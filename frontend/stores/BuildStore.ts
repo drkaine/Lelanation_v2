@@ -1,0 +1,329 @@
+import { defineStore } from 'pinia'
+import type {
+  Build,
+  Champion,
+  Item,
+  RuneSelection,
+  ShardSelection,
+  SummonerSpell,
+  SkillOrder,
+  CalculatedStats,
+} from '~/types/build'
+
+interface BuildState {
+  currentBuild: Build | null
+  status: 'idle' | 'loading' | 'success' | 'error'
+  error: string | null
+  calculatedStats: CalculatedStats | null
+}
+
+export const useBuildStore = defineStore('build', {
+  state: (): BuildState => ({
+    currentBuild: null,
+    status: 'idle',
+    error: null,
+    calculatedStats: null,
+  }),
+
+  getters: {
+    isBuildValid(): boolean {
+      if (!this.currentBuild) return false
+      const build = this.currentBuild
+
+      // Check champion
+      if (!build.champion) return false
+
+      // Check items (at least 1, up to 6)
+      if (!build.items || build.items.length === 0 || build.items.length > 6) {
+        return false
+      }
+
+      // Check runes
+      if (!build.runes) return false
+      if (!build.runes.primary.pathId || !build.runes.primary.keystone) {
+        return false
+      }
+      if (!build.runes.secondary.pathId) return false
+
+      // Check summoner spells (exactly 2)
+      if (
+        !build.summonerSpells ||
+        build.summonerSpells.length !== 2 ||
+        !build.summonerSpells[0] ||
+        !build.summonerSpells[1]
+      ) {
+        return false
+      }
+
+      // Check skill order (all 18 levels)
+      if (!build.skillOrder) return false
+      const levels = Object.keys(build.skillOrder) as Array<keyof SkillOrder>
+      if (levels.length !== 18) return false
+      for (const level of levels) {
+        if (!build.skillOrder[level]) return false
+      }
+
+      return true
+    },
+
+    validationErrors(): string[] {
+      const errors: string[] = []
+      if (!this.currentBuild) {
+        errors.push('No build created')
+        return errors
+      }
+
+      const build = this.currentBuild
+
+      if (!build.champion) {
+        errors.push('Champion must be selected')
+      }
+
+      if (!build.items || build.items.length === 0) {
+        errors.push('At least one item must be selected')
+      } else if (build.items.length > 6) {
+        errors.push('Maximum 6 items allowed')
+      }
+
+      if (!build.runes) {
+        errors.push('Runes must be configured')
+      } else {
+        if (!build.runes.primary.pathId || !build.runes.primary.keystone) {
+          errors.push('Primary rune tree and keystone must be selected')
+        }
+        if (!build.runes.secondary.pathId) {
+          errors.push('Secondary rune tree must be selected')
+        }
+      }
+
+      if (
+        !build.summonerSpells ||
+        build.summonerSpells.length !== 2 ||
+        !build.summonerSpells[0] ||
+        !build.summonerSpells[1]
+      ) {
+        errors.push('Two summoner spells must be selected')
+      }
+
+      if (!build.skillOrder) {
+        errors.push('Skill order must be configured')
+      } else {
+        const levels = Object.keys(build.skillOrder) as Array<keyof SkillOrder>
+        if (levels.length !== 18) {
+          errors.push('Skill order must be complete (18 levels)')
+        }
+      }
+
+      return errors
+    },
+  },
+
+  actions: {
+    createNewBuild() {
+      this.currentBuild = {
+        id: crypto.randomUUID(),
+        name: 'New Build',
+        champion: null,
+        items: [],
+        runes: null,
+        shards: null,
+        summonerSpells: [null, null],
+        skillOrder: null,
+        gameVersion: '', // Will be set from version service
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      this.status = 'idle'
+      this.error = null
+    },
+
+    setChampion(champion: Champion) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.champion = champion
+        this.currentBuild.updatedAt = new Date().toISOString()
+        // Trigger stats recalculation
+        this.recalculateStats()
+      }
+    },
+
+    addItem(item: Item) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild && this.currentBuild.items.length < 6) {
+        this.currentBuild.items.push(item)
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.recalculateStats()
+      }
+    },
+
+    removeItem(itemId: string) {
+      if (this.currentBuild) {
+        this.currentBuild.items = this.currentBuild.items.filter(item => item.id !== itemId)
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.recalculateStats()
+      }
+    },
+
+    setRunes(runes: RuneSelection) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.runes = runes
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.recalculateStats()
+      }
+    },
+
+    setShards(shards: ShardSelection) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.shards = shards
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.recalculateStats()
+      }
+    },
+
+    setSummonerSpell(slot: 0 | 1, spell: SummonerSpell | null) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.summonerSpells[slot] = spell
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    setSkillOrder(skillOrder: SkillOrder) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.skillOrder = skillOrder
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    setName(name: string) {
+      if (this.currentBuild) {
+        this.currentBuild.name = name
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    recalculateStats() {
+      if (!this.currentBuild || !this.currentBuild.champion) {
+        this.calculatedStats = null
+        return
+      }
+
+      // Import and use stats calculator
+      import('~/utils/statsCalculator').then(({ calculateStats }) => {
+        const stats = calculateStats(
+          this.currentBuild!.champion,
+          this.currentBuild!.items,
+          this.currentBuild!.runes,
+          this.currentBuild!.shards,
+          18 // Level 18 for now
+        )
+        this.calculatedStats = stats
+      })
+    },
+
+    saveBuild(): Promise<boolean> {
+      if (!this.currentBuild) {
+        this.error = 'No build to save'
+        this.status = 'error'
+        return false
+      }
+
+      if (!this.isBuildValid) {
+        this.error = 'Build is not valid. Please check all required fields.'
+        this.status = 'error'
+        return false
+      }
+
+      try {
+        this.status = 'loading'
+        // Get current game version
+        // TODO: Get from version service (Epic 2)
+        this.currentBuild.gameVersion = '14.1.1' // Placeholder
+
+        // Save to localStorage
+        const savedBuilds = this.getSavedBuilds()
+        const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+
+        if (existingIndex >= 0) {
+          savedBuilds[existingIndex] = this.currentBuild
+        } else {
+          savedBuilds.push(this.currentBuild)
+        }
+
+        localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+        this.status = 'success'
+        this.error = null
+        return true
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to save build'
+        this.status = 'error'
+        return false
+      }
+    },
+
+    getSavedBuilds(): Build[] {
+      try {
+        const stored = localStorage.getItem('lelanation_builds')
+        if (!stored) return []
+        return JSON.parse(stored) as Build[]
+      } catch {
+        return []
+      }
+    },
+
+    loadBuild(buildId: string): boolean {
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const build = savedBuilds.find(b => b.id === buildId)
+        if (build) {
+          this.currentBuild = build
+          this.status = 'success'
+          this.error = null
+          this.recalculateStats()
+          return true
+        }
+        this.error = 'Build not found'
+        this.status = 'error'
+        return false
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to load build'
+        this.status = 'error'
+        return false
+      }
+    },
+
+    deleteBuild(buildId: string): boolean {
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const filtered = savedBuilds.filter(b => b.id !== buildId)
+        localStorage.setItem('lelanation_builds', JSON.stringify(filtered))
+
+        // If current build is deleted, clear it
+        if (this.currentBuild?.id === buildId) {
+          this.currentBuild = null
+        }
+
+        return true
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to delete build'
+        this.status = 'error'
+        return false
+      }
+    },
+  },
+})
