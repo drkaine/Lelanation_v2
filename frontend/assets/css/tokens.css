@@ -1,5 +1,19 @@
 /* League of Legends Design Tokens */
 
+/* Global Background */
+html {
+  background: var(--gradient-primary);
+  background-attachment: fixed;
+}
+
+body {
+  background: var(--gradient-primary);
+  background-attachment: fixed;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
 /* Blue Colors */
 :root {
   --color-blue-50: #cdfafa;
@@ -38,7 +52,160 @@
 
   --color-background: var(--color-blue-500);
   --color-surface: var(--color-grey-400);
-  --color-text: var(--color-grey-50);
+  
+  /* Gradient Variables */
+  --gradient-start: var(--color-blue-600);
+  --gradient-middle: var(--color-blue-500);
+  --gradient-end: var(--color-blue-400);
+  --gradient-accent: var(--color-blue-200);
+  --gradient-bright: var(--color-blue-100);
+
+  --gradient-secondary: linear-gradient(
+    135deg,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 40%) 0%
+      )
+      0%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 40%) 0%
+      )
+      5%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 35%) 5%
+      )
+      10%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 35%) 10%
+      )
+      15%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 30%) 15%
+      )
+      20%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 30%) 20%
+      )
+      25%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 25%) 25%
+      )
+      30%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 25%) 30%
+      )
+      35%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 20%) 35%
+      )
+      40%,
+    color-mix(
+        in srgb,
+        var(--color-grey-500),
+        color-mix(in srgb, var(--color-grey-500), black 20%) 40%
+      )
+      45%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 15%) 45%
+      )
+      50%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 15%) 50%
+      )
+      55%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 10%) 55%
+      )
+      60%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 10%) 60%
+      )
+      65%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 5%) 65%
+      )
+      70%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 5%) 70%
+      )
+      75%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 0%) 75%
+      )
+      80%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 0%) 80%
+      )
+      85%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 0%) 85%
+      )
+      90%,
+    color-mix(
+        in srgb,
+        var(--color-blue-600),
+        color-mix(in srgb, var(--color-grey-500), black 0%) 90%
+      )
+      95%,
+    var(--color-blue-600) 100%
+  );
+
+  --gradient-primary: linear-gradient(
+    135deg,
+    var(--gradient-start) 0%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-middle) 20%) 15%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-accent) 10%) 20%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-bright) 5%) 25%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-middle) 40%) 35%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-accent) 15%) 45%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-bright) 8%) 50%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-end) 20%) 60%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-accent) 20%) 75%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-bright) 5%) 80%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-end) 40%) 85%,
+    var(--gradient-end) 100%
+  );
+  
+  --color-background-gradient: var(--gradient-primary);
+  --color-text: var(--color-gold-50);
+  --color-text-primary: var(--color-gold-50);
+  --color-text-secondary: var(--color-gold-100);
+  --color-text-accent: var(--color-gold-300);
 
   /* State Colors */
   --color-success: #10b981;

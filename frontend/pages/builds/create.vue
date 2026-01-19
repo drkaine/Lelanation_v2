@@ -1,5 +1,5 @@
 <template>
-  <div class="build-creator min-h-screen bg-background p-4 text-text">
+  <div class="build-creator min-h-screen p-4 text-text">
     <div class="mx-auto max-w-7xl">
       <h1 class="mb-6 text-3xl font-bold">Create Build</h1>
 

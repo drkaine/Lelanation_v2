@@ -1,5 +1,5 @@
 <template>
-  <div class="builds-list min-h-screen bg-background p-4 text-text">
+  <div class="builds-list min-h-screen p-4 text-text">
     <div class="mx-auto max-w-7xl">
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-3xl font-bold">My Builds</h1>

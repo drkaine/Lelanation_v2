@@ -1,5 +1,5 @@
 <template>
-  <div class="build-details min-h-screen bg-background p-4 text-text">
+  <div class="build-details min-h-screen p-4 text-text">
     <div class="mx-auto max-w-6xl">
       <div v-if="loading" class="py-12 text-center">
         <p class="text-text">Loading build...</p>
