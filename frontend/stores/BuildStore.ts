@@ -240,13 +240,13 @@ export const useBuildStore = defineStore('build', {
       if (!this.currentBuild) {
         this.error = 'No build to save'
         this.status = 'error'
-        return false
+        return Promise.resolve(false)
       }
 
       if (!this.isBuildValid) {
         this.error = 'Build is not valid. Please check all required fields.'
         this.status = 'error'
-        return false
+        return Promise.resolve(false)
       }
 
       try {
@@ -268,11 +268,11 @@ export const useBuildStore = defineStore('build', {
         localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
         this.status = 'success'
         this.error = null
-        return true
+        return Promise.resolve(true)
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to save build'
         this.status = 'error'
-        return false
+        return Promise.resolve(false)
       }
     },
 
