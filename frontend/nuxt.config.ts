@@ -6,5 +6,4 @@ export default defineNuxtConfig({
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
-  css: ['~/assets/css/main.css'],
 })

@@ -28,5 +28,14 @@ module.exports = {
       // Run Prettier from frontend directory (needs to be in frontend/ for plugin resolution)
       `bash -c 'cd "${frontendDir}" && npx prettier --write ${filesArg}'`
     ]
+  },
+  'backend/**/*.ts': (filenames) => {
+    const projectRoot = process.cwd()
+    const backendDir = path.join(projectRoot, 'backend')
+    
+    // TypeScript type checking for backend (runs on all files, not just staged)
+    return [
+      `bash -c 'cd "${backendDir}" && npm run typecheck'`
+    ]
   }
 }
