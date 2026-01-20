@@ -9,7 +9,8 @@ module.exports = {
         env: {
           NODE_ENV: 'development',
           PORT: 4001,
-          YOUTUBE_API_KEY: 'API-KEY'      
+          YOUTUBE_API_KEY: 'API-KEY',
+          DISCORD_WEBHOOK_URL: 'DISCORD-WEBHOOK-URL'
         },
         error_file: 'path',
         out_file: 'path',

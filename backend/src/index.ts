@@ -4,6 +4,7 @@ import cors from 'cors'
 import compression from 'compression'
 import syncRoutes from './routes/sync.js'
 import gameDataRoutes from './routes/gameData.js'
+import youtubeRoutes from './routes/youtube.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 
@@ -22,6 +23,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/api/sync', syncRoutes)
 app.use('/api/game-data', gameDataRoutes)
+app.use('/api/youtube', youtubeRoutes)
 
 // Initialize cron jobs
 setupDataDragonSync()

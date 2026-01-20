@@ -36,6 +36,12 @@ DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 
 # YouTube API Key (optional, for video synchronization)
 YOUTUBE_API_KEY=your_youtube_api_key
+
+# YouTube sync tuning (optional)
+# First run backfill limit (default: 500)
+YOUTUBE_BACKFILL_MAX_VIDEOS=500
+# Subsequent runs incremental limit (default: 200)
+YOUTUBE_INCREMENTAL_MAX_VIDEOS=200
 ```
 
 ### Development
@@ -106,6 +112,9 @@ Response:
 - **Retry**: Up to 10 attempts with exponential backoff
 - **Alerts**: Discord webhook on failure
 - **Configuration**: `data/youtube/channels.json`
+  - Supported formats:
+    - `{"channels":[{"channelId":"UC...","channelName":"Lelariva"}]}`
+    - `{"channels":["Lelariva_LoL"]}` (string is resolved via YouTube Search API)
 
 ## Project Structure
 
@@ -163,6 +172,13 @@ YouTube data is stored per channel:
 
 - `data/youtube/{channelId}.json`
 - `data/youtube/channels.json` (channel configuration)
+
+## YouTube API Endpoints
+
+- `GET /api/youtube/channels` (raw channels.json config)
+- `GET /api/youtube/status` (sync status per channel file)
+- `GET /api/youtube/channels/:channelId` (stored data for a channel)
+- `POST /api/youtube/trigger` (manual sync now)
 
 ## TypeScript
 
