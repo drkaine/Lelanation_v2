@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "home": "Accueil",
+    "builds": "Les Builds",
+    "createBuild": "Créer un Build",
+    "videos": "Vidéos",
+    "admin": "Admin",
+    "language": "Langue"
+  },
+  "home": {
+    "subtitle": "La plateforme de référence pour créer, optimiser et partager vos builds League of Legends",
+    "features": "Fonctionnalités",
+    "quickActions": "Actions Rapides",
+    "ctaTitle": "Prêt à créer votre premier build ?",
+    "ctaText": "Rejoignez la communauté Lelanation et partagez vos meilleures configurations",
+    "ctaButton": "Commencer Maintenant"
+  },
+  "seo": {
+    "homeTitle": "Lelanation - Plateforme de builds League of Legends",
+    "homeDescription": "Plateforme de builds et guides League of Legends par la communauté Lelariva"
+  },
+  "cookies": {
+    "title": "Gestion des cookies et du stockage",
+    "text": "Nous utilisons le stockage local pour sauvegarder vos builds et vos préférences. Vous pouvez accepter ou refuser les cookies non essentiels.",
+    "accept": "Accepter",
+    "reject": "Refuser",
+    "learnMore": "En savoir plus"
+  }
+}
+

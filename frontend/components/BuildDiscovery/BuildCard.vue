@@ -122,7 +122,7 @@ const primaryRunePath = computed(() => {
 })
 
 const navigateToBuild = () => {
-  router.push(`/builds/view/${props.build.id}`)
+  router.push(`/builds/${props.build.id}`)
 }
 
 const addToComparison = () => {

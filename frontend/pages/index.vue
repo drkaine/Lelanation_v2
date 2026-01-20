@@ -11,7 +11,7 @@
           loading="lazy"
         />
         <h2 class="subtitle text-text-secondary">
-          La plateforme de référence pour créer, optimiser et partager vos builds League of Legends
+          {{ t('home.subtitle') }}
         </h2>
 
         <!-- Social Links Section -->
@@ -37,7 +37,7 @@
     <section class="py-16">
       <div class="mx-auto max-w-7xl px-4">
         <h2 class="mb-12 text-center text-3xl font-bold text-text-accent md:text-4xl">
-          Fonctionnalités
+          {{ t('home.features') }}
         </h2>
         <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           <!-- Feature 1: Build Creator -->
@@ -119,7 +119,7 @@
     <section class="py-16">
       <div class="mx-auto max-w-7xl px-4">
         <h2 class="mb-12 text-center text-3xl font-bold text-text-accent md:text-4xl">
-          Actions Rapides
+          {{ t('home.quickActions') }}
         </h2>
         <div class="grid gap-6 md:grid-cols-3">
           <NuxtLink
@@ -147,16 +147,16 @@
     <section class="py-16">
       <div class="mx-auto max-w-4xl px-4 text-center">
         <h2 class="mb-6 text-3xl font-bold text-text-accent md:text-4xl">
-          Prêt à créer votre premier build ?
+          {{ t('home.ctaTitle') }}
         </h2>
         <p class="mb-8 text-lg text-text-secondary">
-          Rejoignez la communauté Lelanation et partagez vos meilleures configurations
+          {{ t('home.ctaText') }}
         </p>
         <NuxtLink
           to="/builds/create"
           class="inline-block rounded-lg bg-accent px-8 py-4 text-lg font-semibold text-background transition-colors hover:bg-accent-dark"
         >
-          Commencer Maintenant
+          {{ t('home.ctaButton') }}
         </NuxtLink>
       </div>
     </section>
@@ -165,6 +165,7 @@
 
 <script setup lang="ts">
 // Page d'accueil - Landing page pour Lelanation
+const { t } = useI18n()
 
 interface SocialLink {
   href: string
@@ -212,19 +213,19 @@ const socialLinks: SocialLink[] = [
 
 // Meta tags SEO
 useHead({
-  title: 'Lelanation - Plateforme de builds League of Legends',
+  title: t('seo.homeTitle'),
   meta: [
     {
       name: 'description',
-      content: 'Plateforme de builds et guides League of Legends par la communauté Lelariva',
+      content: t('seo.homeDescription'),
     },
     {
       property: 'og:title',
-      content: 'Lelanation - Plateforme de builds League of Legends',
+      content: t('seo.homeTitle'),
     },
     {
       property: 'og:description',
-      content: 'Plateforme de builds et guides League of Legends par la communauté Lelariva',
+      content: t('seo.homeDescription'),
     },
     {
       property: 'og:url',

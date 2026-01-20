@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
@@ -5,7 +6,13 @@ export default defineNuxtConfig({
   // SSR enabled by default in Nuxt 3 for MPA support
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
+  modules: [
+    '@nuxtjs/tailwindcss',
+    '@pinia/nuxt',
+    '@nuxtjs/i18n',
+    '@nuxtjs/sitemap',
+    '@nuxtjs/robots',
+  ],
   // Backend API base for proxying /api/* calls.
   // Default matches `ecosystem.config.js` (backend PORT=4001).
   runtimeConfig: {
@@ -17,6 +24,34 @@ export default defineNuxtConfig({
     },
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001',
+      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+    },
+  },
+  // @ts-expect-error - provided by Nuxt SEO "site config"
+  site: {
+    url: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+  },
+  i18n: {
+    defaultLocale: 'fr',
+    strategy: 'prefix_except_default',
+    langDir: 'locales',
+    lazy: true,
+    locales: [
+      { code: 'fr', language: 'fr-FR', name: 'Français', file: 'fr.json' },
+      { code: 'en', language: 'en-US', name: 'English', file: 'en.json' },
+    ],
+    detectBrowserLanguage: false,
+    vueI18n: './i18n.config.ts',
+  },
+  robots: {
+    disallow: ['/admin', '/api/admin'],
+  },
+  sitemap: {
+    sitemaps: {
+      default: {
+        include: ['/', '/builds', '/builds/create', '/videos', '/privacy', '/admin'],
+        exclude: ['/api/**'],
+      },
     },
   },
   nitro: {

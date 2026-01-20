@@ -2,11 +2,17 @@
   <header role="banner">
     <nav class="header">
       <div class="left-header">
-        <NuxtLink to="/" class="link" aria-label="Accueil">
+        <NuxtLink to="/" class="link" :aria-label="t('nav.home')">
           <span>Lelanation</span>
         </NuxtLink>
       </div>
-      <button class="menu-mobile" aria-label="Toggle menu" @click="toggleMenu">
+      <button
+        class="menu-mobile"
+        aria-label="Toggle menu"
+        aria-controls="mobile-nav"
+        :aria-expanded="String(isMenuOpen)"
+        @click="toggleMenu"
+      >
         <svg
           width="24"
           height="24"
@@ -23,29 +29,39 @@
         </svg>
       </button>
 
-      <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
-        <NuxtLink to="/builds" title="Les builds" class="version" @click="toggleMenu">
-          Les Builds
+      <div id="mobile-nav" class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
+        <NuxtLink to="/builds" :title="t('nav.builds')" class="version" @click="toggleMenu">
+          {{ t('nav.builds') }}
         </NuxtLink>
         <NuxtLink to="/videos" title="Vidéos" class="version" @click="toggleMenu">
-          Vidéos
+          {{ t('nav.videos') }}
         </NuxtLink>
         <NuxtLink
           to="/builds/create"
-          title="Créer un build"
+          :title="t('nav.createBuild')"
           class="version"
-          aria-label="Créer un build"
+          :aria-label="t('nav.createBuild')"
           @click="toggleMenu"
         >
-          Créer un Build
+          {{ t('nav.createBuild') }}
         </NuxtLink>
+        <button class="version" type="button" @click="toggleLanguage">
+          {{ t('nav.language') }}: {{ locale.toUpperCase() }}
+        </button>
       </div>
       <div class="right-header">
-        <NuxtLink to="/builds" title="Les builds" class="version"> Les Builds </NuxtLink>
-        <NuxtLink to="/videos" title="Vidéos" class="version"> Vidéos </NuxtLink>
-        <NuxtLink title="Créer un Build" class="version" to="/builds/create">
-          Créer un Build
+        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
+          {{ t('nav.builds') }}
         </NuxtLink>
+        <NuxtLink to="/videos" :title="t('nav.videos')" class="version">
+          {{ t('nav.videos') }}
+        </NuxtLink>
+        <NuxtLink :title="t('nav.createBuild')" class="version" to="/builds/create">
+          {{ t('nav.createBuild') }}
+        </NuxtLink>
+        <button class="version" type="button" @click="toggleLanguage">
+          {{ locale.toUpperCase() }}
+        </button>
       </div>
     </nav>
   </header>
@@ -55,9 +71,16 @@
 import { ref } from 'vue'
 
 const isMenuOpen = ref(false)
+const { t, locale } = useI18n()
+const switchLocalePath = useSwitchLocalePath()
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
+}
+
+const toggleLanguage = () => {
+  const next = locale.value === 'fr' ? 'en' : 'fr'
+  navigateTo(switchLocalePath(next))
 }
 </script>
 

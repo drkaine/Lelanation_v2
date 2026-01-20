@@ -129,7 +129,7 @@
 
             <!-- View Details Link -->
             <NuxtLink
-              :to="`/builds/view/${build.id}`"
+              :to="`/builds/${build.id}`"
               class="block rounded-lg bg-primary px-3 py-2 text-center text-sm text-white transition-colors hover:bg-primary-dark"
             >
               Voir les détails
