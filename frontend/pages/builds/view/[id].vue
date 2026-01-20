@@ -28,6 +28,12 @@
             <h1 class="text-3xl font-bold text-text">{{ build.name }}</h1>
           </div>
           <div class="flex items-center gap-3">
+            <button
+              class="rounded-lg border-2 border-primary bg-surface px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-primary hover:text-white"
+              @click="shareBuild"
+            >
+              Partager
+            </button>
             <!-- Vote Button -->
             <button
               class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
@@ -50,6 +56,13 @@
             </button>
           </div>
         </div>
+
+        <OutdatedBuildBanner
+          v-if="build.gameVersion"
+          :build-version="build.gameVersion"
+          :storage-key="`build:${build.id}:${build.gameVersion}`"
+          :on-update="updateToCurrentVersion"
+        />
 
         <!-- Champion Section -->
         <div v-if="build.champion" class="mb-6 rounded-lg bg-surface p-6">
@@ -192,6 +205,8 @@
         </div>
       </div>
     </div>
+
+    <ShareBuildModal v-if="shareUrl" :share-url="shareUrl" @close="shareUrl = null" />
   </div>
 </template>
 
@@ -205,6 +220,10 @@ import { useVoteStore } from '~/stores/VoteStore'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import type { SkillOrder } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
+import ShareBuildModal from '~/components/Build/ShareBuildModal.vue'
+import { apiUrl } from '~/utils/apiUrl'
+import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
+import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
 const route = useRoute()
 const buildStore = useBuildStore()
@@ -216,6 +235,7 @@ const { version } = useGameVersion()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const build = computed(() => buildStore.currentBuild)
+const shareUrl = ref<string | null>(null)
 
 const primaryRunePath = computed(() => {
   if (!build.value?.runes) return null
@@ -285,6 +305,37 @@ const toggleVote = () => {
     voteStore.unvote(build.value.id)
   } else {
     voteStore.vote(build.value.id)
+  }
+}
+
+const shareBuild = async () => {
+  if (!build.value) return
+  try {
+    const res = await fetch(apiUrl('/api/shared-builds'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(build.value),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data?.error || 'Failed to share build')
+    const id = data?.shareId as string
+    shareUrl.value = `${window.location.origin}/builds/shared/${id}`
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to share build'
+  }
+}
+
+const updateToCurrentVersion = async () => {
+  if (!build.value) return
+  try {
+    const { migrated } = await migrateBuildToCurrent(build.value)
+    const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
+    if (newId) {
+      // redirect to editor
+      navigateTo(`/builds/edit/${newId}`)
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Migration failed'
   }
 }
 

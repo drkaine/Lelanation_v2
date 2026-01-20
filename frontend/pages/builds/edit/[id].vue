@@ -36,6 +36,13 @@
           </NuxtLink>
         </div>
 
+        <OutdatedBuildBanner
+          v-if="buildStore.currentBuild?.gameVersion"
+          :build-version="buildStore.currentBuild.gameVersion"
+          :storage-key="`edit:${buildStore.currentBuild.id}:${buildStore.currentBuild.gameVersion}`"
+          :on-update="updateToCurrentVersion"
+        />
+
         <!-- Same structure as create page -->
         <div class="mb-6">
           <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
@@ -162,6 +169,8 @@ import RuneShardSelector from '~/components/Build/RuneShardSelector.vue'
 import SummonerSpellSelector from '~/components/Build/SummonerSpellSelector.vue'
 import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
+import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
+import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
 const route = useRoute()
 const buildStore = useBuildStore()
@@ -207,6 +216,15 @@ const saveBuild = async () => {
     setTimeout(() => {
       buildStore.status = 'idle'
     }, 3000)
+  }
+}
+
+const updateToCurrentVersion = async () => {
+  if (!buildStore.currentBuild) return
+  const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
+  const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
+  if (newId) {
+    navigateTo(`/builds/edit/${newId}`)
   }
 }
 

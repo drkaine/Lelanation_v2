@@ -120,6 +120,37 @@ export const useBuildStore = defineStore('build', {
   },
 
   actions: {
+    setCurrentBuild(build: Build) {
+      this.currentBuild = build
+      this.status = 'success'
+      this.error = null
+      this.recalculateStats()
+    },
+
+    /**
+     * Import an external build (e.g. from a shared link) into localStorage with a new ID.
+     * Returns new build ID, or null if failed.
+     */
+    importBuild(build: Build, options?: { nameSuffix?: string }): string | null {
+      try {
+        const now = new Date().toISOString()
+        const suffix = options?.nameSuffix ?? ' (copie)'
+        const copied: Build = {
+          ...build,
+          id: crypto.randomUUID(),
+          name: build.name ? `${build.name}${suffix}` : `Build${suffix}`,
+          createdAt: now,
+          updatedAt: now,
+        }
+
+        const savedBuilds = this.getSavedBuilds()
+        savedBuilds.push(copied)
+        localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+        return copied.id
+      } catch {
+        return null
+      }
+    },
     createNewBuild() {
       this.currentBuild = {
         id: crypto.randomUUID(),
