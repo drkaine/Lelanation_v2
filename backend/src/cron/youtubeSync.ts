@@ -4,6 +4,7 @@ import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { FileManager } from '../utils/fileManager.js'
 import { join } from 'path'
+import { CronStatusService } from '../services/CronStatusService.js'
 
 interface YouTubeChannelConfig {
   channelId: string
@@ -21,11 +22,13 @@ type YouTubeChannelsConfigFile = {
 export function setupYouTubeSync(): void {
   const youtubeService = new YouTubeService()
   const discordService = new DiscordService()
+  const cronStatus = new CronStatusService()
   const configFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 
   // Schedule daily sync at 03:00
   cron.schedule('0 3 * * *', async () => {
     console.log('[Cron] Starting YouTube synchronization...')
+    await cronStatus.markStart('youtubeSync')
 
     // Load channel configuration
     const configResult = await FileManager.readJson<YouTubeChannelsConfigFile>(configFile)
@@ -42,12 +45,14 @@ export function setupYouTubeSync(): void {
       }
 
       console.log('[Cron] No YouTube channels configured. Skipping sync.')
+      await cronStatus.markSuccess('youtubeSync')
       return
     }
 
     const config = configResult.unwrap()
     if (!config.channels || config.channels.length === 0) {
       console.log('[Cron] No YouTube channels configured. Skipping sync.')
+      await cronStatus.markSuccess('youtubeSync')
       return
     }
 
@@ -67,6 +72,7 @@ export function setupYouTubeSync(): void {
     if (syncResult.isErr()) {
       const error = syncResult.unwrapErr()
       console.error('[Cron] YouTube sync failed after retries:', error)
+      await cronStatus.markFailure('youtubeSync', error)
 
       await discordService.sendAlert(
         'YouTube Sync Failed',
@@ -85,6 +91,7 @@ export function setupYouTubeSync(): void {
     console.log(
       `[Cron] YouTube sync completed successfully. Synced ${syncData.syncedChannels}/${config.channels.length} channels, ${syncData.totalVideos} videos total`
     )
+    await cronStatus.markSuccess('youtubeSync')
   })
 
   console.log('[Cron] YouTube sync scheduled: Daily at 03:00')

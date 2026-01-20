@@ -3,6 +3,7 @@ import { DataDragonService } from '../services/DataDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
+import { CronStatusService } from '../services/CronStatusService.js'
 
 /**
  * Data Dragon synchronization cron job
@@ -12,15 +13,18 @@ export function setupDataDragonSync(): void {
   const dataDragonService = new DataDragonService()
   const versionService = new VersionService()
   const discordService = new DiscordService()
+  const cronStatus = new CronStatusService()
 
   // Schedule daily sync at 02:00
   cron.schedule('0 2 * * *', async () => {
     console.log('[Cron] Starting Data Dragon synchronization...')
+    await cronStatus.markStart('dataDragonSync')
 
     // Check for new version first
     const versionCheckResult = await versionService.checkForNewVersion()
     if (versionCheckResult.isErr()) {
       console.error('[Cron] Failed to check version:', versionCheckResult.unwrapErr())
+      await cronStatus.markFailure('dataDragonSync', versionCheckResult.unwrapErr())
       await discordService.sendAlert(
         'Data Dragon Sync - Version Check Failed',
         'Failed to check for new game version',
@@ -54,6 +58,7 @@ export function setupDataDragonSync(): void {
     if (syncResult.isErr()) {
       const error = syncResult.unwrapErr()
       console.error('[Cron] Data Dragon sync failed after retries:', error)
+      await cronStatus.markFailure('dataDragonSync', error)
 
       await discordService.sendAlert(
         'Data Dragon Sync Failed',
@@ -79,6 +84,7 @@ export function setupDataDragonSync(): void {
     console.log(
       `[Cron] Data Dragon sync completed successfully. Version: ${syncData.version}, Synced at: ${syncData.syncedAt.toISOString()}`
     )
+    await cronStatus.markSuccess('dataDragonSync')
 
     // Optional: Send success notification (can be disabled if too noisy)
     // await discordService.sendSuccess(

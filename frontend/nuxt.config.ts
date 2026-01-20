@@ -9,6 +9,12 @@ export default defineNuxtConfig({
   // Backend API base for proxying /api/* calls.
   // Default matches `ecosystem.config.js` (backend PORT=4001).
   runtimeConfig: {
+    admin: {
+      // If not set, admin routes won't be protected (dev convenience).
+      username: process.env.ADMIN_USERNAME || '',
+      password: process.env.ADMIN_PASSWORD || '',
+      pathPrefix: process.env.ADMIN_PATH_PREFIX || '/admin',
+    },
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001',
     },
