@@ -204,12 +204,14 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import type { SkillOrder } from '~/types/build'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const route = useRoute()
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const runesStore = useRunesStore()
+const { version } = useGameVersion()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -255,11 +257,11 @@ const addToComparison = () => {
 }
 
 const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
 }
 
 const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/item/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 const getRunePathImageUrl = (icon: string): string => {
@@ -267,7 +269,7 @@ const getRunePathImageUrl = (icon: string): string => {
 }
 
 const getSpellImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/spell/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/spell/${imageName}`
 }
 
 const formatDate = (dateString: string): string => {

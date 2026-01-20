@@ -1,16 +1,16 @@
 <template>
   <div class="build-grid">
     <div v-if="builds.length === 0" class="py-12 text-center">
-      <p class="text-lg text-text">No builds found</p>
+      <p class="text-lg text-text">Aucun build trouvé</p>
       <p class="text-text/70 mt-2 text-sm">
-        {{ hasActiveFilters ? 'Try adjusting your filters' : 'Create your first build!' }}
+        {{ hasActiveFilters ? 'Essayez d’ajuster vos filtres' : 'Créez votre premier build !' }}
       </p>
       <NuxtLink
         v-if="!hasActiveFilters"
         to="/builds/create"
         class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
       >
-        Create Build
+        Créer un Build
       </NuxtLink>
     </div>
 

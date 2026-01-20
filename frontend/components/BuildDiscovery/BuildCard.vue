@@ -93,6 +93,7 @@ import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import type { Build } from '~/types/build'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 interface Props {
   build: Build
@@ -106,13 +107,12 @@ const props = withDefaults(defineProps<Props>(), {
 const discoveryStore = useBuildDiscoveryStore()
 const runesStore = useRunesStore()
 const voteStore = useVoteStore()
+const router = useRouter()
+const { version } = useGameVersion()
 
 const displayItems = computed(() => {
-  const items = [...props.build.items]
-  // Fill empty slots
-  while (items.length < 6) {
-    items.push(null as any)
-  }
+  const items: Array<(typeof props.build.items)[number] | null> = [...props.build.items]
+  while (items.length < 6) items.push(null)
   return items.slice(0, 6)
 })
 
@@ -122,7 +122,7 @@ const primaryRunePath = computed(() => {
 })
 
 const navigateToBuild = () => {
-  useRouter().push(`/builds/view/${props.build.id}`)
+  router.push(`/builds/view/${props.build.id}`)
 }
 
 const addToComparison = () => {
@@ -130,11 +130,11 @@ const addToComparison = () => {
 }
 
 const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
 }
 
 const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/item/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 const getRunePathImageUrl = (icon: string): string => {

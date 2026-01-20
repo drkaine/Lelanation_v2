@@ -1,10 +1,19 @@
 import { defineStore } from 'pinia'
 import { useBuildStore } from './BuildStore'
 import { useVoteStore } from './VoteStore'
+import { useVersionStore } from './VersionStore'
 import type { Build } from '~/types/build'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
+
+const ROLE_TAGS: Record<Exclude<FilterRole, null>, string[]> = {
+  top: ['Fighter', 'Tank'],
+  jungle: ['Fighter', 'Assassin', 'Tank'],
+  mid: ['Mage', 'Assassin'],
+  adc: ['Marksman'],
+  support: ['Support', 'Mage'],
+}
 
 interface BuildDiscoveryState {
   searchQuery: string
@@ -50,20 +59,19 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Filter by role (champion tags)
       if (this.selectedRole) {
+        const allowedTags = ROLE_TAGS[this.selectedRole]
         results = results.filter(build =>
-          build.champion?.tags.includes(this.selectedRole!.toUpperCase())
+          build.champion?.tags?.some(tag => allowedTags.includes(tag))
         )
       }
 
       // Filter by version (up-to-date)
       if (this.onlyUpToDate) {
-        // TODO: Get current version from VersionStore
-        // For now, we'll skip this filter until VersionStore is properly integrated
-        // const versionStore = useVersionStore()
-        // const currentVersion = versionStore.currentVersion
-        // if (currentVersion) {
-        //   results = results.filter(build => build.gameVersion === currentVersion)
-        // }
+        const versionStore = useVersionStore()
+        const currentVersion = versionStore.currentVersion
+        if (currentVersion) {
+          results = results.filter(build => build.gameVersion === currentVersion)
+        }
       }
 
       // Sort
@@ -83,9 +91,13 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   },
 
   actions: {
-    loadBuilds() {
+    async loadBuilds() {
       const buildStore = useBuildStore()
       this.builds = buildStore.getSavedBuilds()
+      const versionStore = useVersionStore()
+      if (!versionStore.currentVersion) {
+        await versionStore.loadCurrentVersion()
+      }
       this.applyFilters()
     },
 
@@ -134,8 +146,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
           return sorted.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
-        case 'popular': // Sort by vote count (descending), then by creation date
-        {
+        case 'popular': { // Sort by vote count (descending), then by creation date
           const voteStore = useVoteStore()
           return sorted.sort((a, b) => {
             const votesA = voteStore.getVoteCount(a.id)

@@ -148,9 +148,11 @@ import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { calculateStats } from '~/utils/statsCalculator'
 import type { CalculatedStats } from '~/types/build'
 import StatRow from '~/components/Build/StatRow.vue'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const discoveryStore = useBuildDiscoveryStore()
 const router = useRouter()
+const { version } = useGameVersion()
 
 const builds = computed(() => discoveryStore.getComparisonBuilds())
 
@@ -218,11 +220,11 @@ const removeFromComparison = (buildId: string) => {
 }
 
 const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
 }
 
 const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/item/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 onMounted(() => {

@@ -98,6 +98,14 @@
 
       <!-- Detailed View -->
       <div v-else class="space-y-4">
+        <!-- Quick Analysis -->
+        <div v-if="quickAnalysis.length" class="rounded-lg border-2 border-primary bg-surface p-4">
+          <h4 class="mb-2 text-base font-bold text-text-accent">Analyse rapide</h4>
+          <ul class="text-text/80 list-disc space-y-1 pl-5 text-sm">
+            <li v-for="(msg, idx) in quickAnalysis" :key="idx">{{ msg }}</li>
+          </ul>
+        </div>
+
         <!-- Offensive Stats Section -->
         <div class="rounded-lg border-2 border-primary bg-surface p-4">
           <h4 class="mb-3 text-base font-bold text-text-accent">Statistiques Offensives</h4>
@@ -245,6 +253,7 @@ const viewMode = ref<'simple' | 'detailed'>('simple')
 const previousStats = ref<CalculatedStats | null>(null)
 
 const stats = computed<CalculatedStats | null>(() => buildStore.calculatedStats)
+const championTags = computed(() => buildStore.currentBuild?.champion?.tags || [])
 
 // Track previous stats for change visualization
 watch(
@@ -261,6 +270,34 @@ watch(
     }, 2000)
   }
 )
+
+const quickAnalysis = computed(() => {
+  if (!stats.value) return []
+
+  const s = stats.value
+  const messages: string[] = []
+
+  const offense = s.attackDamage + s.abilityPower * 0.6 + s.attackSpeed * 100 + s.critChance * 100
+  const defense = s.health / 10 + s.armor + s.magicResist
+  const utility = s.movementSpeed + s.cooldownReduction * 100
+
+  if (offense > defense * 1.2) messages.push('Profil très offensif (fragile si mal positionné).')
+  if (defense > offense * 1.2) messages.push('Profil très tanky (dégâts potentiellement faibles).')
+  if (utility > 480) messages.push('Bonne mobilité / utilitaire (kite, rotations).')
+
+  // Small heuristic suggestions (no item recommendation)
+  if (championTags.value.includes('Marksman') && s.attackSpeed < 1.5) {
+    messages.push('Suggestion: augmenter la vitesse d’attaque pour mieux scaler.')
+  }
+  if (s.attackDamage > 200 && s.armorPenetration < 0.1) {
+    messages.push('Suggestion: ajouter de la pénétration d’armure contre les tanks.')
+  }
+  if (championTags.value.includes('Mage') && s.abilityPower < 400) {
+    messages.push('Suggestion: renforcer l’AP si ton objectif est le burst/zone.')
+  }
+
+  return messages
+})
 
 const formatStat = (value: number, decimals: number = 0): string => {
   return value.toFixed(decimals)

@@ -9,6 +9,7 @@ import type {
   SkillOrder,
   CalculatedStats,
 } from '~/types/build'
+import { useVersionStore } from '~/stores/VersionStore'
 
 interface BuildState {
   currentBuild: Build | null
@@ -236,24 +237,27 @@ export const useBuildStore = defineStore('build', {
       })
     },
 
-    saveBuild(): Promise<boolean> {
+    async saveBuild(): Promise<boolean> {
       if (!this.currentBuild) {
         this.error = 'No build to save'
         this.status = 'error'
-        return Promise.resolve(false)
+        return false
       }
 
       if (!this.isBuildValid) {
         this.error = 'Build is not valid. Please check all required fields.'
         this.status = 'error'
-        return Promise.resolve(false)
+        return false
       }
 
       try {
         this.status = 'loading'
         // Get current game version
-        // TODO: Get from version service (Epic 2)
-        this.currentBuild.gameVersion = '14.1.1' // Placeholder
+        const versionStore = useVersionStore()
+        if (!versionStore.currentVersion) {
+          await versionStore.loadCurrentVersion()
+        }
+        this.currentBuild.gameVersion = versionStore.currentVersion || '14.1.1'
 
         // Save to localStorage
         const savedBuilds = this.getSavedBuilds()
@@ -268,11 +272,11 @@ export const useBuildStore = defineStore('build', {
         localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
         this.status = 'success'
         this.error = null
-        return Promise.resolve(true)
+        return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to save build'
         this.status = 'error'
-        return Promise.resolve(false)
+        return false
       }
     },
 

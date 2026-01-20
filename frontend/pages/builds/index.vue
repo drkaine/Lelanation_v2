@@ -189,10 +189,12 @@ import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
+const { version } = useGameVersion()
 
 const buildToDelete = ref<string | null>(null)
 
@@ -243,11 +245,11 @@ const clearComparison = () => {
 }
 
 const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
 }
 
 const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/item/${imageName}`
+  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 const formatDate = (dateString: string): string => {

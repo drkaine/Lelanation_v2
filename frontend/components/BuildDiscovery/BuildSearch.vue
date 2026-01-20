@@ -4,7 +4,7 @@
       <input
         v-model="localSearchQuery"
         type="text"
-        placeholder="Search builds by champion name..."
+        placeholder="Rechercher un build par champion..."
         class="w-full rounded border border-primary bg-surface px-4 py-3 pl-10 text-text"
         @input="handleSearch"
       />
@@ -12,7 +12,9 @@
     </div>
 
     <div v-if="resultsCount > 0" class="text-text/70 mt-2 text-sm">
-      {{ resultsCount }} build{{ resultsCount > 1 ? 's' : '' }} found
+      {{ resultsCount }} build{{ resultsCount > 1 ? 's' : '' }} trouvé{{
+        resultsCount > 1 ? 's' : ''
+      }}
     </div>
   </div>
 </template>
