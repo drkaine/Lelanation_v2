@@ -156,6 +156,7 @@ const steps = [
 
 const currentStep = ref('champion')
 const buildName = ref('New Build')
+const showValidationErrors = ref(false)
 
 const currentStepIndex = computed(() => {
   return steps.findIndex(step => step.id === currentStep.value)
@@ -163,15 +164,17 @@ const currentStepIndex = computed(() => {
 
 const nextStep = () => {
   const index = currentStepIndex.value
-  if (index < steps.length - 1) {
-    currentStep.value = steps[index + 1].id
+  if (index >= 0 && index < steps.length - 1) {
+    const next = steps[index + 1]
+    if (next) currentStep.value = next.id
   }
 }
 
 const previousStep = () => {
   const index = currentStepIndex.value
   if (index > 0) {
-    currentStep.value = steps[index - 1].id
+    const prev = steps[index - 1]
+    if (prev) currentStep.value = prev.id
   }
 }
 
@@ -180,6 +183,7 @@ const updateBuildName = () => {
 }
 
 const saveBuild = async () => {
+  showValidationErrors.value = true
   const success = await buildStore.saveBuild()
   if (success) {
     // Reset status after 3 seconds
@@ -192,5 +196,6 @@ const saveBuild = async () => {
 onMounted(() => {
   buildStore.createNewBuild()
   buildStore.setName(buildName.value)
+  showValidationErrors.value = false
 })
 </script>

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { apiUrl } from '~/utils/apiUrl'
 
 interface VersionState {
   currentVersion: string | null
@@ -19,7 +20,7 @@ export const useVersionStore = defineStore('version', {
         this.status = 'loading'
         this.error = null
 
-        const response = await fetch('/api/game-data/version')
+        const response = await fetch(apiUrl('/api/game-data/version'))
         if (!response.ok) {
           throw new Error('Failed to load game version')
         }

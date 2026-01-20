@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Item } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 
 interface ItemsState {
   items: Item[]
@@ -60,7 +61,7 @@ export const useItemsStore = defineStore('items', {
         this.error = null
 
         // TODO: Load from API endpoint (Epic 2)
-        const response = await fetch(`/api/game-data/items?lang=${language}`)
+        const response = await fetch(apiUrl(`/api/game-data/items?lang=${language}`))
         if (!response.ok) {
           throw new Error('Failed to load items')
         }

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { SummonerSpell } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 
 interface SummonerSpellsState {
   spells: SummonerSpell[]
@@ -29,7 +30,7 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
         this.error = null
 
         // TODO: Load from API endpoint (Epic 2)
-        const response = await fetch(`/api/game-data/summoner-spells?lang=${language}`)
+        const response = await fetch(apiUrl(`/api/game-data/summoner-spells?lang=${language}`))
         if (!response.ok) {
           throw new Error('Failed to load summoner spells')
         }

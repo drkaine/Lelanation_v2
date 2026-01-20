@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Champion } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 
 interface ChampionsState {
   champions: Champion[]
@@ -61,7 +62,7 @@ export const useChampionsStore = defineStore('champions', {
         // TODO: Load from API endpoint (Epic 2)
         // For now, we'll load from a placeholder
         // In production, this will be: /api/game-data/champions?lang=${language}
-        const response = await fetch(`/api/game-data/champions?lang=${language}`)
+        const response = await fetch(apiUrl(`/api/game-data/champions?lang=${language}`))
         if (!response.ok) {
           throw new Error('Failed to load champions')
         }

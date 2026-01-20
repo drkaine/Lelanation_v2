@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { YouTubeChannelData, YouTubeChannelStatus } from '~/types/youtube'
+import { apiUrl } from '~/utils/apiUrl'
 
 type ChannelsConfig = {
   channels: Array<{ channelId: string; channelName: string } | string>
@@ -35,7 +36,7 @@ export const useYouTubeStore = defineStore('youtube', {
       this.loadingStatus = true
       this.error = null
       try {
-        const res = await fetch('/api/youtube/status')
+        const res = await fetch(apiUrl('/api/youtube/status'))
         if (!res.ok) throw new Error('Failed to load YouTube status')
         const data = (await res.json()) as ChannelsStatusResponse
         this.status = Array.isArray(data.channels) ? data.channels : []
@@ -51,7 +52,7 @@ export const useYouTubeStore = defineStore('youtube', {
       this.loadingConfig = true
       this.error = null
       try {
-        const res = await fetch('/api/youtube/channels')
+        const res = await fetch(apiUrl('/api/youtube/channels'))
         if (!res.ok) throw new Error('Failed to load YouTube channels config')
         const data = (await res.json()) as ChannelsConfig
         this.config = Array.isArray(data.channels) ? data.channels : []
@@ -70,7 +71,7 @@ export const useYouTubeStore = defineStore('youtube', {
       this.loadingChannelIds.add(channelId)
       this.error = null
       try {
-        const res = await fetch(`/api/youtube/channels/${encodeURIComponent(channelId)}`)
+        const res = await fetch(apiUrl(`/api/youtube/channels/${encodeURIComponent(channelId)}`))
         if (!res.ok) throw new Error('Failed to load channel videos')
         const data = (await res.json()) as YouTubeChannelData
         this.channelDataById[channelId] = data
@@ -88,7 +89,7 @@ export const useYouTubeStore = defineStore('youtube', {
 
       this.error = null
       try {
-        const res = await fetch('/api/youtube/channels', {
+        const res = await fetch(apiUrl('/api/youtube/channels'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ channel }),
@@ -107,7 +108,7 @@ export const useYouTubeStore = defineStore('youtube', {
 
       this.error = null
       try {
-        const res = await fetch(`/api/youtube/channels/${encodeURIComponent(channelId)}`, {
+        const res = await fetch(apiUrl(`/api/youtube/channels/${encodeURIComponent(channelId)}`), {
           method: 'DELETE',
         })
         const data = await res.json()
@@ -124,7 +125,7 @@ export const useYouTubeStore = defineStore('youtube', {
       this.error = null
       this.lastSyncTriggerResult = null
       try {
-        const res = await fetch('/api/youtube/trigger', { method: 'POST' })
+        const res = await fetch(apiUrl('/api/youtube/trigger'), { method: 'POST' })
         const data = await res.json()
         if (!res.ok) throw new Error(data?.error || 'Failed to trigger YouTube sync')
         this.lastSyncTriggerResult = {

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { RunePath } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 
 interface RunesState {
   runePaths: RunePath[]
@@ -29,7 +30,7 @@ export const useRunesStore = defineStore('runes', {
         this.error = null
 
         // TODO: Load from API endpoint (Epic 2)
-        const response = await fetch(`/api/game-data/runes?lang=${language}`)
+        const response = await fetch(apiUrl(`/api/game-data/runes?lang=${language}`))
         if (!response.ok) {
           throw new Error('Failed to load runes')
         }
