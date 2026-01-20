@@ -1,6 +1,7 @@
 # Root ignores
 .cursor/
 _bmad/
+ecosystem.config.js
 
 # Node dependencies
 node_modules/
