@@ -27,6 +27,7 @@ frontend/dist
 backend/dist
 backend/.env
 backend/.env.local
+backend/data/
 
 # Logs
 logs/

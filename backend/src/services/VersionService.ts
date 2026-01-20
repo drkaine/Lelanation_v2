@@ -33,7 +33,19 @@ export class VersionService {
       return result
     }
 
-    return Result.ok(result.unwrap())
+    const data = result.unwrap()
+    // Defensive: if version.json exists but is malformed/empty, treat as not initialized.
+    if (
+      !data ||
+      typeof data.currentVersion !== 'string' ||
+      data.currentVersion.length === 0 ||
+      typeof data.lastSyncDate !== 'string' ||
+      typeof data.lastSyncTimestamp !== 'number'
+    ) {
+      return Result.ok(null)
+    }
+
+    return Result.ok(data)
   }
 
   /**

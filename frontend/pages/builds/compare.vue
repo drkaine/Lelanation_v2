@@ -4,7 +4,7 @@
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-3xl font-bold text-text">Compare Builds</h1>
         <NuxtLink
-          to="/builds/discover"
+          to="/builds"
           class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
         >
           Back to Discovery
@@ -14,7 +14,7 @@
       <div v-if="builds.length === 0" class="py-12 text-center">
         <p class="text-lg text-text">No builds selected for comparison</p>
         <NuxtLink
-          to="/builds/discover"
+          to="/builds"
           class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
         >
           Discover Builds
@@ -73,37 +73,66 @@
 
             <!-- Stats Comparison -->
             <div class="mb-4">
-              <p class="text-text/70 mb-2 text-xs font-semibold">Key Stats</p>
+              <p class="text-text/70 mb-2 text-xs font-semibold">Statistiques Clés</p>
               <div class="space-y-1 text-xs">
-                <div class="flex justify-between">
-                  <span class="text-text/70">AD:</span>
-                  <span class="font-semibold text-text">{{ getStat(build, 'attackDamage') }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-text/70">AP:</span>
-                  <span class="font-semibold text-text">{{ getStat(build, 'abilityPower') }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-text/70">Health:</span>
-                  <span class="font-semibold text-text">{{ getStat(build, 'health') }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-text/70">Armor:</span>
-                  <span class="font-semibold text-text">{{ getStat(build, 'armor') }}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-text/70">MR:</span>
-                  <span class="font-semibold text-text">{{ getStat(build, 'magicResist') }}</span>
-                </div>
+                <StatRow
+                  label="AD"
+                  :value="getStatValue(build.id, 'attackDamage')"
+                  :is-highest="isHighest(build.id, 'attackDamage')"
+                  :is-lowest="isLowest(build.id, 'attackDamage')"
+                  format="number"
+                />
+                <StatRow
+                  label="AP"
+                  :value="getStatValue(build.id, 'abilityPower')"
+                  :is-highest="isHighest(build.id, 'abilityPower')"
+                  :is-lowest="isLowest(build.id, 'abilityPower')"
+                  format="number"
+                />
+                <StatRow
+                  label="Health"
+                  :value="getStatValue(build.id, 'health')"
+                  :is-highest="isHighest(build.id, 'health')"
+                  :is-lowest="isLowest(build.id, 'health')"
+                  format="number"
+                />
+                <StatRow
+                  label="Armor"
+                  :value="getStatValue(build.id, 'armor')"
+                  :is-highest="isHighest(build.id, 'armor')"
+                  :is-lowest="isLowest(build.id, 'armor')"
+                  format="number"
+                />
+                <StatRow
+                  label="MR"
+                  :value="getStatValue(build.id, 'magicResist')"
+                  :is-highest="isHighest(build.id, 'magicResist')"
+                  :is-lowest="isLowest(build.id, 'magicResist')"
+                  format="number"
+                />
+                <StatRow
+                  label="AS"
+                  :value="getStatValue(build.id, 'attackSpeed')"
+                  :is-highest="isHighest(build.id, 'attackSpeed')"
+                  :is-lowest="isLowest(build.id, 'attackSpeed')"
+                  format="decimal"
+                />
+                <StatRow
+                  label="MS"
+                  :value="getStatValue(build.id, 'movementSpeed')"
+                  :is-highest="isHighest(build.id, 'movementSpeed')"
+                  :is-lowest="isLowest(build.id, 'movementSpeed')"
+                  format="number"
+                />
               </div>
             </div>
 
             <!-- View Details Link -->
             <NuxtLink
               :to="`/builds/view/${build.id}`"
-              class="block rounded bg-primary px-3 py-2 text-center text-sm text-white hover:bg-primary-dark"
+              class="block rounded-lg bg-primary px-3 py-2 text-center text-sm text-white transition-colors hover:bg-primary-dark"
             >
-              View Details
+              Voir les détails
             </NuxtLink>
           </div>
         </div>
@@ -116,47 +145,76 @@
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
+import { calculateStats } from '~/utils/statsCalculator'
 import type { CalculatedStats } from '~/types/build'
+import StatRow from '~/components/Build/StatRow.vue'
 
 const discoveryStore = useBuildDiscoveryStore()
+const router = useRouter()
 
 const builds = computed(() => discoveryStore.getComparisonBuilds())
 
-const removeFromComparison = (buildId: string) => {
-  discoveryStore.removeFromComparison(buildId)
+// Calculate stats for each build
+const buildStats = computed(() => {
+  return builds.value.map(build => {
+    const stats = calculateStats(build.champion, build.items, build.runes, build.shards, 18)
+    return {
+      buildId: build.id,
+      stats: stats || createEmptyStats(),
+    }
+  })
+})
+
+// Find highest and lowest values for each stat
+const getStatComparison = (statName: keyof CalculatedStats) => {
+  const values = buildStats.value.map(bs => bs.stats[statName])
+  const max = Math.max(...values)
+  const min = Math.min(...values)
+  return { max, min }
 }
 
-const getStat = (_build: unknown, statName: keyof CalculatedStats): string => {
-  // TODO: Calculate stats for comparison builds
-  // For now, return placeholder values
-  // In a full implementation, we'd calculate stats for each build
-  const placeholderValues: Record<keyof CalculatedStats, number> = {
-    health: 2000,
-    mana: 1000,
-    attackDamage: 100,
+const getStatValue = (buildId: string, statName: keyof CalculatedStats): number => {
+  const buildStat = buildStats.value.find(bs => bs.buildId === buildId)
+  return buildStat?.stats[statName] || 0
+}
+
+const isHighest = (buildId: string, statName: keyof CalculatedStats): boolean => {
+  const comparison = getStatComparison(statName)
+  const value = getStatValue(buildId, statName)
+  return value === comparison.max && comparison.max !== comparison.min
+}
+
+const isLowest = (buildId: string, statName: keyof CalculatedStats): boolean => {
+  const comparison = getStatComparison(statName)
+  const value = getStatValue(buildId, statName)
+  return value === comparison.min && comparison.max !== comparison.min
+}
+
+const createEmptyStats = (): CalculatedStats => {
+  return {
+    health: 0,
+    mana: 0,
+    attackDamage: 0,
     abilityPower: 0,
-    armor: 50,
-    magicResist: 50,
-    attackSpeed: 1.0,
+    armor: 0,
+    magicResist: 0,
+    attackSpeed: 0,
     critChance: 0,
     critDamage: 1.75,
     lifeSteal: 0,
     spellVamp: 0,
     cooldownReduction: 0,
-    movementSpeed: 350,
-    healthRegen: 5,
-    manaRegen: 5,
+    movementSpeed: 0,
+    healthRegen: 0,
+    manaRegen: 0,
     armorPenetration: 0,
     magicPenetration: 0,
     tenacity: 0,
   }
+}
 
-  const value = placeholderValues[statName] || 0
-
-  if (statName === 'attackDamage' || statName === 'abilityPower' || statName === 'health') {
-    return Math.round(value).toString()
-  }
-  return value.toFixed(1)
+const removeFromComparison = (buildId: string) => {
+  discoveryStore.removeFromComparison(buildId)
 }
 
 const getChampionImageUrl = (imageName: string): string => {
@@ -170,7 +228,7 @@ const getItemImageUrl = (imageName: string): string => {
 onMounted(() => {
   if (builds.value.length === 0) {
     // Redirect if no builds to compare
-    useRouter().push('/builds/discover')
+    router.push('/builds')
   }
 })
 </script>

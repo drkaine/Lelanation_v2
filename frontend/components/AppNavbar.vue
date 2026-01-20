@@ -24,13 +24,8 @@
       </button>
 
       <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
-        <NuxtLink
-          to="/builds/discover"
-          title="Découvrir des builds"
-          class="version"
-          @click="toggleMenu"
-        >
-          Découvrir
+        <NuxtLink to="/builds" title="Les builds" class="version" @click="toggleMenu">
+          Les Builds
         </NuxtLink>
         <NuxtLink
           to="/builds/create"
@@ -41,16 +36,12 @@
         >
           Créer un Build
         </NuxtLink>
-        <NuxtLink to="/builds" title="Mes builds" class="version" @click="toggleMenu">
-          Mes Builds
-        </NuxtLink>
       </div>
       <div class="right-header">
-        <NuxtLink to="/builds/discover" title="Découvrir" class="version"> Découvrir </NuxtLink>
+        <NuxtLink to="/builds" title="Les builds" class="version"> Les Builds </NuxtLink>
         <NuxtLink title="Créer un Build" class="version" to="/builds/create">
           Créer un Build
         </NuxtLink>
-        <NuxtLink title="Mes builds" class="version" to="/builds"> Mes Builds </NuxtLink>
       </div>
     </nav>
   </header>

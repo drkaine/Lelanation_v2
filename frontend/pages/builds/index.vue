@@ -1,77 +1,151 @@
 <template>
-  <div class="builds-list min-h-screen p-4 text-text">
+  <div class="builds-page min-h-screen p-4 text-text">
     <div class="mx-auto max-w-7xl">
       <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-3xl font-bold">My Builds</h1>
+        <h1 class="text-3xl font-bold text-text-accent">Les Builds</h1>
         <NuxtLink
           to="/builds/create"
-          class="rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
+          class="rounded-lg bg-accent px-6 py-2 text-background transition-colors hover:bg-accent-dark"
         >
-          Create New Build
+          Créer un Build
         </NuxtLink>
       </div>
 
-      <div v-if="builds.length === 0" class="py-12 text-center">
-        <p class="mb-4 text-lg text-text">No builds saved yet</p>
-        <NuxtLink
-          to="/builds/create"
-          class="inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
-        >
-          Create Your First Build
-        </NuxtLink>
+      <!-- Tabs -->
+      <div v-if="tabs.length > 1" class="mb-6 border-b-2 border-primary">
+        <div class="flex gap-4">
+          <button
+            v-for="tab in tabs"
+            :key="tab.id"
+            :class="[
+              'px-6 py-3 font-semibold transition-colors',
+              activeTab === tab.id
+                ? 'border-b-2 border-accent text-accent'
+                : 'text-text-secondary hover:text-text-primary',
+            ]"
+            @click="activeTab = tab.id"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
 
-      <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <!-- Tab Content: Discover -->
+      <div v-if="activeTab === 'discover'" class="tab-content">
+        <!-- Search and Filters -->
+        <div class="mb-6 space-y-4">
+          <BuildSearch />
+          <BuildFilters />
+        </div>
+
+        <!-- Comparison Bar -->
         <div
-          v-for="build in builds"
-          :key="build.id"
-          class="rounded-lg border-2 border-primary bg-surface p-4 transition-colors hover:border-accent"
+          v-if="comparisonBuilds.length > 0"
+          class="bg-accent/20 mb-6 rounded-lg border-2 border-accent p-4"
         >
-          <div class="mb-3 flex items-start justify-between">
-            <h3 class="text-lg font-bold text-text">{{ build.name }}</h3>
-            <button class="text-sm text-error hover:text-error/70" @click="confirmDelete(build.id)">
-              Delete
-            </button>
-          </div>
-
-          <div v-if="build.champion" class="mb-3 flex items-center gap-3">
-            <img
-              :src="getChampionImageUrl(build.champion.image.full)"
-              :alt="build.champion.name"
-              class="h-12 w-12 rounded"
-            />
+          <div class="flex items-center justify-between">
             <div>
-              <p class="font-semibold text-text">{{ build.champion.name }}</p>
-              <p class="text-text/70 text-sm">{{ build.champion.title }}</p>
+              <p class="font-semibold text-text">
+                {{ comparisonBuilds.length }} build{{ comparisonBuilds.length > 1 ? 's' : '' }} en
+                comparaison
+              </p>
+            </div>
+            <div class="flex gap-2">
+              <NuxtLink
+                to="/builds/compare"
+                class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
+              >
+                Comparer
+              </NuxtLink>
+              <button
+                class="rounded-lg border border-primary bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
+                @click="clearComparison"
+              >
+                Effacer
+              </button>
             </div>
           </div>
+        </div>
 
-          <div class="mb-3 flex gap-2">
-            <img
-              v-for="item in build.items.slice(0, 6)"
-              :key="item.id"
-              :src="getItemImageUrl(item.image.full)"
-              :alt="item.name"
-              class="h-8 w-8 rounded"
-            />
+        <!-- Build Grid -->
+        <BuildGrid />
+      </div>
+
+      <!-- Tab Content: My Builds -->
+      <div v-if="activeTab === 'my-builds'" class="tab-content">
+        <div v-if="builds.length === 0" class="py-12 text-center">
+          <p class="mb-4 text-lg text-text-secondary">Aucun build sauvegardé</p>
+          <NuxtLink
+            to="/builds/create"
+            class="inline-block rounded-lg bg-primary px-6 py-2 text-white transition-colors hover:bg-primary-dark"
+          >
+            Créer votre premier build
+          </NuxtLink>
+        </div>
+
+        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div
+            v-for="build in builds"
+            :key="build.id"
+            class="rounded-lg border-2 border-primary bg-surface p-4 transition-colors hover:border-accent"
+          >
+            <div class="mb-3 flex items-start justify-between">
+              <h3 class="text-lg font-bold text-text">{{ build.name }}</h3>
+              <button
+                class="text-sm text-error transition-colors hover:text-error/70"
+                @click="confirmDelete(build.id)"
+              >
+                Supprimer
+              </button>
+            </div>
+
+            <div v-if="build.champion" class="mb-3 flex items-center gap-3">
+              <img
+                :src="getChampionImageUrl(build.champion.image.full)"
+                :alt="build.champion.name"
+                class="h-12 w-12 rounded"
+              />
+              <div>
+                <p class="font-semibold text-text">{{ build.champion.name }}</p>
+                <p class="text-text/70 text-sm">{{ build.champion.title }}</p>
+              </div>
+            </div>
+
+            <div class="mb-3 flex gap-2">
+              <img
+                v-for="item in build.items.slice(0, 6)"
+                :key="item.id"
+                :src="getItemImageUrl(item.image.full)"
+                :alt="item.name"
+                class="h-8 w-8 rounded"
+              />
+            </div>
+
+            <div class="mb-3 flex gap-2">
+              <NuxtLink
+                :to="`/builds/edit/${build.id}`"
+                class="rounded-lg bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary-dark"
+              >
+                Modifier
+              </NuxtLink>
+              <button
+                class="rounded-lg border border-primary bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"
+                @click="loadBuild(build.id)"
+              >
+                Voir
+              </button>
+            </div>
+
+            <p class="text-text/50 text-xs">Créé le : {{ formatDate(build.createdAt) }}</p>
           </div>
+        </div>
+      </div>
 
-          <div class="mb-3 flex gap-2">
-            <NuxtLink
-              :to="`/builds/edit/${build.id}`"
-              class="rounded bg-primary px-4 py-2 text-sm text-white hover:bg-primary-dark"
-            >
-              Edit
-            </NuxtLink>
-            <button
-              class="rounded border border-primary bg-surface px-4 py-2 text-sm text-text hover:bg-primary hover:text-white"
-              @click="loadBuild(build.id)"
-            >
-              View
-            </button>
-          </div>
-
-          <p class="text-text/50 text-xs">Created: {{ formatDate(build.createdAt) }}</p>
+      <!-- Tab Content: Lelariva Builds -->
+      <div v-if="activeTab === 'lelariva'" class="tab-content">
+        <div class="py-12 text-center">
+          <p class="mb-4 text-lg text-text-secondary">Builds de Lelariva</p>
+          <p class="text-text-secondary">Cette section sera disponible prochainement</p>
         </div>
       </div>
     </div>
@@ -83,22 +157,22 @@
       @click="buildToDelete = null"
     >
       <div class="mx-4 w-full max-w-md rounded-lg bg-surface p-6" @click.stop>
-        <h3 class="mb-4 text-lg font-bold text-text">Delete Build?</h3>
+        <h3 class="mb-4 text-lg font-bold text-text">Supprimer le build ?</h3>
         <p class="mb-6 text-text">
-          Are you sure you want to delete this build? This action cannot be undone.
+          Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.
         </p>
         <div class="flex gap-4">
           <button
-            class="rounded bg-error px-4 py-2 text-white hover:bg-error/80"
+            class="rounded-lg bg-error px-4 py-2 text-white transition-colors hover:bg-error/80"
             @click="deleteBuild"
           >
-            Delete
+            Supprimer
           </button>
           <button
-            class="rounded border border-primary bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
+            class="rounded-lg border border-primary bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
             @click="buildToDelete = null"
           >
-            Cancel
+            Annuler
           </button>
         </div>
       </div>
@@ -107,15 +181,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
+import { useVoteStore } from '~/stores/VoteStore'
+import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
+import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
+import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
 
 const buildStore = useBuildStore()
+const discoveryStore = useBuildDiscoveryStore()
+const voteStore = useVoteStore()
 
 const buildToDelete = ref<string | null>(null)
 
 const builds = computed<Build[]>(() => buildStore.getSavedBuilds())
+const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
+
+// Check if there are Lelariva builds (placeholder for now)
+const hasLelarivaBuilds = computed(() => {
+  // TODO: Implement check for Lelariva builds when available
+  return false
+})
+
+// Filter tabs based on available builds
+const tabs = computed(() => {
+  const availableTabs = [{ id: 'discover', label: 'Découvrir' }]
+
+  if (builds.value.length > 0) {
+    availableTabs.push({ id: 'my-builds', label: 'Mes Builds' })
+  }
+
+  if (hasLelarivaBuilds.value) {
+    availableTabs.push({ id: 'lelariva', label: 'Builds de Lelariva' })
+  }
+
+  return availableTabs
+})
+
+const activeTab = ref('discover')
 
 const confirmDelete = (buildId: string) => {
   buildToDelete.value = buildId
@@ -133,6 +238,10 @@ const loadBuild = (buildId: string) => {
   navigateTo(`/builds/edit/${buildId}`)
 }
 
+const clearComparison = () => {
+  discoveryStore.clearComparison()
+}
+
 const getChampionImageUrl = (imageName: string): string => {
   return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
 }
@@ -142,10 +251,38 @@ const getItemImageUrl = (imageName: string): string => {
 }
 
 const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString()
+  return new Date(dateString).toLocaleDateString('fr-FR')
 }
 
+// Watch for changes in tabs to update active tab if current tab becomes unavailable
+watch(
+  () => tabs.value.map(t => t.id),
+  availableTabIds => {
+    if (!availableTabIds.includes(activeTab.value)) {
+      activeTab.value = 'discover'
+    }
+  }
+)
+
 onMounted(() => {
-  // Builds are loaded from localStorage via getter
+  voteStore.init()
+  discoveryStore.loadBuilds()
 })
 </script>
+
+<style scoped>
+.tab-content {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>

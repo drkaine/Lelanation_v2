@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useBuildStore } from './BuildStore'
+import { useVoteStore } from './VoteStore'
 import type { Build } from '~/types/build'
 
 export type SortOption = 'recent' | 'popular' | 'name'
@@ -133,12 +134,19 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
           return sorted.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
-        case 'popular':
-          // TODO: Implement voting system
-          // For now, sort by view count or creation date
-          return sorted.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
+        case 'popular': // Sort by vote count (descending), then by creation date
+        {
+          const voteStore = useVoteStore()
+          return sorted.sort((a, b) => {
+            const votesA = voteStore.getVoteCount(a.id)
+            const votesB = voteStore.getVoteCount(b.id)
+            if (votesA !== votesB) {
+              return votesB - votesA
+            }
+            // If same votes, sort by most recent
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          })
+        }
         case 'name':
           return sorted.sort((a, b) => {
             const nameA = a.champion?.name || a.name

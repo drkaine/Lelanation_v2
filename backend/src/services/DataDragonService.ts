@@ -4,10 +4,6 @@ import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 
-interface DataDragonVersion {
-  version: string
-}
-
 interface ChampionData {
   [key: string]: {
     id: string
@@ -63,7 +59,8 @@ export class DataDragonService {
    */
   async getLatestVersion(): Promise<Result<string, AppError>> {
     try {
-      const response = await this.api.get<DataDragonVersion[]>(
+      // Data Dragon returns a JSON array of version strings (e.g. ["15.1.1", ...])
+      const response = await this.api.get<string[]>(
         'https://ddragon.leagueoflegends.com/api/versions.json'
       )
 
@@ -74,7 +71,12 @@ export class DataDragonService {
       }
 
       // Latest version is first in the array
-      const latestVersion = response.data[0].version
+      const latestVersion = response.data[0]
+      if (!latestVersion || typeof latestVersion !== 'string') {
+        return Result.err(
+          new ExternalApiError('Invalid versions payload from Data Dragon API')
+        )
+      }
       return Result.ok(latestVersion)
     } catch (error) {
       if (axios.isAxiosError(error)) {

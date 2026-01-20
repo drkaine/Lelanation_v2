@@ -132,21 +132,12 @@
           </NuxtLink>
 
           <NuxtLink
-            to="/builds/discover"
-            class="hover:bg-accent/10 group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark"
-          >
-            <div class="mb-4 text-5xl">🌐</div>
-            <h3 class="mb-2 text-xl font-bold text-text-primary">Découvrir</h3>
-            <p class="text-text-secondary">Explorez les builds de la communauté</p>
-          </NuxtLink>
-
-          <NuxtLink
             to="/builds"
             class="hover:bg-accent/10 group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark"
           >
-            <div class="mb-4 text-5xl">📁</div>
-            <h3 class="mb-2 text-xl font-bold text-text-primary">Mes Builds</h3>
-            <p class="text-text-secondary">Accédez à vos builds sauvegardés</p>
+            <div class="mb-4 text-5xl">🌐</div>
+            <h3 class="mb-2 text-xl font-bold text-text-primary">Les Builds</h3>
+            <p class="text-text-secondary">Découvrez et gérez vos builds</p>
           </NuxtLink>
         </div>
       </div>

@@ -59,22 +59,39 @@
         <p class="text-sm font-semibold text-text">{{ build.name }}</p>
         <p class="text-text/50 text-xs">{{ formatDate(build.createdAt) }}</p>
       </div>
-      <button
-        v-if="showAddToComparison"
-        class="rounded bg-primary px-2 py-1 text-xs text-white hover:bg-primary-dark"
-        @click.stop="addToComparison"
-      >
-        Compare
-      </button>
+      <div class="flex items-center gap-2">
+        <!-- Vote Button -->
+        <button
+          class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+          :class="
+            hasVoted
+              ? 'bg-accent text-background hover:bg-accent-dark'
+              : 'border border-primary bg-surface text-text hover:bg-primary hover:text-white'
+          "
+          :title="hasVoted ? 'Retirer votre vote' : 'Voter pour ce build'"
+          @click.stop="toggleVote"
+        >
+          <span>👍</span>
+          <span>{{ voteCount }}</span>
+        </button>
+        <button
+          v-if="showAddToComparison"
+          class="rounded bg-primary px-2 py-1 text-xs text-white transition-colors hover:bg-primary-dark"
+          @click.stop="addToComparison"
+        >
+          Compare
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useRunesStore } from '~/stores/RunesStore'
+import { useVoteStore } from '~/stores/VoteStore'
 import type { Build } from '~/types/build'
 
 interface Props {
@@ -88,6 +105,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const discoveryStore = useBuildDiscoveryStore()
 const runesStore = useRunesStore()
+const voteStore = useVoteStore()
 
 const displayItems = computed(() => {
   const items = [...props.build.items]
@@ -126,4 +144,19 @@ const getRunePathImageUrl = (icon: string): string => {
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString()
 }
+
+const voteCount = computed(() => voteStore.getVoteCount(props.build.id))
+const hasVoted = computed(() => voteStore.hasUserVoted(props.build.id))
+
+const toggleVote = () => {
+  if (hasVoted.value) {
+    voteStore.unvote(props.build.id)
+  } else {
+    voteStore.vote(props.build.id)
+  }
+}
+
+onMounted(() => {
+  voteStore.init()
+})
 </script>

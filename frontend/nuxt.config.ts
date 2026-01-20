@@ -6,4 +6,12 @@ export default defineNuxtConfig({
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
   modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt'],
+  vite: {
+    server: {
+      hmr: {
+        clientPort: 443,
+      },
+      allowedHosts: ['www.lelanation.fr', 'lelanation.fr', 'localhost', '127.0.0.1'],
+    },
+  },
 })

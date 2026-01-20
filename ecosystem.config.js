@@ -8,7 +8,8 @@ module.exports = {
       interpreter: 'none',
       env: {
         NODE_ENV: 'development',
-        PORT: 4001
+        PORT: 4001,
+        YOUTUBE_API_KEY: 'AIzaSyBV5QO-6uBExbZL43S3MmZMrT7I0MQHe00'      
       },
       error_file: '/home/ubuntu/dev/Lelanation_v2/logs/backend-error.log',
       out_file: '/home/ubuntu/dev/Lelanation_v2/logs/backend-out.log',
@@ -23,13 +24,14 @@ module.exports = {
     {
       name: 'lelanation-frontend',
       cwd: '/home/ubuntu/dev/Lelanation_v2/frontend',
-      script: 'npx',
-      args: 'nuxt dev',
+      script: 'node',
+      args: '.output/server/index.mjs',
       interpreter: 'none',
       env: {
-        NODE_ENV: 'development',
+        NODE_ENV: 'production',
         PORT: 3000,
-        NITRO_PORT: 3000
+        NITRO_PORT: 3000,
+        NITRO_HOST: '127.0.0.1'
       },
       error_file: '/home/ubuntu/dev/Lelanation_v2/logs/frontend-error.log',
       out_file: '/home/ubuntu/dev/Lelanation_v2/logs/frontend-out.log',

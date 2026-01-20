@@ -10,6 +10,10 @@ interface YouTubeChannelConfig {
   channelName: string
 }
 
+type YouTubeChannelsConfigFile = {
+  channels: Array<YouTubeChannelConfig | string>
+}
+
 /**
  * YouTube synchronization cron job
  * Runs daily at 03:00 (3 AM)
@@ -24,9 +28,7 @@ export function setupYouTubeSync(): void {
     console.log('[Cron] Starting YouTube synchronization...')
 
     // Load channel configuration
-    const configResult = await FileManager.readJson<{
-      channels: YouTubeChannelConfig[]
-    }>(configFile)
+    const configResult = await FileManager.readJson<YouTubeChannelsConfigFile>(configFile)
 
     if (configResult.isErr()) {
       // If config file doesn't exist, create empty one

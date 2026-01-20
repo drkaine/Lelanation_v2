@@ -26,34 +26,36 @@ export class Result<T, E = Error> {
   }
 
   unwrap(): T {
-    if (this._isOk && this._value !== null) {
-      return this._value
+    // Important: allow `ok(null)` for optional return types (T can be null).
+    // Only the ok/err flag determines unwrap safety.
+    if (this._isOk) {
+      return this._value as T
     }
     throw new Error('Attempted to unwrap an error result')
   }
 
   unwrapErr(): E {
-    if (!this._isOk && this._error !== null) {
-      return this._error
+    if (!this._isOk) {
+      return this._error as E
     }
     throw new Error('Attempted to unwrapErr an ok result')
   }
 
   map<U>(fn: (value: T) => U): Result<U, E> {
-    if (this._isOk && this._value !== null) {
+    if (this._isOk) {
       try {
-        return Result.ok(fn(this._value))
+        return Result.ok(fn(this._value as T))
       } catch (error) {
         return Result.err(error as E)
       }
     }
-    return Result.err(this._error!)
+    return Result.err(this._error as E)
   }
 
   mapErr<F>(fn: (error: E) => F): Result<T, F> {
-    if (!this._isOk && this._error !== null) {
-      return Result.err(fn(this._error))
+    if (!this._isOk) {
+      return Result.err(fn(this._error as E))
     }
-    return Result.ok(this._value!)
+    return Result.ok(this._value as T)
   }
 }

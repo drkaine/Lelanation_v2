@@ -1,0 +1,16 @@
+{
+  "name": "Lelanation",
+  "short_name": "Lelanation",
+  "description": "Plateforme de builds et guides League of Legends",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1428",
+  "theme_color": "#0a323c",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

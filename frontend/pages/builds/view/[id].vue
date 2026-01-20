@@ -8,7 +8,7 @@
       <div v-else-if="error" class="py-12 text-center">
         <p class="text-error">{{ error }}</p>
         <NuxtLink
-          to="/builds/discover"
+          to="/builds"
           class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
         >
           Back to Builds
@@ -20,19 +20,35 @@
         <div class="mb-6 flex items-center justify-between">
           <div class="flex items-center gap-4">
             <NuxtLink
-              to="/builds/discover"
+              to="/builds"
               class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
             >
               ← Back
             </NuxtLink>
             <h1 class="text-3xl font-bold text-text">{{ build.name }}</h1>
           </div>
-          <button
-            class="rounded bg-accent px-4 py-2 text-background hover:bg-accent-dark"
-            @click="addToComparison"
-          >
-            Add to Comparison
-          </button>
+          <div class="flex items-center gap-3">
+            <!-- Vote Button -->
+            <button
+              class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+              :class="
+                hasVoted
+                  ? 'bg-accent text-background hover:bg-accent-dark'
+                  : 'border-2 border-primary bg-surface text-text hover:bg-primary hover:text-white'
+              "
+              :title="hasVoted ? 'Retirer votre vote' : 'Voter pour ce build'"
+              @click="toggleVote"
+            >
+              <span>👍</span>
+              <span>{{ voteCount }} vote{{ voteCount !== 1 ? 's' : '' }}</span>
+            </button>
+            <button
+              class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-dark"
+              @click="addToComparison"
+            >
+              Ajouter à la comparaison
+            </button>
+          </div>
         </div>
 
         <!-- Champion Section -->
@@ -181,15 +197,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useRunesStore } from '~/stores/RunesStore'
+import { useVoteStore } from '~/stores/VoteStore'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import type { SkillOrder } from '~/types/build'
 
 const route = useRoute()
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
+const voteStore = useVoteStore()
 const runesStore = useRunesStore()
 
 const loading = ref(true)
@@ -255,7 +274,20 @@ const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString()
 }
 
+const voteCount = computed(() => (build.value ? voteStore.getVoteCount(build.value.id) : 0))
+const hasVoted = computed(() => (build.value ? voteStore.hasUserVoted(build.value.id) : false))
+
+const toggleVote = () => {
+  if (!build.value) return
+  if (hasVoted.value) {
+    voteStore.unvote(build.value.id)
+  } else {
+    voteStore.vote(build.value.id)
+  }
+}
+
 onMounted(() => {
+  voteStore.init()
   const buildId = route.params.id as string
   if (buildId) {
     loading.value = true
