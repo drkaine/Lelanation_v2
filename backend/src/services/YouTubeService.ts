@@ -58,7 +58,7 @@ export class YouTubeService {
    *   - if starts with "UC": treated as a channelId
    *   - otherwise: treated as a search query, resolved to a channelId via YouTube Search API
    */
-  private async resolveChannel(
+  async resolveChannelConfig(
     input: YouTubeChannelConfigInput
   ): Promise<Result<YouTubeChannelConfig, AppError>> {
     const keyOk = this.requireApiKey()
@@ -329,7 +329,7 @@ export class YouTubeService {
     let totalVideos = 0
 
     for (const input of channels) {
-      const resolved = await this.resolveChannel(input)
+      const resolved = await this.resolveChannelConfig(input)
       if (resolved.isErr()) return Result.err(resolved.unwrapErr())
 
       const channel = resolved.unwrap()

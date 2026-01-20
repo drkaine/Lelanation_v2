@@ -27,6 +27,9 @@
         <NuxtLink to="/builds" title="Les builds" class="version" @click="toggleMenu">
           Les Builds
         </NuxtLink>
+        <NuxtLink to="/videos" title="Vidéos" class="version" @click="toggleMenu">
+          Vidéos
+        </NuxtLink>
         <NuxtLink
           to="/builds/create"
           title="Créer un build"
@@ -39,6 +42,7 @@
       </div>
       <div class="right-header">
         <NuxtLink to="/builds" title="Les builds" class="version"> Les Builds </NuxtLink>
+        <NuxtLink to="/videos" title="Vidéos" class="version"> Vidéos </NuxtLink>
         <NuxtLink title="Créer un Build" class="version" to="/builds/create">
           Créer un Build
         </NuxtLink>
