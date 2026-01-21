@@ -23,15 +23,18 @@ export default defineNuxtConfig({
       pathPrefix: process.env.ADMIN_PATH_PREFIX || '/admin',
     },
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001',
+      // Prefer same-origin `/api` in production. In dev you can still set
+      // NUXT_PUBLIC_API_BASE=http://localhost:4001 if needed.
+      apiBase: process.env.NUXT_PUBLIC_API_BASE || '',
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
     },
   },
-  // @ts-expect-error - provided by Nuxt SEO "site config"
   site: {
     url: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
   },
   i18n: {
+    // Required by @nuxtjs/i18n to generate valid SEO alternate links.
+    baseUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
     defaultLocale: 'fr',
     strategy: 'prefix_except_default',
     langDir: 'locales',
@@ -42,7 +45,7 @@ export default defineNuxtConfig({
     ],
     detectBrowserLanguage: false,
     vueI18n: './i18n.config.ts',
-  },
+  } as any,
   robots: {
     disallow: ['/admin', '/api/admin'],
   },
@@ -63,8 +66,42 @@ export default defineNuxtConfig({
     },
     // Also proxy in production (when running `.output/server/index.mjs`)
     routeRules: {
+      // Immutable build assets (hashed filenames).
+      '/_nuxt/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      // Public static assets (non-hashed).
+      '/images/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
+      '/favicon.ico': {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
+      '/manifest.json': {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
+      '/_robots.txt': {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
       '/api/**': {
         proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001') + '/**',
+      },
+      // Pages/HTML should not be cached aggressively. Prevents "new HTML + old _nuxt"
+      // or "old HTML + new _nuxt" mismatches during deployments.
+      '/**': {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
       },
     },
   },

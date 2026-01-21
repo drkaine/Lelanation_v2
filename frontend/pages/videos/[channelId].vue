@@ -22,20 +22,20 @@
         {{ youtube.error }}
       </div>
 
-      <div v-if="youtube.loadingChannelIds.has(channelId)" class="text-text/70 py-10 text-center">
+      <div v-if="youtube.loadingChannelIds.has(channelId)" class="py-10 text-center text-text/70">
         Chargement…
       </div>
 
       <div v-else-if="videos.length === 0" class="py-12 text-center">
         <p class="text-lg text-text">Aucune vidéo trouvée</p>
-        <p class="text-text/70 mt-2 text-sm">
+        <p class="mt-2 text-sm text-text/70">
           Soit la chaîne n’est pas encore synchronisée, soit elle est vide.
         </p>
       </div>
 
       <div v-else>
         <div class="mb-4 flex items-center justify-between">
-          <p class="text-text/70 text-sm">
+          <p class="text-sm text-text/70">
             {{ videos.length }} vidéo{{ videos.length > 1 ? 's' : '' }}
           </p>
         </div>
@@ -49,8 +49,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoCard from '~/components/Videos/VideoCard.vue'
 import type { YouTubeVideo } from '~/types/youtube'
@@ -66,7 +67,13 @@ const videos = computed<YouTubeVideo[]>(() =>
 )
 const title = computed(() => data.value?.channelName || channelId.value)
 
-onMounted(async () => {
-  await youtube.loadChannelData(channelId.value)
-})
+// SSR + client navigation: prefetch the channel videos.
+await useAsyncData(
+  'youtube-channel',
+  async () => {
+    await youtube.loadChannelData(channelId.value)
+    return youtube.channelDataById[channelId.value]
+  },
+  { watch: [channelId] }
+)
 </script>

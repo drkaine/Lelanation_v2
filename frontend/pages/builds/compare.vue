@@ -1,38 +1,59 @@
 <template>
-  <div class="build-comparison min-h-screen p-4 text-text">
+  <div class="build-comparison min-h-screen px-4 py-6 text-text sm:px-6 lg:px-8">
     <div class="mx-auto max-w-7xl">
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-3xl font-bold text-text">Compare Builds</h1>
-        <NuxtLink
-          to="/builds"
-          class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
-        >
-          Back to Discovery
-        </NuxtLink>
+      <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="space-y-1">
+          <h1 class="text-3xl font-bold text-text">Comparer des builds</h1>
+          <p class="text-sm text-text/70">
+            {{ builds.length }} build<span v-if="builds.length > 1">s</span> sélectionné<span
+              v-if="builds.length > 1"
+              >s</span
+            >
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            v-if="builds.length"
+            type="button"
+            class="rounded-lg border border-primary/40 bg-surface px-4 py-2 text-sm font-semibold text-text hover:border-primary hover:bg-primary/10"
+            @click="clearComparison"
+          >
+            Vider
+          </button>
+          <NuxtLink
+            to="/builds"
+            class="rounded-lg border border-primary/40 bg-surface px-4 py-2 text-sm font-semibold text-text hover:border-primary hover:bg-primary/10"
+          >
+            Retour à la découverte
+          </NuxtLink>
+        </div>
       </div>
 
       <div v-if="builds.length === 0" class="py-12 text-center">
-        <p class="text-lg text-text">No builds selected for comparison</p>
+        <p class="text-lg text-text">Aucun build sélectionné pour la comparaison</p>
         <NuxtLink
           to="/builds"
-          class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
+          class="mt-4 inline-block rounded-lg bg-accent px-6 py-2 font-semibold text-background hover:bg-accent-dark"
         >
-          Discover Builds
+          Découvrir des builds
         </NuxtLink>
       </div>
 
-      <div v-else class="overflow-x-auto">
-        <div class="grid gap-4" :style="{ gridTemplateColumns: `repeat(${builds.length}, 1fr)` }">
+      <div v-else class="overflow-x-auto pb-2">
+        <div class="grid snap-x snap-mandatory auto-cols-[minmax(280px,1fr)] grid-flow-col gap-4">
           <div
             v-for="build in builds"
             :key="build.id"
-            class="min-w-[280px] rounded-lg border-2 border-primary bg-surface p-4"
+            class="snap-start rounded-xl border-2 border-primary bg-surface p-4 shadow-sm"
           >
             <!-- Build Header -->
             <div class="mb-4 flex items-center justify-between">
               <h3 class="font-bold text-text">{{ build.name }}</h3>
               <button
-                class="text-error hover:text-error/70"
+                type="button"
+                class="rounded px-2 py-1 text-error hover:bg-error/10"
+                aria-label="Retirer de la comparaison"
                 @click="removeFromComparison(build.id)"
               >
                 ✕
@@ -41,7 +62,7 @@
 
             <!-- Champion -->
             <div v-if="build.champion" class="mb-4">
-              <p class="text-text/70 mb-2 text-xs font-semibold">Champion</p>
+              <p class="mb-2 text-xs font-semibold text-text/70">Champion</p>
               <div class="flex items-center gap-2">
                 <img
                   :src="getChampionImageUrl(build.champion.image.full)"
@@ -54,12 +75,12 @@
 
             <!-- Items -->
             <div class="mb-4">
-              <p class="text-text/70 mb-2 text-xs font-semibold">Items</p>
+              <p class="mb-2 text-xs font-semibold text-text/70">Objets</p>
               <div class="grid grid-cols-3 gap-1">
                 <div
                   v-for="(item, index) in build.items.slice(0, 6)"
                   :key="index"
-                  class="border-primary/30 aspect-square rounded border"
+                  class="aspect-square rounded border border-primary/30"
                 >
                   <img
                     v-if="item"
@@ -73,7 +94,7 @@
 
             <!-- Stats Comparison -->
             <div class="mb-4">
-              <p class="text-text/70 mb-2 text-xs font-semibold">Statistiques Clés</p>
+              <p class="mb-2 text-xs font-semibold text-text/70">Statistiques clés</p>
               <div class="space-y-1 text-xs">
                 <StatRow
                   label="AD"
@@ -142,8 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { calculateStats } from '~/utils/statsCalculator'
 import type { CalculatedStats } from '~/types/build'
@@ -151,7 +171,6 @@ import StatRow from '~/components/Build/StatRow.vue'
 import { useGameVersion } from '~/composables/useGameVersion'
 
 const discoveryStore = useBuildDiscoveryStore()
-const router = useRouter()
 const { version } = useGameVersion()
 
 const builds = computed(() => discoveryStore.getComparisonBuilds())
@@ -159,7 +178,7 @@ const builds = computed(() => discoveryStore.getComparisonBuilds())
 // Calculate stats for each build
 const buildStats = computed(() => {
   return builds.value.map(build => {
-    const stats = calculateStats(build.champion, build.items, build.runes, build.shards, 18)
+    const stats = calculateStats(build.champion ?? null, build.items, build.runes, build.shards, 18)
     return {
       buildId: build.id,
       stats: stats || createEmptyStats(),
@@ -180,16 +199,20 @@ const getStatValue = (buildId: string, statName: keyof CalculatedStats): number 
   return buildStat?.stats[statName] || 0
 }
 
+const isNear = (a: number, b: number, epsilon: number = 1e-6): boolean => {
+  return Math.abs(a - b) <= epsilon
+}
+
 const isHighest = (buildId: string, statName: keyof CalculatedStats): boolean => {
   const comparison = getStatComparison(statName)
   const value = getStatValue(buildId, statName)
-  return value === comparison.max && comparison.max !== comparison.min
+  return isNear(value, comparison.max) && !isNear(comparison.max, comparison.min)
 }
 
 const isLowest = (buildId: string, statName: keyof CalculatedStats): boolean => {
   const comparison = getStatComparison(statName)
   const value = getStatValue(buildId, statName)
-  return value === comparison.min && comparison.max !== comparison.min
+  return isNear(value, comparison.min) && !isNear(comparison.max, comparison.min)
 }
 
 const createEmptyStats = (): CalculatedStats => {
@@ -219,6 +242,10 @@ const removeFromComparison = (buildId: string) => {
   discoveryStore.removeFromComparison(buildId)
 }
 
+const clearComparison = () => {
+  discoveryStore.clearComparison()
+}
+
 const getChampionImageUrl = (imageName: string): string => {
   return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
 }
@@ -226,11 +253,4 @@ const getChampionImageUrl = (imageName: string): string => {
 const getItemImageUrl = (imageName: string): string => {
   return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
-
-onMounted(() => {
-  if (builds.value.length === 0) {
-    // Redirect if no builds to compare
-    router.push('/builds')
-  }
-})
 </script>

@@ -4,7 +4,7 @@
       <div class="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 class="text-3xl font-bold text-text-accent">Vidéos</h1>
-          <p class="text-text/70 mt-1 text-sm">
+          <p class="mt-1 text-sm text-text/70">
             Vidéos YouTube organisées par créateur (synchronisées côté serveur).
           </p>
         </div>
@@ -30,22 +30,22 @@
 
       <div v-else-if="creators.length === 0" class="py-12 text-center">
         <p class="text-lg text-text">Aucun créateur configuré</p>
-        <p class="text-text/70 mt-2 text-sm">Demande à un admin d’ajouter des chaînes.</p>
+        <p class="mt-2 text-sm text-text/70">Demande à un admin d’ajouter des chaînes.</p>
       </div>
 
       <div v-else class="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
         <!-- Creator quick nav -->
         <aside class="rounded-lg border border-primary bg-surface p-4">
-          <p class="text-text/70 mb-3 text-xs font-semibold">Créateurs</p>
+          <p class="mb-3 text-xs font-semibold text-text/70">Créateurs</p>
           <div class="space-y-2">
             <a
               v-for="c in creators"
               :key="c.channelId"
               :href="`#creator-${c.channelId}`"
-              class="hover:bg-primary/20 block rounded px-2 py-1 text-sm text-text transition-colors"
+              class="block rounded px-2 py-1 text-sm text-text transition-colors hover:bg-primary/20"
             >
               <span class="font-semibold">{{ c.channelName || c.channelId }}</span>
-              <span class="text-text/60 ml-2 text-xs">({{ c.videoCount }})</span>
+              <span class="ml-2 text-xs text-text/60">({{ c.videoCount }})</span>
             </a>
           </div>
         </aside>
@@ -63,7 +63,7 @@
                 <h2 class="text-lg font-bold text-text">
                   {{ c.channelName || c.channelId }}
                 </h2>
-                <p class="text-text/60 mt-1 text-xs">
+                <p class="mt-1 text-xs text-text/60">
                   {{ c.videoCount }} vidéo{{ c.videoCount > 1 ? 's' : '' }}
                   <span v-if="c.lastSync">· Sync: {{ formatDateTime(c.lastSync) }}</span>
                 </p>
@@ -88,7 +88,7 @@
             <div v-if="expanded.has(c.channelId)" class="mt-4">
               <div
                 v-if="youtube.loadingChannelIds.has(c.channelId)"
-                class="text-text/70 py-4 text-center"
+                class="py-4 text-center text-text/70"
               >
                 Chargement des vidéos…
               </div>
@@ -114,7 +114,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoCard from '~/components/Videos/VideoCard.vue'
 import type { YouTubeVideo } from '~/types/youtube'
@@ -157,7 +158,9 @@ const formatDateTime = (iso: string) => {
   })
 }
 
-onMounted(async () => {
+// SSR + client navigation: prefetch creators list.
+await useAsyncData('youtube-status', async () => {
   await youtube.loadStatus()
+  return youtube.status
 })
 </script>
