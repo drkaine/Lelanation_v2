@@ -7,6 +7,8 @@ export interface YouTubeVideo {
   channelId: string
   channelTitle: string
   url: string
+  duration?: string
+  isShort?: boolean
 }
 
 export interface YouTubeChannelStatus {

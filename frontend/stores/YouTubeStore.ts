@@ -32,6 +32,11 @@ export const useYouTubeStore = defineStore('youtube', {
   },
 
   actions: {
+    clearChannelCache() {
+      this.channelDataById = {}
+      this.loadingChannelIds = new Set<string>()
+    },
+
     async loadStatus() {
       this.loadingStatus = true
       this.error = null
@@ -46,6 +51,14 @@ export const useYouTubeStore = defineStore('youtube', {
       } finally {
         this.loadingStatus = false
       }
+    },
+
+    async loadAllChannelsData() {
+      // Ensure we have a status list first.
+      if (!this.status.length) {
+        await this.loadStatus()
+      }
+      await Promise.all(this.status.map(s => this.loadChannelData(s.channelId)))
     },
 
     async loadConfig() {

@@ -13,6 +13,14 @@ export interface YouTubeVideo {
   channelId: string
   channelTitle: string
   url: string
+  /**
+   * ISO 8601 duration returned by YouTube API (e.g. "PT59S", "PT2M10S")
+   */
+  duration?: string
+  /**
+   * True when duration <= 60s (Shorts)
+   */
+  isShort?: boolean
 }
 
 export interface YouTubeChannelConfig {
@@ -226,7 +234,7 @@ export class YouTubeService {
       for (let i = 0; i < videoIds.length; i += 50) {
         const chunk = videoIds.slice(i, i + 50)
         const res = await this.api.get('/videos', {
-          params: { part: 'snippet,statistics', id: chunk.join(',') }
+          params: { part: 'snippet,statistics,contentDetails', id: chunk.join(',') }
         })
 
         if (!res.data?.items) continue
@@ -247,6 +255,9 @@ export class YouTubeService {
                 channelId?: string
                 channelTitle?: string
               }
+              contentDetails?: {
+                duration?: string
+              }
             }) => ({
               id: item.id,
               title: item.snippet?.title || 'Untitled',
@@ -259,7 +270,9 @@ export class YouTubeService {
                 '',
               channelId: item.snippet?.channelId || '',
               channelTitle: item.snippet?.channelTitle || 'Unknown',
-              url: `https://www.youtube.com/watch?v=${item.id}`
+              url: `https://www.youtube.com/watch?v=${item.id}`,
+              duration: item.contentDetails?.duration || undefined,
+              isShort: this.isShortDuration(item.contentDetails?.duration)
             })
           )
         )
@@ -284,6 +297,73 @@ export class YouTubeService {
       }
       return Result.err(new ExternalApiError('Failed to fetch YouTube video details', undefined, error))
     }
+  }
+
+  private async fetchVideoDurations(
+    videoIds: string[]
+  ): Promise<Result<Map<string, { duration?: string; isShort?: boolean }>, AppError>> {
+    const keyOk = this.requireApiKey()
+    if (keyOk.isErr()) return Result.err(keyOk.unwrapErr())
+    if (videoIds.length === 0) return Result.ok(new Map())
+
+    try {
+      const byId = new Map<string, { duration?: string; isShort?: boolean }>()
+
+      for (let i = 0; i < videoIds.length; i += 50) {
+        const chunk = videoIds.slice(i, i + 50)
+        const res = await this.api.get('/videos', {
+          params: { part: 'contentDetails', id: chunk.join(',') }
+        })
+        const items = res.data?.items
+        if (!items || items.length === 0) continue
+
+        for (const item of items as Array<{ id: string; contentDetails?: { duration?: string } }>) {
+          const duration = item.contentDetails?.duration || undefined
+          byId.set(item.id, { duration, isShort: this.isShortDuration(duration) })
+        }
+      }
+
+      return Result.ok(byId)
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 429) {
+          return Result.err(new ExternalApiError('YouTube API rate limit exceeded. Please retry later.', 429, error))
+        }
+        if (error.response?.status === 403) {
+          return Result.err(new ExternalApiError('YouTube API quota exceeded', 403, error))
+        }
+        return Result.err(
+          new ExternalApiError(
+            `Failed to fetch YouTube video durations: ${error.message}`,
+            error.response?.status,
+            error
+          )
+        )
+      }
+      return Result.err(new ExternalApiError('Failed to fetch YouTube video durations', undefined, error))
+    }
+  }
+
+  private isShortDuration(duration?: string): boolean | undefined {
+    if (!duration) return undefined
+    const seconds = this.parseIsoDurationSeconds(duration)
+    if (seconds === null) return undefined
+    // YouTube has supported Shorts up to 3 minutes (vertical). Use env override when needed.
+    const maxSeconds = Number(process.env.YOUTUBE_SHORT_MAX_SECONDS || '180')
+    const limit = Number.isFinite(maxSeconds) && maxSeconds > 0 ? maxSeconds : 180
+    return seconds > 0 && seconds <= limit
+  }
+
+  private parseIsoDurationSeconds(duration: string): number | null {
+    // ISO 8601 duration example: PT1H2M3S, PT59S, PT2M, PT0S
+    // We only need total seconds; ignore years/months/days (not expected for YouTube videos).
+    const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(duration)
+    if (!m) return null
+    const h = m[1] ? Number(m[1]) : 0
+    const min = m[2] ? Number(m[2]) : 0
+    const s = m[3] ? Number(m[3]) : 0
+    if (![h, min, s].every((n) => Number.isFinite(n))) return null
+    return h * 3600 + min * 60 + s
   }
 
   private async loadExistingChannelData(
@@ -377,6 +457,31 @@ export class YouTubeService {
         const db = Date.parse(b.publishedAt || '') || 0
         return db - da
       })
+
+      // Enrich existing videos with duration/isShort (one-time backfill).
+      const missingIds = merged
+        .filter((v) => v.duration === undefined || v.isShort === undefined)
+        .map((v) => v.id)
+
+      if (missingIds.length > 0) {
+        const durationsResult = await this.fetchVideoDurations(missingIds)
+        if (durationsResult.isErr()) return Result.err(durationsResult.unwrapErr())
+
+        const durationsById = durationsResult.unwrap()
+        for (const v of merged) {
+          const extra = durationsById.get(v.id)
+          if (!extra) continue
+          if (v.duration === undefined) v.duration = extra.duration
+          if (v.isShort === undefined) v.isShort = extra.isShort
+        }
+      }
+
+      // Always recompute isShort from duration (threshold can change).
+      for (const v of merged) {
+        if (typeof v.duration === 'string') {
+          v.isShort = this.isShortDuration(v.duration)
+        }
+      }
 
       const save = await this.saveChannelData({
         channelId: channel.channelId,
