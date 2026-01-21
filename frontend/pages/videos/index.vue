@@ -33,7 +33,7 @@
 
             <select
               v-model="selectedChannelId"
-              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              class="w-full rounded-lg border border-accent/70 bg-black px-4 py-2 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="all">Toutes les chaînes</option>
               <option v-for="c in creators" :key="c.channelId" :value="c.channelId">
@@ -43,33 +43,34 @@
           </div>
         </div>
 
-        <!-- Type pills (centered) -->
+        <!-- Filters: single responsive row (scrolls on small screens) -->
         <div class="flex justify-center">
-          <div class="flex flex-wrap justify-center gap-2">
-            <button
-              v-for="opt in typeOptions"
-              :key="opt.id"
-              type="button"
-              :class="chipClass(selectedType === opt.id)"
-              @click="selectedType = opt.id"
-            >
-              {{ opt.label }}
-            </button>
-          </div>
-        </div>
+          <div class="no-scrollbar flex w-full max-w-5xl items-center gap-2 overflow-x-auto py-1">
+            <div class="flex flex-nowrap items-center gap-2">
+              <button
+                v-for="opt in typeOptions"
+                :key="opt.id"
+                type="button"
+                :class="chipClass(selectedType === opt.id)"
+                @click="selectedType = opt.id"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
 
-        <!-- Format pills (centered) -->
-        <div class="flex justify-center">
-          <div class="flex flex-wrap justify-center gap-2">
-            <button
-              v-for="opt in formatOptions"
-              :key="opt.id"
-              type="button"
-              :class="chipClass(selectedFormat === opt.id)"
-              @click="selectedFormat = opt.id"
-            >
-              {{ opt.label }}
-            </button>
+            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
+
+            <div class="flex flex-nowrap items-center gap-2">
+              <button
+                v-for="opt in formatOptions"
+                :key="opt.id"
+                type="button"
+                :class="chipClass(selectedFormat === opt.id)"
+                @click="selectedFormat = opt.id"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -77,23 +78,23 @@
         <div
           class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div class="text-sm text-text/70">
-            {{ filteredVideos.length }} résultat{{ filteredVideos.length > 1 ? 's' : '' }}
-          </div>
-
           <button
             type="button"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-accent/10 disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-accent/10 disabled:opacity-40"
             :disabled="youtube.loadingStatus || isLoadingAll"
             @click="refresh"
           >
             Actualiser
           </button>
 
+          <div class="text-sm text-text/70">
+            {{ filteredVideos.length }} résultat{{ filteredVideos.length > 1 ? 's' : '' }}
+          </div>
+
           <div class="flex flex-wrap items-center gap-2">
             <select
               :value="String(perPage)"
-              class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
               @change="onPerPageChange"
             >
               <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
@@ -158,6 +159,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
@@ -165,6 +167,8 @@ import type { YouTubeVideo } from '~/types/youtube'
 
 const youtube = useYouTubeStore()
 const isLoadingAll = ref(false)
+const route = useRoute()
+const router = useRouter()
 
 const creators = computed(() => youtube.creators)
 
@@ -192,10 +196,10 @@ const formatOptions = [
 
 const chipClass = (active: boolean) =>
   [
-    'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+    'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
     active
-      ? 'border-accent bg-accent/15 text-text'
-      : 'border-primary/40 bg-background/10 text-text/80 hover:border-primary hover:bg-primary/10',
+      ? 'border-accent bg-accent/20 text-accent'
+      : 'border-accent/70 bg-background/10 text-accent-dark hover:border-accent hover:bg-accent/10 hover:text-accent',
   ].join(' ')
 
 const normalize = (s: string) =>
@@ -265,14 +269,19 @@ const filteredVideos = computed<YouTubeVideo[]>(() => {
     list = list.filter(v => normalize(v.title).includes(q))
   }
 
-  const sortByTitle = type === 'builds' || type === 'recap' || type === 'tierlist'
-  if (sortByTitle) {
-    return [...list].sort((a, b) => a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' }))
+  const toTime = (iso: string | undefined) => {
+    const t = Date.parse(String(iso || ''))
+    return Number.isFinite(t) ? t : -Infinity
   }
 
-  return [...list].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  )
+  // Default: strict chronological (newest first), stable tie-breakers.
+  return [...list].sort((a, b) => {
+    const dt = toTime(b.publishedAt) - toTime(a.publishedAt)
+    if (dt !== 0) return dt
+    const byTitle = a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' })
+    if (byTitle !== 0) return byTitle
+    return a.id.localeCompare(b.id, 'fr', { sensitivity: 'base' })
+  })
 })
 
 const perPageOptions = [
@@ -292,6 +301,36 @@ const onPerPageChange = (e: Event) => {
 
 watch([query, selectedChannelId, selectedType, selectedFormat, perPage], () => {
   page.value = 1
+})
+
+// Allow deep links like /videos?channelId=UC...
+watch(
+  () => route.query.channelId,
+  channelIdQuery => {
+    const q = typeof channelIdQuery === 'string' ? channelIdQuery : ''
+    if (!q) {
+      selectedChannelId.value = 'all'
+      return
+    }
+    // Apply only if the channel exists in configured creators (defensive)
+    if (creators.value.some(c => c.channelId === q)) {
+      selectedChannelId.value = q
+    }
+  },
+  { immediate: true }
+)
+
+// Keep URL in sync when user changes channel filter.
+watch(selectedChannelId, next => {
+  const current = typeof route.query.channelId === 'string' ? route.query.channelId : ''
+  const nextQueryValue = next === 'all' ? '' : String(next)
+  if (current === nextQueryValue) return
+
+  const q = { ...route.query } as Record<string, any>
+  if (nextQueryValue) q.channelId = nextQueryValue
+  else delete q.channelId
+
+  router.replace({ query: q })
 })
 
 const totalPages = computed(() => {

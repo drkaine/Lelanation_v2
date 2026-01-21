@@ -25,7 +25,7 @@ const onLocaleChange = (e: Event) => {
   appearance: none;
   border-radius: 6px;
   border: 1px solid var(--color-accent);
-  background: transparent;
+  background: #000;
   padding: 0 18px 0 8px;
   font-size: 12px;
   font-weight: 600;

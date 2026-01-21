@@ -4,7 +4,7 @@
       <div class="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 class="text-3xl font-bold text-text-accent">Admin · Créateurs YouTube</h1>
-          <p class="text-text/70 mt-1 text-sm">
+          <p class="mt-1 text-sm text-text/70">
             Gérer la liste des chaînes synchronisées (Epic 6). La protection “admin auth” viendra
             avec Epic 8.
           </p>
@@ -48,7 +48,7 @@
             Ajouter
           </button>
         </div>
-        <p class="text-text/60 mt-2 text-xs">
+        <p class="mt-2 text-xs text-text/60">
           Astuce: si tu mets un username, le backend résout via l’API YouTube Search.
         </p>
       </div>
@@ -64,9 +64,9 @@
           </button>
         </div>
 
-        <div v-if="youtube.loadingStatus" class="text-text/70 py-6 text-center">Chargement…</div>
+        <div v-if="youtube.loadingStatus" class="py-6 text-center text-text/70">Chargement…</div>
 
-        <div v-else-if="youtube.creators.length === 0" class="text-text/70 py-6 text-center">
+        <div v-else-if="youtube.creators.length === 0" class="py-6 text-center text-text/70">
           Aucun créateur configuré.
         </div>
 
@@ -78,7 +78,7 @@
           >
             <div>
               <p class="font-semibold text-text">{{ c.channelName || c.channelId }}</p>
-              <p class="text-text/60 mt-1 text-xs">
+              <p class="mt-1 text-xs text-text/60">
                 id: {{ c.channelId }} · vidéos: {{ c.videoCount }} · sync:
                 {{ c.lastSync ? formatDateTime(c.lastSync) : '—' }}
               </p>
@@ -87,7 +87,7 @@
 
             <div class="flex items-center gap-2">
               <NuxtLink
-                :to="`/videos/${c.channelId}`"
+                :to="`/videos?channelId=${encodeURIComponent(c.channelId)}`"
                 class="rounded-lg border border-primary bg-surface px-3 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"
               >
                 Voir

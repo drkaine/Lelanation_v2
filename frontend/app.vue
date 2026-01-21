@@ -32,6 +32,17 @@ useHead(() => ({
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  /* Selectors: force black background */
+  select {
+    background-color: #000;
+  }
+
+  option {
+    background-color: #000;
+  }
+}
+
 /* Global graphic rules:
    - No pure white in UI (replace with the lightest blue).
 */
