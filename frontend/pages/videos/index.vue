@@ -28,12 +28,12 @@
               v-model="query"
               type="search"
               placeholder="Rechercher une vidéo..."
-              class="w-full rounded-lg border border-primary/40 bg-surface/70 px-4 py-2 text-sm text-text shadow-sm placeholder:text-text/50 focus:border-accent/70 focus:outline-none"
+              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-text shadow-sm placeholder:text-text/50 focus:border-accent focus:outline-none"
             />
 
             <select
               v-model="selectedChannelId"
-              class="w-full rounded-lg border border-primary/40 bg-surface/70 px-4 py-2 text-sm text-text focus:border-accent/70 focus:outline-none"
+              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-text focus:border-accent focus:outline-none"
             >
               <option value="all">Toutes les chaînes</option>
               <option v-for="c in creators" :key="c.channelId" :value="c.channelId">
@@ -83,7 +83,7 @@
 
           <button
             type="button"
-            class="rounded-lg border border-primary/40 bg-surface/70 px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-primary/10 disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-accent/10 disabled:opacity-40"
             :disabled="youtube.loadingStatus || isLoadingAll"
             @click="refresh"
           >
@@ -93,7 +93,7 @@
           <div class="flex flex-wrap items-center gap-2">
             <select
               :value="String(perPage)"
-              class="rounded-lg border border-primary/40 bg-surface/70 px-3 py-2 text-sm text-text focus:border-accent/70 focus:outline-none"
+              class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text focus:border-accent focus:outline-none"
               @change="onPerPageChange"
             >
               <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
@@ -136,7 +136,7 @@
           <button
             type="button"
             :disabled="page === 1"
-            class="rounded-lg border border-primary/40 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
             @click="page = Math.max(1, page - 1)"
           >
             ←
@@ -145,7 +145,7 @@
           <button
             type="button"
             :disabled="page === totalPages"
-            class="rounded-lg border border-primary/40 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
             @click="page = Math.min(totalPages, page + 1)"
           >
             →

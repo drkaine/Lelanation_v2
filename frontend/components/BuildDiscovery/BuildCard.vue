@@ -1,6 +1,6 @@
 <template>
   <div
-    class="build-card flex cursor-pointer flex-col rounded-lg border-2 border-primary bg-surface p-4 transition-all hover:border-accent hover:shadow-lg"
+    class="build-card flex cursor-pointer flex-col rounded-lg border-2 border-accent/70 bg-surface p-4 transition-all hover:border-accent hover:shadow-lg"
     @click="navigateToBuild"
   >
     <!-- Champion Header -->
@@ -12,19 +12,19 @@
       />
       <div class="flex-1">
         <h3 class="font-bold text-text">{{ build.champion.name }}</h3>
-        <p class="text-text/70 text-xs">{{ build.champion.title }}</p>
+        <p class="text-xs text-text/70">{{ build.champion.title }}</p>
       </div>
-      <div v-if="build.gameVersion" class="text-text/50 text-xs">v{{ build.gameVersion }}</div>
+      <div v-if="build.gameVersion" class="text-xs text-text/50">v{{ build.gameVersion }}</div>
     </div>
 
     <!-- Items Grid -->
     <div class="mb-3">
-      <p class="text-text/70 mb-2 text-xs font-semibold">Items</p>
+      <p class="mb-2 text-xs font-semibold text-text/70">Items</p>
       <div class="grid grid-cols-6 gap-1">
         <div
           v-for="(item, index) in displayItems"
           :key="index"
-          class="border-primary/30 bg-surface-dark relative aspect-square rounded border"
+          class="bg-surface-dark relative aspect-square rounded border border-primary/30"
         >
           <img
             v-if="item"
@@ -32,7 +32,7 @@
             :alt="item.name"
             class="h-full w-full rounded object-cover"
           />
-          <div v-else class="text-text/30 flex h-full w-full items-center justify-center text-xs">
+          <div v-else class="flex h-full w-full items-center justify-center text-xs text-text/30">
             -
           </div>
         </div>
@@ -41,7 +41,7 @@
 
     <!-- Runes Preview -->
     <div v-if="build.runes" class="mb-3">
-      <p class="text-text/70 mb-2 text-xs font-semibold">Runes</p>
+      <p class="mb-2 text-xs font-semibold text-text/70">Runes</p>
       <div class="flex items-center gap-2">
         <img
           v-if="primaryRunePath"
@@ -54,10 +54,10 @@
     </div>
 
     <!-- Build Name and Meta -->
-    <div class="border-primary/30 mt-auto flex items-center justify-between border-t pt-2">
+    <div class="mt-auto flex items-center justify-between border-t border-primary/30 pt-2">
       <div class="flex-1">
         <p class="text-sm font-semibold text-text">{{ build.name }}</p>
-        <p class="text-text/50 text-xs">{{ formatDate(build.createdAt) }}</p>
+        <p class="text-xs text-text/50">{{ formatDate(build.createdAt) }}</p>
       </div>
       <div class="flex items-center gap-2">
         <!-- Vote Button -->
@@ -66,7 +66,7 @@
           :class="
             hasVoted
               ? 'bg-accent text-background hover:bg-accent-dark'
-              : 'border border-primary bg-surface text-text hover:bg-primary hover:text-white'
+              : 'border border-accent/70 bg-surface text-text hover:bg-accent/10'
           "
           :title="hasVoted ? 'Retirer votre vote' : 'Voter pour ce build'"
           @click.stop="toggleVote"
@@ -76,7 +76,7 @@
         </button>
         <button
           v-if="showAddToComparison"
-          class="rounded bg-primary px-2 py-1 text-xs text-white transition-colors hover:bg-primary-dark"
+          class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
           @click.stop="addToComparison"
         >
           Compare

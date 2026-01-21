@@ -31,4 +31,22 @@ useHead(() => ({
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Global graphic rules:
+   - No pure white in UI (replace with the lightest blue).
+*/
+@layer utilities {
+  .text-white {
+    color: rgb(var(--rgb-primary-light) / 1) !important;
+  }
+
+  .bg-white {
+    background-color: rgb(var(--rgb-primary-light) / 1) !important;
+  }
+
+  /* All borders should be gold (accent) */
+  [class*='border-primary'] {
+    border-color: rgb(var(--rgb-accent) / 0.7) !important;
+  }
+}
 </style>

@@ -3,7 +3,7 @@
     :href="video.url"
     target="_blank"
     rel="noopener noreferrer"
-    class="group overflow-hidden rounded-2xl border border-primary/25 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent/60 hover:shadow-black/35"
+    class="group overflow-hidden rounded-2xl border border-accent/70 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent hover:shadow-black/35"
   >
     <div class="relative">
       <img
@@ -50,6 +50,7 @@ const formatDate = (iso: string) => {
 .title-2l {
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

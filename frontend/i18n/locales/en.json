@@ -2,6 +2,8 @@
   "nav": {
     "home": "Home",
     "builds": "Builds",
+    "build": "build",
+    "communityBuilds": "Community builds",
     "createBuild": "Create Build",
     "videos": "Videos",
     "admin": "Admin",
@@ -11,6 +13,15 @@
     "subtitle": "The go-to platform to create, optimize and share your League of Legends builds",
     "features": "Features",
     "quickActions": "Quick actions",
+    "links": {
+      "discord": "Discord",
+      "patreon": "Patreon",
+      "youtube": "YouTube",
+      "twitch": "Twitch",
+      "twitter": "Twitter",
+      "tiktok": "TikTok",
+      "website": "Website"
+    },
     "ctaTitle": "Ready to create your first build?",
     "ctaText": "Join the Lelanation community and share your best setups",
     "ctaButton": "Get started"

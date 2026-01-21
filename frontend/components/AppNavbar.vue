@@ -2,17 +2,13 @@
   <header role="banner">
     <nav class="header">
       <div class="left-header">
+        <LanguageSwitcher />
         <NuxtLink to="/" class="link" :aria-label="t('nav.home')">
-          <span>Lelanation</span>
+          <span>Lelariva</span>
         </NuxtLink>
       </div>
-      <button
-        class="menu-mobile"
-        aria-label="Toggle menu"
-        aria-controls="mobile-nav"
-        :aria-expanded="String(isMenuOpen)"
-        @click="toggleMenu"
-      >
+
+      <button class="menu-mobile" aria-label="Toggle menu" @click="toggleMenu">
         <svg
           width="24"
           height="24"
@@ -29,58 +25,85 @@
         </svg>
       </button>
 
-      <div id="mobile-nav" class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
+      <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
+        <NuxtLink to="/videos" :title="t('nav.videos')" class="version" @click="toggleMenu">
+          {{ t('nav.videos') }}
+        </NuxtLink>
+        <NuxtLink to="/builds/create" :title="t('nav.build')" class="version" @click="toggleMenu">
+          {{ t('nav.build') }}
+        </NuxtLink>
         <NuxtLink to="/builds" :title="t('nav.builds')" class="version" @click="toggleMenu">
           {{ t('nav.builds') }}
         </NuxtLink>
-        <NuxtLink to="/videos" title="Vidéos" class="version" @click="toggleMenu">
-          {{ t('nav.videos') }}
-        </NuxtLink>
-        <NuxtLink
-          to="/builds/create"
-          :title="t('nav.createBuild')"
+        <a
+          :href="patchNotesUrl"
+          target="_blank"
+          rel="noopener noreferrer"
           class="version"
-          :aria-label="t('nav.createBuild')"
           @click="toggleMenu"
         >
-          {{ t('nav.createBuild') }}
-        </NuxtLink>
-        <button class="version" type="button" @click="toggleLanguage">
-          {{ t('nav.language') }}: {{ locale.toUpperCase() }}
-        </button>
+          {{ gameVersion }}
+        </a>
       </div>
+
       <div class="right-header">
-        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
-          {{ t('nav.builds') }}
-        </NuxtLink>
         <NuxtLink to="/videos" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink :title="t('nav.createBuild')" class="version" to="/builds/create">
-          {{ t('nav.createBuild') }}
+        <NuxtLink to="/builds/create" :title="t('nav.build')" class="version">
+          {{ t('nav.build') }}
         </NuxtLink>
-        <button class="version" type="button" @click="toggleLanguage">
-          {{ locale.toUpperCase() }}
-        </button>
+        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
+          {{ t('nav.builds') }}
+        </NuxtLink>
+        <a
+          :href="patchNotesUrl"
+          title="Patch Notes"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link"
+        >
+          {{ gameVersion }}
+        </a>
       </div>
     </nav>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
+import { useVersionStore } from '~/stores/VersionStore'
 
 const isMenuOpen = ref(false)
-const { t, locale } = useI18n()
-const switchLocalePath = useSwitchLocalePath()
+const { t } = useI18n()
+const versionStore = useVersionStore()
+const gameVersion = computed(() => versionStore.currentVersion || '14.1.1')
+const patchNotesUrl = computed(() => {
+  // DataDragon-like version (ex: 16.1.1) maps to patch notes (ex: 26.1)
+  const v = String(gameVersion.value || '').trim()
+  const parts = v.match(/\d+/g) ?? []
+  const gameMajor = Number(parts[0] ?? NaN)
+  const gameMinor = Number(parts[1] ?? NaN)
+
+  if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
+    const patchMajor = gameMajor + 10
+    return `https://www.leagueoflegends.com/fr-fr/news/game-updates/patch-${patchMajor}-${gameMinor}-notes/`
+  }
+
+  // Fallback: best-effort formatting
+  const slug = v.replace(/\./g, '-')
+  return `https://www.leagueoflegends.com/fr-fr/news/game-updates/patch-${slug}-notes/`
+})
+
+onMounted(() => {
+  if (!versionStore.currentVersion && versionStore.status === 'idle') {
+    versionStore.loadCurrentVersion()
+  }
+})
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
-}
-
-const toggleLanguage = () => {
-  const next = locale.value === 'fr' ? 'en' : 'fr'
-  navigateTo(switchLocalePath(next))
 }
 </script>
 
@@ -90,105 +113,94 @@ const toggleLanguage = () => {
   top: 0;
   z-index: 50;
   display: flex;
-  width: 100%;
-  height: 4rem;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 2px solid var(--color-primary);
-  padding: 0 1rem;
-  backdrop-filter: blur(8px);
-  background: transparent;
+  height: 64px;
+  padding: 0 15px;
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--color-blue-600), transparent 65%);
+}
+
+.left-header .link {
+  color: var(--color-accent);
 }
 
 .left-header {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 12px;
 }
 
 .right-header {
-  display: none;
+  text-align: right;
+  display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 18px;
 }
 
-@media (min-width: 768px) {
-  .right-header {
-    display: flex;
-  }
+.header a {
+  color: var(--color-blue-50);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.header a.router-link-active,
+.header a.router-link-exact-active {
+  color: var(--color-accent);
 }
 
 .link {
-  color: var(--color-text-accent);
-  font-weight: 700;
-  transition: color 0.2s;
-  text-decoration: none;
-}
-
-.link:hover {
-  color: var(--color-accent-light);
+  color: var(--color-blue-50);
 }
 
 .version {
-  color: var(--color-text-primary);
-  transition: color 0.2s;
-  text-decoration: none;
-}
-
-.version:hover {
-  color: var(--color-accent);
+  color: var(--color-blue-50);
 }
 
 .menu-mobile {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-primary);
-  background: none;
-  border: none;
+  display: none;
   cursor: pointer;
-  padding: 0.5rem;
-  transition: color 0.2s;
-}
-
-.menu-mobile:hover {
-  color: var(--color-accent);
-}
-
-@media (min-width: 768px) {
-  .menu-mobile {
-    display: none;
-  }
+  border: none;
+  background: none;
+  color: var(--color-blue-50);
 }
 
 .mobile-nav {
-  position: fixed;
+  display: none;
+  position: absolute;
+  top: 64px;
   left: 0;
-  top: 4rem;
-  z-index: 40;
-  width: 100%;
-  border-bottom: 2px solid var(--color-primary);
-  background: transparent;
-  transition:
-    max-height 0.3s ease-in-out,
-    padding 0.3s ease-in-out;
-  max-height: 0;
-  overflow: hidden;
-  padding: 0 1rem;
+  right: 0;
+  background: var(--gradient-secondary);
+  padding: 14px 15px;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .mobile-nav.is-open {
-  max-height: 100vh;
-  padding: 1rem;
+  display: flex !important;
+  z-index: 1000;
 }
 
-.mobile-nav .version {
+.mobile-nav a {
+  color: var(--color-blue-50);
+  padding: 6px 8px;
   display: block;
-  padding: 0.75rem 0;
-  font-size: 1.125rem;
 }
 
-.mobile-nav .version:not(:last-child) {
-  border-bottom: 1px solid rgba(10, 50, 60, 0.3);
+@media (hover: hover) {
+  .header a:hover {
+    text-decoration: underline;
+  }
+}
+
+@media (max-width: 700px) {
+  .menu-mobile {
+    display: block;
+  }
+
+  .right-header {
+    display: none;
+  }
 }
 </style>

@@ -8,6 +8,7 @@ export default defineNuxtConfig({
   ssr: true,
   modules: [
     '@nuxtjs/tailwindcss',
+    '@nuxt/icon',
     '@pinia/nuxt',
     '@nuxtjs/i18n',
     '@nuxtjs/sitemap',

@@ -12,7 +12,7 @@
       </div>
 
       <!-- Tabs -->
-      <div v-if="tabs.length > 1" class="mb-6 border-b-2 border-primary">
+      <div v-if="tabs.length > 1" class="mb-6 border-b-2 border-accent/70">
         <div class="flex gap-4">
           <button
             v-for="tab in tabs"
@@ -41,7 +41,7 @@
         <!-- Comparison Bar -->
         <div
           v-if="comparisonBuilds.length > 0"
-          class="bg-accent/20 mb-6 rounded-lg border-2 border-accent p-4"
+          class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
         >
           <div class="flex items-center justify-between">
             <div>
@@ -58,7 +58,7 @@
                 Comparer
               </NuxtLink>
               <button
-                class="rounded-lg border border-primary bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
+                class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
                 @click="clearComparison"
               >
                 Effacer
@@ -77,7 +77,7 @@
           <p class="mb-4 text-lg text-text-secondary">Aucun build sauvegardé</p>
           <NuxtLink
             to="/builds/create"
-            class="inline-block rounded-lg bg-primary px-6 py-2 text-white transition-colors hover:bg-primary-dark"
+            class="inline-block rounded-lg bg-accent px-6 py-2 text-background transition-colors hover:bg-accent-dark"
           >
             Créer votre premier build
           </NuxtLink>
@@ -107,7 +107,7 @@
               />
               <div>
                 <p class="font-semibold text-text">{{ build.champion.name }}</p>
-                <p class="text-text/70 text-sm">{{ build.champion.title }}</p>
+                <p class="text-sm text-text/70">{{ build.champion.title }}</p>
               </div>
             </div>
 
@@ -124,19 +124,19 @@
             <div class="mb-3 flex gap-2">
               <NuxtLink
                 :to="`/builds/edit/${build.id}`"
-                class="rounded-lg bg-primary px-4 py-2 text-sm text-white transition-colors hover:bg-primary-dark"
+                class="rounded-lg bg-accent px-4 py-2 text-sm text-background transition-colors hover:bg-accent-dark"
               >
                 Modifier
               </NuxtLink>
               <button
-                class="rounded-lg border border-primary bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"
+                class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
                 @click="loadBuild(build.id)"
               >
                 Voir
               </button>
             </div>
 
-            <p class="text-text/50 text-xs">Créé le : {{ formatDate(build.createdAt) }}</p>
+            <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
           </div>
         </div>
       </div>
@@ -163,13 +163,13 @@
         </p>
         <div class="flex gap-4">
           <button
-            class="rounded-lg bg-error px-4 py-2 text-white transition-colors hover:bg-error/80"
+            class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
             @click="deleteBuild"
           >
             Supprimer
           </button>
           <button
-            class="rounded-lg border border-primary bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
+            class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
             @click="buildToDelete = null"
           >
             Annuler

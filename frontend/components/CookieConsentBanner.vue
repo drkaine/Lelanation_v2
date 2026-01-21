@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="shouldShow"
-    class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-primary bg-surface p-4 text-text"
+    class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-accent bg-surface p-4 text-text"
     role="dialog"
     aria-label="Cookie consent"
   >
@@ -10,7 +10,7 @@
     >
       <div>
         <p class="text-sm font-semibold text-text-accent">{{ t('cookies.title') }}</p>
-        <p class="text-text/80 mt-1 text-sm">
+        <p class="mt-1 text-sm text-text/80">
           {{ t('cookies.text') }}
           <NuxtLink to="/privacy" class="ml-2 font-semibold text-accent hover:text-accent-dark">
             {{ t('cookies.learnMore') }}
@@ -19,7 +19,7 @@
       </div>
       <div class="flex gap-2">
         <button
-          class="rounded-lg border border-primary bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-primary hover:text-white"
+          class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
           @click="reject"
         >
           {{ t('cookies.reject') }}

@@ -25,7 +25,7 @@
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span class="social-icon">{{ link.icon }}</span>
+              <Icon :name="link.icon" class="social-icon" size="22px" />
               <span class="social-text">{{ link.text }}</span>
             </a>
           </div>
@@ -124,7 +124,7 @@
         <div class="grid gap-6 md:grid-cols-3">
           <NuxtLink
             to="/builds/create"
-            class="hover:bg-accent/10 group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark"
+            class="group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark hover:bg-accent/10"
           >
             <div class="mb-4 text-5xl">✨</div>
             <h3 class="mb-2 text-xl font-bold text-text-primary">Créer un Build</h3>
@@ -133,7 +133,7 @@
 
           <NuxtLink
             to="/builds"
-            class="hover:bg-accent/10 group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark"
+            class="group rounded-lg border-2 border-accent p-8 text-center transition-all hover:border-accent-dark hover:bg-accent/10"
           >
             <div class="mb-4 text-5xl">🌐</div>
             <h3 class="mb-2 text-xl font-bold text-text-primary">Les Builds</h3>
@@ -176,38 +176,38 @@ interface SocialLink {
 const socialLinks: SocialLink[] = [
   {
     href: 'https://discord.com/invite/RrXCpsFGrw',
-    icon: '💬',
-    text: 'Discord',
+    icon: 'mdi:discord',
+    text: t('home.links.discord'),
   },
   {
     href: 'https://www.patreon.com/c/Lelariva/posts',
-    icon: '🎨',
-    text: 'Patreon',
+    icon: 'mdi:patreon',
+    text: t('home.links.patreon'),
   },
   {
     href: 'https://www.youtube.com/@Lelariva_LoL/featured',
-    icon: '📺',
-    text: 'YouTube',
+    icon: 'mdi:youtube',
+    text: t('home.links.youtube'),
   },
   {
     href: 'https://www.twitch.tv/lelariva',
-    icon: '🎮',
-    text: 'Twitch',
+    icon: 'mdi:twitch',
+    text: t('home.links.twitch'),
   },
   {
     href: 'https://x.com/Lelariva_fr',
-    icon: '🐦',
-    text: 'Twitter',
+    icon: 'mdi:twitter',
+    text: t('home.links.twitter'),
   },
   {
     href: 'https://www.tiktok.com/@lelariva_fr',
-    icon: '🎵',
-    text: 'TikTok',
+    icon: 'mdi:music-note',
+    text: t('home.links.tiktok'),
   },
   {
     href: 'https://www.lelariva.fr/',
-    icon: '🌐',
-    text: 'Site Web',
+    icon: 'mdi:web',
+    text: t('home.links.website'),
   },
 ]
 
@@ -299,47 +299,44 @@ useHead({
 .social-links {
   display: flex;
   flex-wrap: wrap;
+  gap: 1rem;
   justify-content: center;
-  gap: 0.75rem;
 }
 
 .social-link {
+  font-family: var(--font-beaufort, ui-sans-serif, system-ui, sans-serif);
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
-  border: 2px solid var(--color-gold-300);
-  background: var(--color-grey-300);
-  color: var(--color-text-primary);
+  padding: 0.8rem 1.5rem;
+  border: var(--border-size, 2px) solid var(--color-gold-400);
+  border-radius: 4px;
+  color: var(--color-gold-200);
   text-decoration: none;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+}
+
+.social-link :deep(svg) {
+  width: var(--title-sm, 1.25rem);
+  height: var(--title-sm, 1.25rem);
 }
 
 .social-link:hover {
-  background: var(--color-grey-200);
-  border-color: var(--color-gold-200);
+  background-color: var(--color-gold-500);
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(212, 175, 55, 0.2);
 }
 
 .social-icon {
-  font-size: 1.5rem;
-  line-height: 1;
+  color: currentColor;
 }
 
 .social-text {
   font-weight: 500;
 }
 
-@media (max-width: 768px) {
-  .social-links {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
+@media (max-width: 600px) {
   .social-link {
-    justify-content: center;
+    width: var(--width-all, 100%);
   }
 }
 </style>
