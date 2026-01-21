@@ -43,34 +43,13 @@
           :on-update="updateToCurrentVersion"
         />
 
-        <!-- Same structure as create page -->
-        <div class="mb-6">
-          <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
-          <input
-            id="build-name"
-            v-model="buildName"
-            type="text"
-            placeholder="Enter build name..."
-            class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
-            @input="updateBuildName"
-          />
-        </div>
-
         <!-- Step Navigation -->
-        <div class="mb-6 flex flex-wrap gap-2">
-          <button
-            v-for="step in steps"
-            :key="step.id"
-            :class="[
-              'rounded px-4 py-2 transition-colors',
-              currentStep === step.id
-                ? 'bg-accent text-background'
-                : 'bg-surface text-text hover:bg-primary hover:text-white',
-            ]"
-            @click="currentStep = step.id"
-          >
-            {{ step.label }}
-          </button>
+        <div class="mb-4">
+          <BuildMenuSteps
+            :current-step="currentStep"
+            :has-champion="hasChampion"
+            @navigate="currentStep = $event"
+          />
         </div>
 
         <!-- Step Content (same as create page) -->
@@ -86,21 +65,34 @@
           <div v-if="currentStep === 'runes'">
             <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
             <RuneSelector />
-          </div>
-          <div v-if="currentStep === 'shards'">
-            <h2 class="mb-4 text-2xl font-bold">Select Rune Shards</h2>
-            <RuneShardSelector />
-          </div>
-          <div v-if="currentStep === 'spells'">
-            <h2 class="mb-4 text-2xl font-bold">Select Summoner Spells</h2>
-            <SummonerSpellSelector />
-          </div>
-          <div v-if="currentStep === 'skills'">
-            <h2 class="mb-4 text-2xl font-bold">Configure Skill Order</h2>
-            <SkillOrderSelector />
+
+            <div class="mt-8">
+              <h3 class="mb-4 text-xl font-bold">Rune Shards</h3>
+              <RuneShardSelector />
+            </div>
+
+            <div class="mt-8">
+              <h3 class="mb-4 text-xl font-bold">Summoner Spells</h3>
+              <SummonerSpellSelector />
+            </div>
           </div>
           <div v-if="currentStep === 'review'">
-            <h2 class="mb-4 text-2xl font-bold">Review & Statistics</h2>
+            <h2 class="mb-4 text-2xl font-bold">Infos</h2>
+            <div class="mb-6">
+              <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
+              <input
+                id="build-name"
+                v-model="buildName"
+                type="text"
+                placeholder="Enter build name..."
+                class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
+                @input="updateBuildName"
+              />
+            </div>
+            <div class="mb-8">
+              <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
+              <SkillOrderSelector />
+            </div>
             <StatsDisplay />
           </div>
         </div>
@@ -123,16 +115,16 @@
           </button>
           <button
             v-if="currentStepIndex === steps.length - 1"
-            :disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
+            :disabled="!buildStore.isBuildValid || isSaving"
             :class="[
               'rounded px-6 py-2',
-              buildStore.isBuildValid && buildStore.status !== 'loading'
+              buildStore.isBuildValid && !isSaving
                 ? 'bg-accent text-background hover:bg-accent-dark'
-                : 'text-text/50 cursor-not-allowed bg-surface',
+                : 'cursor-not-allowed bg-surface text-text/50',
             ]"
             @click="saveBuild"
           >
-            {{ buildStore.status === 'loading' ? 'Saving...' : 'Update Build' }}
+            {{ isSaving ? 'Saving...' : 'Update Build' }}
           </button>
         </div>
 
@@ -171,6 +163,7 @@ import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
+import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 
 const route = useRoute()
 const buildStore = useBuildStore()
@@ -179,14 +172,13 @@ const steps = [
   { id: 'champion', label: 'Champion' },
   { id: 'items', label: 'Items' },
   { id: 'runes', label: 'Runes' },
-  { id: 'shards', label: 'Shards' },
-  { id: 'spells', label: 'Spells' },
-  { id: 'skills', label: 'Skills' },
   { id: 'review', label: 'Review' },
 ]
 
 const currentStep = ref('champion')
 const buildName = ref('')
+const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
+const isSaving = computed(() => buildStore.status === 'loading')
 
 const currentStepIndex = computed(() => {
   return steps.findIndex(step => step.id === currentStep.value)
@@ -195,14 +187,16 @@ const currentStepIndex = computed(() => {
 const nextStep = () => {
   const index = currentStepIndex.value
   if (index < steps.length - 1) {
-    currentStep.value = steps[index + 1].id
+    const next = steps[index + 1]
+    if (next) currentStep.value = next.id
   }
 }
 
 const previousStep = () => {
   const index = currentStepIndex.value
   if (index > 0) {
-    currentStep.value = steps[index - 1].id
+    const prev = steps[index - 1]
+    if (prev) currentStep.value = prev.id
   }
 }
 

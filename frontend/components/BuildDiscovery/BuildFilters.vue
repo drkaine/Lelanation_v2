@@ -30,18 +30,55 @@
       <!-- Role filter -->
       <div class="flex items-center gap-2">
         <label class="text-sm text-text">Role:</label>
-        <select
-          v-model="selectedRole"
-          class="rounded border border-primary bg-surface px-3 py-1 text-sm text-text"
-          @change="handleRoleChange"
-        >
-          <option :value="null">All Roles</option>
-          <option value="top">Top</option>
-          <option value="jungle">Jungle</option>
-          <option value="mid">Mid</option>
-          <option value="adc">ADC</option>
-          <option value="support">Support</option>
-        </select>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === null)"
+            @click="setRole(null)"
+          >
+            Tous
+          </button>
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === 'top')"
+            @click="setRole('top')"
+          >
+            <img src="/icons/roles/top.png" alt="Top" class="h-5 w-5" />
+            <span>Top</span>
+          </button>
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === 'jungle')"
+            @click="setRole('jungle')"
+          >
+            <img src="/icons/roles/jungle.png" alt="Jungle" class="h-5 w-5" />
+            <span>Jungle</span>
+          </button>
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === 'mid')"
+            @click="setRole('mid')"
+          >
+            <img src="/icons/roles/mid.png" alt="Mid" class="h-5 w-5" />
+            <span>Mid</span>
+          </button>
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === 'adc')"
+            @click="setRole('adc')"
+          >
+            <img src="/icons/roles/bot.png" alt="ADC" class="h-5 w-5" />
+            <span>ADC</span>
+          </button>
+          <button
+            type="button"
+            :class="roleChipClass(selectedRole === 'support')"
+            @click="setRole('support')"
+          >
+            <img src="/icons/roles/support.png" alt="Support" class="h-5 w-5" />
+            <span>Support</span>
+          </button>
+        </div>
       </div>
 
       <!-- Sort -->
@@ -102,9 +139,18 @@ const handleChampionChange = () => {
   discoveryStore.setSelectedChampion(selectedChampion.value)
 }
 
-const handleRoleChange = () => {
-  discoveryStore.setSelectedRole(selectedRole.value)
+const setRole = (role: FilterRole) => {
+  selectedRole.value = role
+  discoveryStore.setSelectedRole(role)
 }
+
+const roleChipClass = (active: boolean) =>
+  [
+    'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+    active
+      ? 'border-accent bg-accent/20 text-accent'
+      : 'border-accent/70 bg-background/10 text-accent-dark hover:border-accent hover:bg-accent/10 hover:text-accent',
+  ].join(' ')
 
 const handleSortChange = () => {
   discoveryStore.setSortBy(sortBy.value)

@@ -2,7 +2,7 @@
   <div class="rune-shard-selector">
     <div class="mb-4">
       <p class="mb-2 text-text">Rune Shards</p>
-      <p class="text-text/70 text-sm">
+      <p class="text-sm text-text/70">
         Select shards for the three shard slots. Each slot has different options.
       </p>
     </div>
@@ -18,12 +18,17 @@
             :class="[
               'flex flex-col items-center rounded border-2 p-3 transition-all',
               selectedShards[1] === shard.id
-                ? 'bg-accent/20 border-accent'
+                ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
             ]"
             @click="selectShard(1, shard.id)"
           >
-            <span class="mb-2 text-2xl">{{ shard.icon }}</span>
+            <img
+              :src="shardIconSrc(shard.id)"
+              :alt="shard.name"
+              class="mb-2 h-9 w-9"
+              loading="lazy"
+            />
             <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
@@ -39,12 +44,17 @@
             :class="[
               'flex flex-col items-center rounded border-2 p-3 transition-all',
               selectedShards[2] === shard.id
-                ? 'bg-accent/20 border-accent'
+                ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
             ]"
             @click="selectShard(2, shard.id)"
           >
-            <span class="mb-2 text-2xl">{{ shard.icon }}</span>
+            <img
+              :src="shardIconSrc(shard.id)"
+              :alt="shard.name"
+              class="mb-2 h-9 w-9"
+              loading="lazy"
+            />
             <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
@@ -60,12 +70,17 @@
             :class="[
               'flex flex-col items-center rounded border-2 p-3 transition-all',
               selectedShards[3] === shard.id
-                ? 'bg-accent/20 border-accent'
+                ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
             ]"
             @click="selectShard(3, shard.id)"
           >
-            <span class="mb-2 text-2xl">{{ shard.icon }}</span>
+            <img
+              :src="shardIconSrc(shard.id)"
+              :alt="shard.name"
+              class="mb-2 h-9 w-9"
+              loading="lazy"
+            />
             <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
@@ -87,22 +102,43 @@ const selectedShards = ref<Record<number, number>>({
   3: 5001, // Default: Health
 })
 
+const shardIconSrc = (id: number): string => {
+  // Uses local assets in /public/icons/shards
+  switch (id) {
+    case 5008:
+      return '/icons/shards/adaptative.png'
+    case 5005:
+      return '/icons/shards/speed.png'
+    case 5007:
+      return '/icons/shards/cdr.png'
+    case 5001:
+      return '/icons/shards/hp.png'
+    // Fallback mapping for defense shards (local icon set)
+    case 5002:
+      return '/icons/shards/growth.png'
+    case 5003:
+      return '/icons/shards/tenacity.png'
+    default:
+      return '/icons/shards/adaptative.png'
+  }
+}
+
 const slot1Options = [
-  { id: 5008, name: 'Adaptive Force', icon: '⚔️' },
-  { id: 5005, name: 'Attack Speed', icon: '⚡' },
-  { id: 5007, name: 'Ability Haste', icon: '🔄' },
+  { id: 5008, name: 'Adaptive Force' },
+  { id: 5005, name: 'Attack Speed' },
+  { id: 5007, name: 'Ability Haste' },
 ]
 
 const slot2Options = [
-  { id: 5008, name: 'Adaptive Force', icon: '⚔️' },
-  { id: 5002, name: 'Armor', icon: '🛡️' },
-  { id: 5003, name: 'Magic Resist', icon: '✨' },
+  { id: 5008, name: 'Adaptive Force' },
+  { id: 5002, name: 'Armor' },
+  { id: 5003, name: 'Magic Resist' },
 ]
 
 const slot3Options = [
-  { id: 5001, name: 'Health', icon: '❤️' },
-  { id: 5002, name: 'Armor', icon: '🛡️' },
-  { id: 5003, name: 'Magic Resist', icon: '✨' },
+  { id: 5001, name: 'Health' },
+  { id: 5002, name: 'Armor' },
+  { id: 5003, name: 'Magic Resist' },
 ]
 
 const selectShard = (slot: number, shardId: number) => {

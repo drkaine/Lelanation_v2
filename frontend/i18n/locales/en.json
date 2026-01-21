@@ -36,6 +36,12 @@
     "accept": "Accept",
     "reject": "Reject",
     "learnMore": "Learn more"
+  },
+  "menu-build": {
+    "champion": "Champion",
+    "rune": "Rune",
+    "item": "Item",
+    "info": "Info"
   }
 }
 
