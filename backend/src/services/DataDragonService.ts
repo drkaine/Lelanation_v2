@@ -3,6 +3,7 @@ import { join } from 'path'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
+import { ImageService } from './ImageService.js'
 
 interface ChampionData {
   [key: string]: {
@@ -42,9 +43,14 @@ export class DataDragonService {
   private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
   private readonly dataDir: string
+  private readonly imageService: ImageService
 
-  constructor(dataDir: string = join(process.cwd(), 'data', 'game')) {
+  constructor(
+    dataDir: string = join(process.cwd(), 'data', 'game'),
+    imagesDir: string = join(process.cwd(), 'data', 'images')
+  ) {
     this.dataDir = dataDir
+    this.imageService = new ImageService(imagesDir)
     this.api = axios.create({
       baseURL: this.baseUrl,
       timeout: 30000,
@@ -322,7 +328,8 @@ export class DataDragonService {
    */
   async syncGameData(
     version?: string,
-    languages: string[] = ['fr_FR', 'en_US']
+    languages: string[] = ['fr_FR', 'en_US'],
+    downloadImages: boolean = true
   ): Promise<Result<{ version: string; syncedAt: Date }, AppError>> {
     // Get version if not provided
     let gameVersion = version
@@ -333,6 +340,9 @@ export class DataDragonService {
       }
       gameVersion = versionResult.unwrap()
     }
+
+    // Use first language for image downloads (images are language-agnostic)
+    const primaryLanguage = languages[0] || 'fr_FR'
 
     // Sync for each language
     for (const language of languages) {
@@ -374,9 +384,160 @@ export class DataDragonService {
       }
     }
 
+    // Download images if requested (only once, using primary language data)
+    if (downloadImages) {
+      console.log(`[DataDragon] Downloading images for version ${gameVersion}...`)
+
+      // Delete existing images for this version to ensure fresh download
+      const deleteResult = await this.imageService.deleteVersionImages(gameVersion)
+      if (deleteResult.isErr()) {
+        console.warn(
+          `[DataDragon] Failed to delete existing images for version ${gameVersion}: ${deleteResult.unwrapErr()}`
+        )
+        // Continue anyway - we'll overwrite during download
+      }
+
+      // Delete old version images to save disk space (keep only current version)
+      const deleteOldResult = await this.imageService.deleteOldVersionImages(gameVersion)
+      if (deleteOldResult.isOk()) {
+        const deleted = deleteOldResult.unwrap()
+        if (deleted.deleted > 0) {
+          console.log(
+            `[DataDragon] Deleted ${deleted.deleted} old version image directories`
+          )
+        }
+      } else {
+        console.warn(
+          `[DataDragon] Failed to delete old version images: ${deleteOldResult.unwrapErr()}`
+        )
+        // Continue anyway - not critical
+      }
+
+      // Fetch full champion data for images (need spells and passive)
+      const championsFullResult = await this.fetchChampionsFull(
+        gameVersion,
+        primaryLanguage
+      )
+      const championsResult = await this.fetchChampions(gameVersion, primaryLanguage)
+      const itemsResult = await this.fetchItems(gameVersion, primaryLanguage)
+      const runesResult = await this.fetchRunes(gameVersion, primaryLanguage)
+      const spellsResult = await this.fetchSummonerSpells(gameVersion, primaryLanguage)
+
+      if (
+        championsFullResult.isErr() ||
+        championsResult.isErr() ||
+        itemsResult.isErr() ||
+        runesResult.isErr() ||
+        spellsResult.isErr()
+      ) {
+        console.warn('[DataDragon] Failed to fetch data for image download, skipping images')
+      } else {
+        // Download images in parallel
+        // Type assertions needed because DataDragon API returns partial data
+        // We use 'as unknown as' to safely cast since we know the actual API response includes image fields
+        const championsData = championsResult.unwrap() as unknown as Record<
+          string,
+          { id: string; image: { full: string } }
+        >
+        const itemsData = itemsResult.unwrap() as unknown as Record<
+          string,
+          { id: string; image: { full: string } }
+        >
+        const runesData = runesResult.unwrap() as unknown as Array<{
+          id: number
+          icon: string
+          slots: Array<{
+            runes: Array<{ id: number; icon: string }>
+          }>
+        }>
+        const spellsData = spellsResult.unwrap() as unknown as Record<
+          string,
+          { id: string; image: { full: string } }
+        >
+
+        const [
+          championsImagesResult,
+          itemsImagesResult,
+          runesImagesResult,
+          spellsImagesResult,
+          championSpellsImagesResult
+        ] = await Promise.allSettled([
+          this.imageService.downloadChampionImages(gameVersion, championsData),
+          this.imageService.downloadItemImages(gameVersion, itemsData),
+          this.imageService.downloadRuneImages(gameVersion, runesData),
+          this.imageService.downloadSummonerSpellImages(gameVersion, spellsData),
+          this.imageService.downloadChampionSpellImages(
+            gameVersion,
+            championsFullResult.unwrap()
+          )
+        ])
+
+        // Log results (don't fail sync if images fail)
+        const logResult = (name: string, result: PromiseSettledResult<any>) => {
+          if (result.status === 'fulfilled' && result.value.isOk()) {
+            const stats = result.value.unwrap()
+            console.log(
+              `[DataDragon] ${name} images: ${stats.downloaded} downloaded, ${stats.skipped} skipped`
+            )
+          } else {
+            console.warn(`[DataDragon] ${name} images download failed or had errors`)
+          }
+        }
+
+        logResult('Champions', championsImagesResult)
+        logResult('Items', itemsImagesResult)
+        logResult('Runes', runesImagesResult)
+        logResult('Summoner spells', spellsImagesResult)
+        logResult('Champion spells', championSpellsImagesResult)
+      }
+    }
+
     return Result.ok({
       version: gameVersion,
       syncedAt: new Date()
     })
+  }
+
+  /**
+   * Fetch full champions data (including spells and passive) for image downloading
+   */
+  private async fetchChampionsFull(
+    version: string,
+    language: string = 'fr_FR'
+  ): Promise<Result<Record<string, any>, AppError>> {
+    try {
+      const url = `/${version}/data/${language}/championFull.json`
+      const response = await this.api.get<{ data: Record<string, any> }>(url)
+
+      if (!response.data || !response.data.data) {
+        return Result.err(
+          new ExternalApiError('Invalid champions full data from Data Dragon API')
+        )
+      }
+
+      return Result.ok(response.data.data)
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 429) {
+          return Result.err(
+            new ExternalApiError(
+              'Rate limit exceeded. Please retry later.',
+              429,
+              error
+            )
+          )
+        }
+        return Result.err(
+          new ExternalApiError(
+            `Failed to fetch champions full: ${error.message}`,
+            error.response?.status,
+            error
+          )
+        )
+      }
+      return Result.err(
+        new ExternalApiError('Failed to fetch champions full', undefined, error)
+      )
+    }
   }
 }

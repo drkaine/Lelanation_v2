@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
+import { useVersionStore } from './VersionStore'
 import type { Champion } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
+import { getGameDataUrl, getVersionUrl } from '~/utils/staticDataUrl'
 
 interface ChampionsState {
   champions: Champion[]
@@ -59,15 +61,77 @@ export const useChampionsStore = defineStore('champions', {
         this.status = 'loading'
         this.error = null
 
-        // TODO: Load from API endpoint (Epic 2)
-        // For now, we'll load from a placeholder
-        // In production, this will be: /api/game-data/champions?lang=${language}
-        const response = await fetch(apiUrl(`/api/game-data/champions?lang=${language}`))
-        if (!response.ok) {
-          throw new Error('Failed to load champions')
+        // Try to load from static file first (faster, no API call)
+        const versionStore = useVersionStore()
+        if (!versionStore.currentVersion) {
+          await versionStore.loadCurrentVersion()
         }
 
-        const data = await response.json()
+        // If version store doesn't have version, try to read it directly from static file
+        let version = versionStore.currentVersion
+        if (!version && process.client) {
+          try {
+            const versionUrl = getVersionUrl()
+            const versionResponse = await fetch(versionUrl, { cache: 'no-cache' })
+            if (versionResponse.ok) {
+              const versionData = await versionResponse.json()
+              version = versionData.currentVersion || versionData.version
+            }
+          } catch (e) {
+            // Could not read version from static file - silently continue
+          }
+        }
+
+        // Last resort: return error if no version available
+        if (!version) {
+          this.champions = []
+          this.status = 'error'
+          this.error = 'Game version not available'
+          return
+        }
+
+        let data: any
+        let useStatic = false
+
+        // Try static file first (only in browser, not SSR)
+        if (process.client) {
+          try {
+            const staticUrl = getGameDataUrl(version, 'champion', language)
+            const staticResponse = await fetch(staticUrl, {
+              cache: 'no-cache',
+            })
+            if (staticResponse.ok) {
+              data = await staticResponse.json()
+              useStatic = true
+            }
+          } catch (staticError) {
+            // Network error or other issue - silently continue
+          }
+        }
+
+        // Fallback to API if static file not available
+        // Always try API as fallback (even in production) since static files might not exist yet
+        if (!useStatic) {
+          try {
+            const apiUrlValue = apiUrl(`/api/game-data/champions?lang=${language}`)
+            const response = await fetch(apiUrlValue, {
+              signal: AbortSignal.timeout(5000),
+            })
+            if (!response.ok) {
+              // If API returns error, return empty array
+              this.champions = []
+              this.status = 'success'
+              return
+            }
+            data = await response.json()
+          } catch (apiError) {
+            // If API also fails (network error, timeout, etc.), return empty array
+            this.champions = []
+            this.status = 'success'
+            return
+          }
+        }
+
         // Transform Data Dragon format to our format
         this.champions = Object.values(data.data || {}) as Champion[]
         this.status = 'success'

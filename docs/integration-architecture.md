@@ -74,7 +74,17 @@ Lelanation is a multi-part application with separate backend and frontend compon
 - **Configuration**: Base URL `/api` (proxied in dev)
 - **Error Handling**: Try/catch with user-friendly messages
 
-#### Request Flow
+#### Request Flow (Static-First Architecture)
+
+**For Game Data & YouTube Data**:
+1. Frontend tries to load from static files first (`/data/game/...`, `/data/youtube/...`)
+2. If static files exist: Load directly (no API call, faster)
+3. If static files don't exist: Fallback to API (`/api/game-data/*`, `/api/youtube/*`)
+4. API tries backend first, then frontend public directory as fallback
+5. Store updates state
+6. UI re-renders
+
+**For Builds & Other Dynamic Data**:
 1. User action in frontend
 2. Pinia store dispatches action
 3. Axios makes HTTP request to `/api/*`

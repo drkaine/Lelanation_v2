@@ -28,6 +28,7 @@ const discordService = new DiscordService()
 
 const channelsConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
+const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
 
 async function readChannelsConfig(): Promise<
   { ok: true; value: YouTubeChannelsConfig } | { ok: false; status: number; error: string }
@@ -56,11 +57,24 @@ async function writeChannelsConfig(
 
 /**
  * Get channels config (raw)
+ * Tries backend first, then frontend public directory
  */
 router.get('/channels', async (_req, res) => {
+  // Try backend first
   const config = await readChannelsConfig()
-  if (!config.ok) return res.status(config.status).json({ error: config.error })
-  return res.json(config.value)
+  if (config.ok) {
+    return res.json(config.value)
+  }
+
+  // Fallback to frontend public directory
+  const frontendConfigPath = join(frontendYouTubeDir, 'channels.json')
+  const frontendResult = await FileManager.readJson<YouTubeChannelsConfig>(frontendConfigPath)
+  if (frontendResult.isOk()) {
+    console.debug(`[YouTube API] Reading config from frontend public: ${frontendConfigPath}`)
+    return res.json(frontendResult.unwrap())
+  }
+
+  return res.status(config.status).json({ error: config.error })
 })
 
 /**
@@ -130,6 +144,7 @@ router.delete('/channels/:channelId', async (req, res) => {
 
 /**
  * Get stored sync status (per channel file)
+ * Tries backend first, then frontend public directory
  */
 router.get('/status', async (_req, res) => {
   const configResult = await readChannelsConfig()
@@ -140,9 +155,20 @@ router.get('/status', async (_req, res) => {
     (config.channels ?? []).map(async (entry) => {
       const channelId = typeof entry === 'string' ? entry : entry.channelId
       const channelName = typeof entry === 'string' ? entry : entry.channelName
-      const filePath = join(youtubeDataDir, `${channelId}.json`)
+      const backendPath = join(youtubeDataDir, `${channelId}.json`)
+      const frontendPath = join(frontendYouTubeDir, `${channelId}.json`)
 
-      const exists = await FileManager.exists(filePath)
+      // Try backend first, then frontend
+      let exists = await FileManager.exists(backendPath)
+      let filePath = backendPath
+      if (!exists) {
+        exists = await FileManager.exists(frontendPath)
+        if (exists) {
+          filePath = frontendPath
+          console.debug(`[YouTube API] Reading status from frontend public: ${frontendPath}`)
+        }
+      }
+
       if (!exists) {
         return {
           channelId,
@@ -183,12 +209,24 @@ router.get('/status', async (_req, res) => {
 
 /**
  * Get stored channel data (videos + metadata)
+ * Tries backend first, then frontend public directory (for static serving)
  */
 router.get('/channels/:channelId', async (req, res) => {
   const channelId = req.params.channelId
-  const filePath = join(youtubeDataDir, `${channelId}.json`)
+  const backendPath = join(youtubeDataDir, `${channelId}.json`)
+  const frontendPath = join(frontendYouTubeDir, `${channelId}.json`)
 
-  const readResult = await FileManager.readJson<unknown>(filePath)
+  // Try backend first
+  let readResult = await FileManager.readJson<unknown>(backendPath)
+  
+  // If backend file doesn't exist, try frontend public directory
+  if (readResult.isErr() && readResult.unwrapErr().code === 'FILE_NOT_FOUND') {
+    readResult = await FileManager.readJson<unknown>(frontendPath)
+    if (readResult.isOk()) {
+      console.debug(`[YouTube API] Reading from frontend public: ${frontendPath}`)
+    }
+  }
+
   if (readResult.isErr()) {
     if (readResult.unwrapErr().code === 'FILE_NOT_FOUND') {
       return res.status(404).json({ error: 'Channel data not found' })

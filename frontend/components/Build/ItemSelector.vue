@@ -40,13 +40,13 @@
         :key="item.id"
         :class="[
           'relative flex flex-col items-center rounded border-2 p-2 transition-all',
-          isSelected(item) ? 'bg-accent/20 border-accent' : 'border-surface hover:border-primary',
+          isSelected(item) ? 'border-accent bg-accent/20' : 'border-surface hover:border-primary',
         ]"
         :disabled="!isSelected(item) && selectedItemsCount >= 6"
         @click="toggleItem(item)"
       >
         <img
-          :src="getItemImageUrl(item.image.full)"
+          :src="getItemImageUrl(version, item.image.full)"
           :alt="item.name"
           class="mb-1 h-12 w-12 rounded"
         />
@@ -78,6 +78,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { Item } from '~/types/build'
+
+import { getItemImageUrl } from '~/utils/imageUrl'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
@@ -135,10 +138,7 @@ const handleSearch = () => {
   // Search is reactive via computed property
 }
 
-const getItemImageUrl = (imageName: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/item/${imageName}`
-}
+const { version } = useGameVersion()
 
 onMounted(() => {
   if (itemsStore.items.length === 0) {

@@ -79,6 +79,24 @@ export default defineNuxtConfig({
           'Cache-Control': 'public, max-age=86400',
         },
       },
+      // Game data JSON files (long cache, versioned by path)
+      '/data/game/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
+      // YouTube data JSON files (long cache)
+      '/data/youtube/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
+      // Game images (long cache, versioned by path)
+      '/images/game/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      },
       '/favicon.ico': {
         headers: {
           'Cache-Control': 'public, max-age=86400',

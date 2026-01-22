@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "sync:data": "tsx src/scripts/syncData.ts",
+    "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

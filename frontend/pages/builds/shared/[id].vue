@@ -26,7 +26,7 @@
             </NuxtLink>
             <div>
               <h1 class="text-3xl font-bold text-text">{{ build.name }}</h1>
-              <p class="text-text/70 mt-1 text-sm">Build partagé</p>
+              <p class="mt-1 text-sm text-text/70">Build partagé</p>
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -58,7 +58,7 @@
           <h2 class="mb-4 text-2xl font-bold text-text">Champion</h2>
           <div class="flex items-center gap-4">
             <img
-              :src="getChampionImageUrl(build.champion.image.full)"
+              :src="getChampionImageUrl(version, build.champion.image.full)"
               :alt="build.champion.name"
               class="h-24 w-24 rounded"
             />
@@ -78,7 +78,7 @@
               class="flex flex-col items-center rounded border border-primary p-3"
             >
               <img
-                :src="getItemImageUrl(item.image.full)"
+                :src="getItemImageUrl(version, item.image.full)"
                 :alt="item.name"
                 class="mb-2 h-16 w-16 rounded"
               />
@@ -107,6 +107,8 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+
 const route = useRoute()
 const router = useRouter()
 const buildStore = useBuildStore()
@@ -117,13 +119,6 @@ const error = ref<string | null>(null)
 const copied = ref(false)
 
 const build = computed(() => buildStore.currentBuild)
-
-const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
-}
-const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
-}
 
 const copyBuild = () => {
   if (!build.value) return

@@ -69,7 +69,7 @@
           <h2 class="mb-4 text-2xl font-bold text-text">Champion</h2>
           <div class="flex items-center gap-4">
             <img
-              :src="getChampionImageUrl(build.champion.image.full)"
+              :src="getChampionImageUrl(version, build.champion.image.full)"
               :alt="build.champion.name"
               class="h-24 w-24 rounded"
             />
@@ -80,7 +80,7 @@
                 <span
                   v-for="tag in build.champion.tags"
                   :key="tag"
-                  class="bg-primary/20 rounded px-2 py-1 text-xs text-text"
+                  class="rounded bg-primary/20 px-2 py-1 text-xs text-text"
                 >
                   {{ tag }}
                 </span>
@@ -99,7 +99,7 @@
               class="flex flex-col items-center rounded border border-primary p-3"
             >
               <img
-                :src="getItemImageUrl(item.image.full)"
+                :src="getItemImageUrl(version, item.image.full)"
                 :alt="item.name"
                 class="mb-2 h-16 w-16 rounded"
               />
@@ -132,6 +132,8 @@ import { apiUrl } from '~/utils/apiUrl'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+
 const props = defineProps<{ buildId: string }>()
 
 const buildStore = useBuildStore()
@@ -158,14 +160,6 @@ const toggleVote = () => {
 
 const addToComparison = () => {
   if (build.value) discoveryStore.addToComparison(build.value.id)
-}
-
-const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
-}
-
-const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 const shareBuild = async () => {

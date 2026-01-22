@@ -65,7 +65,7 @@
               <p class="mb-2 text-xs font-semibold text-text/70">Champion</p>
               <div class="flex items-center gap-2">
                 <img
-                  :src="getChampionImageUrl(build.champion.image.full)"
+                  :src="getChampionImageUrl(version, build.champion.image.full)"
                   :alt="build.champion.name"
                   class="h-10 w-10 rounded"
                 />
@@ -84,7 +84,7 @@
                 >
                   <img
                     v-if="item"
-                    :src="getItemImageUrl(item.image.full)"
+                    :src="getItemImageUrl(version, item.image.full)"
                     :alt="item.name"
                     class="h-full w-full rounded object-cover"
                   />
@@ -170,6 +170,8 @@ import type { CalculatedStats } from '~/types/build'
 import StatRow from '~/components/Build/StatRow.vue'
 import { useGameVersion } from '~/composables/useGameVersion'
 
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+
 const discoveryStore = useBuildDiscoveryStore()
 const { version } = useGameVersion()
 
@@ -244,13 +246,5 @@ const removeFromComparison = (buildId: string) => {
 
 const clearComparison = () => {
   discoveryStore.clearComparison()
-}
-
-const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
-}
-
-const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 </script>

@@ -47,13 +47,13 @@
         :class="[
           'flex flex-col items-center rounded border-2 p-3 transition-all',
           isSelected(champion)
-            ? 'bg-accent/20 border-accent'
+            ? 'border-accent bg-accent/20'
             : 'border-surface hover:border-primary',
         ]"
         @click="selectChampion(champion)"
       >
         <img
-          :src="getChampionImageUrl(champion.image.full)"
+          :src="getChampionImageUrl(version, champion.image.full)"
           :alt="champion.name"
           class="mb-2 h-16 w-16 rounded"
         />
@@ -72,6 +72,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { Champion } from '~/types/build'
+
+import { getChampionImageUrl } from '~/utils/imageUrl'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const championsStore = useChampionsStore()
 const buildStore = useBuildStore()
@@ -109,11 +112,7 @@ const handleSearch = () => {
   // Search is reactive via computed property
 }
 
-const getChampionImageUrl = (imageName: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  // For now, return placeholder
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${imageName}`
-}
+const { version } = useGameVersion()
 
 onMounted(() => {
   if (championsStore.champions.length === 0) {

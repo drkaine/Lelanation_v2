@@ -7,7 +7,7 @@
     <div v-else>
       <div class="mb-4">
         <p class="mb-2 text-text">Skill Upgrade Order (Levels 1-18)</p>
-        <p class="text-text/70 text-sm">
+        <p class="text-sm text-text/70">
           Click on abilities to set the upgrade order. All 18 levels must be assigned.
         </p>
       </div>
@@ -29,7 +29,7 @@
           >
             {{ getSkillForLevel(level) }}
           </button>
-          <div v-else class="border-text/30 h-10 w-10 rounded border-2 border-dashed"></div>
+          <div v-else class="h-10 w-10 rounded border-2 border-dashed border-text/30"></div>
         </div>
       </div>
 
@@ -42,13 +42,13 @@
             :class="[
               'flex flex-col items-center rounded border-2 p-3 transition-all',
               selectedAbility === spell.id
-                ? 'bg-accent/20 border-accent'
+                ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
             ]"
             @click="selectedAbility = spell.id"
           >
             <img
-              :src="getSpellImageUrl(spell.image.full)"
+              :src="getSpellImageUrl(version, spell.image.full)"
               :alt="spell.name"
               class="mb-1 h-12 w-12 rounded"
             />
@@ -66,7 +66,7 @@
             :class="[
               'rounded border-2 p-2 transition-all',
               getSkillForLevel(level) === selectedAbility
-                ? 'bg-accent/20 border-accent'
+                ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
             ]"
             @click="assignSkill(level, selectedAbility)"
@@ -90,6 +90,9 @@
 import { ref, computed } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SkillOrder } from '~/types/build'
+
+import { getSpellImageUrl } from '~/utils/imageUrl'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const buildStore = useBuildStore()
 
@@ -184,8 +187,5 @@ const getSkillColor = (ability: string): string => {
   return colors[ability as keyof typeof colors] || 'bg-surface text-text border-primary'
 }
 
-const getSpellImageUrl = (imageName: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/spell/${imageName}`
-}
+const { version } = useGameVersion()
 </script>

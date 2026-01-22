@@ -6,7 +6,7 @@
     <!-- Champion Header -->
     <div v-if="build.champion" class="mb-3 flex items-center gap-3">
       <img
-        :src="getChampionImageUrl(build.champion.image.full)"
+        :src="getChampionImageUrl(version, build.champion.image.full)"
         :alt="build.champion.name"
         class="h-12 w-12 rounded"
       />
@@ -28,7 +28,7 @@
         >
           <img
             v-if="item"
-            :src="getItemImageUrl(item.image.full)"
+            :src="getItemImageUrl(version, item.image.full)"
             :alt="item.name"
             class="h-full w-full rounded object-cover"
           />
@@ -94,6 +94,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import type { Build } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { getChampionImageUrl, getItemImageUrl, getRunePathImageUrl } from '~/utils/imageUrl'
 
 interface Props {
   build: Build
@@ -127,18 +128,6 @@ const navigateToBuild = () => {
 
 const addToComparison = () => {
   discoveryStore.addToComparison(props.build.id)
-}
-
-const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
-}
-
-const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
-}
-
-const getRunePathImageUrl = (icon: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/img/${icon}`
 }
 
 const formatDate = (dateString: string): string => {

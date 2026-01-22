@@ -7,21 +7,64 @@ import { NotFoundError } from '../utils/errors.js'
 const router = Router()
 const versionService = new VersionService()
 
+// Paths for data sources (backend first, frontend as fallback)
+const backendDataDir = join(process.cwd(), 'data', 'game')
+const frontendDataDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game')
+
+/**
+ * Try to read JSON file from backend, fallback to frontend public directory
+ * This allows the API to work even after backend data is deleted (saves disk space)
+ */
+async function readGameDataFile(
+  backendPath: string,
+  frontendPath: string
+): Promise<ReturnType<typeof FileManager.readJson>> {
+  // Try backend first
+  const backendResult = await FileManager.readJson(backendPath)
+  if (backendResult.isOk()) {
+    return backendResult
+  }
+
+  // If backend file doesn't exist, try frontend public directory
+  const frontendResult = await FileManager.readJson(frontendPath)
+  if (frontendResult.isOk()) {
+    console.debug(`[GameData API] Reading from frontend public: ${frontendPath}`)
+    return frontendResult
+  }
+
+  // Both failed, return the frontend error (more recent)
+  return frontendResult
+}
+
 /**
  * Get current game version
+ * Tries backend first, then frontend public directory
  */
 router.get('/version', async (_req, res) => {
+  // Try backend first
   const versionResult = await versionService.getCurrentVersion()
-  if (versionResult.isErr()) {
-    return res.status(500).json({ error: versionResult.unwrapErr().message })
+  if (versionResult.isOk()) {
+    const versionInfo = versionResult.unwrap()
+    if (versionInfo) {
+      return res.json({ version: versionInfo.currentVersion })
+    }
   }
 
-  const versionInfo = versionResult.unwrap()
-  if (!versionInfo) {
-    return res.status(404).json({ error: 'No game version found' })
+  // Fallback to frontend public directory
+  const frontendVersionPath = join(frontendDataDir, 'version.json')
+  const frontendResult = await FileManager.readJson<{ currentVersion: string }>(
+    frontendVersionPath
+  )
+
+  if (frontendResult.isOk()) {
+    const versionInfo = frontendResult.unwrap()
+    if (versionInfo?.currentVersion) {
+      console.debug(`[GameData API] Reading version from frontend public: ${frontendVersionPath}`)
+      return res.json({ version: versionInfo.currentVersion })
+    }
   }
 
-  return res.json({ version: versionInfo.currentVersion })
+  return res.status(404).json({ error: 'No game version found' })
 })
 
 /**
@@ -41,16 +84,20 @@ router.get('/champions', async (req, res) => {
     return res.status(404).json({ error: 'No game version found' })
   }
 
-  const championsPath = join(
-    process.cwd(),
-    'data',
-    'game',
+  const backendPath = join(
+    backendDataDir,
+    versionInfo.currentVersion,
+    language,
+    'champion.json'
+  )
+  const frontendPath = join(
+    frontendDataDir,
     versionInfo.currentVersion,
     language,
     'champion.json'
   )
 
-  const readResult = await FileManager.readJson(championsPath)
+  const readResult = await readGameDataFile(backendPath, frontendPath)
   if (readResult.isErr()) {
     if (readResult.unwrapErr() instanceof NotFoundError) {
       return res.status(404).json({ error: 'Champions data not found' })
@@ -77,16 +124,20 @@ router.get('/items', async (req, res) => {
     return res.status(404).json({ error: 'No game version found' })
   }
 
-  const itemsPath = join(
-    process.cwd(),
-    'data',
-    'game',
+  const backendPath = join(
+    backendDataDir,
+    versionInfo.currentVersion,
+    language,
+    'item.json'
+  )
+  const frontendPath = join(
+    frontendDataDir,
     versionInfo.currentVersion,
     language,
     'item.json'
   )
 
-  const readResult = await FileManager.readJson(itemsPath)
+  const readResult = await readGameDataFile(backendPath, frontendPath)
   if (readResult.isErr()) {
     if (readResult.unwrapErr() instanceof NotFoundError) {
       return res.status(404).json({ error: 'Items data not found' })
@@ -113,16 +164,20 @@ router.get('/runes', async (req, res) => {
     return res.status(404).json({ error: 'No game version found' })
   }
 
-  const runesPath = join(
-    process.cwd(),
-    'data',
-    'game',
+  const backendPath = join(
+    backendDataDir,
+    versionInfo.currentVersion,
+    language,
+    'runesReforged.json'
+  )
+  const frontendPath = join(
+    frontendDataDir,
     versionInfo.currentVersion,
     language,
     'runesReforged.json'
   )
 
-  const readResult = await FileManager.readJson(runesPath)
+  const readResult = await readGameDataFile(backendPath, frontendPath)
   if (readResult.isErr()) {
     if (readResult.unwrapErr() instanceof NotFoundError) {
       return res.status(404).json({ error: 'Runes data not found' })
@@ -149,16 +204,20 @@ router.get('/summoner-spells', async (req, res) => {
     return res.status(404).json({ error: 'No game version found' })
   }
 
-  const spellsPath = join(
-    process.cwd(),
-    'data',
-    'game',
+  const backendPath = join(
+    backendDataDir,
+    versionInfo.currentVersion,
+    language,
+    'summoner.json'
+  )
+  const frontendPath = join(
+    frontendDataDir,
     versionInfo.currentVersion,
     language,
     'summoner.json'
   )
 
-  const readResult = await FileManager.readJson(spellsPath)
+  const readResult = await readGameDataFile(backendPath, frontendPath)
   if (readResult.isErr()) {
     if (readResult.unwrapErr() instanceof NotFoundError) {
       return res.status(404).json({ error: 'Summoner spells data not found' })

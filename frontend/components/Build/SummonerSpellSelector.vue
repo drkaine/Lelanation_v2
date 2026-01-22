@@ -14,7 +14,7 @@
         :key="spell.id"
         :class="[
           'flex flex-col items-center rounded border-2 p-3 transition-all',
-          isSelected(spell) ? 'bg-accent/20 border-accent' : 'border-surface hover:border-primary',
+          isSelected(spell) ? 'border-accent bg-accent/20' : 'border-surface hover:border-primary',
           isDisabled(spell) ? 'cursor-not-allowed opacity-50' : '',
         ]"
         :disabled="isDisabled(spell)"
@@ -104,11 +104,6 @@ const selectSpell = (spell: SummonerSpell) => {
     // Both slots filled, replace first slot
     buildStore.setSummonerSpell(0, spell)
   }
-}
-
-const getSpellImageUrl = (imageName: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/spell/${imageName}`
 }
 
 onMounted(() => {

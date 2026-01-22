@@ -29,6 +29,14 @@ backend/dist
 backend/.env
 backend/.env.local
 backend/data/
+backend/data/images/
+
+# Frontend static game data (copied from backend during sync)
+frontend/public/data/game/
+frontend/public/images/game/
+
+# Frontend static YouTube data (copied from backend during sync)
+frontend/public/data/youtube/
 
 # Logs
 logs/

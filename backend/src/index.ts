@@ -7,6 +7,7 @@ import gameDataRoutes from './routes/gameData.js'
 import youtubeRoutes from './routes/youtube.js'
 import sharedBuildsRoutes from './routes/sharedBuilds.js'
 import adminRoutes from './routes/admin.js'
+import imageRoutes from './routes/images.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { MetricsService } from './services/MetricsService.js'
@@ -39,6 +40,7 @@ app.use('/api/game-data', gameDataRoutes)
 app.use('/api/youtube', youtubeRoutes)
 app.use('/api/shared-builds', sharedBuildsRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/images', imageRoutes)
 
 // Initialize cron jobs
 setupDataDragonSync()

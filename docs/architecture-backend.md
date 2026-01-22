@@ -67,6 +67,18 @@ Services handle business logic for specific domains:
    - YouTube video integration
    - Content creator management
 
+8. **ImageService** (`src/services/ImageService.ts`)
+   - Downloads game images from Data Dragon
+   - Manages image storage and cleanup
+   - Deletes old version images
+
+9. **StaticAssetsService** (`src/services/StaticAssetsService.ts`)
+   - Copies game data and images to frontend public directory
+   - Copies YouTube data to frontend public directory
+   - Deletes backend data after successful copy
+   - Manages old version cleanup
+   - Restarts frontend PM2 process
+
 ### Middleware Layer
 
 1. **cacheMiddleware** (`src/middleware/cacheMiddleware.ts`)
@@ -111,11 +123,24 @@ Services handle business logic for specific domains:
 
 ## Data Architecture
 
+### Static-First Architecture
+
+The backend implements a **static-first architecture** for optimal scalability:
+
+1. **Sync Phase**: Data is synced from external APIs and stored temporarily in `backend/data/`
+2. **Copy Phase**: Data is copied to `frontend/public/` for static serving
+3. **Cleanup Phase**: Backend data is deleted after successful copy (saves disk space)
+4. **Serving Phase**: Frontend serves data directly from static files (no API calls needed)
+5. **Fallback**: API endpoints read from frontend public directory if backend data doesn't exist
+
 ### Storage Strategy
 - **No Database**: File-based storage
 - **Build Storage**: JSON files in `frontend/public/assets/files/build/`
-- **Data Files**: JSON files in `frontend/src/assets/files/data/`
-- **Cache**: Redis for performance optimization
+- **Game Data**: JSON files in `frontend/public/data/game/{version}/{language}/` (static, served directly)
+- **Game Images**: PNG files in `frontend/public/images/game/{version}/` (static, served directly)
+- **YouTube Data**: JSON files in `frontend/public/data/youtube/` (static, served directly)
+- **Backend Temporary**: `backend/data/` (deleted after copy, except config files)
+- **Cache**: Redis for API responses (fallback only)
 
 ### Cache Strategy
 

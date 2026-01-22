@@ -158,7 +158,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
@@ -242,7 +242,12 @@ const allVideos = computed<YouTubeVideo[]>(() => {
   // Deduplicate by id (defensive)
   const byId = new Map<string, YouTubeVideo>()
   for (const v of all) byId.set(v.id, v)
-  return [...byId.values()]
+  const result = [...byId.values()]
+
+  // Debug: check if channels exist but no videos (only in dev)
+  // Silently continue - videos may be loading
+
+  return result
 })
 
 const filteredVideos = computed<YouTubeVideo[]>(() => {
@@ -376,6 +381,26 @@ await useAsyncData('youtube-status', async () => {
     isLoadingAll.value = false
   }
   return youtube.status
+})
+
+// Force reload on client side to ensure static files are loaded
+// (SSR doesn't have access to static files in public/)
+onMounted(async () => {
+  // Always reload on client side to ensure static files are loaded
+  // (SSR can't access public/ files)
+  isLoadingAll.value = true
+  try {
+    await youtube.loadStatus()
+    await youtube.loadAllChannelsData()
+  } catch (error) {
+    // Error is handled by the store
+    if (process.dev) {
+      // eslint-disable-next-line no-console
+      console.error('[VideosPage] Error loading YouTube data:', error)
+    }
+  } finally {
+    isLoadingAll.value = false
+  }
 })
 </script>
 

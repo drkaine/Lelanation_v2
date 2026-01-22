@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
+import { useVersionStore } from './VersionStore'
 import type { SummonerSpell } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
+import { getGameDataUrl } from '~/utils/staticDataUrl'
 
 interface SummonerSpellsState {
   spells: SummonerSpell[]
@@ -29,13 +31,53 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
         this.status = 'loading'
         this.error = null
 
-        // TODO: Load from API endpoint (Epic 2)
-        const response = await fetch(apiUrl(`/api/game-data/summoner-spells?lang=${language}`))
-        if (!response.ok) {
-          throw new Error('Failed to load summoner spells')
+        // Try to load from static file first (faster, no API call)
+        const versionStore = useVersionStore()
+        if (!versionStore.currentVersion) {
+          await versionStore.loadCurrentVersion()
+        }
+        const version = versionStore.currentVersion || '14.1.1'
+
+        let data: any
+        let useStatic = false
+
+        // Try static file first (only in browser, not SSR)
+        if (process.client) {
+          try {
+            const staticUrl = getGameDataUrl(version, 'summoner', language)
+            const staticResponse = await fetch(staticUrl, {
+              cache: 'no-cache',
+            })
+            if (staticResponse.ok) {
+              data = await staticResponse.json()
+              useStatic = true
+            }
+          } catch (staticError) {
+            // Static file not available, will try API - silently continue
+          }
         }
 
-        const data = await response.json()
+        // Fallback to API if static file not available
+        // Always try API as fallback (even in production) since static files might not exist yet
+        if (!useStatic) {
+          try {
+            const apiUrlValue = apiUrl(`/api/game-data/summoner-spells?lang=${language}`)
+            const response = await fetch(apiUrlValue, {
+              signal: AbortSignal.timeout(5000),
+            })
+            if (!response.ok) {
+              this.spells = []
+              this.status = 'success'
+              return
+            }
+            data = await response.json()
+          } catch (apiError) {
+            this.spells = []
+            this.status = 'success'
+            return
+          }
+        }
+
         this.spells = Object.values(data.data || {}) as SummonerSpell[]
         this.status = 'success'
       } catch (error) {

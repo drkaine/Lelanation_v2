@@ -4,6 +4,7 @@ import { VersionService } from '../services/VersionService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
+import { StaticAssetsService } from '../services/StaticAssetsService.js'
 
 /**
  * Data Dragon synchronization cron job
@@ -14,6 +15,7 @@ export function setupDataDragonSync(): void {
   const versionService = new VersionService()
   const discordService = new DiscordService()
   const cronStatus = new CronStatusService()
+  const staticAssets = new StaticAssetsService()
 
   // Schedule daily sync at 02:00
   cron.schedule('0 2 * * *', async () => {
@@ -84,6 +86,26 @@ export function setupDataDragonSync(): void {
     console.log(
       `[Cron] Data Dragon sync completed successfully. Version: ${syncData.version}, Synced at: ${syncData.syncedAt.toISOString()}`
     )
+
+    // Copy static assets to frontend (for faster, scalable serving)
+    console.log(`[Cron] Copying static assets to frontend...`)
+    const copyResult = await staticAssets.copyAllAssetsToFrontend(
+      syncData.version,
+      ['fr_FR', 'en_US'],
+      true // Restart frontend PM2 after copying
+    )
+    if (copyResult.isOk()) {
+      const stats = copyResult.unwrap()
+      console.log(
+        `[Cron] Static assets copied: ${stats.dataCopied} data files, ${stats.imagesCopied} images (${stats.imagesSkipped} skipped)`
+      )
+    } else {
+      console.warn(
+        `[Cron] Failed to copy static assets to frontend: ${copyResult.unwrapErr()}`
+      )
+      // Don't fail the sync if static asset copy fails
+    }
+
     await cronStatus.markSuccess('dataDragonSync')
 
     // Optional: Send success notification (can be disabled if too noisy)

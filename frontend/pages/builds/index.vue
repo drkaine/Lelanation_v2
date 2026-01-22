@@ -101,7 +101,7 @@
 
             <div v-if="build.champion" class="mb-3 flex items-center gap-3">
               <img
-                :src="getChampionImageUrl(build.champion.image.full)"
+                :src="getChampionImageUrl(version, build.champion.image.full)"
                 :alt="build.champion.name"
                 class="h-12 w-12 rounded"
               />
@@ -115,7 +115,7 @@
               <img
                 v-for="item in build.items.slice(0, 6)"
                 :key="item.id"
-                :src="getItemImageUrl(item.image.full)"
+                :src="getItemImageUrl(version, item.image.full)"
                 :alt="item.name"
                 class="h-8 w-8 rounded"
               />
@@ -191,6 +191,8 @@ import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
 
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
@@ -242,14 +244,6 @@ const loadBuild = (buildId: string) => {
 
 const clearComparison = () => {
   discoveryStore.clearComparison()
-}
-
-const getChampionImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/champion/${imageName}`
-}
-
-const getItemImageUrl = (imageName: string): string => {
-  return `https://ddragon.leagueoflegends.com/cdn/${version.value}/img/item/${imageName}`
 }
 
 const formatDate = (dateString: string): string => {
