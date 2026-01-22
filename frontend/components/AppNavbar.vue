@@ -76,10 +76,22 @@ import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { useVersionStore } from '~/stores/VersionStore'
 
 const isMenuOpen = ref(false)
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const versionStore = useVersionStore()
 const gameVersion = computed(() => versionStore.currentVersion || '14.1.1')
+
+// Map i18n locale to Riot Games locale code
+const getRiotLocale = (locale: string): string => {
+  const localeMap: Record<string, string> = {
+    fr: 'fr-fr',
+    en: 'en-us',
+    // Add more locales as needed
+  }
+  return localeMap[locale] || 'en-us'
+}
+
 const patchNotesUrl = computed(() => {
+  const riotLocale = getRiotLocale(locale.value)
   // DataDragon-like version (ex: 16.1.1) maps to patch notes (ex: 26.1)
   const v = String(gameVersion.value || '').trim()
   const parts = v.match(/\d+/g) ?? []
@@ -88,12 +100,12 @@ const patchNotesUrl = computed(() => {
 
   if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
     const patchMajor = gameMajor + 10
-    return `https://www.leagueoflegends.com/fr-fr/news/game-updates/patch-${patchMajor}-${gameMinor}-notes/`
+    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/patch-${patchMajor}-${gameMinor}-notes/`
   }
 
   // Fallback: best-effort formatting
   const slug = v.replace(/\./g, '-')
-  return `https://www.leagueoflegends.com/fr-fr/news/game-updates/patch-${slug}-notes/`
+  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/patch-${slug}-notes/`
 })
 
 onMounted(() => {
