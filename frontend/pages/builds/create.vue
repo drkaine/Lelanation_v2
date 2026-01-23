@@ -1,6 +1,6 @@
 <template>
   <div class="build-creator min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-2xl px-2">
+    <div class="max-w-8xl mx-auto px-2">
       <!-- Step Navigation -->
       <div class="mb-3">
         <BuildMenuSteps
@@ -10,54 +10,66 @@
         />
       </div>
 
-      <!-- Step Content -->
-      <div class="mb-6 rounded-lg bg-surface p-6">
-        <!-- Step 1: Champion Selection -->
-        <div v-if="currentStep === 'champion'">
-          <ChampionSelector />
+      <!-- Build Card and Step Content -->
+      <div class="mb-6 flex gap-4">
+        <!-- Build Card (Left Side) - Visible when champion is selected -->
+        <div v-if="hasChampion" class="build-card-wrapper flex-shrink-0">
+          <BuildCard />
         </div>
 
-        <!-- Step 2: Runes (Runes + Shards + Spells) -->
-        <div v-if="currentStep === 'runes'">
-          <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
-          <RuneSelector />
-
-          <div class="mt-8">
-            <h3 class="mb-4 text-xl font-bold">Rune Shards</h3>
-            <RuneShardSelector />
+        <!-- Step Content (Right Side or Full Width) -->
+        <div
+          :class="
+            hasChampion ? 'flex-1 rounded-lg bg-surface p-6' : 'w-full rounded-lg bg-surface p-6'
+          "
+        >
+          <!-- Step 1: Champion Selection -->
+          <div v-if="currentStep === 'champion'">
+            <ChampionSelector />
           </div>
 
-          <div class="mt-8">
-            <h3 class="mb-4 text-xl font-bold">Summoner Spells</h3>
-            <SummonerSpellSelector />
-          </div>
-        </div>
+          <!-- Step 2: Runes (Runes + Shards + Spells) -->
+          <div v-if="currentStep === 'runes'">
+            <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
+            <RuneSelector />
 
-        <!-- Step 3: Items -->
-        <div v-if="currentStep === 'items'">
-          <h2 class="mb-4 text-2xl font-bold">Select Items</h2>
-          <ItemSelector />
-        </div>
+            <div class="mt-8">
+              <h3 class="mb-4 text-xl font-bold">Rune Shards</h3>
+              <RuneShardSelector />
+            </div>
 
-        <!-- Step 4: Info -->
-        <div v-if="currentStep === 'review'">
-          <h2 class="mb-4 text-2xl font-bold">Infos</h2>
-          <div class="mb-6">
-            <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
-            <input
-              id="build-name"
-              v-model="buildName"
-              type="text"
-              placeholder="Enter build name..."
-              class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
-              @input="updateBuildName"
-            />
+            <div class="mt-8">
+              <h3 class="mb-4 text-xl font-bold">Summoner Spells</h3>
+              <SummonerSpellSelector />
+            </div>
           </div>
-          <div class="mb-8">
-            <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
-            <SkillOrderSelector />
+
+          <!-- Step 3: Items -->
+          <div v-if="currentStep === 'items'">
+            <h2 class="mb-4 text-2xl font-bold">Select Items</h2>
+            <ItemSelector />
           </div>
-          <StatsDisplay />
+
+          <!-- Step 4: Info -->
+          <div v-if="currentStep === 'review'">
+            <h2 class="mb-4 text-2xl font-bold">Infos</h2>
+            <div class="mb-6">
+              <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
+              <input
+                id="build-name"
+                v-model="buildName"
+                type="text"
+                placeholder="Enter build name..."
+                class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
+                @input="updateBuildName"
+              />
+            </div>
+            <div class="mb-8">
+              <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
+              <SkillOrderSelector />
+            </div>
+            <StatsDisplay />
+          </div>
         </div>
       </div>
 
@@ -104,9 +116,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
+import BuildCard from '~/components/Build/BuildCard.vue'
 import ItemSelector from '~/components/Build/ItemSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
 import RuneShardSelector from '~/components/Build/RuneShardSelector.vue'
@@ -128,6 +141,13 @@ const currentStep = ref('champion')
 const buildName = ref('New Build')
 const showValidationErrors = ref(false)
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
+
+// Auto-advance to runes step when champion is selected
+watch(hasChampion, newValue => {
+  if (newValue && currentStep.value === 'champion') {
+    currentStep.value = 'runes'
+  }
+})
 
 const currentStepIndex = computed(() => {
   return steps.findIndex(step => step.id === currentStep.value)
@@ -170,3 +190,15 @@ onMounted(() => {
   showValidationErrors.value = false
 })
 </script>
+
+<style scoped>
+.build-card-wrapper {
+  width: 293.9px;
+}
+
+@media (max-width: 700px) {
+  .build-card-wrapper {
+    width: 100%;
+  }
+}
+</style>

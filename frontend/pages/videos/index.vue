@@ -1,6 +1,6 @@
 <template>
   <div class="videos-page min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-2xl px-2">
+    <div class="max-w-8xl mx-auto px-2">
       <div
         v-if="youtube.error"
         class="mb-4 rounded-lg border border-error bg-surface p-3 text-sm text-error"

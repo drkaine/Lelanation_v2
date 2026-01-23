@@ -49,6 +49,13 @@ export function getChampionSpellImageUrl(
 }
 
 /**
+ * Get champion passive image URL
+ */
+export function getChampionPassiveImageUrl(version: string, imageName: string): string {
+  return getImageUrl('champion-spell', version, imageName, 'passive')
+}
+
+/**
  * Get rune path icon URL
  */
 export function getRunePathImageUrl(icon: string): string {

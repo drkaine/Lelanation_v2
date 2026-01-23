@@ -42,6 +42,14 @@
     "rune": "Rune",
     "item": "Item",
     "info": "Infos"
+  },
+  "champion": {
+    "assassin": "Assassin",
+    "fighter": "Combattant",
+    "mage": "Mage",
+    "marksman": "Tireur",
+    "support": "Support",
+    "tank": "Tank"
   }
 }
 

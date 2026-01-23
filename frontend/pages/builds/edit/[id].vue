@@ -1,6 +1,6 @@
 <template>
   <div class="build-editor min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-2xl px-2">
+    <div class="max-w-8xl mx-auto px-2">
       <div v-if="buildStore.status === 'loading'" class="py-12 text-center">
         <p class="text-text">Loading build...</p>
       </div>

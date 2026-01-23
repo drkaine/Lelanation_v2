@@ -2,7 +2,7 @@
   <div class="home-page min-h-screen text-text-primary">
     <!-- Hero Section -->
     <section class="profil pb-8 pt-4">
-      <div class="mx-auto max-w-2xl px-2">
+      <div class="max-w-8xl mx-auto px-2">
         <h1 class="title text-text-accent">Lelanation</h1>
         <img
           class="profil-image"
@@ -35,7 +35,7 @@
 
     <!-- Features Section -->
     <section class="py-16">
-      <div class="mx-auto max-w-2xl px-2">
+      <div class="max-w-8xl mx-auto px-2">
         <h2 class="mb-12 text-center text-3xl font-bold text-text-accent md:text-4xl">
           {{ t('home.features') }}
         </h2>
@@ -117,7 +117,7 @@
 
     <!-- Quick Actions Section -->
     <section class="py-16">
-      <div class="mx-auto max-w-2xl px-2">
+      <div class="max-w-8xl mx-auto px-2">
         <h2 class="mb-12 text-center text-3xl font-bold text-text-accent md:text-4xl">
           {{ t('home.quickActions') }}
         </h2>
