@@ -1,6 +1,6 @@
 <template>
   <div class="builds-page min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-2xl px-2">
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-3xl font-bold text-text-accent">Les Builds</h1>
         <NuxtLink

@@ -1,6 +1,6 @@
 <template>
   <div class="build-discovery min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-2xl px-2">
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-3xl font-bold text-text">Discover Builds</h1>
         <NuxtLink
@@ -20,7 +20,7 @@
       <!-- Comparison Bar -->
       <div
         v-if="comparisonBuilds.length > 0"
-        class="bg-accent/20 mb-6 rounded-lg border-2 border-accent p-4"
+        class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
       >
         <div class="flex items-center justify-between">
           <div>

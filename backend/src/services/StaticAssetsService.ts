@@ -163,7 +163,7 @@ export class StaticAssetsService {
         }
 
         // Copy JSON files
-        const files = ['champion.json', 'item.json', 'runesReforged.json', 'summoner.json']
+        const files = ['champion.json', 'championFull.json', 'item.json', 'runesReforged.json', 'summoner.json']
         for (const file of files) {
           const sourcePath = join(sourceDir, file)
           const targetPath = join(targetDir, file)

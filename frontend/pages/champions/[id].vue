@@ -1,6 +1,6 @@
 <template>
   <div class="builds-by-champion min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-2xl px-2">
       <div class="mb-6 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <NuxtLink

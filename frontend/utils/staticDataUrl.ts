@@ -9,7 +9,7 @@
  */
 export function getGameDataUrl(
   version: string,
-  type: 'champion' | 'item' | 'runesReforged' | 'summoner',
+  type: 'champion' | 'championFull' | 'item' | 'runesReforged' | 'summoner',
   language: string = 'fr_FR'
 ): string {
   return `/data/game/${version}/${language}/${type}.json`

@@ -1,6 +1,6 @@
 <template>
   <div class="build-creator min-h-screen p-4 text-text">
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-2xl px-2">
       <!-- Step Navigation -->
       <div class="mb-3">
         <BuildMenuSteps

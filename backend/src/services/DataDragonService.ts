@@ -282,7 +282,8 @@ export class DataDragonService {
     items: ItemData,
     runes: RuneData[],
     summonerSpells: SummonerSpellData,
-    language: string = 'fr_FR'
+    language: string = 'fr_FR',
+    championsFull?: Record<string, any>
   ): Promise<Result<void, AppError>> {
     const versionDir = join(this.dataDir, version, language)
 
@@ -293,6 +294,17 @@ export class DataDragonService {
     })
     if (championsResult.isErr()) {
       return championsResult
+    }
+
+    // Save champions full (with spells and passive) if provided
+    if (championsFull) {
+      const championsFullPath = join(versionDir, 'championFull.json')
+      const championsFullResult = await FileManager.writeJson(championsFullPath, {
+        data: championsFull
+      })
+      if (championsFullResult.isErr()) {
+        return championsFullResult
+      }
     }
 
     // Save items
@@ -346,10 +358,11 @@ export class DataDragonService {
 
     // Sync for each language
     for (const language of languages) {
-      // Fetch all data
-      const [championsResult, itemsResult, runesResult, spellsResult] =
+      // Fetch all data (including full champion data with spells and passive)
+      const [championsResult, championsFullResult, itemsResult, runesResult, spellsResult] =
         await Promise.all([
           this.fetchChampions(gameVersion, language),
+          this.fetchChampionsFull(gameVersion, language),
           this.fetchItems(gameVersion, language),
           this.fetchRunes(gameVersion, language),
           this.fetchSummonerSpells(gameVersion, language)
@@ -358,6 +371,9 @@ export class DataDragonService {
       // Check for errors
       if (championsResult.isErr()) {
         return Result.err(championsResult.unwrapErr())
+      }
+      if (championsFullResult.isErr()) {
+        return Result.err(championsFullResult.unwrapErr())
       }
       if (itemsResult.isErr()) {
         return Result.err(itemsResult.unwrapErr())
@@ -369,14 +385,15 @@ export class DataDragonService {
         return Result.err(spellsResult.unwrapErr())
       }
 
-      // Save data
+      // Save data (including full champion data)
       const saveResult = await this.saveGameData(
         gameVersion,
         championsResult.unwrap(),
         itemsResult.unwrap(),
         runesResult.unwrap(),
         spellsResult.unwrap(),
-        language
+        language,
+        championsFullResult.unwrap()
       )
 
       if (saveResult.isErr()) {
@@ -413,7 +430,7 @@ export class DataDragonService {
         // Continue anyway - not critical
       }
 
-      // Fetch full champion data for images (need spells and passive)
+      // Fetch champion data for images (already fetched in sync loop above)
       const championsFullResult = await this.fetchChampionsFull(
         gameVersion,
         primaryLanguage
@@ -499,9 +516,10 @@ export class DataDragonService {
   }
 
   /**
-   * Fetch full champions data (including spells and passive) for image downloading
+   * Fetch full champions data (including spells and passive)
+   * Removes unnecessary fields: skins, lore, blurb, allytips, enemytips
    */
-  private async fetchChampionsFull(
+  async fetchChampionsFull(
     version: string,
     language: string = 'fr_FR'
   ): Promise<Result<Record<string, any>, AppError>> {
@@ -515,7 +533,20 @@ export class DataDragonService {
         )
       }
 
-      return Result.ok(response.data.data)
+      // Clean up champions data: remove unnecessary fields
+      const cleanedData: Record<string, any> = {}
+      for (const [championId, championData] of Object.entries(response.data.data)) {
+        const cleaned: any = { ...championData }
+        // Remove fields we don't need
+        delete cleaned.skins
+        delete cleaned.lore
+        delete cleaned.blurb
+        delete cleaned.allytips
+        delete cleaned.enemytips
+        cleanedData[championId] = cleaned
+      }
+
+      return Result.ok(cleanedData)
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {

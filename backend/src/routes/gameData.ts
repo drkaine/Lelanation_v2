@@ -72,6 +72,7 @@ router.get('/version', async (_req, res) => {
  */
 router.get('/champions', async (req, res) => {
   const language = (req.query.lang as string) || 'fr_FR'
+  const full = req.query.full === 'true' // Check if full data is requested
 
   // Get current version
   const versionResult = await versionService.getCurrentVersion()
@@ -84,17 +85,18 @@ router.get('/champions', async (req, res) => {
     return res.status(404).json({ error: 'No game version found' })
   }
 
+  const filename = full ? 'championFull.json' : 'champion.json'
   const backendPath = join(
     backendDataDir,
     versionInfo.currentVersion,
     language,
-    'champion.json'
+    filename
   )
   const frontendPath = join(
     frontendDataDir,
     versionInfo.currentVersion,
     language,
-    'champion.json'
+    filename
   )
 
   const readResult = await readGameDataFile(backendPath, frontendPath)

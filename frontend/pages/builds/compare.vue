@@ -1,6 +1,6 @@
 <template>
   <div class="build-comparison min-h-screen px-4 py-6 text-text sm:px-6 lg:px-8">
-    <div class="mx-auto max-w-7xl">
+    <div class="mx-auto max-w-2xl px-2">
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="space-y-1">
           <h1 class="text-3xl font-bold text-text">Comparer des builds</h1>

@@ -100,15 +100,27 @@ export const useChampionsStore = defineStore('champions', {
         let useStatic = false
 
         // Try static file first (only in browser, not SSR)
+        // Use championFull.json to get complete data (spells, passive, etc.)
         if (process.client) {
           try {
-            const staticUrl = getGameDataUrl(version, 'champion', language)
-            const staticResponse = await fetch(staticUrl, {
+            // Try championFull.json first (complete data)
+            const staticUrlFull = getGameDataUrl(version, 'championFull', language)
+            const staticResponseFull = await fetch(staticUrlFull, {
               cache: 'no-cache',
             })
-            if (staticResponse.ok) {
-              data = await staticResponse.json()
+            if (staticResponseFull.ok) {
+              data = await staticResponseFull.json()
               useStatic = true
+            } else {
+              // Fallback to basic champion.json if full not available
+              const staticUrl = getGameDataUrl(version, 'champion', language)
+              const staticResponse = await fetch(staticUrl, {
+                cache: 'no-cache',
+              })
+              if (staticResponse.ok) {
+                data = await staticResponse.json()
+                useStatic = true
+              }
             }
           } catch (staticError) {
             // Network error or other issue - silently continue
@@ -119,17 +131,27 @@ export const useChampionsStore = defineStore('champions', {
         // Always try API as fallback (even in production) since static files might not exist yet
         if (!useStatic) {
           try {
-            const apiUrlValue = apiUrl(`/api/game-data/champions?lang=${language}`)
-            const response = await fetch(apiUrlValue, {
+            // Try full data first
+            const apiUrlValueFull = apiUrl(`/api/game-data/champions?lang=${language}&full=true`)
+            const responseFull = await fetch(apiUrlValueFull, {
               signal: AbortSignal.timeout(5000),
             })
-            if (!response.ok) {
-              // If API returns error, return empty array
-              this.champions = []
-              this.status = 'success'
-              return
+            if (responseFull.ok) {
+              data = await responseFull.json()
+            } else {
+              // Fallback to basic data
+              const apiUrlValue = apiUrl(`/api/game-data/champions?lang=${language}`)
+              const response = await fetch(apiUrlValue, {
+                signal: AbortSignal.timeout(5000),
+              })
+              if (!response.ok) {
+                // If API returns error, return empty array
+                this.champions = []
+                this.status = 'success'
+                return
+              }
+              data = await response.json()
             }
-            data = await response.json()
           } catch (apiError) {
             // If API also fails (network error, timeout, etc.), return empty array
             this.champions = []
