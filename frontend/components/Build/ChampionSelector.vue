@@ -1,31 +1,28 @@
 <template>
-  <div class="champion-selector">
-    <div class="mb-4">
+  <div class="champion-selector" style="background: transparent !important">
+    <!-- Search Bar -->
+    <div class="mb-2">
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search champions..."
-        class="w-full rounded border border-primary bg-surface px-4 py-2 text-text"
+        placeholder="Search"
+        class="w-full rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
         @input="handleSearch"
       />
     </div>
 
-    <div v-if="selectedRole" class="mb-4">
-      <button class="rounded bg-primary px-3 py-1 text-sm text-white" @click="selectedRole = null">
-        Clear filter: {{ selectedRole }}
-      </button>
-    </div>
-
-    <div class="mb-4 flex flex-wrap gap-2">
+    <!-- Role Filters -->
+    <div class="mb-3 flex flex-wrap gap-0">
       <button
         v-for="role in availableRoles"
         :key="role"
         :class="[
-          'rounded px-3 py-1 text-sm transition-colors',
-          selectedRole === role
-            ? 'bg-accent text-background'
-            : 'bg-surface text-text hover:bg-primary hover:text-white',
+          'rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all',
+          selectedRoles.includes(role)
+            ? 'border-surface bg-accent text-background'
+            : 'border-accent bg-surface text-text',
         ]"
+        style="margin-right: -1px"
         @click="toggleRole(role)"
       >
         {{ role }}
@@ -40,24 +37,22 @@
       <p class="text-error">{{ championsStore.error }}</p>
     </div>
 
-    <div v-else class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+    <div v-else class="champions-list mt-2">
       <button
-        v-for="champion in filteredChampions"
+        v-for="champion in allChampions"
         :key="champion.id"
-        :class="[
-          'flex flex-col items-center rounded border-2 p-3 transition-all',
-          isSelected(champion)
-            ? 'border-accent bg-accent/20'
-            : 'border-surface hover:border-primary',
-        ]"
+        :class="['champ', !isFiltered(champion) ? 'hide' : '']"
         @click="selectChampion(champion)"
       >
         <img
           :src="getChampionImageUrl(version, champion.image.full)"
           :alt="champion.name"
-          class="mb-2 h-16 w-16 rounded"
+          loading="lazy"
+          width="48"
+          height="48"
+          decoding="async"
         />
-        <span class="text-center text-sm text-text">{{ champion.name }}</span>
+        <div v-if="isSelected(champion)" class="champ-selected" />
       </button>
     </div>
 
@@ -80,7 +75,7 @@ const championsStore = useChampionsStore()
 const buildStore = useBuildStore()
 
 const searchQuery = ref('')
-const selectedRole = ref<string | null>(null)
+const selectedRoles = ref<string[]>([])
 
 const availableRoles = computed(() => {
   const roles = new Set<string>()
@@ -93,8 +88,27 @@ const availableRoles = computed(() => {
 })
 
 const filteredChampions = computed(() => {
-  return championsStore.searchChampions(searchQuery.value, selectedRole.value || undefined)
+  return championsStore.searchChampions(
+    searchQuery.value,
+    selectedRoles.value.length > 0 ? selectedRoles.value : undefined
+  )
 })
+
+// All champions for display (filtered ones in color, others in grayscale)
+const allChampions = computed(() => {
+  return championsStore.champions
+})
+
+// Check if champion matches current filters
+const isFiltered = (champion: Champion): boolean => {
+  // If no filters, all champions are "filtered" (visible in color)
+  if (selectedRoles.value.length === 0 && !searchQuery.value) {
+    return true
+  }
+
+  // Check if champion is in filtered results
+  return filteredChampions.value.some(c => c.id === champion.id)
+}
 
 const isSelected = (champion: Champion): boolean => {
   return buildStore.currentBuild?.champion?.id === champion.id
@@ -105,7 +119,14 @@ const selectChampion = (champion: Champion) => {
 }
 
 const toggleRole = (role: string) => {
-  selectedRole.value = selectedRole.value === role ? null : role
+  const index = selectedRoles.value.indexOf(role)
+  if (index > -1) {
+    // Remove role if already selected
+    selectedRoles.value.splice(index, 1)
+  } else {
+    // Add role if not selected
+    selectedRoles.value.push(role)
+  }
 }
 
 const handleSearch = () => {
@@ -120,3 +141,66 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.champion-selector {
+  background: transparent !important;
+}
+
+.champions-list {
+  --champSizeButton: 51px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, var(--champSizeButton));
+  place-content: center;
+  width: 100%;
+  gap: 0;
+}
+
+.champ {
+  border: 1px solid transparent;
+  position: relative;
+  height: var(--champSizeButton);
+  width: var(--champSizeButton);
+  background-color: unset;
+  display: inline-block;
+  line-height: 1rem;
+  border-radius: 0;
+  appearance: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  transition: border-color 0.2s;
+}
+
+.champ.hide img {
+  filter: grayscale(1) brightness(0.4);
+}
+
+.champ img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  drop-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.champ-selected {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(var(--rgb-accent));
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .champ:hover {
+    border-color: rgb(var(--rgb-accent));
+    z-index: 1;
+  }
+}
+
+@media (max-width: 700px) {
+  .champions-list {
+    --champSizeButton: 43px;
+  }
+}
+</style>

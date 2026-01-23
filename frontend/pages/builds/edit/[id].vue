@@ -128,17 +128,6 @@
           </button>
         </div>
 
-        <!-- Validation Errors -->
-        <div
-          v-if="buildStore.validationErrors.length > 0"
-          class="mt-6 rounded border border-error bg-error/20 p-4"
-        >
-          <p class="mb-2 font-bold text-error">Please fix the following errors:</p>
-          <ul class="list-inside list-disc text-error">
-            <li v-for="error in buildStore.validationErrors" :key="error">{{ error }}</li>
-          </ul>
-        </div>
-
         <!-- Success Message -->
         <div
           v-if="buildStore.status === 'success'"

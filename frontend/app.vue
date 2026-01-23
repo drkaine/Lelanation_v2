@@ -55,6 +55,11 @@ useHead(() => ({
     background-color: rgb(var(--rgb-primary-light) / 1) !important;
   }
 
+  /* bg-surface should be transparent */
+  .bg-surface {
+    background-color: transparent !important;
+  }
+
   /* All borders should be gold (accent) */
   [class*='border-primary'] {
     border-color: rgb(var(--rgb-accent) / 0.7) !important;

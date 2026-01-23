@@ -32,12 +32,18 @@ export const useChampionsStore = defineStore('champions', {
     },
 
     searchChampions() {
-      return (query: string, role?: string): Champion[] => {
+      return (query: string, roles?: string | string[]): Champion[] => {
         let filtered = this.champions
 
-        // Filter by role if provided
-        if (role) {
-          filtered = filtered.filter(champion => champion.tags.includes(role))
+        // Filter by role(s) if provided
+        if (roles) {
+          const rolesArray = Array.isArray(roles) ? roles : [roles]
+          if (rolesArray.length > 0) {
+            // Show champions that have ALL of the selected roles
+            filtered = filtered.filter(champion =>
+              rolesArray.every(role => champion.tags.includes(role))
+            )
+          }
         }
 
         // Search by name

@@ -393,11 +393,7 @@ onMounted(async () => {
     await youtube.loadStatus()
     await youtube.loadAllChannelsData()
   } catch (error) {
-    // Error is handled by the store
-    if (process.dev) {
-      // eslint-disable-next-line no-console
-      console.error('[VideosPage] Error loading YouTube data:', error)
-    }
+    // Error is handled by the store - silently continue
   } finally {
     isLoadingAll.value = false
   }

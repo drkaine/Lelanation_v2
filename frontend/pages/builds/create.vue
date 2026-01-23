@@ -1,10 +1,8 @@
 <template>
   <div class="build-creator min-h-screen p-4 text-text">
     <div class="mx-auto max-w-7xl">
-      <h1 class="mb-6 text-3xl font-bold">Create Build</h1>
-
       <!-- Step Navigation -->
-      <div class="mb-4">
+      <div class="mb-3">
         <BuildMenuSteps
           :current-step="currentStep"
           :has-champion="hasChampion"
@@ -16,7 +14,6 @@
       <div class="mb-6 rounded-lg bg-surface p-6">
         <!-- Step 1: Champion Selection -->
         <div v-if="currentStep === 'champion'">
-          <h2 class="mb-4 text-2xl font-bold">Select Champion</h2>
           <ChampionSelector />
         </div>
 
@@ -93,17 +90,6 @@
         >
           {{ buildStore.status === 'loading' ? 'Saving...' : 'Save Build' }}
         </button>
-      </div>
-
-      <!-- Validation Errors -->
-      <div
-        v-if="buildStore.validationErrors.length > 0"
-        class="mt-6 rounded border border-error bg-error/20 p-4"
-      >
-        <p class="mb-2 font-bold text-error">Please fix the following errors:</p>
-        <ul class="list-inside list-disc text-error">
-          <li v-for="error in buildStore.validationErrors" :key="error">{{ error }}</li>
-        </ul>
       </div>
 
       <!-- Success Message -->
