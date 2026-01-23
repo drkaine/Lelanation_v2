@@ -174,6 +174,7 @@ export interface Item {
   depth: number
   into?: string[]
   from?: string[]
+  maps?: Record<string, boolean>
 }
 
 export interface RunePath {

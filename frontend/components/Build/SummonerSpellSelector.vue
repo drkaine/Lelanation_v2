@@ -8,28 +8,24 @@
       <p class="text-error">{{ spellsStore.error }}</p>
     </div>
 
-    <div v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+    <div v-else class="summoner-spells-grid">
       <button
-        v-for="spell in spellsStore.spells"
+        v-for="spell in availableSpells"
         :key="spell.id"
         :class="[
-          'flex flex-col items-center rounded border-2 p-3 transition-all',
-          isSelected(spell) ? 'border-accent bg-accent/20' : 'border-surface hover:border-primary',
-          isDisabled(spell) ? 'cursor-not-allowed opacity-50' : '',
+          'summoner-spell-button',
+          isSelected(spell) ? 'spell-selected' : 'spell-unselected',
+          isDisabled(spell) ? 'spell-disabled' : '',
         ]"
         :disabled="isDisabled(spell)"
         @click="selectSpell(spell)"
       >
         <img
-          :src="getSpellImageUrl(spell.image.full)"
+          :src="getSpellImageUrl(version, spell.image.full)"
           :alt="spell.name"
-          class="mb-2 h-12 w-12 rounded"
+          class="summoner-spell-icon"
         />
-        <span class="text-center text-xs text-text">{{ spell.name }}</span>
-        <span
-          v-if="isSelected(spell)"
-          class="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs font-bold text-background"
-        >
+        <span v-if="isSelected(spell)" class="spell-slot-badge">
           {{ getSpellSlot(spell) }}
         </span>
       </button>
@@ -38,13 +34,21 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SummonerSpell } from '~/types/build'
+import { getSpellImageUrl } from '~/utils/imageUrl'
+import { useGameVersion } from '~/composables/useGameVersion'
 
 const spellsStore = useSummonerSpellsStore()
 const buildStore = useBuildStore()
+const { version } = useGameVersion()
+
+// Spells are already filtered by backend (only CLASSIC mode)
+const availableSpells = computed(() => {
+  return spellsStore.spells
+})
 
 const isSelected = (spell: SummonerSpell): boolean => {
   const spells = buildStore.currentBuild?.summonerSpells
@@ -112,3 +116,71 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.summoner-spells-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(3rem, 1fr));
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.summoner-spell-button {
+  position: relative;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent));
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.summoner-spell-button.spell-selected {
+  background: rgb(var(--rgb-accent));
+  box-shadow: 0 0 8px rgba(var(--rgb-accent-rgb), 0.6);
+}
+
+.summoner-spell-button.spell-unselected {
+  background: rgb(var(--rgb-surface));
+  opacity: 0.6;
+}
+
+.summoner-spell-button.spell-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.summoner-spell-button:hover:not(.spell-disabled) {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.summoner-spell-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.spell-slot-badge {
+  position: absolute;
+  right: -0.25rem;
+  top: -0.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgb(var(--rgb-accent));
+  color: rgb(var(--rgb-background));
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgb(var(--rgb-background));
+}
+</style>

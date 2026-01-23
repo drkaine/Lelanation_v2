@@ -57,20 +57,22 @@ export function getChampionPassiveImageUrl(version: string, imageName: string): 
 
 /**
  * Get rune path icon URL
+ * Icon format: "perk-images/Styles/7200_Domination.png"
+ * Stored as: /images/game/{version}/rune/paths/7200_Domination.png
  */
-export function getRunePathImageUrl(icon: string): string {
-  // Rune icons use a different path structure: /img/perk-images/...
-  // For now, fallback to CDN since rune paths are more complex
-  // TODO: Update when rune image structure is finalized
-  return `https://ddragon.leagueoflegends.com/cdn/img/${icon}`
+export function getRunePathImageUrl(version: string, icon: string): string {
+  // Extract filename from icon path (e.g., "perk-images/Styles/7200_Domination.png" -> "7200_Domination.png")
+  const filename = icon.split('/').pop() || icon
+  return getImageUrl('rune', version, filename, 'paths')
 }
 
 /**
  * Get rune icon URL
+ * Icon format: "perk-images/Styles/Domination/Electrocute/Electrocute.png"
+ * Stored as: /images/game/{version}/rune/runes/Electrocute.png
  */
-export function getRuneImageUrl(icon: string): string {
-  // Rune icons use a different path structure: /img/perk-images/...
-  // For now, fallback to CDN since rune paths are more complex
-  // TODO: Update when rune image structure is finalized
-  return `https://ddragon.leagueoflegends.com/cdn/img/${icon}`
+export function getRuneImageUrl(version: string, icon: string): string {
+  // Extract filename from icon path (e.g., "perk-images/Styles/Domination/Electrocute/Electrocute.png" -> "Electrocute.png")
+  const filename = icon.split('/').pop() || icon
+  return getImageUrl('rune', version, filename, 'runes')
 }

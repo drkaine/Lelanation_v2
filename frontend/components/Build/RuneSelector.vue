@@ -8,137 +8,107 @@
       <p class="text-error">{{ runesStore.error }}</p>
     </div>
 
-    <div v-else>
-      <!-- Primary Rune Tree -->
-      <div class="mb-8">
-        <h3 class="mb-4 text-lg font-bold text-text">Primary Rune Tree</h3>
-        <div class="mb-4">
-          <p class="text-text/70 mb-2 text-sm">Select primary path:</p>
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+    <div v-else class="rune-selector-content">
+      <!-- Primary and Secondary Path Selection (Side by Side) -->
+      <div class="rune-paths-container">
+        <!-- Primary Rune Path Selection -->
+        <div class="rune-path-section">
+          <div class="rune-paths-row">
             <button
               v-for="path in runesStore.runePaths"
               :key="path.id"
               :class="[
-                'flex flex-col items-center rounded border-2 p-3 transition-all',
-                selectedPrimaryPathId === path.id
-                  ? 'bg-accent/20 border-accent'
-                  : 'border-surface hover:border-primary',
+                'rune-path-button',
+                selectedPrimaryPathId === path.id ? 'rune-path-selected' : 'rune-path-unselected',
               ]"
               @click="selectPrimaryPath(path.id)"
             >
               <img
-                :src="getRunePathImageUrl(path.icon)"
+                :src="getRunePathImageUrl(version, path.icon)"
                 :alt="path.name"
-                class="mb-2 h-12 w-12 rounded"
+                class="rune-path-icon"
               />
-              <span class="text-center text-xs text-text">{{ path.name }}</span>
             </button>
           </div>
-        </div>
 
-        <div v-if="selectedPrimaryPath" class="space-y-4">
-          <!-- Keystone (Slot 0) -->
-          <div>
-            <p class="mb-2 text-sm font-semibold text-text">Keystone (Slot 0)</p>
-            <div class="grid grid-cols-3 gap-3 sm:grid-cols-4">
-              <button
-                v-for="rune in selectedPrimaryPath.slots[0]?.runes || []"
-                :key="rune.id"
-                :class="[
-                  'flex flex-col items-center rounded border-2 p-2 transition-all',
-                  selectedPrimaryRunes[0] === rune.id
-                    ? 'bg-accent/20 border-accent'
-                    : 'border-surface hover:border-primary',
-                ]"
-                @click="selectPrimaryRune(0, rune.id)"
-              >
-                <img
-                  :src="getRuneImageUrl(rune.icon)"
-                  :alt="rune.name"
-                  class="mb-1 h-10 w-10 rounded"
-                />
-                <span class="text-center text-xs text-text">{{ rune.name }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Minor Runes (Slots 1-3) -->
-          <div v-for="slotIndex in [1, 2, 3]" :key="slotIndex">
-            <p class="mb-2 text-sm font-semibold text-text">Slot {{ slotIndex }}</p>
-            <div class="grid grid-cols-3 gap-3 sm:grid-cols-4">
-              <button
-                v-for="rune in selectedPrimaryPath.slots[slotIndex]?.runes || []"
-                :key="rune.id"
-                :class="[
-                  'flex flex-col items-center rounded border-2 p-2 transition-all',
-                  selectedPrimaryRunes[slotIndex] === rune.id
-                    ? 'bg-accent/20 border-accent'
-                    : 'border-surface hover:border-primary',
-                ]"
-                @click="selectPrimaryRune(slotIndex, rune.id)"
-              >
-                <img
-                  :src="getRuneImageUrl(rune.icon)"
-                  :alt="rune.name"
-                  class="mb-1 h-10 w-10 rounded"
-                />
-                <span class="text-center text-xs text-text">{{ rune.name }}</span>
-              </button>
+          <!-- Primary Runes by Tier -->
+          <div v-if="selectedPrimaryPath" class="primary-runes-tiers">
+            <div
+              v-for="(slot, slotIndex) in selectedPrimaryPath.slots"
+              :key="slotIndex"
+              class="rune-tier"
+            >
+              <div class="rune-tier-row">
+                <button
+                  v-for="rune in slot.runes"
+                  :key="rune.id"
+                  :class="[
+                    'rune-button primary-rune-button',
+                    selectedPrimaryRunes[slotIndex] === rune.id
+                      ? 'rune-selected'
+                      : 'rune-unselected',
+                  ]"
+                  @click="selectPrimaryRune(slotIndex, rune.id)"
+                >
+                  <img
+                    :src="getRuneImageUrl(version, rune.icon)"
+                    :alt="rune.name"
+                    class="rune-icon"
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Secondary Rune Tree -->
-      <div>
-        <h3 class="mb-4 text-lg font-bold text-text">Secondary Rune Tree</h3>
-        <div class="mb-4">
-          <p class="text-text/70 mb-2 text-sm">Select secondary path:</p>
-          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+        <!-- Secondary Rune Path Selection -->
+        <div class="rune-path-section">
+          <div class="rune-paths-row secondary-paths">
             <button
               v-for="path in availableSecondaryPaths"
               :key="path.id"
               :class="[
-                'flex flex-col items-center rounded border-2 p-3 transition-all',
-                selectedSecondaryPathId === path.id
-                  ? 'bg-accent/20 border-accent'
-                  : 'border-surface hover:border-primary',
+                'rune-path-button secondary-path-button',
+                selectedSecondaryPathId === path.id ? 'rune-path-selected' : 'rune-path-unselected',
               ]"
               @click="selectSecondaryPath(path.id)"
             >
               <img
-                :src="getRunePathImageUrl(path.icon)"
+                :src="getRunePathImageUrl(version, path.icon)"
                 :alt="path.name"
-                class="mb-2 h-12 w-12 rounded"
+                class="rune-path-icon"
               />
-              <span class="text-center text-xs text-text">{{ path.name }}</span>
             </button>
           </div>
-        </div>
 
-        <div v-if="selectedSecondaryPath" class="space-y-4">
-          <!-- Minor Runes (Slots 1-2) -->
-          <div v-for="slotIndex in [1, 2]" :key="slotIndex">
-            <p class="mb-2 text-sm font-semibold text-text">Slot {{ slotIndex }}</p>
-            <div class="grid grid-cols-3 gap-3 sm:grid-cols-4">
-              <button
-                v-for="rune in selectedSecondaryPath.slots[slotIndex]?.runes || []"
-                :key="rune.id"
-                :class="[
-                  'flex flex-col items-center rounded border-2 p-2 transition-all',
-                  selectedSecondaryRunes[slotIndex] === rune.id
-                    ? 'bg-accent/20 border-accent'
-                    : 'border-surface hover:border-primary',
-                ]"
-                @click="selectSecondaryRune(slotIndex, rune.id)"
-              >
-                <img
-                  :src="getRuneImageUrl(rune.icon)"
-                  :alt="rune.name"
-                  class="mb-1 h-10 w-10 rounded"
-                />
-                <span class="text-center text-xs text-text">{{ rune.name }}</span>
-              </button>
+          <!-- Secondary Runes by Tier (can select 2 total, not one per tier) - Skip first tier -->
+          <div v-if="selectedSecondaryPath" class="secondary-runes-tiers">
+            <div
+              v-for="(slot, slotIndex) in filteredSecondarySlots"
+              :key="slotIndex"
+              class="rune-tier"
+            >
+              <div class="rune-tier-row">
+                <button
+                  v-for="rune in slot.runes"
+                  :key="rune.id"
+                  :class="[
+                    'rune-button',
+                    isSecondaryRuneSelected(rune.id) ? 'rune-selected' : 'rune-unselected',
+                    canSelectSecondaryRune() || isSecondaryRuneSelected(rune.id)
+                      ? ''
+                      : 'rune-disabled',
+                  ]"
+                  :disabled="!canSelectSecondaryRune() && !isSecondaryRuneSelected(rune.id)"
+                  @click="toggleSecondaryRune(rune.id)"
+                >
+                  <img
+                    :src="getRuneImageUrl(version, rune.icon)"
+                    :alt="rune.name"
+                    class="rune-icon"
+                  />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -152,6 +122,10 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { RuneSelection } from '~/types/build'
+import { getRunePathImageUrl, getRuneImageUrl } from '~/utils/imageUrl'
+import { useGameVersion } from '~/composables/useGameVersion'
+
+const { version } = useGameVersion()
 
 const runesStore = useRunesStore()
 const buildStore = useBuildStore()
@@ -159,7 +133,7 @@ const buildStore = useBuildStore()
 const selectedPrimaryPathId = ref<number | null>(null)
 const selectedPrimaryRunes = ref<Record<number, number>>({})
 const selectedSecondaryPathId = ref<number | null>(null)
-const selectedSecondaryRunes = ref<Record<number, number>>({})
+const selectedSecondaryRunes = ref<number[]>([]) // Array of rune IDs (max 2)
 
 const selectedPrimaryPath = computed(() => {
   if (!selectedPrimaryPathId.value) return null
@@ -176,6 +150,11 @@ const availableSecondaryPaths = computed(() => {
   return runesStore.runePaths.filter(path => path.id !== selectedPrimaryPathId.value)
 })
 
+const filteredSecondarySlots = computed(() => {
+  if (!selectedSecondaryPath.value) return []
+  return selectedSecondaryPath.value.slots.filter((_slot, index) => index > 0)
+})
+
 const selectPrimaryPath = (pathId: number) => {
   selectedPrimaryPathId.value = pathId
   selectedPrimaryRunes.value = {}
@@ -183,18 +162,35 @@ const selectPrimaryPath = (pathId: number) => {
 }
 
 const selectPrimaryRune = (slot: number, runeId: number) => {
+  // Only one rune per tier for primary
   selectedPrimaryRunes.value[slot] = runeId
   updateRuneSelection()
 }
 
 const selectSecondaryPath = (pathId: number) => {
   selectedSecondaryPathId.value = pathId
-  selectedSecondaryRunes.value = {}
+  selectedSecondaryRunes.value = []
   updateRuneSelection()
 }
 
-const selectSecondaryRune = (slot: number, runeId: number) => {
-  selectedSecondaryRunes.value[slot] = runeId
+const isSecondaryRuneSelected = (runeId: number): boolean => {
+  return selectedSecondaryRunes.value.includes(runeId)
+}
+
+const canSelectSecondaryRune = (): boolean => {
+  // Can select if less than 2 runes selected
+  return selectedSecondaryRunes.value.length < 2
+}
+
+const toggleSecondaryRune = (runeId: number) => {
+  const index = selectedSecondaryRunes.value.indexOf(runeId)
+  if (index > -1) {
+    // Remove if already selected
+    selectedSecondaryRunes.value.splice(index, 1)
+  } else if (canSelectSecondaryRune()) {
+    // Add if not selected and we have space
+    selectedSecondaryRunes.value.push(runeId)
+  }
   updateRuneSelection()
 }
 
@@ -206,29 +202,19 @@ const updateRuneSelection = () => {
   const runeSelection: RuneSelection = {
     primary: {
       pathId: selectedPrimaryPathId.value,
-      keystone: selectedPrimaryRunes.value[0],
+      keystone: selectedPrimaryRunes.value[0] || 0,
       slot1: selectedPrimaryRunes.value[1] || 0,
       slot2: selectedPrimaryRunes.value[2] || 0,
       slot3: selectedPrimaryRunes.value[3] || 0,
     },
     secondary: {
       pathId: selectedSecondaryPathId.value || 0,
-      slot1: selectedSecondaryRunes.value[1] || 0,
-      slot2: selectedSecondaryRunes.value[2] || 0,
+      slot1: selectedSecondaryRunes.value[0] || 0,
+      slot2: selectedSecondaryRunes.value[1] || 0,
     },
   }
 
   buildStore.setRunes(runeSelection)
-}
-
-const getRunePathImageUrl = (icon: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  return `https://ddragon.leagueoflegends.com/cdn/img/${icon}`
-}
-
-const getRuneImageUrl = (icon: string): string => {
-  // TODO: Use actual Data Dragon CDN URL
-  return `https://ddragon.leagueoflegends.com/cdn/img/${icon}`
 }
 
 // Load existing rune selection from build
@@ -244,9 +230,13 @@ watch(
         3: runes.primary.slot3,
       }
       selectedSecondaryPathId.value = runes.secondary.pathId
-      selectedSecondaryRunes.value = {
-        1: runes.secondary.slot1,
-        2: runes.secondary.slot2,
+      // Reconstruct secondary runes array from slots
+      selectedSecondaryRunes.value = []
+      if (runes.secondary.slot1 && runes.secondary.slot1 !== 0) {
+        selectedSecondaryRunes.value.push(runes.secondary.slot1)
+      }
+      if (runes.secondary.slot2 && runes.secondary.slot2 !== 0) {
+        selectedSecondaryRunes.value.push(runes.secondary.slot2)
       }
     }
   },
@@ -259,3 +249,145 @@ onMounted(() => {
   }
 })
 </script>
+
+<style scoped>
+.rune-selector-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.rune-paths-container {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.rune-path-section {
+  flex: 1;
+}
+
+.rune-paths-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.rune-path-button {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 50%;
+  border: 2px solid rgb(var(--rgb-accent));
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.rune-path-button.rune-path-selected {
+  background: rgb(var(--rgb-accent));
+  box-shadow: 0 0 10px rgba(var(--rgb-accent-rgb), 0.5);
+}
+
+.rune-path-button.rune-path-unselected {
+  background: rgb(var(--rgb-surface));
+  opacity: 0.7;
+}
+
+.rune-path-button:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.rune-path-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.secondary-paths .rune-path-button {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.rune-tier {
+  margin-bottom: 0.5rem;
+}
+
+.rune-tier-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.rune-button {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--rgb-accent));
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.rune-button.primary-rune-button {
+  background: #000;
+  width: 2rem;
+  height: 2rem;
+}
+
+.rune-button.rune-selected {
+  background: rgb(var(--rgb-accent));
+  box-shadow: 0 0 8px rgba(var(--rgb-accent-rgb), 0.6);
+}
+
+.rune-button.rune-unselected {
+  background: rgb(var(--rgb-surface));
+  opacity: 0.6;
+}
+
+.rune-button.primary-rune-button.rune-unselected {
+  background: #000;
+  opacity: 0.8;
+}
+
+.rune-button.rune-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.rune-button:hover:not(.rune-disabled) {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.rune-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.primary-runes-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.secondary-runes-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+</style>

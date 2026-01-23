@@ -146,6 +146,8 @@ export class DataDragonService {
 
   /**
    * Fetch items data for a specific version and language
+   * Filters items to only include those available on Summoner's Rift (map 11),
+   * purchasable, with cost > 0, and excludes certain items
    */
   async fetchItems(
     version: string,
@@ -161,7 +163,44 @@ export class DataDragonService {
         )
       }
 
-      return Result.ok(response.data.data)
+      // Items to exclude from selection
+      const FILTERED_ITEMS = [
+        'Oracle Lens',
+        'Farsight Alteration',
+        'Stealth Ward',
+        'Your Cut',
+        'Ardent Censer',
+        "Mikael's Blessing",
+        'Redemption',
+        "Staff of Flowing Water",
+        "Shurelya's Battlesong",
+        'Moonstone Renewer',
+        'Chemtech Putrifier',
+      ]
+
+      // Filter items
+      const allItems = response.data.data
+      const filteredItems: ItemData = {}
+      const seenNames = new Set<string>()
+
+      for (const [itemId, item] of Object.entries(allItems)) {
+        // Check if item should be included
+        const itemData = item as any
+        if (
+          itemData.maps?.['11'] === true &&
+          itemData.gold?.purchasable === true &&
+          itemData.gold?.total > 0 &&
+          !FILTERED_ITEMS.includes(itemData.name)
+        ) {
+          // Deduplicate by name
+          if (!seenNames.has(itemData.name)) {
+            seenNames.add(itemData.name)
+            filteredItems[itemId] = item
+          }
+        }
+      }
+
+      return Result.ok(filteredItems)
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {
@@ -232,6 +271,7 @@ export class DataDragonService {
 
   /**
    * Fetch summoner spells data for a specific version and language
+   * Filters spells to only include those available in CLASSIC mode
    */
   async fetchSummonerSpells(
     version: string,
@@ -247,7 +287,18 @@ export class DataDragonService {
         )
       }
 
-      return Result.ok(response.data.data)
+      // Filter spells to only include those available in CLASSIC mode
+      const allSpells = response.data.data
+      const filteredSpells: SummonerSpellData = {}
+
+      for (const [spellId, spell] of Object.entries(allSpells)) {
+        const spellData = spell as any
+        if (spellData.modes && Array.isArray(spellData.modes) && spellData.modes.includes('CLASSIC')) {
+          filteredSpells[spellId] = spell
+        }
+      }
+
+      return Result.ok(filteredSpells)
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {

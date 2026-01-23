@@ -11,42 +11,34 @@
       </div>
 
       <!-- Build Card and Step Content -->
-      <div class="mb-6 flex gap-4">
+      <div class="mb-6 flex items-start gap-4">
         <!-- Build Card (Left Side) - Visible when champion is selected -->
         <div v-if="hasChampion" class="build-card-wrapper flex-shrink-0">
           <BuildCard />
         </div>
 
         <!-- Step Content (Right Side or Full Width) -->
-        <div
-          :class="
-            hasChampion ? 'flex-1 rounded-lg bg-surface p-6' : 'w-full rounded-lg bg-surface p-6'
-          "
-        >
+        <div :class="hasChampion ? 'flex-1' : 'w-full'">
           <!-- Step 1: Champion Selection -->
           <div v-if="currentStep === 'champion'">
             <ChampionSelector />
           </div>
 
           <!-- Step 2: Runes (Runes + Shards + Spells) -->
-          <div v-if="currentStep === 'runes'">
-            <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
+          <div v-if="currentStep === 'runes'" class="runes-step-content">
             <RuneSelector />
 
-            <div class="mt-8">
-              <h3 class="mb-4 text-xl font-bold">Rune Shards</h3>
+            <div class="mt-6">
               <RuneShardSelector />
             </div>
 
-            <div class="mt-8">
-              <h3 class="mb-4 text-xl font-bold">Summoner Spells</h3>
+            <div class="mt-6">
               <SummonerSpellSelector />
             </div>
           </div>
 
           <!-- Step 3: Items -->
           <div v-if="currentStep === 'items'">
-            <h2 class="mb-4 text-2xl font-bold">Select Items</h2>
             <ItemSelector />
           </div>
 
@@ -75,20 +67,6 @@
 
       <!-- Action Buttons -->
       <div class="flex gap-4">
-        <button
-          v-if="currentStepIndex > 0"
-          class="rounded border border-primary bg-surface px-6 py-2 text-text hover:bg-primary hover:text-white"
-          @click="previousStep"
-        >
-          Previous
-        </button>
-        <button
-          v-if="currentStepIndex < steps.length - 1"
-          class="rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
-          @click="nextStep"
-        >
-          Next
-        </button>
         <button
           v-if="currentStepIndex === steps.length - 1"
           :disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
@@ -148,26 +126,6 @@ watch(hasChampion, newValue => {
     currentStep.value = 'runes'
   }
 })
-
-const currentStepIndex = computed(() => {
-  return steps.findIndex(step => step.id === currentStep.value)
-})
-
-const nextStep = () => {
-  const index = currentStepIndex.value
-  if (index >= 0 && index < steps.length - 1) {
-    const next = steps[index + 1]
-    if (next) currentStep.value = next.id
-  }
-}
-
-const previousStep = () => {
-  const index = currentStepIndex.value
-  if (index > 0) {
-    const prev = steps[index - 1]
-    if (prev) currentStep.value = prev.id
-  }
-}
 
 const updateBuildName = () => {
   buildStore.setName(buildName.value)

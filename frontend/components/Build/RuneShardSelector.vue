@@ -1,87 +1,71 @@
 <template>
   <div class="rune-shard-selector">
-    <div class="mb-4">
-      <p class="mb-2 text-text">Rune Shards</p>
-      <p class="text-sm text-text/70">
-        Select shards for the three shard slots. Each slot has different options.
-      </p>
-    </div>
-
-    <div class="space-y-6">
-      <!-- Slot 1: Adaptive Force, Attack Speed, Ability Haste -->
-      <div>
-        <p class="mb-2 text-sm font-semibold text-text">Slot 1</p>
-        <div class="grid grid-cols-3 gap-3">
+    <div class="shards-rows">
+      <!-- Row 1: Offense (Adaptive Force, Attack Speed, Ability Haste) -->
+      <div class="shard-row">
+        <div class="shard-row-label">{{ t('runes.stat-selection') }}</div>
+        <div class="shard-row-buttons">
           <button
             v-for="shard in slot1Options"
             :key="shard.id"
             :class="[
-              'flex flex-col items-center rounded border-2 p-3 transition-all',
-              selectedShards[1] === shard.id
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
+              'shard-button',
+              selectedShards[1] === shard.id ? 'shard-selected' : 'shard-unselected',
             ]"
             @click="selectShard(1, shard.id)"
           >
             <img
               :src="shardIconSrc(shard.id)"
               :alt="shard.name"
-              class="mb-2 h-9 w-9"
+              class="shard-icon"
               loading="lazy"
             />
-            <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
       </div>
 
-      <!-- Slot 2: Adaptive Force, Armor, Magic Resist -->
-      <div>
-        <p class="mb-2 text-sm font-semibold text-text">Slot 2</p>
-        <div class="grid grid-cols-3 gap-3">
+      <!-- Row 2: Flex (Adaptive Force, Armor, Magic Resist) -->
+      <div class="shard-row">
+        <div class="shard-row-label">{{ t('runes.stat-selection') }}</div>
+        <div class="shard-row-buttons">
           <button
             v-for="shard in slot2Options"
             :key="shard.id"
             :class="[
-              'flex flex-col items-center rounded border-2 p-3 transition-all',
-              selectedShards[2] === shard.id
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
+              'shard-button',
+              selectedShards[2] === shard.id ? 'shard-selected' : 'shard-unselected',
             ]"
             @click="selectShard(2, shard.id)"
           >
             <img
               :src="shardIconSrc(shard.id)"
               :alt="shard.name"
-              class="mb-2 h-9 w-9"
+              class="shard-icon"
               loading="lazy"
             />
-            <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
       </div>
 
-      <!-- Slot 3: Health, Armor, Magic Resist -->
-      <div>
-        <p class="mb-2 text-sm font-semibold text-text">Slot 3</p>
-        <div class="grid grid-cols-3 gap-3">
+      <!-- Row 3: Defense (Health, Armor, Magic Resist) -->
+      <div class="shard-row">
+        <div class="shard-row-label">{{ t('runes.stat-selection') }}</div>
+        <div class="shard-row-buttons">
           <button
             v-for="shard in slot3Options"
             :key="shard.id"
             :class="[
-              'flex flex-col items-center rounded border-2 p-3 transition-all',
-              selectedShards[3] === shard.id
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
+              'shard-button',
+              selectedShards[3] === shard.id ? 'shard-selected' : 'shard-unselected',
             ]"
             @click="selectShard(3, shard.id)"
           >
             <img
               :src="shardIconSrc(shard.id)"
               :alt="shard.name"
-              class="mb-2 h-9 w-9"
+              class="shard-icon"
               loading="lazy"
             />
-            <span class="text-center text-xs text-text">{{ shard.name }}</span>
           </button>
         </div>
       </div>
@@ -91,10 +75,12 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { ShardSelection } from '~/types/build'
 
 const buildStore = useBuildStore()
+const { t } = useI18n()
 
 const selectedShards = ref<Record<number, number>>({
   1: 5008, // Default: Adaptive Force
@@ -170,3 +156,65 @@ watch(
   { immediate: true }
 )
 </script>
+
+<style scoped>
+.shards-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.shard-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shard-row-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text));
+  min-width: 4rem;
+}
+
+.shard-row-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.shard-button {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent));
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shard-button.shard-selected {
+  background: rgb(var(--rgb-accent));
+  box-shadow: 0 0 6px rgba(var(--rgb-accent-rgb), 0.5);
+}
+
+.shard-button.shard-unselected {
+  background: rgb(var(--rgb-surface));
+  opacity: 0.6;
+}
+
+.shard-button:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.shard-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  object-fit: cover;
+}
+</style>

@@ -1,7 +1,7 @@
 <template>
   <div class="build-card relative rounded-lg border border-accent bg-surface p-4">
     <!-- Version (top right) -->
-    <div class="absolute right-4 top-4 text-xs text-text/70">
+    <div class="absolute right-0 top-0 px-1 text-xs text-text/70">
       {{ version }}
     </div>
 
@@ -21,8 +21,79 @@
       </p>
     </div>
 
+    <!-- Runes, Spells, Shards Display -->
+    <div class="build-selections mt-4 space-y-3">
+      <!-- Primary Runes -->
+      <div v-if="selectedPrimaryRunes" class="primary-runes-display">
+        <div class="flex items-center gap-2">
+          <img
+            v-if="primaryPathIcon"
+            :src="primaryPathIcon"
+            :alt="primaryPathName"
+            class="primary-path-icon"
+          />
+          <div class="primary-runes-grid">
+            <img
+              v-for="(runeId, index) in filteredPrimaryRuneIds"
+              :key="index"
+              :src="getRuneIconById(runeId)"
+              :alt="`Rune ${index + 1}`"
+              class="primary-rune-icon"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Secondary Runes -->
+      <div v-if="selectedSecondaryRunes" class="secondary-runes-display">
+        <div class="flex items-center gap-2">
+          <img
+            v-if="secondaryPathIcon"
+            :src="secondaryPathIcon"
+            :alt="secondaryPathName"
+            class="secondary-path-icon"
+          />
+          <div class="secondary-runes-grid">
+            <img
+              v-for="(runeId, index) in filteredSecondaryRuneIds"
+              :key="index"
+              :src="getRuneIconById(runeId)"
+              :alt="`Secondary Rune ${index + 1}`"
+              class="secondary-rune-icon"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Summoner Spells -->
+      <div v-if="selectedSummonerSpells.length > 0" class="summoner-spells-display">
+        <div class="summoner-spells-grid">
+          <img
+            v-for="(spell, index) in filteredSummonerSpells"
+            :key="index"
+            :src="getSpellImageUrl(version, spell.image.full)"
+            :alt="spell.name"
+            class="summoner-spell-icon"
+          />
+        </div>
+      </div>
+
+      <!-- Shards -->
+      <div v-if="selectedShards" class="shards-display">
+        <div class="shards-grid">
+          <img
+            v-for="(shardId, index) in filteredShardIds"
+            :key="index"
+            :src="getShardIconById(shardId)"
+            :alt="`Shard ${index + 1}`"
+            class="shard-icon"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- Lelanation (bottom right) -->
-    <div class="absolute bottom-4 right-4 text-xs text-text/70">lelanation</div>
+    <div class="absolute bottom-0 right-0 px-1 text-xs text-text/70">lelanation</div>
 
     <!-- Tooltip -->
     <div
@@ -121,16 +192,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useRunesStore } from '~/stores/RunesStore'
 import {
   getChampionImageUrl,
   getChampionSpellImageUrl,
   getChampionPassiveImageUrl,
+  getSpellImageUrl,
+  getRunePathImageUrl,
+  getRuneImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 
 const buildStore = useBuildStore()
+const runesStore = useRunesStore()
 
 const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
@@ -142,6 +218,116 @@ const selectedChampion = computed(() => {
 })
 
 const { version } = useGameVersion()
+
+// Get selected runes, spells, and shards
+const selectedPrimaryRunes = computed(() => buildStore.currentBuild?.runes)
+const selectedSecondaryRunes = computed(() => buildStore.currentBuild?.runes)
+const selectedSummonerSpells = computed(() => buildStore.currentBuild?.summonerSpells || [])
+const filteredSummonerSpells = computed(() => {
+  return selectedSummonerSpells.value.filter(spell => spell !== null && spell !== undefined)
+})
+const selectedShards = computed(() => buildStore.currentBuild?.shards)
+
+// Primary rune path
+const primaryPath = computed(() => {
+  if (!selectedPrimaryRunes.value?.primary?.pathId) return null
+  return runesStore.getRunePathById(selectedPrimaryRunes.value.primary.pathId)
+})
+
+const primaryPathIcon = computed(() => {
+  if (!primaryPath.value) return null
+  return getRunePathImageUrl(version, primaryPath.value.icon)
+})
+
+const primaryPathName = computed(() => {
+  return primaryPath.value?.name || ''
+})
+
+const filteredPrimaryRuneIds = computed(() => {
+  if (!selectedPrimaryRunes.value?.primary) return []
+  return [
+    selectedPrimaryRunes.value.primary.keystone,
+    selectedPrimaryRunes.value.primary.slot1,
+    selectedPrimaryRunes.value.primary.slot2,
+    selectedPrimaryRunes.value.primary.slot3,
+  ].filter(id => id && id !== 0)
+})
+
+// Secondary rune path
+const secondaryPath = computed(() => {
+  if (!selectedSecondaryRunes.value?.secondary?.pathId) return null
+  return runesStore.getRunePathById(selectedSecondaryRunes.value.secondary.pathId)
+})
+
+const secondaryPathIcon = computed(() => {
+  if (!secondaryPath.value) return null
+  return getRunePathImageUrl(version, secondaryPath.value.icon)
+})
+
+const secondaryPathName = computed(() => {
+  return secondaryPath.value?.name || ''
+})
+
+const filteredSecondaryRuneIds = computed(() => {
+  if (!selectedSecondaryRunes.value?.secondary) return []
+  return [
+    selectedSecondaryRunes.value.secondary.slot1,
+    selectedSecondaryRunes.value.secondary.slot2,
+  ].filter(id => id && id !== 0)
+})
+
+// Get rune icon by ID
+const getRuneIconById = (runeId: number): string => {
+  if (!primaryPath.value && !secondaryPath.value) {
+    return ''
+  }
+
+  // Search in primary path
+  if (primaryPath.value) {
+    for (const slot of primaryPath.value.slots) {
+      for (const rune of slot.runes) {
+        if (rune.id === runeId) {
+          return getRuneImageUrl(version, rune.icon)
+        }
+      }
+    }
+  }
+
+  // Search in secondary path
+  if (secondaryPath.value) {
+    for (const slot of secondaryPath.value.slots) {
+      for (const rune of slot.runes) {
+        if (rune.id === runeId) {
+          return getRuneImageUrl(version, rune.icon)
+        }
+      }
+    }
+  }
+
+  return ''
+}
+
+// Get shard icon by ID
+const getShardIconById = (shardId: number): string => {
+  const shardMap: Record<number, string> = {
+    5008: '/icons/shards/adaptative.png',
+    5005: '/icons/shards/speed.png',
+    5007: '/icons/shards/cdr.png',
+    5001: '/icons/shards/hp.png',
+    5002: '/icons/shards/growth.png',
+    5003: '/icons/shards/tenacity.png',
+  }
+  return shardMap[shardId] || '/icons/shards/adaptative.png'
+}
+
+const filteredShardIds = computed(() => {
+  if (!selectedShards.value) return []
+  return [
+    selectedShards.value.slot1,
+    selectedShards.value.slot2,
+    selectedShards.value.slot3,
+  ].filter(id => id && id !== 0)
+})
 
 // Translate tags
 const translatedTags = computed(() => {
@@ -229,6 +415,13 @@ watch(showTooltip, async newValue => {
 onUnmounted(() => {
   window.removeEventListener('scroll', calculateTooltipPosition, true)
   window.removeEventListener('resize', calculateTooltipPosition)
+})
+
+// Load runes if not already loaded
+onMounted(() => {
+  if (runesStore.runePaths.length === 0) {
+    runesStore.loadRunes()
+  }
 })
 </script>
 
@@ -461,5 +654,91 @@ onUnmounted(() => {
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.7);
   line-height: 1.4;
+}
+
+.build-selections {
+  margin-top: 1rem;
+}
+
+.primary-runes-display,
+.secondary-runes-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.primary-path-icon {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  border: 2px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+}
+
+.secondary-path-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+}
+
+.primary-runes-grid,
+.secondary-runes-grid {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.primary-rune-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+}
+
+.secondary-rune-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+}
+
+.summoner-spells-display {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.summoner-spells-grid {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.summoner-spell-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+}
+
+.shards-display {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.shards-grid {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.shard-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
 }
 </style>

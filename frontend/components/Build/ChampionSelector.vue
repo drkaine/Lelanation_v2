@@ -5,23 +5,10 @@
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Search"
+        :placeholder="t('common.search')"
         class="w-full rounded border border-primary/50 bg-transparent px-2 py-1 text-sm text-text placeholder:text-text/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50"
         @input="handleSearch"
       />
-    </div>
-
-    <!-- Active Filters Display -->
-    <div v-if="selectedRoles.length > 0" class="mb-2 flex flex-wrap gap-2">
-      <span class="text-xs text-text/70">Filtres actifs:</span>
-      <button
-        v-for="role in selectedRoles"
-        :key="role"
-        class="rounded border border-accent bg-accent px-2 py-0.5 text-xs text-background"
-        @click="toggleRole(role)"
-      >
-        {{ translateRole(role) }} ×
-      </button>
     </div>
 
     <!-- Role Filters -->
