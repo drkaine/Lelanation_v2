@@ -16,17 +16,20 @@ export class StaticAssetsService {
   private readonly backendDataDir: string
   private readonly backendImagesDir: string
   private readonly backendYouTubeDir: string
+  private readonly backendCommunityDragonDir: string
   private readonly frontendPublicDir: string
 
   constructor(
     backendDataDir: string = join(process.cwd(), 'data', 'game'),
     backendImagesDir: string = join(process.cwd(), 'data', 'images'),
     backendYouTubeDir: string = join(process.cwd(), 'data', 'youtube'),
+    backendCommunityDragonDir: string = join(process.cwd(), 'data', 'community-dragon'),
     frontendPublicDir: string = join(process.cwd(), '..', 'frontend', 'public')
   ) {
     this.backendDataDir = backendDataDir
     this.backendImagesDir = backendImagesDir
     this.backendYouTubeDir = backendYouTubeDir
+    this.backendCommunityDragonDir = backendCommunityDragonDir
     this.frontendPublicDir = frontendPublicDir
   }
 
@@ -415,6 +418,15 @@ export class StaticAssetsService {
       return Result.err(imagesResult.unwrapErr())
     }
 
+    // Copy Community Dragon data (not version-specific, always latest)
+    const communityDragonResult = await this.copyCommunityDragonDataToFrontend()
+    if (communityDragonResult.isErr()) {
+      console.warn(
+        `[StaticAssets] Failed to copy Community Dragon data: ${communityDragonResult.unwrapErr()}`
+      )
+      // Continue anyway - not critical for main sync
+    }
+
     const dataStats = dataResult.unwrap()
     const imageStats = imagesResult.unwrap()
 
@@ -595,5 +607,62 @@ export class StaticAssetsService {
     }
 
     return Result.ok({ copied, deleted })
+  }
+
+  /**
+   * Copy Community Dragon data files to frontend public directory
+   * This allows the frontend to serve Community Dragon data directly (faster, more scalable)
+   * Note: Community Dragon data is not version-specific (always "latest")
+   */
+  async copyCommunityDragonDataToFrontend(): Promise<Result<{ copied: number }, AppError>> {
+    let copied = 0
+
+    try {
+      const targetCommunityDragonDir = join(this.frontendPublicDir, 'data', 'community-dragon')
+
+      // Ensure target directory exists
+      const dirResult = await FileManager.ensureDir(targetCommunityDragonDir)
+      if (dirResult.isErr()) {
+        return Result.err(dirResult.unwrapErr())
+      }
+
+      // Check if backend Community Dragon directory exists
+      const backendExists = await FileManager.exists(this.backendCommunityDragonDir)
+      if (!backendExists) {
+        console.warn(
+          `[StaticAssets] Backend Community Dragon directory not found: ${this.backendCommunityDragonDir}`
+        )
+        return Result.ok({ copied: 0 })
+      }
+
+      // List all JSON files in backend Community Dragon directory
+      const entries = await fs.readdir(this.backendCommunityDragonDir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+
+        const sourcePath = join(this.backendCommunityDragonDir, entry.name)
+        const targetPath = join(targetCommunityDragonDir, entry.name)
+
+        // Copy file (always overwrite to ensure latest data)
+        const content = await fs.readFile(sourcePath, 'utf-8')
+        await fs.writeFile(targetPath, content, 'utf-8')
+        copied++
+      }
+
+      console.log(
+        `[StaticAssets] Copied ${copied} Community Dragon files to frontend`
+      )
+
+      return Result.ok({ copied })
+    } catch (error) {
+      return Result.err(
+        new AppError(
+          `Failed to copy Community Dragon data to frontend: ${error}`,
+          'FILE_ERROR',
+          error
+        )
+      )
+    }
   }
 }

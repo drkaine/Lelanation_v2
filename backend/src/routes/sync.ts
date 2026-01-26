@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { DataDragonService } from '../services/DataDragonService.js'
+import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 
 const router = Router()
 const dataDragonService = new DataDragonService()
+const communityDragonService = new CommunityDragonService()
 const versionService = new VersionService()
 
 /**
@@ -98,6 +100,55 @@ router.post('/trigger', async (_req, res) => {
     return res.status(500).json({
       error: 'Unexpected error during sync',
       details: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
+/**
+ * Trigger manual Community Dragon sync
+ */
+router.post('/community-dragon', async (_req, res) => {
+  console.log('[Manual Sync] Starting Community Dragon synchronization...')
+
+  try {
+    // Sync with retry logic
+    const syncResult = await retryWithBackoff(
+      () => communityDragonService.syncAllChampions(),
+      {
+        maxRetries: 3,
+        initialDelay: 5000,
+        maxDelay: 30000,
+        multiplier: 2,
+      }
+    )
+
+    if (syncResult.isErr()) {
+      const error = syncResult.unwrapErr()
+      console.error('[Manual Sync] Community Dragon sync failed after retries:', error)
+      return res.status(500).json({
+        error: 'Sync failed after retries',
+        details: error.message,
+      })
+    }
+
+    const syncData = syncResult.unwrap()
+
+    console.log(
+      `[Manual Sync] Community Dragon sync completed. Synced: ${syncData.synced}, Failed: ${syncData.failed}, Skipped: ${syncData.skipped}`
+    )
+
+    return res.json({
+      success: true,
+      synced: syncData.synced,
+      failed: syncData.failed,
+      skipped: syncData.skipped,
+      errors: syncData.errors,
+    })
+  } catch (error) {
+    console.error('[Manual Sync] Unexpected error:', error)
+    return res.status(500).json({
+      error: 'Unexpected error during sync',
+      details: error instanceof Error ? error.message : 'Unknown error',
     })
   }
 })

@@ -10,6 +10,7 @@ import adminRoutes from './routes/admin.js'
 import imageRoutes from './routes/images.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
+import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { MetricsService } from './services/MetricsService.js'
 
 const app = express()
@@ -45,6 +46,7 @@ app.use('/api/images', imageRoutes)
 // Initialize cron jobs
 setupDataDragonSync()
 setupYouTubeSync()
+setupCommunityDragonSync()
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)

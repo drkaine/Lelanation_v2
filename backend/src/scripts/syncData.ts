@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { join } from 'path'
 import { DataDragonService } from '../services/DataDragonService.js'
+import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { FileManager } from '../utils/fileManager.js'
@@ -55,6 +56,36 @@ async function main(): Promise<void> {
   console.log(
     `[sync:data] Data Dragon sync OK. Version: ${ddSyncData.version}, syncedAt: ${ddSyncData.syncedAt.toISOString()}`
   )
+
+  // --- Community Dragon ---
+  console.log('[sync:data] Syncing Community Dragon data...')
+  const communityDragonService = new CommunityDragonService()
+
+  const cdSync = await communityDragonService.syncAllChampions()
+  if (cdSync.isErr()) {
+    const err = cdSync.unwrapErr()
+    console.error('[sync:data] Community Dragon sync failed:', err)
+    process.exitCode = 1
+    return
+  }
+
+  const cdSyncData = cdSync.unwrap()
+  console.log(
+    `[sync:data] Community Dragon sync OK. Synced: ${cdSyncData.synced}, Failed: ${cdSyncData.failed}, Skipped: ${cdSyncData.skipped}`
+  )
+  if (cdSyncData.errors.length > 0) {
+    console.warn(
+      `[sync:data] Community Dragon sync completed with ${cdSyncData.errors.length} errors:`
+    )
+    cdSyncData.errors.slice(0, 10).forEach((err) => {
+      console.warn(`[sync:data]   - ${err.champion}: ${err.error}`)
+    })
+    if (cdSyncData.errors.length > 10) {
+      console.warn(
+        `[sync:data]   ... and ${cdSyncData.errors.length - 10} more errors`
+      )
+    }
+  }
 
   // --- YouTube ---
   const youtubeChannelsFile = join(process.cwd(), 'data', 'youtube', 'channels.json')

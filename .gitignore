@@ -34,6 +34,7 @@ backend/data/images/
 # Frontend static game data (copied from backend during sync)
 frontend/public/data/game/
 frontend/public/images/game/
+frontend/public/data/community-dragon/
 
 # Frontend static YouTube data (copied from backend during sync)
 frontend/public/data/youtube/
