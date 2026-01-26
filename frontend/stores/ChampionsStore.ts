@@ -103,9 +103,11 @@ export const useChampionsStore = defineStore('champions', {
         // Use championFull.json to get complete data (spells, passive, etc.)
         if (process.client) {
           try {
+            // Add cache-busting parameter based on version to force reload after sync
+            const cacheBust = `_v=${version.replace(/\./g, '_')}`
             // Try championFull.json first (complete data)
             const staticUrlFull = getGameDataUrl(version, 'championFull', language)
-            const staticResponseFull = await fetch(staticUrlFull, {
+            const staticResponseFull = await fetch(`${staticUrlFull}?${cacheBust}`, {
               cache: 'no-cache',
             })
             if (staticResponseFull.ok) {
@@ -114,7 +116,7 @@ export const useChampionsStore = defineStore('champions', {
             } else {
               // Fallback to basic champion.json if full not available
               const staticUrl = getGameDataUrl(version, 'champion', language)
-              const staticResponse = await fetch(staticUrl, {
+              const staticResponse = await fetch(`${staticUrl}?${cacheBust}`, {
                 cache: 'no-cache',
               })
               if (staticResponse.ok) {

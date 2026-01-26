@@ -137,7 +137,8 @@ export function setupDataDragonSync(): void {
     const copyResult = await staticAssets.copyAllAssetsToFrontend(
       syncData.version,
       ['fr_FR', 'en_US'],
-      true // Restart frontend PM2 after copying
+      true, // Restart frontend PM2 after copying
+      true  // Build frontend before restarting
     )
     
     let assetsStats = null

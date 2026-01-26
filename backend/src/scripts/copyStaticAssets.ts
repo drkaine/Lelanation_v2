@@ -65,8 +65,10 @@ async function main() {
 
   // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)
   const shouldRestartFrontend = process.env.RESTART_FRONTEND === 'true'
+  // Always build frontend when restarting to ensure new assets are included
+  const shouldBuildFrontend = shouldRestartFrontend
   if (shouldRestartFrontend) {
-    console.log('[Copy Static Assets] Frontend restart enabled (RESTART_FRONTEND=true)')
+    console.log('[Copy Static Assets] Frontend restart and build enabled (RESTART_FRONTEND=true)')
   }
 
   // Copy all assets (data + images) in one go
@@ -74,7 +76,8 @@ async function main() {
   const copyResult = await staticAssets.copyAllAssetsToFrontend(
     currentVersion,
     ['fr_FR', 'en_US'],
-    shouldRestartFrontend
+    shouldRestartFrontend,
+    shouldBuildFrontend
   )
 
   if (copyResult.isErr()) {

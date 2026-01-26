@@ -5,6 +5,7 @@ import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { DiscordService } from '../services/DiscordService.js'
+import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { FileManager } from '../utils/fileManager.js'
 
 interface YouTubeChannelConfig {
@@ -184,6 +185,61 @@ async function main(): Promise<void> {
     `[sync:data] YouTube sync OK. Synced ${ytSyncData.syncedChannels}/${channels.length} channels, totalVideos: ${ytSyncData.totalVideos}`
   )
 
+  // --- Copy Assets to Frontend ---
+  console.log('[sync:data] Copying assets to frontend...')
+  const staticAssets = new StaticAssetsService()
+  
+  // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)
+  const shouldRestartFrontend = process.env.RESTART_FRONTEND === 'true'
+  // Always build frontend when restarting to ensure new assets are included
+  const shouldBuildFrontend = shouldRestartFrontend
+  if (shouldRestartFrontend) {
+    console.log('[sync:data] Frontend restart and build enabled (RESTART_FRONTEND=true)')
+  }
+
+  const copyResult = await staticAssets.copyAllAssetsToFrontend(
+    ddSyncData.version,
+    ['fr_FR', 'en_US'],
+    shouldRestartFrontend,
+    shouldBuildFrontend
+  )
+
+  if (copyResult.isErr()) {
+    const err = copyResult.unwrapErr()
+    console.error('[sync:data] Failed to copy assets to frontend:', err)
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Manual Data Sync - Asset Copy Failed',
+      'Data sync succeeded but failed to copy assets to frontend',
+      err,
+      {
+        version: ddSyncData.version,
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
+    process.exitCode = 1
+    return
+  }
+
+  const copyStats = copyResult.unwrap()
+  console.log(
+    `[sync:data] Assets copied to frontend: ${copyStats.dataCopied} data files, ${copyStats.imagesCopied} images (${copyStats.imagesSkipped} skipped)`
+  )
+
+  // Also copy YouTube data if it exists
+  console.log('[sync:data] Copying YouTube data to frontend...')
+  const youtubeResult = await staticAssets.copyYouTubeAssetsToFrontend(false) // Don't restart twice
+  if (youtubeResult.isOk()) {
+    const youtubeStats = youtubeResult.unwrap()
+    console.log(
+      `[sync:data] YouTube data copied: ${youtubeStats.copied} files, deleted ${youtubeStats.deleted} backend files`
+    )
+  } else {
+    console.warn('[sync:data] Failed to copy YouTube data:', youtubeResult.unwrapErr())
+    // Don't fail if YouTube data doesn't exist yet
+  }
+
   // Send success notification with summary
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
   const successContext: Record<string, unknown> = {
@@ -194,6 +250,9 @@ async function main(): Promise<void> {
     communityDragonSkipped: cdSyncData.skipped,
     youtubeChannels: `${ytSyncData.syncedChannels}/${channels.length}`,
     youtubeVideos: ytSyncData.totalVideos,
+    assetsDataFiles: copyStats.dataCopied,
+    assetsImagesCopied: copyStats.imagesCopied,
+    assetsImagesSkipped: copyStats.imagesSkipped,
     duration: `${duration}s`,
     timestamp: new Date().toISOString(),
   }
@@ -202,9 +261,19 @@ async function main(): Promise<void> {
     successContext.communityDragonErrors = cdSyncData.errors.length
   }
 
+  if (youtubeResult.isOk()) {
+    const youtubeStats = youtubeResult.unwrap()
+    successContext.youtubeFilesCopied = youtubeStats.copied
+    successContext.youtubeFilesDeleted = youtubeStats.deleted
+  }
+
+  if (shouldRestartFrontend) {
+    successContext.frontendRestarted = true
+  }
+
   await discordService.sendSuccess(
     '✅ Manual Data Sync Completed Successfully',
-    'All data sources synchronized successfully',
+    'All data sources synchronized and assets copied to frontend',
     successContext
   )
 }

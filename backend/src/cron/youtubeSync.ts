@@ -111,7 +111,7 @@ export function setupYouTubeSync(): void {
 
     // Copy YouTube data to frontend (for faster, scalable serving)
     console.log(`[Cron] Copying YouTube data to frontend...`)
-    const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(true) // Restart frontend
+    const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(true, true) // Restart and build frontend
     if (copyResult.isOk()) {
       const stats = copyResult.unwrap()
       console.log(

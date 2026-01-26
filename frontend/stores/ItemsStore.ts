@@ -75,8 +75,10 @@ export const useItemsStore = defineStore('items', {
         // Try static file first (only in browser, not SSR)
         if (process.client) {
           try {
+            // Add cache-busting parameter based on version to force reload after sync
             const staticUrl = getGameDataUrl(version, 'item', language)
-            const staticResponse = await fetch(staticUrl, {
+            const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
+            const staticResponse = await fetch(urlWithCacheBust, {
               cache: 'no-cache',
             })
             if (staticResponse.ok) {

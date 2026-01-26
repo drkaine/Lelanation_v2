@@ -6,7 +6,7 @@
     </div>
 
     <!-- Champion (center top) -->
-    <div class="flex flex-col items-center pt-2">
+    <div v-if="selectedChampion" class="flex flex-col items-center pt-2">
       <div class="relative mb-2">
         <img
           :src="getChampionImageUrl(version, selectedChampion.image.full)"
@@ -71,8 +71,8 @@
           <img
             v-for="(spell, index) in filteredSummonerSpells"
             :key="index"
-            :src="getSpellImageUrl(version, spell.image.full)"
-            :alt="spell.name"
+            :src="spell ? getSpellImageUrl(version, spell.image.full) : ''"
+            :alt="spell?.name || ''"
             class="summoner-spell-icon"
           />
         </div>
@@ -93,7 +93,7 @@
     </div>
 
     <!-- Lelanation (bottom right) -->
-    <div class="absolute bottom-0 right-0 px-1 text-xs text-text/70">lelanation</div>
+    <div class="absolute bottom-0 right-0 px-1 text-xs text-text/70">lelanation.fr</div>
 
     <!-- Tooltip -->
     <div
@@ -236,7 +236,7 @@ const primaryPath = computed(() => {
 
 const primaryPathIcon = computed(() => {
   if (!primaryPath.value) return null
-  return getRunePathImageUrl(version, primaryPath.value.icon)
+  return getRunePathImageUrl(version.value, primaryPath.value.icon)
 })
 
 const primaryPathName = computed(() => {
@@ -261,7 +261,7 @@ const secondaryPath = computed(() => {
 
 const secondaryPathIcon = computed(() => {
   if (!secondaryPath.value) return null
-  return getRunePathImageUrl(version, secondaryPath.value.icon)
+  return getRunePathImageUrl(version.value, secondaryPath.value.icon)
 })
 
 const secondaryPathName = computed(() => {
@@ -287,7 +287,7 @@ const getRuneIconById = (runeId: number): string => {
     for (const slot of primaryPath.value.slots) {
       for (const rune of slot.runes) {
         if (rune.id === runeId) {
-          return getRuneImageUrl(version, rune.icon)
+          return getRuneImageUrl(version.value, rune.icon)
         }
       }
     }
@@ -298,7 +298,7 @@ const getRuneIconById = (runeId: number): string => {
     for (const slot of secondaryPath.value.slots) {
       for (const rune of slot.runes) {
         if (rune.id === runeId) {
-          return getRuneImageUrl(version, rune.icon)
+          return getRuneImageUrl(version.value, rune.icon)
         }
       }
     }
@@ -434,6 +434,12 @@ onMounted(() => {
 .champion-image {
   width: 57.75px;
   height: 57.75px;
+}
+
+.champion-image:not(img) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .tooltip-box {

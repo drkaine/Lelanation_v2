@@ -1,20 +1,23 @@
 <template>
   <div class="menu-build" role="navigation" aria-label="Build steps">
-    <a :class="linkClass('champion')" @click="go('champion')">
+    <NuxtLink :to="'/builds/create/champion'" :class="linkClass('champion')">
       {{ t('menu-build.champion') }}
-    </a>
+    </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <a :class="linkClass('rune')" @click="go('rune')">
+    <NuxtLink :to="'/builds/create/rune'" :class="linkClass('rune')">
       {{ t('menu-build.rune') }}
-    </a>
+    </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <a :class="linkClass('item')" @click="go('item')">
+    <NuxtLink :to="'/builds/create/item'" :class="linkClass('item')">
       {{ t('menu-build.item') }}
-    </a>
+    </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <a :class="[linkClass('info'), !hasChampion ? 'disabled' : '']" @click="go('info')">
+    <NuxtLink
+      :to="hasChampion ? '/builds/create/info' : '#'"
+      :class="[linkClass('info'), !hasChampion ? 'disabled' : '']"
+    >
       {{ t('menu-build.info') }}
-    </a>
+    </NuxtLink>
   </div>
 </template>
 
@@ -24,27 +27,29 @@ const props = defineProps<{
   hasChampion: boolean
 }>()
 
-const emit = defineEmits<{
-  (e: 'navigate', step: 'champion' | 'runes' | 'items' | 'review'): void
-}>()
-
 const { t } = useI18n()
+const route = useRoute()
 
 const stepMap = {
   champion: 'champion',
-  rune: 'runes',
-  item: 'items',
-  info: 'review',
+  rune: 'rune',
+  item: 'item',
+  info: 'info',
 } as const
 
-const isActive = (key: keyof typeof stepMap) => props.currentStep === stepMap[key]
+// Determine active step from route
+const currentRouteStep = computed(() => {
+  const path = route.path
+  if (path.includes('/champion')) return 'champion'
+  if (path.includes('/rune')) return 'rune'
+  if (path.includes('/item')) return 'item'
+  if (path.includes('/info')) return 'info'
+  return props.currentStep || 'champion'
+})
+
+const isActive = (key: keyof typeof stepMap) => currentRouteStep.value === stepMap[key]
 
 const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
-
-const go = (key: keyof typeof stepMap) => {
-  if (key === 'info' && !props.hasChampion) return
-  emit('navigate', stepMap[key])
-}
 </script>
 
 <style scoped>

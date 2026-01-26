@@ -24,8 +24,10 @@ export const useVersionStore = defineStore('version', {
         // Try static file first (only in browser, not SSR)
         if (process.client) {
           try {
+            // Add cache-busting parameter to force reload after sync
             const staticUrl = getVersionUrl()
-            const staticResponse = await fetch(staticUrl, {
+            const urlWithCacheBust = `${staticUrl}?_t=${Date.now()}`
+            const staticResponse = await fetch(urlWithCacheBust, {
               cache: 'no-cache',
             })
             if (staticResponse.ok) {

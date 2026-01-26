@@ -326,10 +326,68 @@ export class StaticAssetsService {
   }
 
   /**
+   * Build frontend application
+   * This rebuilds the frontend to include new static assets
+   */
+  async buildFrontend(): Promise<Result<void, AppError>> {
+    try {
+      const frontendDir = join(process.cwd(), '..', 'frontend')
+      console.log(`[StaticAssets] Building frontend in: ${frontendDir}`)
+
+      // Execute npm run build in frontend directory
+      const { stdout, stderr } = await execAsync('npm run build', {
+        cwd: frontendDir,
+        timeout: 300000 // 5 minutes timeout for build
+      })
+
+      if (stderr && !stderr.includes('built')) {
+        // Some warnings might go to stderr, but check for actual errors
+        console.warn(`[StaticAssets] Frontend build warning: ${stderr}`)
+      }
+
+      console.log(`[StaticAssets] Frontend built successfully`)
+      if (stdout) {
+        console.log(`[StaticAssets] Build output: ${stdout.slice(-500)}`) // Last 500 chars
+      }
+
+      return Result.ok(undefined)
+    } catch (error: any) {
+      const errorMessage = error.message || String(error)
+      console.error(`[StaticAssets] Failed to build frontend: ${errorMessage}`)
+      return Result.err(
+        new AppError(
+          `Failed to build frontend: ${errorMessage}`,
+          'EXTERNAL_ERROR',
+          error
+        )
+      )
+    }
+  }
+
+  /**
    * Restart frontend PM2 process to pick up new static assets
    * This ensures the frontend serves the newly copied files
+   * Optionally builds the frontend before restarting
    */
-  async restartFrontendPM2(): Promise<Result<void, AppError>> {
+  async restartFrontendPM2(buildFirst: boolean = false): Promise<Result<void, AppError>> {
+    // Build frontend first if requested
+    if (buildFirst) {
+      console.log(`[StaticAssets] Building frontend before restart...`)
+      const buildResult = await this.buildFrontend()
+      if (buildResult.isErr()) {
+        const buildError = buildResult.unwrapErr()
+        console.warn(`[StaticAssets] Frontend build failed: ${buildError.message}`)
+        // Continue with restart anyway - might still work with old build
+        // But return error to let caller know
+        return Result.err(
+          new AppError(
+            `Failed to build frontend before restart: ${buildError.message}`,
+            'EXTERNAL_ERROR',
+            buildError
+          )
+        )
+      }
+    }
     try {
       // Try to restart the frontend PM2 process
       // Use 'pm2 restart lelanation-frontend' or gracefully handle if PM2 is not available
@@ -370,12 +428,14 @@ export class StaticAssetsService {
   /**
    * Copy all static assets (data + images) for a version
    * Optionally restart the frontend PM2 process after copying
+   * Optionally build the frontend before restarting
    * Automatically deletes old version assets from frontend to save disk space
    */
   async copyAllAssetsToFrontend(
     version: string,
     languages: string[] = ['fr_FR', 'en_US'],
-    restartFrontend: boolean = false
+    restartFrontend: boolean = false,
+    buildFrontend: boolean = false
   ): Promise<Result<{ dataCopied: number; imagesCopied: number; imagesSkipped: number }, AppError>> {
     // Delete old version data and images from frontend before copying new ones
     const deleteOldDataResult = await this.deleteOldVersionDataFromFrontend(version)
@@ -453,7 +513,7 @@ export class StaticAssetsService {
 
     // Restart frontend if requested (typically in production with PM2)
     if (restartFrontend) {
-      const restartResult = await this.restartFrontendPM2()
+      const restartResult = await this.restartFrontendPM2(buildFrontend)
       if (restartResult.isErr()) {
         // Log but don't fail - assets were copied successfully
         console.warn(
@@ -572,9 +632,11 @@ export class StaticAssetsService {
   /**
    * Copy all YouTube data to frontend and delete from backend
    * This makes the site more static and scalable
+   * Optionally builds and restarts the frontend after copying
    */
   async copyYouTubeAssetsToFrontend(
-    restartFrontend: boolean = false
+    restartFrontend: boolean = false,
+    buildFrontend: boolean = false
   ): Promise<Result<{ copied: number; deleted: number }, AppError>> {
     // Copy YouTube data to frontend
     const copyResult = await this.copyYouTubeDataToFrontend()
@@ -598,7 +660,7 @@ export class StaticAssetsService {
 
     // Restart frontend if requested
     if (restartFrontend) {
-      const restartResult = await this.restartFrontendPM2()
+      const restartResult = await this.restartFrontendPM2(buildFrontend)
       if (restartResult.isErr()) {
         console.warn(
           `[StaticAssets] YouTube assets copied but frontend restart failed: ${restartResult.unwrapErr()}`

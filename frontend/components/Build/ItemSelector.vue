@@ -42,11 +42,13 @@
         v-for="item in allItems"
         :key="item.id"
         class="item-wrapper"
-        @mouseenter="hoveredItem = item"
+        :class="{ hide: !isFiltered(item) }"
+        @mouseenter="handleItemHover(item, $event)"
         @mouseleave="hoveredItem = null"
+        @mousemove="handleMouseMove($event)"
       >
         <button
-          :class="['item', !isFiltered(item) ? 'hide' : '']"
+          class="item"
           :disabled="!isSelected(item) && selectedItemsCount >= 6"
           @click="toggleItem(item)"
         >
@@ -59,18 +61,18 @@
             decoding="async"
           />
           <div v-if="isSelected(item)" class="item-selected">
-            <span class="item-index">{{ getItemIndex(item) + 1 }}</span>
+            <span class="item-index">{{ getItemIndex(item) }}</span>
           </div>
         </button>
-        <div class="item-price">{{ item.gold?.total || 0 }} <span class="gold-icon">🪙</span></div>
+        <div class="item-price">{{ item.gold?.total || 0 }}</div>
       </div>
 
       <!-- Tooltip -->
       <div
         v-if="hoveredItem"
         ref="tooltipRef"
-        class="item-tooltip absolute z-50 rounded-lg border border-accent bg-background shadow-lg"
-        :class="tooltipPositionClass"
+        class="item-tooltip pointer-events-none fixed z-50 rounded-lg border border-accent bg-background shadow-lg"
+        :style="tooltipStyle"
       >
         <div class="item-tooltip-content">
           <div class="item-tooltip-header">
@@ -82,7 +84,7 @@
             <div class="item-tooltip-text">
               <div class="item-tooltip-name">{{ hoveredItem.name }}</div>
               <div class="item-tooltip-price">
-                {{ hoveredItem.gold?.total || 0 }} <span class="gold-icon">🪙</span>
+                {{ hoveredItem.gold?.total || 0 }}
               </div>
             </div>
           </div>
@@ -169,7 +171,7 @@ const translateTag = (tag: string): string => {
       .toLowerCase()
       .replace(/([A-Z])/g, '-$1')
       .toLowerCase()
-  const translation = t(`item.${tagKey}`, null)
+  const translation = t(`item.${tagKey}`)
   // If translation doesn't exist, return the original tag
   return translation !== `item.${tagKey}` ? translation : tag
 }
@@ -191,14 +193,16 @@ const availableTags = computed(() => {
 const filteredItems = computed<Item[]>(() => {
   let filtered = itemsStore.items
 
+  // Filter by tags
   if (selectedTags.value.length > 0) {
     filtered = filtered.filter((item: Item) =>
-      selectedTags.value.some(tag => item.tags.includes(tag))
+      selectedTags.value.some(tag => item.tags && item.tags.includes(tag))
     )
   }
 
-  if (debouncedSearch.value) {
-    const lowerQuery = debouncedSearch.value.toLowerCase()
+  // Filter by search query (using debounced value)
+  if (debouncedSearch.value && debouncedSearch.value.trim().length > 0) {
+    const lowerQuery = debouncedSearch.value.toLowerCase().trim()
     filtered = filtered.filter(
       (item: Item) =>
         item.name.toLowerCase().includes(lowerQuery) ||
@@ -218,11 +222,15 @@ const allItems = computed(() => {
 // Check if item matches current filters
 const isFiltered = (item: Item): boolean => {
   // If no filters, all items are "filtered" (visible in color)
-  if (selectedTags.value.length === 0 && !debouncedSearch.value) {
-    return true
+  const hasActiveFilters =
+    selectedTags.value.length > 0 ||
+    (debouncedSearch.value && debouncedSearch.value.trim().length > 0)
+
+  if (!hasActiveFilters) {
+    return true // All items visible when no filters
   }
 
-  // Check if item is in filtered results
+  // When filters are active, only show items that match
   return filteredItems.value.some(i => i.id === item.id)
 }
 
@@ -231,11 +239,16 @@ const selectedItemsCount = computed(() => {
 })
 
 const isSelected = (item: Item): boolean => {
-  return buildStore.currentBuild?.items.some(i => i.id === item.id) || false
+  if (!buildStore.currentBuild?.items) return false
+  return buildStore.currentBuild.items.some(i => i.id === item.id)
 }
 
 const getItemIndex = (item: Item): number => {
-  return buildStore.currentBuild?.items.findIndex(i => i.id === item.id) ?? -1
+  if (!buildStore.currentBuild?.items) return 0
+  const index = buildStore.currentBuild.items.findIndex(i => i.id === item.id)
+  // Return index + 1 for display (1-based), or 0 if not found
+  // This should only be called when isSelected(item) is true
+  return index >= 0 ? index + 1 : 0
 }
 
 const toggleItem = (item: Item) => {
@@ -264,72 +277,98 @@ const { version } = useGameVersion()
 // Tooltip state
 const hoveredItem = ref<Item | null>(null)
 const tooltipRef = ref<HTMLElement | null>(null)
-const tooltipPosition = ref<'right' | 'left'>('right')
-const tooltipVerticalPosition = ref<'top' | 'bottom'>('top')
+const tooltipPosition = ref({ x: 0, y: 0 })
+const tooltipOffset = 15 // Offset from cursor in pixels
 
-// Compute tooltip position class
-const tooltipPositionClass = computed(() => {
-  const classes: string[] = []
-
-  if (tooltipPosition.value === 'right') {
-    classes.push('left-full', 'ml-2')
-  } else {
-    classes.push('right-full', 'mr-2')
-  }
-
-  if (tooltipVerticalPosition.value === 'top') {
-    classes.push('top-0')
-  } else {
-    classes.push('bottom-0')
-  }
-
-  return classes.join(' ')
-})
-
-// Calculate tooltip position to avoid going off-screen
-const calculateTooltipPosition = async () => {
+// Calculate and update tooltip position
+const updateTooltipPosition = () => {
   if (!tooltipRef.value || !hoveredItem.value) return
-
-  await nextTick()
 
   const tooltip = tooltipRef.value
   const rect = tooltip.getBoundingClientRect()
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
 
-  // Check horizontal position
-  if (rect.right > viewportWidth) {
-    tooltipPosition.value = 'left'
-  } else {
-    tooltipPosition.value = 'right'
+  let x = tooltipPosition.value.x + tooltipOffset
+  let y = tooltipPosition.value.y + tooltipOffset
+
+  // Adjust horizontal position if tooltip goes off-screen
+  if (x + rect.width > viewportWidth) {
+    x = tooltipPosition.value.x - rect.width - tooltipOffset
   }
 
-  // Check vertical position
-  if (rect.bottom > viewportHeight) {
-    tooltipVerticalPosition.value = 'bottom'
-  } else {
-    tooltipVerticalPosition.value = 'top'
+  // Adjust vertical position if tooltip goes off-screen
+  if (y + rect.height > viewportHeight) {
+    y = tooltipPosition.value.y - rect.height - tooltipOffset
   }
+
+  // Ensure tooltip doesn't go off-screen on the left
+  if (x < 0) {
+    x = tooltipOffset
+  }
+
+  // Ensure tooltip doesn't go off-screen on the top
+  if (y < 0) {
+    y = tooltipOffset
+  }
+
+  // Update tooltip position
+  tooltip.style.left = `${x}px`
+  tooltip.style.top = `${y}px`
+}
+
+// Tooltip style computed from mouse position (initial position)
+const tooltipStyle = computed(() => {
+  if (!hoveredItem.value) return {}
+  return {
+    left: `${tooltipPosition.value.x + tooltipOffset}px`,
+    top: `${tooltipPosition.value.y + tooltipOffset}px`,
+  }
+})
+
+// Handle mouse move to update tooltip position
+const handleMouseMove = (event: MouseEvent) => {
+  if (hoveredItem.value) {
+    tooltipPosition.value = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    nextTick(() => {
+      updateTooltipPosition()
+    })
+  }
+}
+
+// Handle item hover
+const handleItemHover = (item: Item, event: MouseEvent) => {
+  hoveredItem.value = item
+  tooltipPosition.value = {
+    x: event.clientX,
+    y: event.clientY,
+  }
+  nextTick(() => {
+    updateTooltipPosition()
+  })
 }
 
 // Watch for tooltip visibility and recalculate position
 watch(hoveredItem, async newValue => {
   if (newValue) {
     await nextTick()
-    calculateTooltipPosition()
+    updateTooltipPosition()
 
     // Recalculate on scroll and resize
-    window.addEventListener('scroll', calculateTooltipPosition, true)
-    window.addEventListener('resize', calculateTooltipPosition)
+    window.addEventListener('scroll', updateTooltipPosition, true)
+    window.addEventListener('resize', updateTooltipPosition)
   } else {
-    window.removeEventListener('scroll', calculateTooltipPosition, true)
-    window.removeEventListener('resize', calculateTooltipPosition)
+    window.removeEventListener('scroll', updateTooltipPosition, true)
+    window.removeEventListener('resize', updateTooltipPosition)
   }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', calculateTooltipPosition, true)
-  window.removeEventListener('resize', calculateTooltipPosition)
+  window.removeEventListener('scroll', updateTooltipPosition, true)
+  window.removeEventListener('resize', updateTooltipPosition)
 })
 
 onMounted(() => {
@@ -393,8 +432,22 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-.item.hide img {
+.item-wrapper.hide {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.item-wrapper.hide .item {
+  cursor: default;
+}
+
+.item-wrapper.hide img {
   filter: grayscale(1) brightness(0.4);
+}
+
+/* Only gray out items that don't match filters, not all items */
+.item-wrapper:not(.hide) img {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
 
 .item img {
@@ -442,10 +495,6 @@ onMounted(() => {
   color: rgb(var(--rgb-text) / 0.8);
   text-align: center;
   white-space: nowrap;
-}
-
-.gold-icon {
-  font-size: 0.7rem;
 }
 
 .item-tooltip {
