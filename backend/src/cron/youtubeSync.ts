@@ -29,7 +29,19 @@ export function setupYouTubeSync(): void {
 
   // Schedule daily sync at 03:00
   cron.schedule('0 3 * * *', async () => {
+    const startTime = new Date()
     console.log('[Cron] Starting YouTube synchronization...')
+
+    // Send start notification
+    await discordService.sendSuccess(
+      '🔄 YouTube Sync Started',
+      'The daily YouTube synchronization cron job has started',
+      {
+        startedAt: startTime.toISOString(),
+        scheduledTime: '03:00 UTC',
+      }
+    )
+
     await cronStatus.markStart('youtubeSync')
 
     // Load channel configuration
@@ -76,13 +88,16 @@ export function setupYouTubeSync(): void {
       console.error('[Cron] YouTube sync failed after retries:', error)
       await cronStatus.markFailure('youtubeSync', error)
 
+      const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
       await discordService.sendAlert(
-        'YouTube Sync Failed',
+        '❌ YouTube Sync Failed',
         `Failed to synchronize YouTube videos after 10 retry attempts`,
         error,
         {
           channelsCount: config.channels.length,
-          timestamp: new Date().toISOString()
+          duration: `${duration}s`,
+          retries: '10',
+          timestamp: new Date().toISOString(),
         }
       )
       return
@@ -110,6 +125,27 @@ export function setupYouTubeSync(): void {
     }
 
     await cronStatus.markSuccess('youtubeSync')
+
+    // Send success notification with details
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    const successContext: Record<string, unknown> = {
+      syncedChannels: `${syncData.syncedChannels}/${config.channels.length}`,
+      totalVideos: syncData.totalVideos,
+      duration: `${duration}s`,
+      timestamp: new Date().toISOString(),
+    }
+
+    if (copyResult.isOk()) {
+      const stats = copyResult.unwrap()
+      successContext.youtubeFilesCopied = stats.copied
+      successContext.youtubeFilesDeleted = stats.deleted
+    }
+
+    await discordService.sendSuccess(
+      '✅ YouTube Sync Completed Successfully',
+      `YouTube videos synchronized and static assets copied to frontend`,
+      successContext
+    )
   })
 
   console.log('[Cron] YouTube sync scheduled: Daily at 03:00')

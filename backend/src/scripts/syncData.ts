@@ -4,6 +4,7 @@ import { DataDragonService } from '../services/DataDragonService.js'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
+import { DiscordService } from '../services/DiscordService.js'
 import { FileManager } from '../utils/fileManager.js'
 
 interface YouTubeChannelConfig {
@@ -16,7 +17,17 @@ type YouTubeChannelsConfigFile = {
 }
 
 async function main(): Promise<void> {
+  const startTime = new Date()
   console.log('[sync:data] Starting manual data synchronization...')
+
+  const discordService = new DiscordService()
+  await discordService.sendSuccess(
+    '🔄 Manual Data Sync Started',
+    'Manual data synchronization script has started',
+    {
+      startedAt: startTime.toISOString(),
+    }
+  )
 
   // --- Data Dragon ---
   console.log('[sync:data] Checking latest Data Dragon version...')
@@ -27,6 +38,16 @@ async function main(): Promise<void> {
   if (versionCheck.isErr()) {
     const err = versionCheck.unwrapErr()
     console.error('[sync:data] Failed to check Data Dragon version:', err)
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Manual Data Sync - Version Check Failed',
+      'Failed to check for new game version',
+      err,
+      {
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
     process.exitCode = 1
     return
   }
@@ -38,6 +59,17 @@ async function main(): Promise<void> {
   if (ddSync.isErr()) {
     const err = ddSync.unwrapErr()
     console.error('[sync:data] Data Dragon sync failed:', err)
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Manual Data Sync - Data Dragon Failed',
+      'Failed to synchronize Data Dragon data',
+      err,
+      {
+        version: latest,
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
     process.exitCode = 1
     return
   }
@@ -65,6 +97,16 @@ async function main(): Promise<void> {
   if (cdSync.isErr()) {
     const err = cdSync.unwrapErr()
     console.error('[sync:data] Community Dragon sync failed:', err)
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Manual Data Sync - Community Dragon Failed',
+      'Failed to synchronize Community Dragon data',
+      err,
+      {
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
     process.exitCode = 1
     return
   }
@@ -120,7 +162,19 @@ async function main(): Promise<void> {
   console.log(`[sync:data] Syncing YouTube channels: ${channels.length}`)
   const ytSync = await youtubeService.syncChannels(channels)
   if (ytSync.isErr()) {
-    console.error('[sync:data] YouTube sync failed:', ytSync.unwrapErr())
+    const err = ytSync.unwrapErr()
+    console.error('[sync:data] YouTube sync failed:', err)
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Manual Data Sync - YouTube Failed',
+      'Failed to synchronize YouTube data',
+      err,
+      {
+        channels: channels.length,
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
     process.exitCode = 1
     return
   }
@@ -129,10 +183,43 @@ async function main(): Promise<void> {
   console.log(
     `[sync:data] YouTube sync OK. Synced ${ytSyncData.syncedChannels}/${channels.length} channels, totalVideos: ${ytSyncData.totalVideos}`
   )
+
+  // Send success notification with summary
+  const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+  const successContext: Record<string, unknown> = {
+    version: ddSyncData.version,
+    dataDragonSyncedAt: ddSyncData.syncedAt.toISOString(),
+    communityDragonSynced: cdSyncData.synced,
+    communityDragonFailed: cdSyncData.failed,
+    communityDragonSkipped: cdSyncData.skipped,
+    youtubeChannels: `${ytSyncData.syncedChannels}/${channels.length}`,
+    youtubeVideos: ytSyncData.totalVideos,
+    duration: `${duration}s`,
+    timestamp: new Date().toISOString(),
+  }
+
+  if (cdSyncData.errors.length > 0) {
+    successContext.communityDragonErrors = cdSyncData.errors.length
+  }
+
+  await discordService.sendSuccess(
+    '✅ Manual Data Sync Completed Successfully',
+    'All data sources synchronized successfully',
+    successContext
+  )
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error('[sync:data] Unexpected error:', error)
+  const discordService = new DiscordService()
+  await discordService.sendAlert(
+    '❌ Manual Data Sync - Fatal Error',
+    'An unexpected error occurred during manual data synchronization',
+    error,
+    {
+      timestamp: new Date().toISOString(),
+    }
+  )
   process.exitCode = 1
 })
 

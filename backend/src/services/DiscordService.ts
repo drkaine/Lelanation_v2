@@ -42,12 +42,13 @@ export class DiscordService {
   ): Promise<Result<void, AppError>> {
     if (!this.webhookUrl) {
       // If no webhook URL, log to console instead
-      console.warn('[DiscordService] No webhook URL configured. Alert:', {
+      console.warn('[DiscordService] ⚠️  No DISCORD_WEBHOOK_URL configured. Alert not sent:', {
         title,
         message,
         error,
         context
       })
+      console.warn('[DiscordService] To enable Discord notifications, set DISCORD_WEBHOOK_URL in your .env file')
       return Result.ok(undefined)
     }
 
@@ -115,6 +116,11 @@ export class DiscordService {
     context?: Record<string, unknown>
   ): Promise<Result<void, AppError>> {
     if (!this.webhookUrl) {
+      // Log to console if no webhook configured (but don't warn for every success)
+      console.log(`[DiscordService] Success: ${title} - ${message}`)
+      if (context) {
+        console.log('[DiscordService] Context:', context)
+      }
       return Result.ok(undefined)
     }
 

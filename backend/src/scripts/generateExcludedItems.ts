@@ -1,6 +1,8 @@
+import 'dotenv/config'
 import * as fs from 'fs'
 import * as path from 'path'
 import { join } from 'path'
+import { DiscordService } from '../services/DiscordService.js'
 
 /**
  * Script to generate a JSON file listing items to exclude from item.json
@@ -73,15 +75,15 @@ interface ExcludedItem {
 /**
  * Generate excluded items JSON
  */
-function generateExcludedItems(
+async function generateExcludedItems(
   itemJsonPath: string,
   outputPath: string
-): void {
+): Promise<{ excludedCount: number; allowedCount: number; totalCount: number }> {
   console.log(`Reading items from: ${itemJsonPath}`)
 
   if (!fs.existsSync(itemJsonPath)) {
     console.error(`File not found: ${itemJsonPath}`)
-    return
+    throw new Error(`File not found: ${itemJsonPath}`)
   }
 
   const fileContent = fs.readFileSync(itemJsonPath, 'utf-8')
@@ -89,7 +91,7 @@ function generateExcludedItems(
 
   if (!data.data || typeof data.data !== 'object') {
     console.error(`Invalid JSON structure in ${itemJsonPath}`)
-    return
+    throw new Error(`Invalid JSON structure in ${itemJsonPath}`)
   }
 
   const excludedItems: ExcludedItem[] = []
@@ -141,21 +143,87 @@ function generateExcludedItems(
   console.log(`  Excluded items: ${excludedItems.length}`)
   console.log(`  Allowed items: ${ALLOWED_ITEM_IDS.size}`)
   console.log(`  Total items: ${allItemIds.length}`)
+
+  return {
+    excludedCount: excludedItems.length,
+    allowedCount: ALLOWED_ITEM_IDS.size,
+    totalCount: allItemIds.length,
+  }
 }
 
 // Main execution
-const version = '16.2.1'
-const basePath = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game', version)
+async function main() {
+  const startTime = new Date()
+  console.log('[Generate Excluded Items] Starting...')
 
-const frItemPath = join(basePath, 'fr_FR', 'item.json')
-const outputPath = join(process.cwd(), 'data', 'excluded-items.json')
+  const discordService = new DiscordService()
+  await discordService.sendSuccess(
+    '🔄 Generate Excluded Items Started',
+    'Generating excluded items JSON file',
+    {
+      startedAt: startTime.toISOString(),
+    }
+  )
 
-if (fs.existsSync(frItemPath)) {
-  generateExcludedItems(frItemPath, outputPath)
-} else {
-  console.error(`French item.json not found: ${frItemPath}`)
-  console.error('Please ensure the file exists before running this script.')
-  process.exit(1)
+  const version = '16.2.1'
+  const basePath = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game', version)
+
+  const frItemPath = join(basePath, 'fr_FR', 'item.json')
+  const outputPath = join(process.cwd(), 'data', 'excluded-items.json')
+
+  if (!fs.existsSync(frItemPath)) {
+    const err = new Error(`French item.json not found: ${frItemPath}`)
+    console.error(err.message)
+    console.error('Please ensure the file exists before running this script.')
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Generate Excluded Items - File Not Found',
+      'Failed to find item.json file',
+      err,
+      {
+        filePath: frItemPath,
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
+    process.exit(1)
+  }
+
+  try {
+    const stats = await generateExcludedItems(frItemPath, outputPath)
+
+    // Send success notification
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendSuccess(
+      '✅ Generate Excluded Items Completed Successfully',
+      'Excluded items JSON file generated successfully',
+      {
+        excludedItems: stats.excludedCount,
+        allowedItems: stats.allowedCount,
+        totalItems: stats.totalCount,
+        outputPath: outputPath,
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
+
+    console.log('\n✓ Script completed!')
+  } catch (error) {
+    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    await discordService.sendAlert(
+      '❌ Generate Excluded Items Failed',
+      'Failed to generate excluded items JSON file',
+      error,
+      {
+        duration: `${duration}s`,
+        timestamp: new Date().toISOString(),
+      }
+    )
+    throw error
+  }
 }
 
-console.log('\n✓ Script completed!')
+main().catch((error) => {
+  console.error('[Generate Excluded Items] Fatal error:', error)
+  process.exit(1)
+})
