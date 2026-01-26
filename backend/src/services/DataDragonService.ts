@@ -147,7 +147,7 @@ export class DataDragonService {
   /**
    * Fetch items data for a specific version and language
    * Filters items to only include those available on Summoner's Rift (map 11),
-   * purchasable, with cost > 0, and excludes certain items
+   * purchasable, with cost > 0, and excludes items from excluded-items.json
    */
   async fetchItems(
     version: string,
@@ -163,7 +163,25 @@ export class DataDragonService {
         )
       }
 
-      // Items to exclude from selection
+      // Load excluded items from excluded-items.json
+      let excludedItemIds = new Set<string>()
+      const excludedItemsPath = join(process.cwd(), 'data', 'excluded-items.json')
+      const excludedItemsResult = await FileManager.readJson<{
+        excludedIds: string[]
+      }>(excludedItemsPath)
+      
+      if (excludedItemsResult.isOk()) {
+        excludedItemIds = new Set(excludedItemsResult.unwrap().excludedIds)
+        console.log(
+          `[DataDragon] Loaded ${excludedItemIds.size} excluded item IDs from excluded-items.json`
+        )
+      } else {
+        console.warn(
+          `[DataDragon] Could not load excluded-items.json: ${excludedItemsResult.unwrapErr().message}. Continuing without exclusion list.`
+        )
+      }
+
+      // Items to exclude from selection (by name - legacy filter)
       const FILTERED_ITEMS = [
         'Oracle Lens',
         'Farsight Alteration',
@@ -186,6 +204,12 @@ export class DataDragonService {
       for (const [itemId, item] of Object.entries(allItems)) {
         // Check if item should be included
         const itemData = item as any
+        
+        // Skip if item ID is in excluded list
+        if (excludedItemIds.has(itemId)) {
+          continue
+        }
+
         if (
           itemData.maps?.['11'] === true &&
           itemData.gold?.purchasable === true &&
@@ -199,6 +223,10 @@ export class DataDragonService {
           }
         }
       }
+
+      console.log(
+        `[DataDragon] Filtered items: ${Object.keys(filteredItems).length} items (excluded ${excludedItemIds.size} by ID)`
+      )
 
       return Result.ok(filteredItems)
     } catch (error) {
