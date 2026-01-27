@@ -1,5 +1,5 @@
 <template>
-  <div class="rune-selector">
+  <div class="runesPage">
     <div v-if="runesStore.status === 'loading'" class="py-8 text-center">
       <p class="text-text">Loading runes...</p>
     </div>
@@ -8,132 +8,255 @@
       <p class="text-error">{{ runesStore.error }}</p>
     </div>
 
-    <div v-else class="rune-selector-content">
-      <!-- Primary and Secondary Path Selection (Side by Side) -->
-      <div class="rune-paths-container">
-        <!-- Primary Rune Path Selection -->
-        <div class="rune-path-section">
-          <div class="rune-paths-row">
+    <div v-else class="wrap">
+      <div class="paths-container">
+        <!-- Primary Path Section -->
+        <div class="path-section">
+          <!-- Primary Path Selection Row -->
+          <div class="path" :class="{ 'no-selection': !selectedPrimaryPathId }">
             <button
               v-for="path in runesStore.runePaths"
-              :key="path.id"
+              :key="`primary-${path.id}`"
               :class="[
-                'rune-path-button',
-                selectedPrimaryPathId === path.id ? 'rune-path-selected' : 'rune-path-unselected',
+                'rune',
+                getPathName(path.id),
+                'row',
+                selectedPrimaryPathId === path.id ? 'selected chosen' : '',
               ]"
               @click="selectPrimaryPath(path.id)"
+              @mouseenter="e => handlePathHover(path, e)"
+              @mouseleave="handleRuneLeave"
+              @mousemove="handleMouseMove"
             >
-              <img
-                :src="getRunePathImageUrl(version, path.icon)"
-                :alt="path.name"
-                class="rune-path-icon"
-              />
+              <div class="rune">
+                <div
+                  class="path img"
+                  :style="{ '--img': `url(${getRunePathImageUrl(version, path.icon)})` }"
+                ></div>
+              </div>
             </button>
           </div>
 
-          <!-- Primary Runes by Tier -->
-          <div v-if="selectedPrimaryPath" class="primary-runes-tiers">
+          <!-- Primary Runes Grid -->
+          <div v-if="selectedPrimaryPath" class="runes" :style="{ '--rune-size': '48px' }">
             <div
               v-for="(slot, slotIndex) in selectedPrimaryPath.slots"
-              :key="slotIndex"
-              class="rune-tier"
+              :key="`slot-${slotIndex}`"
+              class="rune-slot"
             >
-              <div class="rune-tier-row">
-                <button
-                  v-for="rune in slot.runes"
-                  :key="rune.id"
-                  :class="[
-                    'rune-button primary-rune-button',
-                    selectedPrimaryRunes[slotIndex] === rune.id
-                      ? 'rune-selected'
-                      : 'rune-unselected',
-                  ]"
-                  @click="selectPrimaryRune(slotIndex, rune.id)"
-                >
-                  <img
-                    :src="getRuneImageUrl(version, rune.icon)"
-                    :alt="rune.name"
-                    class="rune-icon"
-                  />
-                </button>
-              </div>
+              <button
+                v-for="rune in slot.runes"
+                :key="`rune-${rune.id}`"
+                :class="[
+                  'row',
+                  'rune-button',
+                  selectedPrimaryRunes[slotIndex] === rune.id ? 'selected' : '',
+                  !selectedPrimaryRunes[slotIndex] ? 'bright' : '',
+                ]"
+                @click="selectPrimaryRune(slotIndex, rune.id)"
+                @mouseenter="e => handleRuneHover(rune, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <div class="rune">
+                  <div
+                    class="img"
+                    :style="{ '--img': `url(${getRuneImageUrl(version, rune.icon)})` }"
+                  ></div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Summoner Spells (sous le primary path) -->
+          <div class="summoners-section">
+            <div class="summoners-grid">
+              <button
+                v-for="spell in availableSpells"
+                :key="`spell-${spell.id}`"
+                :class="[
+                  'summoner-button',
+                  isSummonerSpellSelected(spell) ? 'selected' : '',
+                  selectedSummonerSpells.length < 2 ? 'bright' : '',
+                ]"
+                @click="selectSummonerSpell(spell)"
+                @mouseenter="e => handleSpellHover(spell, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <img
+                  :src="getSpellImageUrl(version, spell.image.full)"
+                  :alt="spell.name"
+                  class="summoner-icon"
+                />
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Secondary Rune Path Selection -->
-        <div class="rune-path-section">
-          <div class="rune-paths-row secondary-paths">
+        <!-- Secondary Path Section -->
+        <div class="path-section">
+          <!-- Secondary Path Selection Row -->
+          <div class="path" :class="{ 'no-selection': !selectedSecondaryPathId }">
             <button
               v-for="path in availableSecondaryPaths"
-              :key="path.id"
+              :key="`secondary-${path.id}`"
               :class="[
-                'rune-path-button secondary-path-button',
-                selectedSecondaryPathId === path.id ? 'rune-path-selected' : 'rune-path-unselected',
+                'rune',
+                getPathName(path.id),
+                'row',
+                selectedSecondaryPathId === path.id ? 'selected' : '',
+                selectedPrimaryPathId === path.id ? 'chosen' : '',
               ]"
               @click="selectSecondaryPath(path.id)"
+              @mouseenter="e => handlePathHover(path, e)"
+              @mouseleave="handleRuneLeave"
+              @mousemove="handleMouseMove"
             >
-              <img
-                :src="getRunePathImageUrl(version, path.icon)"
-                :alt="path.name"
-                class="rune-path-icon"
-              />
+              <div class="rune">
+                <div
+                  class="path img"
+                  :style="{ '--img': `url(${getRunePathImageUrl(version, path.icon)})` }"
+                ></div>
+              </div>
             </button>
           </div>
 
-          <!-- Secondary Runes by Tier (can select 2 total, not one per tier) - Skip first tier -->
-          <div v-if="selectedSecondaryPath" class="secondary-runes-tiers">
+          <!-- Secondary Runes Grid -->
+          <div v-if="selectedSecondaryPath" class="runes" :style="{ '--rune-size': '48px' }">
+            <!-- Ligne 1 vide (keystone) -->
+            <div class="rune-slot empty-slot">
+              <!-- Ligne vide pour le miroir -->
+            </div>
+            <!-- Lignes 2, 3, 4 avec les runes -->
             <div
               v-for="(slot, slotIndex) in filteredSecondarySlots"
-              :key="slotIndex"
-              class="rune-tier"
+              :key="`secondary-slot-${slotIndex}`"
+              class="rune-slot"
             >
-              <div class="rune-tier-row">
-                <button
-                  v-for="rune in slot.runes"
-                  :key="rune.id"
-                  :class="[
-                    'rune-button',
-                    isSecondaryRuneSelected(rune.id) ? 'rune-selected' : 'rune-unselected',
-                    canSelectSecondaryRune() || isSecondaryRuneSelected(rune.id)
-                      ? ''
-                      : 'rune-disabled',
-                  ]"
-                  :disabled="!canSelectSecondaryRune() && !isSecondaryRuneSelected(rune.id)"
-                  @click="toggleSecondaryRune(rune.id)"
-                >
-                  <img
-                    :src="getRuneImageUrl(version, rune.icon)"
-                    :alt="rune.name"
-                    class="rune-icon"
-                  />
-                </button>
-              </div>
+              <button
+                v-for="rune in slot.runes"
+                :key="`secondary-rune-${rune.id}`"
+                :class="[
+                  'row',
+                  'rune-button',
+                  isSecondaryRuneSelected(rune.id) ? 'selected' : '',
+                  // Brillant seulement si aucune rune n'est sélectionnée OU si cette rune est sélectionnée
+                  selectedSecondaryRunes.length === 0 || isSecondaryRuneSelected(rune.id)
+                    ? 'bright'
+                    : '',
+                ]"
+                @click="selectSecondaryRune(rune.id)"
+                @mouseenter="e => handleRuneHover(rune, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <div class="rune">
+                  <div
+                    class="img"
+                    :style="{ '--img': `url(${getRuneImageUrl(version, rune.icon)})` }"
+                  ></div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Shards (sous le secondary path) -->
+          <div class="shards-section">
+            <div class="shards-grid">
+              <!-- Slot 1: Principal -->
+              <button
+                v-for="shard in slot1Options"
+                :key="`shard-1-${shard.id}`"
+                :class="['shard-button', selectedShards[1] === shard.id ? 'selected' : '']"
+                @click="selectShard(1, shard.id)"
+                @mouseenter="e => handleShardHover(shard, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+              </button>
+              <!-- Slot 2: Second -->
+              <button
+                v-for="shard in slot2Options"
+                :key="`shard-2-${shard.id}`"
+                :class="['shard-button', selectedShards[2] === shard.id ? 'selected' : '']"
+                @click="selectShard(2, shard.id)"
+                @mouseenter="e => handleShardHover(shard, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+              </button>
+              <!-- Slot 3: Third -->
+              <button
+                v-for="shard in slot3Options"
+                :key="`shard-3-${shard.id}`"
+                :class="['shard-button', selectedShards[3] === shard.id ? 'selected' : '']"
+                @click="selectShard(3, shard.id)"
+                @mouseenter="e => handleShardHover(shard, e)"
+                @mouseleave="handleRuneLeave"
+                @mousemove="handleMouseMove"
+              >
+                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+              </button>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Tooltip -->
+    <div
+      v-if="hoveredItem"
+      ref="tooltipRef"
+      class="rune-tooltip pointer-events-none fixed z-50 rounded-lg border border-accent bg-background shadow-lg"
+      :style="tooltipStyle"
+    >
+      <div class="rune-tooltip-content">
+        <div class="rune-tooltip-header">
+          <div class="rune-tooltip-name">{{ hoveredItem.name }}</div>
+        </div>
+        <div
+          v-if="hoveredItem.description"
+          class="rune-tooltip-description"
+          v-html="hoveredItem.description"
+        ></div>
+        <div
+          v-else-if="hoveredItem.shortDesc"
+          class="rune-tooltip-description"
+          v-html="hoveredItem.shortDesc"
+        ></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useBuildStore } from '~/stores/BuildStore'
-import type { RuneSelection } from '~/types/build'
-import { getRunePathImageUrl, getRuneImageUrl } from '~/utils/imageUrl'
+import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
+import type { RuneSelection, SummonerSpell, ShardSelection } from '~/types/build'
+import { getRunePathImageUrl, getRuneImageUrl, getSpellImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 
 const { version } = useGameVersion()
 
 const runesStore = useRunesStore()
 const buildStore = useBuildStore()
+const spellsStore = useSummonerSpellsStore()
 
 const selectedPrimaryPathId = ref<number | null>(null)
 const selectedPrimaryRunes = ref<Record<number, number>>({})
 const selectedSecondaryPathId = ref<number | null>(null)
 const selectedSecondaryRunes = ref<number[]>([]) // Array of rune IDs (max 2)
+const selectedSummonerSpells = ref<Array<SummonerSpell | null>>([null, null]) // Array of 2 spells
+const selectedShards = ref<Record<number, number>>({
+  1: 5008, // Default: Adaptive Force
+  2: 5008, // Default: Adaptive Force
+  3: 5001, // Default: Health
+})
 
 const selectedPrimaryPath = computed(() => {
   if (!selectedPrimaryPathId.value) return null
@@ -154,6 +277,20 @@ const filteredSecondarySlots = computed(() => {
   if (!selectedSecondaryPath.value) return []
   return selectedSecondaryPath.value.slots.filter((_slot, index) => index > 0)
 })
+
+const getPathName = (pathId: number): string => {
+  const path = runesStore.getRunePathById(pathId)
+  if (!path) return ''
+  // Map path IDs to names (approximate mapping)
+  const pathNames: Record<number, string> = {
+    8000: 'Precision',
+    8100: 'Domination',
+    8200: 'Sorcery',
+    8300: 'Inspiration',
+    8400: 'Resolve',
+  }
+  return pathNames[pathId] || path.name
+}
 
 const selectPrimaryPath = (pathId: number) => {
   selectedPrimaryPathId.value = pathId
@@ -177,21 +314,131 @@ const isSecondaryRuneSelected = (runeId: number): boolean => {
   return selectedSecondaryRunes.value.includes(runeId)
 }
 
-const canSelectSecondaryRune = (): boolean => {
-  // Can select if less than 2 runes selected
-  return selectedSecondaryRunes.value.length < 2
-}
-
-const toggleSecondaryRune = (runeId: number) => {
+const selectSecondaryRune = (runeId: number) => {
   const index = selectedSecondaryRunes.value.indexOf(runeId)
+
   if (index > -1) {
-    // Remove if already selected
+    // Si la rune est déjà sélectionnée, on la retire
     selectedSecondaryRunes.value.splice(index, 1)
-  } else if (canSelectSecondaryRune()) {
-    // Add if not selected and we have space
+  } else if (selectedSecondaryRunes.value.length < 2) {
+    // Système de roulement (FIFO) - Si moins de 2 runes, on ajoute simplement
     selectedSecondaryRunes.value.push(runeId)
+  } else {
+    // Si 2 runes déjà sélectionnées, on fait un roulement : [1, 2] -> [2, nouvelle]
+    selectedSecondaryRunes.value.shift() // Retire la première
+    selectedSecondaryRunes.value.push(runeId) // Ajoute la nouvelle à la fin
   }
   updateRuneSelection()
+}
+
+// Summoner Spells
+const availableSpells = computed(() => {
+  return spellsStore.spells
+})
+
+const isSummonerSpellSelected = (spell: SummonerSpell): boolean => {
+  return (
+    selectedSummonerSpells.value[0]?.id === spell.id ||
+    selectedSummonerSpells.value[0]?.key === spell.key ||
+    selectedSummonerSpells.value[1]?.id === spell.id ||
+    selectedSummonerSpells.value[1]?.key === spell.key ||
+    false
+  )
+}
+
+const selectSummonerSpell = (spell: SummonerSpell) => {
+  const index0 =
+    selectedSummonerSpells.value[0]?.id === spell.id ||
+    selectedSummonerSpells.value[0]?.key === spell.key
+  const index1 =
+    selectedSummonerSpells.value[1]?.id === spell.id ||
+    selectedSummonerSpells.value[1]?.key === spell.key
+
+  if (index0 || index1) {
+    // Si le sort est déjà sélectionné, on le retire
+    if (index0) {
+      selectedSummonerSpells.value[0] = null
+      buildStore.setSummonerSpell(0, null)
+    } else if (index1) {
+      selectedSummonerSpells.value[1] = null
+      buildStore.setSummonerSpell(1, null)
+    }
+  } else if (selectedSummonerSpells.value[0] === null) {
+    // Système de roulement (FIFO) - Premier slot vide
+    selectedSummonerSpells.value[0] = spell
+    buildStore.setSummonerSpell(0, spell)
+  } else if (selectedSummonerSpells.value[1] === null) {
+    // Deuxième slot vide
+    selectedSummonerSpells.value[1] = spell
+    buildStore.setSummonerSpell(1, spell)
+  } else {
+    // Si 2 sorts déjà sélectionnés, on fait un roulement : [1, 2] -> [2, nouvelle]
+    const firstSpell = selectedSummonerSpells.value[1] || null
+    selectedSummonerSpells.value[0] = firstSpell
+    selectedSummonerSpells.value[1] = spell
+    buildStore.setSummonerSpell(0, firstSpell)
+    buildStore.setSummonerSpell(1, spell)
+  }
+}
+
+// Shards
+const shardIconSrc = (image: string): string => {
+  return `/icons/shards/${image}`
+}
+
+interface ShardOption {
+  id: number
+  name: string
+  image: string
+  description: string
+}
+
+const slot1Options: ShardOption[] = [
+  { id: 5008, name: 'Adaptive Force', image: 'adaptative.png', description: '+9 Force adaptative' },
+  { id: 5005, name: 'Attack Speed', image: 'speed.png', description: "+10% vitesse d'attaque" },
+  {
+    id: 5007,
+    name: 'Ability Haste',
+    image: 'cdr.png',
+    description: '+10% accélération de compétence',
+  },
+]
+
+const slot2Options: ShardOption[] = [
+  { id: 5008, name: 'Adaptive Force', image: 'adaptative.png', description: '+9 Force adaptative' },
+  { id: 5006, name: 'Move Speed', image: 'move.png', description: '+2% vitesse de déplacement' },
+  {
+    id: 5002,
+    name: 'Health per level',
+    image: 'growth.png',
+    description: '+10-180 PV (selon niveau)',
+  },
+]
+
+const slot3Options: ShardOption[] = [
+  { id: 5001, name: 'Health', image: 'hp.png', description: '+65 PV' },
+  {
+    id: 5003,
+    name: 'Tenacity',
+    image: 'tenacity.png',
+    description: '+10% Ténacitée et réduction de ralentissement',
+  },
+  {
+    id: 5002,
+    name: 'Health per level',
+    image: 'growth.png',
+    description: '+10-180 PV (selon niveau)',
+  },
+]
+
+const selectShard = (slot: number, shardId: number) => {
+  selectedShards.value[slot] = shardId
+  const shardSelection: ShardSelection = {
+    slot1: selectedShards.value[1] ?? 5008,
+    slot2: selectedShards.value[2] ?? 5008,
+    slot3: selectedShards.value[3] ?? 5001,
+  }
+  buildStore.setShards(shardSelection)
 }
 
 const updateRuneSelection = () => {
@@ -243,151 +490,490 @@ watch(
   { immediate: true }
 )
 
+// Load existing summoner spells from build
+watch(
+  () => buildStore.currentBuild?.summonerSpells,
+  spells => {
+    if (spells) {
+      selectedSummonerSpells.value = [spells[0] || null, spells[1] || null]
+    }
+  },
+  { immediate: true }
+)
+
+// Load existing shards from build
+watch(
+  () => buildStore.currentBuild?.shards,
+  shards => {
+    if (shards) {
+      selectedShards.value = {
+        1: shards.slot1 || 5008,
+        2: shards.slot2 || 5008,
+        3: shards.slot3 || 5001,
+      }
+    }
+  },
+  { immediate: true }
+)
+
+// Tooltip state
+interface TooltipItem {
+  name: string
+  description?: string
+  shortDesc?: string
+  longDesc?: string
+}
+
+const hoveredItem = ref<TooltipItem | null>(null)
+const tooltipRef = ref<HTMLElement | null>(null)
+const tooltipPosition = ref({ x: 0, y: 0 })
+const tooltipOffset = 15
+
+const handlePathHover = (path: { name: string }, event: MouseEvent) => {
+  hoveredItem.value = {
+    name: path.name,
+    description: undefined,
+  }
+  tooltipPosition.value = { x: event.clientX, y: event.clientY }
+  nextTick(() => {
+    updateTooltipPosition()
+  })
+}
+
+const handleRuneHover = (
+  rune: { name: string; shortDesc?: string; longDesc?: string },
+  event: MouseEvent
+) => {
+  hoveredItem.value = {
+    name: rune.name,
+    description: rune.longDesc || rune.shortDesc,
+    shortDesc: rune.shortDesc,
+    longDesc: rune.longDesc,
+  }
+  tooltipPosition.value = { x: event.clientX, y: event.clientY }
+  nextTick(() => {
+    updateTooltipPosition()
+  })
+}
+
+const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
+  hoveredItem.value = {
+    name: spell.name,
+    description: spell.description || spell.tooltip,
+  }
+  tooltipPosition.value = { x: event.clientX, y: event.clientY }
+  nextTick(() => {
+    updateTooltipPosition()
+  })
+}
+
+const handleShardHover = (shard: ShardOption, event: MouseEvent) => {
+  hoveredItem.value = {
+    name: shard.name,
+    description: shard.description,
+  }
+  tooltipPosition.value = { x: event.clientX, y: event.clientY }
+  nextTick(() => {
+    updateTooltipPosition()
+  })
+}
+
+const handleRuneLeave = () => {
+  hoveredItem.value = null
+}
+
+const handleMouseMove = (event: MouseEvent) => {
+  if (hoveredItem.value) {
+    tooltipPosition.value = { x: event.clientX, y: event.clientY }
+    nextTick(() => {
+      updateTooltipPosition()
+    })
+  }
+}
+
+const updateTooltipPosition = () => {
+  if (!tooltipRef.value || !hoveredItem.value) return
+
+  const tooltip = tooltipRef.value
+  const rect = tooltip.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+
+  let x = tooltipPosition.value.x + tooltipOffset
+  let y = tooltipPosition.value.y + tooltipOffset
+
+  // Adjust horizontal position if tooltip goes off-screen
+  if (x + rect.width > viewportWidth) {
+    x = tooltipPosition.value.x - rect.width - tooltipOffset
+  }
+
+  // Adjust vertical position if tooltip goes off-screen
+  if (y + rect.height > viewportHeight) {
+    y = tooltipPosition.value.y - rect.height - tooltipOffset
+  }
+
+  // Ensure tooltip doesn't go off-screen on the left
+  if (x < 0) {
+    x = tooltipOffset
+  }
+
+  // Ensure tooltip doesn't go off-screen on the top
+  if (y < 0) {
+    y = tooltipOffset
+  }
+
+  // Update tooltip position
+  tooltip.style.left = `${x}px`
+  tooltip.style.top = `${y}px`
+}
+
+const tooltipStyle = computed(() => {
+  if (!hoveredItem.value) return {}
+  return {
+    left: `${tooltipPosition.value.x + tooltipOffset}px`,
+    top: `${tooltipPosition.value.y + tooltipOffset}px`,
+  }
+})
+
+watch(hoveredItem, async newValue => {
+  if (newValue) {
+    await nextTick()
+    updateTooltipPosition()
+    window.addEventListener('scroll', updateTooltipPosition, true)
+    window.addEventListener('resize', updateTooltipPosition)
+  } else {
+    window.removeEventListener('scroll', updateTooltipPosition, true)
+    window.removeEventListener('resize', updateTooltipPosition)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', updateTooltipPosition, true)
+  window.removeEventListener('resize', updateTooltipPosition)
+})
+
 onMounted(() => {
   if (runesStore.runePaths.length === 0) {
     runesStore.loadRunes()
+  }
+  if (spellsStore.spells.length === 0) {
+    spellsStore.loadSummonerSpells()
   }
 })
 </script>
 
 <style scoped>
-.rune-selector-content {
+.runesPage {
+  font-family: var(--font, system-ui, -apple-system, sans-serif);
+  color-scheme: dark only;
+  line-height: 1.5;
+  font-weight: 400;
+  font-size: 16px;
+  color: rgb(var(--rgb-primary-light));
+  box-sizing: border-box;
+  max-width: min-content;
+  margin: 0.5em auto 1em;
+  text-align: center;
+}
+
+.wrap {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
+  align-items: center;
 }
 
-.rune-paths-container {
+.paths-container {
   display: flex;
+  flex-direction: row;
   gap: 2rem;
   align-items: flex-start;
-}
-
-.rune-path-section {
-  flex: 1;
-}
-
-.rune-paths-row {
-  display: flex;
   justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.rune-path-button {
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 50%;
-  border: 2px solid rgb(var(--rgb-accent));
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.rune-path-button.rune-path-selected {
-  background: rgb(var(--rgb-accent));
-  box-shadow: 0 0 10px rgba(var(--rgb-accent-rgb), 0.5);
-}
-
-.rune-path-button.rune-path-unselected {
-  background: rgb(var(--rgb-surface));
-  opacity: 0.7;
-}
-
-.rune-path-button:hover {
-  transform: scale(1.1);
-  opacity: 1;
-}
-
-.rune-path-icon {
   width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
 }
 
-.secondary-paths .rune-path-button {
-  width: 2.5rem;
-  height: 2.5rem;
+.path-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+  flex: 1;
+  max-width: 50%;
 }
 
-.rune-tier {
+/* Path Selection Rows */
+.path {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
   margin-bottom: 0.5rem;
 }
 
-.rune-tier-row {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.rune-button {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--rgb-accent));
-  background: transparent;
+.path button.rune {
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--color-gold-300);
+  background: rgba(0, 0, 0, 0.4);
   padding: 0;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  position: relative;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative;
 }
 
-.rune-button.primary-rune-button {
-  background: #000;
-  width: 2rem;
-  height: 2rem;
+.path button.rune.row {
+  opacity: 0.4; /* Ternes par défaut */
 }
 
-.rune-button.rune-selected {
-  background: rgb(var(--rgb-accent));
-  box-shadow: 0 0 8px rgba(var(--rgb-accent-rgb), 0.6);
+.path button.rune.row.selected {
+  /* Pas de filtre doré, juste l'opacité */
+  opacity: 1; /* Brillant quand sélectionné */
 }
 
-.rune-button.rune-unselected {
-  background: rgb(var(--rgb-surface));
-  opacity: 0.6;
+.path button.rune.row.chosen:not(.selected) {
+  opacity: 0.4; /* Ternes si déjà choisi comme primary mais pas sélectionné */
 }
 
-.rune-button.primary-rune-button.rune-unselected {
-  background: #000;
-  opacity: 0.8;
+.path button.rune.row.selected.chosen {
+  opacity: 1; /* Brillant quand sélectionné, même si choisi */
 }
 
-.rune-button.rune-disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+/* Si aucun path n'est sélectionné, tous brillants */
+.path.no-selection button.rune.row:not(.chosen) {
+  opacity: 1;
 }
 
-.rune-button:hover:not(.rune-disabled) {
+.path button.rune.row:hover {
   transform: scale(1.1);
   opacity: 1;
 }
 
-.rune-icon {
+.path button.rune .rune {
   width: 100%;
   height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.path button.rune .path.img {
+  width: 90%;
+  height: 90%;
   border-radius: 50%;
+  background-image: var(--img);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Runes Grid - Layout horizontal (côte à côte) */
+.runes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  align-items: center;
+}
+
+.rune-slot {
+  display: flex;
+  flex-direction: row;
+  gap: 0.5rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.rune-slot.empty-slot {
+  min-height: var(--rune-size, 48px);
+  /* Ligne vide pour le miroir avec les runes principales */
+}
+
+.runes .rune-button {
+  width: var(--rune-size, 48px);
+  height: var(--rune-size, 48px);
+  border: 2px solid var(--color-gold-300);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.runes .rune-button.row {
+  opacity: 0.4; /* Ternes par défaut */
+}
+
+.runes .rune-button.row.selected {
+  /* Pas de filtre doré, juste le bord et l'opacité */
+  opacity: 1; /* Brillant quand sélectionné */
+}
+
+/* Si aucune rune n'est sélectionnée dans le slot, toutes brillantes */
+.runes .rune-button.row.bright {
+  opacity: 1;
+}
+
+.runes .rune-button.row:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.runes .rune-button .rune {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.runes .rune-button .img {
+  width: 90%;
+  height: 90%;
+  border-radius: 50%;
+  background-image: var(--img);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Summoner Spells Section */
+.summoners-section {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.summoners-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  max-width: 100px; /* Réduit de moitié (200px -> 100px) */
+  margin: 0 auto;
+}
+
+.summoner-button {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid var(--color-gold-300);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 0.4; /* Ternes par défaut */
+}
+
+.summoner-button.selected {
+  opacity: 1; /* Brillant quand sélectionné */
+}
+
+.summoner-button.bright {
+  opacity: 1; /* Brillant quand moins de 2 sélectionnés */
+}
+
+.summoner-button:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.summoner-icon {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  border-radius: 2px;
 }
 
-.primary-runes-tiers {
+/* Shards Section - Ronds, alignés avec summoners, taille réduite de moitié */
+.shards-section {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.shards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  max-width: 100px; /* Réduit de moitié (200px -> 100px) */
+  margin: 0 auto;
+}
+
+.shard-button {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid var(--color-gold-300);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 50%; /* Ronds */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 0.4; /* Ternes par défaut */
+}
+
+.shard-button.selected {
+  opacity: 1; /* Brillant quand sélectionné */
+}
+
+.shard-button:hover {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.shard-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%; /* Ronds */
+}
+
+/* Tooltip Styles */
+.rune-tooltip {
+  max-width: 300px;
+  padding: 0.75rem;
+  pointer-events: none;
+}
+
+.rune-tooltip-content {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.secondary-runes-tiers {
+.rune-tooltip-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.rune-tooltip-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-accent));
+  line-height: 1.2;
+}
+
+.rune-tooltip-description {
+  font-size: 0.8rem;
+  color: rgb(var(--rgb-text));
+  line-height: 1.4;
+  opacity: 0.9;
 }
 </style>

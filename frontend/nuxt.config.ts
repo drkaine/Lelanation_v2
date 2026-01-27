@@ -107,6 +107,22 @@ export default defineNuxtConfig({
           'Cache-Control': 'public, max-age=86400',
         },
       },
+      // Service Worker files (if any) should NEVER be cached
+      '/sw.js': {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
+      '/sw.js.map': {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
+      '/workbox-*.js': {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
       '/_robots.txt': {
         headers: {
           'Cache-Control': 'public, max-age=86400',

@@ -17,14 +17,6 @@
         <div class="flex-1">
           <div class="runes-step-content">
             <RuneSelector />
-
-            <div class="mt-6">
-              <RuneShardSelector />
-            </div>
-
-            <div class="mt-6">
-              <SummonerSpellSelector />
-            </div>
           </div>
         </div>
       </div>
@@ -37,8 +29,6 @@ import { computed, onMounted } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
-import RuneShardSelector from '~/components/Build/RuneShardSelector.vue'
-import SummonerSpellSelector from '~/components/Build/SummonerSpellSelector.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 
 definePageMeta({

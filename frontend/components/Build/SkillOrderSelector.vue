@@ -48,7 +48,8 @@
             @click="selectedAbility = spell.id"
           >
             <img
-              :src="getSpellImageUrl(version, spell.image.full)"
+              v-if="spell.image"
+              :src="getSpellImageUrl(version, spell.image?.full || '')"
               :alt="spell.name"
               class="mb-1 h-12 w-12 rounded"
             />
@@ -74,13 +75,6 @@
             L{{ level }}
           </button>
         </div>
-      </div>
-
-      <div v-if="validationErrors.length > 0" class="rounded border border-error bg-error/20 p-3">
-        <p class="mb-1 text-sm font-bold text-error">Validation Errors:</p>
-        <ul class="list-inside list-disc text-sm text-error">
-          <li v-for="error in validationErrors" :key="error">{{ error }}</li>
-        </ul>
       </div>
     </div>
   </div>
@@ -124,29 +118,6 @@ const availableSpells = computed(() => {
       image: champion.value.spells[3]?.image,
     },
   ].filter(spell => spell.image)
-})
-
-const validationErrors = computed(() => {
-  const errors: string[] = []
-  const skillOrder = buildStore.currentBuild?.skillOrder
-
-  if (!skillOrder) {
-    errors.push('Skill order not configured')
-    return errors
-  }
-
-  const levels = Object.keys(skillOrder) as Array<keyof SkillOrder>
-  if (levels.length !== 18) {
-    errors.push('All 18 levels must be assigned')
-  }
-
-  for (const level of levels) {
-    if (!skillOrder[level]) {
-      errors.push(`Level ${level.replace('level', '')} is not assigned`)
-    }
-  }
-
-  return errors
 })
 
 const getSkillForLevel = (level: number): 'Q' | 'W' | 'E' | 'R' | null => {

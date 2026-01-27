@@ -65,16 +65,6 @@
           <div v-if="currentStep === 'runes'">
             <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
             <RuneSelector />
-
-            <div class="mt-8">
-              <h3 class="mb-4 text-xl font-bold">Rune Shards</h3>
-              <RuneShardSelector />
-            </div>
-
-            <div class="mt-8">
-              <h3 class="mb-4 text-xl font-bold">Summoner Spells</h3>
-              <SummonerSpellSelector />
-            </div>
           </div>
           <div v-if="currentStep === 'review'">
             <h2 class="mb-4 text-2xl font-bold">Infos</h2>
@@ -146,8 +136,6 @@ import { useBuildStore } from '~/stores/BuildStore'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import ItemSelector from '~/components/Build/ItemSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
-import RuneShardSelector from '~/components/Build/RuneShardSelector.vue'
-import SummonerSpellSelector from '~/components/Build/SummonerSpellSelector.vue'
 import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'

@@ -12,7 +12,6 @@
     <div class="champion-section">
       <!-- Portrait en forme de losange -->
       <div class="champion-portrait-container">
-        <div class="champion-portrait-border"></div>
         <img
           v-if="selectedChampion"
           :src="getChampionImageUrl(version, selectedChampion.image.full)"
@@ -681,18 +680,24 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-/* Losange doré (cadre) */
-.champion-portrait-border {
+/* Bordure dorée complète via pseudo-élément avec SVG en data URI */
+.champion-portrait-container::before {
+  content: '';
   position: absolute;
-  inset: 0;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-  border: 3px solid var(--color-gold-300);
-  box-sizing: border-box;
-  pointer-events: none;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cmask id='diamond-border-mask'%3E%3Crect width='100' height='100' fill='white'/%3E%3Cpolygon points='50,6 94,50 50,94 6,50' fill='black'/%3E%3C/mask%3E%3C/defs%3E%3Cpolygon points='50,0 100,50 50,100 0,50' fill='%23c89b3c' mask='url(%23diamond-border-mask)'/%3E%3C/svg%3E");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
   z-index: 2;
+  pointer-events: none;
 }
 
-/* Image légèrement plus petite, coupée en losange à l'intérieur du cadre */
+/* Image du champion en losange (88%) */
 .champion-portrait {
   position: absolute;
   top: 50%;
@@ -717,13 +722,7 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.05);
   border: 1px dashed var(--color-gold-300);
   opacity: 0.3;
-}
-
-.champion-portrait {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  cursor: pointer;
+  z-index: 1;
 }
 
 .champion-name {
