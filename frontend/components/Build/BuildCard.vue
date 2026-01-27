@@ -1,59 +1,98 @@
 <template>
-  <div class="build-card relative rounded-lg border border-accent bg-surface p-4">
+  <div class="build-card">
     <!-- Version (top right) -->
-    <div class="absolute right-0 top-0 px-1 text-xs text-text/70">
-      {{ version }}
-    </div>
+    <div class="build-version">{{ version }}</div>
 
-    <!-- Champion (center top) -->
-    <div v-if="selectedChampion" class="flex flex-col items-center pt-2">
-      <div class="relative mb-2">
+    <!-- Bouton Reset -->
+    <button class="reset-button" title="Réinitialiser la sheet" @click="resetBuild">
+      <Icon name="mdi:refresh" size="16px" />
+    </button>
+
+    <!-- Champion Section (Top) - Toujours visible -->
+    <div class="champion-section">
+      <!-- Portrait en forme de losange -->
+      <div class="champion-portrait-container">
+        <div class="champion-portrait-border"></div>
         <img
+          v-if="selectedChampion"
           :src="getChampionImageUrl(version, selectedChampion.image.full)"
           :alt="selectedChampion.name"
-          class="champion-image cursor-pointer rounded-full border-2 border-accent object-cover"
+          class="champion-portrait"
           @mouseenter="showTooltip = true"
           @mouseleave="showTooltip = false"
         />
+        <div v-else class="champion-portrait-placeholder"></div>
       </div>
-      <p class="text-center text-sm font-semibold text-text">
-        {{ selectedChampion.name }}
-      </p>
+
+      <!-- Nom du champion en majuscules -->
+      <h2 class="champion-name">
+        {{ selectedChampion ? selectedChampion.name.toUpperCase() : '' }}
+      </h2>
+
+      <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
+      <div class="summoner-spells-row">
+        <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
+          <img
+            v-if="spell"
+            :src="getSpellImageUrl(version, spell.image.full)"
+            :alt="spell.name"
+            class="summoner-spell-icon"
+          />
+        </template>
+        <div
+          v-for="n in 2 - filteredSummonerSpells.length"
+          :key="`empty-${n}`"
+          class="summoner-spell-placeholder"
+        ></div>
+      </div>
+
+      <!-- Ligne de séparation -->
+      <div class="separator-line"></div>
     </div>
 
-    <!-- Runes, Spells, Shards Display -->
-    <div class="build-selections mt-4 space-y-3">
-      <!-- Primary Runes -->
-      <div v-if="selectedPrimaryRunes" class="primary-runes-display">
-        <div class="flex items-center gap-2">
+    <!-- Runes Section - Toujours visible -->
+    <div class="runes-section">
+      <div class="runes-container">
+        <!-- Keystone (grande icône à gauche) - première rune principale -->
+        <div class="keystone-container">
           <img
-            v-if="primaryPathIcon"
-            :src="primaryPathIcon"
-            :alt="primaryPathName"
-            class="primary-path-icon"
+            v-if="keystoneRuneId"
+            :src="getRuneIconById(keystoneRuneId)"
+            alt="Keystone"
+            class="keystone-icon"
           />
-          <div class="primary-runes-grid">
+          <div v-else class="keystone-placeholder"></div>
+        </div>
+
+        <!-- Runes principales et secondaires -->
+        <div class="runes-main">
+          <!-- Runes principales (3 horizontales) - Toujours visible -->
+          <div class="primary-runes-row">
             <img
-              v-for="(runeId, index) in filteredPrimaryRuneIds"
+              v-for="(runeId, index) in primaryRunesRow"
               :key="index"
               :src="getRuneIconById(runeId)"
               :alt="`Rune ${index + 1}`"
               class="primary-rune-icon"
             />
+            <div
+              v-for="n in 3 - primaryRunesRow.length"
+              :key="`empty-primary-${n}`"
+              class="primary-rune-placeholder"
+            ></div>
           </div>
-        </div>
-      </div>
 
-      <!-- Secondary Runes -->
-      <div v-if="selectedSecondaryRunes" class="secondary-runes-display">
-        <div class="flex items-center gap-2">
-          <img
-            v-if="secondaryPathIcon"
-            :src="secondaryPathIcon"
-            :alt="secondaryPathName"
-            class="secondary-path-icon"
-          />
-          <div class="secondary-runes-grid">
+          <!-- Runes secondaires (path icon + 2 runes horizontales en dessous) - Toujours visible -->
+          <div class="secondary-runes-row">
+            <!-- Icône du path secondaire -->
+            <img
+              v-if="secondaryPathIcon"
+              :src="secondaryPathIcon"
+              :alt="secondaryPathName"
+              class="secondary-path-icon"
+            />
+            <div v-else class="secondary-path-placeholder"></div>
+            <!-- Runes secondaires -->
             <img
               v-for="(runeId, index) in filteredSecondaryRuneIds"
               :key="index"
@@ -61,39 +100,120 @@
               :alt="`Secondary Rune ${index + 1}`"
               class="secondary-rune-icon"
             />
+            <div
+              v-for="n in 2 - filteredSecondaryRuneIds.length"
+              :key="`empty-secondary-${n}`"
+              class="secondary-rune-placeholder"
+            ></div>
           </div>
         </div>
       </div>
 
-      <!-- Summoner Spells -->
-      <div v-if="selectedSummonerSpells.length > 0" class="summoner-spells-display">
-        <div class="summoner-spells-grid">
-          <img
-            v-for="(spell, index) in filteredSummonerSpells"
-            :key="index"
-            :src="spell ? getSpellImageUrl(version, spell.image.full) : ''"
-            :alt="spell?.name || ''"
-            class="summoner-spell-icon"
-          />
-        </div>
+      <!-- Shards collés au bord droit, dans la même zone que les runes - Toujours visible -->
+      <div class="shards-strip">
+        <img
+          v-for="(shardId, index) in filteredShardIds"
+          :key="index"
+          :src="getShardIconById(shardId)"
+          :alt="`Shard ${index + 1}`"
+          class="shard-icon-strip"
+        />
+        <div
+          v-for="n in 3 - filteredShardIds.length"
+          :key="`empty-shard-${n}`"
+          class="shard-placeholder"
+        ></div>
+      </div>
+    </div>
+
+    <!-- Séparateur entre runes et items - Toujours visible -->
+    <div class="separator-line"></div>
+
+    <!-- Items Section - Toujours visible -->
+    <div class="items-section">
+      <!-- Starting Items (2 premiers) - Toujours visible -->
+      <div class="starting-items-row">
+        <img
+          v-for="(item, index) in startingItems"
+          :key="index"
+          :src="getItemImageUrl(version, item.image.full)"
+          :alt="item.name"
+          class="item-icon"
+        />
+        <div
+          v-for="n in 2 - startingItems.length"
+          :key="`empty-starting-${n}`"
+          class="item-placeholder"
+        ></div>
       </div>
 
-      <!-- Shards -->
-      <div v-if="selectedShards" class="shards-display">
-        <div class="shards-grid">
-          <img
-            v-for="(shardId, index) in filteredShardIds"
-            :key="index"
-            :src="getShardIconById(shardId)"
-            :alt="`Shard ${index + 1}`"
-            class="shard-icon"
-          />
+      <!-- Core Items Paths - Toujours visible -->
+      <div class="core-items-paths">
+        <!-- Path 1 (3 items avec flèches) -->
+        <div class="items-path">
+          <template v-for="(item, index) in coreItemsPath1" :key="index">
+            <img
+              :src="getItemImageUrl(version, item.image.full)"
+              :alt="item.name"
+              class="item-icon"
+            />
+            <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
+          </template>
+          <template
+            v-for="(n, idx) in Array(3 - coreItemsPath1.length).fill(0)"
+            :key="`empty-path1-${idx}`"
+          >
+            <div class="item-placeholder"></div>
+            <span v-if="idx < 3 - coreItemsPath1.length - 1" class="arrow-right">→</span>
+          </template>
+        </div>
+
+        <!-- Path 2 (3 items avec flèches) -->
+        <div class="items-path">
+          <template v-for="(item, index) in coreItemsPath2" :key="index">
+            <img
+              :src="getItemImageUrl(version, item.image.full)"
+              :alt="item.name"
+              class="item-icon"
+            />
+            <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
+          </template>
+          <template
+            v-for="(n, idx) in Array(3 - coreItemsPath2.length).fill(0)"
+            :key="`empty-path2-${idx}`"
+          >
+            <div class="item-placeholder"></div>
+            <span v-if="idx < 3 - coreItemsPath2.length - 1" class="arrow-right">→</span>
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- Lelanation (bottom right) -->
-    <div class="absolute bottom-0 right-0 px-1 text-xs text-text/70">lelanation.fr</div>
+    <!-- Skill Order Section (Right) - Toujours visible -->
+    <div class="skill-order-section">
+      <div class="skill-order-vertical">
+        <div v-for="(ability, index) in skillOrderAbilities" :key="index" class="skill-order-item">
+          <img
+            :src="getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)"
+            :alt="ability.name"
+            class="skill-icon"
+          />
+          <span class="skill-key">{{ ability.key }}</span>
+          <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
+        </div>
+        <div
+          v-for="n in 3 - skillOrderAbilities.length"
+          :key="`empty-skill-${n}`"
+          class="skill-order-item"
+        >
+          <div class="skill-placeholder"></div>
+          <span v-if="n < 3 - skillOrderAbilities.length" class="arrow-down">↓</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lelanation (bottom left) -->
+    <div class="build-footer">lelanation.fr</div>
 
     <!-- Tooltip -->
     <div
@@ -102,7 +222,7 @@
       class="tooltip-box absolute z-50 rounded-lg border border-accent bg-background shadow-lg"
       :class="tooltipPositionClass"
     >
-      <!-- Top: Champion Image, Name, Title, Tags -->
+      <!-- Tooltip content (same as before) -->
       <div class="tooltip-top">
         <div class="tooltip-present">
           <img
@@ -127,10 +247,8 @@
 
       <hr class="tooltip-separator" />
 
-      <!-- Body: Passive and Spells -->
       <div class="tooltip-body">
         <div class="tooltip-spells">
-          <!-- Passive -->
           <div
             v-if="selectedChampion.passive && selectedChampion.passive.image"
             class="tooltip-spell"
@@ -144,17 +262,14 @@
             </div>
             <div class="tooltip-spell-content">
               <div class="tooltip-spell-name">Passive: {{ selectedChampion.passive.name }}</div>
-              <!-- eslint-disable vue/no-v-html -->
               <div
                 v-if="formattedPassive"
                 class="tooltip-spell-description"
                 v-html="formattedPassive"
               />
-              <!-- eslint-enable vue/no-v-html -->
             </div>
           </div>
 
-          <!-- Spells -->
           <div
             v-for="(spell, index) in formattedSpells"
             :key="spell.id || index"
@@ -175,13 +290,11 @@
                 <div class="tooltip-spell-name">
                   {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
                 </div>
-                <!-- eslint-disable vue/no-v-html -->
                 <div
                   v-if="spell.description"
                   class="tooltip-spell-description"
                   v-html="spell.description"
                 />
-                <!-- eslint-enable vue/no-v-html -->
               </div>
             </div>
           </div>
@@ -202,8 +315,10 @@ import {
   getSpellImageUrl,
   getRunePathImageUrl,
   getRuneImageUrl,
+  getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import type { Build } from '~/types/build'
 
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
@@ -227,6 +342,55 @@ const filteredSummonerSpells = computed(() => {
   return selectedSummonerSpells.value.filter(spell => spell !== null && spell !== undefined)
 })
 const selectedShards = computed(() => buildStore.currentBuild?.shards)
+const buildItems = computed(() => buildStore.currentBuild?.items || [])
+
+// Starting items (2 premiers)
+const startingItems = computed(() => {
+  return buildItems.value.slice(0, 2)
+})
+
+// Core items (les items restants après les starting items, organisés en 2 chemins de 3)
+const coreItems = computed(() => {
+  return buildItems.value.slice(2)
+})
+
+// Path 1 : premier chemin (jusqu'à 3 items)
+const coreItemsPath1 = computed(() => {
+  return coreItems.value.slice(0, 3)
+})
+
+// Path 2 : deuxième chemin (jusqu'à 3 items)
+const coreItemsPath2 = computed(() => {
+  return coreItems.value.slice(3, 6)
+})
+
+// Skill order - calculer les 3 premières compétences à maxer
+const skillOrderAbilities = computed(() => {
+  if (!selectedChampion.value || !buildStore.currentBuild?.skillOrder) return []
+
+  const skillOrder = buildStore.currentBuild.skillOrder
+  const counts: Record<'Q' | 'W' | 'E' | 'R', number> = { Q: 0, W: 0, E: 0, R: 0 }
+
+  // Compter les niveaux pour chaque compétence
+  Object.values(skillOrder).forEach((ability: 'Q' | 'W' | 'E' | 'R') => {
+    if (ability && counts[ability] !== undefined) {
+      counts[ability]++
+    }
+  })
+
+  // Trier par nombre de niveaux (décroissant) et prendre les 3 premières
+  const sorted = (Object.entries(counts) as Array<['Q' | 'W' | 'E' | 'R', number]>)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([key]) => {
+      const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
+      const spell = selectedChampion.value?.spells[index]
+      return spell ? { ...spell, key } : null
+    })
+    .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
+
+  return sorted
+})
 
 // Primary rune path
 const primaryPath = computed(() => {
@@ -234,19 +398,16 @@ const primaryPath = computed(() => {
   return runesStore.getRunePathById(selectedPrimaryRunes.value.primary.pathId)
 })
 
-const primaryPathIcon = computed(() => {
-  if (!primaryPath.value) return null
-  return getRunePathImageUrl(version.value, primaryPath.value.icon)
+// Keystone (première rune principale)
+const keystoneRuneId = computed(() => {
+  if (!selectedPrimaryRunes.value?.primary?.keystone) return null
+  return selectedPrimaryRunes.value.primary.keystone
 })
 
-const primaryPathName = computed(() => {
-  return primaryPath.value?.name || ''
-})
-
-const filteredPrimaryRuneIds = computed(() => {
+// Runes principales (keystone + 3 slots) - exclure keystone pour la ligne horizontale
+const primaryRunesRow = computed(() => {
   if (!selectedPrimaryRunes.value?.primary) return []
   return [
-    selectedPrimaryRunes.value.primary.keystone,
     selectedPrimaryRunes.value.primary.slot1,
     selectedPrimaryRunes.value.primary.slot2,
     selectedPrimaryRunes.value.primary.slot3,
@@ -282,7 +443,6 @@ const getRuneIconById = (runeId: number): string => {
     return ''
   }
 
-  // Search in primary path
   if (primaryPath.value) {
     for (const slot of primaryPath.value.slots) {
       for (const rune of slot.runes) {
@@ -293,7 +453,6 @@ const getRuneIconById = (runeId: number): string => {
     }
   }
 
-  // Search in secondary path
   if (secondaryPath.value) {
     for (const slot of secondaryPath.value.slots) {
       for (const rune of slot.runes) {
@@ -382,14 +541,12 @@ const calculateTooltipPosition = async () => {
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
 
-  // Check horizontal position
   if (rect.right > viewportWidth) {
     tooltipPosition.value = 'left'
   } else {
     tooltipPosition.value = 'right'
   }
 
-  // Check vertical position
   if (rect.bottom > viewportHeight) {
     tooltipVerticalPosition.value = 'bottom'
   } else {
@@ -397,13 +554,11 @@ const calculateTooltipPosition = async () => {
   }
 }
 
-// Watch for tooltip visibility and recalculate position
 watch(showTooltip, async newValue => {
   if (newValue) {
     await nextTick()
     calculateTooltipPosition()
 
-    // Recalculate on scroll and resize
     window.addEventListener('scroll', calculateTooltipPosition, true)
     window.addEventListener('resize', calculateTooltipPosition)
   } else {
@@ -417,8 +572,46 @@ onUnmounted(() => {
   window.removeEventListener('resize', calculateTooltipPosition)
 })
 
-// Load runes if not already loaded
+// Reset build function
+const resetBuild = () => {
+  buildStore.createNewBuild()
+  // Sauvegarder le build vide
+  buildStore.saveBuild()
+}
+
+// Persistance automatique - sauvegarder à chaque modification
+watch(
+  () => buildStore.currentBuild,
+  newBuild => {
+    if (newBuild) {
+      // Sauvegarder automatiquement dans localStorage
+      const buildData = JSON.stringify(newBuild)
+      localStorage.setItem('lelanation_current_build', buildData)
+    }
+  },
+  { deep: true }
+)
+
+// Charger le build sauvegardé au montage
 onMounted(() => {
+  // Charger depuis localStorage
+  try {
+    const saved = localStorage.getItem('lelanation_current_build')
+    if (saved) {
+      const build = JSON.parse(saved) as Build
+      buildStore.setCurrentBuild(build)
+    } else if (!buildStore.currentBuild) {
+      // Créer un nouveau build si aucun n'existe
+      buildStore.createNewBuild()
+    }
+  } catch (error) {
+    // Failed to load saved build - create new one
+    if (!buildStore.currentBuild) {
+      buildStore.createNewBuild()
+    }
+  }
+
+  // Load runes if not already loaded
   if (runesStore.runePaths.length === 0) {
     runesStore.loadRunes()
   }
@@ -427,21 +620,429 @@ onMounted(() => {
 
 <style scoped>
 .build-card {
-  width: 293.9px;
-  height: 405px;
+  position: relative;
+  width: 300px;
+  height: 450px;
+  background: var(--gradient-primary);
+  background-attachment: fixed;
+  border: 2px solid var(--color-gold-300);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-beaufort, ui-sans-serif, system-ui, sans-serif);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
-.champion-image {
-  width: 57.75px;
-  height: 57.75px;
+.build-version {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
-.champion-image:not(img) {
+.reset-button {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-gold-300);
+  border-radius: 4px;
+  color: var(--color-gold-300);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
 }
 
+.reset-button:hover {
+  background: rgba(0, 0, 0, 0.5);
+  transform: rotate(180deg);
+}
+
+/* Champion Section */
+.champion-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.champion-portrait-container {
+  width: 72px;
+  height: 72px;
+  position: relative;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+/* Losange doré (cadre) */
+.champion-portrait-border {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  border: 3px solid var(--color-gold-300);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Image légèrement plus petite, coupée en losange à l'intérieur du cadre */
+.champion-portrait {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 88%;
+  height: 88%;
+  transform: translate(-50%, -50%);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  object-fit: cover;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.champion-portrait-placeholder {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 88%;
+  height: 88%;
+  transform: translate(-50%, -50%);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--color-gold-300);
+  opacity: 0.3;
+}
+
+.champion-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.champion-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-light);
+  text-align: center;
+  margin: 0 0 8px 0;
+  letter-spacing: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.separator-line {
+  width: 100%;
+  height: 1px;
+  background: var(--color-gold-300);
+  opacity: 0.8;
+  margin: 8px 0;
+}
+
+.summoner-spells-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.summoner-spell-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.summoner-spell-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+/* Runes Section */
+.runes-section {
+  margin: 8px 0;
+  position: relative;
+  padding-right: 40px; /* espace réservé pour la colonne de shards à droite */
+}
+
+.runes-container {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.keystone-container {
+  flex-shrink: 0;
+}
+
+.keystone-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.keystone-placeholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.runes-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.primary-runes-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.primary-rune-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.primary-rune-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.shards-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.shard-icon-small {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+/* Colonne de shards à droite, dans la même zone que les runes */
+.shards-strip {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.shard-icon-strip {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.shard-placeholder {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.secondary-runes-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.secondary-path-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.secondary-path-placeholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.secondary-rune-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.secondary-rune-placeholder {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+/* Items Section */
+.items-section {
+  margin: 8px 0;
+  padding-left: 10px; /* Même espacement que les skills à droite */
+}
+
+.starting-items-row {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+  padding-left: 0;
+  /* Centrer par rapport à un path de 3 items (32px * 3 + 14px * 2 flèches = 124px) */
+  /* Starting items = 32px * 2 + 6px gap = 70px, donc offset = (124 - 70) / 2 = 27px */
+  margin-left: 27px;
+}
+
+.core-items-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.items-path {
+  display: flex;
+  align-items: center;
+  gap: 6px; /* Même gap que les starting items */
+  justify-content: flex-start;
+}
+
+.item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.item-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.arrow-right {
+  color: var(--color-gold-300);
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* Skill Order Section */
+.skill-order-section {
+  position: absolute;
+  right: 20px; /* Décalé de 20px du bord droit */
+  top: 300px; /* Descendu pour s'aligner avec les items */
+}
+
+.skill-order-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* Même gap que les items */
+  align-items: center;
+}
+
+.skill-order-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.skill-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--color-gold-300);
+  object-fit: cover;
+}
+
+.skill-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px dashed var(--color-gold-300);
+  background: rgba(255, 255, 255, 0.05);
+  opacity: 0.3;
+}
+
+.skill-key {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--color-gold-300);
+  font-size: 10px;
+  font-weight: bold;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.arrow-down {
+  color: var(--color-gold-300);
+  font-size: 8px;
+  font-weight: bold;
+  margin-top: 1px;
+  line-height: 1;
+}
+
+/* Footer */
+.build-footer {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Tooltip styles (same as before) */
 .tooltip-box {
   width: min(680px, calc(100vw - 2rem));
   max-width: min(680px, calc(100vw - 2rem));
@@ -660,91 +1261,5 @@ onMounted(() => {
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.7);
   line-height: 1.4;
-}
-
-.build-selections {
-  margin-top: 1rem;
-}
-
-.primary-runes-display,
-.secondary-runes-display {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.primary-path-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  border: 2px solid rgb(var(--rgb-accent));
-  object-fit: cover;
-}
-
-.secondary-path-icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--rgb-accent));
-  object-fit: cover;
-}
-
-.primary-runes-grid,
-.secondary-runes-grid {
-  display: flex;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-}
-
-.primary-rune-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--rgb-accent));
-  object-fit: cover;
-}
-
-.secondary-rune-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--rgb-accent));
-  object-fit: cover;
-}
-
-.summoner-spells-display {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.summoner-spells-grid {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.summoner-spell-icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 4px;
-  border: 1px solid rgb(var(--rgb-accent));
-  object-fit: cover;
-}
-
-.shards-display {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.shards-grid {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.shard-icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 4px;
-  border: 1px solid rgb(var(--rgb-accent));
-  object-fit: cover;
 }
 </style>
