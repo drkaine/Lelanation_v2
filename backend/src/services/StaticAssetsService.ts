@@ -8,6 +8,14 @@ import { FileManager } from '../utils/fileManager.js'
 
 const execAsync = promisify(exec)
 
+interface ItemData {
+  [key: string]: any
+}
+
+interface ItemJson {
+  data: ItemData
+}
+
 /**
  * Service to copy game data and images to frontend public directory
  * This allows the frontend to serve static assets directly (faster, more scalable)
@@ -144,7 +152,82 @@ export class StaticAssetsService {
   }
 
   /**
+   * Filter items using the same logic as DataDragonService.fetchItems()
+   * Excludes items from excluded-items.json and applies standard filters
+   */
+  private async filterItems(
+    items: ItemData,
+    excludedItemIds: Set<string>
+  ): Promise<ItemData> {
+    // Items to exclude from selection (by name - legacy filter)
+    const FILTERED_ITEMS = [
+      'Oracle Lens',
+      'Farsight Alteration',
+      'Stealth Ward',
+      'Your Cut',
+      'Ardent Censer',
+      "Mikael's Blessing",
+      'Redemption',
+      "Staff of Flowing Water",
+      "Shurelya's Battlesong",
+      'Moonstone Renewer',
+      'Chemtech Putrifier',
+    ]
+
+    const filteredItems: ItemData = {}
+    const seenNames = new Set<string>()
+
+    for (const [itemId, item] of Object.entries(items)) {
+      const itemData = item as any
+
+      // Skip if item ID is in excluded list
+      if (excludedItemIds.has(itemId)) {
+        continue
+      }
+
+      if (
+        itemData.maps?.['11'] === true &&
+        itemData.gold?.purchasable === true &&
+        itemData.gold?.total > 0 &&
+        !FILTERED_ITEMS.includes(itemData.name)
+      ) {
+        // Deduplicate by name
+        if (!seenNames.has(itemData.name)) {
+          seenNames.add(itemData.name)
+          filteredItems[itemId] = item
+        }
+      }
+    }
+
+    return filteredItems
+  }
+
+  /**
+   * Load excluded items from excluded-items.json
+   */
+  private async loadExcludedItems(): Promise<Set<string>> {
+    const excludedItemsPath = join(process.cwd(), 'data', 'excluded-items.json')
+    const excludedItemsResult = await FileManager.readJson<{
+      excludedIds: string[]
+    }>(excludedItemsPath)
+
+    if (excludedItemsResult.isOk()) {
+      const excludedIds = excludedItemsResult.unwrap().excludedIds
+      console.log(
+        `[StaticAssets] Loaded ${excludedIds.length} excluded item IDs from excluded-items.json`
+      )
+      return new Set(excludedIds)
+    } else {
+      console.warn(
+        `[StaticAssets] Could not load excluded-items.json: ${excludedItemsResult.unwrapErr().message}. Continuing without exclusion list.`
+      )
+      return new Set<string>()
+    }
+  }
+
+  /**
    * Copy game data JSON files to frontend public directory
+   * Filters item.json to exclude items from excluded-items.json
    */
   async copyGameDataToFrontend(
     version: string,
@@ -153,6 +236,9 @@ export class StaticAssetsService {
     let copied = 0
 
     try {
+      // Load excluded items once for all languages
+      const excludedItemIds = await this.loadExcludedItems()
+
       const frontendDataDir = join(this.frontendPublicDir, 'data', 'game', version)
 
       for (const language of languages) {
@@ -178,10 +264,39 @@ export class StaticAssetsService {
             continue
           }
 
-          // Copy file
-          const content = await fs.readFile(sourcePath, 'utf-8')
-          await fs.writeFile(targetPath, content, 'utf-8')
-          copied++
+          // For item.json, filter items before copying
+          if (file === 'item.json') {
+            const content = await fs.readFile(sourcePath, 'utf-8')
+            const itemJson: ItemJson = JSON.parse(content)
+
+            if (itemJson.data && typeof itemJson.data === 'object') {
+              // Filter items
+              const filteredItems = await this.filterItems(itemJson.data, excludedItemIds)
+              
+              // Write filtered items
+              const filteredContent = JSON.stringify(
+                { data: filteredItems },
+                null,
+                2
+              )
+              await fs.writeFile(targetPath, filteredContent, 'utf-8')
+              
+              console.log(
+                `[StaticAssets] Filtered item.json: ${Object.keys(filteredItems).length} items (excluded ${excludedItemIds.size} by ID)`
+              )
+              copied++
+            } else {
+              console.warn(`[StaticAssets] Invalid item.json structure in ${sourcePath}`)
+              // Copy as-is if structure is invalid
+              await fs.writeFile(targetPath, content, 'utf-8')
+              copied++
+            }
+          } else {
+            // Copy other files as-is
+            const content = await fs.readFile(sourcePath, 'utf-8')
+            await fs.writeFile(targetPath, content, 'utf-8')
+            copied++
+          }
         }
       }
 

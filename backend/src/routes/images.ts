@@ -17,12 +17,11 @@ const imagesDir = join(process.cwd(), 'data', 'images')
  *   /api/images/16.1.1/rune/runes/8005.png
  *   /api/images/16.1.1/champion-spell/Aatrox/AatroxQ.png
  */
-router.get('/:version/:type/*', async (req, res) => {
+router.get('/:version/:type/:filename(*)', async (req, res) => {
   try {
     const { version, type } = req.params
-    // Get the wildcard path (everything after /type/)
-    // Express stores wildcard matches in req.params[0] but TypeScript doesn't know about it
-    const filename = (req.params as any)[0] || ''
+    // Express stores wildcard parameter with the exact key name
+    const filename = (req.params as Record<string, string>)['filename(*)'] || ''
 
     // Validate type
     const validTypes = ['champion', 'item', 'spell', 'rune', 'champion-spell']

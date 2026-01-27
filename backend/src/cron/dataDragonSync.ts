@@ -17,7 +17,7 @@ export function setupDataDragonSync(): void {
   const cronStatus = new CronStatusService()
   const staticAssets = new StaticAssetsService()
 
-  // Schedule daily sync at 02:00
+  // Schedule daily sync at 02:00 UTC
   cron.schedule('0 2 * * *', async () => {
     const startTime = new Date()
     console.log('[Cron] Starting Data Dragon synchronization...')
@@ -185,7 +185,9 @@ export function setupDataDragonSync(): void {
       `Game data synchronized and static assets copied to frontend`,
       successContext
     )
+  }, {
+    timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] Data Dragon sync scheduled: Daily at 02:00')
+  console.log('[Cron] Data Dragon sync scheduled: Daily at 02:00 UTC')
 }

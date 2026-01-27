@@ -100,7 +100,9 @@ export function setupCommunityDragonSync(): void {
         successContext
       )
     }
+  }, {
+    timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] Community Dragon sync scheduled: Daily at 03:00')
+  console.log('[Cron] Community Dragon sync scheduled: Daily at 03:00 UTC')
 }

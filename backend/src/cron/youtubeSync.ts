@@ -146,7 +146,9 @@ export function setupYouTubeSync(): void {
       `YouTube videos synchronized and static assets copied to frontend`,
       successContext
     )
+  }, {
+    timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] YouTube sync scheduled: Daily at 03:00')
+  console.log('[Cron] YouTube sync scheduled: Daily at 03:00 UTC')
 }

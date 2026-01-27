@@ -214,9 +214,103 @@ const filteredItems = computed<Item[]>(() => {
   return filtered
 })
 
+// Item category types for sorting
+type ItemCategory = 'starter' | 'boots' | 'basic' | 'epic' | 'legendary' | 'other'
+
+// Get item category for sorting
+const getItemCategory = (item: Item): ItemCategory => {
+  // Starter items - identified by ID and name patterns
+  const starterItemIds = new Set([
+    '1054', // Bouclier de Doran
+    '1055', // Lame de Doran
+    '1056', // Anneau de Doran
+    '1082', // Seau noir (Relic Shield)
+    '1083', // Abatteur (Cull)
+    '3070', // Larme de la déesse
+    '3865', // Atlas
+    '3866', // Faucheuse (Sickle)
+    '3867', // Fragment (Shard)
+    '3869', // Épée de voleur (Spellthief's Edge)
+    '3870', // Fragment (Shard)
+    '3871', // Fragment (Shard)
+    '3876', // Fragment (Shard)
+    '3877', // Fragment (Shard)
+  ])
+
+  const starterNamePatterns = [
+    'seau',
+    'anneau de doran',
+    'lame de doran',
+    'bouclier de doran',
+    'larme de la déesse',
+    'cull',
+    'abatteur',
+    'atlas',
+    'épée de voleur',
+    'faucheuse',
+    'fragment',
+  ]
+
+  if (starterItemIds.has(item.id)) {
+    return 'starter'
+  }
+
+  const itemNameLower = item.name.toLowerCase()
+  if (starterNamePatterns.some(pattern => itemNameLower.includes(pattern))) {
+    return 'starter'
+  }
+
+  // Boots - item 1001 and items that build from 1001
+  if (item.id === '1001' || (item.from && item.from.includes('1001'))) {
+    return 'boots'
+  }
+
+  // Basic items - no from array or empty from
+  if (!item.from || item.from.length === 0) {
+    return 'basic'
+  }
+
+  // Epic items - have from AND into with at least 1 element
+  if (item.from && item.from.length > 0 && item.into && item.into.length > 0) {
+    return 'epic'
+  }
+
+  // Legendary items - have from but no into (or empty into)
+  if (item.from && item.from.length > 0 && (!item.into || item.into.length === 0)) {
+    return 'legendary'
+  }
+
+  return 'other'
+}
+
+// Category order for sorting
+const categoryOrder: Record<ItemCategory, number> = {
+  starter: 1,
+  boots: 2,
+  basic: 3,
+  epic: 4,
+  legendary: 5,
+  other: 6,
+}
+
 // All items for display (filtered ones in color, others in grayscale)
+// Sorted by category, then by name within each category
 const allItems = computed(() => {
-  return itemsStore.items
+  const items = [...itemsStore.items]
+
+  return items.sort((a, b) => {
+    const categoryA = getItemCategory(a)
+    const categoryB = getItemCategory(b)
+
+    // First sort by category
+    const categoryDiff = categoryOrder[categoryA] - categoryOrder[categoryB]
+    if (categoryDiff !== 0) {
+      return categoryDiff
+    }
+
+    // Then sort by name within the same category
+    return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+  })
 })
 
 // Check if item matches current filters
