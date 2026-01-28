@@ -138,6 +138,14 @@
     "goldEfficiency": "Gold Efficiency (%)",
     "goldCost": "Gold Cost",
     "disclaimer": "Calculations are based on official data and wiki formulas, but may contain errors"
+  },
+  "skills": {
+    "key": {
+      "Q": "Q",
+      "W": "W",
+      "E": "E",
+      "R": "R"
+    }
   }
 }
 

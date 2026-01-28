@@ -280,6 +280,9 @@ export interface SkillOrder {
 export interface Build {
   id: string
   name: string
+  author?: string
+  description?: string
+  visibility?: 'public' | 'private'
   champion: Champion | null
   items: Item[]
   runes: RuneSelection | null

@@ -138,6 +138,14 @@
     "goldEfficiency": "Efficacité or (%)",
     "goldCost": "Coût en or",
     "disclaimer": "Les calculs sont basés sur les données officielles et les formules du wiki, mais peuvent posséder des erreurs"
+  },
+  "skills": {
+    "key": {
+      "Q": "A",
+      "W": "Z",
+      "E": "E",
+      "R": "R"
+    }
   }
 }
 

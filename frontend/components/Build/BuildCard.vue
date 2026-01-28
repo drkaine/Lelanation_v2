@@ -37,6 +37,7 @@
               :src="getSpellImageUrl(version, spell.image.full)"
               :alt="spell.name"
               class="summoner-spell-icon"
+              :title="spell?.name || ''"
             />
           </template>
           <div
@@ -60,6 +61,7 @@
               :src="getRuneIconById(keystoneRuneId)"
               alt="Keystone"
               class="keystone-icon"
+              :title="keystoneRuneId ? getRuneNameById(keystoneRuneId) || 'Rune' : ''"
             />
             <div v-else class="keystone-placeholder"></div>
           </div>
@@ -74,6 +76,7 @@
                 :src="getRuneIconById(runeId)"
                 :alt="`Rune ${index + 1}`"
                 class="primary-rune-icon"
+                :title="runeId ? getRuneNameById(runeId) || 'Rune' : ''"
               />
               <div
                 v-for="n in 3 - primaryRunesRow.length"
@@ -90,6 +93,7 @@
                 :src="secondaryPathIcon"
                 :alt="secondaryPathName"
                 class="secondary-path-icon"
+                :title="secondaryPathName || 'Secondary Path'"
               />
               <div v-else class="secondary-path-placeholder"></div>
               <!-- Runes secondaires -->
@@ -99,6 +103,7 @@
                 :src="getRuneIconById(runeId)"
                 :alt="`Secondary Rune ${index + 1}`"
                 class="secondary-rune-icon"
+                :title="runeId ? getRuneNameById(runeId) || 'Rune' : ''"
               />
               <div
                 v-for="n in 2 - filteredSecondaryRuneIds.length"
@@ -117,6 +122,7 @@
             :src="getShardIconById(shardId)"
             :alt="`Shard ${index + 1}`"
             class="shard-icon-strip"
+            :title="shardId ? getShardNameById(shardId) || 'Shard' : ''"
           />
           <div
             v-for="n in 3 - filteredShardIds.length"
@@ -138,6 +144,7 @@
               :src="getItemImageUrl(version, item.image.full)"
               :alt="item.name"
               class="item-icon"
+              :title="item?.name || 'Item'"
             />
           </div>
           <div
@@ -154,6 +161,7 @@
               :src="getItemImageUrl(version, bootsItems[0].image.full)"
               :alt="bootsItems[0].name"
               class="boots-icon-single"
+              :title="bootsItems[0]?.name || 'Boots'"
             />
 
             <!-- Deux paires de bottes : image recomposée en deux moitiés -->
@@ -161,10 +169,12 @@
               <div
                 class="boots-item-split boots-item-left"
                 :style="getBootBackgroundStyle(bootsItems[0])"
+                :title="bootsItems[0]?.name || 'Boots'"
               ></div>
               <div
                 class="boots-item-split boots-item-right"
                 :style="getBootBackgroundStyle(bootsItems[1])"
+                :title="bootsItems[1]?.name || 'Boots'"
               ></div>
             </template>
 
@@ -182,6 +192,7 @@
                   :src="getItemImageUrl(version, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
+                  :title="item?.name || 'Item'"
                 />
               </div>
               <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
@@ -206,6 +217,7 @@
                   :src="getItemImageUrl(version, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
+                  :title="item?.name || 'Item'"
                 />
               </div>
               <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
@@ -238,8 +250,11 @@
               "
               :alt="ability.name"
               class="skill-icon"
+              :title="ability.name"
             />
-            <span class="skill-key">{{ ability.key }}</span>
+            <span class="skill-key">
+              {{ t(`skills.key.${ability.key}`) }}
+            </span>
             <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
           </div>
           <div
@@ -383,6 +398,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import {
@@ -399,6 +415,7 @@ import type { Build, Item } from '~/types/build'
 
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
+const { t } = useI18n()
 
 const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
@@ -601,46 +618,61 @@ const filteredSecondaryRuneIds = computed(() => {
   ].filter(id => id && id !== 0)
 })
 
+// Internal helper to find a rune object by ID in currently loaded paths
+const findRuneById = (runeId: number) => {
+  const paths = [primaryPath.value, secondaryPath.value].filter(
+    Boolean
+  ) as (typeof primaryPath.value)[]
+  for (const path of paths) {
+    for (const slot of path!.slots) {
+      for (const rune of slot.runes) {
+        if (rune.id === runeId) {
+          return rune
+        }
+      }
+    }
+  }
+  return null
+}
+
 // Get rune icon by ID
 const getRuneIconById = (runeId: number): string => {
   if (!primaryPath.value && !secondaryPath.value) {
     return ''
   }
 
-  if (primaryPath.value) {
-    for (const slot of primaryPath.value.slots) {
-      for (const rune of slot.runes) {
-        if (rune.id === runeId) {
-          return getRuneImageUrl(version.value, rune.icon)
-        }
-      }
-    }
-  }
+  const rune = findRuneById(runeId)
+  return rune ? getRuneImageUrl(version.value, rune.icon) : ''
+}
 
-  if (secondaryPath.value) {
-    for (const slot of secondaryPath.value.slots) {
-      for (const rune of slot.runes) {
-        if (rune.id === runeId) {
-          return getRuneImageUrl(version.value, rune.icon)
-        }
-      }
-    }
-  }
+const getRuneNameById = (runeId: number): string => {
+  const rune = findRuneById(runeId)
+  return rune ? rune.name : ''
+}
 
-  return ''
+// Shards metadata (icon + label)
+const shardInfo: Record<
+  number,
+  {
+    icon: string
+    name: string
+  }
+> = {
+  5008: { icon: '/icons/shards/adaptative.png', name: 'Force adaptative' },
+  5005: { icon: '/icons/shards/speed.png', name: 'Vitesse d’attaque' },
+  5007: { icon: '/icons/shards/cdr.png', name: 'Hâte de compétence' },
+  5001: { icon: '/icons/shards/hp.png', name: 'PV' },
+  5002: { icon: '/icons/shards/growth.png', name: 'Armure' },
+  5003: { icon: '/icons/shards/tenacity.png', name: 'Résistance magique' },
 }
 
 // Get shard icon by ID
 const getShardIconById = (shardId: number): string => {
-  const shardMap: Record<number, string> = {
-    5008: '/icons/shards/adaptative.png',
-    5005: '/icons/shards/speed.png',
-    5007: '/icons/shards/cdr.png',
-    5001: '/icons/shards/hp.png',
-    5002: '/icons/shards/growth.png',
-    5003: '/icons/shards/tenacity.png',
-  }
-  return shardMap[shardId] || '/icons/shards/adaptative.png'
+  return shardInfo[shardId]?.icon || '/icons/shards/adaptative.png'
+}
+
+const getShardNameById = (shardId: number): string => {
+  return shardInfo[shardId]?.name || ''
 }
 
 const filteredShardIds = computed(() => {

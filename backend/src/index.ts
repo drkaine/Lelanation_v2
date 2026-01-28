@@ -6,6 +6,7 @@ import syncRoutes from './routes/sync.js'
 import gameDataRoutes from './routes/gameData.js'
 import youtubeRoutes from './routes/youtube.js'
 import sharedBuildsRoutes from './routes/sharedBuilds.js'
+import buildsRoutes from './routes/builds.js'
 import adminRoutes from './routes/admin.js'
 import imageRoutes from './routes/images.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
@@ -40,6 +41,7 @@ app.use('/api/sync', syncRoutes)
 app.use('/api/game-data', gameDataRoutes)
 app.use('/api/youtube', youtubeRoutes)
 app.use('/api/shared-builds', sharedBuildsRoutes)
+app.use('/api/builds', buildsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/images', imageRoutes)
 

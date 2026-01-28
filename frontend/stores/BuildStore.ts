@@ -155,6 +155,9 @@ export const useBuildStore = defineStore('build', {
       this.currentBuild = {
         id: crypto.randomUUID(),
         name: 'New Build',
+        author: '',
+        description: '',
+        visibility: 'public',
         champion: null,
         items: [],
         runes: null,
@@ -260,6 +263,27 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    setAuthor(author: string) {
+      if (this.currentBuild) {
+        this.currentBuild.author = author
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    setDescription(description: string) {
+      if (this.currentBuild) {
+        this.currentBuild.description = description
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    setVisibility(visibility: 'public' | 'private') {
+      if (this.currentBuild) {
+        this.currentBuild.visibility = visibility
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
     recalculateStats() {
       if (!this.currentBuild || !this.currentBuild.champion) {
         this.calculatedStats = null
@@ -299,9 +323,9 @@ export const useBuildStore = defineStore('build', {
         if (!versionStore.currentVersion) {
           await versionStore.loadCurrentVersion()
         }
-        this.currentBuild.gameVersion = versionStore.currentVersion || '14.1.1'
+        this.currentBuild.gameVersion = versionStore.currentVersion || '16.2.1'
 
-        // Save to localStorage
+        // 1) Sauvegarde locale (localStorage) pour l'UX rapide
         const savedBuilds = this.getSavedBuilds()
         const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
 
@@ -310,8 +334,38 @@ export const useBuildStore = defineStore('build', {
         } else {
           savedBuilds.push(this.currentBuild)
         }
-
         localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+
+        // 2) Sauvegarde fichier JSON côté serveur (dans le front) via l'API
+        //    -> best effort seulement : si l'API est down (502 en prod),
+        //       on NE casse PAS la sauvegarde locale.
+        try {
+          const { apiUrl } = await import('~/utils/apiUrl')
+          const response = await fetch(apiUrl('/api/builds'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(this.currentBuild),
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            // Mettre à jour l'ID si le backend en a généré un (cas import ou ancien build)
+            if (result.id && !this.currentBuild.id) {
+              this.currentBuild.id = result.id
+            }
+          } else {
+            // En prod actuellement on a un 502 -> on ignore pour garder le site statique
+            // et on s'appuie sur localStorage + éventuel traitement offline.
+            // eslint-disable-next-line no-console
+            console.warn('Build saved locally but failed to save JSON on server.', response.status)
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('Build saved locally but API /api/builds is unreachable.', e)
+        }
+
         this.status = 'success'
         this.error = null
         return true

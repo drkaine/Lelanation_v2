@@ -24,6 +24,8 @@ export function getVersionUrl(): string {
 
 /**
  * Get static image URL
+ * Uses static files from frontend public directory
+ * Falls back to API if static files are not available
  * Example: /images/game/16.1.1/champion/Aatrox.png
  */
 export function getStaticImageUrl(
@@ -32,6 +34,9 @@ export function getStaticImageUrl(
   filename: string,
   subPath?: string
 ): string {
+  // Use static files from frontend public directory
+  // Images should be copied from backend to frontend/public/images/game/ during sync
+  // If images are not available, they will fail to load and can be handled by onerror handlers
   if (subPath) {
     return `/images/game/${version}/${type}/${subPath}/${filename}`
   }
