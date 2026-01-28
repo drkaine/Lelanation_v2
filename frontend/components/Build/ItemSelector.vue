@@ -58,7 +58,7 @@
             >
               <button
                 class="item"
-                :disabled="!isSelected(item) && availableSlots >= 9"
+                :disabled="!isSelected(item) && availableSlots >= 9 && !isBootsItem(item)"
                 @click="toggleItem(item)"
               >
                 <img
@@ -215,8 +215,8 @@ const filteredItems = computed<Item[]>(() => {
   if (selectedTags.value.length > 0) {
     filtered = filtered.filter((item: Item) => {
       if (!item.tags || item.tags.length === 0) return false
-      // Item must have at least one of the selected tags
-      return selectedTags.value.some(tag => item.tags!.includes(tag))
+      // L'item doit contenir TOUS les tags sélectionnés (ET logique)
+      return selectedTags.value.every(tag => item.tags!.includes(tag))
     })
   }
 
@@ -342,6 +342,14 @@ const getItemCategory = (item: Item): ItemCategory => {
     return 'basic'
   }
 
+  // Manual overrides for items dont classification (design choice, non Data-Dragon)
+  const forcedLegendaryIds = new Set([
+    '2526', // Diadème des murmures (doit être légendaire)
+  ])
+  if (forcedLegendaryIds.has(item.id)) {
+    return 'legendary'
+  }
+
   // Epic items - have from AND into with at least 1 element
   if (item.from && item.from.length > 0 && item.into && item.into.length > 0) {
     return 'epic'
@@ -463,7 +471,8 @@ const isItemFiltered = (item: Item): boolean => {
     if (!item.tags || item.tags.length === 0) {
       matchesTags = false
     } else {
-      matchesTags = selectedTags.value.some(tag => item.tags!.includes(tag))
+      // L'item doit contenir TOUS les tags sélectionnés (ET logique)
+      matchesTags = selectedTags.value.every(tag => item.tags!.includes(tag))
     }
   }
 

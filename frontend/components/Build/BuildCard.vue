@@ -148,20 +148,26 @@
 
           <!-- Boots slot (always shown) -->
           <div class="boots-slot">
-            <div v-if="bootsItems[0]" class="boots-item boots-item-left">
-              <img
-                :src="getItemImageUrl(version, bootsItems[0].image.full)"
-                :alt="bootsItems[0].name"
-                class="boots-icon"
-              />
-            </div>
-            <div v-if="bootsItems[1]" class="boots-item boots-item-right">
-              <img
-                :src="getItemImageUrl(version, bootsItems[1].image.full)"
-                :alt="bootsItems[1].name"
-                class="boots-icon"
-              />
-            </div>
+            <!-- Une seule paire de bottes : icône complète -->
+            <img
+              v-if="bootsItems.length === 1 && bootsItems[0]"
+              :src="getItemImageUrl(version, bootsItems[0].image.full)"
+              :alt="bootsItems[0].name"
+              class="boots-icon-single"
+            />
+
+            <!-- Deux paires de bottes : image recomposée en deux moitiés -->
+            <template v-else-if="bootsItems.length >= 2">
+              <div
+                class="boots-item-split boots-item-left"
+                :style="getBootBackgroundStyle(bootsItems[0])"
+              ></div>
+              <div
+                class="boots-item-split boots-item-right"
+                :style="getBootBackgroundStyle(bootsItems[1])"
+              ></div>
+            </template>
+
             <div v-if="bootsItems.length === 0" class="item-placeholder"></div>
           </div>
         </div>
@@ -418,10 +424,31 @@ const dragIndex = ref<number | null>(null)
 
 // Helper to check if item is boots
 const isBootsItem = (item: Item): boolean => {
+  // Signal principal : tag "Boots"
   if (item.tags && item.tags.includes('Boots')) return true
-  if (item.id === '1001') return true
-  if (!item.from || item.from.length === 0) return false
-  return item.from.includes('1001')
+
+  // Ensemble des IDs de bottes (cohérent avec ItemSelector)
+  const bootIds = new Set([
+    '1001', // Bottes
+    '3005', // Bottes du vigilant
+    '3006', // Jambières du berzerker
+    '3009', // Bottes de célérité
+    '3010', // Bottes de lucidité spéciales
+    '3020', // Chaussures du sorcier
+    '3047', // Coques en acier renforcé
+    '3111', // Sandales de mercure
+    '3117', // Bottes de mobilité
+    '3158', // Bottes de lucidité
+  ])
+
+  if (bootIds.has(item.id)) return true
+
+  // Les upgrades comme "Jambières de métal" héritent d'une botte dans `from`
+  if (item.from && item.from.some(parentId => bootIds.has(parentId))) {
+    return true
+  }
+
+  return false
 }
 
 // Starting items (2 premiers - starter items only)
@@ -743,6 +770,13 @@ const onDragEnd = () => {
 
 const resetItemsOnly = () => {
   buildStore.setItems([])
+}
+
+const getBootBackgroundStyle = (item?: Item | null) => {
+  if (!item) return {}
+  return {
+    backgroundImage: `url(${getItemImageUrl(version.value, item.image.full)})`,
+  }
 }
 
 // Persistance automatique - sauvegarder à chaque modification
@@ -1117,44 +1151,36 @@ onMounted(() => {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.boots-item {
+.boots-icon-single {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.boots-item-split {
   position: absolute;
   top: 0;
   width: 50%;
   height: 100%;
-  overflow: hidden;
   cursor: pointer;
   transition: opacity 0.2s;
+  background-size: 32px 32px;
+  background-repeat: no-repeat;
 }
 
-.boots-item:hover {
+.boots-item-split:hover {
   opacity: 0.7;
 }
 
 .boots-item-left {
   left: 0;
+  background-position: left center;
 }
 
 .boots-item-right {
   right: 0;
-}
-
-.boots-icon {
-  width: 64px;
-  height: 32px;
-  object-fit: cover;
-  display: block;
-  position: absolute;
-}
-
-.boots-item-left .boots-icon {
-  left: 0;
-  clip-path: inset(0 32px 0 0);
-}
-
-.boots-item-right .boots-icon {
-  right: 0;
-  clip-path: inset(0 0 0 32px);
+  background-position: right center;
 }
 
 /* Items manager (below card) */

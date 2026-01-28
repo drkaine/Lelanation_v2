@@ -50,14 +50,6 @@
           {{ buildStore.status === 'loading' ? 'Saving...' : 'Save Build' }}
         </button>
       </div>
-
-      <!-- Success Message -->
-      <div
-        v-if="buildStore.status === 'success'"
-        class="mt-6 rounded border border-success bg-success/20 p-4"
-      >
-        <p class="font-bold text-success">Build saved successfully!</p>
-      </div>
     </div>
   </div>
 </template>
