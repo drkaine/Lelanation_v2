@@ -248,18 +248,19 @@ const getItemCategory = (item: Item): ItemCategory => {
     '1082', // Seau noir (Relic Shield)
     '1083', // Abatteur (Cull)
     '3070', // Larme de la déesse
+    // Support starting lines (base items uniquement)
     '3865', // Atlas
-    '3866', // Faucheuse (Sickle)
-    '3867', // Fragment (Shard)
-    '3869', // Épée de voleur (Spellthief's Edge)
-    '3870', // Fragment (Shard)
-    '3871', // Fragment (Shard)
-    '3876', // Fragment (Shard)
-    '3877', // Fragment (Shard)
+    '3866', // Base support item (sickle line)
+    '3867', // Base support item (spellthief/other line)
+    // Jungle pets (bébé chardent, bébé sautes-nuage, bébé ixamandre)
+    '1101', // Scorchclaw Pup / Bébé chardent
+    '1102', // Gustwalker Hatchling / Bébé sautes-nuage
+    '1103', // Mosstomper Seedling / Bébé ixamandre
   ])
 
   const starterNamePatterns = [
-    'seau',
+    'seau', // couvre "sceau noir" (Dark Seal FR)
+    'dark seal',
     'anneau de doran',
     'lame de doran',
     'bouclier de doran',
@@ -281,14 +282,32 @@ const getItemCategory = (item: Item): ItemCategory => {
     return 'starter'
   }
 
-  // Boots - item 1001 and ALL items that build from 1001 (must be checked before basic/epic/legendary)
-  // This includes all boot upgrades, even if they have other properties
-  if (item.id === '1001') {
+  // Boots - base boots and ALL items that build from any boot
+  // Preferred signal: Riot tag "Boots" (covers most upgrades)
+  if (item.tags && item.tags.includes('Boots')) {
     return 'boots'
   }
 
-  // Check if item builds from boots (1001) - this takes priority over other categories
-  if (item.from && item.from.includes('1001')) {
+  // Known boot IDs (basic boots + all tier-2 boots)
+  const bootIds = new Set([
+    '1001', // Bottes
+    '3005', // Bottes du vigilant
+    '3006', // Jambières du berzerker
+    '3009', // Sandales de mercure
+    '3010', // Bottes de lucidité
+    '3020', // Chaussures du sorcier
+    '3047', // Coques en acier renforcé
+    '3111', // Sandales de mercure
+    '3117', // Bottes de mobilité
+    '3158', // Bottes de lucidité (CDR)
+  ])
+
+  if (bootIds.has(item.id)) {
+    return 'boots'
+  }
+
+  // Check if item directly builds from any boot (covers items like "Jambières de métal")
+  if (item.from && item.from.some(parentId => bootIds.has(parentId))) {
     return 'boots'
   }
 
@@ -347,7 +366,7 @@ const categoryOrder: Record<ItemCategory, number> = {
 }
 
 // All items for display (filtered ones in color, others in grayscale)
-// Sorted by category, then by name within each category
+// Sorted by category, then by price within each category
 const allItems = computed(() => {
   const items = [...itemsStore.items]
 
@@ -361,10 +380,10 @@ const allItems = computed(() => {
       return categoryDiff
     }
 
-    // Then sort by price (descending) within the same category
+    // Then sort by price (ascending) within the same category
     const priceA = a.gold?.total || 0
     const priceB = b.gold?.total || 0
-    return priceB - priceA // Descending order (most expensive first)
+    return priceA - priceB // Ascending order (cheapest first)
   })
 })
 

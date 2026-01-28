@@ -1,348 +1,373 @@
 <template>
-  <div class="build-card">
-    <!-- Version (top right) -->
-    <div class="build-version">{{ version }}</div>
+  <div class="build-card-wrapper">
+    <div class="build-card">
+      <!-- Version (top right) -->
+      <div class="build-version">{{ version }}</div>
 
-    <!-- Bouton Reset -->
-    <button class="reset-button" title="Réinitialiser la sheet" @click="resetBuild">
-      <Icon name="mdi:refresh" size="16px" />
-    </button>
+      <!-- Bouton Reset -->
+      <button class="reset-button" title="Réinitialiser la sheet" @click="resetBuild">
+        <Icon name="mdi:refresh" size="16px" />
+      </button>
 
-    <!-- Champion Section (Top) - Toujours visible -->
-    <div class="champion-section">
-      <!-- Portrait en forme de losange -->
-      <div class="champion-portrait-container">
-        <img
-          v-if="selectedChampion"
-          :src="getChampionImageUrl(version, selectedChampion.image.full)"
-          :alt="selectedChampion.name"
-          class="champion-portrait"
-          @mouseenter="showTooltip = true"
-          @mouseleave="showTooltip = false"
-        />
-        <div v-else class="champion-portrait-placeholder"></div>
-      </div>
-
-      <!-- Nom du champion en majuscules -->
-      <h2 class="champion-name">
-        {{ selectedChampion ? selectedChampion.name.toUpperCase() : '' }}
-      </h2>
-
-      <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
-      <div class="summoner-spells-row">
-        <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
+      <!-- Champion Section (Top) - Toujours visible -->
+      <div class="champion-section">
+        <!-- Portrait en forme de losange -->
+        <div class="champion-portrait-container">
           <img
-            v-if="spell"
-            :src="getSpellImageUrl(version, spell.image.full)"
-            :alt="spell.name"
-            class="summoner-spell-icon"
-          />
-        </template>
-        <div
-          v-for="n in 2 - filteredSummonerSpells.length"
-          :key="`empty-${n}`"
-          class="summoner-spell-placeholder"
-        ></div>
-      </div>
-
-      <!-- Ligne de séparation -->
-      <div class="separator-line"></div>
-    </div>
-
-    <!-- Runes Section - Toujours visible -->
-    <div class="runes-section">
-      <div class="runes-container">
-        <!-- Keystone (grande icône à gauche) - première rune principale -->
-        <div class="keystone-container">
-          <img
-            v-if="keystoneRuneId"
-            :src="getRuneIconById(keystoneRuneId)"
-            alt="Keystone"
-            class="keystone-icon"
-          />
-          <div v-else class="keystone-placeholder"></div>
-        </div>
-
-        <!-- Runes principales et secondaires -->
-        <div class="runes-main">
-          <!-- Runes principales (3 horizontales) - Toujours visible -->
-          <div class="primary-runes-row">
-            <img
-              v-for="(runeId, index) in primaryRunesRow"
-              :key="index"
-              :src="getRuneIconById(runeId)"
-              :alt="`Rune ${index + 1}`"
-              class="primary-rune-icon"
-            />
-            <div
-              v-for="n in 3 - primaryRunesRow.length"
-              :key="`empty-primary-${n}`"
-              class="primary-rune-placeholder"
-            ></div>
-          </div>
-
-          <!-- Runes secondaires (path icon + 2 runes horizontales en dessous) - Toujours visible -->
-          <div class="secondary-runes-row">
-            <!-- Icône du path secondaire -->
-            <img
-              v-if="secondaryPathIcon"
-              :src="secondaryPathIcon"
-              :alt="secondaryPathName"
-              class="secondary-path-icon"
-            />
-            <div v-else class="secondary-path-placeholder"></div>
-            <!-- Runes secondaires -->
-            <img
-              v-for="(runeId, index) in filteredSecondaryRuneIds"
-              :key="index"
-              :src="getRuneIconById(runeId)"
-              :alt="`Secondary Rune ${index + 1}`"
-              class="secondary-rune-icon"
-            />
-            <div
-              v-for="n in 2 - filteredSecondaryRuneIds.length"
-              :key="`empty-secondary-${n}`"
-              class="secondary-rune-placeholder"
-            ></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Shards collés au bord droit, dans la même zone que les runes - Toujours visible -->
-      <div class="shards-strip">
-        <img
-          v-for="(shardId, index) in filteredShardIds"
-          :key="index"
-          :src="getShardIconById(shardId)"
-          :alt="`Shard ${index + 1}`"
-          class="shard-icon-strip"
-        />
-        <div
-          v-for="n in 3 - filteredShardIds.length"
-          :key="`empty-shard-${n}`"
-          class="shard-placeholder"
-        ></div>
-      </div>
-    </div>
-
-    <!-- Séparateur entre runes et items - Toujours visible -->
-    <div class="separator-line"></div>
-
-    <!-- Items Section - Toujours visible -->
-    <div class="items-section">
-      <!-- Starting Items (2 premiers) - Toujours visible -->
-      <div class="starting-items-row">
-        <div
-          v-for="item in startingItems"
-          :key="`starter-${item.id}`"
-          class="item-wrapper"
-          title="Cliquer pour supprimer"
-          @click="removeItem(item.id)"
-        >
-          <img
-            :src="getItemImageUrl(version, item.image.full)"
-            :alt="item.name"
-            class="item-icon"
-          />
-        </div>
-        <div
-          v-for="n in 2 - startingItems.length"
-          :key="`empty-starting-${n}`"
-          class="item-placeholder"
-        ></div>
-      </div>
-
-      <!-- Boots (shared slot) -->
-      <div v-if="bootsItems.length > 0" class="boots-row">
-        <div class="boots-slot">
-          <div
-            v-if="bootsItems[0]"
-            class="boots-item boots-item-left"
-            title="Cliquer pour supprimer"
-            @click="removeItem(bootsItems[0].id)"
-          >
-            <img
-              :src="getItemImageUrl(version, bootsItems[0].image.full)"
-              :alt="bootsItems[0].name"
-              class="boots-icon"
-            />
-          </div>
-          <div
-            v-if="bootsItems[1]"
-            class="boots-item boots-item-right"
-            title="Cliquer pour supprimer"
-            @click="removeItem(bootsItems[1].id)"
-          >
-            <img
-              :src="getItemImageUrl(version, bootsItems[1].image.full)"
-              :alt="bootsItems[1].name"
-              class="boots-icon"
-            />
-          </div>
-          <div v-if="bootsItems.length === 0" class="item-placeholder"></div>
-        </div>
-      </div>
-
-      <!-- Core Items Paths - Toujours visible -->
-      <div class="core-items-paths">
-        <!-- Path 1 (3 items avec flèches) -->
-        <div class="items-path">
-          <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
-            <div class="item-wrapper" title="Cliquer pour supprimer" @click="removeItem(item.id)">
-              <img
-                :src="getItemImageUrl(version, item.image.full)"
-                :alt="item.name"
-                class="item-icon"
-              />
-            </div>
-            <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
-          </template>
-          <template
-            v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath1.length)).fill(0)"
-            :key="`empty-path1-${idx}`"
-          >
-            <span v-if="idx === 0 && coreItemsPath1.length > 0" class="arrow-right">→</span>
-            <div class="item-placeholder"></div>
-            <span v-if="idx < Math.max(0, 3 - coreItemsPath1.length - 1)" class="arrow-right"
-              >→</span
-            >
-          </template>
-        </div>
-
-        <!-- Path 2 (3 items avec flèches) -->
-        <div class="items-path">
-          <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
-            <div class="item-wrapper" title="Cliquer pour supprimer" @click="removeItem(item.id)">
-              <img
-                :src="getItemImageUrl(version, item.image.full)"
-                :alt="item.name"
-                class="item-icon"
-              />
-            </div>
-            <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
-          </template>
-          <template
-            v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath2.length)).fill(0)"
-            :key="`empty-path2-${idx}`"
-          >
-            <span v-if="idx === 0 && coreItemsPath2.length > 0" class="arrow-right">→</span>
-            <div class="item-placeholder"></div>
-            <span v-if="idx < Math.max(0, 3 - coreItemsPath2.length - 1)" class="arrow-right"
-              >→</span
-            >
-          </template>
-        </div>
-      </div>
-    </div>
-
-    <!-- Skill Order Section (Right) - Toujours visible -->
-    <div class="skill-order-section">
-      <div class="skill-order-vertical">
-        <div v-for="(ability, index) in skillOrderAbilities" :key="index" class="skill-order-item">
-          <img
-            :src="getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)"
-            :alt="ability.name"
-            class="skill-icon"
-          />
-          <span class="skill-key">{{ ability.key }}</span>
-          <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
-        </div>
-        <div
-          v-for="n in 3 - skillOrderAbilities.length"
-          :key="`empty-skill-${n}`"
-          class="skill-order-item"
-        >
-          <div class="skill-placeholder"></div>
-          <span v-if="n < 3 - skillOrderAbilities.length" class="arrow-down">↓</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Lelanation (bottom left) -->
-    <div class="build-footer">lelanation.fr</div>
-
-    <!-- Tooltip -->
-    <div
-      v-if="showTooltip && selectedChampion"
-      ref="tooltipRef"
-      class="tooltip-box absolute z-50 rounded-lg border border-accent bg-background shadow-lg"
-      :class="tooltipPositionClass"
-    >
-      <!-- Tooltip content (same as before) -->
-      <div class="tooltip-top">
-        <div class="tooltip-present">
-          <img
+            v-if="selectedChampion"
             :src="getChampionImageUrl(version, selectedChampion.image.full)"
             :alt="selectedChampion.name"
-            class="tooltip-champion-image"
+            class="champion-portrait"
+            @mouseenter="showTooltip = true"
+            @mouseleave="showTooltip = false"
           />
-          <div class="tooltip-text">
-            <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
-            <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
+          <div v-else class="champion-portrait-placeholder"></div>
+        </div>
+
+        <!-- Nom du champion en majuscules -->
+        <h2 class="champion-name">
+          {{ selectedChampion ? selectedChampion.name.toUpperCase() : '' }}
+        </h2>
+
+        <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
+        <div class="summoner-spells-row">
+          <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
+            <img
+              v-if="spell"
+              :src="getSpellImageUrl(version, spell.image.full)"
+              :alt="spell.name"
+              class="summoner-spell-icon"
+            />
+          </template>
+          <div
+            v-for="n in 2 - filteredSummonerSpells.length"
+            :key="`empty-${n}`"
+            class="summoner-spell-placeholder"
+          ></div>
+        </div>
+
+        <!-- Ligne de séparation -->
+        <div class="separator-line"></div>
+      </div>
+
+      <!-- Runes Section - Toujours visible -->
+      <div class="runes-section">
+        <div class="runes-container">
+          <!-- Keystone (grande icône à gauche) - première rune principale -->
+          <div class="keystone-container">
+            <img
+              v-if="keystoneRuneId"
+              :src="getRuneIconById(keystoneRuneId)"
+              alt="Keystone"
+              class="keystone-icon"
+            />
+            <div v-else class="keystone-placeholder"></div>
+          </div>
+
+          <!-- Runes principales et secondaires -->
+          <div class="runes-main">
+            <!-- Runes principales (3 horizontales) - Toujours visible -->
+            <div class="primary-runes-row">
+              <img
+                v-for="(runeId, index) in primaryRunesRow"
+                :key="index"
+                :src="getRuneIconById(runeId)"
+                :alt="`Rune ${index + 1}`"
+                class="primary-rune-icon"
+              />
+              <div
+                v-for="n in 3 - primaryRunesRow.length"
+                :key="`empty-primary-${n}`"
+                class="primary-rune-placeholder"
+              ></div>
+            </div>
+
+            <!-- Runes secondaires (path icon + 2 runes horizontales en dessous) - Toujours visible -->
+            <div class="secondary-runes-row">
+              <!-- Icône du path secondaire -->
+              <img
+                v-if="secondaryPathIcon"
+                :src="secondaryPathIcon"
+                :alt="secondaryPathName"
+                class="secondary-path-icon"
+              />
+              <div v-else class="secondary-path-placeholder"></div>
+              <!-- Runes secondaires -->
+              <img
+                v-for="(runeId, index) in filteredSecondaryRuneIds"
+                :key="index"
+                :src="getRuneIconById(runeId)"
+                :alt="`Secondary Rune ${index + 1}`"
+                class="secondary-rune-icon"
+              />
+              <div
+                v-for="n in 2 - filteredSecondaryRuneIds.length"
+                :key="`empty-secondary-${n}`"
+                class="secondary-rune-placeholder"
+              ></div>
+            </div>
           </div>
         </div>
-        <div
-          v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
-          class="tooltip-tags-container"
-        >
-          <div class="tooltip-tags">
-            {{ translatedTags }}
+
+        <!-- Shards collés au bord droit, dans la même zone que les runes - Toujours visible -->
+        <div class="shards-strip">
+          <img
+            v-for="(shardId, index) in filteredShardIds"
+            :key="index"
+            :src="getShardIconById(shardId)"
+            :alt="`Shard ${index + 1}`"
+            class="shard-icon-strip"
+          />
+          <div
+            v-for="n in 3 - filteredShardIds.length"
+            :key="`empty-shard-${n}`"
+            class="shard-placeholder"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Séparateur entre runes et items - Toujours visible -->
+      <div class="separator-line"></div>
+
+      <!-- Items Section - Toujours visible -->
+      <div class="items-section">
+        <!-- Starting Items (2) + Boots slot (1) - Toujours visible -->
+        <div class="starting-items-row">
+          <div v-for="item in startingItems" :key="`starter-${item.id}`" class="item-wrapper">
+            <img
+              :src="getItemImageUrl(version, item.image.full)"
+              :alt="item.name"
+              class="item-icon"
+            />
+          </div>
+          <div
+            v-for="n in 2 - startingItems.length"
+            :key="`empty-starting-${n}`"
+            class="item-placeholder"
+          ></div>
+
+          <!-- Boots slot (always shown) -->
+          <div class="boots-slot">
+            <div v-if="bootsItems[0]" class="boots-item boots-item-left">
+              <img
+                :src="getItemImageUrl(version, bootsItems[0].image.full)"
+                :alt="bootsItems[0].name"
+                class="boots-icon"
+              />
+            </div>
+            <div v-if="bootsItems[1]" class="boots-item boots-item-right">
+              <img
+                :src="getItemImageUrl(version, bootsItems[1].image.full)"
+                :alt="bootsItems[1].name"
+                class="boots-icon"
+              />
+            </div>
+            <div v-if="bootsItems.length === 0" class="item-placeholder"></div>
+          </div>
+        </div>
+
+        <!-- Core Items Paths - Toujours visible -->
+        <div class="core-items-paths">
+          <!-- Path 1 (3 items avec flèches) -->
+          <div class="items-path">
+            <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
+              <div class="item-wrapper">
+                <img
+                  :src="getItemImageUrl(version, item.image.full)"
+                  :alt="item.name"
+                  class="item-icon"
+                />
+              </div>
+              <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
+            </template>
+            <template
+              v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath1.length)).fill(0)"
+              :key="`empty-path1-${idx}`"
+            >
+              <span v-if="idx === 0 && coreItemsPath1.length > 0" class="arrow-right">→</span>
+              <div class="item-placeholder"></div>
+              <span v-if="idx < Math.max(0, 3 - coreItemsPath1.length - 1)" class="arrow-right"
+                >→</span
+              >
+            </template>
+          </div>
+
+          <!-- Path 2 (3 items avec flèches) -->
+          <div class="items-path">
+            <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
+              <div class="item-wrapper">
+                <img
+                  :src="getItemImageUrl(version, item.image.full)"
+                  :alt="item.name"
+                  class="item-icon"
+                />
+              </div>
+              <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
+            </template>
+            <template
+              v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath2.length)).fill(0)"
+              :key="`empty-path2-${idx}`"
+            >
+              <span v-if="idx === 0 && coreItemsPath2.length > 0" class="arrow-right">→</span>
+              <div class="item-placeholder"></div>
+              <span v-if="idx < Math.max(0, 3 - coreItemsPath2.length - 1)" class="arrow-right"
+                >→</span
+              >
+            </template>
           </div>
         </div>
       </div>
 
-      <hr class="tooltip-separator" />
-
-      <div class="tooltip-body">
-        <div class="tooltip-spells">
+      <!-- Skill Order Section (Right) - Toujours visible -->
+      <div class="skill-order-section">
+        <div class="skill-order-vertical">
           <div
-            v-if="selectedChampion.passive && selectedChampion.passive.image"
-            class="tooltip-spell"
+            v-for="(ability, index) in skillOrderAbilities"
+            :key="index"
+            class="skill-order-item"
           >
-            <div class="tooltip-spell-img-container">
-              <img
-                :src="getChampionPassiveImageUrl(version, selectedChampion.passive.image.full)"
-                :alt="selectedChampion.passive.name"
-                class="tooltip-spell-img"
-              />
-            </div>
-            <div class="tooltip-spell-content">
-              <div class="tooltip-spell-name">Passive: {{ selectedChampion.passive.name }}</div>
-              <div
-                v-if="formattedPassive"
-                class="tooltip-spell-description"
-                v-html="formattedPassive"
-              />
+            <img
+              :src="
+                getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
+              "
+              :alt="ability.name"
+              class="skill-icon"
+            />
+            <span class="skill-key">{{ ability.key }}</span>
+            <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
+          </div>
+          <div
+            v-for="n in 3 - skillOrderAbilities.length"
+            :key="`empty-skill-${n}`"
+            class="skill-order-item"
+          >
+            <div class="skill-placeholder"></div>
+            <span v-if="n < 3 - skillOrderAbilities.length" class="arrow-down">↓</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lelanation (bottom left) -->
+      <div class="build-footer">lelanation.fr</div>
+
+      <!-- Tooltip -->
+      <div
+        v-if="showTooltip && selectedChampion"
+        ref="tooltipRef"
+        class="tooltip-box absolute z-50 rounded-lg border border-accent bg-background shadow-lg"
+        :class="tooltipPositionClass"
+      >
+        <!-- Tooltip content (same as before) -->
+        <div class="tooltip-top">
+          <div class="tooltip-present">
+            <img
+              :src="getChampionImageUrl(version, selectedChampion.image.full)"
+              :alt="selectedChampion.name"
+              class="tooltip-champion-image"
+            />
+            <div class="tooltip-text">
+              <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
+              <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
             </div>
           </div>
-
           <div
-            v-for="(spell, index) in formattedSpells"
-            :key="spell.id || index"
-            class="tooltip-spell"
+            v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
+            class="tooltip-tags-container"
           >
-            <div v-if="spell && spell.image" class="tooltip-spell-wrapper">
-              <div
-                class="tooltip-spell-img-container"
-                :data-spell-key="['Q', 'W', 'E', 'R'][index]"
-              >
+            <div class="tooltip-tags">
+              {{ translatedTags }}
+            </div>
+          </div>
+        </div>
+
+        <hr class="tooltip-separator" />
+
+        <div class="tooltip-body">
+          <div class="tooltip-spells">
+            <div
+              v-if="selectedChampion.passive && selectedChampion.passive.image"
+              class="tooltip-spell"
+            >
+              <div class="tooltip-spell-img-container">
                 <img
-                  :src="getChampionSpellImageUrl(version, selectedChampion.id, spell.image.full)"
-                  :alt="spell.name"
+                  :src="getChampionPassiveImageUrl(version, selectedChampion.passive.image.full)"
+                  :alt="selectedChampion.passive.name"
                   class="tooltip-spell-img"
                 />
               </div>
               <div class="tooltip-spell-content">
-                <div class="tooltip-spell-name">
-                  {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
-                </div>
+                <div class="tooltip-spell-name">Passive: {{ selectedChampion.passive.name }}</div>
                 <div
-                  v-if="spell.description"
+                  v-if="formattedPassive"
                   class="tooltip-spell-description"
-                  v-html="spell.description"
+                  v-html="formattedPassive"
                 />
               </div>
             </div>
+
+            <div
+              v-for="(spell, index) in formattedSpells"
+              :key="spell.id || index"
+              class="tooltip-spell"
+            >
+              <div v-if="spell && spell.image" class="tooltip-spell-wrapper">
+                <div
+                  class="tooltip-spell-img-container"
+                  :data-spell-key="['Q', 'W', 'E', 'R'][index]"
+                >
+                  <img
+                    :src="getChampionSpellImageUrl(version, selectedChampion.id, spell.image.full)"
+                    :alt="spell.name"
+                    class="tooltip-spell-img"
+                  />
+                </div>
+                <div class="tooltip-spell-content">
+                  <div class="tooltip-spell-name">
+                    {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
+                  </div>
+                  <div
+                    v-if="spell.description"
+                    class="tooltip-spell-description"
+                    v-html="spell.description"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Items Manager (under the card): drag & drop, remove & reset items -->
+    <div class="items-manager">
+      <div class="items-manager-header">
+        <div class="items-manager-title">Gestion des items</div>
+        <button class="items-reset-btn" type="button" @click="resetItemsOnly">Reset items</button>
+      </div>
+      <div v-if="buildItems.length === 0" class="items-manager-empty">Aucun item</div>
+      <div v-else class="items-manager-list">
+        <div
+          v-for="(item, index) in buildItems"
+          :key="`${item.id}-${index}`"
+          class="items-manager-row"
+          draggable="true"
+          @dragstart="onDragStart(index)"
+          @dragover.prevent
+          @drop="onDrop(index)"
+          @dragend="onDragEnd"
+        >
+          <img
+            :src="getItemImageUrl(version, item.image.full)"
+            :alt="item.name"
+            class="items-manager-icon"
+          />
+          <div class="items-manager-name">
+            <span class="items-manager-index">{{ index + 1 }}.</span>
+            {{ item.name }}
+          </div>
+          <div class="items-manager-actions">
+            <button class="items-manager-btn danger" type="button" @click="removeItemById(item.id)">
+              ✕
+            </button>
           </div>
         </div>
       </div>
@@ -389,9 +414,11 @@ const filteredSummonerSpells = computed(() => {
 })
 const selectedShards = computed(() => buildStore.currentBuild?.shards)
 const buildItems = computed(() => buildStore.currentBuild?.items || [])
+const dragIndex = ref<number | null>(null)
 
 // Helper to check if item is boots
 const isBootsItem = (item: Item): boolean => {
+  if (item.tags && item.tags.includes('Boots')) return true
   if (item.id === '1001') return true
   if (!item.from || item.from.length === 0) return false
   return item.from.includes('1001')
@@ -689,8 +716,33 @@ const resetBuild = () => {
   buildStore.saveBuild()
 }
 
-const removeItem = (itemId: string) => {
+const removeItemById = (itemId: string) => {
   buildStore.removeItem(itemId)
+}
+
+const onDragStart = (index: number) => {
+  dragIndex.value = index
+}
+
+const onDrop = (index: number) => {
+  if (dragIndex.value === null || dragIndex.value === index) return
+  const items = buildItems.value.slice() as Item[]
+  const moved = items.splice(dragIndex.value, 1)[0]
+  if (!moved) {
+    dragIndex.value = null
+    return
+  }
+  items.splice(index, 0, moved)
+  buildStore.setItems(items)
+  dragIndex.value = null
+}
+
+const onDragEnd = () => {
+  dragIndex.value = null
+}
+
+const resetItemsOnly = () => {
+  buildStore.setItems([])
 }
 
 // Persistance automatique - sauvegarder à chaque modification
@@ -733,6 +785,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.build-card-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .build-card {
   position: relative;
   width: 300px;
@@ -1039,6 +1097,7 @@ onMounted(() => {
 
 .starting-items-row {
   display: flex;
+  align-items: center;
   gap: 6px;
   justify-content: flex-start;
   margin-bottom: 8px;
@@ -1048,21 +1107,14 @@ onMounted(() => {
   margin-left: 27px;
 }
 
-.boots-row {
-  display: flex;
-  justify-content: flex-start;
-  margin-bottom: 8px;
-  margin-left: 27px;
-}
-
 .boots-slot {
   width: 32px;
   height: 32px;
   position: relative;
   border-radius: 4px;
-  border: 1px solid var(--color-gold-300);
+  border: 1px dashed var(--color-gold-300);
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .boots-item {
@@ -1103,6 +1155,106 @@ onMounted(() => {
 .boots-item-right .boots-icon {
   right: 0;
   clip-path: inset(0 0 0 32px);
+}
+
+/* Items manager (below card) */
+.items-manager {
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.items-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.items-manager-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+  opacity: 0.9;
+}
+
+.items-reset-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+
+.items-reset-btn:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.items-manager-empty {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.items-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.items-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.items-manager-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.items-manager-name {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.items-manager-index {
+  opacity: 0.7;
+  margin-right: 4px;
+}
+
+.items-manager-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.items-manager-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.items-manager-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.items-manager-btn.danger {
+  border-color: rgba(255, 80, 80, 0.35);
+  background: rgba(255, 80, 80, 0.12);
 }
 
 .core-items-paths {

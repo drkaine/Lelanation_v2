@@ -112,7 +112,16 @@ export const useItemsStore = defineStore('items', {
         }
 
         // Transform Data Dragon format to our format
-        this.items = Object.values(data.data || {}) as Item[]
+        // Keys of data.data are the string IDs ("1001", "2055", "1101", etc.)
+        // We need to inject them into each item so categorisation and selection
+        // logic can reliably use item.id across all languages.
+        const rawItems = data?.data || {}
+        this.items = Object.entries(rawItems).map(([id, item]) => {
+          return {
+            ...(item as Item),
+            id,
+          }
+        })
         this.status = 'success'
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to load items'

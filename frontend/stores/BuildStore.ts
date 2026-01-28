@@ -34,8 +34,8 @@ export const useBuildStore = defineStore('build', {
       // Check champion
       if (!build.champion) return false
 
-      // Check items (at least 1, up to 6)
-      if (!build.items || build.items.length === 0 || build.items.length > 6) {
+      // Check items (at least 1). UI supports: 2 starters + 2 boots + 6 core = up to 10.
+      if (!build.items || build.items.length === 0 || build.items.length > 10) {
         return false
       }
 
@@ -82,8 +82,8 @@ export const useBuildStore = defineStore('build', {
 
       if (!build.items || build.items.length === 0) {
         errors.push('At least one item must be selected')
-      } else if (build.items.length > 6) {
-        errors.push('Maximum 6 items allowed')
+      } else if (build.items.length > 10) {
+        errors.push('Maximum 10 items allowed')
       }
 
       if (!build.runes) {
@@ -185,7 +185,7 @@ export const useBuildStore = defineStore('build', {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild && this.currentBuild.items.length < 6) {
+      if (this.currentBuild && this.currentBuild.items.length < 10) {
         this.currentBuild.items.push(item)
         this.currentBuild.updatedAt = new Date().toISOString()
         this.recalculateStats()
