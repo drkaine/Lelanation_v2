@@ -8,7 +8,7 @@ const imagesDir = join(process.cwd(), 'data', 'images')
 
 /**
  * Serve images from local storage
- * GET /api/images/:version/:type/:filename(*)
+ * GET /api/images/:version/:type/{*filename} (reste du chemin = filename)
  * Examples:
  *   /api/images/16.1.1/champion/Aatrox.png
  *   /api/images/16.1.1/item/1001.png
@@ -16,12 +16,19 @@ const imagesDir = join(process.cwd(), 'data', 'images')
  *   /api/images/16.1.1/rune/paths/8000.png
  *   /api/images/16.1.1/rune/runes/8005.png
  *   /api/images/16.1.1/champion-spell/Aatrox/AatroxQ.png
+ *
+ * Avec Express 5 / path-to-regexp v8, les wildcards anonymes (`*`) ne sont
+ * plus supportés. Il faut utiliser un paramètre nommé avec la syntaxe
+ * `{*nom}`. Ici : `{*filename}`.
  */
-router.get('/:version/:type/:filename(*)', async (req, res) => {
+router.get('/:version/:type/{*filename}', async (req, res) => {
   try {
     const { version, type } = req.params
-    // Express stores wildcard parameter with the exact key name
-    const filename = (req.params as Record<string, string>)['filename(*)'] || ''
+    // Avec la syntaxe `{*filename}`, Express expose `req.params.filename`
+    // qui peut être un string ou un tableau de segments.
+    const rawFilename = (req.params as any).filename as string | string[] | undefined
+    const filename =
+      Array.isArray(rawFilename) ? rawFilename.join('/') : rawFilename || ''
 
     // Validate type
     const validTypes = ['champion', 'item', 'spell', 'rune', 'champion-spell']
