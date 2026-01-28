@@ -38,34 +38,46 @@
     </div>
 
     <div v-else class="items-list mt-2">
-      <div
-        v-for="item in allItems"
-        :key="item.id"
-        class="item-wrapper"
-        :class="{ hide: !isFiltered(item) }"
-        @mouseenter="handleItemHover(item, $event)"
-        @mouseleave="hoveredItem = null"
-        @mousemove="handleMouseMove($event)"
-      >
-        <button
-          class="item"
-          :disabled="!isSelected(item) && selectedItemsCount >= 6"
-          @click="toggleItem(item)"
-        >
-          <img
-            :src="getItemImageUrl(version, item.image.full)"
-            :alt="item.name"
-            loading="lazy"
-            width="64"
-            height="64"
-            decoding="async"
-          />
-          <div v-if="isSelected(item)" class="item-selected">
-            <span class="item-index">{{ getItemIndex(item) }}</span>
+      <template v-for="category in categoryOrderKeys" :key="category">
+        <div v-if="itemsByCategory[category]?.length > 0" class="category-section">
+          <button class="category-header" @click="toggleCategory(category)">
+            <span>{{ getCategoryLabel(category) }}</span>
+            <span class="category-toggle-icon" :class="{ collapsed: !isCategoryVisible(category) }">
+              ▼
+            </span>
+          </button>
+          <div class="category-items" :class="{ collapsed: !isCategoryVisible(category) }">
+            <div
+              v-for="item in itemsByCategory[category]"
+              :key="item.id"
+              class="item-wrapper"
+              :class="{ hide: !isItemFiltered(item) }"
+              @mouseenter="handleItemHover(item, $event)"
+              @mouseleave="hoveredItem = null"
+              @mousemove="handleMouseMove($event)"
+            >
+              <button
+                class="item"
+                :disabled="!isSelected(item) && availableSlots >= 9"
+                @click="toggleItem(item)"
+              >
+                <img
+                  :src="getItemImageUrl(version, item.image.full)"
+                  :alt="item.name"
+                  loading="lazy"
+                  width="32"
+                  height="32"
+                  decoding="async"
+                />
+                <div v-if="isSelected(item)" class="item-selected">
+                  <span class="item-index">{{ getItemIndex(item) }}</span>
+                </div>
+              </button>
+              <div class="item-price">{{ item.gold?.total || 0 }}</div>
+            </div>
           </div>
-        </button>
-        <div class="item-price">{{ item.gold?.total || 0 }}</div>
-      </div>
+        </div>
+      </template>
 
       <!-- Tooltip -->
       <div
@@ -117,7 +129,6 @@ import type { Item } from '~/types/build'
 
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { useDebounce } from '~/composables/useDebounce'
 
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
@@ -126,86 +137,96 @@ const { t } = useI18n()
 // Translate tag name - map actual item tags to translation keys
 const translateTag = (tag: string): string => {
   const tagMap: Record<string, string> = {
-    Boots: 'boots',
-    Starter: 'starter',
-    Basic: 'basic',
-    Epic: 'epic',
-    Legendary: 'legendary',
-    Consumable: 'consumable',
+    Damage: 'damage', // Attack Damage
     CriticalStrike: 'critical-strike',
     AttackSpeed: 'attack-speed',
     OnHit: 'on-hit',
-    ArmorPenetration: 'armor-penetration',
+    ArmorPenetration: 'armor-penetration', // Armor Pen
     AbilityPower: 'ability-power',
     Mana: 'mana',
-    ManaRegen: 'mana-regen',
-    MagicPenetration: 'magic-penetration',
+    MagicPenetration: 'magic-penetration', // Magic Pen
     Health: 'health',
-    HealthRegen: 'health-regen',
     Armor: 'armor',
-    SpellBlock: 'spell-block',
     MagicResist: 'magic-resist',
     AbilityHaste: 'ability-haste',
-    NonbootsMovement: 'movement',
+    NonbootsMovement: 'movement', // Movement
     LifeSteal: 'life-steal',
-    SpellVamp: 'spell-vamp',
     Omnivamp: 'omnivamp',
-    Damage: 'damage',
-    Active: 'active',
-    Aura: 'aura',
-    CooldownReduction: 'ability-haste',
-    GoldPer: 'gold-per',
-    Jungle: 'jungle',
-    Lane: 'lane',
-    Slow: 'slow',
-    SpellDamage: 'spell-damage',
-    Stealth: 'stealth',
-    Tenacity: 'tenacity',
-    Trinket: 'trinket',
-    Vision: 'vision',
   }
 
-  const tagKey =
-    tagMap[tag] ||
-    tag
-      .toLowerCase()
+  const tagKey = tagMap[tag]
+  if (!tagKey) {
+    // Fallback: convert camelCase to kebab-case
+    return tag
       .replace(/([A-Z])/g, '-$1')
       .toLowerCase()
+      .replace(/^-/, '')
+  }
+
   const translation = t(`item.${tagKey}`)
-  // If translation doesn't exist, return the original tag
-  return translation !== `item.${tagKey}` ? translation : tag
+  // If translation doesn't exist, return a formatted version of the tag
+  if (translation === `item.${tagKey}`) {
+    // Format tag name for display
+    return tag
+      .replace(/([A-Z])/g, ' $1')
+      .trim()
+      .replace(/^./, str => str.toUpperCase())
+  }
+  return translation
 }
 
 const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
-const debouncedSearch = useDebounce(searchQuery, 300)
+
+// Allowed tags to display
+const allowedTags = [
+  'Damage', // Attack Damage
+  'CriticalStrike',
+  'AttackSpeed',
+  'OnHit',
+  'ArmorPenetration', // Armor Pen
+  'AbilityPower',
+  'Mana',
+  'MagicPenetration', // Magic Pen
+  'Health',
+  'Armor',
+  'MagicResist',
+  'AbilityHaste',
+  'NonbootsMovement', // Movement
+  'LifeSteal',
+  'Omnivamp',
+]
 
 const availableTags = computed(() => {
-  const tags = new Set<string>()
-  for (const item of itemsStore.items) {
-    for (const tag of item.tags) {
-      tags.add(tag)
-    }
-  }
-  return Array.from(tags).sort()
+  return allowedTags.filter(tag => {
+    // Check if at least one item has this tag
+    return itemsStore.items.some(item => item.tags && item.tags.includes(tag))
+  })
 })
 
 const filteredItems = computed<Item[]>(() => {
-  let filtered = itemsStore.items
-
-  // Filter by tags
-  if (selectedTags.value.length > 0) {
-    filtered = filtered.filter((item: Item) =>
-      selectedTags.value.some(tag => item.tags && item.tags.includes(tag))
-    )
+  if (!itemsStore.items || itemsStore.items.length === 0) {
+    return []
   }
 
-  // Filter by search query (using debounced value)
-  if (debouncedSearch.value && debouncedSearch.value.trim().length > 0) {
-    const lowerQuery = debouncedSearch.value.toLowerCase().trim()
+  let filtered = [...itemsStore.items]
+
+  // Filter by tags (if any selected)
+  if (selectedTags.value.length > 0) {
+    filtered = filtered.filter((item: Item) => {
+      if (!item.tags || item.tags.length === 0) return false
+      // Item must have at least one of the selected tags
+      return selectedTags.value.some(tag => item.tags!.includes(tag))
+    })
+  }
+
+  // Filter by search query (if any)
+  const searchTerm = searchQuery.value?.trim()
+  if (searchTerm && searchTerm.length > 0) {
+    const lowerQuery = searchTerm.toLowerCase()
     filtered = filtered.filter(
       (item: Item) =>
-        item.name.toLowerCase().includes(lowerQuery) ||
+        item.name?.toLowerCase().includes(lowerQuery) ||
         item.colloq?.toLowerCase().includes(lowerQuery) ||
         item.plaintext?.toLowerCase().includes(lowerQuery)
     )
@@ -260,12 +281,44 @@ const getItemCategory = (item: Item): ItemCategory => {
     return 'starter'
   }
 
-  // Boots - item 1001 and items that build from 1001
-  if (item.id === '1001' || (item.from && item.from.includes('1001'))) {
+  // Boots - item 1001 and ALL items that build from 1001 (must be checked before basic/epic/legendary)
+  // This includes all boot upgrades, even if they have other properties
+  if (item.id === '1001') {
     return 'boots'
   }
 
-  // Basic items - no from array or empty from
+  // Check if item builds from boots (1001) - this takes priority over other categories
+  if (item.from && item.from.includes('1001')) {
+    return 'boots'
+  }
+
+  // Consumables (potions, control ward, etc.) - check tags first
+  if (item.tags && item.tags.includes('Consumable')) {
+    // Common consumable IDs
+    const consumableIds = new Set([
+      '2003', // Health Potion
+      '2009', // Total Biscuit of Everlasting Will
+      '2010', // Total Biscuit of Rejuvenation
+      '2031', // Refillable Potion
+      '2032', // Hunter's Potion
+      '2033', // Corrupting Potion
+      '2055', // Control Ward
+      '2060', // Stealth Ward (if not excluded)
+      '2061', // Shurelya's Battlesong (if not excluded)
+      '2138', // Elixir of Iron
+      '2139', // Elixir of Sorcery
+      '2140', // Elixir of Wrath
+    ])
+    const consumablePatterns = ['potion', 'ward', 'elixir', 'biscuit']
+    if (
+      consumableIds.has(item.id) ||
+      consumablePatterns.some(pattern => item.name.toLowerCase().includes(pattern))
+    ) {
+      return 'starter'
+    }
+  }
+
+  // Basic items - no from array or empty from (but not consumables)
   if (!item.from || item.from.length === 0) {
     return 'basic'
   }
@@ -308,33 +361,132 @@ const allItems = computed(() => {
       return categoryDiff
     }
 
-    // Then sort by name within the same category
-    return a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })
+    // Then sort by price (descending) within the same category
+    const priceA = a.gold?.total || 0
+    const priceB = b.gold?.total || 0
+    return priceB - priceA // Descending order (most expensive first)
   })
 })
 
-// Check if item matches current filters
-const isFiltered = (item: Item): boolean => {
-  // If no filters, all items are "filtered" (visible in color)
-  const hasActiveFilters =
-    selectedTags.value.length > 0 ||
-    (debouncedSearch.value && debouncedSearch.value.trim().length > 0)
-
-  if (!hasActiveFilters) {
-    return true // All items visible when no filters
+// Group items by category
+const itemsByCategory = computed(() => {
+  const grouped: Record<ItemCategory, Item[]> = {
+    starter: [],
+    boots: [],
+    basic: [],
+    epic: [],
+    legendary: [],
+    other: [],
   }
 
-  // When filters are active, only show items that match
-  return filteredItems.value.some(i => i.id === item.id)
-}
+  // Use allItems which is already sorted and reactive
+  const items = allItems.value
+  for (const item of items) {
+    const category = getItemCategory(item)
+    grouped[category].push(item)
+  }
 
-const selectedItemsCount = computed(() => {
-  return buildStore.currentBuild?.items.length || 0
+  return grouped
 })
 
+// Category order keys for template iteration
+const categoryOrderKeys = computed(() => {
+  return Object.keys(categoryOrder).sort(
+    (a, b) => categoryOrder[a as ItemCategory] - categoryOrder[b as ItemCategory]
+  ) as ItemCategory[]
+})
+
+// Get category label for display
+const getCategoryLabel = (category: ItemCategory): string => {
+  const labels: Record<ItemCategory, string> = {
+    starter: t('item.starter'),
+    boots: t('item.boots'),
+    basic: t('item.basic'),
+    epic: t('item.epic'),
+    legendary: t('item.legendary'),
+    other: 'Other',
+  }
+  return labels[category] || category
+}
+
+// Category visibility state
+const categoryVisibility = ref<Record<ItemCategory, boolean>>({
+  starter: true,
+  boots: true,
+  basic: true,
+  epic: true,
+  legendary: true,
+  other: true,
+})
+
+const isCategoryVisible = (category: ItemCategory): boolean => {
+  return categoryVisibility.value[category] ?? true
+}
+
+const toggleCategory = (category: ItemCategory) => {
+  categoryVisibility.value[category] = !categoryVisibility.value[category]
+}
+
+// Check if item matches current filters
+const isItemFiltered = (item: Item): boolean => {
+  // Check if there are any active filters
+  const hasActiveFilters =
+    selectedTags.value.length > 0 || (searchQuery.value && searchQuery.value.trim().length > 0)
+
+  // If no filters, all items are visible (filtered = true)
+  if (!hasActiveFilters) {
+    return true
+  }
+
+  // Check if item matches tag filters
+  let matchesTags = true
+  if (selectedTags.value.length > 0) {
+    if (!item.tags || item.tags.length === 0) {
+      matchesTags = false
+    } else {
+      matchesTags = selectedTags.value.some(tag => item.tags!.includes(tag))
+    }
+  }
+
+  // Check if item matches search query
+  let matchesSearch = true
+  const searchTerm = searchQuery.value?.trim()
+  if (searchTerm && searchTerm.length > 0) {
+    const lowerQuery = searchTerm.toLowerCase()
+    matchesSearch =
+      item.name?.toLowerCase().includes(lowerQuery) ||
+      item.colloq?.toLowerCase().includes(lowerQuery) ||
+      item.plaintext?.toLowerCase().includes(lowerQuery) ||
+      false
+  }
+
+  // Item is filtered (visible) if it matches both tag and search filters
+  return matchesTags && matchesSearch
+}
+
+const availableSlots = computed(() => {
+  const items = buildStore.currentBuild?.items || []
+  const starterItems = items.filter(i => isStarterItem(i))
+  const bootsItems = items.filter(i => isBootsItem(i))
+  const otherItems = items.filter(i => !isStarterItem(i) && !isBootsItem(i))
+  // Count slots: starter (max 2) + boots (1 slot for up to 2 boots) + other items (max 6)
+  // Total max = 2 + 1 + 6 = 9 slots, but can have up to 10 items (2 starter + 2 boots + 6 other)
+  return starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
+})
+
+// Helper functions to check item types
+const isStarterItem = (item: Item): boolean => {
+  return getItemCategory(item) === 'starter'
+}
+
+const isBootsItem = (item: Item): boolean => {
+  return getItemCategory(item) === 'boots'
+}
+
 const isSelected = (item: Item): boolean => {
-  if (!buildStore.currentBuild?.items) return false
-  return buildStore.currentBuild.items.some(i => i.id === item.id)
+  if (!buildStore.currentBuild?.items || !item?.id) return false
+  // Compare by ID to ensure exact match (strict equality)
+  return buildStore.currentBuild.items.some(i => i && i.id === item.id)
 }
 
 const getItemIndex = (item: Item): number => {
@@ -347,9 +499,41 @@ const getItemIndex = (item: Item): number => {
 
 const toggleItem = (item: Item) => {
   if (isSelected(item)) {
+    // Remove item
     buildStore.removeItem(item.id)
-  } else if (selectedItemsCount.value < 6) {
-    buildStore.addItem(item)
+  } else {
+    // Add item with special logic
+    const currentItems = buildStore.currentBuild?.items || []
+    const starterItems = currentItems.filter(i => isStarterItem(i))
+    const bootsItems = currentItems.filter(i => isBootsItem(i))
+    const otherItems = currentItems.filter(i => !isStarterItem(i) && !isBootsItem(i))
+
+    // Check if we can add this item
+    if (isStarterItem(item)) {
+      // Max 2 starter items
+      if (starterItems.length < 2) {
+        // Insert at the beginning (positions 0-1)
+        const newItems = [...starterItems, item, ...bootsItems, ...otherItems]
+        buildStore.setItems(newItems)
+      }
+    } else if (isBootsItem(item)) {
+      // Max 2 boots (they share 1 slot, so we can have 2 boots + 5 other items = 6 slots)
+      if (bootsItems.length < 2) {
+        // Insert after starter items
+        const newItems = [...starterItems, ...bootsItems, item, ...otherItems]
+        buildStore.setItems(newItems)
+      }
+    } else {
+      // Other items: check total slots
+      // Max slots = 2 starter + 1 boots slot + 6 other = 9 slots total
+      // But can have up to 10 items: 2 starter + 2 boots + 6 other
+      const totalSlots = starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
+      if (totalSlots < 9) {
+        // Insert after starter and boots
+        const newItems = [...starterItems, ...bootsItems, ...otherItems, item]
+        buildStore.setItems(newItems)
+      }
+    }
   }
 }
 
@@ -363,7 +547,8 @@ const toggleTag = (tag: string) => {
 }
 
 const handleSearch = () => {
-  // Search is reactive via computed property
+  // Force reactivity update - search is reactive via computed property
+  // This function is called on @input but v-model already handles reactivity
 }
 
 const { version } = useGameVersion()
@@ -478,13 +663,73 @@ onMounted(() => {
 }
 
 .items-list {
-  --itemSizeButton: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+  position: relative;
+}
+
+.category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.category-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-accent));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  transition: color 0.2s ease;
+}
+
+.category-header:hover {
+  color: rgb(var(--rgb-accent) / 0.8);
+}
+
+.category-toggle-icon {
+  font-size: 0.6rem;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+
+.category-toggle-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.category-items {
+  --itemSizeButton: 32px;
   display: grid;
   grid-template-columns: repeat(auto-fit, var(--itemSizeButton));
-  place-content: center;
+  justify-content: flex-start;
   width: 100%;
   gap: 0.5rem;
-  position: relative;
+  max-height: 1000px;
+  overflow: hidden;
+  transition:
+    max-height 0.3s ease,
+    opacity 0.3s ease;
+  opacity: 1;
+}
+
+.category-items.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .item-wrapper {
@@ -669,8 +914,8 @@ onMounted(() => {
 }
 
 @media (max-width: 700px) {
-  .items-list {
-    --itemSizeButton: 54px;
+  .category-items {
+    --itemSizeButton: 28px;
   }
 }
 </style>

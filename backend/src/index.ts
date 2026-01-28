@@ -44,13 +44,22 @@ app.use('/api/admin', adminRoutes)
 app.use('/api/images', imageRoutes)
 
 // Initialize cron jobs
-setupDataDragonSync()
-setupYouTubeSync()
-setupCommunityDragonSync()
+console.log('[Server] Initializing cron jobs...')
+try {
+  setupDataDragonSync()
+  setupYouTubeSync()
+  setupCommunityDragonSync()
+  console.log('[Server] ✅ All cron jobs initialized successfully')
+} catch (error) {
+  console.error('[Server] ❌ Failed to initialize cron jobs:', error)
+  // Don't exit - server can still run without cron
+}
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Cron jobs initialized`)
+  console.log(`Current time: ${new Date().toISOString()}`)
+  console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
 })
 
 export default app

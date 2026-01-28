@@ -228,6 +228,7 @@ export class StaticAssetsService {
   /**
    * Copy game data JSON files to frontend public directory
    * Filters item.json to exclude items from excluded-items.json
+   * If backend data doesn't exist, filters the existing frontend file directly
    */
   async copyGameDataToFrontend(
     version: string,
@@ -257,16 +258,24 @@ export class StaticAssetsService {
           const sourcePath = join(sourceDir, file)
           const targetPath = join(targetDir, file)
 
-          // Check if source exists
-          const exists = await FileManager.exists(sourcePath)
-          if (!exists) {
-            console.warn(`[StaticAssets] Source file not found: ${sourcePath}`)
-            continue
-          }
-
-          // For item.json, filter items before copying
+          // For item.json, always filter (even if source is frontend file)
           if (file === 'item.json') {
-            const content = await fs.readFile(sourcePath, 'utf-8')
+            // Try backend first, fallback to frontend if backend doesn't exist
+            let itemJsonPath = sourcePath
+            const backendExists = await FileManager.exists(sourcePath)
+            if (!backendExists) {
+              // Backend data was deleted, use existing frontend file as source
+              const frontendPath = targetPath
+              const frontendExists = await FileManager.exists(frontendPath)
+              if (!frontendExists) {
+                console.warn(`[StaticAssets] Item.json not found in backend or frontend: ${sourcePath}`)
+                continue
+              }
+              itemJsonPath = frontendPath
+              console.log(`[StaticAssets] Backend data not found, filtering existing frontend file: ${itemJsonPath}`)
+            }
+
+            const content = await fs.readFile(itemJsonPath, 'utf-8')
             const itemJson: ItemJson = JSON.parse(content)
 
             if (itemJson.data && typeof itemJson.data === 'object') {
@@ -286,12 +295,19 @@ export class StaticAssetsService {
               )
               copied++
             } else {
-              console.warn(`[StaticAssets] Invalid item.json structure in ${sourcePath}`)
+              console.warn(`[StaticAssets] Invalid item.json structure in ${itemJsonPath}`)
               // Copy as-is if structure is invalid
               await fs.writeFile(targetPath, content, 'utf-8')
               copied++
             }
           } else {
+            // For other files, check if source exists
+            const exists = await FileManager.exists(sourcePath)
+            if (!exists) {
+              console.warn(`[StaticAssets] Source file not found: ${sourcePath}`)
+              continue
+            }
+
             // Copy other files as-is
             const content = await fs.readFile(sourcePath, 'utf-8')
             await fs.writeFile(targetPath, content, 'utf-8')

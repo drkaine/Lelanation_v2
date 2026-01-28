@@ -113,6 +113,12 @@ export default defineNuxtConfig({
           'Cache-Control': 'no-store, no-cache, must-revalidate',
         },
       },
+      // Legacy SW filename used by some setups
+      '/service-worker.js': {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
       '/sw.js.map': {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -125,6 +131,14 @@ export default defineNuxtConfig({
       },
       '/_robots.txt': {
         headers: {
+          'Cache-Control': 'public, max-age=86400',
+        },
+      },
+      // IMPORTANT: Nuxt Icon module serves icons via a Nuxt endpoint under /api/_nuxt_icon/**.
+      // Do NOT proxy this to the backend, otherwise users get 502s.
+      '/api/_nuxt_icon/**': {
+        headers: {
+          // Safe cache: response depends on querystring, but is static per request.
           'Cache-Control': 'public, max-age=86400',
         },
       },

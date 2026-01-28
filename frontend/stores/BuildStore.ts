@@ -200,6 +200,17 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
+    setItems(items: Item[]) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.items = items
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.recalculateStats()
+      }
+    },
+
     setRunes(runes: RuneSelection) {
       if (!this.currentBuild) {
         this.createNewBuild()

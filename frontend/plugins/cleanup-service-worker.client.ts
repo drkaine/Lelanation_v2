@@ -10,6 +10,9 @@
  */
 export default defineNuxtPlugin(() => {
   if (process.client && 'serviceWorker' in navigator) {
+    const reloadKey = 'sw_cleanup_done_v1'
+    const alreadyReloaded = window.localStorage.getItem(reloadKey) === '1'
+
     // Supprimer tous les Service Workers enregistrés
     navigator.serviceWorker
       .getRegistrations()
@@ -36,9 +39,12 @@ export default defineNuxtPlugin(() => {
       })
       .then(() => {
         console.log('[SW Cleanup] Nettoyage terminé avec succès')
-        // Recharger la page pour s'assurer que tout est propre
-        // (optionnel, décommente si nécessaire)
-        // window.location.reload()
+        // Recharger UNE FOIS pour s'assurer que l'app repart sur le bon HTML/JS.
+        // Important: évite les pages blanches chez les utilisateurs avec un cache "zombie".
+        if (!alreadyReloaded) {
+          window.localStorage.setItem(reloadKey, '1')
+          window.location.reload()
+        }
       })
       .catch(error => {
         console.error('[SW Cleanup] Erreur lors du nettoyage:', error)

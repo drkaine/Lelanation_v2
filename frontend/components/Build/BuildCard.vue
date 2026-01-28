@@ -132,13 +132,19 @@
     <div class="items-section">
       <!-- Starting Items (2 premiers) - Toujours visible -->
       <div class="starting-items-row">
-        <img
-          v-for="(item, index) in startingItems"
-          :key="index"
-          :src="getItemImageUrl(version, item.image.full)"
-          :alt="item.name"
-          class="item-icon"
-        />
+        <div
+          v-for="item in startingItems"
+          :key="`starter-${item.id}`"
+          class="item-wrapper"
+          title="Cliquer pour supprimer"
+          @click="removeItem(item.id)"
+        >
+          <img
+            :src="getItemImageUrl(version, item.image.full)"
+            :alt="item.name"
+            class="item-icon"
+          />
+        </div>
         <div
           v-for="n in 2 - startingItems.length"
           :key="`empty-starting-${n}`"
@@ -146,43 +152,84 @@
         ></div>
       </div>
 
+      <!-- Boots (shared slot) -->
+      <div v-if="bootsItems.length > 0" class="boots-row">
+        <div class="boots-slot">
+          <div
+            v-if="bootsItems[0]"
+            class="boots-item boots-item-left"
+            title="Cliquer pour supprimer"
+            @click="removeItem(bootsItems[0].id)"
+          >
+            <img
+              :src="getItemImageUrl(version, bootsItems[0].image.full)"
+              :alt="bootsItems[0].name"
+              class="boots-icon"
+            />
+          </div>
+          <div
+            v-if="bootsItems[1]"
+            class="boots-item boots-item-right"
+            title="Cliquer pour supprimer"
+            @click="removeItem(bootsItems[1].id)"
+          >
+            <img
+              :src="getItemImageUrl(version, bootsItems[1].image.full)"
+              :alt="bootsItems[1].name"
+              class="boots-icon"
+            />
+          </div>
+          <div v-if="bootsItems.length === 0" class="item-placeholder"></div>
+        </div>
+      </div>
+
       <!-- Core Items Paths - Toujours visible -->
       <div class="core-items-paths">
         <!-- Path 1 (3 items avec flèches) -->
         <div class="items-path">
-          <template v-for="(item, index) in coreItemsPath1" :key="index">
-            <img
-              :src="getItemImageUrl(version, item.image.full)"
-              :alt="item.name"
-              class="item-icon"
-            />
+          <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
+            <div class="item-wrapper" title="Cliquer pour supprimer" @click="removeItem(item.id)">
+              <img
+                :src="getItemImageUrl(version, item.image.full)"
+                :alt="item.name"
+                class="item-icon"
+              />
+            </div>
             <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
           </template>
           <template
-            v-for="(n, idx) in Array(3 - coreItemsPath1.length).fill(0)"
+            v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath1.length)).fill(0)"
             :key="`empty-path1-${idx}`"
           >
+            <span v-if="idx === 0 && coreItemsPath1.length > 0" class="arrow-right">→</span>
             <div class="item-placeholder"></div>
-            <span v-if="idx < 3 - coreItemsPath1.length - 1" class="arrow-right">→</span>
+            <span v-if="idx < Math.max(0, 3 - coreItemsPath1.length - 1)" class="arrow-right"
+              >→</span
+            >
           </template>
         </div>
 
         <!-- Path 2 (3 items avec flèches) -->
         <div class="items-path">
-          <template v-for="(item, index) in coreItemsPath2" :key="index">
-            <img
-              :src="getItemImageUrl(version, item.image.full)"
-              :alt="item.name"
-              class="item-icon"
-            />
+          <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
+            <div class="item-wrapper" title="Cliquer pour supprimer" @click="removeItem(item.id)">
+              <img
+                :src="getItemImageUrl(version, item.image.full)"
+                :alt="item.name"
+                class="item-icon"
+              />
+            </div>
             <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
           </template>
           <template
-            v-for="(n, idx) in Array(3 - coreItemsPath2.length).fill(0)"
+            v-for="(n, idx) in Array(Math.max(0, 3 - coreItemsPath2.length)).fill(0)"
             :key="`empty-path2-${idx}`"
           >
+            <span v-if="idx === 0 && coreItemsPath2.length > 0" class="arrow-right">→</span>
             <div class="item-placeholder"></div>
-            <span v-if="idx < 3 - coreItemsPath2.length - 1" class="arrow-right">→</span>
+            <span v-if="idx < Math.max(0, 3 - coreItemsPath2.length - 1)" class="arrow-right"
+              >→</span
+            >
           </template>
         </div>
       </div>
@@ -317,7 +364,7 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import type { Build } from '~/types/build'
+import type { Build, Item } from '~/types/build'
 
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
@@ -343,14 +390,78 @@ const filteredSummonerSpells = computed(() => {
 const selectedShards = computed(() => buildStore.currentBuild?.shards)
 const buildItems = computed(() => buildStore.currentBuild?.items || [])
 
-// Starting items (2 premiers)
+// Helper to check if item is boots
+const isBootsItem = (item: Item): boolean => {
+  if (item.id === '1001') return true
+  if (!item.from || item.from.length === 0) return false
+  return item.from.includes('1001')
+}
+
+// Starting items (2 premiers - starter items only)
 const startingItems = computed(() => {
-  return buildItems.value.slice(0, 2)
+  return buildItems.value
+    .filter(item => {
+      // Check if it's a starter item (not boots)
+      const itemNameLower = item.name.toLowerCase()
+      const starterPatterns = [
+        'seau',
+        'anneau de doran',
+        'lame de doran',
+        'bouclier de doran',
+        'larme de la déesse',
+        'cull',
+        'abatteur',
+        'atlas',
+        'épée de voleur',
+        'faucheuse',
+        'fragment',
+        'potion',
+        'ward',
+        'elixir',
+        'biscuit',
+      ]
+      const starterIds = [
+        '1054',
+        '1055',
+        '1056',
+        '1082',
+        '1083',
+        '3070',
+        '3865',
+        '3866',
+        '3867',
+        '3869',
+        '3870',
+        '3871',
+        '3876',
+        '3877',
+        '2003',
+        '2009',
+        '2010',
+        '2031',
+        '2032',
+        '2033',
+        '2055',
+      ]
+      return (
+        starterIds.includes(item.id) ||
+        starterPatterns.some(pattern => itemNameLower.includes(pattern)) ||
+        (item.tags && item.tags.includes('Consumable'))
+      )
+    })
+    .slice(0, 2)
 })
 
-// Core items (les items restants après les starting items, organisés en 2 chemins de 3)
+// Boots items (can have 2, they share 1 slot)
+const bootsItems = computed(() => {
+  return buildItems.value.filter(item => isBootsItem(item)).slice(0, 2)
+})
+
+// Core items (items restants après starter et boots, organisés en 2 chemins)
 const coreItems = computed(() => {
-  return buildItems.value.slice(2)
+  const starterIds = new Set(startingItems.value.map(i => i.id))
+  const bootsIds = new Set(bootsItems.value.map(i => i.id))
+  return buildItems.value.filter(item => !starterIds.has(item.id) && !bootsIds.has(item.id))
 })
 
 // Path 1 : premier chemin (jusqu'à 3 items)
@@ -576,6 +687,10 @@ const resetBuild = () => {
   buildStore.createNewBuild()
   // Sauvegarder le build vide
   buildStore.saveBuild()
+}
+
+const removeItem = (itemId: string) => {
+  buildStore.removeItem(itemId)
 }
 
 // Persistance automatique - sauvegarder à chaque modification
@@ -933,6 +1048,63 @@ onMounted(() => {
   margin-left: 27px;
 }
 
+.boots-row {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 8px;
+  margin-left: 27px;
+}
+
+.boots-slot {
+  width: 32px;
+  height: 32px;
+  position: relative;
+  border-radius: 4px;
+  border: 1px solid var(--color-gold-300);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.boots-item {
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.boots-item:hover {
+  opacity: 0.7;
+}
+
+.boots-item-left {
+  left: 0;
+}
+
+.boots-item-right {
+  right: 0;
+}
+
+.boots-icon {
+  width: 64px;
+  height: 32px;
+  object-fit: cover;
+  display: block;
+  position: absolute;
+}
+
+.boots-item-left .boots-icon {
+  left: 0;
+  clip-path: inset(0 32px 0 0);
+}
+
+.boots-item-right .boots-icon {
+  right: 0;
+  clip-path: inset(0 0 0 32px);
+}
+
 .core-items-paths {
   display: flex;
   flex-direction: column;
@@ -946,12 +1118,23 @@ onMounted(() => {
   justify-content: flex-start;
 }
 
+.item-wrapper {
+  position: relative;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.item-wrapper:hover {
+  opacity: 0.7;
+}
+
 .item-icon {
   width: 32px;
   height: 32px;
   border-radius: 4px;
   border: 1px solid var(--color-gold-300);
   object-fit: cover;
+  display: block;
 }
 
 .item-placeholder {
