@@ -685,9 +685,9 @@ onMounted(() => {
 
 .paths-container {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 2rem;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   width: 100%;
 }
@@ -697,8 +697,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 0.5rem;
   align-items: center;
-  flex: 1;
-  max-width: 50%;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Path Selection Rows */

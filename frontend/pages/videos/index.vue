@@ -45,8 +45,10 @@
 
         <!-- Filters: single responsive row (scrolls on small screens) -->
         <div class="flex justify-center">
-          <div class="no-scrollbar flex w-full max-w-5xl items-center gap-2 overflow-x-auto py-1">
-            <div class="flex flex-nowrap items-center gap-2">
+          <div
+            class="no-scrollbar flex w-full max-w-5xl flex-wrap items-center justify-center gap-2 py-1"
+          >
+            <div class="flex flex-wrap items-center justify-center gap-2">
               <button
                 v-for="opt in typeOptions"
                 :key="opt.id"
@@ -60,7 +62,7 @@
 
             <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
 
-            <div class="flex flex-nowrap items-center gap-2">
+            <div class="flex flex-wrap items-center justify-center gap-2">
               <button
                 v-for="opt in formatOptions"
                 :key="opt.id"

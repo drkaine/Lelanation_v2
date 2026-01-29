@@ -14,40 +14,46 @@
           </p>
         </div>
 
-        <div class="mb-4 grid grid-cols-3 gap-4">
+        <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
           <div
             v-for="(slot, index) in 3"
             :key="`first-${slot}`"
-            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-4"
+            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
             :class="{
               'border-accent bg-accent/10': selectedSlot === `first-${index}`,
             }"
           >
-            <span class="mb-2 text-xs font-semibold text-text">Niveau {{ index + 1 }}</span>
+            <span class="mb-1 text-xs font-semibold text-text sm:mb-2">Niveau {{ index + 1 }}</span>
             <button
               v-if="getFirstThreeUp(index)"
               :class="[
-                'flex h-16 w-16 flex-col items-center justify-center rounded border-2 transition-all',
+                'flex h-12 w-12 flex-col items-center justify-center rounded border-2 transition-all sm:h-16 sm:w-16',
                 getSkillColor(getFirstThreeUp(index)!),
               ]"
               :title="getSpellName(getFirstThreeUp(index)!)"
               @click="clearFirstThreeUp(index)"
             >
               <img
-                v-if="getSpellImage(getFirstThreeUp(index)!)"
-                :src="getSpellImageUrl(version, getSpellImage(getFirstThreeUp(index)!)!.full)"
+                v-if="getSpellImage(getFirstThreeUp(index)!) && champion"
+                :src="
+                  getChampionSpellImageUrl(
+                    version,
+                    champion.id,
+                    getSpellImage(getFirstThreeUp(index)!)!.full
+                  )
+                "
                 :alt="getSpellName(getFirstThreeUp(index)!)"
-                class="mb-1 h-10 w-10 rounded"
+                class="mb-0.5 h-6 w-6 rounded sm:mb-1 sm:h-10 sm:w-10"
               />
-              <span class="text-lg font-bold">
+              <span class="text-xs font-bold sm:text-lg">
                 {{ t(`skills.key.${getFirstThreeUp(index)}`) }}
               </span>
             </button>
             <div
               v-else
-              class="flex h-16 w-16 items-center justify-center rounded border-2 border-dashed border-text/30"
+              class="flex h-12 w-12 items-center justify-center rounded border-2 border-dashed border-text/30 sm:h-16 sm:w-16"
             >
-              <span class="text-text/30">?</span>
+              <span class="text-xs text-text/30 sm:text-base">?</span>
             </div>
           </div>
         </div>
@@ -63,40 +69,48 @@
           </p>
         </div>
 
-        <div class="mb-4 grid grid-cols-3 gap-4">
+        <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
           <div
             v-for="(slot, index) in 3"
             :key="`order-${slot}`"
-            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-4"
+            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
             :class="{
               'border-accent bg-accent/10': selectedSlot === `order-${index}`,
             }"
           >
-            <span class="mb-2 text-xs font-semibold text-text">Priorité {{ index + 1 }}</span>
+            <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
+              >Priorité {{ index + 1 }}</span
+            >
             <button
               v-if="getSkillUpOrder(index)"
               :class="[
-                'flex h-16 w-16 flex-col items-center justify-center rounded border-2 transition-all',
+                'flex h-12 w-12 flex-col items-center justify-center rounded border-2 transition-all sm:h-16 sm:w-16',
                 getSkillColor(getSkillUpOrder(index)!),
               ]"
               :title="getSpellName(getSkillUpOrder(index)!)"
               @click="clearSkillUpOrder(index)"
             >
               <img
-                v-if="getSpellImage(getSkillUpOrder(index)!)"
-                :src="getSpellImageUrl(version, getSpellImage(getSkillUpOrder(index)!)!.full)"
+                v-if="getSpellImage(getSkillUpOrder(index)!) && champion"
+                :src="
+                  getChampionSpellImageUrl(
+                    version,
+                    champion.id,
+                    getSpellImage(getSkillUpOrder(index)!)!.full
+                  )
+                "
                 :alt="getSpellName(getSkillUpOrder(index)!)"
-                class="mb-1 h-10 w-10 rounded"
+                class="mb-0.5 h-6 w-6 rounded sm:mb-1 sm:h-10 sm:w-10"
               />
-              <span class="text-lg font-bold">
+              <span class="text-xs font-bold sm:text-lg">
                 {{ t(`skills.key.${getSkillUpOrder(index)}`) }}
               </span>
             </button>
             <div
               v-else
-              class="flex h-16 w-16 items-center justify-center rounded border-2 border-dashed border-text/30"
+              class="flex h-12 w-12 items-center justify-center rounded border-2 border-dashed border-text/30 sm:h-16 sm:w-16"
             >
-              <span class="text-text/30">?</span>
+              <span class="text-xs text-text/30 sm:text-base">?</span>
             </div>
           </div>
         </div>
@@ -104,13 +118,13 @@
 
       <!-- Compétences disponibles -->
       <div class="mb-4">
-        <p class="mb-2 font-semibold text-text">Compétences disponibles</p>
-        <div class="flex gap-3">
+        <p class="mb-2 text-sm font-semibold text-text sm:text-base">Compétences disponibles</p>
+        <div class="flex flex-wrap gap-2 sm:gap-3">
           <button
             v-for="spell in availableSpells"
             :key="spell.id"
             :class="[
-              'flex flex-col items-center rounded border-2 p-3 transition-all',
+              'flex flex-col items-center rounded border-2 p-2 transition-all sm:p-3',
               selectedAbility === spell.id
                 ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
@@ -119,10 +133,10 @@
             @click="selectedAbility = spell.id"
           >
             <img
-              v-if="spell.image"
-              :src="getSpellImageUrl(version, spell.image?.full || '')"
+              v-if="spell.image && champion"
+              :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
               :alt="spell.name"
-              class="mb-1 h-12 w-12 rounded"
+              class="mb-1 h-8 w-8 rounded sm:h-12 sm:w-12"
             />
             <span class="text-xs text-text">
               {{ t(`skills.key.${spell.id}`) }}
@@ -133,16 +147,16 @@
 
       <!-- Instructions pour assigner -->
       <div v-if="selectedAbility" class="mb-4">
-        <p class="mb-2 text-text">
+        <p class="mb-2 text-sm text-text sm:text-base">
           Cliquez sur une case pour assigner {{ t(`skills.key.${selectedAbility}`) }}
         </p>
-        <div class="grid grid-cols-3 gap-2">
+        <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
           <!-- Cases pour les 3 premiers up -->
           <button
             v-for="index in 3"
             :key="`assign-first-${index}`"
             :class="[
-              'rounded border-2 p-2 transition-all',
+              'rounded border-2 p-1.5 text-xs transition-all sm:p-2 sm:text-sm',
               getFirstThreeUp(index - 1) === selectedAbility
                 ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
@@ -153,13 +167,13 @@
             Niveau {{ index }}
           </button>
         </div>
-        <div class="mt-2 grid grid-cols-3 gap-2">
+        <div class="mt-2 grid grid-cols-3 gap-1.5 sm:gap-2">
           <!-- Cases pour l'ordre de up -->
           <button
             v-for="index in 3"
             :key="`assign-order-${index}`"
             :class="[
-              'rounded border-2 p-2 transition-all',
+              'rounded border-2 p-1.5 text-xs transition-all sm:p-2 sm:text-sm',
               getSkillUpOrder(index - 1) === selectedAbility
                 ? 'border-accent bg-accent/20'
                 : 'border-surface hover:border-primary',
@@ -181,7 +195,7 @@ import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SkillOrder } from '~/types/build'
 
-import { getSpellImageUrl } from '~/utils/imageUrl'
+import { getChampionSpellImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 
 const buildStore = useBuildStore()

@@ -7,15 +7,15 @@
       </div>
 
       <!-- Build Card and Step Content -->
-      <div class="mb-6 flex items-start gap-4">
-        <!-- Build Card (Left Side) - Always visible -->
-        <div class="build-card-wrapper flex-shrink-0">
-          <BuildCard />
+      <div class="mb-6 flex flex-col items-start gap-4 md:flex-row">
+        <!-- Step Content (Top on mobile, Left on desktop) -->
+        <div class="w-full flex-1 md:order-2">
+          <ItemSelector />
         </div>
 
-        <!-- Step Content (Right Side) -->
-        <div class="flex-1">
-          <ItemSelector />
+        <!-- Build Card (Bottom on mobile, Right on desktop) -->
+        <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
+          <BuildCard />
         </div>
       </div>
     </div>
@@ -60,9 +60,10 @@ onMounted(() => {
   width: 293.9px;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .build-card-wrapper {
     width: 100%;
+    max-width: 100%;
   }
 }
 </style>

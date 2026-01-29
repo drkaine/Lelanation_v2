@@ -1,15 +1,17 @@
 <template>
   <div class="builds-by-champion min-h-screen p-4 text-text">
     <div class="max-w-8xl mx-auto px-2">
-      <div class="mb-6 flex items-center justify-between">
-        <div class="flex items-center gap-3">
+      <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-wrap items-center gap-3">
           <NuxtLink
             to="/builds"
             class="rounded-lg bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
           >
             ← Retour
           </NuxtLink>
-          <h1 class="text-2xl font-bold text-text">Builds: {{ championName || championId }}</h1>
+          <h1 class="text-xl font-bold text-text sm:text-2xl">
+            Builds: {{ championName || championId }}
+          </h1>
         </div>
       </div>
 

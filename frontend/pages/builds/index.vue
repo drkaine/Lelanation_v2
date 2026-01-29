@@ -43,14 +43,14 @@
           v-if="comparisonBuilds.length > 0"
           class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
         >
-          <div class="flex items-center justify-between">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p class="font-semibold text-text">
                 {{ comparisonBuilds.length }} build{{ comparisonBuilds.length > 1 ? 's' : '' }} en
                 comparaison
               </p>
             </div>
-            <div class="flex gap-2">
+            <div class="flex flex-wrap gap-2">
               <NuxtLink
                 to="/builds/compare"
                 class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
