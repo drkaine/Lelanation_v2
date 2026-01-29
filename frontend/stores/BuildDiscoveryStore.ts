@@ -75,9 +75,36 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       }
 
       // Sort
-      results = this.sortBuilds(results)
+      const sorted = [...results]
 
-      return results
+      switch (this.sortBy) {
+        case 'recent':
+          sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          break
+        case 'popular': {
+          // Sort by vote count (descending), then by creation date
+          const voteStore = useVoteStore()
+          sorted.sort((a, b) => {
+            const votesA = voteStore.getVoteCount(a.id)
+            const votesB = voteStore.getVoteCount(b.id)
+            if (votesA !== votesB) {
+              return votesB - votesA
+            }
+            // If same votes, sort by most recent
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          })
+          break
+        }
+        case 'name':
+          sorted.sort((a, b) => {
+            const nameA = a.champion?.name || a.name
+            const nameB = b.champion?.name || b.name
+            return nameA.localeCompare(nameB)
+          })
+          break
+      }
+
+      return sorted
     },
 
     hasActiveFilters(): boolean {
@@ -93,7 +120,30 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   actions: {
     async loadBuilds() {
       const buildStore = useBuildStore()
-      this.builds = buildStore.getSavedBuilds()
+      const localBuilds = buildStore.getSavedBuilds()
+
+      // Charger les builds publics depuis l'API
+      let publicBuilds: Build[] = []
+      try {
+        const { apiUrl } = await import('~/utils/apiUrl')
+        const response = await fetch(apiUrl('/api/builds'))
+        if (response.ok) {
+          const allBuilds = (await response.json()) as Build[]
+          // Filtrer seulement les builds publics (pas ceux avec _priv dans le nom de fichier)
+          // et exclure les builds locaux pour éviter les doublons
+          const localBuildIds = new Set(localBuilds.map(b => b.id))
+          publicBuilds = allBuilds.filter(
+            build => !localBuildIds.has(build.id) && build.visibility !== 'private'
+          )
+        }
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load public builds:', error)
+      }
+
+      // Combiner les builds locaux et publics
+      this.builds = [...localBuilds, ...publicBuilds]
+
       const versionStore = useVersionStore()
       if (!versionStore.currentVersion) {
         await versionStore.loadCurrentVersion()
@@ -146,7 +196,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
           return sorted.sort(
             (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
           )
-        case 'popular': { // Sort by vote count (descending), then by creation date
+        case 'popular': {
+          // Sort by vote count (descending), then by creation date
           const voteStore = useVoteStore()
           return sorted.sort((a, b) => {
             const votesA = voteStore.getVoteCount(a.id)

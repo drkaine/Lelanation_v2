@@ -15,28 +15,26 @@
         </NuxtLink>
       </div>
 
-      <div v-else-if="build">
-        <!-- Header -->
-        <div class="mb-6 flex items-center justify-between">
-          <div class="flex items-center gap-4">
-            <NuxtLink
-              to="/builds"
-              class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
-            >
-              ← Back
-            </NuxtLink>
-            <h1 class="text-3xl font-bold text-text">{{ build.name }}</h1>
-          </div>
-          <div class="flex items-center gap-3">
+      <div v-else-if="build" class="flex flex-col items-center gap-6">
+        <!-- Header avec actions -->
+        <div class="flex w-full max-w-[300px] items-center justify-between">
+          <NuxtLink
+            to="/builds"
+            class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
+          >
+            ← Retour
+          </NuxtLink>
+          <div class="flex items-center gap-2">
             <button
-              class="rounded-lg border-2 border-primary bg-surface px-4 py-2 text-sm font-semibold text-text transition-colors hover:bg-primary hover:text-white"
+              class="rounded-lg border-2 border-primary bg-surface px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-primary hover:text-white"
               @click="shareBuild"
             >
               Partager
             </button>
-            <!-- Vote Button -->
+            <!-- Vote Button (désactivé pour les builds de l'utilisateur) -->
             <button
-              class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+              v-if="!isUserBuild"
+              class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
               :class="
                 hasVoted
                   ? 'bg-accent text-background hover:bg-accent-dark'
@@ -46,13 +44,13 @@
               @click="toggleVote"
             >
               <span>👍</span>
-              <span>{{ voteCount }} vote{{ voteCount !== 1 ? 's' : '' }}</span>
+              <span>{{ voteCount }}</span>
             </button>
             <button
-              class="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-dark"
+              class="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-background transition-colors hover:bg-accent-dark"
               @click="addToComparison"
             >
-              Ajouter à la comparaison
+              Comparer
             </button>
           </div>
         </div>
@@ -64,54 +62,26 @@
           :on-update="updateToCurrentVersion"
         />
 
-        <!-- Champion Section -->
-        <div v-if="build.champion" class="mb-6 rounded-lg bg-surface p-6">
-          <h2 class="mb-4 text-2xl font-bold text-text">Champion</h2>
-          <div class="flex items-center gap-4">
-            <img
-              :src="getChampionImageUrl(version, build.champion.image.full)"
-              :alt="build.champion.name"
-              class="h-24 w-24 rounded"
-            />
-            <div>
-              <h3 class="text-xl font-bold text-text">{{ build.champion.name }}</h3>
-              <p class="text-text/70">{{ build.champion.title }}</p>
-              <div class="mt-2 flex gap-2">
-                <span
-                  v-for="tag in build.champion.tags"
-                  :key="tag"
-                  class="rounded bg-primary/20 px-2 py-1 text-xs text-text"
-                >
-                  {{ tag }}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- BuildCard Sheet -->
+        <div class="flex flex-col items-center gap-4">
+          <BuildCard :build="build" :readonly="true" />
 
-        <!-- Items Section -->
-        <div class="mb-6 rounded-lg bg-surface p-6">
-          <h2 class="mb-4 text-2xl font-bold text-text">Items</h2>
-          <div class="grid grid-cols-3 gap-4 sm:grid-cols-6">
-            <div
-              v-for="(item, index) in build.items"
-              :key="index"
-              class="flex flex-col items-center rounded border border-primary p-3"
-            >
-              <img
-                :src="getItemImageUrl(version, item.image.full)"
-                :alt="item.name"
-                class="mb-2 h-16 w-16 rounded"
-              />
-              <p class="text-center text-sm text-text">{{ item.name }}</p>
+          <!-- Informations du build (auteur et description) -->
+          <div class="w-full max-w-[300px] space-y-2">
+            <!-- Auteur -->
+            <div v-if="build.author" class="text-sm text-text/70">
+              <span class="font-semibold">Auteur:</span>
+              <span class="ml-1">{{ build.author }}</span>
             </div>
-          </div>
-        </div>
 
-        <!-- Statistics Section -->
-        <div class="mb-6 rounded-lg bg-surface p-6">
-          <h2 class="mb-4 text-2xl font-bold text-text">Statistics</h2>
-          <StatsDisplay />
+            <!-- Description -->
+            <div v-if="build.description" class="text-sm text-text/80">
+              <p class="whitespace-pre-wrap">{{ build.description }}</p>
+            </div>
+
+            <!-- Date de création -->
+            <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -125,21 +95,17 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
-import StatsDisplay from '~/components/Build/StatsDisplay.vue'
-import { useGameVersion } from '~/composables/useGameVersion'
+import BuildCard from '~/components/Build/BuildCard.vue'
 import ShareBuildModal from '~/components/Build/ShareBuildModal.vue'
 import { apiUrl } from '~/utils/apiUrl'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
-
-import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 
 const props = defineProps<{ buildId: string }>()
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
-const { version } = useGameVersion()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -148,6 +114,11 @@ const shareUrl = ref<string | null>(null)
 
 const voteCount = computed(() => (build.value ? voteStore.getVoteCount(build.value.id) : 0))
 const hasVoted = computed(() => (build.value ? voteStore.hasUserVoted(build.value.id) : false))
+const isUserBuild = computed(() => {
+  if (!build.value) return false
+  const savedBuilds = buildStore.getSavedBuilds()
+  return savedBuilds.some(b => b.id === build.value!.id)
+})
 
 const toggleVote = () => {
   if (!build.value) return
@@ -201,6 +172,14 @@ watch(
   },
   { immediate: true }
 )
+
+const formatDate = (dateString: string): string => {
+  return new Date(dateString).toLocaleDateString('fr-FR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
+}
 
 onMounted(() => {
   voteStore.init()

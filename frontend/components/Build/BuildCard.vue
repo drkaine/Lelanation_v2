@@ -4,8 +4,13 @@
       <!-- Version (top right) -->
       <div class="build-version">{{ version }}</div>
 
-      <!-- Bouton Reset -->
-      <button class="reset-button" title="Réinitialiser la sheet" @click="resetBuild">
+      <!-- Bouton Reset (seulement si pas en mode readonly) -->
+      <button
+        v-if="!readonly"
+        class="reset-button"
+        title="Réinitialiser la sheet"
+        @click="resetBuild"
+      >
         <Icon name="mdi:refresh" size="16px" />
       </button>
 
@@ -21,7 +26,8 @@
               selectedRoles.includes(role) ? 'role-selected' : 'role-unselected',
             ]"
             :title="getRoleName(role)"
-            @click="toggleRole(role)"
+            :disabled="readonly"
+            @click="!readonly && toggleRole(role)"
           >
             <img
               :src="`/icons/roles/${role === 'adc' ? 'bot' : role}.png`"
@@ -381,8 +387,8 @@
         </div>
       </div>
     </div>
-    <!-- Items Manager (under the card): drag & drop, remove & reset items -->
-    <div class="items-manager">
+    <!-- Items Manager (under the card): drag & drop, remove & reset items (seulement si pas readonly) -->
+    <div v-if="!readonly" class="items-manager">
       <div class="items-manager-header">
         <div class="items-manager-title">Gestion des items</div>
         <button class="items-reset-btn" type="button" @click="resetItemsOnly">Reset items</button>
@@ -436,6 +442,16 @@ import {
 import { useGameVersion } from '~/composables/useGameVersion'
 import type { Build, Item, Role } from '~/types/build'
 
+interface Props {
+  build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
+  readonly?: boolean // Si true, désactive les interactions (bouton reset, toggle rôles, etc.)
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  build: null,
+  readonly: false,
+})
+
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
 const { t } = useI18n()
@@ -445,15 +461,20 @@ const tooltipRef = ref<HTMLElement | null>(null)
 const tooltipPosition = ref<'right' | 'left'>('right')
 const tooltipVerticalPosition = ref<'top' | 'bottom'>('top')
 
+// Utiliser le build en prop si fourni, sinon le build courant du store
+const displayBuild = computed(() => props.build || buildStore.currentBuild)
+
 const selectedChampion = computed(() => {
-  return buildStore.currentBuild?.champion || null
+  return displayBuild.value?.champion || null
 })
 
-const { version } = useGameVersion()
+const { version: defaultVersion } = useGameVersion()
+// Utiliser la version du build si disponible, sinon la version courante
+const version = computed(() => displayBuild.value?.gameVersion || defaultVersion.value)
 
 // Rôles
 const allRoles: Role[] = ['top', 'jungle', 'mid', 'adc', 'support']
-const selectedRoles = computed(() => buildStore.currentBuild?.roles || [])
+const selectedRoles = computed(() => displayBuild.value?.roles || [])
 
 const getRoleName = (role: Role): string => {
   const names: Record<Role, string> = {
@@ -467,6 +488,7 @@ const getRoleName = (role: Role): string => {
 }
 
 const toggleRole = (role: Role) => {
+  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   const currentRoles = selectedRoles.value
   if (currentRoles.includes(role)) {
     // Retirer le rôle
@@ -478,14 +500,14 @@ const toggleRole = (role: Role) => {
 }
 
 // Get selected runes, spells, and shards
-const selectedPrimaryRunes = computed(() => buildStore.currentBuild?.runes)
-const selectedSecondaryRunes = computed(() => buildStore.currentBuild?.runes)
-const selectedSummonerSpells = computed(() => buildStore.currentBuild?.summonerSpells || [])
+const selectedPrimaryRunes = computed(() => displayBuild.value?.runes)
+const selectedSecondaryRunes = computed(() => displayBuild.value?.runes)
+const selectedSummonerSpells = computed(() => displayBuild.value?.summonerSpells || [])
 const filteredSummonerSpells = computed(() => {
   return selectedSummonerSpells.value.filter(spell => spell !== null && spell !== undefined)
 })
-const selectedShards = computed(() => buildStore.currentBuild?.shards)
-const buildItems = computed(() => buildStore.currentBuild?.items || [])
+const selectedShards = computed(() => displayBuild.value?.shards)
+const buildItems = computed(() => displayBuild.value?.items || [])
 const dragIndex = ref<number | null>(null)
 
 // Helper to check if item is boots
@@ -597,9 +619,9 @@ const coreItemsPath2 = computed(() => {
 // Skill order - calculer les 3 premières compétences à maxer
 // Afficher l'ordre de montée des compétences (skillUpOrder)
 const skillOrderAbilities = computed(() => {
-  if (!selectedChampion.value || !buildStore.currentBuild?.skillOrder) return []
+  if (!selectedChampion.value || !displayBuild.value?.skillOrder) return []
 
-  const skillOrder = buildStore.currentBuild.skillOrder
+  const skillOrder = displayBuild.value.skillOrder
   if (!skillOrder.skillUpOrder) return []
 
   // Retourner les 3 compétences dans l'ordre de skillUpOrder
@@ -810,12 +832,14 @@ onUnmounted(() => {
 
 // Reset build function
 const resetBuild = () => {
+  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   buildStore.createNewBuild()
   // Sauvegarder le build vide
   buildStore.saveBuild()
 }
 
 const removeItemById = (itemId: string) => {
+  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   buildStore.removeItem(itemId)
 }
 
@@ -824,6 +848,7 @@ const onDragStart = (index: number) => {
 }
 
 const onDrop = (index: number) => {
+  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   if (dragIndex.value === null || dragIndex.value === index) return
   const items = buildItems.value.slice() as Item[]
   const moved = items.splice(dragIndex.value, 1)[0]
@@ -841,6 +866,7 @@ const onDragEnd = () => {
 }
 
 const resetItemsOnly = () => {
+  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   buildStore.setItems([])
 }
 
@@ -851,35 +877,41 @@ const getBootBackgroundStyle = (item?: Item | null) => {
   }
 }
 
-// Persistance automatique - sauvegarder à chaque modification
+// Persistance automatique - sauvegarder à chaque modification (seulement si pas de build en prop)
 watch(
   () => buildStore.currentBuild,
   newBuild => {
-    if (newBuild) {
-      // Sauvegarder automatiquement dans localStorage
-      const buildData = JSON.stringify(newBuild)
-      localStorage.setItem('lelanation_current_build', buildData)
+    if (newBuild && !props.build) {
+      // Sauvegarder automatiquement dans localStorage seulement si on utilise currentBuild
+      try {
+        const buildData = JSON.stringify(newBuild)
+        localStorage.setItem('lelanation_current_build', buildData)
+      } catch (error) {
+        // Ignore storage errors
+      }
     }
   },
   { deep: true }
 )
 
-// Charger le build sauvegardé au montage
+// Charger le build sauvegardé au montage (seulement si pas de build en prop)
 onMounted(() => {
-  // Charger depuis localStorage
-  try {
-    const saved = localStorage.getItem('lelanation_current_build')
-    if (saved) {
-      const build = JSON.parse(saved) as Build
-      buildStore.setCurrentBuild(build)
-    } else if (!buildStore.currentBuild) {
-      // Créer un nouveau build si aucun n'existe
-      buildStore.createNewBuild()
-    }
-  } catch (error) {
-    // Failed to load saved build - create new one
-    if (!buildStore.currentBuild) {
-      buildStore.createNewBuild()
+  if (!props.build) {
+    // Charger depuis localStorage
+    try {
+      const saved = localStorage.getItem('lelanation_current_build')
+      if (saved) {
+        const build = JSON.parse(saved) as Build
+        buildStore.setCurrentBuild(build)
+      } else if (!buildStore.currentBuild) {
+        // Créer un nouveau build si aucun n'existe
+        buildStore.createNewBuild()
+      }
+    } catch (error) {
+      // Failed to load saved build - create new one
+      if (!buildStore.currentBuild) {
+        buildStore.createNewBuild()
+      }
     }
   }
 

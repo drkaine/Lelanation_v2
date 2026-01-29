@@ -83,60 +83,48 @@
           </NuxtLink>
         </div>
 
-        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <div
-            v-for="build in builds"
-            :key="build.id"
-            class="rounded-lg border-2 border-primary bg-surface p-4 transition-colors hover:border-accent"
-          >
-            <div class="mb-3 flex items-start justify-between">
-              <h3 class="text-lg font-bold text-text">{{ build.name }}</h3>
-              <button
-                class="text-sm text-error transition-colors hover:text-error/70"
-                @click="confirmDelete(build.id)"
-              >
-                Supprimer
-              </button>
-            </div>
-
-            <div v-if="build.champion" class="mb-3 flex items-center gap-3">
-              <img
-                :src="getChampionImageUrl(version, build.champion.image.full)"
-                :alt="build.champion.name"
-                class="h-12 w-12 rounded"
-              />
-              <div>
-                <p class="font-semibold text-text">{{ build.champion.name }}</p>
-                <p class="text-sm text-text/70">{{ build.champion.title }}</p>
+        <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-4">
+            <!-- BuildCard Sheet -->
+            <div class="relative">
+              <BuildCard :build="build" :readonly="true" />
+              <!-- Boutons d'action (en overlay) -->
+              <div class="absolute -right-2 -top-2 z-10 flex flex-col gap-2">
+                <!-- Bouton Supprimer -->
+                <button
+                  class="rounded-full bg-error p-1.5 text-white shadow-lg transition-colors hover:bg-error/80"
+                  title="Supprimer le build"
+                  @click="confirmDelete(build.id)"
+                >
+                  ✕
+                </button>
+                <!-- Bouton Modifier (icône crayon) -->
+                <NuxtLink
+                  :to="`/builds/edit/${build.id}`"
+                  class="rounded-full bg-surface p-1.5 text-text shadow-lg transition-colors hover:bg-primary/20"
+                  title="Modifier le build"
+                >
+                  <Icon name="mdi:pencil" class="h-4 w-4" />
+                </NuxtLink>
               </div>
             </div>
 
-            <div class="mb-3 flex gap-2">
-              <img
-                v-for="item in build.items.slice(0, 6)"
-                :key="item.id"
-                :src="getItemImageUrl(version, item.image.full)"
-                :alt="item.name"
-                class="h-8 w-8 rounded"
-              />
-            </div>
+            <!-- Informations du build (auteur et description) -->
+            <div class="w-full max-w-[300px] space-y-2">
+              <!-- Auteur -->
+              <div v-if="build.author" class="text-sm text-text/70">
+                <span class="font-semibold">Auteur:</span>
+                <span class="ml-1">{{ build.author }}</span>
+              </div>
 
-            <div class="mb-3 flex gap-2">
-              <NuxtLink
-                :to="`/builds/edit/${build.id}`"
-                class="rounded-lg bg-accent px-4 py-2 text-sm text-background transition-colors hover:bg-accent-dark"
-              >
-                Modifier
-              </NuxtLink>
-              <button
-                class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
-                @click="loadBuild(build.id)"
-              >
-                Voir
-              </button>
-            </div>
+              <!-- Description -->
+              <div v-if="build.description" class="text-sm text-text/80">
+                <p class="line-clamp-3">{{ build.description }}</p>
+              </div>
 
-            <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
+              <!-- Date de création -->
+              <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -189,15 +177,12 @@ import { useVoteStore } from '~/stores/VoteStore'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
+import BuildCard from '~/components/Build/BuildCard.vue'
 import type { Build } from '~/types/build'
-import { useGameVersion } from '~/composables/useGameVersion'
-
-import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
-const { version } = useGameVersion()
 const route = useRoute()
 
 const buildToDelete = ref<string | null>(null)
@@ -248,11 +233,6 @@ const deleteBuild = () => {
     buildStore.deleteBuild(buildToDelete.value)
     buildToDelete.value = null
   }
-}
-
-const loadBuild = (buildId: string) => {
-  buildStore.loadBuild(buildId)
-  navigateTo(`/builds/edit/${buildId}`)
 }
 
 const clearComparison = () => {
