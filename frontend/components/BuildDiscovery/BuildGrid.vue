@@ -17,8 +17,12 @@
     <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-4">
         <!-- BuildCard Sheet -->
-        <div class="relative cursor-pointer" @click="navigateToBuild(build.id)">
-          <BuildCard :build="build" :readonly="true" />
+        <div class="relative">
+          <div class="cursor-pointer" @click="navigateToBuild(build.id)">
+            <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
+              <BuildCard :build="build" :readonly="true" />
+            </div>
+          </div>
         </div>
 
         <!-- Informations du build (auteur et description) -->
@@ -59,13 +63,44 @@
                 <span>{{ getDownvoteCount(build.id) }}</span>
               </button>
             </div>
-            <button
-              v-if="props.showComparisonButtons"
-              class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
-              @click.stop="addToComparison(build.id)"
-            >
-              Comparer
-            </button>
+            <!-- Bouton Partager avec dropdown -->
+            <div v-if="props.showComparisonButtons" class="relative">
+              <button
+                class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
+                @click.stop="toggleShareDropdown(build.id)"
+              >
+                Partager
+              </button>
+              <!-- Dropdown -->
+              <div
+                v-if="openShareDropdown === build.id"
+                class="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-primary shadow-lg"
+                style="background-color: rgb(26, 26, 46)"
+                @click.stop
+              >
+                <button
+                  class="flex w-full items-center gap-2 rounded-t-lg px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                  @click="copyBuildLink(build.id)"
+                >
+                  <span class="text-base">🔗</span>
+                  <span>Copier le lien</span>
+                </button>
+                <button
+                  class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                  @click="downloadBuildImage(build.id)"
+                >
+                  <span class="text-base">⬇️</span>
+                  <span>Télécharger l'image</span>
+                </button>
+                <button
+                  class="flex w-full items-center gap-2 rounded-b-lg border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                  @click="copyBuildImage(build.id)"
+                >
+                  <span class="text-base">📋</span>
+                  <span>Copier l'image</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Auteur -->
@@ -88,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
@@ -96,6 +131,8 @@ import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 
 const buildStore = useBuildStore()
+const openShareDropdown = ref<string | null>(null)
+const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 
 interface Props {
   showComparisonButtons?: boolean
@@ -114,10 +151,6 @@ const hasActiveFilters = computed(() => discoveryStore.hasActiveFilters)
 
 const navigateToBuild = (buildId: string) => {
   router.push(`/builds/${buildId}`)
-}
-
-const addToComparison = (buildId: string) => {
-  discoveryStore.addToComparison(buildId)
 }
 
 const formatDate = (dateString: string): string => {
@@ -162,4 +195,324 @@ const isUserBuild = (buildId: string): boolean => {
   const savedBuilds = buildStore.getSavedBuilds()
   return savedBuilds.some(b => b.id === buildId)
 }
+
+const setBuildCardRef = (buildId: string, el: unknown) => {
+  if (el && el instanceof HTMLElement) {
+    // Stocker la référence au div qui contient le BuildCard
+    buildCardRefs.value[buildId] = el
+  }
+}
+
+const toggleShareDropdown = (buildId: string) => {
+  if (openShareDropdown.value === buildId) {
+    openShareDropdown.value = null
+  } else {
+    openShareDropdown.value = buildId
+  }
+}
+
+const copyBuildLink = async (buildId: string) => {
+  const buildUrl = `${window.location.origin}/builds/${buildId}`
+  try {
+    await navigator.clipboard.writeText(buildUrl)
+    openShareDropdown.value = null
+    // Optionnel: afficher une notification
+  } catch (error) {
+    // Fallback pour les navigateurs qui ne supportent pas clipboard API
+    const textarea = document.createElement('textarea')
+    textarea.value = buildUrl
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    openShareDropdown.value = null
+  }
+}
+
+const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
+  const cardElement = buildCardRefs.value[buildId]
+  if (!cardElement) {
+    // eslint-disable-next-line no-console
+    console.error('BuildCard element not found for build:', buildId)
+    return null
+  }
+
+  try {
+    // Trouver le BuildCard à l'intérieur (élément avec classe build-card-wrapper)
+    const buildCardWrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
+    if (!buildCardWrapper) {
+      // eslint-disable-next-line no-console
+      console.error('BuildCard wrapper not found in element:', cardElement)
+      return null
+    }
+
+    // Attendre un peu pour s'assurer que tout est rendu
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    // Cloner l'élément pour éviter de modifier l'original
+    const clonedElement = buildCardWrapper.cloneNode(true) as HTMLElement
+
+    // Positionner le clone hors écran mais visible pour le rendu
+    // IMPORTANT: Ne pas mettre opacity à 0, sinon dom-to-image-more ne peut pas capturer
+    clonedElement.style.position = 'fixed'
+    clonedElement.style.left = '-9999px'
+    clonedElement.style.top = '0'
+    clonedElement.style.zIndex = '9999'
+    clonedElement.style.opacity = '1'
+    clonedElement.style.visibility = 'visible'
+    clonedElement.style.pointerEvents = 'none'
+    document.body.appendChild(clonedElement)
+
+    // Fonction pour forcer tous les backgrounds à être transparents sauf ceux explicitement définis
+    const sanitizeStyles = (element: HTMLElement) => {
+      const allElements = [element, ...Array.from(element.querySelectorAll('*'))] as HTMLElement[]
+
+      // Fonction helper pour détecter si une couleur est blanche ou gris très clair
+      const isWhiteOrLightGrey = (color: string): boolean => {
+        if (!color) return false
+        const normalized = color.toLowerCase().trim()
+
+        // Couleurs blanches
+        if (
+          normalized === 'rgb(255, 255, 255)' ||
+          normalized === 'rgba(255, 255, 255, 1)' ||
+          normalized === '#ffffff' ||
+          normalized === '#fff' ||
+          normalized === 'white'
+        ) {
+          return true
+        }
+
+        // Gris très clair (comme rgb(229, 231, 235))
+        const rgbMatch = normalized.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+        if (
+          rgbMatch &&
+          rgbMatch[1] !== undefined &&
+          rgbMatch[2] !== undefined &&
+          rgbMatch[3] !== undefined
+        ) {
+          const r = parseInt(rgbMatch[1], 10)
+          const g = parseInt(rgbMatch[2], 10)
+          const b = parseInt(rgbMatch[3], 10)
+          // Si toutes les valeurs sont > 200, c'est très clair
+          if (r > 200 && g > 200 && b > 200) {
+            return true
+          }
+        }
+
+        return false
+      }
+
+      allElements.forEach(el => {
+        const computed = window.getComputedStyle(el)
+        const style = el.style
+
+        // Vérifier si c'est un séparateur (doit conserver son background)
+        const isSeparator = el.classList.contains('separator-line')
+
+        // FORCER le background à transparent par défaut (sauf pour les séparateurs)
+        if (!isSeparator) {
+          style.backgroundColor = 'transparent'
+        }
+
+        // Puis appliquer seulement si une couleur est explicitement définie et non blanche/transparente
+        const bgColor = computed.backgroundColor
+        if (
+          bgColor &&
+          !isWhiteOrLightGrey(bgColor) &&
+          bgColor !== 'rgba(0, 0, 0, 0)' &&
+          bgColor !== 'transparent'
+        ) {
+          style.backgroundColor = bgColor
+          // Pour les séparateurs, aussi appliquer l'opacité
+          if (isSeparator) {
+            style.opacity = computed.opacity || '0.8'
+          }
+        }
+
+        // Même chose pour les images de fond
+        if (computed.backgroundImage && computed.backgroundImage !== 'none') {
+          style.backgroundImage = computed.backgroundImage
+          style.backgroundSize = computed.backgroundSize
+          style.backgroundPosition = computed.backgroundPosition
+          style.backgroundRepeat = computed.backgroundRepeat
+        }
+
+        // Supprimer les bordures blanches/gris clair
+        const borderColor = computed.borderColor
+        if (isWhiteOrLightGrey(borderColor)) {
+          // Supprimer la bordure si elle est blanche/gris clair
+          style.border = 'none'
+          style.borderWidth = '0'
+          style.borderColor = 'transparent'
+        } else if (
+          borderColor &&
+          borderColor !== 'rgba(0, 0, 0, 0)' &&
+          borderColor !== 'transparent'
+        ) {
+          // Garder la bordure seulement si elle a une couleur valide
+          style.borderColor = borderColor
+        } else {
+          // Pas de bordure
+          style.border = 'none'
+        }
+
+        // Remplacer color (mais pas si c'est noir par défaut)
+        if (computed.color && computed.color !== 'rgb(0, 0, 0)') {
+          style.color = computed.color
+        }
+
+        // Pour les séparateurs, s'assurer que la hauteur et la largeur sont préservées
+        if (isSeparator) {
+          style.width = computed.width || '100%'
+          style.height = computed.height || '1px'
+          style.margin = computed.margin || '8px 0'
+        }
+      })
+    }
+
+    // Nettoyer les styles
+    sanitizeStyles(clonedElement)
+
+    // Attendre un peu pour que les styles soient appliqués et que le clone soit rendu
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    // Vérifier que le clone est bien dans le DOM et visible
+    // eslint-disable-next-line no-console
+    console.log(
+      'Clone element:',
+      clonedElement,
+      'Visible:',
+      clonedElement.offsetWidth,
+      'x',
+      clonedElement.offsetHeight
+    )
+
+    // Utiliser dom-to-image-more directement pour convertir en blob
+    const domtoimage = await import('dom-to-image-more')
+
+    // eslint-disable-next-line no-console
+    console.log('Converting element to blob...')
+
+    // Convertir directement en blob (plus simple et plus fiable)
+    const resultBlob = await domtoimage.toBlob(clonedElement, {
+      bgcolor: '#0a0a14',
+      quality: 1.0,
+    })
+
+    // eslint-disable-next-line no-console
+    console.log('Blob created:', resultBlob ? `Size: ${resultBlob.size} bytes` : 'null')
+
+    // Nettoyer : retirer le clone du DOM
+    document.body.removeChild(clonedElement)
+
+    return resultBlob
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to capture image:', error)
+    return null
+  }
+}
+
+const downloadBuildImage = async (buildId: string) => {
+  // eslint-disable-next-line no-console
+  console.log('Download image clicked for build:', buildId)
+  try {
+    const blob = await captureBuildImage(buildId)
+    // eslint-disable-next-line no-console
+    console.log('Blob received:', blob ? `Size: ${blob.size} bytes` : 'null')
+    if (!blob) {
+      // eslint-disable-next-line no-console
+      console.error('No blob returned from captureBuildImage')
+      return
+    }
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `build-${buildId}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    openShareDropdown.value = null
+    // eslint-disable-next-line no-console
+    console.log('Image download triggered')
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to download image:', error)
+  }
+}
+
+const copyBuildImage = async (buildId: string) => {
+  // eslint-disable-next-line no-console
+  console.log('Copy image clicked for build:', buildId)
+  try {
+    const blob = await captureBuildImage(buildId)
+    // eslint-disable-next-line no-console
+    console.log('Blob received for copy:', blob ? `Size: ${blob.size} bytes` : 'null')
+    if (!blob) {
+      // eslint-disable-next-line no-console
+      console.error('No blob returned from captureBuildImage')
+      return
+    }
+
+    // Utiliser l'API Clipboard pour copier l'image
+    if (navigator.clipboard && navigator.clipboard.write) {
+      const item = new ClipboardItem({ 'image/png': blob })
+      await navigator.clipboard.write([item])
+      openShareDropdown.value = null
+      // eslint-disable-next-line no-console
+      console.log('Image copied to clipboard')
+    } else {
+      // eslint-disable-next-line no-console
+      console.error('Clipboard API not available')
+      // Fallback: convertir en data URL et copier via un élément temporaire
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        const img = new Image()
+        img.src = dataUrl
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.width
+          canvas.height = img.height
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.drawImage(img, 0, 0)
+            canvas.toBlob(async blob => {
+              if (blob && navigator.clipboard && navigator.clipboard.write) {
+                const item = new ClipboardItem({ 'image/png': blob })
+                await navigator.clipboard.write([item])
+              }
+            })
+          }
+        }
+      }
+      reader.readAsDataURL(blob)
+      openShareDropdown.value = null
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to copy image:', error)
+  }
+}
+
+// Fermer le dropdown si on clique ailleurs
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  // Vérifier si le clic est en dehors du dropdown
+  const clickedInsideDropdown = target.closest('.relative') && target.closest('button')
+  if (!clickedInsideDropdown) {
+    openShareDropdown.value = null
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
 </script>

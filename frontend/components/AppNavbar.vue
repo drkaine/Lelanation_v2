@@ -47,14 +47,14 @@
       </div>
 
       <div class="right-header">
-        <NuxtLink to="/videos" :title="t('nav.videos')" class="version">
-          {{ t('nav.videos') }}
+        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
+          {{ t('nav.builds') }}
         </NuxtLink>
         <NuxtLink to="/builds/create" :title="t('nav.build')" class="version">
           {{ t('nav.build') }}
         </NuxtLink>
-        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
-          {{ t('nav.builds') }}
+        <NuxtLink to="/videos" :title="t('nav.videos')" class="version">
+          {{ t('nav.videos') }}
         </NuxtLink>
         <a
           :href="patchNotesUrl"
