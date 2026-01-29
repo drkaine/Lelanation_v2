@@ -20,11 +20,11 @@
         <div
           class="flex min-h-[60px] w-full max-w-[300px] flex-col justify-center space-y-1 text-center"
         >
-          <!-- Nom du build -->
-          <h3 class="text-lg font-semibold text-text">{{ build.name || 'Sans nom' }}</h3>
           <!-- Auteur -->
+          <h3 class="text-lg font-semibold text-text">{{ build.author }}</h3>
+          <!-- Nom du build -->
           <div class="text-sm text-text/70" :class="{ invisible: !build.author }">
-            <span class="ml-1">{{ build.author || 'Placeholder' }}</span>
+            <span class="ml-1">{{ build.name }}</span>
           </div>
         </div>
 

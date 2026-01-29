@@ -98,7 +98,7 @@
         <h2 class="mt-8 text-xl font-bold text-text">Contact</h2>
         <p class="mt-2 text-text/80">
           Pour toute question concernant ces mentions légales ou pour signaler un contenu, vous
-          pouvez nous contacter via les réseaux sociaux ou le Discord de Lelanation.
+          pouvez nous contacter via les réseaux sociaux ou le formulaire de contact.
         </p>
       </section>
 

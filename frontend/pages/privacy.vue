@@ -125,7 +125,7 @@
         <h2 class="mt-8 text-xl font-bold text-text">Contact</h2>
         <p class="mt-2 text-text/80">
           Pour toute question concernant cette politique de confidentialité, vous pouvez nous
-          contacter via les réseaux sociaux ou le Discord de Lelanation.
+          contacter via les réseaux sociaux ou le formulaire de contact.
         </p>
       </section>
 
