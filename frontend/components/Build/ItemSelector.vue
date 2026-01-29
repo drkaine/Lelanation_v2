@@ -58,7 +58,13 @@
             >
               <button
                 class="item"
-                :disabled="!isSelected(item) && availableSlots >= 9 && !isBootsItem(item)"
+                :disabled="
+                  (!isSelected(item) && availableSlots >= 9 && !isBootsItem(item)) ||
+                  (!isSelected(item) && !canAddItem(item))
+                "
+                :title="
+                  !isSelected(item) && !canAddItem(item) ? getItemValidationError(item) || '' : ''
+                "
                 @click="toggleItem(item)"
               >
                 <img
@@ -102,6 +108,13 @@
           </div>
           <div v-if="hoveredItem.plaintext" class="item-tooltip-plaintext">
             {{ hoveredItem.plaintext }}
+          </div>
+          <!-- Validation error message -->
+          <div
+            v-if="!isSelected(hoveredItem) && !canAddItem(hoveredItem)"
+            class="item-tooltip-error mt-2 rounded border border-error/50 bg-error/20 p-2 text-sm text-error"
+          >
+            ⚠️ {{ getItemValidationError(hoveredItem) }}
           </div>
           <!-- eslint-disable vue/no-v-html -->
           <div
@@ -242,6 +255,7 @@ type ItemCategory = 'starter' | 'boots' | 'basic' | 'epic' | 'legendary' | 'othe
 const getItemCategory = (item: Item): ItemCategory => {
   // Starter items - identified by ID and name patterns
   const starterItemIds = new Set([
+    '1036', // Épée longue (Long Sword)
     '1054', // Bouclier de Doran
     '1055', // Lame de Doran
     '1056', // Anneau de Doran
@@ -269,6 +283,8 @@ const getItemCategory = (item: Item): ItemCategory => {
     'abatteur',
     'atlas',
     'épée de voleur',
+    'épée longue', // Long Sword
+    'long sword',
     'faucheuse',
     'fragment',
   ]
@@ -511,6 +527,35 @@ const isBootsItem = (item: Item): boolean => {
   return getItemCategory(item) === 'boots'
 }
 
+// Items that can be in core items even if classified as starter
+// (when starter slots are full)
+const canBeInCoreItems = (item: Item): boolean => {
+  // IDs that can be in core items
+  const flexibleStarterIds = new Set([
+    '1036', // Épée longue (Long Sword)
+    '1082', // Sceau noir (Dark Seal)
+    '1083', // Cull
+    '3070', // Larme de la déesse
+  ])
+
+  if (flexibleStarterIds.has(item.id)) {
+    return true
+  }
+
+  // Pattern-based check for Dark Seal (Sceau noir) - fallback if ID doesn't match
+  const itemNameLower = item.name.toLowerCase()
+  if (itemNameLower.includes('dark seal') || itemNameLower.includes('sceau noir')) {
+    return true
+  }
+
+  // Pattern-based check for Long Sword (Épée longue) - fallback if ID doesn't match
+  if (itemNameLower.includes('épée longue') || itemNameLower.includes('long sword')) {
+    return true
+  }
+
+  return false
+}
+
 const isSelected = (item: Item): boolean => {
   if (!buildStore.currentBuild?.items || !item?.id) return false
   // Compare by ID to ensure exact match (strict equality)
@@ -525,11 +570,92 @@ const getItemIndex = (item: Item): number => {
   return index >= 0 ? index + 1 : 0
 }
 
+// Validation rules
+const isJunglePet = (item: Item): boolean => {
+  const junglePetIds = ['1101', '1102', '1103']
+  return junglePetIds.includes(item.id)
+}
+
+const isAtlas = (item: Item): boolean => {
+  return item.id === '3865'
+}
+
+const isAtlasUpgrade = (item: Item): boolean => {
+  const atlasUpgradeIds = ['3869', '3870', '3871', '3876', '3877']
+  return atlasUpgradeIds.includes(item.id)
+}
+
+const hasSmite = (): boolean => {
+  const spells = buildStore.currentBuild?.summonerSpells || []
+  return spells.some(
+    spell =>
+      spell &&
+      (spell.id === '11' ||
+        spell.key === 'SummonerSmite' ||
+        spell.name?.toLowerCase().includes('smite') ||
+        spell.name?.toLowerCase().includes('punition'))
+  )
+}
+
+const hasSupportRole = (): boolean => {
+  const roles = buildStore.currentBuild?.roles || []
+  return roles.includes('support')
+}
+
+const hasAtlasInStarters = (): boolean => {
+  const items = buildStore.currentBuild?.items || []
+  const starterItems = items.filter(i => isStarterItem(i))
+  return starterItems.some(i => isAtlas(i))
+}
+
+const hasAtlasUpgrade = (excludeItemId?: string): boolean => {
+  const items = buildStore.currentBuild?.items || []
+  return items.some(i => isAtlasUpgrade(i) && i.id !== excludeItemId)
+}
+
+const getItemValidationError = (item: Item): string | null => {
+  // Rule 1: Bébés nécessitent Smite
+  if (isJunglePet(item) && !hasSmite()) {
+    return 'Les jungle pets nécessitent le sort Smite'
+  }
+
+  // Rule 2: Atlas et améliorations nécessitent le rôle support
+  if ((isAtlas(item) || isAtlasUpgrade(item)) && !hasSupportRole()) {
+    return 'Atlas et ses améliorations nécessitent le rôle Support'
+  }
+
+  // Rule 3: On ne peut pas prendre plusieurs améliorations d'Atlas
+  if (isAtlasUpgrade(item) && hasAtlasUpgrade(item.id)) {
+    return "Vous ne pouvez avoir qu'une seule amélioration d'Atlas"
+  }
+
+  // Rule 4: On ne peut prendre une amélioration d'Atlas que si on a Atlas en starter
+  if (isAtlasUpgrade(item) && !hasAtlasInStarters()) {
+    return 'Vous devez avoir Atlas dans vos items de départ pour prendre une amélioration'
+  }
+
+  return null
+}
+
+const canAddItem = (item: Item): boolean => {
+  return getItemValidationError(item) === null
+}
+
 const toggleItem = (item: Item) => {
   if (isSelected(item)) {
     // Remove item
     buildStore.removeItem(item.id)
   } else {
+    // Check validation rules
+    const validationError = getItemValidationError(item)
+    if (validationError) {
+      // Show error message (could use a toast/notification system)
+      // eslint-disable-next-line no-console
+      console.warn(validationError)
+      // For now, we'll just prevent adding the item
+      return
+    }
+
     // Add item with special logic
     const currentItems = buildStore.currentBuild?.items || []
     const starterItems = currentItems.filter(i => isStarterItem(i))
@@ -543,6 +669,14 @@ const toggleItem = (item: Item) => {
         // Insert at the beginning (positions 0-1)
         const newItems = [...starterItems, item, ...bootsItems, ...otherItems]
         buildStore.setItems(newItems)
+      } else if (canBeInCoreItems(item)) {
+        // If starter slots are full but item can be in core items, add it there
+        const totalSlots = starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
+        if (totalSlots < 9) {
+          // Insert after starter and boots
+          const newItems = [...starterItems, ...bootsItems, ...otherItems, item]
+          buildStore.setItems(newItems)
+        }
       }
     } else if (isBootsItem(item)) {
       // Max 2 boots (they share 1 slot, so we can have 2 boots + 5 other items = 6 slots)
@@ -797,6 +931,8 @@ onMounted(() => {
 
 .item:disabled {
   cursor: not-allowed;
+  opacity: 0.5;
+  filter: grayscale(0.5);
 }
 
 .item-wrapper.hide {
@@ -930,6 +1066,11 @@ onMounted(() => {
   line-height: 1.4;
   padding-top: 0.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.item-tooltip-error {
+  font-size: 0.875rem;
+  line-height: 1.4;
 }
 
 @media (max-width: 768px) {

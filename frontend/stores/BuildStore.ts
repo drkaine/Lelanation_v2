@@ -180,7 +180,11 @@ export const useBuildStore = defineStore('build', {
         champion: null,
         items: [],
         runes: null,
-        shards: null,
+        shards: {
+          slot1: 5008, // Adaptive Force (default)
+          slot2: 5008, // Adaptive Force (default)
+          slot3: 5001, // Health (default)
+        },
         summonerSpells: [null, null],
         skillOrder: {
           firstThreeUps: [null as any, null as any, null as any],
@@ -395,6 +399,8 @@ export const useBuildStore = defineStore('build', {
             // et on s'appuie sur localStorage + éventuel traitement offline.
             // eslint-disable-next-line no-console
             console.warn('Build saved locally but failed to save JSON on server.', response.status)
+            // Marquer le build pour synchronisation ultérieure
+            // La synchronisation sera effectuée lors du prochain loadBuilds()
           }
         } catch (e) {
           // eslint-disable-next-line no-console
@@ -481,8 +487,9 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    deleteBuild(buildId: string): boolean {
+    async deleteBuild(buildId: string): Promise<boolean> {
       try {
+        // Delete from localStorage first
         const savedBuilds = this.getSavedBuilds()
         const filtered = savedBuilds.filter(b => b.id !== buildId)
         localStorage.setItem('lelanation_builds', JSON.stringify(filtered))
@@ -492,11 +499,107 @@ export const useBuildStore = defineStore('build', {
           this.currentBuild = null
         }
 
+        // Try to delete from server (don't fail if it doesn't exist on server)
+        try {
+          const { apiUrl } = await import('~/utils/apiUrl')
+          const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
+            method: 'DELETE',
+          })
+
+          if (!response.ok && response.status !== 404) {
+            // Only log error if it's not a 404 (build might not exist on server)
+            // eslint-disable-next-line no-console
+            console.warn(`[BuildStore] Failed to delete build on server: ${response.status}`)
+          }
+        } catch (apiError) {
+          // Don't fail the deletion if API call fails (build might not exist on server)
+          // eslint-disable-next-line no-console
+          console.warn('[BuildStore] Failed to delete build on server:', apiError)
+        }
+
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to delete build'
         this.status = 'error'
         return false
+      }
+    },
+
+    /**
+     * Vérifie si un build existe sur le serveur et le resauvegarde si nécessaire
+     */
+    async syncBuildToServer(build: Build): Promise<boolean> {
+      if (!build || !build.id) return false
+
+      try {
+        const { apiUrl } = await import('~/utils/apiUrl')
+
+        // Vérifier si le build existe sur le serveur
+        const checkResponse = await fetch(apiUrl(`/api/builds/${encodeURIComponent(build.id)}`))
+
+        // Si le build n'existe pas (404), retenter de le sauvegarder
+        if (checkResponse.status === 404) {
+          // eslint-disable-next-line no-console
+          console.log(`[BuildStore] Build ${build.id} not found on server, attempting to save...`)
+
+          try {
+            const saveResponse = await fetch(apiUrl('/api/builds'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(build),
+            })
+
+            if (saveResponse.ok) {
+              // eslint-disable-next-line no-console
+              console.log(`[BuildStore] Build ${build.id} successfully synced to server`)
+              return true
+            } else {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[BuildStore] Failed to sync build ${build.id} to server: ${saveResponse.status}`
+              )
+              return false
+            }
+          } catch (saveError) {
+            // eslint-disable-next-line no-console
+            console.warn(`[BuildStore] Failed to sync build ${build.id} to server:`, saveError)
+            return false
+          }
+        } else if (checkResponse.ok) {
+          // Build existe déjà sur le serveur
+          return true
+        } else {
+          // Autre erreur (500, etc.)
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[BuildStore] Error checking build ${build.id} on server: ${checkResponse.status}`
+          )
+          return false
+        }
+      } catch (error) {
+        // Erreur réseau ou autre
+        // eslint-disable-next-line no-console
+        console.warn(`[BuildStore] Error syncing build ${build.id} to server:`, error)
+        return false
+      }
+    },
+
+    /**
+     * Synchronise tous les builds locaux avec le serveur
+     * Vérifie chaque build et resauvegarde ceux qui n'existent pas sur le serveur
+     */
+    async syncAllBuildsToServer(): Promise<void> {
+      const savedBuilds = this.getSavedBuilds()
+
+      // Synchroniser tous les builds en parallèle (mais avec un délai pour éviter de surcharger)
+      for (const build of savedBuilds) {
+        if (build && build.id) {
+          await this.syncBuildToServer(build)
+          // Petit délai entre chaque sync pour éviter de surcharger le serveur
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
       }
     },
   },

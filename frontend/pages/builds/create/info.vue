@@ -36,6 +36,18 @@
             >
               Skill Order
             </button>
+            <button
+              type="button"
+              class="px-4 py-2 text-sm font-semibold transition-colors"
+              :class="
+                activeTab === 'stats'
+                  ? 'border-b-2 border-accent text-accent'
+                  : 'text-text/60 hover:text-text'
+              "
+              @click="activeTab = 'stats'"
+            >
+              Statistiques
+            </button>
           </div>
 
           <!-- Tab Content: Formulaire -->
@@ -111,7 +123,7 @@
                 v-if="!buildStore.isBuildValid && validationDebug.checks"
                 class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
               >
-                <p class="mb-2 font-semibold text-info">État de validation (debug) :</p>
+                <p class="mb-2 font-semibold text-info">État de validation :</p>
                 <div class="space-y-1 text-text/80">
                   <div>
                     <span class="font-medium">Champion:</span>
@@ -205,7 +217,7 @@
                 v-if="!buildStore.isBuildValid && validationDebug.checks"
                 class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
               >
-                <p class="mb-2 font-semibold text-info">État de validation (debug) :</p>
+                <p class="mb-2 font-semibold text-info">État de validation :</p>
                 <div class="space-y-1 text-text/80">
                   <div>
                     <span class="font-medium">Champion:</span>
@@ -287,6 +299,11 @@
               </button>
             </div>
           </div>
+
+          <!-- Tab Content: Statistiques -->
+          <div v-show="activeTab === 'stats'" class="tab-content">
+            <StatsTable />
+          </div>
         </div>
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
@@ -312,6 +329,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
+import StatsTable from '~/components/Build/StatsTable.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 
@@ -333,7 +351,7 @@ const buildStore = useBuildStore()
 const router = useRouter()
 const route = useRoute()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
-const activeTab = ref<'form' | 'skill-order'>('form')
+const activeTab = ref<'form' | 'skill-order' | 'stats'>('form')
 const buildName = ref('New Build')
 const buildAuthor = ref('')
 const buildDescription = ref('')

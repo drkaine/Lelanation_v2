@@ -115,6 +115,13 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       const buildStore = useBuildStore()
       const localBuilds = buildStore.getSavedBuilds()
 
+      // Synchroniser les builds locaux avec le serveur (en arrière-plan)
+      // Cela resauvegarde automatiquement les builds qui n'existent pas sur le serveur
+      buildStore.syncAllBuildsToServer().catch(error => {
+        // eslint-disable-next-line no-console
+        console.warn('[BuildDiscoveryStore] Error syncing builds to server:', error)
+      })
+
       // Charger les builds publics depuis l'API
       let publicBuilds: Build[] = []
       try {

@@ -153,4 +153,50 @@ router.get('/', async (_req, res) => {
   }
 })
 
+/**
+ * Delete a build by ID
+ * DELETE /api/builds/:id
+ */
+router.delete('/:id', async (req, res) => {
+  const buildId = req.params.id
+
+  try {
+    const { promises: fs } = await import('fs')
+    const files = await fs.readdir(buildsDir)
+    
+    // Try to find the build file (public ou privé)
+    const buildFile =
+      files.find(file => file === `${buildId}.json`) ||
+      files.find(file => file === `${buildId}_priv.json`)
+    
+    if (!buildFile) {
+      return res.status(404).json({ error: 'Build not found' })
+    }
+
+    const filePath = join(buildsDir, buildFile)
+    
+    // Delete the file
+    try {
+      await fs.unlink(filePath)
+      console.log(`[Builds API] Build deleted successfully: ${buildFile}`)
+      return res.json({ 
+        id: buildId,
+        message: 'Build deleted successfully'
+      })
+    } catch (unlinkError) {
+      console.error(`[Builds API] Failed to delete build file: ${unlinkError}`)
+      return res.status(500).json({ 
+        error: 'Failed to delete build file',
+        details: unlinkError instanceof Error ? unlinkError.message : 'Unknown error'
+      })
+    }
+  } catch (error) {
+    console.error('[Builds API] Unexpected error:', error)
+    return res.status(500).json({ 
+      error: 'Failed to read builds directory',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
+})
+
 export default router

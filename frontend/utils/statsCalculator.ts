@@ -35,22 +35,33 @@ export function calculateStats(
   // Add shard stats
   const shardStats = calculateShardStats(shards)
 
-  // Combine all stats
+  // Combine all stats (including shards)
   const finalStats: CalculatedStats = {
-    health: baseStats.hp + (itemStats.health || 0),
+    health: baseStats.hp + (itemStats.health || 0) + (shardStats.health || 0),
     mana: baseStats.mp + (itemStats.mana || 0),
     attackDamage:
-      baseStats.attackdamage + (itemStats.attackDamage || 0) + (runeStats.attackDamage || 0),
-    abilityPower: (itemStats.abilityPower || 0) + (runeStats.abilityPower || 0),
+      baseStats.attackdamage +
+      (itemStats.attackDamage || 0) +
+      (runeStats.attackDamage || 0) +
+      (shardStats.attackDamage || 0),
+    abilityPower:
+      (itemStats.abilityPower || 0) +
+      (runeStats.abilityPower || 0) +
+      (shardStats.abilityPower || 0),
     armor: baseStats.armor + (itemStats.armor || 0) + (shardStats.armor || 0),
     magicResist:
       baseStats.spellblock + (itemStats.magicResist || 0) + (shardStats.magicResist || 0),
-    attackSpeed: calculateAttackSpeed(baseStats.attackspeed, itemStats.attackSpeed || 0),
+    attackSpeed: calculateAttackSpeed(
+      baseStats.attackspeed,
+      (itemStats.attackSpeed || 0) + (shardStats.attackSpeed || 0)
+    ),
     critChance: (itemStats.critChance || 0) / 100, // Convert to decimal
     critDamage: 1.75 + (itemStats.critDamage || 0) / 100, // Base 175% + items
     lifeSteal: (itemStats.lifeSteal || 0) / 100,
     spellVamp: (itemStats.spellVamp || 0) / 100,
-    cooldownReduction: calculateCooldownReduction(itemStats.cooldownReduction || 0),
+    cooldownReduction: calculateCooldownReduction(
+      (itemStats.cooldownReduction || 0) + (shardStats.abilityHaste || 0)
+    ),
     movementSpeed: calculateMovementSpeed(
       baseStats.movespeed,
       itemStats.movementSpeed || 0,
@@ -61,6 +72,10 @@ export function calculateStats(
     armorPenetration: (itemStats.armorPenetration || 0) / 100,
     magicPenetration: (itemStats.magicPenetration || 0) / 100,
     tenacity: (itemStats.tenacity || 0) / 100,
+    lethality: itemStats.lethality || 0,
+    omnivamp: (itemStats.omnivamp || 0) / 100,
+    shield: itemStats.shield || 0,
+    attackRange: baseStats.attackrange + (itemStats.attackRange || 0),
   }
 
   return finalStats
@@ -113,6 +128,10 @@ function calculateItemStats(items: Item[]): ItemStats & {
   armorPenetration: number
   magicPenetration: number
   tenacity: number
+  lethality: number
+  omnivamp: number
+  shield: number
+  attackRange: number
 } {
   const totals: Record<string, number> = {
     health: 0,
@@ -134,6 +153,10 @@ function calculateItemStats(items: Item[]): ItemStats & {
     armorPenetration: 0,
     magicPenetration: 0,
     tenacity: 0,
+    lethality: 0,
+    omnivamp: 0,
+    shield: 0,
+    attackRange: 0,
   }
 
   for (const item of items) {
@@ -158,6 +181,16 @@ function calculateItemStats(items: Item[]): ItemStats & {
     totals.manaRegen += item.stats.FlatMPRegenMod || 0
     totals.armorPenetration += item.stats.rPercentArmorPenetrationMod || 0
     totals.magicPenetration += item.stats.rPercentSpellPenetrationMod || 0
+    // Lethality (FlatLethality)
+    totals.lethality += (item.stats as any).FlatLethality || 0
+    // Omnivamp (FlatOmnivamp + PercentOmnivamp)
+    totals.omnivamp +=
+      ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
+    // Shield (FlatShield + PercentShield - simplified as flat value)
+    totals.shield +=
+      ((item.stats as any).FlatShield || 0) + ((item.stats as any).PercentShield || 0)
+    // Attack Range (FlatAttackRangeMod)
+    totals.attackRange += (item.stats as any).FlatAttackRangeMod || 0
     // Tenacity is usually from runes, but can be from items
   }
 

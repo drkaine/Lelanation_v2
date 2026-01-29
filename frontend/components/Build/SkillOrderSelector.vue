@@ -9,32 +9,31 @@
       <div class="mb-6">
         <div class="mb-4">
           <p class="mb-2 font-semibold text-text">Les 3 premiers "up" (Niveaux 1, 2, 3)</p>
-          <p class="text-sm text-text/70">
-            Définissez l'ordre dans lequel vous apprenez les 3 premières compétences
-          </p>
         </div>
 
         <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
           <div
             v-for="(slot, index) in 3"
             :key="`first-${slot}`"
-            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
-            :class="{
-              'border-accent bg-accent/10': selectedSlot === `first-${index}`,
-            }"
+            class="relative flex flex-col items-center"
           >
             <span class="mb-1 text-xs font-semibold text-text sm:mb-2">Niveau {{ index + 1 }}</span>
             <button
-              v-if="getFirstThreeUp(index)"
               :class="[
-                'flex h-12 w-12 flex-col items-center justify-center rounded border-2 transition-all sm:h-16 sm:w-16',
-                getSkillColor(getFirstThreeUp(index)!),
+                'relative flex h-6 w-6 flex-col items-center justify-center rounded border-2 transition-all sm:h-8 sm:w-8',
+                getFirstThreeUp(index)
+                  ? 'border-primary bg-surface'
+                  : 'border-dashed border-text/30 bg-surface',
               ]"
-              :title="getSpellName(getFirstThreeUp(index)!)"
-              @click="clearFirstThreeUp(index)"
+              :title="
+                getFirstThreeUp(index)
+                  ? getSpellName(getFirstThreeUp(index)!)
+                  : 'Sélectionner une compétence'
+              "
+              @click.stop="toggleDropdown(`first-${index}`)"
             >
               <img
-                v-if="getSpellImage(getFirstThreeUp(index)!) && champion"
+                v-if="getFirstThreeUp(index) && getSpellImage(getFirstThreeUp(index)!) && champion"
                 :src="
                   getChampionSpellImageUrl(
                     version,
@@ -43,17 +42,43 @@
                   )
                 "
                 :alt="getSpellName(getFirstThreeUp(index)!)"
-                class="mb-0.5 h-6 w-6 rounded sm:mb-1 sm:h-10 sm:w-10"
+                class="h-4 w-4 rounded sm:h-5 sm:w-5"
               />
-              <span class="text-xs font-bold sm:text-lg">
+              <span v-else-if="getFirstThreeUp(index)" class="text-xs font-bold sm:text-sm">
                 {{ t(`skills.key.${getFirstThreeUp(index)}`) }}
               </span>
+              <span v-else class="text-xs text-text/30 sm:text-sm">?</span>
             </button>
+
+            <!-- Dropdown menu -->
             <div
-              v-else
-              class="flex h-12 w-12 items-center justify-center rounded border-2 border-dashed border-text/30 sm:h-16 sm:w-16"
+              v-if="openDropdown === `first-${index}`"
+              class="absolute top-full z-50 mt-1 rounded border-2 border-primary bg-surface shadow-lg"
+              style="background-color: var(--color-surface); opacity: 1"
+              @click.stop
             >
-              <span class="text-xs text-text/30 sm:text-base">?</span>
+              <button
+                v-for="spell in availableSpells"
+                :key="spell.id"
+                :class="[
+                  'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors',
+                  getFirstThreeUp(index) === spell.id
+                    ? 'bg-accent/20'
+                    : isFirstThreeUpSelected(spell.id, index)
+                      ? 'cursor-not-allowed bg-surface/50 opacity-50'
+                      : 'hover:bg-primary/20',
+                ]"
+                :disabled="isFirstThreeUpSelected(spell.id, index)"
+                @click="selectFirstThreeUp(index, spell.id)"
+              >
+                <img
+                  v-if="spell.image && champion"
+                  :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
+                  :alt="spell.name"
+                  class="h-5 w-5 rounded"
+                />
+                <span class="text-sm font-semibold">{{ t(`skills.key.${spell.id}`) }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -63,35 +88,33 @@
       <div class="mb-6">
         <div class="mb-4">
           <p class="mb-2 font-semibold text-text">Ordre de montée des compétences</p>
-          <p class="text-sm text-text/70">
-            Définissez l'ordre dans lequel vous montez les compétences (les 3 compétences maxées en
-            priorité)
-          </p>
         </div>
 
         <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
           <div
             v-for="(slot, index) in 3"
             :key="`order-${slot}`"
-            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
-            :class="{
-              'border-accent bg-accent/10': selectedSlot === `order-${index}`,
-            }"
+            class="relative flex flex-col items-center"
           >
             <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
               >Priorité {{ index + 1 }}</span
             >
             <button
-              v-if="getSkillUpOrder(index)"
               :class="[
-                'flex h-12 w-12 flex-col items-center justify-center rounded border-2 transition-all sm:h-16 sm:w-16',
-                getSkillColor(getSkillUpOrder(index)!),
+                'relative flex h-6 w-6 flex-col items-center justify-center rounded border-2 transition-all sm:h-8 sm:w-8',
+                getSkillUpOrder(index)
+                  ? 'border-primary bg-surface'
+                  : 'border-dashed border-text/30 bg-surface',
               ]"
-              :title="getSpellName(getSkillUpOrder(index)!)"
-              @click="clearSkillUpOrder(index)"
+              :title="
+                getSkillUpOrder(index)
+                  ? getSpellName(getSkillUpOrder(index)!)
+                  : 'Sélectionner une compétence'
+              "
+              @click.stop="toggleDropdown(`order-${index}`)"
             >
               <img
-                v-if="getSpellImage(getSkillUpOrder(index)!) && champion"
+                v-if="getSkillUpOrder(index) && getSpellImage(getSkillUpOrder(index)!) && champion"
                 :src="
                   getChampionSpellImageUrl(
                     version,
@@ -100,89 +123,45 @@
                   )
                 "
                 :alt="getSpellName(getSkillUpOrder(index)!)"
-                class="mb-0.5 h-6 w-6 rounded sm:mb-1 sm:h-10 sm:w-10"
+                class="h-4 w-4 rounded sm:h-5 sm:w-5"
               />
-              <span class="text-xs font-bold sm:text-lg">
+              <span v-else-if="getSkillUpOrder(index)" class="text-xs font-bold sm:text-sm">
                 {{ t(`skills.key.${getSkillUpOrder(index)}`) }}
               </span>
+              <span v-else class="text-xs text-text/30 sm:text-sm">?</span>
             </button>
+
+            <!-- Dropdown menu -->
             <div
-              v-else
-              class="flex h-12 w-12 items-center justify-center rounded border-2 border-dashed border-text/30 sm:h-16 sm:w-16"
+              v-if="openDropdown === `order-${index}`"
+              class="absolute top-full z-50 mt-1 rounded border-2 border-primary bg-surface shadow-lg"
+              style="background-color: var(--color-surface); opacity: 1"
+              @click.stop
             >
-              <span class="text-xs text-text/30 sm:text-base">?</span>
+              <button
+                v-for="spell in availableSpells"
+                :key="spell.id"
+                :class="[
+                  'flex w-full items-center gap-2 px-3 py-2 text-left transition-colors',
+                  getSkillUpOrder(index) === spell.id
+                    ? 'bg-accent/20'
+                    : isSkillUpOrderSelected(spell.id, index)
+                      ? 'cursor-not-allowed bg-surface/50 opacity-50'
+                      : 'hover:bg-primary/20',
+                ]"
+                :disabled="isSkillUpOrderSelected(spell.id, index)"
+                @click="selectSkillUpOrder(index, spell.id)"
+              >
+                <img
+                  v-if="spell.image && champion"
+                  :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
+                  :alt="spell.name"
+                  class="h-5 w-5 rounded"
+                />
+                <span class="text-sm font-semibold">{{ t(`skills.key.${spell.id}`) }}</span>
+              </button>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Compétences disponibles -->
-      <div class="mb-4">
-        <p class="mb-2 text-sm font-semibold text-text sm:text-base">Compétences disponibles</p>
-        <div class="flex flex-wrap gap-2 sm:gap-3">
-          <button
-            v-for="spell in availableSpells"
-            :key="spell.id"
-            :class="[
-              'flex flex-col items-center rounded border-2 p-2 transition-all sm:p-3',
-              selectedAbility === spell.id
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
-            ]"
-            :title="`${spell.name}${spell.description ? ': ' + spell.description.replace(/<[^>]*>/g, '').substring(0, 100) : ''}`"
-            @click="selectedAbility = spell.id"
-          >
-            <img
-              v-if="spell.image && champion"
-              :src="getChampionSpellImageUrl(version, champion.id, spell.image?.full || '')"
-              :alt="spell.name"
-              class="mb-1 h-8 w-8 rounded sm:h-12 sm:w-12"
-            />
-            <span class="text-xs text-text">
-              {{ t(`skills.key.${spell.id}`) }}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Instructions pour assigner -->
-      <div v-if="selectedAbility" class="mb-4">
-        <p class="mb-2 text-sm text-text sm:text-base">
-          Cliquez sur une case pour assigner {{ t(`skills.key.${selectedAbility}`) }}
-        </p>
-        <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
-          <!-- Cases pour les 3 premiers up -->
-          <button
-            v-for="index in 3"
-            :key="`assign-first-${index}`"
-            :class="[
-              'rounded border-2 p-1.5 text-xs transition-all sm:p-2 sm:text-sm',
-              getFirstThreeUp(index - 1) === selectedAbility
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
-            ]"
-            :title="`Niveau ${index}: Assigner ${t(`skills.key.${selectedAbility}`)}`"
-            @click="assignFirstThreeUp(index - 1, selectedAbility)"
-          >
-            Niveau {{ index }}
-          </button>
-        </div>
-        <div class="mt-2 grid grid-cols-3 gap-1.5 sm:gap-2">
-          <!-- Cases pour l'ordre de up -->
-          <button
-            v-for="index in 3"
-            :key="`assign-order-${index}`"
-            :class="[
-              'rounded border-2 p-1.5 text-xs transition-all sm:p-2 sm:text-sm',
-              getSkillUpOrder(index - 1) === selectedAbility
-                ? 'border-accent bg-accent/20'
-                : 'border-surface hover:border-primary',
-            ]"
-            :title="`Priorité ${index}: Assigner ${t(`skills.key.${selectedAbility}`)}`"
-            @click="assignSkillUpOrder(index - 1, selectedAbility)"
-          >
-            Priorité {{ index }}
-          </button>
         </div>
       </div>
     </div>
@@ -190,7 +169,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SkillOrder } from '~/types/build'
@@ -201,8 +180,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 const buildStore = useBuildStore()
 const { t } = useI18n()
 
-const selectedAbility = ref<string | null>(null)
-const selectedSlot = ref<string | null>(null)
+const openDropdown = ref<string | null>(null)
 
 const champion = computed(() => buildStore.currentBuild?.champion)
 
@@ -266,8 +244,33 @@ const getSkillUpOrder = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
   return skillOrder.skillUpOrder[index] || null
 }
 
-// Assigner les 3 premiers up
-const assignFirstThreeUp = (index: number, ability: string) => {
+// Toggle dropdown
+const toggleDropdown = (slot: string) => {
+  if (openDropdown.value === slot) {
+    openDropdown.value = null
+  } else {
+    openDropdown.value = slot
+  }
+}
+
+// Fermer le dropdown en cliquant ailleurs
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.skill-order-selector')) {
+    openDropdown.value = null
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+// Sélectionner pour les 3 premiers up
+const selectFirstThreeUp = (index: number, ability: string) => {
   initializeSkillOrder()
   if (!buildStore.currentBuild) return
 
@@ -286,11 +289,12 @@ const assignFirstThreeUp = (index: number, ability: string) => {
         'Q' | 'W' | 'E' | 'R',
       ],
     })
+    openDropdown.value = null
   }
 }
 
-// Assigner l'ordre de up
-const assignSkillUpOrder = (index: number, ability: string) => {
+// Sélectionner pour l'ordre de up
+const selectSkillUpOrder = (index: number, ability: string) => {
   initializeSkillOrder()
   if (!buildStore.currentBuild) return
 
@@ -309,51 +313,31 @@ const assignSkillUpOrder = (index: number, ability: string) => {
         'Q' | 'W' | 'E' | 'R',
       ],
     })
+    openDropdown.value = null
   }
 }
 
-// Clear functions
-const clearFirstThreeUp = (index: number) => {
-  if (!buildStore.currentBuild?.skillOrder) return
-  const skillOrder = { ...buildStore.currentBuild.skillOrder }
-  const newFirstThreeUps = [...skillOrder.firstThreeUps]
-  newFirstThreeUps[index] = null as any
-  buildStore.setSkillOrder({
-    ...skillOrder,
-    firstThreeUps: newFirstThreeUps as [
-      'Q' | 'W' | 'E' | 'R',
-      'Q' | 'W' | 'E' | 'R',
-      'Q' | 'W' | 'E' | 'R',
-    ],
-  })
+// Vérifier si une compétence est déjà sélectionnée dans les 3 premiers up (hors l'index actuel)
+const isFirstThreeUpSelected = (spellId: string, currentIndex: number): boolean => {
+  initializeSkillOrder()
+  const skillOrder = buildStore.currentBuild?.skillOrder
+  if (!skillOrder || !skillOrder.firstThreeUps) return false
+  return skillOrder.firstThreeUps.some(
+    (selected, idx) => idx !== currentIndex && selected === spellId
+  )
 }
 
-const clearSkillUpOrder = (index: number) => {
-  if (!buildStore.currentBuild?.skillOrder) return
-  const skillOrder = { ...buildStore.currentBuild.skillOrder }
-  const newSkillUpOrder = [...skillOrder.skillUpOrder]
-  newSkillUpOrder[index] = null as any
-  buildStore.setSkillOrder({
-    ...skillOrder,
-    skillUpOrder: newSkillUpOrder as [
-      'Q' | 'W' | 'E' | 'R',
-      'Q' | 'W' | 'E' | 'R',
-      'Q' | 'W' | 'E' | 'R',
-    ],
-  })
+// Vérifier si une compétence est déjà sélectionnée dans l'ordre de montée (hors l'index actuel)
+const isSkillUpOrderSelected = (spellId: string, currentIndex: number): boolean => {
+  initializeSkillOrder()
+  const skillOrder = buildStore.currentBuild?.skillOrder
+  if (!skillOrder || !skillOrder.skillUpOrder) return false
+  return skillOrder.skillUpOrder.some(
+    (selected, idx) => idx !== currentIndex && selected === spellId
+  )
 }
 
 // Helper functions
-const getSkillColor = (ability: string): string => {
-  const colors = {
-    Q: 'bg-blue-500 text-white border-blue-600',
-    W: 'bg-green-500 text-white border-green-600',
-    E: 'bg-yellow-500 text-white border-yellow-600',
-    R: 'bg-red-500 text-white border-red-600',
-  }
-  return colors[ability as keyof typeof colors] || 'bg-surface text-text border-primary'
-}
-
 const getSpellName = (ability: 'Q' | 'W' | 'E' | 'R'): string => {
   const spell = availableSpells.value.find(s => s.id === ability)
   return spell?.name || ability
@@ -366,3 +350,22 @@ const getSpellImage = (ability: 'Q' | 'W' | 'E' | 'R'): { full: string } | null 
 
 const { version } = useGameVersion()
 </script>
+
+<style scoped>
+.skill-order-selector {
+  position: relative;
+}
+
+/* Style pour les dropdowns avec background opaque */
+.skill-order-selector [class*='absolute top-full'] {
+  background-color: var(--color-surface) !important;
+  opacity: 1 !important;
+  min-width: 120px;
+}
+
+/* Style pour les boutons désactivés */
+.skill-order-selector button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+</style>

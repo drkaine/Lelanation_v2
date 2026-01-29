@@ -692,6 +692,20 @@ onMounted(() => {
   width: 100%;
 }
 
+/* Sur grand écran, les runes primaires et secondaires sont côte à côte */
+@media (min-width: 768px) {
+  .paths-container {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 3rem;
+  }
+
+  .path-section {
+    flex: 1;
+    max-width: 50%;
+  }
+}
+
 .path-section {
   display: flex;
   flex-direction: column;

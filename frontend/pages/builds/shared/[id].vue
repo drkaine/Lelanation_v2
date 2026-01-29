@@ -53,14 +53,28 @@
           <!-- Informations du build (auteur et description) -->
           <div class="w-full max-w-[300px] space-y-2">
             <!-- Auteur -->
-            <div v-if="build.author" class="text-sm text-text/70">
-              <span class="font-semibold">Auteur:</span>
+            <div class="text-sm text-text/70">
               <span class="ml-1">{{ build.author }}</span>
             </div>
 
             <!-- Description -->
             <div v-if="build.description" class="text-sm text-text/80">
-              <p class="whitespace-pre-wrap">{{ build.description }}</p>
+              <p
+                v-if="build.description.length <= 150 || isDescriptionExpanded"
+                class="whitespace-pre-wrap"
+              >
+                {{ build.description }}
+              </p>
+              <p v-else class="line-clamp-3 whitespace-pre-wrap">
+                {{ build.description }}
+              </p>
+              <button
+                v-if="build.description.length > 150"
+                class="mt-1 text-xs text-accent hover:text-accent/80"
+                @click="isDescriptionExpanded = !isDescriptionExpanded"
+              >
+                {{ isDescriptionExpanded ? 'Voir moins' : 'Voir plus' }}
+              </button>
             </div>
 
             <!-- Date de création -->
@@ -89,6 +103,7 @@ const buildStore = useBuildStore()
 const loading = ref(true)
 const error = ref<string | null>(null)
 const copied = ref(false)
+const isDescriptionExpanded = ref(false)
 
 const build = computed(() => buildStore.currentBuild)
 

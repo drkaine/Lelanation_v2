@@ -104,7 +104,11 @@
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       @click="buildToDelete = null"
     >
-      <div class="mx-4 w-full max-w-md rounded-lg bg-surface p-6" @click.stop>
+      <div
+        class="mx-4 w-full max-w-md rounded-lg bg-surface p-6"
+        style="background-color: var(--color-surface); opacity: 1"
+        @click.stop
+      >
         <h3 class="mb-4 text-lg font-bold text-text">Supprimer le build ?</h3>
         <p class="mb-6 text-text">
           Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.
@@ -226,10 +230,14 @@ const confirmDelete = (buildId: string) => {
   buildToDelete.value = buildId
 }
 
-const deleteBuild = () => {
+const deleteBuild = async () => {
   if (buildToDelete.value) {
-    buildStore.deleteBuild(buildToDelete.value)
-    buildToDelete.value = null
+    const success = await buildStore.deleteBuild(buildToDelete.value)
+    if (success) {
+      // Recharger la liste des builds pour mettre à jour l'affichage
+      await discoveryStore.loadBuilds()
+      buildToDelete.value = null
+    }
   }
 }
 

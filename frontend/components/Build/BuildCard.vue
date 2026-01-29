@@ -555,6 +555,8 @@ const startingItems = computed(() => {
         'abatteur',
         'atlas',
         'épée de voleur',
+        'épée longue', // Long Sword
+        'long sword',
         'faucheuse',
         'fragment',
         'potion',
@@ -563,6 +565,7 @@ const startingItems = computed(() => {
         'biscuit',
       ]
       const starterIds = [
+        '1036', // Épée longue (Long Sword)
         '1054',
         '1055',
         '1056',
@@ -584,6 +587,10 @@ const startingItems = computed(() => {
         '2032',
         '2033',
         '2055',
+        // Jungle pets (bébés)
+        '1101', // Scorchclaw Pup / Bébé chardent
+        '1102', // Gustwalker Hatchling / Bébé sautes-nuage
+        '1103', // Mosstomper Seedling / Bébé ixamandre
       ]
       return (
         starterIds.includes(item.id) ||

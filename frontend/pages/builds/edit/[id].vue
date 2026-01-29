@@ -52,38 +52,50 @@
           />
         </div>
 
-        <!-- Step Content (same as create page) -->
-        <div class="mb-6 rounded-lg bg-surface p-6">
-          <div v-if="currentStep === 'champion'">
-            <h2 class="mb-4 text-2xl font-bold">Select Champion</h2>
-            <ChampionSelector />
-          </div>
-          <div v-if="currentStep === 'items'">
-            <h2 class="mb-4 text-2xl font-bold">Select Items</h2>
-            <ItemSelector />
-          </div>
-          <div v-if="currentStep === 'runes'">
-            <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
-            <RuneSelector />
-          </div>
-          <div v-if="currentStep === 'review'">
-            <h2 class="mb-4 text-2xl font-bold">Infos</h2>
-            <div class="mb-6">
-              <label for="build-name" class="mb-2 block text-sm font-semibold">Build Name</label>
-              <input
-                id="build-name"
-                v-model="buildName"
-                type="text"
-                placeholder="Enter build name..."
-                class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
-                @input="updateBuildName"
-              />
+        <!-- Build Card and Step Content -->
+        <div class="mb-6 flex flex-col items-start gap-4 md:flex-row">
+          <!-- Step Content (Top on mobile, Left on desktop) -->
+          <div class="w-full flex-1 md:order-2">
+            <div class="rounded-lg bg-surface p-6">
+              <div v-if="currentStep === 'champion'">
+                <h2 class="mb-4 text-2xl font-bold">Select Champion</h2>
+                <ChampionSelector />
+              </div>
+              <div v-if="currentStep === 'items'">
+                <h2 class="mb-4 text-2xl font-bold">Select Items</h2>
+                <ItemSelector />
+              </div>
+              <div v-if="currentStep === 'runes'">
+                <h2 class="mb-4 text-2xl font-bold">Configure Runes</h2>
+                <RuneSelector />
+              </div>
+              <div v-if="currentStep === 'review'">
+                <h2 class="mb-4 text-2xl font-bold">Infos</h2>
+                <div class="mb-6">
+                  <label for="build-name" class="mb-2 block text-sm font-semibold"
+                    >Build Name</label
+                  >
+                  <input
+                    id="build-name"
+                    v-model="buildName"
+                    type="text"
+                    placeholder="Enter build name..."
+                    class="w-full max-w-md rounded border border-primary bg-surface px-4 py-2 text-text"
+                    @input="updateBuildName"
+                  />
+                </div>
+                <div class="mb-8">
+                  <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
+                  <SkillOrderSelector />
+                </div>
+                <StatsDisplay />
+              </div>
             </div>
-            <div class="mb-8">
-              <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
-              <SkillOrderSelector />
-            </div>
-            <StatsDisplay />
+          </div>
+
+          <!-- Build Card (Bottom on mobile, Right on desktop) -->
+          <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
+            <BuildCard />
           </div>
         </div>
 
@@ -141,6 +153,7 @@ import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
+import BuildCard from '~/components/Build/BuildCard.vue'
 
 const route = useRoute()
 const buildStore = useBuildStore()
@@ -152,7 +165,7 @@ const steps = [
   { id: 'review', label: 'Review' },
 ]
 
-const currentStep = ref('champion')
+const currentStep = ref('runes') // Start on runes step when editing
 const buildName = ref('')
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const isSaving = computed(() => buildStore.status === 'loading')
@@ -209,10 +222,34 @@ watch(
   { immediate: true }
 )
 
-onMounted(() => {
+onMounted(async () => {
   const buildId = route.params.id as string
   if (buildId) {
-    buildStore.loadBuild(buildId)
+    // Load build from localStorage
+    const ok = buildStore.loadBuild(buildId)
+    if (ok && buildStore.currentBuild) {
+      // Migrate the build to ensure it has the correct structure
+      try {
+        const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
+        buildStore.setCurrentBuild(migrated)
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Migration failed for edit build:', e)
+      }
+    }
   }
 })
 </script>
+
+<style scoped>
+.build-card-wrapper {
+  width: 293.9px;
+}
+
+@media (max-width: 768px) {
+  .build-card-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+</style>

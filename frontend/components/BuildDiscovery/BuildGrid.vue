@@ -140,7 +140,18 @@
 
           <!-- Description -->
           <div class="min-h-[60px] text-sm text-text/80">
-            <p v-if="build.description" class="line-clamp-3">{{ build.description }}</p>
+            <template v-if="build.description">
+              <p :class="expandedDescriptions[build.id] ? '' : 'line-clamp-3'">
+                {{ build.description }}
+              </p>
+              <button
+                v-if="build.description.length > 150"
+                class="mt-1 text-xs text-accent hover:text-accent/80"
+                @click.stop="toggleDescription(build.id)"
+              >
+                {{ expandedDescriptions[build.id] ? 'Voir moins' : 'Voir plus' }}
+              </button>
+            </template>
             <p v-else class="invisible">Placeholder</p>
           </div>
 
@@ -168,6 +179,7 @@ import type { Build } from '~/types/build'
 const buildStore = useBuildStore()
 const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
+const expandedDescriptions = ref<Record<string, boolean>>({})
 
 interface Props {
   showComparisonButtons?: boolean
@@ -277,6 +289,10 @@ const formatDate = (dateString: string): string => {
     month: 'long',
     day: 'numeric',
   })
+}
+
+const toggleDescription = (buildId: string) => {
+  expandedDescriptions.value[buildId] = !expandedDescriptions.value[buildId]
 }
 
 const getUpvoteCount = (buildId: string): number => {

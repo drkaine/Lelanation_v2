@@ -29,13 +29,19 @@ export async function migrateBuildToCurrent(
   const runesStore = useRunesStore()
   const spellsStore = useSummonerSpellsStore()
 
-  if (championsStore.champions.length === 0) championsStore.loadChampions()
-  if (itemsStore.items.length === 0) itemsStore.loadItems()
-  if (runesStore.runePaths.length === 0) runesStore.loadRunes()
-  if (spellsStore.spells.length === 0) spellsStore.loadSummonerSpells()
-
-  // Wait for stores to load (best-effort: they set status, but we don't have an await)
-  // In practice, these are fast on local backend; we keep migration defensive.
+  // Load stores if they are empty, and wait for them to load
+  if (championsStore.champions.length === 0) {
+    await championsStore.loadChampions()
+  }
+  if (itemsStore.items.length === 0) {
+    await itemsStore.loadItems()
+  }
+  if (runesStore.runePaths.length === 0) {
+    await runesStore.loadRunes()
+  }
+  if (spellsStore.spells.length === 0) {
+    await spellsStore.loadSummonerSpells()
+  }
 
   const migrated: Build = {
     ...build,
@@ -58,14 +64,22 @@ export async function migrateBuildToCurrent(
     }
   }
 
-  // Items: drop items not present anymore
-  if (Array.isArray(build.items) && build.items.length > 0) {
-    const validIds = new Set(itemsStore.items.map(i => i.id))
-    const kept = build.items.filter(i => validIds.has(i.id))
-    if (kept.length !== build.items.length) {
-      warnings.push('Certains items ont été retirés (introuvables dans la version courante).')
+  // Items: drop items not present anymore, but preserve the array even if empty
+  if (Array.isArray(build.items)) {
+    if (build.items.length > 0) {
+      const validIds = new Set(itemsStore.items.map(i => i.id))
+      const kept = build.items.filter(i => validIds.has(i.id))
+      if (kept.length !== build.items.length) {
+        warnings.push('Certains items ont été retirés (introuvables dans la version courante).')
+      }
+      migrated.items = kept
+    } else {
+      // Preserve empty array
+      migrated.items = []
     }
-    migrated.items = kept
+  } else {
+    // If items is not an array, initialize as empty array
+    migrated.items = []
   }
 
   // Summoner spells: ensure both exist, else set nulls
@@ -83,39 +97,60 @@ export async function migrateBuildToCurrent(
   }
 
   // Runes: verify ids exist, else remove runes config
+  // Preserve runes if they exist and are valid
   if (build.runes) {
     const paths = runesStore.runePaths
-    const okPrimaryPath = paths.some(p => p.id === build.runes!.primary.pathId)
-    const okSecondaryPath = paths.some(p => p.id === build.runes!.secondary.pathId)
-    const okKeystone = runeIdExists(paths, build.runes.primary.keystone)
-    const okS1 = runeIdExists(paths, build.runes.primary.slot1)
-    const okS2 = runeIdExists(paths, build.runes.primary.slot2)
-    const okS3 = runeIdExists(paths, build.runes.primary.slot3)
-    const okSS1 = runeIdExists(paths, build.runes.secondary.slot1)
-    const okSS2 = runeIdExists(paths, build.runes.secondary.slot2)
-
-    if (!okPrimaryPath || !okSecondaryPath || !okKeystone) {
-      migrated.runes = null
-      warnings.push('Configuration de runes retirée (incompatible avec la version courante).')
+    // Check if rune paths are loaded
+    if (paths.length === 0) {
+      // If rune paths are not loaded yet, preserve the runes as-is
+      migrated.runes = build.runes
     } else {
-      migrated.runes = {
-        primary: {
-          pathId: build.runes.primary.pathId,
-          keystone: build.runes.primary.keystone,
-          slot1: okS1 ? build.runes.primary.slot1 : 0,
-          slot2: okS2 ? build.runes.primary.slot2 : 0,
-          slot3: okS3 ? build.runes.primary.slot3 : 0,
-        },
-        secondary: {
-          pathId: build.runes.secondary.pathId,
-          slot1: okSS1 ? build.runes.secondary.slot1 : 0,
-          slot2: okSS2 ? build.runes.secondary.slot2 : 0,
-        },
-      }
-      if (!okS1 || !okS2 || !okS3 || !okSS1 || !okSS2) {
-        warnings.push('Certaines runes secondaires/slots ont été retirées (introuvables).')
+      const okPrimaryPath = paths.some(p => p.id === build.runes!.primary.pathId)
+      const okSecondaryPath = paths.some(p => p.id === build.runes!.secondary.pathId)
+      const okKeystone = runeIdExists(paths, build.runes.primary.keystone)
+      const okS1 = runeIdExists(paths, build.runes.primary.slot1)
+      const okS2 = runeIdExists(paths, build.runes.primary.slot2)
+      const okS3 = runeIdExists(paths, build.runes.primary.slot3)
+      const okSS1 = runeIdExists(paths, build.runes.secondary.slot1)
+      const okSS2 = runeIdExists(paths, build.runes.secondary.slot2)
+
+      if (!okPrimaryPath || !okSecondaryPath || !okKeystone) {
+        migrated.runes = null
+        warnings.push('Configuration de runes retirée (incompatible avec la version courante).')
+      } else {
+        migrated.runes = {
+          primary: {
+            pathId: build.runes.primary.pathId,
+            keystone: build.runes.primary.keystone,
+            slot1: okS1 ? build.runes.primary.slot1 : 0,
+            slot2: okS2 ? build.runes.primary.slot2 : 0,
+            slot3: okS3 ? build.runes.primary.slot3 : 0,
+          },
+          secondary: {
+            pathId: build.runes.secondary.pathId,
+            slot1: okSS1 ? build.runes.secondary.slot1 : 0,
+            slot2: okSS2 ? build.runes.secondary.slot2 : 0,
+          },
+        }
+        if (!okS1 || !okS2 || !okS3 || !okSS1 || !okSS2) {
+          warnings.push('Certaines runes secondaires/slots ont été retirées (introuvables).')
+        }
       }
     }
+  } else {
+    // Preserve null if runes don't exist
+    migrated.runes = null
+  }
+
+  // SkillOrder: conserver tel quel s'il existe, sinon null
+  // (pas de migration nécessaire car c'est juste Q/W/E/R)
+  migrated.skillOrder = build.skillOrder || null
+
+  // Shards: conserver tel quel s'ils existent, sinon valeurs par défaut
+  migrated.shards = build.shards || {
+    slot1: 5008, // Adaptive Force (default)
+    slot2: 5008, // Adaptive Force (default)
+    slot3: 5001, // Health (default)
   }
 
   return { migrated, warnings }

@@ -14,6 +14,12 @@ export default defineNuxtConfig({
     '@nuxtjs/sitemap',
     '@nuxtjs/robots',
   ],
+  icon: {
+    clientBundle: {
+      scan: true,
+      sizeLimitKb: 512,
+    },
+  },
   // Backend API base for proxying /api/* calls.
   // Default matches `ecosystem.config.js` (backend PORT=4001).
   runtimeConfig: {
@@ -136,12 +142,16 @@ export default defineNuxtConfig({
       },
       // IMPORTANT: Nuxt Icon module serves icons via a Nuxt endpoint under /api/_nuxt_icon/**.
       // Do NOT proxy this to the backend, otherwise users get 502s.
+      // This rule MUST come before the /api/** proxy rule to take precedence.
       '/api/_nuxt_icon/**': {
+        cors: true,
         headers: {
           // Safe cache: response depends on querystring, but is static per request.
           'Cache-Control': 'public, max-age=86400',
         },
       },
+      // Proxy all other /api/** requests to the backend, but NOT /api/_nuxt_icon/**
+      // Note: The route above takes precedence, so /api/_nuxt_icon/** won't be proxied
       '/api/**': {
         proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001') + '/**',
       },

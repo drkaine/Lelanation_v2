@@ -304,4 +304,8 @@ export interface CalculatedStats {
   armorPenetration: number
   magicPenetration: number
   tenacity: number
+  lethality: number
+  omnivamp: number
+  shield: number
+  attackRange: number
 }
