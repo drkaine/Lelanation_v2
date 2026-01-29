@@ -9,6 +9,29 @@
         <Icon name="mdi:refresh" size="16px" />
       </button>
 
+      <!-- Roles Section - Entre la version et le séparateur -->
+      <div class="roles-section">
+        <div class="roles-container">
+          <button
+            v-for="role in allRoles"
+            :key="role"
+            type="button"
+            :class="[
+              'role-icon',
+              selectedRoles.includes(role) ? 'role-selected' : 'role-unselected',
+            ]"
+            :title="getRoleName(role)"
+            @click="toggleRole(role)"
+          >
+            <img
+              :src="`/icons/roles/${role === 'adc' ? 'bot' : role}.png`"
+              :alt="getRoleName(role)"
+              class="role-image"
+            />
+          </button>
+        </div>
+      </div>
+
       <!-- Champion Section (Top) - Toujours visible -->
       <div class="champion-section">
         <!-- Portrait en forme de losange -->
@@ -411,7 +434,7 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import type { Build, Item } from '~/types/build'
+import type { Build, Item, Role } from '~/types/build'
 
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
@@ -427,6 +450,32 @@ const selectedChampion = computed(() => {
 })
 
 const { version } = useGameVersion()
+
+// Rôles
+const allRoles: Role[] = ['top', 'jungle', 'mid', 'adc', 'support']
+const selectedRoles = computed(() => buildStore.currentBuild?.roles || [])
+
+const getRoleName = (role: Role): string => {
+  const names: Record<Role, string> = {
+    top: 'Top',
+    jungle: 'Jungle',
+    mid: 'Mid',
+    adc: 'ADC',
+    support: 'Support',
+  }
+  return names[role]
+}
+
+const toggleRole = (role: Role) => {
+  const currentRoles = selectedRoles.value
+  if (currentRoles.includes(role)) {
+    // Retirer le rôle
+    buildStore.setRoles(currentRoles.filter(r => r !== role))
+  } else {
+    // Ajouter le rôle
+    buildStore.setRoles([...currentRoles, role])
+  }
+}
 
 // Get selected runes, spells, and shards
 const selectedPrimaryRunes = computed(() => buildStore.currentBuild?.runes)
@@ -546,31 +595,22 @@ const coreItemsPath2 = computed(() => {
 })
 
 // Skill order - calculer les 3 premières compétences à maxer
+// Afficher l'ordre de montée des compétences (skillUpOrder)
 const skillOrderAbilities = computed(() => {
   if (!selectedChampion.value || !buildStore.currentBuild?.skillOrder) return []
 
   const skillOrder = buildStore.currentBuild.skillOrder
-  const counts: Record<'Q' | 'W' | 'E' | 'R', number> = { Q: 0, W: 0, E: 0, R: 0 }
+  if (!skillOrder.skillUpOrder) return []
 
-  // Compter les niveaux pour chaque compétence
-  Object.values(skillOrder).forEach((ability: 'Q' | 'W' | 'E' | 'R') => {
-    if (ability && counts[ability] !== undefined) {
-      counts[ability]++
-    }
-  })
-
-  // Trier par nombre de niveaux (décroissant) et prendre les 3 premières
-  const sorted = (Object.entries(counts) as Array<['Q' | 'W' | 'E' | 'R', number]>)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([key]) => {
+  // Retourner les 3 compétences dans l'ordre de skillUpOrder
+  return skillOrder.skillUpOrder
+    .filter((ability): ability is 'Q' | 'W' | 'E' | 'R' => ability !== null)
+    .map(key => {
       const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
       const spell = selectedChampion.value?.spells[index]
       return spell ? { ...spell, key } : null
     })
     .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
-
-  return sorted
 })
 
 // Primary rune path
@@ -878,6 +918,55 @@ onMounted(() => {
   right: 8px;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.roles-section {
+  position: absolute;
+  top: 30px;
+  right: 8px; /* Aligné à droite comme la version */
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.roles-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.role-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.role-unselected {
+  opacity: 0.3;
+  filter: grayscale(100%);
+}
+
+.role-selected {
+  opacity: 1;
+  filter: grayscale(0%);
+  border: 1px solid var(--color-gold-300);
+  background: rgba(200, 155, 60, 0.1);
+}
+
+.role-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .reset-button {

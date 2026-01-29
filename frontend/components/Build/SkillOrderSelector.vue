@@ -5,36 +5,104 @@
     </div>
 
     <div v-else>
-      <div class="mb-4">
-        <p class="mb-2 font-semibold text-text">Ordre de montée des compétences (Niveaux 1-18)</p>
-        <p class="text-sm text-text/70">
-          Cliquez sur les compétences pour définir l'ordre de montée. Les 18 niveaux doivent être
-          assignés.
-        </p>
-      </div>
+      <!-- Section 1: Les 3 premiers "up" (niveaux 1, 2, 3) -->
+      <div class="mb-6">
+        <div class="mb-4">
+          <p class="mb-2 font-semibold text-text">Les 3 premiers "up" (Niveaux 1, 2, 3)</p>
+          <p class="text-sm text-text/70">
+            Définissez l'ordre dans lequel vous apprenez les 3 premières compétences
+          </p>
+        </div>
 
-      <div class="mb-4 grid grid-cols-9 gap-2">
-        <div
-          v-for="level in 18"
-          :key="level"
-          class="flex flex-col items-center rounded border border-primary bg-surface p-2"
-        >
-          <span class="mb-1 text-xs text-text">L{{ level }}</span>
-          <button
-            v-if="getSkillForLevel(level)"
-            :class="[
-              'flex h-10 w-10 items-center justify-center rounded border-2 text-lg font-bold',
-              getSkillColor(getSkillForLevel(level)!),
-            ]"
-            :title="getSkillTooltip(getSkillForLevel(level)!, level)"
-            @click="clearLevel(level)"
+        <div class="mb-4 grid grid-cols-3 gap-4">
+          <div
+            v-for="(slot, index) in 3"
+            :key="`first-${slot}`"
+            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-4"
+            :class="{
+              'border-accent bg-accent/10': selectedSlot === `first-${index}`,
+            }"
           >
-            {{ t(`skills.key.${getSkillForLevel(level)}`) }}
-          </button>
-          <div v-else class="h-10 w-10 rounded border-2 border-dashed border-text/30"></div>
+            <span class="mb-2 text-xs font-semibold text-text">Niveau {{ index + 1 }}</span>
+            <button
+              v-if="getFirstThreeUp(index)"
+              :class="[
+                'flex h-16 w-16 flex-col items-center justify-center rounded border-2 transition-all',
+                getSkillColor(getFirstThreeUp(index)!),
+              ]"
+              :title="getSpellName(getFirstThreeUp(index)!)"
+              @click="clearFirstThreeUp(index)"
+            >
+              <img
+                v-if="getSpellImage(getFirstThreeUp(index)!)"
+                :src="getSpellImageUrl(version, getSpellImage(getFirstThreeUp(index)!)!.full)"
+                :alt="getSpellName(getFirstThreeUp(index)!)"
+                class="mb-1 h-10 w-10 rounded"
+              />
+              <span class="text-lg font-bold">
+                {{ t(`skills.key.${getFirstThreeUp(index)}`) }}
+              </span>
+            </button>
+            <div
+              v-else
+              class="flex h-16 w-16 items-center justify-center rounded border-2 border-dashed border-text/30"
+            >
+              <span class="text-text/30">?</span>
+            </div>
+          </div>
         </div>
       </div>
 
+      <!-- Section 2: L'ordre de montée (les 3 compétences qu'on max en priorité) -->
+      <div class="mb-6">
+        <div class="mb-4">
+          <p class="mb-2 font-semibold text-text">Ordre de montée des compétences</p>
+          <p class="text-sm text-text/70">
+            Définissez l'ordre dans lequel vous montez les compétences (les 3 compétences maxées en
+            priorité)
+          </p>
+        </div>
+
+        <div class="mb-4 grid grid-cols-3 gap-4">
+          <div
+            v-for="(slot, index) in 3"
+            :key="`order-${slot}`"
+            class="flex flex-col items-center rounded border-2 border-primary bg-surface p-4"
+            :class="{
+              'border-accent bg-accent/10': selectedSlot === `order-${index}`,
+            }"
+          >
+            <span class="mb-2 text-xs font-semibold text-text">Priorité {{ index + 1 }}</span>
+            <button
+              v-if="getSkillUpOrder(index)"
+              :class="[
+                'flex h-16 w-16 flex-col items-center justify-center rounded border-2 transition-all',
+                getSkillColor(getSkillUpOrder(index)!),
+              ]"
+              :title="getSpellName(getSkillUpOrder(index)!)"
+              @click="clearSkillUpOrder(index)"
+            >
+              <img
+                v-if="getSpellImage(getSkillUpOrder(index)!)"
+                :src="getSpellImageUrl(version, getSpellImage(getSkillUpOrder(index)!)!.full)"
+                :alt="getSpellName(getSkillUpOrder(index)!)"
+                class="mb-1 h-10 w-10 rounded"
+              />
+              <span class="text-lg font-bold">
+                {{ t(`skills.key.${getSkillUpOrder(index)}`) }}
+              </span>
+            </button>
+            <div
+              v-else
+              class="flex h-16 w-16 items-center justify-center rounded border-2 border-dashed border-text/30"
+            >
+              <span class="text-text/30">?</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compétences disponibles -->
       <div class="mb-4">
         <p class="mb-2 font-semibold text-text">Compétences disponibles</p>
         <div class="flex gap-3">
@@ -63,27 +131,43 @@
         </div>
       </div>
 
+      <!-- Instructions pour assigner -->
       <div v-if="selectedAbility" class="mb-4">
         <p class="mb-2 text-text">
-          Cliquez sur un niveau pour assigner {{ t(`skills.key.${selectedAbility}`) }}
+          Cliquez sur une case pour assigner {{ t(`skills.key.${selectedAbility}`) }}
         </p>
-        <div class="grid grid-cols-9 gap-2">
+        <div class="grid grid-cols-3 gap-2">
+          <!-- Cases pour les 3 premiers up -->
           <button
-            v-for="level in 18"
-            :key="level"
+            v-for="index in 3"
+            :key="`assign-first-${index}`"
             :class="[
               'rounded border-2 p-2 transition-all',
-              getSkillForLevel(level) === selectedAbility
+              getFirstThreeUp(index - 1) === selectedAbility
                 ? 'border-accent bg-accent/20'
-                : canAssignSkill(level, selectedAbility)
-                  ? 'border-surface hover:border-primary'
-                  : 'cursor-not-allowed border-surface/30 bg-surface/30 opacity-50',
+                : 'border-surface hover:border-primary',
             ]"
-            :disabled="!canAssignSkill(level, selectedAbility)"
-            :title="getLevelTooltip(level, selectedAbility)"
-            @click="assignSkill(level, selectedAbility)"
+            :title="`Niveau ${index}: Assigner ${t(`skills.key.${selectedAbility}`)}`"
+            @click="assignFirstThreeUp(index - 1, selectedAbility)"
           >
-            L{{ level }}
+            Niveau {{ index }}
+          </button>
+        </div>
+        <div class="mt-2 grid grid-cols-3 gap-2">
+          <!-- Cases pour l'ordre de up -->
+          <button
+            v-for="index in 3"
+            :key="`assign-order-${index}`"
+            :class="[
+              'rounded border-2 p-2 transition-all',
+              getSkillUpOrder(index - 1) === selectedAbility
+                ? 'border-accent bg-accent/20'
+                : 'border-surface hover:border-primary',
+            ]"
+            :title="`Priorité ${index}: Assigner ${t(`skills.key.${selectedAbility}`)}`"
+            @click="assignSkillUpOrder(index - 1, selectedAbility)"
+          >
+            Priorité {{ index }}
           </button>
         </div>
       </div>
@@ -104,6 +188,7 @@ const buildStore = useBuildStore()
 const { t } = useI18n()
 
 const selectedAbility = ref<string | null>(null)
+const selectedSlot = ref<string | null>(null)
 
 const champion = computed(() => buildStore.currentBuild?.champion)
 
@@ -137,39 +222,114 @@ const availableSpells = computed(() => {
   ].filter(spell => spell.image)
 })
 
-const getSkillForLevel = (level: number): 'Q' | 'W' | 'E' | 'R' | null => {
-  const skillOrder = buildStore.currentBuild?.skillOrder
-  if (!skillOrder) return null
-  const levelKey = `level${level}` as keyof SkillOrder
-  return skillOrder[levelKey] || null
+// Initialiser le skillOrder si nécessaire
+const initializeSkillOrder = () => {
+  if (!buildStore.currentBuild) {
+    buildStore.createNewBuild()
+  }
+  if (!buildStore.currentBuild?.skillOrder) {
+    const newSkillOrder: SkillOrder = {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    }
+    buildStore.setSkillOrder(newSkillOrder)
+  }
 }
 
-const assignSkill = (level: number, ability: string) => {
+// Getters pour les 3 premiers up
+const getFirstThreeUp = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
+  initializeSkillOrder()
+  const skillOrder = buildStore.currentBuild?.skillOrder
+  if (!skillOrder || !skillOrder.firstThreeUps) return null
+  return skillOrder.firstThreeUps[index] || null
+}
+
+// Getters pour l'ordre de up
+const getSkillUpOrder = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
+  initializeSkillOrder()
+  const skillOrder = buildStore.currentBuild?.skillOrder
+  if (!skillOrder || !skillOrder.skillUpOrder) return null
+  return skillOrder.skillUpOrder[index] || null
+}
+
+// Assigner les 3 premiers up
+const assignFirstThreeUp = (index: number, ability: string) => {
+  initializeSkillOrder()
   if (!buildStore.currentBuild) return
 
-  // Vérifier les règles avant d'assigner
-  if (!canAssignSkill(level, ability)) {
-    return
+  if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
+    const skillOrder = buildStore.currentBuild.skillOrder || {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    }
+    const newFirstThreeUps = [...(skillOrder.firstThreeUps || [null, null, null])]
+    newFirstThreeUps[index] = ability as 'Q' | 'W' | 'E' | 'R'
+    buildStore.setSkillOrder({
+      ...skillOrder,
+      firstThreeUps: newFirstThreeUps as [
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+      ],
+    })
   }
+}
 
-  const skillOrder = buildStore.currentBuild.skillOrder || ({} as SkillOrder)
-  const levelKey = `level${level}` as keyof SkillOrder
+// Assigner l'ordre de up
+const assignSkillUpOrder = (index: number, ability: string) => {
+  initializeSkillOrder()
+  if (!buildStore.currentBuild) return
 
   if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
-    skillOrder[levelKey] = ability
-    buildStore.setSkillOrder(skillOrder)
+    const skillOrder = buildStore.currentBuild.skillOrder || {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    }
+    const newSkillUpOrder = [...(skillOrder.skillUpOrder || [null, null, null])]
+    newSkillUpOrder[index] = ability as 'Q' | 'W' | 'E' | 'R'
+    buildStore.setSkillOrder({
+      ...skillOrder,
+      skillUpOrder: newSkillUpOrder as [
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+      ],
+    })
   }
 }
 
-const clearLevel = (level: number) => {
+// Clear functions
+const clearFirstThreeUp = (index: number) => {
   if (!buildStore.currentBuild?.skillOrder) return
-
   const skillOrder = { ...buildStore.currentBuild.skillOrder }
-  const levelKey = `level${level}` as keyof SkillOrder
-  delete skillOrder[levelKey]
-  buildStore.setSkillOrder(skillOrder as SkillOrder)
+  const newFirstThreeUps = [...skillOrder.firstThreeUps]
+  newFirstThreeUps[index] = null as any
+  buildStore.setSkillOrder({
+    ...skillOrder,
+    firstThreeUps: newFirstThreeUps as [
+      'Q' | 'W' | 'E' | 'R',
+      'Q' | 'W' | 'E' | 'R',
+      'Q' | 'W' | 'E' | 'R',
+    ],
+  })
 }
 
+const clearSkillUpOrder = (index: number) => {
+  if (!buildStore.currentBuild?.skillOrder) return
+  const skillOrder = { ...buildStore.currentBuild.skillOrder }
+  const newSkillUpOrder = [...skillOrder.skillUpOrder]
+  newSkillUpOrder[index] = null as any
+  buildStore.setSkillOrder({
+    ...skillOrder,
+    skillUpOrder: newSkillUpOrder as [
+      'Q' | 'W' | 'E' | 'R',
+      'Q' | 'W' | 'E' | 'R',
+      'Q' | 'W' | 'E' | 'R',
+    ],
+  })
+}
+
+// Helper functions
 const getSkillColor = (ability: string): string => {
   const colors = {
     Q: 'bg-blue-500 text-white border-blue-600',
@@ -180,72 +340,14 @@ const getSkillColor = (ability: string): string => {
   return colors[ability as keyof typeof colors] || 'bg-surface text-text border-primary'
 }
 
-const getSkillTooltip = (ability: string, level: number): string => {
+const getSpellName = (ability: 'Q' | 'W' | 'E' | 'R'): string => {
   const spell = availableSpells.value.find(s => s.id === ability)
-  if (!spell) return `Niveau ${level}: ${ability}`
-  const cleanDescription = spell.description
-    ? spell.description.replace(/<[^>]*>/g, '').substring(0, 150)
-    : ''
-  return `Niveau ${level}: ${spell.name}${cleanDescription ? ' - ' + cleanDescription : ''}`
+  return spell?.name || ability
 }
 
-const canAssignSkill = (level: number, ability: string): boolean => {
-  // R ne peut être assigné qu'aux niveaux 6, 11, 16
-  if (ability === 'R') {
-    return level === 6 || level === 11 || level === 16
-  }
-
-  // Pour Q, W, E : le premier point (niveau 1) peut être assigné librement
-  if (level === 1) {
-    return true
-  }
-
-  // Au-delà du niveau 1 : vérifier que le rang ne dépasse pas la moitié du niveau (arrondi à l'inférieur)
-  const skillOrder = buildStore.currentBuild?.skillOrder
-  if (!skillOrder) return true
-
-  // Compter combien de fois cette compétence a déjà été assignée AVANT ce niveau
-  let currentRank = 0
-  for (let l = 1; l < level; l++) {
-    const levelKey = `level${l}` as keyof SkillOrder
-    if (skillOrder[levelKey] === ability) {
-      currentRank++
-    }
-  }
-
-  // Le rang maximum autorisé au niveau N est floor(N / 2)
-  // Après assignation, on aura currentRank + 1 rangs, donc il faut : currentRank + 1 <= floor(level / 2)
-  // Ce qui équivaut à : currentRank < floor(level / 2)
-  const maxRank = Math.floor(level / 2)
-  return currentRank < maxRank
-}
-
-const getLevelTooltip = (level: number, ability: string): string => {
-  if (ability === 'R') {
-    if (level === 6 || level === 11 || level === 16) {
-      return `Niveau ${level}: Vous pouvez apprendre/améliorer le R`
-    } else {
-      return `Niveau ${level}: Le R ne peut être amélioré qu'aux niveaux 6, 11 et 16`
-    }
-  }
-
-  const canAssign = canAssignSkill(level, ability)
-  if (!canAssign) {
-    const skillOrder = buildStore.currentBuild?.skillOrder
-    if (skillOrder) {
-      let currentRank = 0
-      for (let l = 1; l < level; l++) {
-        const levelKey = `level${l}` as keyof SkillOrder
-        if (skillOrder[levelKey] === ability) {
-          currentRank++
-        }
-      }
-      const maxRank = Math.floor(level / 2)
-      return `Niveau ${level}: Limite atteinte (${currentRank}/${maxRank} rangs max)`
-    }
-  }
-
-  return `Niveau ${level}: Assigner ${t(`skills.key.${ability}`)}`
+const getSpellImage = (ability: 'Q' | 'W' | 'E' | 'R'): { full: string } | null => {
+  const spell = availableSpells.value.find(s => s.id === ability)
+  return spell?.image || null
 }
 
 const { version } = useGameVersion()

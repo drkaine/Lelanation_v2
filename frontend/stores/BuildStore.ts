@@ -8,6 +8,7 @@ import type {
   SummonerSpell,
   SkillOrder,
   CalculatedStats,
+  Role,
 } from '~/types/build'
 import { useVersionStore } from '~/stores/VersionStore'
 
@@ -56,13 +57,18 @@ export const useBuildStore = defineStore('build', {
         return false
       }
 
-      // Check skill order (all 18 levels)
+      // Check skill order (firstThreeUps and skillUpOrder must be complete)
       if (!build.skillOrder) return false
-      const levels = Object.keys(build.skillOrder) as Array<keyof SkillOrder>
-      if (levels.length !== 18) return false
-      for (const level of levels) {
-        if (!build.skillOrder[level]) return false
+      // Les 3 premiers up doivent être définis
+      if (!build.skillOrder.firstThreeUps || build.skillOrder.firstThreeUps.length !== 3) {
+        return false
       }
+      if (build.skillOrder.firstThreeUps.some(up => !up)) return false
+      // L'ordre de montée doit être défini
+      if (!build.skillOrder.skillUpOrder || build.skillOrder.skillUpOrder.length !== 3) {
+        return false
+      }
+      if (build.skillOrder.skillUpOrder.some(up => !up)) return false
 
       return true
     },
@@ -109,9 +115,21 @@ export const useBuildStore = defineStore('build', {
       if (!build.skillOrder) {
         errors.push('Skill order must be configured')
       } else {
-        const levels = Object.keys(build.skillOrder) as Array<keyof SkillOrder>
-        if (levels.length !== 18) {
-          errors.push('Skill order must be complete (18 levels)')
+        // Vérifier les 3 premiers up
+        if (
+          !build.skillOrder.firstThreeUps ||
+          build.skillOrder.firstThreeUps.length !== 3 ||
+          build.skillOrder.firstThreeUps.some(up => !up)
+        ) {
+          errors.push('Les 3 premiers "up" doivent être définis (niveaux 1, 2, 3)')
+        }
+        // Vérifier l'ordre de montée
+        if (
+          !build.skillOrder.skillUpOrder ||
+          build.skillOrder.skillUpOrder.length !== 3 ||
+          build.skillOrder.skillUpOrder.some(up => !up)
+        ) {
+          errors.push("L'ordre de montée des compétences doit être défini (3 compétences)")
         }
       }
 
@@ -163,7 +181,13 @@ export const useBuildStore = defineStore('build', {
         runes: null,
         shards: null,
         summonerSpells: [null, null],
-        skillOrder: null,
+        skillOrder: {
+          firstThreeUps: [null as any, null as any, null as any],
+          skillUpOrder: [null as any, null as any, null as any],
+        },
+        roles: [], // Aucun rôle sélectionné par défaut
+        upvote: 0,
+        downvote: 0,
         gameVersion: '', // Will be set from version service
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -252,6 +276,16 @@ export const useBuildStore = defineStore('build', {
       }
       if (this.currentBuild) {
         this.currentBuild.skillOrder = skillOrder
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    setRoles(roles: Role[]) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.roles = roles
         this.currentBuild.updatedAt = new Date().toISOString()
       }
     },

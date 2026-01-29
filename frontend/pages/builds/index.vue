@@ -182,6 +182,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
@@ -197,6 +198,7 @@ const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const { version } = useGameVersion()
+const route = useRoute()
 
 const buildToDelete = ref<string | null>(null)
 
@@ -224,7 +226,18 @@ const tabs = computed(() => {
   return availableTabs
 })
 
-const activeTab = ref('discover')
+// Initialiser activeTab depuis l'URL ou par défaut 'discover'
+const activeTab = ref((route.query.tab as string) || 'discover')
+
+// Mettre à jour activeTab quand l'URL change
+watch(
+  () => route.query.tab,
+  newTab => {
+    if (newTab && typeof newTab === 'string') {
+      activeTab.value = newTab
+    }
+  }
+)
 
 const confirmDelete = (buildId: string) => {
   buildToDelete.value = buildId

@@ -15,8 +15,6 @@
 
         <!-- Step Content (Right Side) -->
         <div class="flex-1">
-          <h2 class="mb-6 text-2xl font-bold">Infos</h2>
-
           <!-- Tabs Navigation -->
           <div class="mb-6 flex gap-2 border-b border-primary/20">
             <button
@@ -112,7 +110,80 @@
             </div>
 
             <!-- Save Button (Form Tab) -->
-            <div class="mt-8 flex gap-4 border-t border-primary/20 pt-6">
+            <div class="mt-8 flex flex-col gap-4 border-t border-primary/20 pt-6">
+              <!-- Debug Info (développement) -->
+              <div
+                v-if="!buildStore.isBuildValid && validationDebug.checks"
+                class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
+              >
+                <p class="mb-2 font-semibold text-info">État de validation (debug) :</p>
+                <div class="space-y-1 text-text/80">
+                  <div>
+                    <span class="font-medium">Champion:</span>
+                    <span :class="validationDebug.checks?.champion ? 'text-success' : 'text-error'">
+                      {{ validationDebug.checks?.champion ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Items:</span>
+                    <span :class="validationDebug.checks?.items ? 'text-success' : 'text-error'">
+                      {{ validationDebug.checks?.items ? '✓' : '✗' }}
+                    </span>
+                    <span class="text-text/60"> ({{ validationDebug.checks?.itemsCount }})</span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Runes (Primary):</span>
+                    <span
+                      :class="validationDebug.checks?.runesPrimary ? 'text-success' : 'text-error'"
+                    >
+                      {{ validationDebug.checks?.runesPrimary ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Runes (Secondary):</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.runesSecondary ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.runesSecondary ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Summoner Spells:</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.summonerSpells ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.summonerSpells ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Skill Order:</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.skillOrderComplete ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.skillOrderComplete ? '✓' : '✗' }}
+                    </span>
+                    <span class="text-text/60"> (3 premiers + 3 ordre) </span>
+                  </div>
+                </div>
+              </div>
+              <!-- Validation Errors Display -->
+              <div
+                v-if="showValidationErrors && !buildStore.isBuildValid"
+                class="rounded-lg border border-warning/50 bg-warning/10 p-4"
+              >
+                <p class="mb-2 font-semibold text-warning">Le build n'est pas complet :</p>
+                <ul class="list-inside list-disc space-y-1 text-sm text-text/80">
+                  <li v-for="error in buildStore.validationErrors" :key="error">
+                    {{ error }}
+                  </li>
+                </ul>
+              </div>
               <button
                 :disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
                 :class="[
@@ -133,7 +204,80 @@
             <SkillOrderSelector />
 
             <!-- Save Button (Skill Order Tab) -->
-            <div class="mt-8 flex gap-4 border-t border-primary/20 pt-6">
+            <div class="mt-8 flex flex-col gap-4 border-t border-primary/20 pt-6">
+              <!-- Debug Info (développement) -->
+              <div
+                v-if="!buildStore.isBuildValid && validationDebug.checks"
+                class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
+              >
+                <p class="mb-2 font-semibold text-info">État de validation (debug) :</p>
+                <div class="space-y-1 text-text/80">
+                  <div>
+                    <span class="font-medium">Champion:</span>
+                    <span :class="validationDebug.checks?.champion ? 'text-success' : 'text-error'">
+                      {{ validationDebug.checks?.champion ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Items:</span>
+                    <span :class="validationDebug.checks?.items ? 'text-success' : 'text-error'">
+                      {{ validationDebug.checks?.items ? '✓' : '✗' }}
+                    </span>
+                    <span class="text-text/60"> ({{ validationDebug.checks?.itemsCount }})</span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Runes (Primary):</span>
+                    <span
+                      :class="validationDebug.checks?.runesPrimary ? 'text-success' : 'text-error'"
+                    >
+                      {{ validationDebug.checks?.runesPrimary ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Runes (Secondary):</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.runesSecondary ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.runesSecondary ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Summoner Spells:</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.summonerSpells ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.summonerSpells ? '✓' : '✗' }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Skill Order:</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.skillOrderComplete ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.skillOrderComplete ? '✓' : '✗' }}
+                    </span>
+                    <span class="text-text/60"> (3 premiers + 3 ordre) </span>
+                  </div>
+                </div>
+              </div>
+              <!-- Validation Errors Display -->
+              <div
+                v-if="showValidationErrors && !buildStore.isBuildValid"
+                class="rounded-lg border border-warning/50 bg-warning/10 p-4"
+              >
+                <p class="mb-2 font-semibold text-warning">Le build n'est pas complet :</p>
+                <ul class="list-inside list-disc space-y-1 text-sm text-text/80">
+                  <li v-for="error in buildStore.validationErrors" :key="error">
+                    {{ error }}
+                  </li>
+                </ul>
+              </div>
               <button
                 :disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
                 :class="[
@@ -151,6 +295,14 @@
         </div>
       </div>
     </div>
+
+    <!-- Notification Toast -->
+    <NotificationToast
+      v-if="showNotification"
+      :message="notificationMessage"
+      :type="buildStore.status === 'success' ? 'success' : 'error'"
+      @close="showNotification = false"
+    />
   </div>
 </template>
 
@@ -161,6 +313,7 @@ import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
+import NotificationToast from '~/components/NotificationToast.vue'
 
 definePageMeta({
   layout: false,
@@ -187,6 +340,44 @@ const buildDescription = ref('')
 const visibility = ref<'public' | 'private'>('public')
 const showValidationErrors = ref(false)
 
+// Debug: computed pour afficher l'état de validation en temps réel
+const validationDebug = computed(() => {
+  if (!buildStore.currentBuild) {
+    return { isValid: false, reason: 'No build' }
+  }
+  const build = buildStore.currentBuild
+  const checks = {
+    champion: !!build.champion,
+    items: !!(build.items && build.items.length > 0 && build.items.length <= 10),
+    itemsCount: build.items?.length || 0,
+    runes: !!build.runes,
+    runesPrimary: !!(build.runes?.primary?.pathId && build.runes?.primary?.keystone),
+    runesSecondary: !!build.runes?.secondary?.pathId,
+    summonerSpells: !!(
+      build.summonerSpells &&
+      build.summonerSpells.length === 2 &&
+      build.summonerSpells[0] &&
+      build.summonerSpells[1]
+    ),
+    skillOrder: !!build.skillOrder,
+    skillOrderLevels: build.skillOrder
+      ? (build.skillOrder.firstThreeUps?.filter(Boolean).length || 0) +
+        (build.skillOrder.skillUpOrder?.filter(Boolean).length || 0)
+      : 0,
+    skillOrderComplete: build.skillOrder
+      ? build.skillOrder.firstThreeUps?.length === 3 &&
+        build.skillOrder.firstThreeUps.every(v => !!v) &&
+        build.skillOrder.skillUpOrder?.length === 3 &&
+        build.skillOrder.skillUpOrder.every(v => !!v)
+      : false,
+  }
+  return {
+    isValid: buildStore.isBuildValid,
+    checks,
+    errors: buildStore.validationErrors,
+  }
+})
+
 const updateBuildName = () => {
   buildStore.setName(buildName.value)
 }
@@ -204,14 +395,25 @@ const toggleVisibility = () => {
   buildStore.setVisibility(visibility.value)
 }
 
+const showNotification = ref(false)
+const notificationMessage = ref('')
+
 const saveBuild = async () => {
   showValidationErrors.value = true
   const success = await buildStore.saveBuild()
-  if (success) {
-    // Reset status after 3 seconds
+  if (success && buildStore.status === 'success') {
+    // Afficher la notification verte
+    notificationMessage.value = 'Build sauvegardé avec succès !'
+    showNotification.value = true
+
+    // Rediriger vers la page builds, onglet "mes builds" après un court délai
     setTimeout(() => {
-      buildStore.status = 'idle'
-    }, 3000)
+      router.push('/builds?tab=my-builds')
+    }, 1000) // Délai pour que l'utilisateur voie la notification
+  } else {
+    // Afficher une notification d'erreur
+    notificationMessage.value = buildStore.error || 'Erreur lors de la sauvegarde'
+    showNotification.value = true
   }
 }
 
@@ -243,6 +445,11 @@ onMounted(() => {
   } else {
     visibility.value = 'public'
     buildStore.setVisibility('public')
+  }
+
+  // Initialiser les rôles si nécessaire
+  if (!current?.roles) {
+    buildStore.setRoles([])
   }
 
   showValidationErrors.value = false

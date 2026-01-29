@@ -257,25 +257,13 @@ export interface SummonerSpell {
 }
 
 export interface SkillOrder {
-  level1: 'Q' | 'W' | 'E' | 'R'
-  level2: 'Q' | 'W' | 'E' | 'R'
-  level3: 'Q' | 'W' | 'E' | 'R'
-  level4: 'Q' | 'W' | 'E' | 'R'
-  level5: 'Q' | 'W' | 'E' | 'R'
-  level6: 'Q' | 'W' | 'E' | 'R'
-  level7: 'Q' | 'W' | 'E' | 'R'
-  level8: 'Q' | 'W' | 'E' | 'R'
-  level9: 'Q' | 'W' | 'E' | 'R'
-  level10: 'Q' | 'W' | 'E' | 'R'
-  level11: 'Q' | 'W' | 'E' | 'R'
-  level12: 'Q' | 'W' | 'E' | 'R'
-  level13: 'Q' | 'W' | 'E' | 'R'
-  level14: 'Q' | 'W' | 'E' | 'R'
-  level15: 'Q' | 'W' | 'E' | 'R'
-  level16: 'Q' | 'W' | 'E' | 'R'
-  level17: 'Q' | 'W' | 'E' | 'R'
-  level18: 'Q' | 'W' | 'E' | 'R'
+  // Les 3 premiers "up" (niveaux 1, 2, 3)
+  firstThreeUps: ['Q' | 'W' | 'E' | 'R', 'Q' | 'W' | 'E' | 'R', 'Q' | 'W' | 'E' | 'R']
+  // L'ordre de montée des compétences (les 3 compétences qu'on max en priorité)
+  skillUpOrder: ['Q' | 'W' | 'E' | 'R', 'Q' | 'W' | 'E' | 'R', 'Q' | 'W' | 'E' | 'R']
 }
+
+export type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 
 export interface Build {
   id: string
@@ -289,6 +277,9 @@ export interface Build {
   shards: ShardSelection | null
   summonerSpells: [SummonerSpell | null, SummonerSpell | null]
   skillOrder: SkillOrder | null
+  roles: Role[] // Rôles sélectionnés pour ce build
+  upvote: number // Nombre de votes positifs
+  downvote: number // Nombre de votes négatifs
   gameVersion: string
   createdAt: string
   updatedAt: string

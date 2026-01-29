@@ -39,6 +39,11 @@ export async function migrateBuildToCurrent(
 
   const migrated: Build = {
     ...build,
+    // Initialiser les rôles si absents
+    roles: build.roles || [],
+    // Initialiser les votes si absents
+    upvote: build.upvote ?? 0,
+    downvote: build.downvote ?? 0,
     gameVersion: currentVersion,
     updatedAt: new Date().toISOString(),
   }
