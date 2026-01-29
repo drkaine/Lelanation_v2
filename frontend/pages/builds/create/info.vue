@@ -406,6 +406,16 @@ const saveBuild = async () => {
     notificationMessage.value = 'Build sauvegardé avec succès !'
     showNotification.value = true
 
+    // Vider le store pour pouvoir créer un nouveau build de zéro
+    buildStore.createNewBuild()
+
+    // Réinitialiser les champs du formulaire
+    buildName.value = 'New Build'
+    buildAuthor.value = ''
+    buildDescription.value = ''
+    visibility.value = 'public'
+    showValidationErrors.value = false
+
     // Rediriger vers la page builds, onglet "mes builds" après un court délai
     setTimeout(() => {
       router.push('/builds?tab=my-builds')

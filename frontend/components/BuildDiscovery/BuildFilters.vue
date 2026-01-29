@@ -1,6 +1,7 @@
 <template>
   <div class="build-filters">
-    <div class="mb-4 flex flex-wrap items-center gap-4">
+    <!-- First row: Up-to-date, Champion and Sort selectors (will be on same line as Search) -->
+    <div class="flex flex-wrap items-center gap-4">
       <!-- Up-to-date toggle -->
       <label class="flex cursor-pointer items-center gap-2">
         <input
@@ -27,60 +28,6 @@
         </select>
       </div>
 
-      <!-- Role filter -->
-      <div class="flex items-center gap-2">
-        <label class="text-sm text-text">Role:</label>
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === null)"
-            @click="setRole(null)"
-          >
-            Tous
-          </button>
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === 'top')"
-            @click="setRole('top')"
-          >
-            <img src="/icons/roles/top.png" alt="Top" class="h-5 w-5" />
-            <span>Top</span>
-          </button>
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === 'jungle')"
-            @click="setRole('jungle')"
-          >
-            <img src="/icons/roles/jungle.png" alt="Jungle" class="h-5 w-5" />
-            <span>Jungle</span>
-          </button>
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === 'mid')"
-            @click="setRole('mid')"
-          >
-            <img src="/icons/roles/mid.png" alt="Mid" class="h-5 w-5" />
-            <span>Mid</span>
-          </button>
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === 'adc')"
-            @click="setRole('adc')"
-          >
-            <img src="/icons/roles/bot.png" alt="ADC" class="h-5 w-5" />
-            <span>ADC</span>
-          </button>
-          <button
-            type="button"
-            :class="roleChipClass(selectedRole === 'support')"
-            @click="setRole('support')"
-          >
-            <img src="/icons/roles/support.png" alt="Support" class="h-5 w-5" />
-            <span>Support</span>
-          </button>
-        </div>
-      </div>
-
       <!-- Sort -->
       <div class="flex items-center gap-2">
         <label class="text-sm text-text">Sort:</label>
@@ -103,6 +50,53 @@
       >
         Clear Filters
       </button>
+    </div>
+
+    <!-- Second row: Role filter (below) -->
+    <div class="mt-4 flex items-center gap-2">
+      <label class="text-sm text-text">Role:</label>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === 'top')"
+          @click="toggleRole('top')"
+        >
+          <img src="/icons/roles/top.png" alt="Top" class="h-4 w-4" />
+          <span class="text-xs">Top</span>
+        </button>
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === 'jungle')"
+          @click="toggleRole('jungle')"
+        >
+          <img src="/icons/roles/jungle.png" alt="Jungle" class="h-4 w-4" />
+          <span class="text-xs">Jungle</span>
+        </button>
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === 'mid')"
+          @click="toggleRole('mid')"
+        >
+          <img src="/icons/roles/mid.png" alt="Mid" class="h-4 w-4" />
+          <span class="text-xs">Mid</span>
+        </button>
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === 'adc')"
+          @click="toggleRole('adc')"
+        >
+          <img src="/icons/roles/bot.png" alt="ADC" class="h-4 w-4" />
+          <span class="text-xs">ADC</span>
+        </button>
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === 'support')"
+          @click="toggleRole('support')"
+        >
+          <img src="/icons/roles/support.png" alt="Support" class="h-4 w-4" />
+          <span class="text-xs">Support</span>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -144,9 +138,18 @@ const setRole = (role: FilterRole) => {
   discoveryStore.setSelectedRole(role)
 }
 
+const toggleRole = (role: FilterRole) => {
+  // Si le rôle est déjà sélectionné, le désélectionner
+  if (selectedRole.value === role) {
+    setRole(null)
+  } else {
+    setRole(role)
+  }
+}
+
 const roleChipClass = (active: boolean) =>
   [
-    'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+    'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
     active
       ? 'border-accent bg-accent/20 text-accent'
       : 'border-accent/70 bg-background/10 text-accent-dark hover:border-accent hover:bg-accent/10 hover:text-accent',

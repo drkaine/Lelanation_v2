@@ -53,7 +53,7 @@ export default defineNuxtConfig({
   sitemap: {
     sitemaps: {
       default: {
-        include: ['/', '/builds', '/builds/create', '/videos', '/privacy', '/admin'],
+        include: ['/', '/builds', '/builds/create', '/videos', '/privacy', '/legal', '/admin'],
         exclude: ['/api/**'],
       },
     },

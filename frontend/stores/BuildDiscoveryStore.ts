@@ -34,13 +34,14 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     searchResults(): Build[] {
       let results = [...this.builds]
 
-      // Search by champion name
+      // Search by champion name or author
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase()
         results = results.filter(
           build =>
             build.champion?.name.toLowerCase().includes(query) ||
-            build.champion?.id.toLowerCase().includes(query)
+            build.champion?.id.toLowerCase().includes(query) ||
+            (build.author && build.author.toLowerCase().includes(query))
         )
       }
 

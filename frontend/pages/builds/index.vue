@@ -1,32 +1,30 @@
 <template>
   <div class="builds-page min-h-screen p-4 text-text">
     <div class="max-w-8xl mx-auto px-2">
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="text-3xl font-bold text-text-accent">Les Builds</h1>
-        <NuxtLink
-          to="/builds/create"
-          class="rounded-lg bg-accent px-6 py-2 text-background transition-colors hover:bg-accent-dark"
-        >
-          Créer un Build
-        </NuxtLink>
-      </div>
-
       <!-- Tabs -->
       <div v-if="tabs.length > 1" class="mb-6 border-b-2 border-accent/70">
-        <div class="flex gap-4">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            :class="[
-              'px-6 py-3 font-semibold transition-colors',
-              activeTab === tab.id
-                ? 'border-b-2 border-accent text-accent'
-                : 'text-text-secondary hover:text-text-primary',
-            ]"
-            @click="activeTab = tab.id"
+        <div class="flex items-center justify-between">
+          <div class="flex gap-4">
+            <button
+              v-for="tab in tabs"
+              :key="tab.id"
+              :class="[
+                'px-6 py-3 font-semibold transition-colors',
+                activeTab === tab.id
+                  ? 'border-b-2 border-accent text-accent'
+                  : 'text-text-secondary hover:text-text-primary',
+              ]"
+              @click="handleTabClick(tab.id)"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+          <NuxtLink
+            to="/builds/create"
+            class="rounded-lg bg-accent px-3 py-1.5 text-sm text-background transition-colors hover:bg-accent-dark"
           >
-            {{ tab.label }}
-          </button>
+            Créer un Build
+          </NuxtLink>
         </div>
       </div>
 
@@ -34,8 +32,10 @@
       <div v-if="activeTab === 'discover'" class="tab-content">
         <!-- Search and Filters -->
         <div class="mb-6 space-y-4">
-          <BuildSearch />
-          <BuildFilters />
+          <div class="flex flex-wrap items-center gap-4">
+            <BuildSearch />
+            <BuildFilters />
+          </div>
         </div>
 
         <!-- Comparison Bar -->
@@ -73,63 +73,20 @@
 
       <!-- Tab Content: My Builds -->
       <div v-if="activeTab === 'my-builds'" class="tab-content">
-        <div v-if="builds.length === 0" class="py-12 text-center">
-          <p class="mb-4 text-lg text-text-secondary">Aucun build sauvegardé</p>
-          <NuxtLink
-            to="/builds/create"
-            class="inline-block rounded-lg bg-accent px-6 py-2 text-background transition-colors hover:bg-accent-dark"
-          >
-            Créer votre premier build
-          </NuxtLink>
-        </div>
-
-        <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-4">
-            <!-- BuildCard Sheet (cliquable pour aller à la page individuelle) -->
-            <div class="relative">
-              <NuxtLink :to="`/builds/${build.id}`" class="block">
-                <BuildCard :build="build" :readonly="true" />
-              </NuxtLink>
-              <!-- Boutons d'action (en overlay, positionnés en haut à droite) -->
-              <div class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
-                <!-- Bouton Supprimer -->
-                <button
-                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
-                  title="Supprimer le build"
-                  @click.stop="confirmDelete(build.id)"
-                >
-                  ✕
-                </button>
-                <!-- Bouton Modifier (symbole crayon) -->
-                <NuxtLink
-                  :to="`/builds/edit/${build.id}`"
-                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
-                  title="Modifier le build"
-                  @click.stop
-                >
-                  ✎
-                </NuxtLink>
-              </div>
-            </div>
-
-            <!-- Informations du build (auteur et description) -->
-            <div class="w-full max-w-[300px] space-y-2">
-              <!-- Auteur -->
-              <div v-if="build.author" class="text-sm text-text/70">
-                <span class="font-semibold">Auteur:</span>
-                <span class="ml-1">{{ build.author }}</span>
-              </div>
-
-              <!-- Description -->
-              <div v-if="build.description" class="text-sm text-text/80">
-                <p class="line-clamp-3">{{ build.description }}</p>
-              </div>
-
-              <!-- Date de création -->
-              <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
-            </div>
+        <!-- Search and Filters -->
+        <div class="mb-6 space-y-4">
+          <div class="flex flex-wrap items-center gap-4">
+            <BuildSearch />
+            <BuildFilters />
           </div>
         </div>
+
+        <!-- Build Grid avec les builds de l'utilisateur -->
+        <BuildGrid
+          :custom-builds="builds"
+          :show-user-actions="true"
+          @delete-build="confirmDelete"
+        />
       </div>
 
       <!-- Tab Content: Lelariva Builds -->
@@ -180,7 +137,6 @@ import { useVoteStore } from '~/stores/VoteStore'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
-import BuildCard from '~/components/Build/BuildCard.vue'
 import type { Build } from '~/types/build'
 
 const buildStore = useBuildStore()
@@ -235,6 +191,16 @@ const getInitialTab = (): string => {
 
 const activeTab = ref(getInitialTab())
 
+// Gérer le clic sur un onglet (désélectionner si déjà actif)
+const handleTabClick = (tabId: string) => {
+  if (activeTab.value === tabId) {
+    // Si l'onglet est déjà actif, le désélectionner en revenant à 'discover'
+    activeTab.value = 'discover'
+  } else {
+    activeTab.value = tabId
+  }
+}
+
 // Sauvegarder l'onglet actif dans localStorage et mettre à jour l'URL
 watch(activeTab, async newTab => {
   try {
@@ -269,10 +235,6 @@ const deleteBuild = () => {
 
 const clearComparison = () => {
   discoveryStore.clearComparison()
-}
-
-const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString('fr-FR')
 }
 
 // Watch for changes in tabs to update active tab if current tab becomes unavailable

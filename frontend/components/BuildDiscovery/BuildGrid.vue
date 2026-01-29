@@ -15,7 +15,19 @@
     </div>
 
     <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-      <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-4">
+      <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-2">
+        <!-- Informations au-dessus de la sheet (nom et auteur) -->
+        <div
+          class="flex min-h-[60px] w-full max-w-[300px] flex-col justify-center space-y-1 text-center"
+        >
+          <!-- Nom du build -->
+          <h3 class="text-lg font-semibold text-text">{{ build.name || 'Sans nom' }}</h3>
+          <!-- Auteur -->
+          <div class="text-sm text-text/70" :class="{ invisible: !build.author }">
+            <span class="ml-1">{{ build.author || 'Placeholder' }}</span>
+          </div>
+        </div>
+
         <!-- BuildCard Sheet -->
         <div class="relative">
           <div class="cursor-pointer" @click="navigateToBuild(build.id)">
@@ -23,9 +35,32 @@
               <BuildCard :build="build" :readonly="true" />
             </div>
           </div>
+          <!-- Boutons d'action utilisateur (supprimer/modifier) -->
+          <div
+            v-if="props.showUserActions"
+            class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5"
+          >
+            <!-- Bouton Supprimer -->
+            <button
+              class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
+              title="Supprimer le build"
+              @click.stop="$emit('delete-build', build.id)"
+            >
+              ✕
+            </button>
+            <!-- Bouton Modifier (symbole crayon) -->
+            <NuxtLink
+              :to="`/builds/edit/${build.id}`"
+              class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
+              title="Modifier le build"
+              @click.stop
+            >
+              ✎
+            </NuxtLink>
+          </div>
         </div>
 
-        <!-- Informations du build (auteur et description) -->
+        <!-- Informations en dessous de la sheet (description, date, votes, partager) -->
         <div class="w-full max-w-[300px] space-y-2">
           <div class="flex items-center justify-end gap-2">
             <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
@@ -103,19 +138,17 @@
             </div>
           </div>
 
-          <!-- Auteur -->
-          <div v-if="build.author" class="text-sm text-text/70">
-            <span class="font-semibold">Auteur:</span>
-            <span class="ml-1">{{ build.author }}</span>
-          </div>
-
           <!-- Description -->
-          <div v-if="build.description" class="text-sm text-text/80">
-            <p class="line-clamp-3">{{ build.description }}</p>
+          <div class="min-h-[60px] text-sm text-text/80">
+            <p v-if="build.description" class="line-clamp-3">{{ build.description }}</p>
+            <p v-else class="invisible">Placeholder</p>
           </div>
 
           <!-- Date de création -->
-          <p class="text-xs text-text/50">Créé le : {{ formatDate(build.createdAt) }}</p>
+          <p class="min-h-[20px] text-xs text-text/50">
+            <span v-if="build.createdAt">Créé le : {{ formatDate(build.createdAt) }}</span>
+            <span v-else class="invisible">Placeholder</span>
+          </p>
         </div>
       </div>
     </div>
@@ -129,6 +162,8 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
+import { useVersionStore } from '~/stores/VersionStore'
+import type { Build } from '~/types/build'
 
 const buildStore = useBuildStore()
 const openShareDropdown = ref<string | null>(null)
@@ -136,18 +171,101 @@ const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 
 interface Props {
   showComparisonButtons?: boolean
+  customBuilds?: Build[]
+  showUserActions?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showComparisonButtons: true,
+  customBuilds: undefined,
+  showUserActions: false,
 })
+
+defineEmits<{
+  'delete-build': [buildId: string]
+}>()
 
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const router = useRouter()
 
-const builds = computed(() => discoveryStore.filteredBuilds)
-const hasActiveFilters = computed(() => discoveryStore.hasActiveFilters)
+// Filtrer les customBuilds avec les mêmes critères que discoveryStore
+const filteredCustomBuilds = computed(() => {
+  if (!props.customBuilds) return null
+
+  let results = [...props.customBuilds]
+  const versionStore = useVersionStore()
+  const currentVersion = versionStore.currentVersion
+
+  // Search by champion name or author
+  if (discoveryStore.searchQuery) {
+    const query = discoveryStore.searchQuery.toLowerCase()
+    results = results.filter(
+      build =>
+        build.champion?.name.toLowerCase().includes(query) ||
+        build.champion?.id.toLowerCase().includes(query) ||
+        (build.author && build.author.toLowerCase().includes(query))
+    )
+  }
+
+  // Filter by champion
+  if (discoveryStore.selectedChampion) {
+    results = results.filter(build => build.champion?.id === discoveryStore.selectedChampion)
+  }
+
+  // Filter by role
+  if (discoveryStore.selectedRole) {
+    results = results.filter(build => build.roles?.includes(discoveryStore.selectedRole!))
+  }
+
+  // Filter by up-to-date
+  if (discoveryStore.onlyUpToDate) {
+    results = results.filter(build => build.gameVersion === currentVersion)
+  }
+
+  // Sort
+  switch (discoveryStore.sortBy) {
+    case 'recent':
+      results.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime()
+        const dateB = new Date(b.createdAt || 0).getTime()
+        return dateB - dateA
+      })
+      break
+    case 'popular': {
+      results.sort((a, b) => {
+        const votesA = voteStore.getVoteCount(a.id)
+        const votesB = voteStore.getVoteCount(b.id)
+        if (votesA !== votesB) {
+          return votesB - votesA
+        }
+        // If same votes, sort by most recent
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      })
+      break
+    }
+    case 'name':
+      results.sort((a, b) => {
+        const nameA = a.name?.toLowerCase() || ''
+        const nameB = b.name?.toLowerCase() || ''
+        return nameA.localeCompare(nameB)
+      })
+      break
+  }
+
+  return results
+})
+
+const builds = computed(() => filteredCustomBuilds.value ?? discoveryStore.filteredBuilds)
+const hasActiveFilters = computed(() => {
+  return (
+    !!discoveryStore.searchQuery ||
+    !!discoveryStore.selectedChampion ||
+    !!discoveryStore.selectedRole ||
+    discoveryStore.onlyUpToDate ||
+    discoveryStore.sortBy !== 'recent'
+  )
+})
 
 const navigateToBuild = (buildId: string) => {
   router.push(`/builds/${buildId}`)

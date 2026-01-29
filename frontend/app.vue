@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="flex min-h-screen flex-col">
     <a
       href="#main"
       class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-surface focus:px-4 focus:py-2 focus:text-text"
@@ -10,12 +10,14 @@
     <main id="main" tabindex="-1">
       <NuxtPage />
     </main>
+    <AppFooter />
     <CookieConsentBanner />
   </div>
 </template>
 
 <script setup lang="ts">
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
+import AppFooter from '~/components/AppFooter.vue'
 
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true })
 useHead(() => ({
