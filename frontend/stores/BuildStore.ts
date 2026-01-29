@@ -11,6 +11,7 @@ import type {
   Role,
 } from '~/types/build'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useVoteStore } from '~/stores/VoteStore'
 
 interface BuildState {
   currentBuild: Build | null
@@ -400,6 +401,9 @@ export const useBuildStore = defineStore('build', {
           console.warn('Build saved locally but API /api/builds is unreachable.', e)
         }
 
+        // 3) Vérifier si le build doit passer en privé automatiquement
+        await this.checkAndUpdateVisibility()
+
         this.status = 'success'
         this.error = null
         return true
@@ -407,6 +411,42 @@ export const useBuildStore = defineStore('build', {
         this.error = error instanceof Error ? error.message : 'Failed to save build'
         this.status = 'error'
         return false
+      }
+    },
+
+    async checkAndUpdateVisibility() {
+      if (!this.currentBuild) return
+
+      const voteStore = useVoteStore()
+      const upvotes = voteStore.getUpvoteCount(this.currentBuild.id)
+      const downvotes = voteStore.getDownvoteCount(this.currentBuild.id)
+      const totalVotes = upvotes + downvotes
+
+      if (totalVotes >= 10) {
+        const upvotePercentage = (upvotes / totalVotes) * 100
+        if (upvotePercentage < 30) {
+          // Passer le build en privé
+          this.currentBuild.visibility = 'private'
+          // Re-sauvegarder avec la nouvelle visibilité
+          const savedBuilds = this.getSavedBuilds()
+          const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+          if (existingIndex >= 0) {
+            savedBuilds[existingIndex] = this.currentBuild
+            localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+          }
+
+          // Sauvegarder aussi côté serveur
+          try {
+            const { apiUrl } = await import('~/utils/apiUrl')
+            await fetch(apiUrl('/api/builds'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.currentBuild),
+            })
+          } catch {
+            // Ignore errors
+          }
+        }
       }
     },
 

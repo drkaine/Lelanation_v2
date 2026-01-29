@@ -85,26 +85,29 @@
 
         <div v-else class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-4">
-            <!-- BuildCard Sheet -->
+            <!-- BuildCard Sheet (cliquable pour aller à la page individuelle) -->
             <div class="relative">
-              <BuildCard :build="build" :readonly="true" />
-              <!-- Boutons d'action (en overlay) -->
-              <div class="absolute -right-2 -top-2 z-10 flex flex-col gap-2">
+              <NuxtLink :to="`/builds/${build.id}`" class="block">
+                <BuildCard :build="build" :readonly="true" />
+              </NuxtLink>
+              <!-- Boutons d'action (en overlay, positionnés en haut à droite) -->
+              <div class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
                 <!-- Bouton Supprimer -->
                 <button
-                  class="rounded-full bg-error p-1.5 text-white shadow-lg transition-colors hover:bg-error/80"
+                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
                   title="Supprimer le build"
-                  @click="confirmDelete(build.id)"
+                  @click.stop="confirmDelete(build.id)"
                 >
                   ✕
                 </button>
-                <!-- Bouton Modifier (icône crayon) -->
+                <!-- Bouton Modifier (symbole crayon) -->
                 <NuxtLink
                   :to="`/builds/edit/${build.id}`"
-                  class="rounded-full bg-surface p-1.5 text-text shadow-lg transition-colors hover:bg-primary/20"
+                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
                   title="Modifier le build"
+                  @click.stop
                 >
-                  <Icon name="mdi:pencil" class="h-4 w-4" />
+                  ✎
                 </NuxtLink>
               </div>
             </div>
@@ -211,14 +214,43 @@ const tabs = computed(() => {
   return availableTabs
 })
 
-// Initialiser activeTab depuis l'URL ou par défaut 'discover'
-const activeTab = ref((route.query.tab as string) || 'discover')
+// Initialiser activeTab depuis l'URL, localStorage, ou par défaut 'discover'
+const getInitialTab = (): string => {
+  // Priorité 1: URL query parameter
+  if (route.query.tab && typeof route.query.tab === 'string') {
+    return route.query.tab
+  }
+  // Priorité 2: localStorage
+  try {
+    const savedTab = localStorage.getItem('lelanation_active_tab')
+    if (savedTab && ['discover', 'my-builds', 'lelariva'].includes(savedTab)) {
+      return savedTab
+    }
+  } catch {
+    // Ignore localStorage errors
+  }
+  // Priorité 3: Défaut
+  return 'discover'
+}
 
-// Mettre à jour activeTab quand l'URL change
+const activeTab = ref(getInitialTab())
+
+// Sauvegarder l'onglet actif dans localStorage et mettre à jour l'URL
+watch(activeTab, async newTab => {
+  try {
+    localStorage.setItem('lelanation_active_tab', newTab)
+  } catch {
+    // Ignore localStorage errors
+  }
+  // Mettre à jour l'URL sans recharger la page
+  await navigateTo({ query: { tab: newTab } }, { replace: true })
+})
+
+// Mettre à jour activeTab quand l'URL change (pour les liens directs)
 watch(
   () => route.query.tab,
   newTab => {
-    if (newTab && typeof newTab === 'string') {
+    if (newTab && typeof newTab === 'string' && newTab !== activeTab.value) {
       activeTab.value = newTab
     }
   }

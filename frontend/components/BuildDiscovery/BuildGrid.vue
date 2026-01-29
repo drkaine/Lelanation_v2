@@ -24,21 +24,41 @@
         <!-- Informations du build (auteur et description) -->
         <div class="w-full max-w-[300px] space-y-2">
           <div class="flex items-center justify-end gap-2">
-            <!-- Vote Button (désactivé pour les builds de l'utilisateur) -->
-            <button
-              v-if="!isUserBuild(build.id)"
-              class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
-              :class="
-                hasVoted(build.id)
-                  ? 'bg-accent text-background hover:bg-accent-dark'
-                  : 'border border-accent/70 bg-surface text-text hover:bg-accent/10'
-              "
-              :title="hasVoted(build.id) ? 'Retirer votre vote' : 'Voter pour ce build'"
-              @click.stop="toggleVote(build.id)"
-            >
-              <span>👍</span>
-              <span>{{ getVoteCount(build.id) }}</span>
-            </button>
+            <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
+            <div v-if="!isUserBuild(build.id)" class="flex items-center gap-1">
+              <!-- Bouton Upvote -->
+              <button
+                class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+                :class="
+                  getUserVote(build.id) === 'up'
+                    ? 'bg-green-600 text-white hover:bg-green-700'
+                    : 'border border-green-600 bg-surface text-green-600 hover:bg-green-50'
+                "
+                :title="
+                  getUserVote(build.id) === 'up' ? 'Retirer votre upvote' : 'Upvoter ce build'
+                "
+                @click.stop="handleUpvote(build.id)"
+              >
+                <span>👍</span>
+                <span>{{ getUpvoteCount(build.id) }}</span>
+              </button>
+              <!-- Bouton Downvote -->
+              <button
+                class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+                :class="
+                  getUserVote(build.id) === 'down'
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'border border-red-600 bg-surface text-red-600 hover:bg-red-50'
+                "
+                :title="
+                  getUserVote(build.id) === 'down' ? 'Retirer votre downvote' : 'Downvoter ce build'
+                "
+                @click.stop="handleDownvote(build.id)"
+              >
+                <span>👎</span>
+                <span>{{ getDownvoteCount(build.id) }}</span>
+              </button>
+            </div>
             <button
               v-if="props.showComparisonButtons"
               class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
@@ -75,6 +95,8 @@ import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 
+const buildStore = useBuildStore()
+
 interface Props {
   showComparisonButtons?: boolean
 }
@@ -84,7 +106,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const discoveryStore = useBuildDiscoveryStore()
-const buildStore = useBuildStore()
 const voteStore = useVoteStore()
 const router = useRouter()
 
@@ -107,19 +128,33 @@ const formatDate = (dateString: string): string => {
   })
 }
 
-const getVoteCount = (buildId: string): number => {
-  return voteStore.getVoteCount(buildId)
+const getUpvoteCount = (buildId: string): number => {
+  return voteStore.getUpvoteCount(buildId)
 }
 
-const hasVoted = (buildId: string): boolean => {
-  return voteStore.hasUserVoted(buildId)
+const getDownvoteCount = (buildId: string): number => {
+  return voteStore.getDownvoteCount(buildId)
 }
 
-const toggleVote = (buildId: string) => {
-  if (hasVoted(buildId)) {
-    voteStore.unvote(buildId)
-  } else {
-    voteStore.vote(buildId)
+const getUserVote = (buildId: string): 'up' | 'down' | null => {
+  return voteStore.getUserVote(buildId)
+}
+
+const handleUpvote = async (buildId: string) => {
+  voteStore.upvote(buildId)
+  const build = discoveryStore.builds.find(b => b.id === buildId)
+  if (build) {
+    buildStore.setCurrentBuild(build)
+    await buildStore.checkAndUpdateVisibility()
+  }
+}
+
+const handleDownvote = async (buildId: string) => {
+  voteStore.downvote(buildId)
+  const build = discoveryStore.builds.find(b => b.id === buildId)
+  if (build) {
+    buildStore.setCurrentBuild(build)
+    await buildStore.checkAndUpdateVisibility()
   }
 }
 

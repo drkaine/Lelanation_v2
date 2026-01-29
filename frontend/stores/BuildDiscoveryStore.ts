@@ -7,14 +7,6 @@ import type { Build } from '~/types/build'
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
 
-const ROLE_TAGS: Record<Exclude<FilterRole, null>, string[]> = {
-  top: ['Fighter', 'Tank'],
-  jungle: ['Fighter', 'Assassin', 'Tank'],
-  mid: ['Mage', 'Assassin'],
-  adc: ['Marksman'],
-  support: ['Support', 'Mage'],
-}
-
 interface BuildDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
@@ -57,12 +49,12 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         results = results.filter(build => build.champion?.id === this.selectedChampion)
       }
 
-      // Filter by role (champion tags)
+      // Filter by role (using build.roles field)
       if (this.selectedRole) {
-        const allowedTags = ROLE_TAGS[this.selectedRole]
-        results = results.filter(build =>
-          build.champion?.tags?.some(tag => allowedTags.includes(tag))
-        )
+        results = results.filter(build => {
+          // Vérifier si le build a le rôle sélectionné dans son champ roles
+          return build.roles && build.roles.includes(this.selectedRole!)
+        })
       }
 
       // Filter by version (up-to-date)
