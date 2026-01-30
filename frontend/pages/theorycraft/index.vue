@@ -16,7 +16,7 @@
       <!-- Build card (editable) + right column: stats & spell damage -->
       <div class="flex flex-col gap-6 lg:flex-row">
         <div class="flex-shrink-0">
-          <BuildCard :readonly="false" />
+          <BuildCard v-if="theorycraftBuild" :build="theorycraftBuild" />
         </div>
         <div class="min-w-0 flex-1 space-y-6">
           <!-- Item stacks -->
@@ -82,7 +82,7 @@
           <!-- Stats table (includes level selector 1-18) -->
           <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
             <h2 class="mb-4 text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
-            <StatsTable :build="buildStore.currentBuild" />
+            <StatsTable :build="theorycraftBuild" />
           </div>
 
           <!-- Enemy target -->
@@ -186,12 +186,25 @@
             <button
               type="button"
               class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-              :disabled="!buildStore.isBuildValid"
+              :disabled="
+                !theorycraftBuild ||
+                !theorycraftBuild.champion ||
+                !theorycraftBuild.items ||
+                theorycraftBuild.items.length === 0
+              "
               @click="goToSaveBuild"
             >
               {{ t('theorycraft.saveBuild') }}
             </button>
-            <p v-if="!buildStore.isBuildValid" class="text-sm text-text/60">
+            <p
+              v-if="
+                !theorycraftBuild ||
+                !theorycraftBuild.champion ||
+                !theorycraftBuild.items ||
+                theorycraftBuild.items.length === 0
+              "
+              class="text-sm text-text/60"
+            >
               {{ t('stats.selectChampionAndItems') }} (champion, items, runes, sorts, ordre de
               montée).
             </p>
@@ -204,6 +217,7 @@
 
 <script setup lang="ts">
 import { useBuildStore } from '~/stores/BuildStore'
+import { useTheorycraftStore } from '~/stores/TheorycraftStore'
 import { calculateStats } from '~/utils/statsCalculator'
 import { getSpellDamageByRank } from '~/utils/spellDamage'
 import { isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
@@ -213,25 +227,32 @@ import StatsTable from '~/components/Build/StatsTable.vue'
 import type { Spell } from '~/types/build'
 
 definePageMeta({
-  layout: true,
+  layout: false,
 })
 
 const { t } = useI18n()
 const localePath = useLocalePath()
 const buildStore = useBuildStore()
+const theorycraftStore = useTheorycraftStore()
 
 useHead({
   title: () => t('theorycraft.metaTitle'),
   meta: [{ name: 'description', content: () => t('theorycraft.metaDescription') }],
 })
 
+// Get the build to use: theorycraft build if available, otherwise current build
+const theorycraftBuild = computed(() => theorycraftStore.getBuild() || buildStore.currentBuild)
+
 onMounted(() => {
-  if (!buildStore.currentBuild) {
-    buildStore.createNewBuild()
+  // If no theorycraft build is loaded, use current build or create a new one
+  if (!theorycraftBuild.value) {
+    if (!buildStore.currentBuild) {
+      buildStore.createNewBuild()
+    }
   }
 })
 
-const champion = computed(() => buildStore.currentBuild?.champion ?? null)
+const champion = computed(() => theorycraftBuild.value?.champion ?? null)
 const theorycraftLevel = ref(18)
 const itemStacks = ref<Record<string, number>>({})
 const passiveStacks = ref<Record<string, number>>({})
@@ -242,7 +263,7 @@ const enemyTarget = ref<EnemyTarget>({
 })
 
 const stackableItems = computed(() => {
-  const items = buildStore.currentBuild?.items || []
+  const items = theorycraftBuild.value?.items || []
   return items.filter(item => isStackableItem(item.id))
 })
 
@@ -258,10 +279,11 @@ function getItemMaxStacks(itemId: string): number {
 
 const normalizedPassiveStacks = computed(() => {
   const result: Record<string, number> = {}
-  if (!champion.value) return result
+  if (!champion.value?.id) return result
+  const championId = champion.value.id
   for (const [key, value] of Object.entries(passiveStacks.value)) {
     const [champId, stackType] = key.split(':')
-    if (champId === champion.value.id) {
+    if (champId === championId && stackType) {
       result[stackType] = value || 0
     }
   }
@@ -269,7 +291,7 @@ const normalizedPassiveStacks = computed(() => {
 })
 
 const buildStats = computed(() => {
-  const b = buildStore.currentBuild
+  const b = theorycraftBuild.value
   if (!b?.champion || !b.items || !b.runes || !b.shards) return null
   return calculateStats(
     b.champion,

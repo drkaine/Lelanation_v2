@@ -248,7 +248,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
-const selectedLevel = ref(18)
+const selectedLevel = ref(1)
 const showBasicStats = ref(true) // Always visible by default
 const showAdvancedStats = ref(false) // Condensed by default
 const showEconomicStats = ref(false) // Condensed by default

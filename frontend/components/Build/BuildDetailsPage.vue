@@ -78,11 +78,10 @@
               <div class="flex items-center justify-end gap-2">
                 <!-- Bouton Theorycraft (visible pour tous) -->
                 <button
-                  class="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white transition-colors hover:opacity-90"
+                  class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
                   :title="t('theorycraft.testBuild')"
                   @click.stop="goToTheorycraft"
                 >
-                  <span>⚡</span>
                   <span>{{ t('theorycraft.testBuild') }}</span>
                 </button>
                 <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
@@ -489,10 +488,12 @@ const copyBuildImage = async () => {
   }
 }
 
-const goToTheorycraft = () => {
+const goToTheorycraft = async () => {
   if (!build.value) return
-  // Charger le build dans le store avant de naviguer
-  buildStore.setCurrentBuild(build.value)
+  // Charger le build dans le store theorycraft avant de naviguer
+  const { useTheorycraftStore } = await import('~/stores/TheorycraftStore')
+  const theorycraftStore = useTheorycraftStore()
+  theorycraftStore.loadBuild(build.value)
   navigateTo(localePath('/theorycraft'))
 }
 

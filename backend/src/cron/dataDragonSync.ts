@@ -270,17 +270,4 @@ export function setupDataDragonSync(): void {
   })
 
   console.log('[Cron] Data Dragon sync scheduled: Daily at 02:00 UTC')
-  
-  // Send notification when cron is initialized
-  discordService.sendSuccess(
-    '✅ Cron Data Dragon Sync - Initialisé',
-    'Le cron de synchronisation Data Dragon a été configuré avec succès',
-    {
-      schedule: 'Daily at 02:00 UTC',
-      timezone: 'Etc/UTC',
-      timestamp: new Date().toISOString()
-    }
-  ).catch(err => {
-    console.warn('[Cron] Failed to send initialization notification:', err)
-  })
 }

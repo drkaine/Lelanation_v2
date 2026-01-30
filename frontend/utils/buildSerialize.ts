@@ -45,7 +45,12 @@ export function serializeBuild(build: Build): StoredBuild {
           }
         : null
     ) as [SummonerSpellRef | null, SummonerSpellRef | null],
-    skillOrder: build.skillOrder,
+    skillOrder: build.skillOrder
+      ? {
+          firstThreeUps: build.skillOrder.firstThreeUps,
+          skillUpOrder: build.skillOrder.skillUpOrder,
+        }
+      : null,
     roles: build.roles ?? [],
     upvote: build.upvote ?? 0,
     downvote: build.downvote ?? 0,

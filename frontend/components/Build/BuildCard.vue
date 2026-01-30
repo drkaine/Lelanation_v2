@@ -266,6 +266,44 @@
         </div>
       </div>
 
+      <!-- First Three Ups Section (Between items and skills) - Toujours visible -->
+      <div class="first-three-ups-section">
+        <div class="first-three-ups-vertical">
+          <div
+            v-for="(ability, index) in firstThreeUpsAbilities"
+            :key="index"
+            class="first-three-ups-item"
+          >
+            <div class="skill-icon-wrapper">
+              <img
+                :src="
+                  getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
+                "
+                :alt="ability.name"
+                class="skill-icon"
+                :title="ability.name"
+              />
+              <span class="skill-key">
+                {{ t(`skills.key.${ability.key}`) }}
+              </span>
+              <span class="level-badge">{{ index + 1 }}</span>
+            </div>
+            <span v-if="index < firstThreeUpsAbilities.length - 1" class="arrow-down">↓</span>
+          </div>
+          <div
+            v-for="n in 3 - firstThreeUpsAbilities.length"
+            :key="`empty-first-${n}`"
+            class="first-three-ups-item"
+          >
+            <div class="skill-placeholder-wrapper">
+              <div class="skill-placeholder"></div>
+              <span class="level-badge">{{ firstThreeUpsAbilities.length + n }}</span>
+            </div>
+            <span v-if="n < 3 - firstThreeUpsAbilities.length" class="arrow-down">↓</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Skill Order Section (Right) - Toujours visible -->
       <div class="skill-order-section">
         <div class="skill-order-vertical">
@@ -629,6 +667,24 @@ const coreItemsPath1 = computed(() => {
 // Path 2 : deuxième chemin (jusqu'à 3 items)
 const coreItemsPath2 = computed(() => {
   return coreItems.value.slice(3, 6)
+})
+
+// First Three Ups - Les 3 premiers "up" (niveaux 1, 2, 3)
+const firstThreeUpsAbilities = computed(() => {
+  if (!selectedChampion.value || !displayBuild.value?.skillOrder) return []
+
+  const skillOrder = displayBuild.value.skillOrder
+  if (!skillOrder.firstThreeUps) return []
+
+  // Retourner les 3 compétences dans l'ordre de firstThreeUps
+  return skillOrder.firstThreeUps
+    .filter((ability): ability is 'Q' | 'W' | 'E' | 'R' => ability !== null)
+    .map(key => {
+      const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
+      const spell = selectedChampion.value?.spells[index]
+      return spell ? { ...spell, key } : null
+    })
+    .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
 })
 
 // Skill order - calculer les 3 premières compétences à maxer
@@ -1498,6 +1554,81 @@ watch(locale, () => {
   color: var(--color-gold-300);
   font-size: 14px;
   font-weight: bold;
+}
+
+/* First Three Ups Section */
+.first-three-ups-section {
+  position: absolute;
+  left: 200px; /* Positionné pour avoir le même espace entre items (~120px) et skill order (~280px) */
+  top: 300px; /* Descendu pour s'aligner avec les items */
+  z-index: 10;
+}
+
+.first-three-ups-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* Même gap que les items */
+  align-items: center;
+}
+
+.first-three-ups-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.first-three-ups-item .skill-icon-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.first-three-ups-item .skill-placeholder-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.first-three-ups-item .skill-icon {
+  position: relative;
+}
+
+.first-three-ups-item .skill-key {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--color-gold-300);
+  font-size: 10px;
+  font-weight: bold;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  z-index: 1;
+}
+
+.first-three-ups-item .level-badge {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--color-gold-300);
+  color: var(--color-blue-600);
+  font-size: 9px;
+  font-weight: bold;
+  z-index: 1;
 }
 
 /* Skill Order Section */

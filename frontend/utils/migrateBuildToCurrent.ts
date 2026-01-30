@@ -142,9 +142,16 @@ export async function migrateBuildToCurrent(
     migrated.runes = null
   }
 
-  // SkillOrder: conserver tel quel s'il existe, sinon null
-  // (pas de migration nécessaire car c'est juste Q/W/E/R)
-  migrated.skillOrder = build.skillOrder || null
+  // SkillOrder: nettoyer les propriétés obsolètes (level1, level2, etc.) et ne garder que firstThreeUps et skillUpOrder
+  if (build.skillOrder) {
+    const cleanedSkillOrder: Build['skillOrder'] = {
+      firstThreeUps: build.skillOrder.firstThreeUps,
+      skillUpOrder: build.skillOrder.skillUpOrder,
+    }
+    migrated.skillOrder = cleanedSkillOrder
+  } else {
+    migrated.skillOrder = null
+  }
 
   // Shards: conserver tel quel s'ils existent, sinon valeurs par défaut
   migrated.shards = build.shards || {
