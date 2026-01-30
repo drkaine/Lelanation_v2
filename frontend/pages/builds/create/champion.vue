@@ -47,13 +47,12 @@ useHead({
 const buildStore = useBuildStore()
 const router = useRouter()
 const route = useRoute()
+const localePath = useLocalePath()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 
-// Auto-advance to runes step when champion is selected (only on champion page)
 watch(hasChampion, newValue => {
-  // Only auto-advance if we're currently on the champion page
-  if (newValue && route.path === '/builds/create/champion') {
-    router.push('/builds/create/rune')
+  if (newValue && route.path.includes('/builds/create/champion')) {
+    router.push(localePath('/builds/create/rune'))
   }
 })
 

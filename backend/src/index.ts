@@ -9,6 +9,7 @@ import sharedBuildsRoutes from './routes/sharedBuilds.js'
 import buildsRoutes from './routes/builds.js'
 import adminRoutes from './routes/admin.js'
 import imageRoutes from './routes/images.js'
+import contactRoutes from './routes/contact.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
@@ -44,6 +45,7 @@ app.use('/api/shared-builds', sharedBuildsRoutes)
 app.use('/api/builds', buildsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/images', imageRoutes)
+app.use('/api/contact', contactRoutes)
 
 // Initialize cron jobs
 console.log('[Server] Initializing cron jobs...')

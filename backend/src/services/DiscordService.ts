@@ -167,4 +167,46 @@ export class DiscordService {
       )
     }
   }
+
+  /**
+   * Send contact form notification (type, name, message)
+   */
+  async sendContactNotification(
+    type: string,
+    name: string,
+    message: string
+  ): Promise<Result<void, AppError>> {
+    if (!this.webhookUrl) {
+      console.log(`[DiscordService] Contact: ${type} from ${name}`)
+      return Result.ok(undefined)
+    }
+
+    try {
+      const embed: DiscordWebhookPayload['embeds'] = [
+        {
+          title: `📬 Demande de contact - ${type}`,
+          description: message.substring(0, 2000),
+          color: 0x5865f2,
+          timestamp: new Date().toISOString(),
+          fields: [
+            { name: 'Type', value: type, inline: true },
+            { name: 'Nom', value: name.substring(0, 256), inline: true }
+          ],
+          footer: { text: 'Lelanation Contact' }
+        }
+      ]
+
+      await this.api.post(this.webhookUrl, { embeds: embed })
+      return Result.ok(undefined)
+    } catch (error) {
+      console.error('[DiscordService] Failed to send contact notification:', error)
+      return Result.err(
+        new AppError(
+          'Failed to send Discord contact notification',
+          'DISCORD_ERROR',
+          error
+        )
+      )
+    }
+  }
 }

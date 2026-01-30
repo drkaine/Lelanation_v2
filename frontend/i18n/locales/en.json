@@ -378,6 +378,27 @@
       "title": "Contact",
       "text": "For any questions regarding this privacy policy, you can contact us via social networks or the contact form."
     }
+  },
+  "footer": {
+    "legal": "Legal notice",
+    "privacy": "Privacy & Cookies",
+    "contact": "Contact"
+  },
+  "contactModal": {
+    "title": "Contact us",
+    "type": "Request type",
+    "types": {
+      "suggestion": "Suggestion",
+      "bug": "Bug",
+      "reclamation": "Complaint",
+      "autre": "Other"
+    },
+    "name": "Name",
+    "message": "Message",
+    "submit": "Send",
+    "success": "Message sent. Thank you!",
+    "error": "Error sending message.",
+    "close": "Close"
   }
 }
 

@@ -242,6 +242,7 @@ useHead({
 const buildStore = useBuildStore()
 const router = useRouter()
 const route = useRoute()
+const localePath = useLocalePath()
 const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const activeTab = ref<'form' | 'stats'>('form')
@@ -327,10 +328,9 @@ const saveBuild = async () => {
     visibility.value = 'public'
     showValidationErrors.value = false
 
-    // Rediriger vers la page builds, onglet "mes builds" après un court délai
     setTimeout(() => {
-      router.push('/builds?tab=my-builds')
-    }, 1000) // Délai pour que l'utilisateur voie la notification
+      router.push(localePath('/builds') + '?tab=my-builds')
+    }, 1000)
   } else {
     // Afficher une notification d'erreur
     notificationMessage.value = buildStore.error || 'Erreur lors de la sauvegarde'
@@ -376,13 +376,11 @@ onMounted(() => {
   showValidationErrors.value = false
 })
 
-// Use a watcher to check for champion when navigating to this page
 watch(
   () => buildStore.currentBuild?.champion,
   champion => {
-    // Only redirect if we're on this page and there's no champion
-    if (!champion && route.path === '/builds/create/info') {
-      router.replace('/builds/create/champion')
+    if (!champion && route.path.includes('/builds/create/info')) {
+      router.replace(localePath('/builds/create/champion'))
     }
   },
   { immediate: true }

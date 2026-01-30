@@ -236,7 +236,7 @@
     <!-- Delete Confirmation Modal -->
     <div
       v-if="buildToDelete"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black"
       @click="buildToDelete = null"
     >
       <div
@@ -281,6 +281,7 @@ const props = defineProps<{ buildId: string }>()
 const buildStore = useBuildStore()
 const voteStore = useVoteStore()
 const discoveryStore = useBuildDiscoveryStore()
+const localePath = useLocalePath()
 const { t } = useI18n()
 
 const loading = ref(true)
@@ -540,7 +541,7 @@ const updateToCurrentVersion = async () => {
   try {
     const { migrated } = await migrateBuildToCurrent(build.value)
     const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
-    if (newId) navigateTo(`/builds/edit/${newId}`)
+    if (newId) navigateTo(localePath(`/builds/edit/${newId}`))
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Migration failed'
   }

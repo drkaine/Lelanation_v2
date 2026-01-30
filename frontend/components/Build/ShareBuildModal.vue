@@ -1,13 +1,13 @@
 <template>
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black p-4"
     @click="$emit('close')"
   >
     <div class="w-full max-w-lg rounded-lg bg-surface p-6" @click.stop>
       <div class="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 class="text-lg font-bold text-text">Partager ce build</h3>
-          <p class="text-text/70 mt-1 text-sm">Lien public (sans authentification).</p>
+          <p class="mt-1 text-sm text-text/70">Lien public (sans authentification).</p>
         </div>
         <button class="text-text/70 hover:text-text" aria-label="Fermer" @click="$emit('close')">
           ✕
@@ -15,7 +15,7 @@
       </div>
 
       <div class="mb-3">
-        <label class="text-text/70 mb-2 block text-xs font-semibold">Lien</label>
+        <label class="mb-2 block text-xs font-semibold text-text/70">Lien</label>
         <div class="flex gap-2">
           <input
             :value="shareUrl"

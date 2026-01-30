@@ -1,7 +1,8 @@
 <template>
   <div
     v-if="shouldShow"
-    class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-accent bg-surface p-4 text-text"
+    class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-accent p-4 text-text"
+    style="background-color: var(--color-surface); opacity: 1"
     role="dialog"
     aria-label="Cookie consent"
   >

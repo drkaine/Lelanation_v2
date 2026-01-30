@@ -378,6 +378,27 @@
       "title": "Contact",
       "text": "Pour toute question concernant cette politique de confidentialité, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
     }
+  },
+  "footer": {
+    "legal": "Mentions légales",
+    "privacy": "Confidentialité & Cookies",
+    "contact": "Contact"
+  },
+  "contactModal": {
+    "title": "Nous contacter",
+    "type": "Type de demande",
+    "types": {
+      "suggestion": "Suggestion",
+      "bug": "Bug",
+      "reclamation": "Réclamation",
+      "autre": "Autre"
+    },
+    "name": "Nom",
+    "message": "Message",
+    "submit": "Envoyer",
+    "success": "Message envoyé. Merci !",
+    "error": "Erreur lors de l'envoi.",
+    "close": "Fermer"
   }
 }
 
