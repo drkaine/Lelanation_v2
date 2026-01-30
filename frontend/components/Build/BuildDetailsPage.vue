@@ -16,19 +16,19 @@
       </div>
 
       <div v-else-if="build" class="space-y-6">
-        <!-- Header avec retour et nom du build sur la même ligne -->
-        <div class="flex w-full flex-wrap items-center gap-4">
+        <!-- Header avec retour à gauche et nom du build centré -->
+        <div class="relative flex w-full items-center">
+          <!-- Bouton retour à gauche -->
           <NuxtLink
             :to="localePath('/builds')"
-            class="flex-shrink-0 rounded bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
+            class="absolute left-0 flex-shrink-0 rounded bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
           >
             ← Retour
           </NuxtLink>
-          <div class="flex min-w-0 flex-col">
+          <!-- Nom du build centré -->
+          <div class="mx-auto flex flex-col text-center">
             <!-- Nom du build -->
-            <h3 class="break-words text-lg font-semibold text-text">
-              {{ build.name || 'Sans nom' }}
-            </h3>
+            <h3 class="text-lg font-semibold text-text">{{ build.name || 'Sans nom' }}</h3>
             <!-- Auteur -->
             <div class="text-sm text-text/70" :class="{ invisible: !build.author }">
               <span class="ml-1">{{ build.author || 'Placeholder' }}</span>
@@ -52,41 +52,39 @@
                 <BuildCard :build="build" :readonly="true" />
               </div>
               <!-- Boutons d'action utilisateur (supprimer/modifier) -->
-              <div class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
-                <!-- Bouton Theorycraft (visible pour tous) -->
+              <div v-if="isUserBuild" class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
+                <!-- Bouton Supprimer -->
                 <button
-                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[10px] text-white shadow-md transition-colors hover:opacity-90"
-                  :title="t('theorycraft.testBuild')"
-                  @click.stop="goToTheorycraft"
+                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
+                  title="Supprimer le build"
+                  @click.stop="confirmDelete"
                 >
-                  ⚡
+                  ✕
                 </button>
-                <!-- Boutons pour les builds de l'utilisateur -->
-                <template v-if="isUserBuild">
-                  <!-- Bouton Supprimer -->
-                  <button
-                    class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
-                    title="Supprimer le build"
-                    @click.stop="confirmDelete"
-                  >
-                    ✕
-                  </button>
-                  <!-- Bouton Modifier (symbole crayon) -->
-                  <NuxtLink
-                    :to="localePath(`/builds/edit/${build.id}`)"
-                    class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
-                    title="Modifier le build"
-                    @click.stop
-                  >
-                    ✎
-                  </NuxtLink>
-                </template>
+                <!-- Bouton Modifier (symbole crayon) -->
+                <NuxtLink
+                  :to="localePath(`/builds/edit/${build.id}`)"
+                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
+                  title="Modifier le build"
+                  @click.stop
+                >
+                  ✎
+                </NuxtLink>
               </div>
             </div>
 
             <!-- Informations en dessous de la sheet (description, date, votes, partager) -->
             <div class="mt-4 w-full max-w-[300px] space-y-2">
               <div class="flex items-center justify-end gap-2">
+                <!-- Bouton Theorycraft (visible pour tous) -->
+                <button
+                  class="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-white transition-colors hover:opacity-90"
+                  :title="t('theorycraft.testBuild')"
+                  @click.stop="goToTheorycraft"
+                >
+                  <span>⚡</span>
+                  <span>{{ t('theorycraft.testBuild') }}</span>
+                </button>
                 <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
                 <div v-if="!isUserBuild" class="flex items-center gap-1">
                   <!-- Bouton Upvote -->
