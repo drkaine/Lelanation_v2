@@ -403,6 +403,8 @@
       "autre": "Autre"
     },
     "name": "Nom",
+    "contact": "Mail / pseudo Discord (optionnel)",
+    "contactPlaceholder": "Pour vous recontacter",
     "message": "Message",
     "submit": "Envoyer",
     "success": "Message envoyé. Merci !",

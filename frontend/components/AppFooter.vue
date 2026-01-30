@@ -87,6 +87,19 @@
               />
             </div>
             <div>
+              <label for="contact-contact" class="mb-1 block text-sm font-medium text-text">
+                {{ t('contactModal.contact') }}
+              </label>
+              <input
+                id="contact-contact"
+                v-model="contactForm.contact"
+                type="text"
+                maxlength="256"
+                :placeholder="t('contactModal.contactPlaceholder')"
+                class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+              />
+            </div>
+            <div>
               <label for="contact-message" class="mb-1 block text-sm font-medium text-text">
                 {{ t('contactModal.message') }}
               </label>
@@ -169,7 +182,7 @@ async function submitContact() {
     }
     contactFeedback.value = t('contactModal.success')
     contactError.value = false
-    contactForm.value = { type: 'suggestion', name: '', message: '' }
+    contactForm.value = { type: 'suggestion', name: '', contact: '', message: '' }
     setTimeout(() => closeContactModal(), 1500)
   } catch {
     contactFeedback.value = t('contactModal.error')

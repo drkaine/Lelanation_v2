@@ -14,6 +14,7 @@ interface ContactEntry {
   name: string
   message: string
   date: string
+  contact?: string
 }
 
 type ContactData = Record<ContactType, ContactEntry[]>
@@ -70,7 +71,7 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to save contact' })
   }
 
-  await discord.sendContactNotification(type, entry.name, entry.message)
+  await discord.sendContactNotification(type, entry.name, entry.message, entry.contact)
 
   return res.status(201).json({ ok: true })
 })

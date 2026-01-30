@@ -169,16 +169,25 @@ export class DiscordService {
   }
 
   /**
-   * Send contact form notification (type, name, message)
+   * Send contact form notification (type, name, message, optional contact)
    */
   async sendContactNotification(
     type: string,
     name: string,
-    message: string
+    message: string,
+    contact?: string
   ): Promise<Result<void, AppError>> {
     if (!this.webhookUrl) {
       console.log(`[DiscordService] Contact: ${type} from ${name}`)
       return Result.ok(undefined)
+    }
+
+    const fields: Array<{ name: string; value: string; inline?: boolean }> = [
+      { name: 'Type', value: type, inline: true },
+      { name: 'Nom', value: name.substring(0, 256), inline: true }
+    ]
+    if (contact) {
+      fields.push({ name: 'Mail / Discord', value: contact.substring(0, 256), inline: true })
     }
 
     try {
@@ -188,10 +197,7 @@ export class DiscordService {
           description: message.substring(0, 2000),
           color: 0x5865f2,
           timestamp: new Date().toISOString(),
-          fields: [
-            { name: 'Type', value: type, inline: true },
-            { name: 'Nom', value: name.substring(0, 256), inline: true }
-          ],
+          fields,
           footer: { text: 'Lelanation Contact' }
         }
       ]

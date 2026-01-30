@@ -399,6 +399,8 @@
       "autre": "Other"
     },
     "name": "Name",
+    "contact": "Email / Discord username (optional)",
+    "contactPlaceholder": "To get back to you",
     "message": "Message",
     "submit": "Send",
     "success": "Message sent. Thank you!",
