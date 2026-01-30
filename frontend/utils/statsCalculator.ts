@@ -37,7 +37,7 @@ export function calculateStats(
   const runeStats = calculateRuneStats(runes)
 
   // Add shard stats
-  const shardStats = calculateShardStats(shards)
+  const shardStats = calculateShardStats(shards, level)
 
   // Add passive stack stats (if any)
   const passiveStackStats = calculatePassiveStackStats(champion.id, passiveStacks)
@@ -84,14 +84,14 @@ export function calculateStats(
     ),
     movementSpeed: calculateMovementSpeed(
       baseStats.movespeed,
-      itemStats.movementSpeed || 0,
-      itemStats.percentMovementSpeed || 0
+      (itemStats.movementSpeed || 0) + (shardStats.movementSpeed || 0),
+      (itemStats.percentMovementSpeed || 0) + (shardStats.percentMovementSpeed || 0)
     ),
     healthRegen: baseStats.hpregen + (itemStats.healthRegen || 0),
     manaRegen: baseStats.mpregen + (itemStats.manaRegen || 0),
     armorPenetration: (itemStats.armorPenetration || 0) / 100,
     magicPenetration: (itemStats.magicPenetration || 0) / 100,
-    tenacity: (itemStats.tenacity || 0) / 100,
+    tenacity: (itemStats.tenacity || 0) / 100 + (shardStats.tenacity || 0),
     lethality: itemStats.lethality || 0,
     omnivamp: (itemStats.omnivamp || 0) / 100,
     shield: itemStats.shield || 0,
@@ -192,7 +192,7 @@ function calculateItemStats(
   shield: number
   attackRange: number
 } {
-  const totals: Record<string, number> = {
+  const totals = {
     health: 0,
     mana: 0,
     attackDamage: 0,
@@ -254,7 +254,7 @@ function calculateItemStats(
 
     // Add stack bonuses if item is stackable and stacks provided
     if (itemStacks && itemStacks[item.id] != null) {
-      const stackStats = calculateItemStackStats(item.id, itemStacks[item.id])
+      const stackStats = calculateItemStackStats(item.id, itemStacks[item.id]!)
       totals.health += stackStats.health || 0
       totals.armor += stackStats.armor || 0
       totals.attackDamage += stackStats.attackDamage || 0
@@ -263,7 +263,27 @@ function calculateItemStats(
     }
   }
 
-  return totals as typeof totals & ItemStats
+  return {
+    ...totals,
+    FlatHPPoolMod: totals.health,
+    FlatMPPoolMod: totals.mana,
+    FlatPhysicalDamageMod: totals.attackDamage,
+    FlatMagicDamageMod: totals.abilityPower,
+    FlatArmorMod: totals.armor,
+    FlatSpellBlockMod: totals.magicResist,
+    PercentAttackSpeedMod: totals.attackSpeed * 100,
+    FlatCritChanceMod: totals.critChance,
+    FlatCritDamageMod: totals.critDamage,
+    PercentLifeStealMod: totals.lifeSteal,
+    PercentSpellVampMod: totals.spellVamp,
+    rFlatCooldownModPerLevel: totals.cooldownReduction,
+    FlatMovementSpeedMod: totals.movementSpeed,
+    PercentMovementSpeedMod: totals.percentMovementSpeed,
+    FlatHPRegenMod: totals.healthRegen,
+    FlatMPRegenMod: totals.manaRegen,
+    rPercentArmorPenetrationMod: totals.armorPenetration,
+    rPercentSpellPenetrationMod: totals.magicPenetration,
+  } as typeof totals & ItemStats
 }
 
 /**
@@ -286,8 +306,12 @@ function calculateRuneStats(runes: RuneSelection | null): {
 
 /**
  * Calculate shard stats
+ * Based on official League of Legends shard values
  */
-function calculateShardStats(shards: ShardSelection | null): {
+function calculateShardStats(
+  shards: ShardSelection | null,
+  level: number = 18
+): {
   armor?: number
   magicResist?: number
   health?: number
@@ -295,6 +319,9 @@ function calculateShardStats(shards: ShardSelection | null): {
   abilityPower?: number
   attackSpeed?: number
   abilityHaste?: number
+  movementSpeed?: number
+  percentMovementSpeed?: number
+  tenacity?: number
 } {
   if (!shards) {
     return {}
@@ -308,34 +335,42 @@ function calculateShardStats(shards: ShardSelection | null): {
     abilityPower?: number
     attackSpeed?: number
     abilityHaste?: number
+    movementSpeed?: number
+    percentMovementSpeed?: number
+    tenacity?: number
   } = {}
 
   // Slot 1: Adaptive Force (5008), Attack Speed (5005), Ability Haste (5007)
   if (shards.slot1 === 5008) {
-    // Adaptive Force: +9 AD or +15 AP (simplified as AD)
-    stats.attackDamage = 9
+    // Adaptive: 5.4 AD or 9 AP (simplified as AD for now)
+    stats.attackDamage = 5.4
   } else if (shards.slot1 === 5005) {
     stats.attackSpeed = 0.1 // 10% attack speed
   } else if (shards.slot1 === 5007) {
     stats.abilityHaste = 8
   }
 
-  // Slot 2: Adaptive Force (5008), Armor (5002), Magic Resist (5003)
+  // Slot 2: Adaptive Force (5008), Movement Speed (5006), Health per level (5002)
   if (shards.slot2 === 5008) {
-    stats.attackDamage = (stats.attackDamage || 0) + 9
+    // Adaptive: 5.4 AD or 9 AP
+    stats.attackDamage = (stats.attackDamage || 0) + 5.4
+  } else if (shards.slot2 === 5006) {
+    stats.percentMovementSpeed = 2.5 // 2.5% movement speed
   } else if (shards.slot2 === 5002) {
-    stats.armor = 6
-  } else if (shards.slot2 === 5003) {
-    stats.magicResist = 8
+    // Health per level: 10-200 based on level (formula: 10 + (level - 1) * 11.176)
+    const healthPerLevel = Math.round(10 + (level - 1) * (190 / 17))
+    stats.health = healthPerLevel
   }
 
-  // Slot 3: Health (5001), Armor (5002), Magic Resist (5003)
+  // Slot 3: Health (5001), Tenacity + Slow Resist (5003), Health per level (5002)
   if (shards.slot3 === 5001) {
-    stats.health = 15
-  } else if (shards.slot3 === 5002) {
-    stats.armor = (stats.armor || 0) + 6
+    stats.health = 65 // Fixed 65 health
   } else if (shards.slot3 === 5003) {
-    stats.magicResist = (stats.magicResist || 0) + 8
+    stats.tenacity = 0.15 // 15% tenacity and slow resist
+  } else if (shards.slot3 === 5002) {
+    // Health per level: 10-200 based on level (formula: 10 + (level - 1) * 11.176)
+    const healthPerLevel = Math.round(10 + (level - 1) * (190 / 17))
+    stats.health = (stats.health || 0) + healthPerLevel
   }
 
   return stats

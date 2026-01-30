@@ -209,6 +209,7 @@ import { getSpellDamageByRank } from '~/utils/spellDamage'
 import { isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
 import { getChampionPassiveStacks } from '~/utils/passiveStacks'
 import { calculateMagicDamage, type EnemyTarget } from '~/utils/realDamage'
+import StatsTable from '~/components/Build/StatsTable.vue'
 import type { Spell } from '~/types/build'
 
 definePageMeta({

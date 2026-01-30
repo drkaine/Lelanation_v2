@@ -106,13 +106,13 @@
     "secondary-rune-selection": "Sélectionnez une rune",
     "stat-selection": "Sélectionnez une stat",
     "shards": {
-      "5008": { "name": "Force adaptative", "desc": "+9 Force adaptative" },
-      "5005": { "name": "Vitesse d'attaque", "desc": "+10% vitesse d'attaque" },
-      "5007": { "name": "Hâte de compétence", "desc": "+10% accélération de compétence" },
-      "5006": { "name": "Vitesse de déplacement", "desc": "+2% vitesse de déplacement" },
-      "5002": { "name": "PV par niveau", "desc": "+10-180 PV (selon niveau)" },
+      "5008": { "name": "Force adaptative", "desc": "+5.4 Dégâts d'attaque ou +9 Puissance magique" },
+      "5005": { "name": "Vitesse d'attaque", "desc": "+10% Vitesse d'attaque" },
+      "5007": { "name": "Hâte de compétence", "desc": "+8 Hâte de compétence" },
+      "5006": { "name": "Vitesse de déplacement", "desc": "+2.5% Vitesse de déplacement" },
+      "5002": { "name": "PV par niveau", "desc": "+10-200 PV (selon niveau)" },
       "5001": { "name": "PV", "desc": "+65 PV" },
-      "5003": { "name": "Ténacité", "desc": "+10% Ténacité et réduction de ralentissement" }
+      "5003": { "name": "Ténacité", "desc": "+15% Ténacité et résistance aux ralentissements" }
     }
   },
   "buildCard": {
@@ -129,7 +129,9 @@
     "statColumn": "Statistique",
     "base": "Base",
     "itemsColumn": "Items",
+    "shards": "Shards",
     "total": "Total",
+    "disclaimer": "Les statistiques sont calculées au niveau sélectionné. Les valeurs des shards sont séparées des items. Les calculs sont basés sur les formules du wiki League of Legends et les données officielles, mais ne sont pas des calculs officiels de Riot Games et peuvent contenir des erreurs.",
     "simple": "Simple",
     "detailed": "Détaillé",
     "quickAnalysis": "Analyse rapide",
@@ -158,7 +160,18 @@
       "lethality": "Léthalité",
       "omnivamp": "Omnivamp",
       "shield": "Bouclier",
-      "attackRange": "Portée d'attaque"
+      "attackRange": "Portée d'attaque",
+      "goldValue": "Valeur en or",
+      "goldCost": "Coût en or",
+      "goldEfficiency": "Efficacité en or",
+      "armorDamageReductionPercent": "Réduction dégâts physiques (%)",
+      "magicDamageReductionPercent": "Réduction dégâts magiques (%)",
+      "physicalEffectiveHealth": "Santé effective physique",
+      "magicalEffectiveHealth": "Santé effective magique",
+      "averageEffectiveHealth": "Santé effective moyenne",
+      "totalEffectiveHealth": "Santé effective totale",
+      "showDetails": "Afficher les détails",
+      "hideDetails": "Masquer les détails"
     },
     "categories": {
       "basic": "Statistiques de base",
@@ -183,11 +196,6 @@
     "shield": "Augmentation bouclier",
     "omnivamp": "Omnivamp (%)",
     "tenacity": "Tenacité (%)",
-    "armorDamageReductionPercent": "Réduction dégâts physiques (%)",
-    "magicDamageReductionPercent": "Réduction dégâts magiques (%)",
-    "physicalEffectiveHealth": "Santé effective physique",
-    "magicalEffectiveHealth": "Santé effective magique",
-    "averageEffectiveHealth": "Santé effective moyenne",
     "goldValue": "Valeur en or",
     "goldEfficiency": "Efficacité or (%)",
     "goldCost": "Coût en or",

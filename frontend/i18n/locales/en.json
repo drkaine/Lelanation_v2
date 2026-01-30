@@ -106,13 +106,13 @@
     "secondary-rune-selection": "Select a rune",
     "stat-selection": "Select a stat",
     "shards": {
-      "5008": { "name": "Adaptive Force", "desc": "+9 Adaptive Force" },
+      "5008": { "name": "Adaptive Force", "desc": "+5.4 Attack Damage or +9 Ability Power" },
       "5005": { "name": "Attack Speed", "desc": "+10% Attack Speed" },
-      "5007": { "name": "Ability Haste", "desc": "+10% Ability Haste" },
-      "5006": { "name": "Move Speed", "desc": "+2% Move Speed" },
-      "5002": { "name": "Health per level", "desc": "+10-180 Health (based on level)" },
+      "5007": { "name": "Ability Haste", "desc": "+8 Ability Haste" },
+      "5006": { "name": "Move Speed", "desc": "+2.5% Move Speed" },
+      "5002": { "name": "Health per level", "desc": "+10-200 Health (based on level)" },
       "5001": { "name": "Health", "desc": "+65 Health" },
-      "5003": { "name": "Tenacity", "desc": "+10% Tenacity and Slow Resist" }
+      "5003": { "name": "Tenacity", "desc": "+15% Tenacity and Slow Resist" }
     }
   },
   "buildCard": {
@@ -129,7 +129,9 @@
     "statColumn": "Stat",
     "base": "Base",
     "itemsColumn": "Items",
+    "shards": "Shards",
     "total": "Total",
+    "disclaimer": "Statistics are calculated at the selected level. Shard values are separated from items. Calculations are based on League of Legends Wiki formulas and official data, but are not official Riot Games calculations and may contain errors.",
     "simple": "Simple",
     "detailed": "Detailed",
     "quickAnalysis": "Quick analysis",
@@ -158,7 +160,18 @@
       "lethality": "Lethality",
       "omnivamp": "Omnivamp",
       "shield": "Shield",
-      "attackRange": "Attack Range"
+      "attackRange": "Attack Range",
+      "goldValue": "Gold Value",
+      "goldCost": "Gold Cost",
+      "goldEfficiency": "Gold Efficiency",
+      "armorDamageReductionPercent": "Physical Damage Reduction (%)",
+      "magicDamageReductionPercent": "Magic Damage Reduction (%)",
+      "physicalEffectiveHealth": "Physical Effective Health",
+      "magicalEffectiveHealth": "Magical Effective Health",
+      "averageEffectiveHealth": "Average Effective Health",
+      "totalEffectiveHealth": "Total Effective Health",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details"
     },
     "categories": {
       "basic": "Basic Statistics",
@@ -183,11 +196,6 @@
     "shield": "Shield Increase",
     "omnivamp": "Omnivamp (%)",
     "tenacity": "Tenacity (%)",
-    "armorDamageReductionPercent": "Physical Damage Reduction (%)",
-    "magicDamageReductionPercent": "Magic Damage Reduction (%)",
-    "physicalEffectiveHealth": "Physical Effective Health",
-    "magicalEffectiveHealth": "Magical Effective Health",
-    "averageEffectiveHealth": "Average Effective Health",
     "goldValue": "Gold Value",
     "goldEfficiency": "Gold Efficiency (%)",
     "goldCost": "Gold Cost",
