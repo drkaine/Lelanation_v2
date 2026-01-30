@@ -72,7 +72,16 @@ export default defineNuxtConfig({
   sitemap: {
     sitemaps: {
       default: {
-        include: ['/', '/builds', '/builds/create', '/videos', '/privacy', '/legal', '/admin'],
+        include: [
+          '/',
+          '/builds',
+          '/builds/create',
+          '/theorycraft',
+          '/videos',
+          '/privacy',
+          '/legal',
+          '/admin',
+        ],
         exclude: ['/api/**'],
       },
     },

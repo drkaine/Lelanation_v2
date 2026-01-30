@@ -72,6 +72,14 @@
                 >
                   ✎
                 </NuxtLink>
+                <NuxtLink
+                  :to="localePath('/theorycraft')"
+                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[10px] text-white shadow-md transition-colors hover:opacity-90"
+                  :title="t('theorycraft.testBuild')"
+                  @click.stop
+                >
+                  ⚡
+                </NuxtLink>
               </div>
             </div>
 
@@ -179,48 +187,14 @@
             </div>
           </div>
 
-          <!-- Colonne droite: Onglets Skill Order et Statistiques -->
+          <!-- Colonne droite: Statistiques -->
           <div class="flex-1">
-            <!-- Tabs Navigation -->
-            <div class="mb-6 flex gap-2 border-b border-primary/20">
-              <button
-                type="button"
-                class="px-4 py-2 text-sm font-semibold transition-colors"
-                :class="
-                  activeTab === 'skill-order'
-                    ? 'border-b-2 border-accent text-accent'
-                    : 'text-text/60 hover:text-text'
-                "
-                @click="activeTab = 'skill-order'"
-              >
-                Skill Order
-              </button>
-              <button
-                type="button"
-                class="px-4 py-2 text-sm font-semibold transition-colors"
-                :class="
-                  activeTab === 'stats'
-                    ? 'border-b-2 border-accent text-accent'
-                    : 'text-text/60 hover:text-text'
-                "
-                @click="activeTab = 'stats'"
-              >
-                {{ t('stats.title') }}
-              </button>
+            <div class="mb-6">
+              <h2 class="text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
             </div>
 
-            <!-- Tab Content: Skill Order -->
-            <div v-show="activeTab === 'skill-order'" class="tab-content">
-              <SkillOrderDisplay v-if="build && build.champion" :build="build" />
-              <div v-else class="py-8 text-center">
-                <p class="text-text/70">
-                  {{ build ? 'Chargement du build...' : 'Aucun build chargé' }}
-                </p>
-              </div>
-            </div>
-
-            <!-- Tab Content: Statistiques -->
-            <div v-show="activeTab === 'stats'" class="tab-content">
+            <!-- Statistiques -->
+            <div class="tab-content">
               <StatsTable v-if="build && build.champion" :build="build" />
               <div v-else class="py-8 text-center">
                 <p class="text-text/70">
@@ -274,6 +248,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
+import StatsTable from '~/components/Build/StatsTable.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
 const props = defineProps<{ buildId: string }>()
@@ -290,7 +265,6 @@ const build = computed(() => buildStore.currentBuild)
 const openShareDropdown = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
 const buildToDelete = ref<string | null>(null)
-const activeTab = ref<'skill-order' | 'stats'>('skill-order')
 const isDescriptionExpanded = ref(false)
 
 const upvoteCount = computed(() => (build.value ? voteStore.getUpvoteCount(build.value.id) : 0))

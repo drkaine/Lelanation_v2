@@ -50,6 +50,14 @@
         >
           {{ t('nav.builds') }}
         </NuxtLink>
+        <NuxtLink
+          :to="localePath('/theorycraft')"
+          :title="t('theorycraft.title')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('theorycraft.title') }}
+        </NuxtLink>
         <a
           :href="patchNotesUrl"
           target="_blank"
@@ -67,6 +75,9 @@
         </NuxtLink>
         <NuxtLink :to="localePath('/builds/create')" :title="t('nav.build')" class="version">
           {{ t('nav.build') }}
+        </NuxtLink>
+        <NuxtLink :to="localePath('/theorycraft')" :title="t('theorycraft.title')" class="version">
+          {{ t('theorycraft.title') }}
         </NuxtLink>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}

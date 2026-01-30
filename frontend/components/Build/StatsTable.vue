@@ -18,8 +18,24 @@
         </select>
       </div>
 
+      <!-- Debug info (temporaire) -->
+      <div
+        v-if="!baseStatsAtLevel || !totalStats"
+        class="rounded border border-yellow-500/50 bg-yellow-500/10 p-3 text-sm text-yellow-600"
+      >
+        <p>Données manquantes pour le calcul des stats:</p>
+        <ul class="mt-1 list-inside list-disc">
+          <li>Champion: {{ champion ? '✓' : '✗' }}</li>
+          <li>Base stats: {{ baseStatsAtLevel ? '✓' : '✗' }}</li>
+          <li>Total stats: {{ totalStats ? '✓' : '✗' }}</li>
+          <li>Items: {{ items.length }}</li>
+          <li>Runes: {{ runes ? '✓' : '✗' }}</li>
+          <li>Shards: {{ shards ? '✓' : '✗' }}</li>
+        </ul>
+      </div>
+
       <!-- Stats Table -->
-      <div class="overflow-x-auto">
+      <div v-if="statsList.length > 0" class="overflow-x-auto">
         <table class="w-full border-collapse">
           <thead>
             <tr class="border-b border-primary/30">
@@ -60,6 +76,12 @@
             </tr>
           </tbody>
         </table>
+      </div>
+      <div v-else class="py-8 text-center text-text/70">
+        <p>
+          Aucune statistique à afficher. Vérifiez que le build contient un champion, des items, des
+          runes et des shards.
+        </p>
       </div>
     </div>
   </div>

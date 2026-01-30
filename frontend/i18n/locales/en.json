@@ -406,6 +406,33 @@
     "success": "Message sent. Thank you!",
     "error": "Error sending message.",
     "close": "Close"
+  },
+  "theorycraft": {
+    "title": "Theorycraft",
+    "metaTitle": "Theorycraft - Lelanation",
+    "metaDescription": "Optimize your build: precise stats, spell damage per rank, level 1-18",
+    "configurePrompt": "Configure your build (champion, runes, items, skill order) to see stats and damage.",
+    "saveBuild": "Save build",
+    "spellDamage": "Spell damage",
+    "spellDamageByRank": "Damage per rank",
+    "rank": "Rank",
+    "damage": "Damage",
+    "nextLevel": "Next level",
+    "testBuild": "Test build",
+    "itemStacks": "Item stacks",
+    "itemStacksDescription": "Number of stacks for stackable items",
+    "passiveStacks": "Passive stacks",
+    "passiveStacksDescription": "Champion passive stacks (e.g. Veigar Q, Nasus Q)",
+    "enemyTarget": "Enemy target",
+    "enemyTargetDescription": "Target parameters to calculate real damage",
+    "enemyHealth": "Health (HP)",
+    "enemyArmor": "Armor",
+    "enemyMagicResist": "Magic Resist (MR)",
+    "rawDamage": "Raw damage",
+    "realDamage": "Real damage",
+    "physical": "Physical",
+    "magic": "Magic",
+    "true": "True"
   }
 }
 

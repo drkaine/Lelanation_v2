@@ -1,3 +1,5 @@
+import { calculateItemStackStats } from './itemStacks'
+import { calculatePassiveStackStats as calcPassiveStacks } from './passiveStacks'
 import type {
   Champion,
   ChampionStats,
@@ -10,14 +12,16 @@ import type {
 
 /**
  * Calculate final statistics for a build
- * Takes into account: champion base stats, items, runes, shards
+ * Takes into account: champion base stats, items, runes, shards, item stacks, passive stacks
  */
 export function calculateStats(
   champion: Champion | null,
   items: Item[],
   runes: RuneSelection | null,
   shards: ShardSelection | null,
-  level: number = 18
+  level: number = 18,
+  itemStacks?: Record<string, number>,
+  passiveStacks?: Record<string, number>
 ): CalculatedStats | null {
   if (!champion) {
     return null
@@ -27,7 +31,7 @@ export function calculateStats(
   const baseStats = calculateChampionStatsAtLevel(champion.stats, level)
 
   // Add item stats
-  const itemStats = calculateItemStats(items)
+  const itemStats = calculateItemStats(items, itemStacks)
 
   // Add rune stats (if any)
   const runeStats = calculateRuneStats(runes)
@@ -35,22 +39,38 @@ export function calculateStats(
   // Add shard stats
   const shardStats = calculateShardStats(shards)
 
-  // Combine all stats (including shards)
+  // Add passive stack stats (if any)
+  const passiveStackStats = calculatePassiveStackStats(champion.id, passiveStacks)
+
+  // Combine all stats (including shards and stacks)
   const finalStats: CalculatedStats = {
-    health: baseStats.hp + (itemStats.health || 0) + (shardStats.health || 0),
+    health:
+      baseStats.hp +
+      (itemStats.health || 0) +
+      (shardStats.health || 0) +
+      (passiveStackStats.health || 0),
     mana: baseStats.mp + (itemStats.mana || 0),
     attackDamage:
       baseStats.attackdamage +
       (itemStats.attackDamage || 0) +
       (runeStats.attackDamage || 0) +
-      (shardStats.attackDamage || 0),
+      (shardStats.attackDamage || 0) +
+      (passiveStackStats.attackDamage || 0),
     abilityPower:
       (itemStats.abilityPower || 0) +
       (runeStats.abilityPower || 0) +
-      (shardStats.abilityPower || 0),
-    armor: baseStats.armor + (itemStats.armor || 0) + (shardStats.armor || 0),
+      (shardStats.abilityPower || 0) +
+      (passiveStackStats.abilityPower || 0),
+    armor:
+      baseStats.armor +
+      (itemStats.armor || 0) +
+      (shardStats.armor || 0) +
+      (passiveStackStats.armor || 0),
     magicResist:
-      baseStats.spellblock + (itemStats.magicResist || 0) + (shardStats.magicResist || 0),
+      baseStats.spellblock +
+      (itemStats.magicResist || 0) +
+      (shardStats.magicResist || 0) +
+      (passiveStackStats.magicResist || 0),
     attackSpeed: calculateAttackSpeed(
       baseStats.attackspeed,
       (itemStats.attackSpeed || 0) + (shardStats.attackSpeed || 0)
@@ -75,10 +95,46 @@ export function calculateStats(
     lethality: itemStats.lethality || 0,
     omnivamp: (itemStats.omnivamp || 0) / 100,
     shield: itemStats.shield || 0,
-    attackRange: baseStats.attackrange + (itemStats.attackRange || 0),
+    attackRange:
+      baseStats.attackrange + (itemStats.attackRange || 0) + (passiveStackStats.attackRange || 0),
   }
 
   return finalStats
+}
+
+/**
+ * Calculate passive stack stats for a champion.
+ */
+function calculatePassiveStackStats(
+  championId: string,
+  passiveStacks?: Record<string, number>
+): {
+  health?: number
+  armor?: number
+  attackDamage?: number
+  abilityPower?: number
+  magicResist?: number
+  attackRange?: number
+} {
+  if (!passiveStacks) return {}
+  const result: {
+    health?: number
+    armor?: number
+    attackDamage?: number
+    abilityPower?: number
+    magicResist?: number
+    attackRange?: number
+  } = {}
+  for (const [stackType, stacks] of Object.entries(passiveStacks)) {
+    const stats = calcPassiveStacks(championId, stackType, stacks)
+    result.health = (result.health || 0) + (stats.health || 0)
+    result.armor = (result.armor || 0) + (stats.armor || 0)
+    result.attackDamage = (result.attackDamage || 0) + (stats.attackDamage || 0)
+    result.abilityPower = (result.abilityPower || 0) + (stats.abilityPower || 0)
+    result.magicResist = (result.magicResist || 0) + (stats.magicResist || 0)
+    result.attackRange = (result.attackRange || 0) + (stats.attackRange || 0)
+  }
+  return result
 }
 
 /**
@@ -106,9 +162,12 @@ function calculateChampionStatsAtLevel(
 }
 
 /**
- * Sum all item stats
+ * Sum all item stats (including stack bonuses)
  */
-function calculateItemStats(items: Item[]): ItemStats & {
+function calculateItemStats(
+  items: Item[],
+  itemStacks?: Record<string, number>
+): ItemStats & {
   health: number
   mana: number
   attackDamage: number
@@ -192,6 +251,16 @@ function calculateItemStats(items: Item[]): ItemStats & {
     // Attack Range (FlatAttackRangeMod)
     totals.attackRange += (item.stats as any).FlatAttackRangeMod || 0
     // Tenacity is usually from runes, but can be from items
+
+    // Add stack bonuses if item is stackable and stacks provided
+    if (itemStacks && itemStacks[item.id] != null) {
+      const stackStats = calculateItemStackStats(item.id, itemStacks[item.id])
+      totals.health += stackStats.health || 0
+      totals.armor += stackStats.armor || 0
+      totals.attackDamage += stackStats.attackDamage || 0
+      totals.abilityPower += stackStats.abilityPower || 0
+      totals.magicResist += stackStats.magicResist || 0
+    }
   }
 
   return totals as typeof totals & ItemStats

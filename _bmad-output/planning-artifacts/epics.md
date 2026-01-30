@@ -475,6 +475,7 @@ This document provides the complete epic and story breakdown for Lelanation_v2, 
 - Comparaison de statistiques entre builds
 - Analyses avancées avec recommandations
 - Composant StatsDisplay avec toggle pour vue simple/détaillée
+- **Page Theorycraft dédiée** : sélection champion / runes / items / niveau (1–18), stacks d'items (ex. Cœur d'acier) et stacks de passifs (Veigar, Smolder, Nasus…), dégâts réels vs ennemi (HP, armure, RM), dégâts par niveau des sorts avec valeurs des objets — voir **`_bmad-output/planning-artifacts/epic-theorycraft-page.md`** pour la spec détaillée.
 
 **Dependencies:** Epic 1 (infrastructure), Epic 2 (données de jeu), Epic 3 (création de builds)
 
