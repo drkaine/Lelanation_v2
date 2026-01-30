@@ -32,7 +32,7 @@
   },
   "cookies": {
     "title": "Gestion des cookies et du stockage",
-    "text": "Nous utilisons le stockage local pour sauvegarder vos builds et vos préférences. Vous pouvez accepter ou refuser les cookies non essentiels.",
+    "text": "Nous utilisons le stockage local pour vos builds et préférences. Nous utilisons également <strong>Matomo</strong> (mesure d'audience). Vous pouvez accepter ou refuser les cookies non essentiels.",
     "accept": "Accepter",
     "reject": "Refuser",
     "learnMore": "En savoir plus"
@@ -319,6 +319,10 @@
     "contact": {
       "title": "Contact",
       "text": "Pour toute question concernant ces mentions légales ou pour signaler un contenu, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
+    },
+    "analytics": {
+      "title": "Mesure d'audience (Matomo)",
+      "p1": "Ce site utilise <strong>Matomo</strong>, un outil d'analyse d'audience open source, pour mesurer la fréquentation (pages vues, parcours). Le suivi n'est activé qu'avec votre consentement (bannière cookies). Les données sont utilisées uniquement pour améliorer le site et ne sont pas vendues à des tiers."
     }
   },
   "privacy": {
@@ -344,8 +348,8 @@
       },
       "nonEssential": {
         "title": "Cookies non essentiels",
-        "p1": "Actuellement, <strong>Lelanation n'utilise aucun cookie non essentiel</strong> (cookies de suivi, cookies publicitaires, cookies d'analyse d'audience).",
-        "p2": "Si des outils de mesure d'audience (ex: Matomo, Google Analytics) ou d'autres services tiers sont ajoutés à l'avenir, ils seront soumis à votre consentement explicite via la bannière de consentement aux cookies."
+        "p1": "Lelanation utilise <strong>Matomo</strong> pour la mesure d'audience (pages vues, navigation). Matomo est un outil d'analyse open source qui nous aide à comprendre l'utilisation du site (sans publicité ni revente de données).",
+        "p2": "Le suivi Matomo n'est activé qu'après votre consentement explicite via la bannière cookies. Vous pouvez refuser ; le site fonctionne alors sans analyse d'audience."
       },
       "manage": {
         "title": "Gestion de vos préférences",
@@ -377,6 +381,11 @@
     "contact": {
       "title": "Contact",
       "text": "Pour toute question concernant cette politique de confidentialité, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
+    },
+    "analytics": {
+      "title": "Mesure d'audience (Matomo)",
+      "p1": "Lelanation utilise <strong>Matomo</strong> pour analyser l'usage du site (pages vues, durée, navigation). Matomo est hébergé selon notre configuration ; les données ne sont pas transmises à des régies publicitaires.",
+      "p2": "Le suivi n'est activé qu'après votre consentement (bannière cookies). Vous pouvez à tout moment retirer votre consentement en supprimant les données du site dans les paramètres de votre navigateur."
     }
   },
   "footer": {

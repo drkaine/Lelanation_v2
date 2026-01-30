@@ -34,6 +34,9 @@ export default defineNuxtConfig({
       // NUXT_PUBLIC_API_BASE=http://localhost:4001 if needed.
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '',
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+      // Matomo: set NUXT_PUBLIC_MATOMO_HOST and NUXT_PUBLIC_MATOMO_SITE_ID to enable
+      matomoHost: process.env.NUXT_PUBLIC_MATOMO_HOST || '',
+      matomoSiteId: process.env.NUXT_PUBLIC_MATOMO_SITE_ID || '',
     },
   },
   site: {

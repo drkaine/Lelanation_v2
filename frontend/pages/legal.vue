@@ -47,6 +47,11 @@
       </section>
 
       <section>
+        <h2 class="mt-8 text-xl font-bold text-text">{{ t('legal.analytics.title') }}</h2>
+        <p class="mt-2 text-text/80" v-html="t('legal.analytics.p1')" />
+      </section>
+
+      <section>
         <h2 class="mt-8 text-xl font-bold text-text">{{ t('legal.contact.title') }}</h2>
         <p class="mt-2 text-text/80">{{ t('legal.contact.text') }}</p>
       </section>

@@ -32,7 +32,9 @@ module.exports = {
           NODE_ENV: 'production',
           PORT: 3000,
           NITRO_PORT: 3000,
-          NITRO_HOST: '127.0.0.1'
+          NITRO_HOST: '127.0.0.1',
+          NUXT_PUBLIC_MATOMO_HOST: 'https://votre-instance-matomo.com',
+          NUXT_PUBLIC_MATOMO_SITE_ID: '1'
         },
         error_file: 'path',
         out_file: 'path',

@@ -55,6 +55,12 @@
       </section>
 
       <section>
+        <h2 class="mt-8 text-xl font-bold text-text">{{ t('privacy.analytics.title') }}</h2>
+        <p class="mt-2 text-text/80" v-html="t('privacy.analytics.p1')" />
+        <p class="mt-2 text-text/80">{{ t('privacy.analytics.p2') }}</p>
+      </section>
+
+      <section>
         <h2 class="mt-8 text-xl font-bold text-text">{{ t('privacy.rights.title') }}</h2>
         <p class="mt-2 text-text/80">{{ t('privacy.rights.intro') }}</p>
         <ul class="mt-2 list-inside list-disc space-y-1 text-text/80">

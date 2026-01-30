@@ -32,7 +32,7 @@
   },
   "cookies": {
     "title": "Cookies & storage preferences",
-    "text": "We use local storage to save your builds and preferences. You can accept or reject non-essential cookies.",
+    "text": "We use local storage for your builds and preferences. We also use <strong>Matomo</strong> (audience measurement). You can accept or reject non-essential cookies.",
     "accept": "Accept",
     "reject": "Reject",
     "learnMore": "Learn more"
@@ -344,8 +344,8 @@
       },
       "nonEssential": {
         "title": "Non-essential cookies",
-        "p1": "Currently, <strong>Lelanation does not use any non-essential cookies</strong> (tracking cookies, advertising cookies, analytics cookies).",
-        "p2": "If audience measurement tools (e.g. Matomo, Google Analytics) or other third-party services are added in the future, they will be subject to your explicit consent via the cookie consent banner."
+        "p1": "Lelanation uses <strong>Matomo</strong> for audience measurement (page views, navigation). Matomo is an open-source analytics tool that helps us understand how the site is used (no advertising or data resale).",
+        "p2": "Matomo tracking is only enabled after your explicit consent via the cookie banner. You can refuse; the site then works without audience analytics."
       },
       "manage": {
         "title": "Managing your preferences",
@@ -377,6 +377,11 @@
     "contact": {
       "title": "Contact",
       "text": "For any questions regarding this privacy policy, you can contact us via social networks or the contact form."
+    },
+    "analytics": {
+      "title": "Audience measurement (Matomo)",
+      "p1": "Lelanation uses <strong>Matomo</strong> to analyse site usage (page views, duration, navigation). Matomo is hosted according to our configuration; data is not shared with ad networks.",
+      "p2": "Tracking is only enabled after your consent (cookie banner). You can withdraw consent at any time by deleting the site data in your browser settings."
     }
   },
   "footer": {

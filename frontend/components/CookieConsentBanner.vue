@@ -50,7 +50,14 @@ const localePath = useLocalePath()
 
 const shouldShow = computed(() => consent.choice === 'unknown')
 
-const accept = () => consent.accept()
+function accept() {
+  consent.accept()
+  if (typeof window !== 'undefined' && (window as Window & { _paq?: unknown[] })._paq) {
+    const paq = (window as Window & { _paq: unknown[] })._paq
+    paq.push(['setConsentGiven'])
+    paq.push(['trackPageView'])
+  }
+}
 const reject = () => consent.reject()
 
 onMounted(() => consent.load())
