@@ -8,7 +8,7 @@
       <div v-else-if="error" class="py-12 text-center">
         <p class="text-error">{{ error }}</p>
         <NuxtLink
-          to="/builds"
+          :to="localePath('/builds')"
           class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
         >
           Retour aux builds
@@ -19,7 +19,7 @@
         <!-- Bouton retour et actions -->
         <div class="flex w-full max-w-[300px] items-center justify-between">
           <NuxtLink
-            to="/builds"
+            :to="localePath('/builds')"
             class="rounded bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
           >
             ← Retour
@@ -99,6 +99,7 @@ import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 const route = useRoute()
 const router = useRouter()
 const buildStore = useBuildStore()
+const localePath = useLocalePath()
 
 const loading = ref(true)
 const error = ref<string | null>(null)

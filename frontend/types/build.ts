@@ -285,6 +285,47 @@ export interface Build {
   updatedAt: string
 }
 
+/** Référence légère pour le champion (id + nom pour retrouver en bonne langue, image pour affichage) */
+export interface ChampionRef {
+  id: string
+  name: string
+  image: { full: string }
+}
+
+/** Référence légère pour un item (id pour retrouver, image pour affichage) */
+export interface ItemRef {
+  id: string
+  image?: { full: string }
+}
+
+/** Référence légère pour un sort d'invocateur (id ou key pour retrouver, image pour affichage) */
+export interface SummonerSpellRef {
+  id: string
+  key?: string
+  image?: { full: string }
+}
+
+/** Format allégé d'un build pour sauvegarde (locale et serveur). On ne garde que id/nom et image pour retrouver les données complètes à l'hydratation. */
+export interface StoredBuild {
+  id: string
+  name: string
+  author?: string
+  description?: string
+  visibility?: 'public' | 'private'
+  champion: ChampionRef | null
+  items: ItemRef[]
+  runes: RuneSelection | null
+  shards: ShardSelection | null
+  summonerSpells: [SummonerSpellRef | null, SummonerSpellRef | null]
+  skillOrder: SkillOrder | null
+  roles: Role[]
+  upvote: number
+  downvote: number
+  gameVersion: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface CalculatedStats {
   health: number
   mana: number

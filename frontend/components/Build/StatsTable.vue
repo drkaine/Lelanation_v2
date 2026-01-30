@@ -1,18 +1,20 @@
 <template>
   <div class="stats-table">
     <div v-if="!champion" class="py-8 text-center">
-      <p class="text-text/70">Sélectionnez un champion pour voir les statistiques</p>
+      <p class="text-text/70">{{ t('stats.selectChampionPrompt') }}</p>
     </div>
 
     <div v-else class="space-y-4">
       <!-- Level Selector -->
       <div class="flex items-center justify-between">
-        <label class="text-sm font-semibold text-text">Niveau du champion</label>
+        <label class="text-sm font-semibold text-text">{{ t('stats.championLevel') }}</label>
         <select
           v-model.number="selectedLevel"
           class="rounded-lg border border-primary/50 bg-surface px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
         >
-          <option v-for="level in 18" :key="level" :value="level">Niveau {{ level }}</option>
+          <option v-for="level in 18" :key="level" :value="level">
+            {{ t('stats.level') }} {{ level }}
+          </option>
         </select>
       </div>
 
@@ -21,10 +23,18 @@
         <table class="w-full border-collapse">
           <thead>
             <tr class="border-b border-primary/30">
-              <th class="px-4 py-2 text-left text-sm font-semibold text-text">Statistique</th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">Base</th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">Items</th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">Total</th>
+              <th class="px-4 py-2 text-left text-sm font-semibold text-text">
+                {{ t('stats.statColumn') }}
+              </th>
+              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                {{ t('stats.base') }}
+              </th>
+              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                {{ t('stats.itemsColumn') }}
+              </th>
+              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                {{ t('stats.total') }}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -57,6 +67,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import { calculateStats } from '~/utils/statsCalculator'
 import type { Build } from '~/types/build'
@@ -65,6 +76,7 @@ const props = defineProps<{
   build?: Build | null
 }>()
 
+const { t } = useI18n()
 const buildStore = useBuildStore()
 const selectedLevel = ref(18)
 
@@ -212,7 +224,7 @@ const statsList = computed(() => {
   return [
     {
       key: 'health',
-      label: 'Santé (HP)',
+      label: t('stats.labels.health'),
       baseValue: base.hp,
       itemValue: items.health || 0,
       totalValue: total.health,
@@ -220,7 +232,7 @@ const statsList = computed(() => {
     },
     {
       key: 'mana',
-      label: 'Mana (MP)',
+      label: t('stats.labels.mana'),
       baseValue: base.mp,
       itemValue: items.mana || 0,
       totalValue: total.mana,
@@ -228,7 +240,7 @@ const statsList = computed(() => {
     },
     {
       key: 'attackDamage',
-      label: "Dégâts d'attaque (AD)",
+      label: t('stats.labels.attackDamage'),
       baseValue: base.attackdamage,
       itemValue: items.attackDamage || 0,
       totalValue: total.attackDamage,
@@ -236,7 +248,7 @@ const statsList = computed(() => {
     },
     {
       key: 'abilityPower',
-      label: 'Puissance magique (AP)',
+      label: t('stats.labels.abilityPower'),
       baseValue: 0,
       itemValue: items.abilityPower || 0,
       totalValue: total.abilityPower,
@@ -244,7 +256,7 @@ const statsList = computed(() => {
     },
     {
       key: 'armor',
-      label: 'Armure',
+      label: t('stats.labels.armor'),
       baseValue: base.armor,
       itemValue: items.armor || 0,
       totalValue: total.armor,
@@ -252,7 +264,7 @@ const statsList = computed(() => {
     },
     {
       key: 'magicResist',
-      label: 'Résistance magique (MR)',
+      label: t('stats.labels.magicResist'),
       baseValue: base.spellblock,
       itemValue: items.magicResist || 0,
       totalValue: total.magicResist,
@@ -260,15 +272,15 @@ const statsList = computed(() => {
     },
     {
       key: 'attackSpeed',
-      label: "Vitesse d'attaque (AS)",
+      label: t('stats.labels.attackSpeed'),
       baseValue: base.attackspeed,
-      itemValue: ((items.attackSpeed || 0) * 100).toFixed(1) + '%', // Bonus en pourcentage
+      itemValue: ((items.attackSpeed || 0) * 100).toFixed(1) + '%',
       totalValue: total.attackSpeed,
       format: 'decimal' as const,
     },
     {
       key: 'critChance',
-      label: 'Chance de critique',
+      label: t('stats.labels.critChance'),
       baseValue: 0,
       itemValue: items.critChance || 0,
       totalValue: total.critChance * 100,
@@ -276,7 +288,7 @@ const statsList = computed(() => {
     },
     {
       key: 'critDamage',
-      label: 'Dégâts de critique',
+      label: t('stats.labels.critDamage'),
       baseValue: 175,
       itemValue: items.critDamage || 0,
       totalValue: total.critDamage * 100,
@@ -284,7 +296,7 @@ const statsList = computed(() => {
     },
     {
       key: 'lifeSteal',
-      label: 'Vol de vie',
+      label: t('stats.labels.lifeSteal'),
       baseValue: 0,
       itemValue: items.lifeSteal || 0,
       totalValue: total.lifeSteal * 100,
@@ -292,7 +304,7 @@ const statsList = computed(() => {
     },
     {
       key: 'spellVamp',
-      label: 'Vol de sort',
+      label: t('stats.labels.spellVamp'),
       baseValue: 0,
       itemValue: items.spellVamp || 0,
       totalValue: total.spellVamp * 100,
@@ -300,7 +312,7 @@ const statsList = computed(() => {
     },
     {
       key: 'cooldownReduction',
-      label: 'Réduction de temps de recharge (CDR)',
+      label: t('stats.labels.cooldownReduction'),
       baseValue: 0,
       itemValue: items.cooldownReduction || 0,
       totalValue: total.cooldownReduction * 100,
@@ -308,7 +320,7 @@ const statsList = computed(() => {
     },
     {
       key: 'movementSpeed',
-      label: 'Vitesse de déplacement (MS)',
+      label: t('stats.labels.movementSpeed'),
       baseValue: base.movespeed,
       itemValue: items.movementSpeed || 0,
       totalValue: total.movementSpeed,
@@ -316,7 +328,7 @@ const statsList = computed(() => {
     },
     {
       key: 'healthRegen',
-      label: 'Régénération de santé',
+      label: t('stats.labels.healthRegen'),
       baseValue: base.hpregen,
       itemValue: items.healthRegen || 0,
       totalValue: total.healthRegen,
@@ -324,7 +336,7 @@ const statsList = computed(() => {
     },
     {
       key: 'manaRegen',
-      label: 'Régénération de mana',
+      label: t('stats.labels.manaRegen'),
       baseValue: base.mpregen,
       itemValue: items.manaRegen || 0,
       totalValue: total.manaRegen,
@@ -332,7 +344,7 @@ const statsList = computed(() => {
     },
     {
       key: 'armorPenetration',
-      label: "Pénétration d'armure",
+      label: t('stats.labels.armorPenetration'),
       baseValue: 0,
       itemValue: items.armorPenetration || 0,
       totalValue: total.armorPenetration * 100,
@@ -340,7 +352,7 @@ const statsList = computed(() => {
     },
     {
       key: 'magicPenetration',
-      label: 'Pénétration magique',
+      label: t('stats.labels.magicPenetration'),
       baseValue: 0,
       itemValue: items.magicPenetration || 0,
       totalValue: total.magicPenetration * 100,
@@ -348,7 +360,7 @@ const statsList = computed(() => {
     },
     {
       key: 'tenacity',
-      label: 'Ténacité',
+      label: t('stats.labels.tenacity'),
       baseValue: 0,
       itemValue: items.tenacity || 0,
       totalValue: total.tenacity * 100,
@@ -356,7 +368,7 @@ const statsList = computed(() => {
     },
     {
       key: 'lethality',
-      label: 'Léthalité',
+      label: t('stats.labels.lethality'),
       baseValue: 0,
       itemValue: items.lethality || 0,
       totalValue: total.lethality,
@@ -364,7 +376,7 @@ const statsList = computed(() => {
     },
     {
       key: 'omnivamp',
-      label: 'Omnivamp',
+      label: t('stats.labels.omnivamp'),
       baseValue: 0,
       itemValue: items.omnivamp || 0,
       totalValue: total.omnivamp * 100,
@@ -372,7 +384,7 @@ const statsList = computed(() => {
     },
     {
       key: 'shield',
-      label: 'Bouclier',
+      label: t('stats.labels.shield'),
       baseValue: 0,
       itemValue: items.shield || 0,
       totalValue: total.shield,
@@ -380,7 +392,7 @@ const statsList = computed(() => {
     },
     {
       key: 'attackRange',
-      label: "Portée d'attaque",
+      label: t('stats.labels.attackRange'),
       baseValue: (base as any).attackrange || champion.value?.stats.attackrange || 0,
       itemValue: items.attackRange || 0,
       totalValue: total.attackRange,

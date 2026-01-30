@@ -8,7 +8,7 @@
       <div v-else-if="buildStore.status === 'error'" class="py-12 text-center">
         <p class="text-error">{{ buildStore.error }}</p>
         <NuxtLink
-          to="/builds"
+          :to="localePath('/builds')"
           class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
         >
           Back to Builds
@@ -18,7 +18,7 @@
       <div v-else-if="!buildStore.currentBuild" class="py-12 text-center">
         <p class="text-text">Build not found</p>
         <NuxtLink
-          to="/builds"
+          :to="localePath('/builds')"
           class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
         >
           Back to Builds
@@ -29,7 +29,7 @@
         <div class="mb-6 flex items-center justify-between">
           <h1 class="text-3xl font-bold">Edit Build</h1>
           <NuxtLink
-            to="/builds"
+            :to="localePath('/builds')"
             class="rounded border border-primary bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
           >
             Back to Builds
@@ -157,6 +157,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 
 const route = useRoute()
 const buildStore = useBuildStore()
+const localePath = useLocalePath()
 
 const steps = [
   { id: 'champion', label: 'Champion' },
@@ -208,7 +209,7 @@ const updateToCurrentVersion = async () => {
   const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
   const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
   if (newId) {
-    navigateTo(`/builds/edit/${newId}`)
+    navigateTo(localePath(`/builds/edit/${newId}`))
   }
 }
 

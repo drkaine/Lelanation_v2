@@ -1,16 +1,20 @@
 <template>
   <div class="build-grid">
     <div v-if="builds.length === 0" class="py-12 text-center">
-      <p class="text-lg text-text">Aucun build trouvé</p>
+      <p class="text-lg text-text">{{ t('buildDiscovery.noBuildsFound') }}</p>
       <p class="mt-2 text-sm text-text/70">
-        {{ hasActiveFilters ? 'Essayez d’ajuster vos filtres' : 'Créez votre premier build !' }}
+        {{
+          hasActiveFilters
+            ? t('buildDiscovery.adjustFilters')
+            : t('buildDiscovery.createFirstBuild')
+        }}
       </p>
       <NuxtLink
         v-if="!hasActiveFilters"
-        to="/builds/create"
+        :to="localePath('/builds/create')"
         class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
       >
-        Créer un Build
+        {{ t('buildsPage.createBuild') }}
       </NuxtLink>
     </div>
 
@@ -43,16 +47,15 @@
             <!-- Bouton Supprimer -->
             <button
               class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
-              title="Supprimer le build"
+              :title="t('buildDiscovery.deleteBuild')"
               @click.stop="$emit('delete-build', build.id)"
             >
               ✕
             </button>
-            <!-- Bouton Modifier (symbole crayon) -->
             <NuxtLink
-              :to="`/builds/edit/${build.id}`"
+              :to="localePath(`/builds/edit/${build.id}`)"
               class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
-              title="Modifier le build"
+              :title="t('buildDiscovery.editBuild')"
               @click.stop
             >
               ✎
@@ -74,7 +77,9 @@
                     : 'border border-green-600 bg-surface text-green-600 hover:bg-green-50'
                 "
                 :title="
-                  getUserVote(build.id) === 'up' ? 'Retirer votre upvote' : 'Upvoter ce build'
+                  getUserVote(build.id) === 'up'
+                    ? t('buildDiscovery.removeUpvote')
+                    : t('buildDiscovery.upvoteBuild')
                 "
                 @click.stop="handleUpvote(build.id)"
               >
@@ -90,7 +95,9 @@
                     : 'border border-red-600 bg-surface text-red-600 hover:bg-red-50'
                 "
                 :title="
-                  getUserVote(build.id) === 'down' ? 'Retirer votre downvote' : 'Downvoter ce build'
+                  getUserVote(build.id) === 'down'
+                    ? t('buildDiscovery.removeDownvote')
+                    : t('buildDiscovery.downvoteBuild')
                 "
                 @click.stop="handleDownvote(build.id)"
               >
@@ -104,7 +111,7 @@
                 class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
                 @click.stop="toggleShareDropdown(build.id)"
               >
-                Partager
+                {{ t('buildDiscovery.share') }}
               </button>
               <!-- Dropdown -->
               <div
@@ -118,21 +125,21 @@
                   @click="copyBuildLink(build.id)"
                 >
                   <span class="text-base">🔗</span>
-                  <span>Copier le lien</span>
+                  <span>{{ t('buildDiscovery.copyLink') }}</span>
                 </button>
                 <button
                   class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                   @click="downloadBuildImage(build.id)"
                 >
                   <span class="text-base">⬇️</span>
-                  <span>Télécharger l'image</span>
+                  <span>{{ t('buildDiscovery.downloadImage') }}</span>
                 </button>
                 <button
                   class="flex w-full items-center gap-2 rounded-b-lg border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                   @click="copyBuildImage(build.id)"
                 >
                   <span class="text-base">📋</span>
-                  <span>Copier l'image</span>
+                  <span>{{ t('buildDiscovery.copyImage') }}</span>
                 </button>
               </div>
             </div>
@@ -149,7 +156,11 @@
                 class="mt-1 text-xs text-accent hover:text-accent/80"
                 @click.stop="toggleDescription(build.id)"
               >
-                {{ expandedDescriptions[build.id] ? 'Voir moins' : 'Voir plus' }}
+                {{
+                  expandedDescriptions[build.id]
+                    ? t('buildDiscovery.showLess')
+                    : t('buildDiscovery.showMore')
+                }}
               </button>
             </template>
             <p v-else class="invisible">Placeholder</p>
@@ -157,7 +168,9 @@
 
           <!-- Date de création -->
           <p class="min-h-[20px] text-xs text-text/50">
-            <span v-if="build.createdAt">Créé le : {{ formatDate(build.createdAt) }}</span>
+            <span v-if="build.createdAt"
+              >{{ t('buildDiscovery.createdOn') }} {{ formatDate(build.createdAt) }}</span
+            >
             <span v-else class="invisible">Placeholder</span>
           </p>
         </div>
@@ -169,6 +182,7 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'
@@ -176,6 +190,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import type { Build } from '~/types/build'
 
+const { t, locale } = useI18n()
 const buildStore = useBuildStore()
 const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
@@ -279,12 +294,14 @@ const hasActiveFilters = computed(() => {
   )
 })
 
+const localePath = useLocalePath()
 const navigateToBuild = (buildId: string) => {
-  router.push(`/builds/${buildId}`)
+  router.push(localePath(`/builds/${buildId}`))
 }
 
 const formatDate = (dateString: string): string => {
-  return new Date(dateString).toLocaleDateString('fr-FR', {
+  const localeCode = locale.value === 'fr' ? 'fr-FR' : 'en-US'
+  return new Date(dateString).toLocaleDateString(localeCode, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

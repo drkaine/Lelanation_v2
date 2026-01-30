@@ -40,17 +40,27 @@ export default defineNuxtConfig({
     url: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
   },
   i18n: {
-    // Required by @nuxtjs/i18n to generate valid SEO alternate links.
     baseUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
     defaultLocale: 'fr',
     strategy: 'prefix_except_default',
     langDir: 'locales',
+    // Allow HTML in locale messages (legal/privacy pages use <strong> etc. with v-html).
+    compilation: {
+      strictMessage: false,
+    },
+    // lazy: true loads fr.json / en.json when the locale is first used. When the user switches
+    // language (LanguageSwitcher → switchLocalePath), the new locale is set and the corresponding
+    // JSON is loaded, so t() returns the correct language.
     lazy: true,
     locales: [
       { code: 'fr', language: 'fr-FR', name: 'Français', file: 'fr.json' },
       { code: 'en', language: 'en-US', name: 'English', file: 'en.json' },
     ],
-    detectBrowserLanguage: false,
+    detectBrowserLanguage: {
+      useCookie: true,
+      cookieKey: 'i18n_redirected',
+      redirectOn: 'root',
+    },
     vueI18n: './i18n.config.ts',
   } as any,
   robots: {

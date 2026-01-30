@@ -1,8 +1,6 @@
 <template>
   <div class="build-filters">
-    <!-- First row: Up-to-date, Champion and Sort selectors (will be on same line as Search) -->
     <div class="flex flex-wrap items-center gap-4">
-      <!-- Up-to-date toggle -->
       <label class="flex cursor-pointer items-center gap-2">
         <input
           v-model="onlyUpToDate"
@@ -10,51 +8,33 @@
           class="rounded border-primary"
           @change="handleUpToDateChange"
         />
-        <span class="text-sm text-text">À jour</span>
+        <span class="text-sm text-text">{{ t('buildDiscovery.upToDate') }}</span>
       </label>
 
-      <!-- Champion filter -->
       <div class="flex items-center gap-2">
-        <label class="text-sm text-text">Champion:</label>
-        <select
-          v-model="selectedChampion"
-          class="rounded border border-primary bg-surface px-3 py-1 text-sm text-text"
-          @change="handleChampionChange"
-        >
-          <option :value="null">All Champions</option>
-          <option v-for="champion in availableChampions" :key="champion.id" :value="champion.id">
-            {{ champion.name }}
-          </option>
-        </select>
-      </div>
-
-      <!-- Sort -->
-      <div class="flex items-center gap-2">
-        <label class="text-sm text-text">Sort:</label>
+        <label class="text-sm text-text">{{ t('buildDiscovery.sort') }}</label>
         <select
           v-model="sortBy"
           class="rounded border border-primary bg-surface px-3 py-1 text-sm text-text"
           @change="handleSortChange"
         >
-          <option value="recent">Most Recent</option>
-          <option value="popular">Most Popular</option>
-          <option value="name">Name (A-Z)</option>
+          <option value="recent">{{ t('buildDiscovery.mostRecent') }}</option>
+          <option value="popular">{{ t('buildDiscovery.mostPopular') }}</option>
+          <option value="name">{{ t('buildDiscovery.nameAZ') }}</option>
         </select>
       </div>
 
-      <!-- Clear filters -->
       <button
         v-if="hasActiveFilters"
         class="rounded bg-surface px-3 py-1 text-sm text-text hover:bg-primary hover:text-white"
         @click="clearFilters"
       >
-        Clear Filters
+        {{ t('buildDiscovery.clearFilters') }}
       </button>
     </div>
 
-    <!-- Second row: Role filter (below) -->
     <div class="mt-4 flex items-center gap-2">
-      <label class="text-sm text-text">Role:</label>
+      <label class="text-sm text-text">{{ t('buildDiscovery.role') }}</label>
       <div class="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -102,13 +82,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import type { FilterRole, SortOption } from '~/stores/BuildDiscoveryStore'
 
+const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
 const championsStore = useChampionsStore()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const onlyUpToDate = ref(discoveryStore.onlyUpToDate)
 const selectedChampion = ref<string | null>(discoveryStore.selectedChampion)
@@ -117,8 +102,11 @@ const sortBy = ref<SortOption>(discoveryStore.sortBy)
 
 const hasActiveFilters = computed(() => discoveryStore.hasActiveFilters)
 
+const championSearchQuery = ref('')
+
+// Champions available in discovery builds (reserved for future champion filter UI)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- used when champion filter UI is added
 const availableChampions = computed(() => {
-  // Get unique champions from builds
   const championIds = new Set(
     discoveryStore.builds.map(build => build.champion?.id).filter(Boolean) as string[]
   )
@@ -127,10 +115,6 @@ const availableChampions = computed(() => {
 
 const handleUpToDateChange = () => {
   discoveryStore.setOnlyUpToDate(onlyUpToDate.value)
-}
-
-const handleChampionChange = () => {
-  discoveryStore.setSelectedChampion(selectedChampion.value)
 }
 
 const setRole = (role: FilterRole) => {
@@ -163,13 +147,20 @@ const clearFilters = () => {
   discoveryStore.clearAllFilters()
   onlyUpToDate.value = false
   selectedChampion.value = null
+  championSearchQuery.value = ''
   selectedRole.value = null
   sortBy.value = 'recent'
 }
 
+const loadChampionsForLocale = async () => {
+  await championsStore.loadChampions(riotLocale.value)
+}
+
 onMounted(() => {
-  if (championsStore.champions.length === 0) {
-    championsStore.loadChampions()
-  }
+  loadChampionsForLocale()
+})
+
+watch(locale, () => {
+  loadChampionsForLocale()
 })
 </script>

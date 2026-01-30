@@ -145,7 +145,10 @@ import { useGameVersion } from '~/composables/useGameVersion'
 
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
-const { t } = useI18n()
+const { locale, t } = useI18n()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 // Translate tag name - map actual item tags to translation keys
 const translateTag = (tag: string): string => {
@@ -587,14 +590,45 @@ const isAtlasUpgrade = (item: Item): boolean => {
 
 const hasSmite = (): boolean => {
   const spells = buildStore.currentBuild?.summonerSpells || []
-  return spells.some(
-    spell =>
-      spell &&
-      (spell.id === '11' ||
-        spell.key === 'SummonerSmite' ||
-        spell.name?.toLowerCase().includes('smite') ||
-        spell.name?.toLowerCase().includes('punition'))
-  )
+  if (!spells || spells.length === 0) return false
+
+  return spells.some(spell => {
+    if (!spell) return false
+
+    // Dans Data Dragon API: id="11", key="SummonerSmite"
+    // Dans builds sauvegardés: id="SummonerSmite", key="11"
+    // On doit vérifier les deux champs dans les deux sens
+
+    const spellId = String(spell.id || '')
+      .trim()
+      .toLowerCase()
+    const spellKey = String(spell.key || '')
+      .trim()
+      .toLowerCase()
+
+    // Vérifier si id ou key contient "11" (ID numérique de Smite)
+    if (spellId === '11' || spellKey === '11') {
+      return true
+    }
+
+    // Vérifier si id ou key contient "summonersmite" (clé de Smite)
+    if (
+      spellId === 'summonersmite' ||
+      spellKey === 'summonersmite' ||
+      spellId.includes('smite') ||
+      spellKey.includes('smite')
+    ) {
+      return true
+    }
+
+    // Vérifier le nom (name) - "smite" ou "punition" (FR) / "châtiment" (FR)
+    const name = (spell.name || '').toLowerCase().trim()
+    if (name.includes('smite') || name.includes('punition') || name.includes('châtiment')) {
+      return true
+    }
+
+    return false
+  })
 }
 
 const hasSupportRole = (): boolean => {
@@ -812,10 +846,16 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateTooltipPosition)
 })
 
+const loadItemsForLocale = async () => {
+  await itemsStore.loadItems(riotLocale.value)
+}
+
 onMounted(() => {
-  if (itemsStore.items.length === 0) {
-    itemsStore.loadItems()
-  }
+  loadItemsForLocale()
+})
+
+watch(locale, () => {
+  loadItemsForLocale()
 })
 </script>
 

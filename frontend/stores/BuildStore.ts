@@ -10,6 +10,7 @@ import type {
   CalculatedStats,
   Role,
 } from '~/types/build'
+import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
 
@@ -164,7 +165,8 @@ export const useBuildStore = defineStore('build', {
 
         const savedBuilds = this.getSavedBuilds()
         savedBuilds.push(copied)
-        localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+        const toStore = savedBuilds.map(b => serializeBuild(b))
+        localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
         return copied.id
       } catch {
         return null
@@ -367,47 +369,67 @@ export const useBuildStore = defineStore('build', {
         // 1) Sauvegarde locale (localStorage) pour l'UX rapide
         const savedBuilds = this.getSavedBuilds()
         const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+        const previousBuild = existingIndex >= 0 ? savedBuilds[existingIndex] : null
+        const previousVisibility = previousBuild?.visibility ?? null
+        const newVisibility = this.currentBuild!.visibility ?? 'public'
 
         if (existingIndex >= 0) {
           savedBuilds[existingIndex] = this.currentBuild
         } else {
           savedBuilds.push(this.currentBuild)
         }
-        localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+        const toStore = savedBuilds.map(b => serializeBuild(b))
+        localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
 
-        // 2) Sauvegarde fichier JSON côté serveur (dans le front) via l'API
-        //    -> best effort seulement : si l'API est down (502 en prod),
-        //       on NE casse PAS la sauvegarde locale.
+        // 2) Sync serveur selon visibilité :
+        //    - Build privé : on ne sauvegarde que en local (pas d'envoi au serveur).
+        //    - Passage privé → public : on ajoute/met à jour sur le serveur (POST).
+        //    - Passage public → privé : on supprime sur le serveur (DELETE).
         try {
           const { apiUrl } = await import('~/utils/apiUrl')
-          const response = await fetch(apiUrl('/api/builds'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(this.currentBuild),
-          })
 
-          if (response.ok) {
-            const result = await response.json()
-            // Mettre à jour l'ID si le backend en a généré un (cas import ou ancien build)
-            if (result.id && !this.currentBuild.id) {
-              this.currentBuild.id = result.id
+          if (newVisibility === 'private') {
+            // Privé : pas d'envoi au serveur. Si on passait de public à privé, supprimer du serveur.
+            if (previousVisibility === 'public' && this.currentBuild!.id) {
+              const delResponse = await fetch(
+                apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild!.id)}`),
+                { method: 'DELETE' }
+              )
+              if (!delResponse.ok && delResponse.status !== 404) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  'Build saved locally but failed to remove from server (public→private).',
+                  delResponse.status
+                )
+              }
             }
           } else {
-            // En prod actuellement on a un 502 -> on ignore pour garder le site statique
-            // et on s'appuie sur localStorage + éventuel traitement offline.
-            // eslint-disable-next-line no-console
-            console.warn('Build saved locally but failed to save JSON on server.', response.status)
-            // Marquer le build pour synchronisation ultérieure
-            // La synchronisation sera effectuée lors du prochain loadBuilds()
+            // Public : ajout ou mise à jour sur le serveur (best effort)
+            const response = await fetch(apiUrl('/api/builds'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(serializeBuild(this.currentBuild!)),
+            })
+
+            if (response.ok) {
+              const result = await response.json()
+              if (result.id && !this.currentBuild!.id) {
+                this.currentBuild!.id = result.id
+              }
+            } else {
+              // eslint-disable-next-line no-console
+              console.warn(
+                'Build saved locally but failed to save JSON on server.',
+                response.status
+              )
+            }
           }
         } catch (e) {
           // eslint-disable-next-line no-console
           console.warn('Build saved locally but API /api/builds is unreachable.', e)
         }
 
-        // 3) Vérifier si le build doit passer en privé automatiquement
+        // 3) Vérifier si le build doit passer en privé automatiquement (votes)
         await this.checkAndUpdateVisibility()
 
         this.status = 'success'
@@ -431,23 +453,20 @@ export const useBuildStore = defineStore('build', {
       if (totalVotes >= 10) {
         const upvotePercentage = (upvotes / totalVotes) * 100
         if (upvotePercentage < 30) {
-          // Passer le build en privé
+          // Passer le build en privé (public → privé = supprimer sur le serveur)
           this.currentBuild.visibility = 'private'
-          // Re-sauvegarder avec la nouvelle visibilité
           const savedBuilds = this.getSavedBuilds()
           const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
           if (existingIndex >= 0) {
-            savedBuilds[existingIndex] = this.currentBuild
-            localStorage.setItem('lelanation_builds', JSON.stringify(savedBuilds))
+            savedBuilds[existingIndex] = this.currentBuild!
+            const toStore = savedBuilds.map(b => serializeBuild(b))
+            localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
           }
 
-          // Sauvegarder aussi côté serveur
           try {
             const { apiUrl } = await import('~/utils/apiUrl')
-            await fetch(apiUrl('/api/builds'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(this.currentBuild),
+            await fetch(apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild.id)}`), {
+              method: 'DELETE',
             })
           } catch {
             // Ignore errors
@@ -460,7 +479,8 @@ export const useBuildStore = defineStore('build', {
       try {
         const stored = localStorage.getItem('lelanation_builds')
         if (!stored) return []
-        return JSON.parse(stored) as Build[]
+        const parsed = JSON.parse(stored) as unknown[]
+        return parsed.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
       } catch {
         return []
       }
@@ -489,10 +509,10 @@ export const useBuildStore = defineStore('build', {
 
     async deleteBuild(buildId: string): Promise<boolean> {
       try {
-        // Delete from localStorage first
         const savedBuilds = this.getSavedBuilds()
         const filtered = savedBuilds.filter(b => b.id !== buildId)
-        localStorage.setItem('lelanation_builds', JSON.stringify(filtered))
+        const toStore = filtered.map(b => serializeBuild(b))
+        localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
 
         // If current build is deleted, clear it
         if (this.currentBuild?.id === buildId) {
@@ -548,7 +568,7 @@ export const useBuildStore = defineStore('build', {
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(build),
+              body: JSON.stringify(serializeBuild(build)),
             })
 
             if (saveResponse.ok) {

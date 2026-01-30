@@ -41,6 +41,7 @@
     "champion": "Champion",
     "rune": "Rune",
     "item": "Item",
+    "skillOrder": "Skill order",
     "info": "Infos"
   },
   "common": {
@@ -103,9 +104,62 @@
     "secondary-branch": "BRANCHE SECONDAIRE",
     "secondary-branch-selection": "Sélectionnez une branche secondaire",
     "secondary-rune-selection": "Sélectionnez une rune",
-    "stat-selection": "Sélectionnez une stat"
+    "stat-selection": "Sélectionnez une stat",
+    "shards": {
+      "5008": { "name": "Force adaptative", "desc": "+9 Force adaptative" },
+      "5005": { "name": "Vitesse d'attaque", "desc": "+10% vitesse d'attaque" },
+      "5007": { "name": "Hâte de compétence", "desc": "+10% accélération de compétence" },
+      "5006": { "name": "Vitesse de déplacement", "desc": "+2% vitesse de déplacement" },
+      "5002": { "name": "PV par niveau", "desc": "+10-180 PV (selon niveau)" },
+      "5001": { "name": "PV", "desc": "+65 PV" },
+      "5003": { "name": "Ténacité", "desc": "+10% Ténacité et réduction de ralentissement" }
+    }
+  },
+  "buildCard": {
+    "itemsManagement": "Gestion des items",
+    "resetItems": "Reset items",
+    "noItems": "Aucun item"
   },
   "stats": {
+    "title": "Statistiques",
+    "selectChampionPrompt": "Sélectionnez un champion pour voir les statistiques",
+    "selectChampionAndItems": "Sélectionnez un champion et des items pour voir les statistiques",
+    "championLevel": "Niveau du champion",
+    "level": "Niveau",
+    "statColumn": "Statistique",
+    "base": "Base",
+    "itemsColumn": "Items",
+    "total": "Total",
+    "simple": "Simple",
+    "detailed": "Détaillé",
+    "quickAnalysis": "Analyse rapide",
+    "offensive": "Statistiques Offensives",
+    "defensive": "Statistiques Défensives",
+    "utility": "Statistiques Utilitaires",
+    "labels": {
+      "health": "Santé (HP)",
+      "mana": "Mana (MP)",
+      "attackDamage": "Dégâts d'attaque (AD)",
+      "abilityPower": "Puissance magique (AP)",
+      "armor": "Armure",
+      "magicResist": "Résistance magique (MR)",
+      "attackSpeed": "Vitesse d'attaque (AS)",
+      "critChance": "Chance de critique",
+      "critDamage": "Dégâts de critique",
+      "lifeSteal": "Vol de vie",
+      "spellVamp": "Vol de sort",
+      "cooldownReduction": "Réduction de temps de recharge (CDR)",
+      "movementSpeed": "Vitesse de déplacement (MS)",
+      "healthRegen": "Régénération de santé",
+      "manaRegen": "Régénération de mana",
+      "armorPenetration": "Pénétration d'armure",
+      "magicPenetration": "Pénétration magique",
+      "tenacity": "Ténacité",
+      "lethality": "Léthalité",
+      "omnivamp": "Omnivamp",
+      "shield": "Bouclier",
+      "attackRange": "Portée d'attaque"
+    },
     "categories": {
       "basic": "Statistiques de base",
       "advanced": "Statistiques avancées",
@@ -145,6 +199,184 @@
       "W": "Z",
       "E": "E",
       "R": "R"
+    },
+    "selectSkill": "Sélectionner une compétence",
+    "clickToDeselect": "Cliquer pour désélectionner",
+    "alreadyUsedElsewhere": "Déjà utilisé ailleurs",
+    "select": "Sélectionner",
+    "firstThreeUps": "Les 3 premiers \"up\" (Niveaux 1, 2, 3)",
+    "firstThreeUpsDescription": "Ordre dans lequel les 3 premières compétences sont apprises",
+    "skillUpOrder": "Ordre de montée des compétences",
+    "skillUpOrderDescription": "Ordre dans lequel les compétences sont maxées en priorité",
+    "level": "Niveau",
+    "priority": "Priorité",
+    "selectChampionFirst": "Veuillez d'abord sélectionner un champion"
+  },
+  "buildsPage": {
+    "createBuild": "Créer un Build",
+    "discover": "Découvrir",
+    "myBuilds": "Mes Builds",
+    "lelarivaBuilds": "Builds de Lelariva",
+    "lelarivaComingSoon": "Cette section sera disponible prochainement",
+    "visibility": "Visibilité :",
+    "all": "Tous",
+    "private": "Privé",
+    "public": "Public",
+    "buildsInComparison": "build en comparaison",
+    "buildsInComparison_other": "builds en comparaison",
+    "compare": "Comparer",
+    "clear": "Effacer",
+    "deleteBuildTitle": "Supprimer le build ?",
+    "deleteBuildConfirm": "Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.",
+    "delete": "Supprimer",
+    "cancel": "Annuler"
+  },
+  "buildDiscovery": {
+    "searchPlaceholder": "Rechercher un build par champion ou auteur...",
+    "buildFound": "build trouvé",
+    "buildsFound": "builds trouvés",
+    "noBuildsFound": "Aucun build trouvé",
+    "adjustFilters": "Essayez d'ajuster vos filtres",
+    "createFirstBuild": "Créez votre premier build !",
+    "upToDate": "À jour",
+    "champion": "Champion :",
+    "searchChampionPlaceholder": "Rechercher un champion...",
+    "allChampions": "Tous les champions",
+    "sort": "Trier :",
+    "mostRecent": "Plus récents",
+    "mostPopular": "Plus populaires",
+    "nameAZ": "Nom (A-Z)",
+    "clearFilters": "Effacer les filtres",
+    "role": "Rôle :",
+    "share": "Partager",
+    "copyLink": "Copier le lien",
+    "downloadImage": "Télécharger l'image",
+    "copyImage": "Copier l'image",
+    "removeUpvote": "Retirer votre upvote",
+    "upvoteBuild": "Upvoter ce build",
+    "removeDownvote": "Retirer votre downvote",
+    "downvoteBuild": "Downvoter ce build",
+    "deleteBuild": "Supprimer le build",
+    "editBuild": "Modifier le build",
+    "showMore": "Voir plus",
+    "showLess": "Voir moins",
+    "createdOn": "Créé le"
+  },
+  "createBuild": {
+    "form": "Formulaire",
+    "stats": "Statistiques",
+    "buildName": "Nom du build",
+    "buildNamePlaceholder": "Entrez le nom du build...",
+    "author": "Auteur",
+    "authorPlaceholder": "Votre pseudo...",
+    "description": "Description",
+    "descriptionPlaceholder": "Expliquez le plan de jeu, les forces/faiblesses, matchups, etc.",
+    "visibility": "Visibilité",
+    "visibleToAll": "Visible par tous",
+    "onlyForYou": "Uniquement pour vous",
+    "validationState": "État de validation :",
+    "saveBuild": "Sauvegarder le build",
+    "saving": "Sauvegarde...",
+    "buildIncomplete": "Le build n'est pas complet :",
+    "buildSavedSuccess": "Build sauvegardé avec succès !",
+    "saveError": "Erreur lors de la sauvegarde",
+    "skillOrder": "Ordre des compétences",
+    "skillOrderStepTitle": "Ordre des compétences"
+  },
+  "legal": {
+    "title": "Mentions légales",
+    "metaTitle": "Mentions légales - Lelanation",
+    "metaDescription": "Mentions légales de Lelanation - Informations sur l'utilisation des données de Riot Games et du contenu de Lelariva",
+    "lastUpdate": "Dernière mise à jour :",
+    "siteInfo": {
+      "title": "Informations sur le site",
+      "intro": "Le site <strong>Lelanation</strong> est une plateforme communautaire dédiée aux builds League of Legends. Ce site est édité à titre personnel et n'est pas affilié, associé, autorisé, approuvé ou parrainé par Riot Games, Inc. ou ses filiales."
+    },
+    "riotData": {
+      "title": "Données de Riot Games",
+      "p1": "Ce site utilise des données de jeu (champions, items, runes, sorts d'invocateur, etc.) provenant de l'API Data Dragon de <strong>Riot Games, Inc.</strong>",
+      "p2": "<strong>Lelanation n'est pas un partenaire officiel de Riot Games</strong> et n'a aucun droit, licence ou autorisation officielle de la part de Riot Games pour l'utilisation de ces données. L'utilisation de ces données se fait dans le cadre de la politique d'utilisation des données de Riot Games pour les projets communautaires non commerciaux.",
+      "p3": "League of Legends est une marque déposée de Riot Games, Inc. Tous les droits sont réservés à Riot Games, Inc.",
+      "p4": "Pour plus d'informations sur la politique d'utilisation des données de Riot Games, veuillez consulter :",
+      "riotLegalUrl": "https://www.riotgames.com/fr/legal"
+    },
+    "lelariva": {
+      "title": "Contenu de Lelariva",
+      "p1": "Ce site peut faire référence au créateur de contenu YouTube <strong>Lelariva</strong> et peut utiliser certaines de ses vidéos ou contenus dans le cadre de la fonctionnalité de découverte de builds.",
+      "p2": "<strong>Lelanation n'est pas un partenaire officiel de Lelariva</strong> et n'a aucun droit, licence ou autorisation officielle de la part de Lelariva pour l'utilisation de son contenu. L'utilisation de ce contenu se fait dans le cadre de l'utilisation équitable et de la promotion de contenu communautaire.",
+      "p3": "Tous les droits sur le contenu de Lelariva restent la propriété de Lelariva. Si vous êtes Lelariva et souhaitez que votre contenu soit retiré de ce site, veuillez nous contacter."
+    },
+    "ip": {
+      "title": "Propriété intellectuelle",
+      "p1": "Tous les contenus créés par les utilisateurs de Lelanation (builds, descriptions, etc.) restent la propriété de leurs auteurs respectifs. En publiant du contenu sur Lelanation, vous accordez au site le droit de l'afficher et de le partager dans le cadre de la plateforme.",
+      "p2": "Le design, la structure et le code source de Lelanation sont protégés par les lois sur la propriété intellectuelle."
+    },
+    "liability": {
+      "title": "Responsabilité",
+      "p1": "Lelanation est un site communautaire. Les builds et contenus partagés par les utilisateurs sont fournis à titre informatif uniquement. Nous ne garantissons pas l'exactitude, la pertinence ou l'efficacité des builds partagés.",
+      "p2": "Lelanation ne peut être tenu responsable des dommages directs ou indirects résultant de l'utilisation ou de l'impossibilité d'utiliser le site ou son contenu."
+    },
+    "contact": {
+      "title": "Contact",
+      "text": "Pour toute question concernant ces mentions légales ou pour signaler un contenu, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
+    }
+  },
+  "privacy": {
+    "title": "Politique de confidentialité",
+    "metaTitle": "Politique de confidentialité - Lelanation",
+    "metaDescription": "Politique de confidentialité de Lelanation - Informations sur les cookies, les données collectées et vos droits",
+    "lastUpdate": "Dernière mise à jour :",
+    "dataCollected": {
+      "title": "Données collectées",
+      "p1": "Lelanation utilise le stockage local du navigateur (localStorage) pour sauvegarder vos builds et certaines préférences (ex: votes, consentement aux cookies, onglet actif). Aucun compte n'est requis et aucune donnée personnelle n'est collectée.",
+      "p2": "Toutes les données sont stockées localement sur votre appareil et ne sont jamais transmises à des serveurs externes, sauf lorsque vous choisissez de partager un build publiquement."
+    },
+    "cookies": {
+      "title": "Cookies et technologies similaires",
+      "essential": {
+        "title": "Cookies essentiels",
+        "p1": "Lelanation n'utilise pas de cookies HTTP traditionnels. À la place, nous utilisons le <strong>localStorage</strong> du navigateur pour stocker :",
+        "li1": "Vos builds sauvegardés",
+        "li2": "Vos votes sur les builds",
+        "li3": "Votre consentement aux cookies",
+        "li4": "Vos préférences d'interface (onglet actif, etc.)",
+        "p2": "Ces données sont nécessaires au fonctionnement du site et ne nécessitent pas de consentement explicite selon le RGPD, car elles sont strictement nécessaires à la fourniture du service demandé."
+      },
+      "nonEssential": {
+        "title": "Cookies non essentiels",
+        "p1": "Actuellement, <strong>Lelanation n'utilise aucun cookie non essentiel</strong> (cookies de suivi, cookies publicitaires, cookies d'analyse d'audience).",
+        "p2": "Si des outils de mesure d'audience (ex: Matomo, Google Analytics) ou d'autres services tiers sont ajoutés à l'avenir, ils seront soumis à votre consentement explicite via la bannière de consentement aux cookies."
+      },
+      "manage": {
+        "title": "Gestion de vos préférences",
+        "p1": "Vous pouvez à tout moment modifier ou supprimer les données stockées dans votre navigateur en :",
+        "li1": "Supprimant les données du site dans les paramètres de votre navigateur",
+        "li2": "Utilisant le mode navigation privée",
+        "li3": "Désactivant le JavaScript (cela empêchera le fonctionnement du site)"
+      }
+    },
+    "shareBuilds": {
+      "title": "Partage de builds",
+      "p1": "Lorsque vous choisissez de rendre un build public, celui-ci est stocké sur nos serveurs et peut être consulté par tous les utilisateurs du site. Les builds publics incluent uniquement les informations que vous avez choisies de partager (nom, description, auteur, configuration du build).",
+      "p2": "Vous pouvez à tout moment supprimer un build public depuis la page \"Mes Builds\" ou en le rendant privé."
+    },
+    "thirdParty": {
+      "title": "Données provenant de tiers",
+      "p1": "Lelanation récupère des données de jeu (champions, items, runes, etc.) depuis l'API Data Dragon de Riot Games. Ces données sont mises en cache localement pour améliorer les performances du site.",
+      "p2": "Aucune donnée personnelle n'est partagée avec Riot Games ou d'autres tiers dans le cadre de cette récupération de données."
+    },
+    "rights": {
+      "title": "Vos droits",
+      "intro": "Conformément au RGPD, vous disposez des droits suivants :",
+      "access": "Droit d'accès : Vous pouvez consulter toutes vos données stockées localement",
+      "rectification": "Droit de rectification : Vous pouvez modifier vos builds et préférences à tout moment",
+      "erasure": "Droit à l'effacement : Vous pouvez supprimer vos builds et données localement",
+      "portability": "Droit à la portabilité : Vos données sont déjà dans votre navigateur, vous pouvez les exporter",
+      "p2": "Pour exercer ces droits, vous pouvez simplement supprimer les données du site dans les paramètres de votre navigateur ou supprimer individuellement vos builds depuis l'interface."
+    },
+    "contact": {
+      "title": "Contact",
+      "text": "Pour toute question concernant cette politique de confidentialité, vous pouvez nous contacter via les réseaux sociaux ou le formulaire de contact."
     }
   }
 }

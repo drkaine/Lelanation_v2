@@ -1,14 +1,14 @@
 <template>
   <div class="skill-order-selector">
     <div v-if="!champion" class="py-8 text-center">
-      <p class="text-text">Veuillez d'abord sélectionner un champion</p>
+      <p class="text-text">{{ t('skills.selectChampionFirst') }}</p>
     </div>
 
     <div v-else>
       <!-- Section 1: Les 3 premiers "up" (niveaux 1, 2, 3) -->
       <div class="mb-6">
         <div class="mb-4">
-          <p class="mb-2 font-semibold text-text">Les 3 premiers "up" (Niveaux 1, 2, 3)</p>
+          <p class="mb-2 font-semibold text-text">{{ t('skills.firstThreeUps') }}</p>
         </div>
 
         <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
@@ -17,7 +17,9 @@
             :key="`first-${slot}`"
             class="relative flex flex-col items-center"
           >
-            <span class="mb-1 text-xs font-semibold text-text sm:mb-2">Niveau {{ index + 1 }}</span>
+            <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
+              >{{ t('skills.level') }} {{ index + 1 }}</span
+            >
             <button
               :class="[
                 'relative flex h-6 w-6 flex-col items-center justify-center rounded border-2 transition-all sm:h-8 sm:w-8',
@@ -28,7 +30,7 @@
               :title="
                 getFirstThreeUp(index)
                   ? getSpellName(getFirstThreeUp(index)!)
-                  : 'Sélectionner une compétence'
+                  : t('skills.selectSkill')
               "
               @click.stop="toggleDropdown(`first-${index}`)"
             >
@@ -69,7 +71,14 @@
                       : 'hover:bg-primary/20',
                 ]"
                 :disabled="isFirstThreeUpSelected(spell.id, index)"
-                @click="selectFirstThreeUp(index, spell.id)"
+                :title="
+                  getFirstThreeUp(index) === spell.id
+                    ? t('skills.clickToDeselect')
+                    : isFirstThreeUpSelected(spell.id, index)
+                      ? t('skills.alreadyUsedElsewhere')
+                      : t('skills.select')
+                "
+                @click="toggleFirstThreeUp(index, spell.id)"
               >
                 <img
                   v-if="spell.image && champion"
@@ -87,7 +96,7 @@
       <!-- Section 2: L'ordre de montée (les 3 compétences qu'on max en priorité) -->
       <div class="mb-6">
         <div class="mb-4">
-          <p class="mb-2 font-semibold text-text">Ordre de montée des compétences</p>
+          <p class="mb-2 font-semibold text-text">{{ t('skills.skillUpOrder') }}</p>
         </div>
 
         <div class="mb-4 grid grid-cols-3 gap-2 sm:gap-4">
@@ -97,7 +106,7 @@
             class="relative flex flex-col items-center"
           >
             <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
-              >Priorité {{ index + 1 }}</span
+              >{{ t('skills.priority') }} {{ index + 1 }}</span
             >
             <button
               :class="[
@@ -109,7 +118,7 @@
               :title="
                 getSkillUpOrder(index)
                   ? getSpellName(getSkillUpOrder(index)!)
-                  : 'Sélectionner une compétence'
+                  : t('skills.selectSkill')
               "
               @click.stop="toggleDropdown(`order-${index}`)"
             >
@@ -150,7 +159,14 @@
                       : 'hover:bg-primary/20',
                 ]"
                 :disabled="isSkillUpOrderSelected(spell.id, index)"
-                @click="selectSkillUpOrder(index, spell.id)"
+                :title="
+                  getSkillUpOrder(index) === spell.id
+                    ? t('skills.clickToDeselect')
+                    : isSkillUpOrderSelected(spell.id, index)
+                      ? t('skills.alreadyUsedElsewhere')
+                      : t('skills.select')
+                "
+                @click="toggleSkillUpOrder(index, spell.id)"
               >
                 <img
                   v-if="spell.image && champion"
@@ -269,10 +285,31 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 
-// Sélectionner pour les 3 premiers up
-const selectFirstThreeUp = (index: number, ability: string) => {
+// Sélectionner ou désélectionner (toggle) pour les 3 premiers up
+const toggleFirstThreeUp = (index: number, ability: string) => {
   initializeSkillOrder()
   if (!buildStore.currentBuild) return
+
+  const current = getFirstThreeUp(index)
+  // Si on reclique sur le skill déjà sélectionné, on le désélectionne
+  if (current === ability) {
+    const skillOrder = buildStore.currentBuild.skillOrder || {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    }
+    const newFirstThreeUps = [...(skillOrder.firstThreeUps || [null, null, null])]
+    newFirstThreeUps[index] = null
+    buildStore.setSkillOrder({
+      ...skillOrder,
+      firstThreeUps: newFirstThreeUps as [
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+      ],
+    })
+    openDropdown.value = null
+    return
+  }
 
   if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
     const skillOrder = buildStore.currentBuild.skillOrder || {
@@ -293,10 +330,31 @@ const selectFirstThreeUp = (index: number, ability: string) => {
   }
 }
 
-// Sélectionner pour l'ordre de up
-const selectSkillUpOrder = (index: number, ability: string) => {
+// Sélectionner ou désélectionner (toggle) pour l'ordre de up
+const toggleSkillUpOrder = (index: number, ability: string) => {
   initializeSkillOrder()
   if (!buildStore.currentBuild) return
+
+  const current = getSkillUpOrder(index)
+  // Si on reclique sur le skill déjà sélectionné, on le désélectionne
+  if (current === ability) {
+    const skillOrder = buildStore.currentBuild.skillOrder || {
+      firstThreeUps: [null as any, null as any, null as any],
+      skillUpOrder: [null as any, null as any, null as any],
+    }
+    const newSkillUpOrder = [...(skillOrder.skillUpOrder || [null, null, null])]
+    newSkillUpOrder[index] = null
+    buildStore.setSkillOrder({
+      ...skillOrder,
+      skillUpOrder: newSkillUpOrder as [
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+        'Q' | 'W' | 'E' | 'R',
+      ],
+    })
+    openDropdown.value = null
+    return
+  }
 
   if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
     const skillOrder = buildStore.currentBuild.skillOrder || {

@@ -12,7 +12,10 @@
         <p class="text-sm font-semibold text-text-accent">{{ t('cookies.title') }}</p>
         <p class="mt-1 text-sm text-text/80">
           {{ t('cookies.text') }}
-          <NuxtLink to="/privacy" class="ml-2 font-semibold text-accent hover:text-accent-dark">
+          <NuxtLink
+            :to="localePath('/privacy')"
+            class="ml-2 font-semibold text-accent hover:text-accent-dark"
+          >
             {{ t('cookies.learnMore') }}
           </NuxtLink>
         </p>
@@ -42,6 +45,7 @@ import { useCookieConsentStore } from '~/stores/CookieConsentStore'
 
 const { t } = useI18n()
 const consent = useCookieConsentStore()
+const localePath = useLocalePath()
 
 const shouldShow = computed(() => consent.choice === 'unknown')
 

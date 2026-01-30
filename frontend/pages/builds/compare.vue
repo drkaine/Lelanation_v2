@@ -22,7 +22,7 @@
             Vider
           </button>
           <NuxtLink
-            to="/builds"
+            :to="localePath('/builds')"
             class="rounded-lg border border-primary/40 bg-surface px-4 py-2 text-sm font-semibold text-text hover:border-primary hover:bg-primary/10"
           >
             Retour à la découverte
@@ -150,7 +150,7 @@
 
             <!-- View Details Link -->
             <NuxtLink
-              :to="`/builds/${build.id}`"
+              :to="localePath(`/builds/${build.id}`)"
               class="block rounded-lg bg-primary px-3 py-2 text-center text-sm text-white transition-colors hover:bg-primary-dark"
             >
               Voir les détails
@@ -173,6 +173,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 
 const discoveryStore = useBuildDiscoveryStore()
+const localePath = useLocalePath()
 const { version } = useGameVersion()
 
 const builds = computed(() => discoveryStore.getComparisonBuilds())

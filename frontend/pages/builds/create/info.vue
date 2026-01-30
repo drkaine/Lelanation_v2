@@ -22,19 +22,7 @@
               "
               @click="activeTab = 'form'"
             >
-              Formulaire
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 text-sm font-semibold transition-colors"
-              :class="
-                activeTab === 'skill-order'
-                  ? 'border-b-2 border-accent text-accent'
-                  : 'text-text/60 hover:text-text'
-              "
-              @click="activeTab = 'skill-order'"
-            >
-              Skill Order
+              {{ t('createBuild.form') }}
             </button>
             <button
               type="button"
@@ -46,7 +34,7 @@
               "
               @click="activeTab = 'stats'"
             >
-              Statistiques
+              {{ t('createBuild.stats') }}
             </button>
           </div>
 
@@ -54,26 +42,28 @@
           <div v-show="activeTab === 'form'" class="tab-content">
             <div class="space-y-6">
               <div>
-                <label for="build-name" class="mb-2 block text-sm font-semibold"
-                  >Nom du build</label
-                >
+                <label for="build-name" class="mb-2 block text-sm font-semibold">
+                  {{ t('createBuild.buildName') }}
+                </label>
                 <input
                   id="build-name"
                   v-model="buildName"
                   type="text"
-                  placeholder="Entrez le nom du build..."
+                  :placeholder="t('createBuild.buildNamePlaceholder')"
                   class="w-full max-w-md rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
                   @input="updateBuildName"
                 />
               </div>
 
               <div>
-                <label for="build-author" class="mb-2 block text-sm font-semibold">Auteur</label>
+                <label for="build-author" class="mb-2 block text-sm font-semibold">{{
+                  t('createBuild.author')
+                }}</label>
                 <input
                   id="build-author"
                   v-model="buildAuthor"
                   type="text"
-                  placeholder="Votre pseudo..."
+                  :placeholder="t('createBuild.authorPlaceholder')"
                   class="w-full max-w-md rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
                   @input="updateBuildAuthor"
                 />
@@ -81,20 +71,20 @@
 
               <div>
                 <label for="build-description" class="mb-2 block text-sm font-semibold">
-                  Description
+                  {{ t('createBuild.description') }}
                 </label>
                 <textarea
                   id="build-description"
                   v-model="buildDescription"
                   rows="5"
-                  placeholder="Expliquez le plan de jeu, les forces/faiblesses, matchups, etc."
+                  :placeholder="t('createBuild.descriptionPlaceholder')"
                   class="w-full max-w-2xl rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
                   @input="updateBuildDescription"
                 ></textarea>
               </div>
 
               <div class="flex flex-col gap-2">
-                <label class="text-sm font-semibold">Visibilité</label>
+                <label class="text-sm font-semibold">{{ t('createBuild.visibility') }}</label>
                 <div class="flex items-center gap-4">
                   <button
                     type="button"
@@ -107,10 +97,16 @@
                     @click="toggleVisibility"
                   >
                     <span class="text-base">{{ visibility === 'public' ? '🌐' : '🔒' }}</span>
-                    <span>{{ visibility === 'public' ? 'Public' : 'Privé' }}</span>
+                    <span>{{
+                      visibility === 'public' ? t('buildsPage.public') : t('buildsPage.private')
+                    }}</span>
                   </button>
                   <p class="text-xs text-text/60">
-                    {{ visibility === 'public' ? 'Visible par tous' : 'Uniquement pour vous' }}
+                    {{
+                      visibility === 'public'
+                        ? t('createBuild.visibleToAll')
+                        : t('createBuild.onlyForYou')
+                    }}
                   </p>
                 </div>
               </div>
@@ -123,7 +119,7 @@
                 v-if="!buildStore.isBuildValid && validationDebug.checks"
                 class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
               >
-                <p class="mb-2 font-semibold text-info">État de validation :</p>
+                <p class="mb-2 font-semibold text-info">{{ t('createBuild.validationState') }}</p>
                 <div class="space-y-1 text-text/80">
                   <div>
                     <span class="font-medium">Champion:</span>
@@ -166,17 +162,6 @@
                       {{ validationDebug.checks?.summonerSpells ? '✓' : '✗' }}
                     </span>
                   </div>
-                  <div>
-                    <span class="font-medium">Skill Order:</span>
-                    <span
-                      :class="
-                        validationDebug.checks?.skillOrderComplete ? 'text-success' : 'text-error'
-                      "
-                    >
-                      {{ validationDebug.checks?.skillOrderComplete ? '✓' : '✗' }}
-                    </span>
-                    <span class="text-text/60"> (3 premiers + 3 ordre) </span>
-                  </div>
                 </div>
               </div>
               <!-- Validation Errors Display -->
@@ -184,101 +169,9 @@
                 v-if="showValidationErrors && !buildStore.isBuildValid"
                 class="rounded-lg border border-warning/50 bg-warning/10 p-4"
               >
-                <p class="mb-2 font-semibold text-warning">Le build n'est pas complet :</p>
-                <ul class="list-inside list-disc space-y-1 text-sm text-text/80">
-                  <li v-for="error in buildStore.validationErrors" :key="error">
-                    {{ error }}
-                  </li>
-                </ul>
-              </div>
-              <button
-                :disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
-                :class="[
-                  'rounded-lg px-6 py-2.5 font-semibold transition',
-                  buildStore.isBuildValid && buildStore.status !== 'loading'
-                    ? 'bg-accent text-background hover:bg-accent/90'
-                    : 'cursor-not-allowed bg-surface text-text/50',
-                ]"
-                @click="saveBuild"
-              >
-                {{ buildStore.status === 'loading' ? 'Sauvegarde...' : 'Sauvegarder le build' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Tab Content: Skill Order -->
-          <div v-show="activeTab === 'skill-order'" class="tab-content">
-            <SkillOrderSelector />
-
-            <!-- Save Button (Skill Order Tab) -->
-            <div class="mt-8 flex flex-col gap-4 border-t border-primary/20 pt-6">
-              <!-- Debug Info (développement) -->
-              <div
-                v-if="!buildStore.isBuildValid && validationDebug.checks"
-                class="rounded-lg border border-info/50 bg-info/10 p-4 text-xs"
-              >
-                <p class="mb-2 font-semibold text-info">État de validation :</p>
-                <div class="space-y-1 text-text/80">
-                  <div>
-                    <span class="font-medium">Champion:</span>
-                    <span :class="validationDebug.checks?.champion ? 'text-success' : 'text-error'">
-                      {{ validationDebug.checks?.champion ? '✓' : '✗' }}
-                    </span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Items:</span>
-                    <span :class="validationDebug.checks?.items ? 'text-success' : 'text-error'">
-                      {{ validationDebug.checks?.items ? '✓' : '✗' }}
-                    </span>
-                    <span class="text-text/60"> ({{ validationDebug.checks?.itemsCount }})</span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Runes (Primary):</span>
-                    <span
-                      :class="validationDebug.checks?.runesPrimary ? 'text-success' : 'text-error'"
-                    >
-                      {{ validationDebug.checks?.runesPrimary ? '✓' : '✗' }}
-                    </span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Runes (Secondary):</span>
-                    <span
-                      :class="
-                        validationDebug.checks?.runesSecondary ? 'text-success' : 'text-error'
-                      "
-                    >
-                      {{ validationDebug.checks?.runesSecondary ? '✓' : '✗' }}
-                    </span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Summoner Spells:</span>
-                    <span
-                      :class="
-                        validationDebug.checks?.summonerSpells ? 'text-success' : 'text-error'
-                      "
-                    >
-                      {{ validationDebug.checks?.summonerSpells ? '✓' : '✗' }}
-                    </span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Skill Order:</span>
-                    <span
-                      :class="
-                        validationDebug.checks?.skillOrderComplete ? 'text-success' : 'text-error'
-                      "
-                    >
-                      {{ validationDebug.checks?.skillOrderComplete ? '✓' : '✗' }}
-                    </span>
-                    <span class="text-text/60"> (3 premiers + 3 ordre) </span>
-                  </div>
-                </div>
-              </div>
-              <!-- Validation Errors Display -->
-              <div
-                v-if="showValidationErrors && !buildStore.isBuildValid"
-                class="rounded-lg border border-warning/50 bg-warning/10 p-4"
-              >
-                <p class="mb-2 font-semibold text-warning">Le build n'est pas complet :</p>
+                <p class="mb-2 font-semibold text-warning">
+                  {{ t('createBuild.buildIncomplete') }}
+                </p>
                 <ul class="list-inside list-disc space-y-1 text-sm text-text/80">
                   <li v-for="error in buildStore.validationErrors" :key="error">
                     {{ error }}
@@ -328,7 +221,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
-import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
@@ -350,8 +242,9 @@ useHead({
 const buildStore = useBuildStore()
 const router = useRouter()
 const route = useRoute()
+const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
-const activeTab = ref<'form' | 'skill-order' | 'stats'>('form')
+const activeTab = ref<'form' | 'stats'>('form')
 const buildName = ref('New Build')
 const buildAuthor = ref('')
 const buildDescription = ref('')
@@ -421,7 +314,7 @@ const saveBuild = async () => {
   const success = await buildStore.saveBuild()
   if (success && buildStore.status === 'success') {
     // Afficher la notification verte
-    notificationMessage.value = 'Build sauvegardé avec succès !'
+    notificationMessage.value = t('createBuild.buildSavedSuccess')
     showNotification.value = true
 
     // Vider le store pour pouvoir créer un nouveau build de zéro

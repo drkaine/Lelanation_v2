@@ -1,6 +1,6 @@
 <template>
   <div class="language-switcher">
-    <select :value="locale" aria-label="Language" @change="onLocaleChange">
+    <select :value="locale" :aria-label="t('nav.language')" @change="onLocaleChange">
       <option value="fr">FR</option>
       <option value="en">EN</option>
     </select>
@@ -8,13 +8,14 @@
 </template>
 
 <script setup lang="ts">
-const { locale } = useI18n()
+const { locale, setLocale, t } = useI18n()
 const switchLocalePath = useSwitchLocalePath()
 
 const onLocaleChange = (e: Event) => {
-  const next = (e.target as HTMLSelectElement | null)?.value
+  const next = (e.target as HTMLSelectElement | null)?.value as 'fr' | 'en'
   if (!next) return
-  navigateTo(switchLocalePath(next as 'fr' | 'en'))
+  setLocale(next)
+  navigateTo(switchLocalePath(next))
 }
 </script>
 

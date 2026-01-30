@@ -4,7 +4,7 @@
       <div class="mb-6 flex items-center justify-between">
         <h1 class="text-3xl font-bold text-text">Discover Builds</h1>
         <NuxtLink
-          to="/builds/create"
+          :to="localePath('/builds/create')"
           class="rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
         >
           Create Build
@@ -60,6 +60,7 @@ import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 
 const discoveryStore = useBuildDiscoveryStore()
+const localePath = useLocalePath()
 
 const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 

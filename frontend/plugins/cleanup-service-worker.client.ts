@@ -8,6 +8,7 @@
  * ⚠️ À SUPPRIMER après quelques semaines/mois une fois que tous les utilisateurs
  * ont rechargé le site et que les anciens SW sont supprimés.
  */
+/* eslint-disable no-console -- intentional logging for SW cleanup */
 export default defineNuxtPlugin(() => {
   if (process.client && 'serviceWorker' in navigator) {
     const reloadKey = 'sw_cleanup_done_v1'

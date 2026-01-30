@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-v-html -- spell/description from game data -->
 <template>
   <div class="build-card-wrapper">
     <div class="build-card">
@@ -390,10 +391,14 @@
     <!-- Items Manager (under the card): drag & drop, remove & reset items (seulement si pas readonly) -->
     <div v-if="!readonly" class="items-manager">
       <div class="items-manager-header">
-        <div class="items-manager-title">Gestion des items</div>
-        <button class="items-reset-btn" type="button" @click="resetItemsOnly">Reset items</button>
+        <div class="items-manager-title">{{ t('buildCard.itemsManagement') }}</div>
+        <button class="items-reset-btn" type="button" @click="resetItemsOnly">
+          {{ t('buildCard.resetItems') }}
+        </button>
       </div>
-      <div v-if="buildItems.length === 0" class="items-manager-empty">Aucun item</div>
+      <div v-if="buildItems.length === 0" class="items-manager-empty">
+        {{ t('buildCard.noItems') }}
+      </div>
       <div v-else class="items-manager-list">
         <div
           v-for="(item, index) in buildItems"
@@ -454,7 +459,10 @@ const props = withDefaults(defineProps<Props>(), {
 
 const buildStore = useBuildStore()
 const runesStore = useRunesStore()
-const { t } = useI18n()
+const { locale, t } = useI18n()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
@@ -564,6 +572,11 @@ const startingItems = computed(() => {
         'elixir',
         'biscuit',
       ]
+      // Starters : base items uniquement. Les améliorations d'Atlas (3869, 3870, etc.) ne sont PAS des starters.
+      const atlasUpgradeIds = ['3869', '3870', '3871', '3876', '3877']
+      if (atlasUpgradeIds.includes(item.id)) {
+        return false
+      }
       const starterIds = [
         '1036', // Épée longue (Long Sword)
         '1054',
@@ -572,14 +585,9 @@ const startingItems = computed(() => {
         '1082',
         '1083',
         '3070',
-        '3865',
+        '3865', // Atlas (base)
         '3866',
         '3867',
-        '3869',
-        '3870',
-        '3871',
-        '3876',
-        '3877',
         '2003',
         '2009',
         '2010',
@@ -922,10 +930,12 @@ onMounted(() => {
     }
   }
 
-  // Load runes if not already loaded
-  if (runesStore.runePaths.length === 0) {
-    runesStore.loadRunes()
-  }
+  // Load runes in current locale (for tooltips)
+  runesStore.loadRunes(riotLocale.value)
+})
+
+watch(locale, () => {
+  runesStore.loadRunes(riotLocale.value)
 })
 </script>
 

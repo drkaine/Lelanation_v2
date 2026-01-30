@@ -4,7 +4,7 @@
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex flex-wrap items-center gap-3">
           <NuxtLink
-            to="/builds"
+            :to="localePath('/builds')"
             class="rounded-lg bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
           >
             ← Retour
@@ -26,8 +26,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
@@ -37,6 +38,11 @@ import { useChampionsStore } from '~/stores/ChampionsStore'
 const route = useRoute()
 const discoveryStore = useBuildDiscoveryStore()
 const championsStore = useChampionsStore()
+const localePath = useLocalePath()
+const { locale } = useI18n()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const championId = computed(() => route.params.id as string)
 
@@ -45,12 +51,17 @@ const championName = computed(() => {
   return champ?.name || null
 })
 
+const loadChampionsForLocale = async () => {
+  await championsStore.loadChampions(riotLocale.value)
+}
+
 onMounted(async () => {
   await discoveryStore.loadBuilds()
   discoveryStore.setSelectedChampion(championId.value)
+  await loadChampionsForLocale()
+})
 
-  if (championsStore.champions.length === 0) {
-    championsStore.loadChampions()
-  }
+watch(locale, () => {
+  loadChampionsForLocale()
 })
 </script>

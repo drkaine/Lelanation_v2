@@ -7,8 +7,9 @@ import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
+const localePath = useLocalePath()
 
 onMounted(() => {
-  navigateTo(`/champions/${route.params.id as string}`)
+  navigateTo(localePath(`/champions/${route.params.id as string}`))
 })
 </script>

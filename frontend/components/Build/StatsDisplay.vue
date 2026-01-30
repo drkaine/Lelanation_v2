@@ -2,14 +2,14 @@
   <div class="stats-display">
     <div v-if="!stats" class="py-8 text-center">
       <p class="text-text-secondary">
-        Sélectionnez un champion et des items pour voir les statistiques
+        {{ t('stats.selectChampionAndItems') }}
       </p>
     </div>
 
     <div v-else class="space-y-6">
       <!-- View Toggle -->
       <div class="flex items-center justify-between">
-        <h3 class="text-lg font-bold text-text-accent">Statistiques</h3>
+        <h3 class="text-lg font-bold text-text-accent">{{ t('stats.title') }}</h3>
         <div class="flex gap-2 rounded-lg border-2 border-primary bg-surface p-1">
           <button
             :class="[
@@ -20,7 +20,7 @@
             ]"
             @click="viewMode = 'simple'"
           >
-            Simple
+            {{ t('stats.simple') }}
           </button>
           <button
             :class="[
@@ -31,7 +31,7 @@
             ]"
             @click="viewMode = 'detailed'"
           >
-            Détaillé
+            {{ t('stats.detailed') }}
           </button>
         </div>
       </div>
@@ -43,55 +43,55 @@
       >
         <!-- Offensive Stats -->
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Attack Damage</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.attackDamage') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.attackDamage) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Ability Power</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.abilityPower') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.abilityPower) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Attack Speed</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.attackSpeed') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.attackSpeed, 2) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Crit Chance</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.critChance') }}</p>
           <p class="text-xl font-bold text-text">{{ formatPercent(stats.critChance) }}</p>
         </div>
 
         <!-- Defensive Stats -->
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Health</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.health') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.health) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Armor</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.armor') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.armor) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Magic Resist</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.magicResist') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.magicResist) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Health Regen</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.healthRegen') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.healthRegen, 2) }}/s</p>
         </div>
 
         <!-- Utility Stats -->
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Movement Speed</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.movementSpeed') }}</p>
           <p class="text-xl font-bold text-text">{{ formatStat(stats.movementSpeed) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Cooldown Reduction</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.cooldownReduction') }}</p>
           <p class="text-xl font-bold text-text">{{ formatPercent(stats.cooldownReduction) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Life Steal</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.lifeSteal') }}</p>
           <p class="text-xl font-bold text-text">{{ formatPercent(stats.lifeSteal) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="text-text/70 mb-1 text-xs">Armor Pen</p>
+          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.armorPenetration') }}</p>
           <p class="text-xl font-bold text-text">{{ formatPercent(stats.armorPenetration) }}</p>
         </div>
       </div>
@@ -100,60 +100,60 @@
       <div v-else class="space-y-4">
         <!-- Quick Analysis -->
         <div v-if="quickAnalysis.length" class="rounded-lg border-2 border-primary bg-surface p-4">
-          <h4 class="mb-2 text-base font-bold text-text-accent">Analyse rapide</h4>
-          <ul class="text-text/80 list-disc space-y-1 pl-5 text-sm">
+          <h4 class="mb-2 text-base font-bold text-text-accent">{{ t('stats.quickAnalysis') }}</h4>
+          <ul class="list-disc space-y-1 pl-5 text-sm text-text/80">
             <li v-for="(msg, idx) in quickAnalysis" :key="idx">{{ msg }}</li>
           </ul>
         </div>
 
         <!-- Offensive Stats Section -->
         <div class="rounded-lg border-2 border-primary bg-surface p-4">
-          <h4 class="mb-3 text-base font-bold text-text-accent">Statistiques Offensives</h4>
+          <h4 class="mb-3 text-base font-bold text-text-accent">{{ t('stats.offensive') }}</h4>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <StatCard
-              label="Attack Damage"
+              :label="t('stats.labels.attackDamage')"
               :value="stats.attackDamage"
               :previous-value="previousStats?.attackDamage"
               format="number"
             />
             <StatCard
-              label="Ability Power"
+              :label="t('stats.labels.abilityPower')"
               :value="stats.abilityPower"
               :previous-value="previousStats?.abilityPower"
               format="number"
             />
             <StatCard
-              label="Attack Speed"
+              :label="t('stats.labels.attackSpeed')"
               :value="stats.attackSpeed"
               :previous-value="previousStats?.attackSpeed"
               format="decimal"
             />
             <StatCard
-              label="Crit Chance"
+              :label="t('stats.labels.critChance')"
               :value="stats.critChance"
               :previous-value="previousStats?.critChance"
               format="percent"
             />
             <StatCard
-              label="Crit Damage"
+              :label="t('stats.labels.critDamage')"
               :value="stats.critDamage"
               :previous-value="previousStats?.critDamage"
               format="percent"
             />
             <StatCard
-              label="Life Steal"
+              :label="t('stats.labels.lifeSteal')"
               :value="stats.lifeSteal"
               :previous-value="previousStats?.lifeSteal"
               format="percent"
             />
             <StatCard
-              label="Armor Penetration"
+              :label="t('stats.labels.armorPenetration')"
               :value="stats.armorPenetration"
               :previous-value="previousStats?.armorPenetration"
               format="percent"
             />
             <StatCard
-              label="Magic Penetration"
+              :label="t('stats.labels.magicPenetration')"
               :value="stats.magicPenetration"
               :previous-value="previousStats?.magicPenetration"
               format="percent"
@@ -163,35 +163,35 @@
 
         <!-- Defensive Stats Section -->
         <div class="rounded-lg border-2 border-primary bg-surface p-4">
-          <h4 class="mb-3 text-base font-bold text-text-accent">Statistiques Défensives</h4>
+          <h4 class="mb-3 text-base font-bold text-text-accent">{{ t('stats.defensive') }}</h4>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <StatCard
-              label="Health"
+              :label="t('stats.labels.health')"
               :value="stats.health"
               :previous-value="previousStats?.health"
               format="number"
             />
             <StatCard
-              label="Armor"
+              :label="t('stats.labels.armor')"
               :value="stats.armor"
               :previous-value="previousStats?.armor"
               format="number"
             />
             <StatCard
-              label="Magic Resist"
+              :label="t('stats.labels.magicResist')"
               :value="stats.magicResist"
               :previous-value="previousStats?.magicResist"
               format="number"
             />
             <StatCard
-              label="Health Regen"
+              :label="t('stats.labels.healthRegen')"
               :value="stats.healthRegen"
               :previous-value="previousStats?.healthRegen"
               format="decimal"
               suffix="/s"
             />
             <StatCard
-              label="Tenacity"
+              :label="t('stats.labels.tenacity')"
               :value="stats.tenacity"
               :previous-value="previousStats?.tenacity"
               format="percent"
@@ -201,35 +201,35 @@
 
         <!-- Utility Stats Section -->
         <div class="rounded-lg border-2 border-primary bg-surface p-4">
-          <h4 class="mb-3 text-base font-bold text-text-accent">Statistiques Utilitaires</h4>
+          <h4 class="mb-3 text-base font-bold text-text-accent">{{ t('stats.utility') }}</h4>
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <StatCard
-              label="Mana"
+              :label="t('stats.labels.mana')"
               :value="stats.mana"
               :previous-value="previousStats?.mana"
               format="number"
             />
             <StatCard
-              label="Mana Regen"
+              :label="t('stats.labels.manaRegen')"
               :value="stats.manaRegen"
               :previous-value="previousStats?.manaRegen"
               format="decimal"
               suffix="/s"
             />
             <StatCard
-              label="Movement Speed"
+              :label="t('stats.labels.movementSpeed')"
               :value="stats.movementSpeed"
               :previous-value="previousStats?.movementSpeed"
               format="number"
             />
             <StatCard
-              label="Cooldown Reduction"
+              :label="t('stats.labels.cooldownReduction')"
               :value="stats.cooldownReduction"
               :previous-value="previousStats?.cooldownReduction"
               format="percent"
             />
             <StatCard
-              label="Spell Vamp"
+              :label="t('stats.labels.spellVamp')"
               :value="stats.spellVamp"
               :previous-value="previousStats?.spellVamp"
               format="percent"
@@ -243,10 +243,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import StatCard from './StatCard.vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { CalculatedStats } from '~/types/build'
 
+const { t } = useI18n()
 const buildStore = useBuildStore()
 
 const viewMode = ref<'simple' | 'detailed'>('simple')

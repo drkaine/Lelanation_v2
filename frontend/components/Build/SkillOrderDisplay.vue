@@ -11,9 +11,9 @@
       <!-- Section 1: Les 3 premiers "up" (niveaux 1, 2, 3) -->
       <div>
         <div class="mb-4">
-          <p class="mb-2 font-semibold text-text">Les 3 premiers "up" (Niveaux 1, 2, 3)</p>
+          <p class="mb-2 font-semibold text-text">{{ t('skills.firstThreeUps') }}</p>
           <p class="text-sm text-text/70">
-            Ordre dans lequel les 3 premières compétences sont apprises
+            {{ t('skills.firstThreeUpsDescription') }}
           </p>
         </div>
 
@@ -23,7 +23,9 @@
             :key="`first-${slot}`"
             class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
           >
-            <span class="mb-1 text-xs font-semibold text-text sm:mb-2">Niveau {{ index + 1 }}</span>
+            <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
+              >{{ t('skills.level') }} {{ index + 1 }}</span
+            >
             <div
               v-if="getFirstThreeUp(index)"
               :class="[
@@ -60,9 +62,9 @@
       <!-- Section 2: L'ordre de montée (les 3 compétences qu'on max en priorité) -->
       <div>
         <div class="mb-4">
-          <p class="mb-2 font-semibold text-text">Ordre de montée des compétences</p>
+          <p class="mb-2 font-semibold text-text">{{ t('skills.skillUpOrder') }}</p>
           <p class="text-sm text-text/70">
-            Ordre dans lequel les compétences sont maxées en priorité
+            {{ t('skills.skillUpOrderDescription') }}
           </p>
         </div>
 
@@ -73,7 +75,7 @@
             class="flex flex-col items-center rounded border-2 border-primary bg-surface p-2 sm:p-4"
           >
             <span class="mb-1 text-xs font-semibold text-text sm:mb-2"
-              >Priorité {{ index + 1 }}</span
+              >{{ t('skills.priority') }} {{ index + 1 }}</span
             >
             <div
               v-if="getSkillUpOrder(index)"

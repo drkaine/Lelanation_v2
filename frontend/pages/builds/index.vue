@@ -2,14 +2,14 @@
   <div class="builds-page min-h-screen p-4 text-text">
     <div class="max-w-8xl mx-auto px-2">
       <!-- Tabs -->
-      <div v-if="tabs.length > 1" class="mb-6 border-b-2 border-accent/70">
-        <div class="flex items-center justify-between">
-          <div class="flex gap-4">
+      <div v-if="tabs.length > 0" class="mb-6 border-b-2 border-accent/70">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex gap-2 overflow-x-auto pb-2 sm:gap-4 sm:overflow-visible sm:pb-0">
             <button
               v-for="tab in tabs"
               :key="tab.id"
               :class="[
-                'px-6 py-3 font-semibold transition-colors',
+                'flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold transition-colors sm:px-6 sm:py-3 sm:text-base',
                 activeTab === tab.id
                   ? 'border-b-2 border-accent text-accent'
                   : 'text-text-secondary hover:text-text-primary',
@@ -20,10 +20,10 @@
             </button>
           </div>
           <NuxtLink
-            to="/builds/create"
-            class="rounded-lg bg-accent px-3 py-1.5 text-sm text-background transition-colors hover:bg-accent-dark"
+            :to="localePath('/builds/create')"
+            class="flex-shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm text-background transition-colors hover:bg-accent-dark sm:ml-4"
           >
-            Créer un Build
+            {{ t('buildsPage.createBuild') }}
           </NuxtLink>
         </div>
       </div>
@@ -46,22 +46,26 @@
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p class="font-semibold text-text">
-                {{ comparisonBuilds.length }} build{{ comparisonBuilds.length > 1 ? 's' : '' }} en
-                comparaison
+                {{ comparisonBuilds.length }}
+                {{
+                  comparisonBuilds.length === 1
+                    ? t('buildsPage.buildsInComparison')
+                    : t('buildsPage.buildsInComparison_other')
+                }}
               </p>
             </div>
             <div class="flex flex-wrap gap-2">
               <NuxtLink
-                to="/builds/compare"
+                :to="localePath('/builds/compare')"
                 class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
               >
-                Comparer
+                {{ t('buildsPage.compare') }}
               </NuxtLink>
               <button
                 class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
                 @click="clearComparison"
               >
-                Effacer
+                {{ t('buildsPage.clear') }}
               </button>
             </div>
           </div>
@@ -73,6 +77,24 @@
 
       <!-- Tab Content: My Builds -->
       <div v-if="activeTab === 'my-builds'" class="tab-content">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <span class="text-sm text-text-secondary">{{ t('buildsPage.visibility') }}</span>
+          <div class="flex rounded-lg border border-accent/50 bg-surface/50 p-0.5">
+            <button
+              v-for="opt in visibilityFilterOptions"
+              :key="opt.value"
+              :class="[
+                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                myBuildsVisibilityFilter === opt.value
+                  ? 'bg-accent text-background'
+                  : 'text-text-secondary hover:bg-accent/20 hover:text-text',
+              ]"
+              @click="myBuildsVisibilityFilter = opt.value"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+        </div>
         <!-- Search and Filters -->
         <div class="mb-6 space-y-4">
           <div class="flex flex-wrap items-center gap-4">
@@ -83,17 +105,16 @@
 
         <!-- Build Grid avec les builds de l'utilisateur -->
         <BuildGrid
-          :custom-builds="builds"
+          :custom-builds="buildsFilteredByVisibility"
           :show-user-actions="true"
           @delete-build="confirmDelete"
         />
       </div>
 
-      <!-- Tab Content: Lelariva Builds -->
       <div v-if="activeTab === 'lelariva'" class="tab-content">
         <div class="py-12 text-center">
-          <p class="mb-4 text-lg text-text-secondary">Builds de Lelariva</p>
-          <p class="text-text-secondary">Cette section sera disponible prochainement</p>
+          <p class="mb-4 text-lg text-text-secondary">{{ t('buildsPage.lelarivaBuilds') }}</p>
+          <p class="text-text-secondary">{{ t('buildsPage.lelarivaComingSoon') }}</p>
         </div>
       </div>
     </div>
@@ -109,22 +130,22 @@
         style="background-color: var(--color-surface); opacity: 1"
         @click.stop
       >
-        <h3 class="mb-4 text-lg font-bold text-text">Supprimer le build ?</h3>
+        <h3 class="mb-4 text-lg font-bold text-text">{{ t('buildsPage.deleteBuildTitle') }}</h3>
         <p class="mb-6 text-text">
-          Êtes-vous sûr de vouloir supprimer ce build ? Cette action est irréversible.
+          {{ t('buildsPage.deleteBuildConfirm') }}
         </p>
         <div class="flex gap-4">
           <button
             class="rounded-lg bg-error px-4 py-2 text-text transition-colors hover:bg-error/80"
             @click="deleteBuild"
           >
-            Supprimer
+            {{ t('buildsPage.delete') }}
           </button>
           <button
             class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
             @click="buildToDelete = null"
           >
-            Annuler
+            {{ t('buildsPage.cancel') }}
           </button>
         </div>
       </div>
@@ -147,10 +168,28 @@ const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const route = useRoute()
+const localePath = useLocalePath()
 
 const buildToDelete = ref<string | null>(null)
 
-const builds = computed<Build[]>(() => buildStore.getSavedBuilds())
+/** Filtre visibilité pour l'onglet Mes Builds */
+type VisibilityFilterValue = 'all' | 'private' | 'public'
+const myBuildsVisibilityFilter = ref<VisibilityFilterValue>('all')
+const { t } = useI18n()
+
+const visibilityFilterOptions = computed<{ value: VisibilityFilterValue; label: string }[]>(() => [
+  { value: 'all', label: t('buildsPage.all') },
+  { value: 'private', label: t('buildsPage.private') },
+  { value: 'public', label: t('buildsPage.public') },
+])
+
+/** Builds de l'onglet Mes Builds, filtrés par visibilité */
+const buildsFilteredByVisibility = computed<Build[]>(() => {
+  const list = buildStore.getSavedBuilds()
+  const filter = myBuildsVisibilityFilter.value
+  if (filter === 'all') return list
+  return list.filter(b => (b.visibility ?? 'public') === filter)
+})
 const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 
 // Check if there are Lelariva builds (placeholder for now)
@@ -159,16 +198,14 @@ const hasLelarivaBuilds = computed(() => {
   return false
 })
 
-// Filter tabs based on available builds
 const tabs = computed(() => {
-  const availableTabs = [{ id: 'discover', label: 'Découvrir' }]
-
-  if (builds.value.length > 0) {
-    availableTabs.push({ id: 'my-builds', label: 'Mes Builds' })
-  }
+  const availableTabs = [
+    { id: 'discover', label: t('buildsPage.discover') },
+    { id: 'my-builds', label: t('buildsPage.myBuilds') },
+  ]
 
   if (hasLelarivaBuilds.value) {
-    availableTabs.push({ id: 'lelariva', label: 'Builds de Lelariva' })
+    availableTabs.push({ id: 'lelariva', label: t('buildsPage.lelarivaBuilds') })
   }
 
   return availableTabs

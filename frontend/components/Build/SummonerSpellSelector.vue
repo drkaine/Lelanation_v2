@@ -34,7 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { SummonerSpell } from '~/types/build'
@@ -44,6 +45,10 @@ import { useGameVersion } from '~/composables/useGameVersion'
 const spellsStore = useSummonerSpellsStore()
 const buildStore = useBuildStore()
 const { version } = useGameVersion()
+const { locale } = useI18n()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 // Spells are already filtered by backend (only CLASSIC mode)
 const availableSpells = computed(() => {
@@ -110,10 +115,16 @@ const selectSpell = (spell: SummonerSpell) => {
   }
 }
 
+const loadSpellsForLocale = async () => {
+  await spellsStore.loadSummonerSpells(riotLocale.value)
+}
+
 onMounted(() => {
-  if (spellsStore.spells.length === 0) {
-    spellsStore.loadSummonerSpells()
-  }
+  loadSpellsForLocale()
+})
+
+watch(locale, () => {
+  loadSpellsForLocale()
 })
 </script>
 

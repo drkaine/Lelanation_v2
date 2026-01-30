@@ -8,7 +8,7 @@
       <div v-else-if="error" class="py-12 text-center">
         <p class="text-error">{{ error }}</p>
         <NuxtLink
-          to="/builds"
+          :to="localePath('/builds')"
           class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
         >
           Back to Builds
@@ -19,7 +19,7 @@
         <!-- Header avec retour -->
         <div class="flex w-full items-center justify-between">
           <NuxtLink
-            to="/builds"
+            :to="localePath('/builds')"
             class="rounded bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
           >
             ← Retour
@@ -65,7 +65,7 @@
                 </button>
                 <!-- Bouton Modifier (symbole crayon) -->
                 <NuxtLink
-                  :to="`/builds/edit/${build.id}`"
+                  :to="localePath(`/builds/edit/${build.id}`)"
                   class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
                   title="Modifier le build"
                   @click.stop
@@ -205,7 +205,7 @@
                 "
                 @click="activeTab = 'stats'"
               >
-                Statistiques
+                {{ t('stats.title') }}
               </button>
             </div>
 
@@ -281,6 +281,7 @@ const props = defineProps<{ buildId: string }>()
 const buildStore = useBuildStore()
 const voteStore = useVoteStore()
 const discoveryStore = useBuildDiscoveryStore()
+const { t } = useI18n()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -574,8 +575,9 @@ watch(
       const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(id)}`))
       if (response.ok) {
         const buildData = await response.json()
-        // Migrer le build si nécessaire pour s'assurer qu'il a la bonne structure
-        const { migrated } = await migrateBuildToCurrent(buildData)
+        const { hydrateBuild, isStoredBuild } = await import('~/utils/buildSerialize')
+        const buildToMigrate = isStoredBuild(buildData) ? hydrateBuild(buildData) : buildData
+        const { migrated } = await migrateBuildToCurrent(buildToMigrate)
         buildStore.setCurrentBuild(migrated)
       } else {
         error.value = 'Build not found'

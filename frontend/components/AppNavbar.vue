@@ -3,7 +3,7 @@
     <nav class="header">
       <div class="left-header">
         <LanguageSwitcher />
-        <NuxtLink to="/" class="link" :aria-label="t('nav.home')">
+        <NuxtLink :to="localePath('/')" class="link" :aria-label="t('nav.home')">
           <span>Lelariva</span>
         </NuxtLink>
       </div>
@@ -26,13 +26,28 @@
       </button>
 
       <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
-        <NuxtLink to="/videos" :title="t('nav.videos')" class="version" @click="toggleMenu">
+        <NuxtLink
+          :to="localePath('/videos')"
+          :title="t('nav.videos')"
+          class="version"
+          @click="toggleMenu"
+        >
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink to="/builds/create" :title="t('nav.build')" class="version" @click="toggleMenu">
+        <NuxtLink
+          :to="localePath('/builds/create')"
+          :title="t('nav.build')"
+          class="version"
+          @click="toggleMenu"
+        >
           {{ t('nav.build') }}
         </NuxtLink>
-        <NuxtLink to="/builds" :title="t('nav.builds')" class="version" @click="toggleMenu">
+        <NuxtLink
+          :to="localePath('/builds')"
+          :title="t('nav.builds')"
+          class="version"
+          @click="toggleMenu"
+        >
           {{ t('nav.builds') }}
         </NuxtLink>
         <a
@@ -47,13 +62,13 @@
       </div>
 
       <div class="right-header">
-        <NuxtLink to="/builds" :title="t('nav.builds')" class="version">
+        <NuxtLink :to="localePath('/builds')" :title="t('nav.builds')" class="version">
           {{ t('nav.builds') }}
         </NuxtLink>
-        <NuxtLink to="/builds/create" :title="t('nav.build')" class="version">
+        <NuxtLink :to="localePath('/builds/create')" :title="t('nav.build')" class="version">
           {{ t('nav.build') }}
         </NuxtLink>
-        <NuxtLink to="/videos" :title="t('nav.videos')" class="version">
+        <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
         </NuxtLink>
         <a
@@ -77,6 +92,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 
 const isMenuOpen = ref(false)
 const { t, locale } = useI18n()
+const localePath = useLocalePath()
 const versionStore = useVersionStore()
 const gameVersion = computed(() => versionStore.currentVersion || '14.1.1')
 

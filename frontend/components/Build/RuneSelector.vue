@@ -1,3 +1,4 @@
+<!-- eslint-disable vue/no-v-html -- rune descriptions from game data -->
 <template>
   <div class="runesPage">
     <div v-if="runesStore.status === 'loading'" class="py-8 text-center">
@@ -242,10 +243,14 @@ import { getRunePathImageUrl, getRuneImageUrl, getSpellImageUrl } from '~/utils/
 import { useGameVersion } from '~/composables/useGameVersion'
 
 const { version } = useGameVersion()
+const { locale, t } = useI18n()
 
 const runesStore = useRunesStore()
 const buildStore = useBuildStore()
 const spellsStore = useSummonerSpellsStore()
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const selectedPrimaryPathId = ref<number | null>(null)
 const selectedPrimaryRunes = ref<Record<number, number>>({})
@@ -393,43 +398,68 @@ interface ShardOption {
   description: string
 }
 
-const slot1Options: ShardOption[] = [
-  { id: 5008, name: 'Adaptive Force', image: 'adaptative.png', description: '+9 Force adaptative' },
-  { id: 5005, name: 'Attack Speed', image: 'speed.png', description: "+10% vitesse d'attaque" },
+const slot1Options = computed<ShardOption[]>(() => [
+  {
+    id: 5008,
+    name: t('runes.shards.5008.name'),
+    image: 'adaptative.png',
+    description: t('runes.shards.5008.desc'),
+  },
+  {
+    id: 5005,
+    name: t('runes.shards.5005.name'),
+    image: 'speed.png',
+    description: t('runes.shards.5005.desc'),
+  },
   {
     id: 5007,
-    name: 'Ability Haste',
+    name: t('runes.shards.5007.name'),
     image: 'cdr.png',
-    description: '+10% accélération de compétence',
+    description: t('runes.shards.5007.desc'),
   },
-]
+])
 
-const slot2Options: ShardOption[] = [
-  { id: 5008, name: 'Adaptive Force', image: 'adaptative.png', description: '+9 Force adaptative' },
-  { id: 5006, name: 'Move Speed', image: 'move.png', description: '+2% vitesse de déplacement' },
+const slot2Options = computed<ShardOption[]>(() => [
+  {
+    id: 5008,
+    name: t('runes.shards.5008.name'),
+    image: 'adaptative.png',
+    description: t('runes.shards.5008.desc'),
+  },
+  {
+    id: 5006,
+    name: t('runes.shards.5006.name'),
+    image: 'move.png',
+    description: t('runes.shards.5006.desc'),
+  },
   {
     id: 5002,
-    name: 'Health per level',
+    name: t('runes.shards.5002.name'),
     image: 'growth.png',
-    description: '+10-180 PV (selon niveau)',
+    description: t('runes.shards.5002.desc'),
   },
-]
+])
 
-const slot3Options: ShardOption[] = [
-  { id: 5001, name: 'Health', image: 'hp.png', description: '+65 PV' },
+const slot3Options = computed<ShardOption[]>(() => [
+  {
+    id: 5001,
+    name: t('runes.shards.5001.name'),
+    image: 'hp.png',
+    description: t('runes.shards.5001.desc'),
+  },
   {
     id: 5003,
-    name: 'Tenacity',
+    name: t('runes.shards.5003.name'),
     image: 'tenacity.png',
-    description: '+10% Ténacitée et réduction de ralentissement',
+    description: t('runes.shards.5003.desc'),
   },
   {
     id: 5002,
-    name: 'Health per level',
+    name: t('runes.shards.5002.name'),
     image: 'growth.png',
-    description: '+10-180 PV (selon niveau)',
+    description: t('runes.shards.5002.desc'),
   },
-]
+])
 
 const selectShard = (slot: number, shardId: number) => {
   selectedShards.value[slot] = shardId
@@ -652,13 +682,18 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateTooltipPosition)
 })
 
+const loadGameDataForLocale = async () => {
+  const lang = riotLocale.value
+  await runesStore.loadRunes(lang)
+  await spellsStore.loadSummonerSpells(lang)
+}
+
 onMounted(() => {
-  if (runesStore.runePaths.length === 0) {
-    runesStore.loadRunes()
-  }
-  if (spellsStore.spells.length === 0) {
-    spellsStore.loadSummonerSpells()
-  }
+  loadGameDataForLocale()
+})
+
+watch(locale, () => {
+  loadGameDataForLocale()
 })
 </script>
 

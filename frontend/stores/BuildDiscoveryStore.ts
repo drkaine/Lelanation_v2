@@ -2,7 +2,8 @@ import { defineStore } from 'pinia'
 import { useBuildStore } from './BuildStore'
 import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
-import type { Build } from '~/types/build'
+import type { Build, StoredBuild } from '~/types/build'
+import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -128,21 +129,22 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         const { apiUrl } = await import('~/utils/apiUrl')
         const response = await fetch(apiUrl('/api/builds'))
         if (response.ok) {
-          const allBuilds = (await response.json()) as Build[]
-          // Filtrer seulement les builds publics (pas ceux avec _priv dans le nom de fichier)
-          // et exclure les builds locaux pour éviter les doublons
+          const allBuilds = (await response.json()) as (Build | StoredBuild)[]
           const localBuildIds = new Set(localBuilds.map(b => b.id))
-          publicBuilds = allBuilds.filter(
-            build => !localBuildIds.has(build.id) && build.visibility !== 'private'
+          const filtered = allBuilds.filter(
+            b => !localBuildIds.has(b.id) && b.visibility !== 'private'
           )
+          publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
         }
       } catch (error) {
         // eslint-disable-next-line no-console
         console.error('Failed to load public builds:', error)
       }
 
-      // Combiner les builds locaux et publics
-      this.builds = [...localBuilds, ...publicBuilds]
+      // Combiner les builds locaux publics et les builds publics du serveur
+      // (ne pas inclure nos builds privés dans la découverte)
+      const localPublicBuilds = localBuilds.filter(b => b.visibility !== 'private')
+      this.builds = [...localPublicBuilds, ...publicBuilds]
 
       const versionStore = useVersionStore()
       if (!versionStore.currentVersion) {

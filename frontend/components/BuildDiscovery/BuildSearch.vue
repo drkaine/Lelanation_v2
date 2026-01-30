@@ -1,10 +1,10 @@
 <template>
-  <div class="build-search" style="width: 33.333%; flex-shrink: 0">
+  <div class="build-search w-full flex-shrink-0 md:w-1/3">
     <div class="relative">
       <input
         v-model="localSearchQuery"
         type="text"
-        placeholder="Rechercher un build par champion ou auteur..."
+        :placeholder="t('buildDiscovery.searchPlaceholder')"
         class="w-full rounded border border-primary bg-surface px-4 py-3 pl-10 text-text"
         @input="handleSearch"
       />
@@ -12,18 +12,19 @@
     </div>
 
     <div v-if="resultsCount > 0" class="mt-2 text-sm text-text/70">
-      {{ resultsCount }} build{{ resultsCount > 1 ? 's' : '' }} trouvé{{
-        resultsCount > 1 ? 's' : ''
-      }}
+      {{ resultsCount }}
+      {{ resultsCount === 1 ? t('buildDiscovery.buildFound') : t('buildDiscovery.buildsFound') }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useDebounce } from '~/composables/useDebounce'
 
+const { t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
 
 const localSearchQuery = ref(discoveryStore.searchQuery)
