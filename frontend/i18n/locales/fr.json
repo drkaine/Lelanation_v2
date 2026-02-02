@@ -444,7 +444,15 @@
     "realDamage": "Dégât réel",
     "physical": "Physique",
     "magic": "Magique",
-    "true": "Vrai"
+    "true": "Vrai",
+    "tabStats": "Statistiques",
+    "tabSkill": "Skill",
+    "tabTarget": "Cible ennemi",
+    "tabChampion": "Champion",
+    "tabRunes": "Runes",
+    "tabItems": "Items",
+    "tabSkillOrder": "Ordre des compétences",
+    "spellDamageUnavailable": "Les valeurs de dégâts par rang ne sont pas fournies par Data Dragon (effect à 0). Les données Community Dragon seront utilisées si disponibles."
   }
 }
 

@@ -3,180 +3,243 @@
     <div class="mx-auto max-w-6xl space-y-6">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 class="text-2xl font-bold text-text-accent">{{ t('theorycraft.title') }}</h1>
-        <NuxtLink
-          :to="localePath('/builds/create/champion')"
-          class="rounded border border-accent/70 px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
-        >
-          {{ t('menu-build.champion') }} →
-        </NuxtLink>
       </div>
 
       <p class="text-text/80">{{ t('theorycraft.configurePrompt') }}</p>
 
-      <!-- Build card (editable) + right column: stats & spell damage -->
+      <!-- Build card (editable) + right column: tabs (Statistiques / Skill / Cible ennemi) -->
       <div class="flex flex-col gap-6 lg:flex-row">
         <div class="flex-shrink-0">
           <BuildCard v-if="theorycraftBuild" :build="theorycraftBuild" />
         </div>
-        <div class="min-w-0 flex-1 space-y-6">
-          <!-- Item stacks -->
-          <div
-            v-if="stackableItems.length > 0"
-            class="rounded-lg border border-primary/30 bg-surface/30 p-4"
-          >
-            <h2 class="mb-4 text-lg font-semibold text-text">{{ t('theorycraft.itemStacks') }}</h2>
-            <p class="mb-3 text-sm text-text/70">{{ t('theorycraft.itemStacksDescription') }}</p>
-            <div class="space-y-3">
-              <div
-                v-for="item in stackableItems"
-                :key="item.id"
-                class="flex items-center justify-between gap-3 rounded border border-primary/20 bg-background/50 p-2"
-              >
-                <span class="text-sm text-text">{{ item.name }}</span>
-                <label class="flex items-center gap-2 text-sm">
-                  <span class="text-text/70">{{ t('theorycraft.rank') }}</span>
-                  <input
-                    v-model.number="itemStacks[item.id]"
-                    type="number"
-                    :min="0"
-                    :max="getItemMaxStacks(item.id)"
-                    class="w-20 rounded border border-primary/50 bg-background px-2 py-1 text-text"
-                  />
-                </label>
+        <div class="min-w-0 flex-1 space-y-4">
+          <!-- Tabs -->
+          <div class="flex gap-2 border-b border-primary/30 pb-2">
+            <button
+              v-for="tab in theorycraftTabs"
+              :key="tab.id"
+              type="button"
+              :class="[
+                'rounded px-4 py-2 text-sm font-medium transition-colors',
+                activeTheorycraftTab === tab.id
+                  ? 'bg-accent text-background'
+                  : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
+              ]"
+              @click="activeTheorycraftTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+
+          <!-- Tab: Champion -->
+          <div v-show="activeTheorycraftTab === 'champion'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">{{ t('menu-build.champion') }}</h2>
+              <ChampionSelector />
+            </div>
+          </div>
+
+          <!-- Tab: Runes -->
+          <div v-show="activeTheorycraftTab === 'runes'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">{{ t('theorycraft.tabRunes') }}</h2>
+              <RuneSelector />
+            </div>
+          </div>
+
+          <!-- Tab: Items -->
+          <div v-show="activeTheorycraftTab === 'items'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">{{ t('theorycraft.tabItems') }}</h2>
+              <ItemSelector />
+            </div>
+          </div>
+
+          <!-- Tab: Skill order -->
+          <div v-show="activeTheorycraftTab === 'skillOrder'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">
+                {{ t('theorycraft.tabSkillOrder') }}
+              </h2>
+              <SkillOrderSelector />
+            </div>
+          </div>
+
+          <!-- Tab: Statistiques -->
+          <div v-show="activeTheorycraftTab === 'stats'" class="space-y-6">
+            <!-- Item stacks -->
+            <div
+              v-if="stackableItems.length > 0"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-4"
+            >
+              <h2 class="mb-4 text-lg font-semibold text-text">
+                {{ t('theorycraft.itemStacks') }}
+              </h2>
+              <p class="mb-3 text-sm text-text/70">{{ t('theorycraft.itemStacksDescription') }}</p>
+              <div class="space-y-3">
+                <div
+                  v-for="item in stackableItems"
+                  :key="item.id"
+                  class="flex items-center justify-between gap-3 rounded border border-primary/20 bg-background/50 p-2"
+                >
+                  <span class="text-sm text-text">{{ item.name }}</span>
+                  <label class="flex items-center gap-2 text-sm">
+                    <span class="text-text/70">{{ t('theorycraft.rank') }}</span>
+                    <input
+                      v-model.number="itemStacks[item.id]"
+                      type="number"
+                      :min="0"
+                      :max="getItemMaxStacks(item.id)"
+                      class="w-20 rounded border border-primary/50 bg-background px-2 py-1 text-text"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Passive stacks -->
-          <div
-            v-if="championPassiveStacks.length > 0"
-            class="rounded-lg border border-primary/30 bg-surface/30 p-4"
-          >
-            <h2 class="mb-4 text-lg font-semibold text-text">
-              {{ t('theorycraft.passiveStacks') }}
-            </h2>
-            <p class="mb-3 text-sm text-text/70">{{ t('theorycraft.passiveStacksDescription') }}</p>
-            <div class="space-y-3">
-              <div
-                v-for="stackDef in championPassiveStacks"
-                :key="stackDef.stackType"
-                class="flex items-center justify-between gap-3 rounded border border-primary/20 bg-background/50 p-2"
-              >
-                <span class="text-sm text-text"
-                  >{{ stackDef.championName }} ({{ stackDef.stackType }})</span
+            <!-- Passive stacks -->
+            <div
+              v-if="championPassiveStacks.length > 0"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-4"
+            >
+              <h2 class="mb-4 text-lg font-semibold text-text">
+                {{ t('theorycraft.passiveStacks') }}
+              </h2>
+              <p class="mb-3 text-sm text-text/70">
+                {{ t('theorycraft.passiveStacksDescription') }}
+              </p>
+              <div class="space-y-3">
+                <div
+                  v-for="stackDef in championPassiveStacks"
+                  :key="stackDef.stackType"
+                  class="flex items-center justify-between gap-3 rounded border border-primary/20 bg-background/50 p-2"
                 >
-                <label class="flex items-center gap-2 text-sm">
-                  <span class="text-text/70">{{ t('theorycraft.rank') }}</span>
-                  <input
-                    v-model.number="passiveStacks[`${champion?.id || ''}:${stackDef.stackType}`]"
-                    type="number"
-                    :min="0"
-                    :max="stackDef.maxStacks"
-                    class="w-24 rounded border border-primary/50 bg-background px-2 py-1 text-text"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Stats table (includes level selector 1-18) -->
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-            <h2 class="mb-4 text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
-            <StatsTable :build="theorycraftBuild" />
-          </div>
-
-          <!-- Enemy target -->
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-            <h2 class="mb-4 text-lg font-semibold text-text">{{ t('theorycraft.enemyTarget') }}</h2>
-            <p class="mb-3 text-sm text-text/70">{{ t('theorycraft.enemyTargetDescription') }}</p>
-            <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <label class="flex flex-col gap-1 text-sm">
-                <span class="text-text/70">{{ t('theorycraft.enemyHealth') }}</span>
-                <input
-                  v-model.number="enemyTarget.health"
-                  type="number"
-                  min="0"
-                  class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-sm">
-                <span class="text-text/70">{{ t('theorycraft.enemyArmor') }}</span>
-                <input
-                  v-model.number="enemyTarget.armor"
-                  type="number"
-                  min="0"
-                  class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                />
-              </label>
-              <label class="flex flex-col gap-1 text-sm">
-                <span class="text-text/70">{{ t('theorycraft.enemyMagicResist') }}</span>
-                <input
-                  v-model.number="enemyTarget.magicResist"
-                  type="number"
-                  min="0"
-                  class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                />
-              </label>
-            </div>
-          </div>
-
-          <!-- Spell damage by rank -->
-          <div
-            v-if="champion && buildStats"
-            class="rounded-lg border border-primary/30 bg-surface/30 p-4"
-          >
-            <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-lg font-semibold text-text">{{ t('theorycraft.spellDamage') }}</h2>
-              <label class="flex items-center gap-2 text-sm text-text/80">
-                <span>{{ t('stats.level') }}</span>
-                <select
-                  v-model.number="theorycraftLevel"
-                  class="rounded border border-primary/50 bg-background px-2 py-1 text-text"
-                >
-                  <option v-for="n in 18" :key="n" :value="n">{{ n }}</option>
-                </select>
-              </label>
-            </div>
-            <p class="mb-3 text-sm text-text/70">
-              {{ t('theorycraft.spellDamageByRank') }}
-            </p>
-            <div class="space-y-4">
-              <div
-                v-for="(spell, idx) in champion.spells"
-                :key="spell.id"
-                class="rounded border border-primary/20 bg-background/50 p-3"
-              >
-                <div class="mb-2 flex items-center gap-2">
-                  <span class="font-semibold text-text"
-                    >{{ ['Q', 'W', 'E', 'R'][idx] }}: {{ spell.name }}</span
+                  <span class="text-sm text-text"
+                    >{{ stackDef.championName }} ({{ stackDef.stackType }})</span
                   >
+                  <label class="flex items-center gap-2 text-sm">
+                    <span class="text-text/70">{{ t('theorycraft.rank') }}</span>
+                    <input
+                      v-model.number="passiveStacks[`${champion?.id || ''}:${stackDef.stackType}`]"
+                      type="number"
+                      :min="0"
+                      :max="stackDef.maxStacks"
+                      class="w-24 rounded border border-primary/50 bg-background px-2 py-1 text-text"
+                    />
+                  </label>
                 </div>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-primary/20 text-left">
-                        <th class="py-1 pr-4 text-text/70">{{ t('theorycraft.rank') }}</th>
-                        <th class="py-1 text-text/70">{{ t('theorycraft.rawDamage') }}</th>
-                        <th v-if="enemyTarget.health > 0" class="py-1 text-text/70">
-                          {{ t('theorycraft.realDamage') }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="row in spellDamageBySpell[idx]"
-                        :key="row.rank"
-                        class="border-b border-primary/10"
-                      >
-                        <td class="py-1 pr-4 text-text">{{ row.rank }}</td>
-                        <td class="py-1 font-mono text-text">{{ row.damage }}</td>
-                        <td v-if="enemyTarget.health > 0" class="py-1 font-mono text-text">
-                          {{ getRealDamageForSpell(spell, row.rank, row.damage) }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+              </div>
+            </div>
+
+            <!-- Stats table (includes level selector 1-18) -->
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
+              <StatsTable :build="theorycraftBuild" />
+            </div>
+          </div>
+
+          <!-- Tab: Skill (dégâts des sorts) -->
+          <div v-show="activeTheorycraftTab === 'skill'" class="space-y-6">
+            <div
+              v-if="champion && buildStats"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-4"
+            >
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-lg font-semibold text-text">{{ t('theorycraft.spellDamage') }}</h2>
+                <label class="flex items-center gap-2 text-sm text-text/80">
+                  <span>{{ t('stats.level') }}</span>
+                  <select
+                    v-model.number="theorycraftLevel"
+                    class="rounded border border-primary/50 bg-background px-2 py-1 text-text"
+                  >
+                    <option v-for="n in 18" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </label>
+              </div>
+              <p class="mb-3 text-sm text-text/70">
+                {{ t('theorycraft.spellDamageByRank') }}
+              </p>
+              <p v-if="spellDamageUnavailable" class="mb-3 text-sm text-warning">
+                {{ t('theorycraft.spellDamageUnavailable') }}
+              </p>
+              <div class="space-y-4">
+                <div
+                  v-for="(spell, idx) in champion.spells"
+                  :key="spell.id"
+                  class="rounded border border-primary/20 bg-background/50 p-3"
+                >
+                  <div class="mb-2 flex items-center gap-2">
+                    <span class="font-semibold text-text"
+                      >{{ ['Q', 'W', 'E', 'R'][idx] }}: {{ spell.name }}</span
+                    >
+                  </div>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/20 text-left">
+                          <th class="py-1 pr-4 text-text/70">{{ t('theorycraft.rank') }}</th>
+                          <th class="py-1 text-text/70">{{ t('theorycraft.rawDamage') }}</th>
+                          <th v-if="enemyTarget.health > 0" class="py-1 text-text/70">
+                            {{ t('theorycraft.realDamage') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in spellDamageBySpell[idx]"
+                          :key="row.rank"
+                          class="border-b border-primary/10"
+                        >
+                          <td class="py-1 pr-4 text-text">{{ row.rank }}</td>
+                          <td class="py-1 font-mono text-text">{{ row.damage }}</td>
+                          <td v-if="enemyTarget.health > 0" class="py-1 font-mono text-text">
+                            {{ getRealDamageForSpell(spell, row.rank, row.damage) }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+              </div>
+            </div>
+            <p v-else class="text-sm text-text/60">{{ t('stats.selectChampionAndItems') }}</p>
+          </div>
+
+          <!-- Tab: Cible ennemi -->
+          <div v-show="activeTheorycraftTab === 'target'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <h2 class="mb-4 text-lg font-semibold text-text">
+                {{ t('theorycraft.enemyTarget') }}
+              </h2>
+              <p class="mb-3 text-sm text-text/70">{{ t('theorycraft.enemyTargetDescription') }}</p>
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <label class="flex flex-col gap-1 text-sm">
+                  <span class="text-text/70">{{ t('theorycraft.enemyHealth') }}</span>
+                  <input
+                    v-model.number="enemyTarget.health"
+                    type="number"
+                    min="0"
+                    class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-sm">
+                  <span class="text-text/70">{{ t('theorycraft.enemyArmor') }}</span>
+                  <input
+                    v-model.number="enemyTarget.armor"
+                    type="number"
+                    min="0"
+                    class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-sm">
+                  <span class="text-text/70">{{ t('theorycraft.enemyMagicResist') }}</span>
+                  <input
+                    v-model.number="enemyTarget.magicResist"
+                    type="number"
+                    min="0"
+                    class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                  />
+                </label>
               </div>
             </div>
           </div>
@@ -216,15 +279,27 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useTheorycraftStore } from '~/stores/TheorycraftStore'
 import { calculateStats } from '~/utils/statsCalculator'
 import { getSpellDamageByRank } from '~/utils/spellDamage'
+import { getCommunityDragonSpellDamage } from '~/utils/communityDragonSpellDamage'
+import {
+  loadCommunityDragonSpellDefinitions,
+  getSpellDamageByRankFromEngine,
+} from '~/utils/theorycraftEngine'
+import type { SpellDefinition } from '~/types/theorycraft'
 import { isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
 import { getChampionPassiveStacks } from '~/utils/passiveStacks'
 import { calculateMagicDamage, type EnemyTarget } from '~/utils/realDamage'
 import StatsTable from '~/components/Build/StatsTable.vue'
+import ChampionSelector from '~/components/Build/ChampionSelector.vue'
+import RuneSelector from '~/components/Build/RuneSelector.vue'
+import ItemSelector from '~/components/Build/ItemSelector.vue'
+import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import type { Spell } from '~/types/build'
+import type { CommunityDragonSpellDamageData } from '~/utils/communityDragonSpellDamage'
 
 definePageMeta({
   layout: false,
@@ -243,17 +318,55 @@ useHead({
 // Get the build to use: theorycraft build if available, otherwise current build
 const theorycraftBuild = computed(() => theorycraftStore.getBuild() || buildStore.currentBuild)
 
+// Sync theorycraft build with buildStore so Champion/Runes/Items selectors edit the same build
 onMounted(() => {
-  // If no theorycraft build is loaded, use current build or create a new one
-  if (!theorycraftBuild.value) {
-    if (!buildStore.currentBuild) {
-      buildStore.createNewBuild()
-    }
+  const tcBuild = theorycraftStore.getBuild()
+  if (tcBuild) {
+    buildStore.setCurrentBuild(tcBuild)
+  } else if (!buildStore.currentBuild) {
+    buildStore.createNewBuild()
   }
 })
 
+watch(
+  () => buildStore.currentBuild,
+  newBuild => {
+    if (newBuild) theorycraftStore.loadBuild(newBuild)
+  },
+  { deep: true }
+)
+
 const champion = computed(() => theorycraftBuild.value?.champion ?? null)
 const theorycraftLevel = ref(18)
+const activeTheorycraftTab = ref<
+  'champion' | 'runes' | 'items' | 'skillOrder' | 'stats' | 'skill' | 'target'
+>('champion')
+const communityDragonSpellData = ref<Record<string, CommunityDragonSpellDamageData>>({})
+const engineSpellDefinitions = ref<SpellDefinition[]>([])
+
+watch(
+  () => champion.value?.id,
+  async championId => {
+    if (!championId) {
+      communityDragonSpellData.value = {}
+      engineSpellDefinitions.value = []
+      return
+    }
+    communityDragonSpellData.value = await getCommunityDragonSpellDamage(championId)
+    engineSpellDefinitions.value = await loadCommunityDragonSpellDefinitions(championId)
+  },
+  { immediate: true }
+)
+
+const theorycraftTabs = computed(() => [
+  { id: 'champion' as const, label: t('theorycraft.tabChampion') },
+  { id: 'runes' as const, label: t('theorycraft.tabRunes') },
+  { id: 'items' as const, label: t('theorycraft.tabItems') },
+  { id: 'skillOrder' as const, label: t('theorycraft.tabSkillOrder') },
+  { id: 'stats' as const, label: t('theorycraft.tabStats') },
+  { id: 'skill' as const, label: t('theorycraft.tabSkill') },
+  { id: 'target' as const, label: t('theorycraft.tabTarget') },
+])
 const itemStacks = ref<Record<string, number>>({})
 const passiveStacks = ref<Record<string, number>>({})
 const enemyTarget = ref<EnemyTarget>({
@@ -315,8 +428,29 @@ const spellDamageBySpell = computed(() => {
   const ch = champion.value
   const stats = buildStats.value
   const baseAd = championBaseAdAtLevel.value
-  if (!ch?.spells || !stats) return [[], [], [], []]
-  return ch.spells.map(spell => getSpellDamageByRank(spell, stats, baseAd))
+  const definitions = engineSpellDefinitions.value
+  if (!ch?.spells) return [[], [], [], []]
+  if (definitions.length === 4) {
+    const override =
+      stats != null
+        ? { attackDamage: stats.attackDamage, abilityPower: stats.abilityPower }
+        : undefined
+    return getSpellDamageByRankFromEngine(ch, theorycraftLevel.value, definitions, override)
+  }
+  if (!stats) return [[], [], [], []]
+  return ch.spells.map(spell =>
+    getSpellDamageByRank(spell, stats, baseAd, communityDragonSpellData.value)
+  )
+})
+
+/** True when Data Dragon spell effect is all zeros (no damage data from DD) */
+const spellDamageUnavailable = computed(() => {
+  const rows = spellDamageBySpell.value
+  if (!rows.length) return false
+  const allZero = rows.every(
+    spellRows => spellRows.length === 0 || spellRows.every(r => r.damage === 0)
+  )
+  return allZero
 })
 
 function getRealDamageForSpell(_spell: Spell, _rank: number, rawDamage: number): number {

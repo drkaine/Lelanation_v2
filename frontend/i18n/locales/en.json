@@ -440,7 +440,15 @@
     "realDamage": "Real damage",
     "physical": "Physical",
     "magic": "Magic",
-    "true": "True"
+    "true": "True",
+    "tabStats": "Statistics",
+    "tabSkill": "Skill",
+    "tabTarget": "Enemy target",
+    "tabChampion": "Champion",
+    "tabRunes": "Runes",
+    "tabItems": "Items",
+    "tabSkillOrder": "Skill order",
+    "spellDamageUnavailable": "Damage per rank values are not provided by Data Dragon (effect is 0). Community Dragon data will be used when available."
   }
 }
 
