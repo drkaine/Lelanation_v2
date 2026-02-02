@@ -35,6 +35,15 @@
           {{ t('nav.videos') }}
         </NuxtLink>
         <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/statistics')"
+          :title="t('nav.statistics')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('nav.statistics') }}
+        </NuxtLink>
+        <NuxtLink
           :to="localePath('/builds/create')"
           :title="t('nav.build')"
           class="version"
@@ -96,6 +105,14 @@
         </NuxtLink>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/statistics')"
+          :title="t('nav.statistics')"
+          class="version"
+        >
+          {{ t('nav.statistics') }}
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"

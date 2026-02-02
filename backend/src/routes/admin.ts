@@ -31,6 +31,16 @@ const youtubeConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json'
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
+const riotApikeyFile = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
+
+interface RiotApikeyConfig {
+  riotApiKey?: string
+}
+
+function maskRiotApiKey(key: string): string {
+  if (!key || key.length < 12) return '****'
+  return `${key.slice(0, 6)}****...${key.slice(-4)}`
+}
 
 function parseBasicAuth(authHeader: string): { username: string; password: string } | null {
   const [scheme, token] = authHeader.split(' ')
@@ -260,6 +270,39 @@ router.post('/youtube/channels', async (req, res) => {
     return res.status(500).json({ error: writeResult.unwrapErr().message })
   }
   return res.json({ success: true, channels: next.channels })
+})
+
+// --- Riot API key (admin) ---
+router.get('/riot-apikey', async (_req, res) => {
+  const fileResult = await FileManager.readJson<RiotApikeyConfig>(riotApikeyFile)
+  const fromFile = fileResult.isOk() ? fileResult.unwrap().riotApiKey : undefined
+  const fromEnv = process.env.RIOT_API_KEY
+  const key = (typeof fromFile === 'string' && fromFile.trim() !== '') ? fromFile : fromEnv
+  const hasKey = typeof key === 'string' && key.trim() !== ''
+  return res.json({
+    hasKey: !!hasKey,
+    maskedKey: hasKey ? maskRiotApiKey(key!) : undefined
+  })
+})
+
+router.put('/riot-apikey', async (req, res) => {
+  const raw = req.body?.riotApiKey ?? req.body?.apiKey ?? req.body?.key
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  const dirResult = await FileManager.ensureDir(join(process.cwd(), 'data', 'admin'))
+  if (dirResult.isErr()) {
+    return res.status(500).json({ error: dirResult.unwrapErr().message })
+  }
+  const writeResult = await FileManager.writeJson<RiotApikeyConfig>(riotApikeyFile, {
+    riotApiKey: value || undefined
+  })
+  if (writeResult.isErr()) {
+    return res.status(500).json({ error: writeResult.unwrapErr().message })
+  }
+  return res.json({
+    success: true,
+    hasKey: value.length > 0,
+    maskedKey: value.length > 0 ? maskRiotApiKey(value) : undefined
+  })
 })
 
 export default router

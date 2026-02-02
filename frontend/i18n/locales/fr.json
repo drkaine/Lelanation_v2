@@ -6,6 +6,7 @@
     "communityBuilds": "Builds de la communauté",
     "createBuild": "Créer un Build",
     "videos": "Vidéos",
+    "statistics": "Statistiques",
     "admin": "Admin",
     "language": "Langue"
   },
@@ -119,6 +120,35 @@
     "itemsManagement": "Gestion des items",
     "resetItems": "Reset items",
     "noItems": "Aucun item"
+  },
+  "statisticsPage": {
+    "title": "Statistiques LoL",
+    "description": "Winrate et pickrate par champion, calculés à partir des matchs Ranked Solo/Duo (EUW + EUNE). Filtrez par rang ou rôle.",
+    "tabChampions": "Champions",
+    "tabBuilds": "Builds",
+    "tabRunes": "Runes",
+    "tabPlayers": "Meilleurs joueurs",
+    "filterRank": "Rang",
+    "filterRole": "Rôle",
+    "allRanks": "Tous les rangs",
+    "allRoles": "Tous les rôles",
+    "loading": "Chargement…",
+    "champion": "Champion",
+    "selectChampion": "Choisir un champion",
+    "games": "Parties",
+    "wins": "Victoires",
+    "winrate": "Winrate %",
+    "pickrate": "Pickrate %",
+    "totalGames": "Total parties",
+    "generatedAt": "Généré le",
+    "buildsItems": "Items (IDs)",
+    "player": "Joueur",
+    "region": "Région",
+    "rank": "Rang",
+    "minGames": "Min. parties",
+    "noData": "Aucune donnée.",
+    "runesSetup": "Setup runes",
+    "allChampions": "Tous les champions"
   },
   "stats": {
     "title": "Statistiques",
@@ -466,7 +496,8 @@
     "tabs": {
       "contact": "Contact",
       "builds": "Builds",
-      "videos": "Vidéos"
+      "videos": "Vidéos",
+      "apikeyRiot": "Clé API Riot"
     },
     "contact": {
       "title": "Demandes de contact",
@@ -494,6 +525,16 @@
       "addChannelSuccess": "Chaîne ajoutée.",
       "addChannelError": "Impossible d'ajouter la chaîne.",
       "channels": "Chaînes"
+    },
+    "riotApikey": {
+      "title": "Clé API Riot",
+      "description": "Clé utilisée pour les appels à l'API Riot (developer.riotgames.com). Elle est stockée côté serveur et remplace la variable d'environnement RIOT_API_KEY si définie.",
+      "currentKey": "Clé actuelle",
+      "notSet": "Aucune clé configurée",
+      "placeholder": "RGAPI-xxxx...",
+      "save": "Enregistrer la clé",
+      "saveSuccess": "Clé enregistrée.",
+      "saveError": "Erreur lors de l'enregistrement."
     },
     "logout": "Déconnexion"
   }

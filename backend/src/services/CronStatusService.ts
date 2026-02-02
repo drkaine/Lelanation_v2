@@ -3,7 +3,7 @@ import { FileManager } from '../utils/fileManager.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 
-export type CronJobKey = 'dataDragonSync' | 'youtubeSync' | 'communityDragonSync'
+export type CronJobKey = 'dataDragonSync' | 'youtubeSync' | 'communityDragonSync' | 'riotMatchCollect'
 
 export type CronJobStatus = {
   job: CronJobKey
@@ -47,6 +47,13 @@ export class CronStatusService {
           lastSuccessAt: null,
           lastFailureAt: null,
           lastFailureMessage: null
+        },
+        riotMatchCollect: {
+          job: 'riotMatchCollect',
+          lastStartAt: null,
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureMessage: null
         }
       }
     }
@@ -65,7 +72,9 @@ export class CronStatusService {
     }
     const value = read.unwrap()
     if (!value?.jobs) return Result.ok(this.defaultFile())
-    return Result.ok(value)
+    const defaultJobs = this.defaultFile().jobs
+    const jobs = { ...defaultJobs, ...value.jobs } as Record<CronJobKey, CronJobStatus>
+    return Result.ok({ ...value, jobs })
   }
 
   async markStart(job: CronJobKey): Promise<Result<void, AppError>> {

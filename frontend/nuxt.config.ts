@@ -78,6 +78,7 @@ export default defineNuxtConfig({
           '/builds/create',
           '/theorycraft',
           '/videos',
+          '/statistics',
           '/privacy',
           '/legal',
           '/admin',

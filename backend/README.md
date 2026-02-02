@@ -25,13 +25,50 @@ Backend API server for Lelanation v2.
 npm install
 ```
 
+### Database (PostgreSQL)
+
+La base est utilisée pour les **statistiques LoL** (matches, participants). Option 1 : Docker à la racine du projet :
+
+```bash
+# À la racine du repo
+docker compose up -d
+```
+
+PostgreSQL écoute sur le port **5433** (pour éviter un conflit avec un Postgres local sur 5432). Dans `backend/.env` :
+
+```env
+DATABASE_URL="postgresql://lelanation:lelanation@localhost:5433/lelanation_stats"
+```
+
+Option 2 : PostgreSQL déjà installé sur la machine (port 5432) — créez la base `lelanation_stats` et un utilisateur si besoin, puis :
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/lelanation_stats"
+```
+
+Appliquer les migrations :
+
+```bash
+cd backend
+npx prisma migrate deploy
+```
+
+Créer une nouvelle migration après modification de `prisma/schema.prisma` :
+
+```bash
+npx prisma migrate dev --name nom_de_la_migration
+```
+
 ### Environment Variables
 
-Create a `.env` file in the backend directory:
+Create a `.env` file in the backend directory (see also `.env.example`):
 
 ```env
 # Server Configuration
 PORT=3001
+
+# Database (required for stats / match collection)
+# DATABASE_URL="postgresql://lelanation:lelanation@localhost:5433/lelanation_stats"
 
 # Discord Webhooks (optional)
 # Alerts (cron failures, etc.)

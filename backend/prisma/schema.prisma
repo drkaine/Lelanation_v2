@@ -1,0 +1,102 @@
+// Lelanation stats: matches and participants (Ranked Solo/Duo, EUW/EUNE)
+// See epic-lol-statistics-platform.md
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Match {
+  id            BigInt   @id @default(autoincrement())
+  matchId       String   @unique @map("match_id")
+  region        String   // euw1, eun1
+  queueId       Int      @map("queue_id") // 420 = Ranked Solo/Duo
+  gameVersion   String?  @map("game_version")
+  gameCreation  BigInt?  @map("game_creation")
+  gameDuration  Int?     @map("game_duration")
+  platformId    String?  @map("platform_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  participants Participant[]
+
+  @@map("matches")
+}
+
+model Participant {
+  id              BigInt   @id @default(autoincrement())
+  matchId         BigInt   @map("match_id")
+  puuid           String
+  summonerId      String?  @map("summoner_id")
+  championId      Int      @map("champion_id")
+  win             Boolean
+  role            String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY
+  lane            String?
+  teamPosition    String?  @map("team_position")
+  rankTier        String?  @map("rank_tier")
+  rankDivision    String?  @map("rank_division")
+  rankLp          Int?     @map("rank_lp")
+  items           Json?    // [item_id, ...]
+  runes           Json?
+  summonerSpells Json?     @map("summoner_spells")
+  kills           Int      @default(0)
+  deaths          Int      @default(0)
+  assists         Int      @default(0)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([puuid])
+  @@index([championId])
+  @@index([rankTier])
+  @@index([role])
+  @@index([championId, rankTier])
+  @@map("participants")
+}
+
+model Player {
+  puuid              String    @id
+  summonerId         String?   @map("summoner_id")
+  summonerName       String?   @map("summoner_name")
+  region             String
+  currentRankTier    String?   @map("current_rank_tier")
+  currentRankDivision String?  @map("current_rank_division")
+  currentRankLp      Int?      @map("current_rank_lp")
+  totalGames         Int       @default(0) @map("total_games")
+  totalWins          Int       @default(0) @map("total_wins")
+  lastSeen           DateTime? @map("last_seen")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  championStats ChampionPlayerStats[]
+
+  @@index([region])
+  @@index([currentRankTier])
+  @@map("players")
+}
+
+model ChampionPlayerStats {
+  id          BigInt   @id @default(autoincrement())
+  puuid       String   @map("puuid")
+  championId  Int      @map("champion_id")
+  games       Int      @default(0)
+  wins        Int      @default(0)
+  winrate     Decimal  @db.Decimal(5, 2)
+  avgKills    Decimal? @map("avg_kills") @db.Decimal(5, 2)
+  avgDeaths   Decimal? @map("avg_deaths") @db.Decimal(5, 2)
+  avgAssists  Decimal? @map("avg_assists") @db.Decimal(5, 2)
+  lastPlayed  DateTime? @map("last_played")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  player Player @relation(fields: [puuid], references: [puuid], onDelete: Cascade)
+
+  @@unique([puuid, championId])
+  @@index([puuid])
+  @@index([championId])
+  @@index([championId, winrate])
+  @@map("champion_player_stats")
+}

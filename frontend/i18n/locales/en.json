@@ -6,6 +6,7 @@
     "communityBuilds": "Community builds",
     "createBuild": "Create Build",
     "videos": "Videos",
+    "statistics": "Statistics",
     "admin": "Admin",
     "language": "Language"
   },
@@ -119,6 +120,35 @@
     "itemsManagement": "Item management",
     "resetItems": "Reset items",
     "noItems": "No items"
+  },
+  "statisticsPage": {
+    "title": "LoL Statistics",
+    "description": "Winrate and pickrate per champion, computed from Ranked Solo/Duo matches (EUW + EUNE). Filter by rank or role.",
+    "tabChampions": "Champions",
+    "tabBuilds": "Builds",
+    "tabRunes": "Runes",
+    "tabPlayers": "Top players",
+    "filterRank": "Rank",
+    "filterRole": "Role",
+    "allRanks": "All ranks",
+    "allRoles": "All roles",
+    "loading": "Loading…",
+    "champion": "Champion",
+    "selectChampion": "Select champion",
+    "games": "Games",
+    "wins": "Wins",
+    "winrate": "Winrate %",
+    "pickrate": "Pickrate %",
+    "totalGames": "Total games",
+    "generatedAt": "Generated at",
+    "buildsItems": "Items (IDs)",
+    "player": "Player",
+    "region": "Region",
+    "rank": "Rank",
+    "minGames": "Min. games",
+    "noData": "No data.",
+    "runesSetup": "Runes setup",
+    "allChampions": "All champions"
   },
   "stats": {
     "title": "Statistics",
@@ -462,7 +492,8 @@
     "tabs": {
       "contact": "Contact",
       "builds": "Builds",
-      "videos": "Videos"
+      "videos": "Videos",
+      "apikeyRiot": "Riot API key"
     },
     "contact": {
       "title": "Contact requests",
@@ -490,6 +521,16 @@
       "addChannelSuccess": "Channel added.",
       "addChannelError": "Failed to add channel.",
       "channels": "Channels"
+    },
+    "riotApikey": {
+      "title": "Riot API key",
+      "description": "Key used for Riot API calls (developer.riotgames.com). Stored on the server and overrides the RIOT_API_KEY environment variable when set.",
+      "currentKey": "Current key",
+      "notSet": "No key configured",
+      "placeholder": "RGAPI-xxxx...",
+      "save": "Save key",
+      "saveSuccess": "Key saved.",
+      "saveError": "Failed to save key."
     },
     "logout": "Log out"
   }

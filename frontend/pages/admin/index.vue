@@ -6,7 +6,7 @@
           <h1 class="text-3xl font-bold text-text-accent">Admin</h1>
           <p class="mt-1 text-sm text-text/70">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.builds') }} ·
-            {{ t('admin.tabs.videos') }}
+            {{ t('admin.tabs.videos') }} · {{ t('admin.tabs.apikeyRiot') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -111,6 +111,54 @@
         </div>
       </div>
 
+      <!-- Tab: Riot API key -->
+      <div v-show="activeTab === 'apikey'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.riotApikey.title') }}</h2>
+          <p class="mb-4 text-sm text-text/80">{{ t('admin.riotApikey.description') }}</p>
+          <p v-if="riotApikeyLoading" class="text-text/70">Chargement…</p>
+          <template v-else>
+            <div class="mb-4">
+              <h3 class="mb-1 text-sm font-medium text-text">
+                {{ t('admin.riotApikey.currentKey') }}
+              </h3>
+              <p class="text-sm text-text/80">
+                {{ riotApikeyMasked ?? t('admin.riotApikey.notSet') }}
+              </p>
+            </div>
+            <form class="flex flex-wrap items-end gap-2" @submit.prevent="saveRiotApikey">
+              <div class="min-w-[200px]">
+                <label for="riot-apikey-input" class="sr-only">{{
+                  t('admin.riotApikey.placeholder')
+                }}</label>
+                <input
+                  id="riot-apikey-input"
+                  v-model="riotApikeyValue"
+                  type="password"
+                  autocomplete="off"
+                  :placeholder="t('admin.riotApikey.placeholder')"
+                  class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                />
+              </div>
+              <button
+                type="submit"
+                class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                :disabled="riotApikeySaving"
+              >
+                {{ riotApikeySaving ? '…' : t('admin.riotApikey.save') }}
+              </button>
+            </form>
+            <p
+              v-if="riotApikeyMessage"
+              :class="riotApikeyError ? 'text-error' : 'text-green-600'"
+              class="mt-2 text-sm"
+            >
+              {{ riotApikeyMessage }}
+            </p>
+          </template>
+        </div>
+      </div>
+
       <!-- Tab: Videos -->
       <div v-show="activeTab === 'videos'" class="space-y-6">
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
@@ -201,12 +249,13 @@ const localePath = useLocalePath()
 const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
 const authError = ref<string | null>(null)
-const activeTab = ref<'contact' | 'builds' | 'videos'>('contact')
+const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey'>('contact')
 
 const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
   { id: 'builds' as const, label: t('admin.tabs.builds') },
   { id: 'videos' as const, label: t('admin.tabs.videos') },
+  { id: 'apikey' as const, label: t('admin.tabs.apikeyRiot') },
 ])
 
 // Contact
@@ -297,6 +346,65 @@ const videosAdding = ref(false)
 const videosAddMessage = ref('')
 const videosAddError = ref(false)
 
+// Riot API key
+const riotApikeyMasked = ref<string | null>(null)
+const riotApikeyLoading = ref(false)
+const riotApikeyValue = ref('')
+const riotApikeySaving = ref(false)
+const riotApikeyMessage = ref('')
+const riotApikeyError = ref(false)
+
+async function loadRiotApikey() {
+  riotApikeyLoading.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-apikey'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    riotApikeyMasked.value = data.maskedKey ?? null
+  } catch {
+    authError.value = t('admin.login.error')
+  } finally {
+    riotApikeyLoading.value = false
+  }
+}
+
+async function saveRiotApikey() {
+  riotApikeyMessage.value = ''
+  riotApikeyError.value = false
+  riotApikeySaving.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-apikey'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ riotApiKey: riotApikeyValue.value }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      riotApikeyMessage.value = t('admin.riotApikey.saveSuccess')
+      riotApikeyMasked.value = data.maskedKey ?? null
+      riotApikeyValue.value = ''
+      await loadRiotApikey()
+    } else {
+      riotApikeyError.value = true
+      riotApikeyMessage.value = data?.error ?? t('admin.riotApikey.saveError')
+    }
+  } catch {
+    riotApikeyError.value = true
+    riotApikeyMessage.value = t('admin.riotApikey.saveError')
+  } finally {
+    riotApikeySaving.value = false
+  }
+}
+
 async function loadCron() {
   cronLoading.value = true
   try {
@@ -385,12 +493,14 @@ onMounted(async () => {
     await navigateTo(localePath('/admin/login'))
     return
   }
-  await Promise.all([loadContact(), loadBuildsStats(), loadCron()])
+  await Promise.all([loadContact(), loadBuildsStats(), loadCron(), loadRiotApikey()])
 })
 
 watch(activeTab, tab => {
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if (tab === 'builds' && buildsStats.value === null && !buildsLoading.value) loadBuildsStats()
   if (tab === 'videos' && !cron.value && !cronLoading.value) loadCron()
+  if (tab === 'apikey' && riotApikeyMasked.value === null && !riotApikeyLoading.value)
+    loadRiotApikey()
 })
 </script>

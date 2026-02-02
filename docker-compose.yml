@@ -1,0 +1,24 @@
+# PostgreSQL pour les statistiques LoL (backend)
+# Usage: docker compose up -d
+# Puis: cd backend && npx prisma migrate deploy
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lelanation-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lelanation
+      POSTGRES_PASSWORD: lelanation
+      POSTGRES_DB: lelanation_stats
+    ports:
+      - "5433:5432"
+    volumes:
+      - lelanation_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lelanation -d lelanation_stats"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  lelanation_pgdata:

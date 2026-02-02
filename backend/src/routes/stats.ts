@@ -1,16 +1,24 @@
 /**
  * API statistiques LoL (agrégats uniquement, pas de données brutes).
- * GET /api/stats/champions - liste winrate/pickrate par champion
- * GET /api/stats/champions/:championId - détail par champion (et par rôle)
+ * Champions, builds, runes, meilleurs joueurs.
  */
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
+import { getBuildsByChampion } from '../services/StatsBuildsService.js'
+import { getRunesByChampion } from '../services/StatsRunesService.js'
+import {
+  getTopPlayers,
+  getTopPlayersByChampion,
+} from '../services/StatsPlayersService.js'
+import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
 
-router.get('/champions', async (_req: Request, res: Response) => {
-  const data = await aggregator.load()
+router.get('/champions', async (req: Request, res: Response) => {
+  const rankTier = (req.query.rankTier as string) || undefined
+  const role = (req.query.role as string) || undefined
+  const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
   if (!data) {
     return res.status(200).json({
       totalGames: 0,
@@ -35,7 +43,9 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const data = await aggregator.load()
+  const rankTier = (req.query.rankTier as string) || undefined
+  const role = (req.query.role as string) || undefined
+  const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
   if (!data) {
     return res.status(404).json({ error: 'No stats available' })
   }
@@ -55,6 +65,88 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   })
 })
 
+/** GET /api/stats/champions/:championId/builds */
+router.get('/champions/:championId/builds', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const rankTier = (req.query.rankTier as string) || undefined
+  const role = (req.query.role as string) || undefined
+  const patch = (req.query.patch as string) || undefined
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20
+  const data = await getBuildsByChampion({
+    championId,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+    patch: patch ?? null,
+    minGames,
+    limit,
+  })
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, builds: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/runes */
+router.get('/champions/:championId/runes', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const rankTier = (req.query.rankTier as string) || undefined
+  const patch = (req.query.patch as string) || undefined
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20
+  const data = await getRunesByChampion({
+    championId,
+    rankTier: rankTier ?? null,
+    patch: patch ?? null,
+    minGames,
+    limit,
+  })
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, runes: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/players - meilleurs joueurs (classement général) */
+router.get('/players', async (req: Request, res: Response) => {
+  const rankTier = (req.query.rankTier as string) || undefined
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 50
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
+  const list = await getTopPlayers({
+    rankTier: rankTier ?? null,
+    minGames,
+    limit,
+  })
+  return res.json({ players: list })
+})
+
+/** GET /api/stats/champions/:championId/players - meilleurs joueurs sur un champion */
+router.get('/champions/:championId/players', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const rankTier = (req.query.rankTier as string) || undefined
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50
+  const list = await getTopPlayersByChampion({
+    championId,
+    rankTier: rankTier ?? null,
+    minGames,
+    limit,
+  })
+  return res.json({ players: list })
+})
+
 /** POST /api/stats/aggregate - recalculer les agrégats (admin / cron) */
 router.post('/aggregate', async (_req: Request, res: Response) => {
   try {
@@ -68,6 +160,22 @@ router.post('/aggregate', async (_req: Request, res: Response) => {
   } catch (err) {
     return res.status(500).json({
       error: err instanceof Error ? err.message : 'Aggregation failed'
+    })
+  }
+})
+
+/** POST /api/stats/refresh-players - rafraîchir players + champion_player_stats (admin / cron) */
+router.post('/refresh-players', async (_req: Request, res: Response) => {
+  try {
+    const result = await refreshPlayersAndChampionStats()
+    return res.json({
+      ok: true,
+      playersUpserted: result.playersUpserted,
+      championStatsUpserted: result.championStatsUpserted,
+    })
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : 'Refresh failed',
     })
   }
 })

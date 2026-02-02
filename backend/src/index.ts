@@ -10,7 +10,9 @@ import buildsRoutes from './routes/builds.js'
 import adminRoutes from './routes/admin.js'
 import imageRoutes from './routes/images.js'
 import contactRoutes from './routes/contact.js'
+import statsRoutes from './routes/stats.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
+import { setupRiotMatchCollect } from './cron/riotMatchCollect.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { MetricsService } from './services/MetricsService.js'
@@ -46,6 +48,7 @@ app.use('/api/builds', buildsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/images', imageRoutes)
 app.use('/api/contact', contactRoutes)
+app.use('/api/stats', statsRoutes)
 
 // Initialize cron jobs
 console.log('[Server] Initializing cron jobs...')
@@ -53,6 +56,7 @@ try {
   setupDataDragonSync()
   setupYouTubeSync()
   setupCommunityDragonSync()
+  setupRiotMatchCollect()
   console.log('[Server] ✅ All cron jobs initialized successfully')
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
