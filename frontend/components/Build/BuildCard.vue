@@ -459,7 +459,7 @@
           />
           <div class="items-manager-name">
             <span class="items-manager-index">{{ index + 1 }}.</span>
-            {{ item.name }}
+            {{ getItemDisplayName(item) }}
           </div>
           <div class="items-manager-actions">
             <button class="items-manager-btn danger" type="button" @click="removeItemById(item.id)">
@@ -476,6 +476,7 @@
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import {
   getChampionImageUrl,
@@ -500,8 +501,15 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const buildStore = useBuildStore()
+const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const { locale, t } = useI18n()
+
+/** Nom d'affichage de l'item (résolu via le store pour éviter d'afficher l'id quand l'item n'a pas de nom) */
+function getItemDisplayName(item: Item): string {
+  const full = itemsStore.items.find(i => i.id === item.id)
+  return full?.name ?? item.name ?? item.id
+}
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))

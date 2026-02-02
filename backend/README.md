@@ -33,8 +33,11 @@ Create a `.env` file in the backend directory:
 # Server Configuration
 PORT=3001
 
-# Discord Webhook (optional, for alerts)
+# Discord Webhooks (optional)
+# Alerts (cron failures, etc.)
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# Contact form notifications
+DISCORD_CONTACT_WEBHOOK_URL=https://discord.com/api/webhooks/...
 
 # YouTube API Key (optional, for video synchronization)
 YOUTUBE_API_KEY=your_youtube_api_key

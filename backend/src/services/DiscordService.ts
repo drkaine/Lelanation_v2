@@ -23,9 +23,13 @@ interface DiscordWebhookPayload {
 export class DiscordService {
   private readonly api: AxiosInstance
   private readonly webhookUrl: string | null
+  /** Webhook URL for contact form notifications (DISCORD_CONTACT_WEBHOOK_URL) */
+  private readonly contactWebhookUrl: string | null
 
-  constructor(webhookUrl?: string) {
-    this.webhookUrl = webhookUrl || process.env.DISCORD_WEBHOOK_URL || null
+  constructor(webhookUrl?: string, contactWebhookUrl?: string) {
+    this.webhookUrl = webhookUrl ?? process.env.DISCORD_WEBHOOK_URL ?? null
+    this.contactWebhookUrl =
+      contactWebhookUrl ?? process.env.DISCORD_CONTACT_WEBHOOK_URL ?? null
     this.api = axios.create({
       timeout: 10000
     })
@@ -169,7 +173,8 @@ export class DiscordService {
   }
 
   /**
-   * Send contact form notification (type, name, message, optional contact)
+   * Send contact form notification (type, name, message, optional contact).
+   * Uses DISCORD_CONTACT_WEBHOOK_URL (separate from cron/alert webhook).
    */
   async sendContactNotification(
     type: string,
@@ -177,8 +182,8 @@ export class DiscordService {
     message: string,
     contact?: string
   ): Promise<Result<void, AppError>> {
-    if (!this.webhookUrl) {
-      console.log(`[DiscordService] Contact: ${type} from ${name}`)
+    if (!this.contactWebhookUrl) {
+      console.log(`[DiscordService] Contact: ${type} from ${name} (no DISCORD_CONTACT_WEBHOOK_URL)`)
       return Result.ok(undefined)
     }
 
@@ -202,7 +207,7 @@ export class DiscordService {
         }
       ]
 
-      await this.api.post(this.webhookUrl, { embeds: embed })
+      await this.api.post(this.contactWebhookUrl, { embeds: embed })
       return Result.ok(undefined)
     } catch (error) {
       console.error('[DiscordService] Failed to send contact notification:', error)

@@ -18,7 +18,7 @@ type YouTubeChannelsConfigFile = {
 
 /**
  * YouTube synchronization cron job
- * Runs daily at 03:00 (3 AM)
+ * Runs every hour (at minute 0)
  */
 export function setupYouTubeSync(): void {
   const youtubeService = new YouTubeService()
@@ -27,18 +27,18 @@ export function setupYouTubeSync(): void {
   const staticAssets = new StaticAssetsService()
   const configFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 
-  // Schedule daily sync at 03:00
-  cron.schedule('0 3 * * *', async () => {
+  // Schedule sync every hour
+  cron.schedule('0 * * * *', async () => {
     const startTime = new Date()
     console.log('[Cron] Starting YouTube synchronization...')
 
     // Send start notification
     await discordService.sendSuccess(
       '🔄 YouTube Sync Started',
-      'The daily YouTube synchronization cron job has started',
+      'The hourly YouTube synchronization cron job has started',
       {
         startedAt: startTime.toISOString(),
-        scheduledTime: '03:00 UTC',
+        scheduledTime: 'Every hour (0 min) UTC',
       }
     )
 
@@ -150,5 +150,5 @@ export function setupYouTubeSync(): void {
     timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] YouTube sync scheduled: Daily at 03:00 UTC')
+  console.log('[Cron] YouTube sync scheduled: Every hour (0 min UTC)')
 }
