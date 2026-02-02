@@ -449,6 +449,49 @@
     "tabItems": "Items",
     "tabSkillOrder": "Skill order",
     "spellDamageUnavailable": "Damage per rank values are not provided by Data Dragon (effect is 0). Community Dragon data will be used when available."
+  },
+  "admin": {
+    "login": {
+      "title": "Admin login",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Log in",
+      "invalid": "Invalid username or password.",
+      "error": "Connection error. Please try again."
+    },
+    "tabs": {
+      "contact": "Contact",
+      "builds": "Builds",
+      "videos": "Videos"
+    },
+    "contact": {
+      "title": "Contact requests",
+      "byCategory": "By category",
+      "empty": "No contact requests.",
+      "delete": "Delete",
+      "deleted": "Deleted."
+    },
+    "builds": {
+      "title": "Builds stats",
+      "total": "Total",
+      "public": "Public",
+      "private": "Private"
+    },
+    "videos": {
+      "title": "Videos / YouTube",
+      "cronStatus": "Cron status",
+      "lastSuccess": "Last success",
+      "lastFailure": "Last failure",
+      "trigger": "Run sync now",
+      "triggerSuccess": "Sync completed.",
+      "triggerError": "Sync failed.",
+      "addChannel": "Add channel",
+      "addChannelPlaceholder": "YouTube channel (e.g. Lelariva_LoL)",
+      "addChannelSuccess": "Channel added.",
+      "addChannelError": "Failed to add channel.",
+      "channels": "Channels"
+    },
+    "logout": "Log out"
   }
 }
 

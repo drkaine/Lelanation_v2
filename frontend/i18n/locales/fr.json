@@ -453,6 +453,49 @@
     "tabItems": "Items",
     "tabSkillOrder": "Ordre des compétences",
     "spellDamageUnavailable": "Les valeurs de dégâts par rang ne sont pas fournies par Data Dragon (effect à 0). Les données Community Dragon seront utilisées si disponibles."
+  },
+  "admin": {
+    "login": {
+      "title": "Connexion admin",
+      "username": "Identifiant",
+      "password": "Mot de passe",
+      "submit": "Connexion",
+      "invalid": "Identifiant ou mot de passe incorrect.",
+      "error": "Erreur de connexion. Réessayez."
+    },
+    "tabs": {
+      "contact": "Contact",
+      "builds": "Builds",
+      "videos": "Vidéos"
+    },
+    "contact": {
+      "title": "Demandes de contact",
+      "byCategory": "Par catégorie",
+      "empty": "Aucune demande de contact.",
+      "delete": "Supprimer",
+      "deleted": "Supprimé."
+    },
+    "builds": {
+      "title": "Statistiques builds",
+      "total": "Total",
+      "public": "Publics",
+      "private": "Privés"
+    },
+    "videos": {
+      "title": "Vidéos / YouTube",
+      "cronStatus": "État du cron",
+      "lastSuccess": "Dernier succès",
+      "lastFailure": "Dernier échec",
+      "trigger": "Lancer la sync maintenant",
+      "triggerSuccess": "Synchronisation terminée.",
+      "triggerError": "Échec de la synchronisation.",
+      "addChannel": "Ajouter une chaîne",
+      "addChannelPlaceholder": "Chaîne YouTube (ex. Lelariva_LoL)",
+      "addChannelSuccess": "Chaîne ajoutée.",
+      "addChannelError": "Impossible d'ajouter la chaîne.",
+      "channels": "Chaînes"
+    },
+    "logout": "Déconnexion"
   }
 }
 

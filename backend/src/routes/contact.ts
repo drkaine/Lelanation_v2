@@ -29,10 +29,11 @@ function emptyContactData(): ContactData {
 }
 
 router.post('/', async (req: Request, res: Response) => {
-  const { type, name, message } = req.body as {
+  const { type, name, message, contact } = req.body as {
     type?: string
     name?: string
     message?: string
+    contact?: string
   }
 
   if (!type || !VALID_TYPES.includes(type as ContactType)) {
@@ -50,7 +51,8 @@ router.post('/', async (req: Request, res: Response) => {
   const entry: ContactEntry = {
     name: trimmedName.substring(0, 256),
     message: trimmedMessage.substring(0, 5000),
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    contact: typeof contact === 'string' ? contact.trim().substring(0, 256) : undefined
   }
 
   let data: ContactData = emptyContactData()

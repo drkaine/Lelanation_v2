@@ -51,6 +51,7 @@
           {{ t('nav.builds') }}
         </NuxtLink>
         <NuxtLink
+          v-if="isAdminLoggedIn"
           :to="localePath('/theorycraft')"
           :title="t('theorycraft.title')"
           class="version"
@@ -67,6 +68,15 @@
         >
           {{ gameVersion }}
         </a>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/admin')"
+          :title="t('nav.admin')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('nav.admin') }}
+        </NuxtLink>
       </div>
 
       <div class="right-header">
@@ -76,11 +86,24 @@
         <NuxtLink :to="localePath('/builds/create')" :title="t('nav.build')" class="version">
           {{ t('nav.build') }}
         </NuxtLink>
-        <NuxtLink :to="localePath('/theorycraft')" :title="t('theorycraft.title')" class="version">
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/theorycraft')"
+          :title="t('theorycraft.title')"
+          class="version"
+        >
           {{ t('theorycraft.title') }}
         </NuxtLink>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/admin')"
+          :title="t('nav.admin')"
+          class="version"
+        >
+          {{ t('nav.admin') }}
         </NuxtLink>
         <a
           :href="patchNotesUrl"
@@ -100,9 +123,11 @@
 import { computed, onMounted, ref } from 'vue'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useAdminAuth } from '~/composables/useAdminAuth'
 
 const isMenuOpen = ref(false)
 const { t, locale } = useI18n()
+const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const versionStore = useVersionStore()
 const gameVersion = computed(() => versionStore.currentVersion || '14.1.1')
