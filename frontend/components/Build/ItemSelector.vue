@@ -636,6 +636,29 @@ const hasSupportRole = (): boolean => {
   return roles.includes('support')
 }
 
+const hasMidRole = (): boolean => {
+  const roles = buildStore.currentBuild?.roles || []
+  return roles.includes('mid')
+}
+
+// Tier-2 boot IDs (boots that build from 1001). Tier-3 boots build FROM one of these.
+const tier2BootIds = new Set([
+  '3005',
+  '3006',
+  '3009',
+  '3010',
+  '3020',
+  '3047',
+  '3111',
+  '3117',
+  '3158',
+])
+
+const isTier3Boots = (item: Item): boolean => {
+  if (!isBootsItem(item)) return false
+  return !!(item.from && item.from.some(parentId => tier2BootIds.has(parentId)))
+}
+
 const hasAtlasInStarters = (): boolean => {
   const items = buildStore.currentBuild?.items || []
   const starterItems = items.filter(i => isStarterItem(i))
@@ -653,17 +676,22 @@ const getItemValidationError = (item: Item): string | null => {
     return 'Les jungle pets nécessitent le sort Smite'
   }
 
-  // Rule 2: Atlas et améliorations nécessitent le rôle support
+  // Rule 2: Bottes tier 3 (améliorations type Jambières de métal, Chaussures du sorcier améliorées) nécessitent le rôle Mid
+  if (isTier3Boots(item) && !hasMidRole()) {
+    return "Les bottes tier 3 ne peuvent être sélectionnées qu'avec le rôle Mid"
+  }
+
+  // Rule 3: Atlas et améliorations nécessitent le rôle support
   if ((isAtlas(item) || isAtlasUpgrade(item)) && !hasSupportRole()) {
     return 'Atlas et ses améliorations nécessitent le rôle Support'
   }
 
-  // Rule 3: On ne peut pas prendre plusieurs améliorations d'Atlas
+  // Rule 4: On ne peut pas prendre plusieurs améliorations d'Atlas
   if (isAtlasUpgrade(item) && hasAtlasUpgrade(item.id)) {
     return "Vous ne pouvez avoir qu'une seule amélioration d'Atlas"
   }
 
-  // Rule 4: On ne peut prendre une amélioration d'Atlas que si on a Atlas en starter
+  // Rule 5: On ne peut prendre une amélioration d'Atlas que si on a Atlas en starter
   if (isAtlasUpgrade(item) && !hasAtlasInStarters()) {
     return 'Vous devez avoir Atlas dans vos items de départ pour prendre une amélioration'
   }
