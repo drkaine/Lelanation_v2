@@ -19,6 +19,8 @@ interface BuildState {
   status: 'idle' | 'loading' | 'success' | 'error'
   error: string | null
   calculatedStats: CalculatedStats | null
+  /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
+  savedBuildsVersion: number
 }
 
 export const useBuildStore = defineStore('build', {
@@ -27,6 +29,7 @@ export const useBuildStore = defineStore('build', {
     status: 'idle',
     error: null,
     calculatedStats: null,
+    savedBuildsVersion: 0,
   }),
 
   getters: {
@@ -167,6 +170,7 @@ export const useBuildStore = defineStore('build', {
         savedBuilds.push(copied)
         const toStore = savedBuilds.map(b => serializeBuild(b))
         localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        this.savedBuildsVersion++
         return copied.id
       } catch {
         return null
@@ -373,13 +377,17 @@ export const useBuildStore = defineStore('build', {
         const previousVisibility = previousBuild?.visibility ?? null
         const newVisibility = this.currentBuild!.visibility ?? 'public'
 
+        const now = new Date().toISOString()
+        this.currentBuild.updatedAt = now
         if (existingIndex >= 0) {
           savedBuilds[existingIndex] = this.currentBuild
         } else {
+          this.currentBuild.createdAt = now
           savedBuilds.push(this.currentBuild)
         }
         const toStore = savedBuilds.map(b => serializeBuild(b))
         localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        this.savedBuildsVersion++
 
         // 2) Sync serveur selon visibilité :
         //    - Build privé : on ne sauvegarde que en local (pas d'envoi au serveur).
@@ -513,6 +521,7 @@ export const useBuildStore = defineStore('build', {
         const filtered = savedBuilds.filter(b => b.id !== buildId)
         const toStore = filtered.map(b => serializeBuild(b))
         localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        this.savedBuildsVersion++
 
         // If current build is deleted, clear it
         if (this.currentBuild?.id === buildId) {

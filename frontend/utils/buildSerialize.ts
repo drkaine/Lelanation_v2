@@ -129,6 +129,8 @@ export function hydrateBuild(stored: StoredBuild): Build {
     }
   ) as [SummonerSpell | null, SummonerSpell | null]
 
+  const skillOrder = normalizeSkillOrder(stored.skillOrder)
+
   return {
     id: stored.id,
     name: stored.name,
@@ -140,7 +142,7 @@ export function hydrateBuild(stored: StoredBuild): Build {
     runes: stored.runes,
     shards: stored.shards,
     summonerSpells,
-    skillOrder: stored.skillOrder,
+    skillOrder,
     roles: stored.roles,
     upvote: stored.upvote,
     downvote: stored.downvote,
@@ -148,6 +150,25 @@ export function hydrateBuild(stored: StoredBuild): Build {
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
   }
+}
+
+/** Normalise skillOrder pour les builds sauvegardés sans ou avec skill order incomplet (anciens builds). */
+function normalizeSkillOrder(so: StoredBuild['skillOrder']): Build['skillOrder'] {
+  const pad3 = <T>(arr: T[] | undefined | null): (T | null)[] => {
+    const a = Array.isArray(arr) ? [...arr] : []
+    while (a.length < 3) a.push(null as T)
+    return a.slice(0, 3) as (T | null)[]
+  }
+  if (!so) {
+    return {
+      firstThreeUps: pad3(null),
+      skillUpOrder: pad3(null),
+    } as Build['skillOrder']
+  }
+  return {
+    firstThreeUps: pad3(so.firstThreeUps),
+    skillUpOrder: pad3(so.skillUpOrder),
+  } as Build['skillOrder']
 }
 
 /** Indique si un objet parsé est un StoredBuild (format léger). Les items en format léger n'ont pas "gold". */

@@ -183,12 +183,13 @@ const visibilityFilterOptions = computed<{ value: VisibilityFilterValue; label: 
   { value: 'public', label: t('buildsPage.public') },
 ])
 
-/** Builds de l'onglet Mes Builds, filtrés par visibilité */
+/** Builds de l'onglet Mes Builds, filtrés par visibilité (dépend de savedBuildsVersion pour refresh après delete/save) */
 const buildsFilteredByVisibility = computed<Build[]>(() => {
+  const version = buildStore.savedBuildsVersion
   const list = buildStore.getSavedBuilds()
   const filter = myBuildsVisibilityFilter.value
   if (filter === 'all') return list
-  return list.filter(b => (b.visibility ?? 'public') === filter)
+  return list.filter(b => (b.visibility ?? 'public') === filter && version >= 0)
 })
 const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 

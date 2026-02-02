@@ -467,15 +467,28 @@ const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
 
         // Vérifier si c'est un séparateur (doit conserver son background)
         const isSeparator = el.classList.contains('separator-line')
+        // Clés de spell et badges de niveau : conserver fond opaque pour la capture (lisibilité)
+        const isSpellOrLevelBadge =
+          el.classList.contains('skill-key') || el.classList.contains('level-badge')
 
-        // FORCER le background à transparent par défaut (sauf pour les séparateurs)
-        if (!isSeparator) {
+        // FORCER le background à transparent par défaut (sauf séparateurs et badges spell/niveau)
+        if (!isSeparator && !isSpellOrLevelBadge) {
           style.backgroundColor = 'transparent'
+        }
+
+        // Pour skill-key et level-badge : forcer des couleurs opaques pour dom-to-image
+        if (el.classList.contains('skill-key')) {
+          style.backgroundColor = 'rgba(0, 0, 0, 0.9)'
+          style.color = computed.color || '#c9a227'
+        } else if (el.classList.contains('level-badge')) {
+          style.backgroundColor = '#c9a227'
+          style.color = '#2563eb'
         }
 
         // Puis appliquer seulement si une couleur est explicitement définie et non blanche/transparente
         const bgColor = computed.backgroundColor
         if (
+          !isSpellOrLevelBadge &&
           bgColor &&
           !isWhiteOrLightGrey(bgColor) &&
           bgColor !== 'rgba(0, 0, 0, 0)' &&

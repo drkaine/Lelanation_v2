@@ -377,13 +377,24 @@ const captureBuildImage = async (): Promise<Blob | null> => {
         const computed = window.getComputedStyle(el)
         const style = el.style
         const isSeparator = el.classList.contains('separator-line')
+        const isSpellOrLevelBadge =
+          el.classList.contains('skill-key') || el.classList.contains('level-badge')
 
-        if (!isSeparator) {
+        if (!isSeparator && !isSpellOrLevelBadge) {
           style.backgroundColor = 'transparent'
+        }
+
+        if (el.classList.contains('skill-key')) {
+          style.backgroundColor = 'rgba(0, 0, 0, 0.9)'
+          style.color = computed.color || '#c9a227'
+        } else if (el.classList.contains('level-badge')) {
+          style.backgroundColor = '#c9a227'
+          style.color = '#2563eb'
         }
 
         const bgColor = computed.backgroundColor
         if (
+          !isSpellOrLevelBadge &&
           bgColor &&
           !isWhiteOrLightGrey(bgColor) &&
           bgColor !== 'rgba(0, 0, 0, 0)' &&

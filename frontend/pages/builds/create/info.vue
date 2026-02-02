@@ -162,6 +162,17 @@
                       {{ validationDebug.checks?.summonerSpells ? '✓' : '✗' }}
                     </span>
                   </div>
+                  <div>
+                    <span class="font-medium">Skill order:</span>
+                    <span
+                      :class="
+                        validationDebug.checks?.skillOrderComplete ? 'text-success' : 'text-error'
+                      "
+                    >
+                      {{ validationDebug.checks?.skillOrderComplete ? '✓' : '✗' }}
+                    </span>
+                    <span class="text-text/60"> (first 3 + order) </span>
+                  </div>
                 </div>
               </div>
               <!-- Validation Errors Display -->

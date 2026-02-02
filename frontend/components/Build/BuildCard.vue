@@ -304,7 +304,7 @@
         </div>
       </div>
 
-      <!-- Skill Order Section (Right) - Toujours visible -->
+      <!-- Skill Order Section (Right) - Toujours visible (même disposition que first three ups : clé sur l'image) -->
       <div class="skill-order-section">
         <div class="skill-order-vertical">
           <div
@@ -312,17 +312,19 @@
             :key="index"
             class="skill-order-item"
           >
-            <img
-              :src="
-                getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
-              "
-              :alt="ability.name"
-              class="skill-icon"
-              :title="ability.name"
-            />
-            <span class="skill-key">
-              {{ t(`skills.key.${ability.key}`) }}
-            </span>
+            <div class="skill-icon-wrapper">
+              <img
+                :src="
+                  getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
+                "
+                :alt="ability.name"
+                class="skill-icon"
+                :title="ability.name"
+              />
+              <span class="skill-key">
+                {{ t(`skills.key.${ability.key}`) }}
+              </span>
+            </div>
             <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
           </div>
           <div
@@ -330,7 +332,9 @@
             :key="`empty-skill-${n}`"
             class="skill-order-item"
           >
-            <div class="skill-placeholder"></div>
+            <div class="skill-placeholder-wrapper">
+              <div class="skill-placeholder"></div>
+            </div>
             <span v-if="n < 3 - skillOrderAbilities.length" class="arrow-down">↓</span>
           </div>
         </div>
@@ -1601,7 +1605,7 @@ watch(locale, () => {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.9);
   color: var(--color-gold-300);
   font-size: 10px;
   font-weight: bold;
@@ -1653,6 +1657,19 @@ watch(locale, () => {
   position: relative;
 }
 
+/* Wrapper pour positionner la clé (Q/W/E/R) sur l'icône, comme first-three-ups */
+.skill-order-item .skill-icon-wrapper,
+.skill-order-item .skill-placeholder-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skill-order-item .skill-icon {
+  position: relative;
+}
+
 .skill-icon {
   width: 32px;
   height: 32px;
@@ -1670,11 +1687,12 @@ watch(locale, () => {
   opacity: 0.3;
 }
 
+/* Fond opaque pour lisibilité à l'écran et à la capture image (fallback pour dom-to-image) */
 .skill-key {
   position: absolute;
   bottom: -2px;
   right: -2px;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.9);
   color: var(--color-gold-300);
   font-size: 10px;
   font-weight: bold;
@@ -1684,6 +1702,7 @@ watch(locale, () => {
   align-items: center;
   justify-content: center;
   border-radius: 2px;
+  z-index: 1;
 }
 
 .arrow-down {
