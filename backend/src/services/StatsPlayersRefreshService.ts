@@ -160,10 +160,7 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
   const riotApi = getRiotApiService()
   const players = await prisma.player.findMany({
     where: {
-      OR: [
-        { summonerName: null },
-        { currentRankTier: null, summonerId: { not: null } },
-      ],
+      OR: [{ summonerName: null }, { currentRankTier: null }],
     },
     take: limit,
     select: { puuid: true, region: true, summonerId: true, summonerName: true, currentRankTier: true },
@@ -194,9 +191,8 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
       }
     }
 
-    const summonerId = updated.summonerId ?? p.summonerId
-    if (summonerId && !p.currentRankTier) {
-      const leagueResult = await riotApi.getLeagueEntriesBySummonerId(platform, summonerId)
+    if (!p.currentRankTier) {
+      const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, p.puuid)
       if (leagueResult.isOk()) {
         const entry = leagueResult.unwrap()
         if (entry) {
@@ -212,7 +208,7 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
             `${ENRICH_LOG} League API returns 403 Forbidden. Enable League-v4 for your API key in Riot Developer Portal (product / API access).`
           )
         }
-        console.warn(`${ENRICH_LOG} League API failed for summonerId ${summonerId.slice(0, 12)}…: ${errMsg}`)
+        console.warn(`${ENRICH_LOG} League API failed for puuid ${p.puuid.slice(0, 12)}…: ${errMsg}`)
       }
     }
 

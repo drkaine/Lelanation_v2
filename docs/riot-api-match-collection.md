@@ -61,6 +61,11 @@ Riot ID (gameName#tagLine) → PUUID → summonerId → rang
 | 1. Riot ID → PUUID | Account-V1 | `GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | **Continentale** : `europe`, `americas`, `asia` |
 | 2. PUUID → summonerId | Summoner-V4 | `GET /lol/summoner/v4/summoners/by-puuid/{puuid}` | **Régionale** : `euw1`, `eun1`, `na1`, etc. |
 | 3. summonerId → rang | League-V4 | `GET /lol/league/v4/entries/by-summoner/{summonerId}` | **Régionale** : `euw1`, `eun1`, etc. |
+| 3 bis. **PUUID → rang** | League-V4 | `GET /lol/league/v4/entries/by-puuid/{puuid}` | **Régionale** : `euw1`, `eun1`, etc. |
+
+Sur le [Riot Developer Portal](https://developer.riotgames.com/apis#league-v4), le Swagger propose **by-puuid** : `GET /lol/league/v4/entries/by-puuid/{puuid}`. C’est l’endpoint utilisé dans le projet pour l’enrichissement du rang (on a toujours le PUUID du joueur, pas besoin d’appeler Summoner-V4 pour obtenir le `summonerId`).  
+L’endpoint **by-summoner** (`GET_getLeagueEntriesBySummoner`) peut renvoyer 403 selon la clé ; **by-puuid** fonctionne avec la même clé dans beaucoup de cas.  
+**GET_getLeagueEntries** (sans « BySummoner ») est un **autre** endpoint : entries par **tier/division** (ex. PLATINUM II), pas par joueur.
 
 - **Account-V1** utilise une **route continentale** (routing value `europe`, `americas`, `asia`).
 - **Summoner-V4** et **League-V4** utilisent une **route régionale** (platform : `euw1`, `na1`, etc.).
@@ -90,13 +95,13 @@ Tableau d’entrées (Solo/Duo, Flex, etc.) :
 | À ne pas faire | Raison |
 |----------------|--------|
 | Chercher le rang via Match-V5 | Les participants de match ne contiennent pas le rang. |
-| Utiliser le PUUID avec League-V4 | League-V4 attend **summonerId** uniquement. |
-| Utiliser une route continentale pour League-V4 | League-V4 est une API **régionale** (platform). |
+| Utiliser le PUUID avec **by-summoner** | L’endpoint **by-summoner** attend le **summonerId**. Utiliser **by-puuid** si tu as le PUUID. |
+| Utiliser une route continentale pour League-V4 | League-V4 est une API **régionale** (platform : euw1, eun1, etc.). |
 
 ### Implémentation dans le projet
 
-- **RiotApiService** : `getSummonerByPuuid(platform, puuid)` → retourne `id` (summonerId) ; `getLeagueEntriesBySummonerId(platform, summonerId)` → retourne `tier`, `rank`, `leaguePoints` pour Solo/Duo.
-- **StatsPlayersRefreshService.enrichPlayers()** : pour les joueurs avec `currentRankTier` vide et `summonerId` renseigné (ou après avoir récupéré le summoner via Summoner-V4), appelle League-V4 et met à jour `Player.currentRankTier`, `currentRankDivision`, `currentRankLp`.
+- **RiotApiService** : `getLeagueEntriesByPuuid(platform, puuid)` appelle `GET /lol/league/v4/entries/by-puuid/{puuid}` (comme sur le Swagger Riot) et retourne `tier`, `rank`, `leaguePoints` pour Solo/Duo. `getLeagueEntriesBySummonerId(platform, summonerId)` reste disponible (by-summoner).
+- **StatsPlayersRefreshService.enrichPlayers()** : pour les joueurs avec `currentRankTier` vide, appelle **League-V4 by-puuid** (avec le PUUID du joueur) et met à jour `Player.currentRankTier`, `currentRankDivision`, `currentRankLp`. Plus besoin de `summonerId` pour le rang.
 
 ### Vérifier les joueurs au rang vide
 

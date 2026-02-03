@@ -222,8 +222,47 @@ export class RiotApiService {
   }
 
   /**
-   * League v4: entries by summoner id (ranked queues). Platform: euw1, eun1.
+   * League v4: entries by puuid (ranked queues). Platform: euw1, eun1.
+   * Uses /lol/league/v4/entries/by-puuid/{puuid} (available on Riot Developer Portal Swagger).
    * Returns Solo/Duo entry if present (tier, rank = division, leaguePoints).
+   */
+  async getLeagueEntriesByPuuid(
+    platform: 'euw1' | 'eun1',
+    puuid: string
+  ): Promise<Result<{ tier: string; rank: string; leaguePoints: number } | null, AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const base = PLATFORM_BASE[platform]
+    if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key)
+    try {
+      const res = await withRetry429(() =>
+        client.get<Array<{ queueType: string; tier: string; rank: string; leaguePoints: number }>>(
+          `/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
+        )
+      )
+      const entries = res.data ?? []
+      const solo = entries.find((e) => e.queueType === RANKED_SOLO_QUEUE)
+      if (!solo) return Result.ok(null)
+      return Result.ok({
+        tier: (solo.tier ?? '').toUpperCase(),
+        rank: (solo.rank ?? '').toUpperCase(),
+        leaguePoints: typeof solo.leaguePoints === 'number' ? solo.leaguePoints : 0,
+      })
+    } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      const hint =
+        status === 403
+          ? ' League-v4 may be disabled for your API key: check product permissions in Riot Developer Portal.'
+          : ''
+      return Result.err(new AppError(`League entries API (by-puuid): ${message}${hint}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
+   * League v4: entries by summoner id (ranked queues). Platform: euw1, eun1.
+   * Uses /lol/league/v4/entries/by-summoner/{summonerId}. Prefer getLeagueEntriesByPuuid when you have puuid.
    */
   async getLeagueEntriesBySummonerId(
     platform: 'euw1' | 'eun1',
@@ -255,7 +294,7 @@ export class RiotApiService {
         status === 403
           ? ' League-v4 may be disabled for your API key: check product permissions in Riot Developer Portal.'
           : ''
-      return Result.err(new AppError(`League entries API: ${message}${hint}`, 'RIOT_API_ERROR', err))
+      return Result.err(new AppError(`League entries API (by-summoner): ${message}${hint}`, 'RIOT_API_ERROR', err))
     }
   }
 
