@@ -3,6 +3,7 @@ import { useBuildStore } from './BuildStore'
 import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
 import type { Build, StoredBuild } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 
 export type SortOption = 'recent' | 'popular' | 'name'
@@ -126,7 +127,6 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       // Charger les builds publics depuis l'API
       let publicBuilds: Build[] = []
       try {
-        const { apiUrl } = await import('~/utils/apiUrl')
         const response = await fetch(apiUrl('/api/builds'))
         if (response.ok) {
           const allBuilds = (await response.json()) as (Build | StoredBuild)[]

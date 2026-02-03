@@ -10,6 +10,7 @@ import type {
   CalculatedStats,
   Role,
 } from '~/types/build'
+import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
@@ -394,8 +395,6 @@ export const useBuildStore = defineStore('build', {
         //    - Passage privé → public : on ajoute/met à jour sur le serveur (POST).
         //    - Passage public → privé : on supprime sur le serveur (DELETE).
         try {
-          const { apiUrl } = await import('~/utils/apiUrl')
-
           if (newVisibility === 'private') {
             // Privé : pas d'envoi au serveur. Si on passait de public à privé, supprimer du serveur.
             if (previousVisibility === 'public' && this.currentBuild!.id) {
@@ -472,7 +471,6 @@ export const useBuildStore = defineStore('build', {
           }
 
           try {
-            const { apiUrl } = await import('~/utils/apiUrl')
             await fetch(apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild.id)}`), {
               method: 'DELETE',
             })
@@ -530,7 +528,6 @@ export const useBuildStore = defineStore('build', {
 
         // Try to delete from server (don't fail if it doesn't exist on server)
         try {
-          const { apiUrl } = await import('~/utils/apiUrl')
           const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
             method: 'DELETE',
           })
@@ -561,8 +558,6 @@ export const useBuildStore = defineStore('build', {
       if (!build || !build.id) return false
 
       try {
-        const { apiUrl } = await import('~/utils/apiUrl')
-
         // Vérifier si le build existe sur le serveur
         const checkResponse = await fetch(apiUrl(`/api/builds/${encodeURIComponent(build.id)}`))
 

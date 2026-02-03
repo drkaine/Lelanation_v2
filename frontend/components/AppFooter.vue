@@ -139,6 +139,8 @@
 </template>
 
 <script setup lang="ts">
+import { apiUrl } from '~/utils/apiUrl'
+
 const { t } = useI18n()
 const currentYear = new Date().getFullYear()
 const localePath = useLocalePath()
@@ -168,7 +170,6 @@ async function submitContact() {
   contactFeedback.value = ''
   contactError.value = false
   try {
-    const { apiUrl } = await import('~/utils/apiUrl')
     const res = await fetch(apiUrl('/api/contact'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

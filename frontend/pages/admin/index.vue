@@ -206,7 +206,7 @@
               <button
                 type="submit"
                 class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="seedPlayersAdding || !seedPlayerLabel.trim()"
+                :disabled="seedPlayersAdding || !(seedPlayerLabel ?? '').trim()"
               >
                 {{ seedPlayersAdding ? '…' : t('admin.seedPlayers.add') }}
               </button>
@@ -293,7 +293,7 @@
               <button
                 type="submit"
                 class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="videosAdding || !newChannelHandle.trim()"
+                :disabled="videosAdding || !(newChannelHandle ?? '').trim()"
               >
                 {{ videosAdding ? '…' : t('admin.videos.addChannel') }}
               </button>
@@ -441,6 +441,83 @@ const riotApikeySaving = ref(false)
 const riotApikeyTesting = ref(false)
 const riotApikeyMessage = ref('')
 const riotApikeyError = ref(false)
+
+// Seed players (for match collection)
+const seedPlayerLabel = ref('')
+const seedPlayerPlatform = ref<'euw1' | 'eun1'>('euw1')
+const seedPlayersList = ref<Array<{ id: string; label: string; platform: string }>>([])
+const seedPlayersLoading = ref(false)
+const seedPlayersAdding = ref(false)
+const seedPlayersMessage = ref('')
+const seedPlayersError = ref(false)
+const seedPlayerDeleting = ref<string | null>(null)
+
+async function loadSeedPlayers() {
+  seedPlayersLoading.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/seed-players'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    seedPlayersList.value = data?.players ?? []
+  } catch {
+    authError.value = t('admin.login.error')
+  } finally {
+    seedPlayersLoading.value = false
+  }
+}
+
+async function addSeedPlayer() {
+  const label = (seedPlayerLabel.value ?? '').trim()
+  if (!label) return
+  seedPlayersMessage.value = ''
+  seedPlayersError.value = false
+  seedPlayersAdding.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/seed-players'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label, platform: seedPlayerPlatform.value }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok && data?.player) {
+      seedPlayersMessage.value = t('admin.seedPlayers.addSuccess')
+      seedPlayerLabel.value = ''
+      seedPlayersList.value = [...seedPlayersList.value, data.player]
+    } else {
+      seedPlayersError.value = true
+      seedPlayersMessage.value = (data?.error as string) ?? t('admin.seedPlayers.addError')
+    }
+  } catch {
+    seedPlayersError.value = true
+    seedPlayersMessage.value = t('admin.seedPlayers.addError')
+  } finally {
+    seedPlayersAdding.value = false
+  }
+}
+
+async function deleteSeedPlayer(id: string) {
+  seedPlayerDeleting.value = id
+  try {
+    const res = await fetchWithAuth(apiUrl(`/api/admin/seed-players/${id}`), { method: 'DELETE' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    if (res.ok) seedPlayersList.value = seedPlayersList.value.filter(p => p.id !== id)
+  } finally {
+    seedPlayerDeleting.value = null
+  }
+}
 
 async function testRiotApikey() {
   riotApikeyMessage.value = ''

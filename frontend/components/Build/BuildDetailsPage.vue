@@ -247,6 +247,7 @@ import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
+import { apiUrl } from '~/utils/apiUrl'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
 const props = defineProps<{ buildId: string }>()
@@ -564,7 +565,6 @@ watch(
 
     // Si pas trouvé localement, charger depuis l'API
     try {
-      const { apiUrl } = await import('~/utils/apiUrl')
       const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(id)}`))
       if (response.ok) {
         const buildData = await response.json()
