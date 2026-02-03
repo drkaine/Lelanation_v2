@@ -12,6 +12,11 @@ const PLATFORM_BASE: Record<string, string> = {
   eun1: 'https://eun1.api.riotgames.com',
 }
 const REGIONAL_BASE = 'https://europe.api.riotgames.com'
+const CONTINENT_BASE: Record<string, string> = {
+  europe: 'https://europe.api.riotgames.com',
+  americas: 'https://americas.api.riotgames.com',
+  asia: 'https://asia.api.riotgames.com',
+}
 const RANKED_SOLO_QUEUE = 'RANKED_SOLO_5x5'
 const QUEUE_ID_420 = 420
 
@@ -348,6 +353,36 @@ export class RiotApiService {
     } catch (err: unknown) {
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
+   * Account v1: PUUID → Riot ID (gameName, tagLine). Route continentale (europe, americas, asia).
+   * Riot ID = gameName#tagLine.
+   */
+  async getAccountByPuuid(
+    continent: 'europe' | 'americas' | 'asia',
+    puuid: string
+  ): Promise<Result<{ gameName: string; tagLine: string; riotId: string }, AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const base = CONTINENT_BASE[continent]
+    if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key)
+    try {
+      const res = await withRetry429(() =>
+        client.get<{ gameName: string; tagLine: string }>(
+          `/riot/account/v1/accounts/by-puuid/${encodeURIComponent(puuid)}`
+        )
+      )
+      const gameName = res.data?.gameName ?? ''
+      const tagLine = res.data?.tagLine ?? ''
+      if (!gameName && !tagLine) return Result.err(new AppError('Account API: no gameName/tagLine in response', 'RIOT_API_ERROR'))
+      const riotId = tagLine ? `${gameName}#${tagLine}` : gameName
+      return Result.ok({ gameName, tagLine, riotId })
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`Account API (by-puuid): ${message}`, 'RIOT_API_ERROR', err))
     }
   }
 

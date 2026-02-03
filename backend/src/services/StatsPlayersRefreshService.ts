@@ -1,7 +1,7 @@
 /**
  * Refreshes players and champion_player_stats from participants (aggregation).
  * Run after match collection or on a schedule (e.g. every 12h).
- * Optionally enriches Player.summonerName and Player.currentRankTier/Division via Riot Summoner + League APIs.
+ * Optionally enriches Player.summonerName (Riot ID via Account-V1 by-puuid) and currentRankTier/Division (League-V4 by-puuid).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -146,9 +146,15 @@ function regionToPlatform(region: string): 'euw1' | 'eun1' {
   return region === 'eun1' ? 'eun1' : 'euw1'
 }
 
+/** Continent for Account-V1 (euw1, eun1 → europe). */
+function regionToContinent(region: string): 'europe' | 'americas' | 'asia' {
+  if (region === 'eun1' || region === 'euw1') return 'europe'
+  if (region === 'na1' || region === 'br1' || region === 'la1' || region === 'la2') return 'americas'
+  return 'asia'
+}
+
 /**
- * Enrich players missing summoner_name or current_rank_* via Riot Summoner-v4 and League-v4.
- * Processes up to `limit` players per run to respect rate limits. Returns count enriched.
+ * Enrich players missing summoner_name (Riot ID) or current_rank_* via Account-V1 by-puuid and League-V4 by-puuid.
  */
 const ENRICH_LOG = '[enrich]'
 
@@ -174,20 +180,19 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
     const platform = regionToPlatform(p.region)
     const updated: {
       summonerName?: string
-      summonerId?: string
       currentRankTier?: string
       currentRankDivision?: string
       currentRankLp?: number
     } = {}
 
     if (!p.summonerName) {
-      const summonerResult = await riotApi.getSummonerByPuuid(platform, p.puuid)
-      if (summonerResult.isOk()) {
-        const s = summonerResult.unwrap()
-        if (s.name) updated.summonerName = s.name
-        if (s.id) updated.summonerId = s.id
+      const continent = regionToContinent(p.region)
+      const accountResult = await riotApi.getAccountByPuuid(continent, p.puuid)
+      if (accountResult.isOk()) {
+        const account = accountResult.unwrap()
+        if (account.riotId) updated.summonerName = account.riotId
       } else {
-        console.warn(`${ENRICH_LOG} Summoner API failed for puuid ${p.puuid.slice(0, 8)}…: ${summonerResult.unwrapErr().message}`)
+        console.warn(`${ENRICH_LOG} Account API (by-puuid) failed for puuid ${p.puuid.slice(0, 8)}…: ${accountResult.unwrapErr().message}`)
       }
     }
 
