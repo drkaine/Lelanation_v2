@@ -73,6 +73,14 @@ Expand : en mémoire (run courant) + persistance en DB (PuuidCrawlQueue) pour le
 5. **Match details** : pour chaque match ID, si déjà en base (`hasMatch(matchId)`) on skip ; sinon fetch détail puis `upsertMatchFromRiot` (pas de doublon).
 6. **Expansion** : extraction des 10 PUUIDs participants ; ajout en mémoire (run courant) et `createMany` en DB (`PuuidCrawlQueue`, `skipDuplicates: true`) pour les runs suivants. Les matchs déjà vus ne sont pas re-traités.
 7. **Refresh** : après collecte, mise à jour des joueurs et stats champions (PostgreSQL).
+8. **Enrichment** (optionnel) : pour les joueurs en base, appel Summoner-v4 (by puuid) et League-v4 (by summonerId) pour remplir `summoner_name`, `current_rank_tier`, `current_rank_division`. Les mêmes valeurs de rang sont recopiées sur les lignes **Participant** (`rank_tier`, `rank_division`, `rank_lp`) pour ce puuid, car l’API Match ne fournit pas le rang par participant.
+
+### Pourquoi certains champs Player sont vides
+
+- **`summoner_name`** : l’API Match-v5 ne renvoie pas le nom d’invocateur dans les participants. Il est rempli uniquement par un **enrichment** (appel Summoner-v4 par PUUID) après le refresh.
+- **`current_rank_tier` / `current_rank_division`** : les participants des matchs ne contiennent pas le rang actuel. De plus, `MatchCollectService` ne lit pas le rang côté Riot. Ils sont remplis par un **enrichment** (appel League-v4 entries by summonerId) après le refresh.
+
+Sans étape d’enrichment, ces colonnes restent donc `NULL`.
 
 ---
 

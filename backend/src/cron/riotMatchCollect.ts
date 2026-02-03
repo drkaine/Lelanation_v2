@@ -7,7 +7,7 @@ import axios from 'axios'
 import cron from 'node-cron'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.js'
-import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
+import { refreshPlayersAndChampionStats, enrichPlayers } from '../services/StatsPlayersRefreshService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { isDatabaseConfigured, prisma } from '../db.js'
@@ -305,6 +305,7 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
 
     let playersUpserted = 0
     let championStatsUpserted = 0
+    let playersEnriched = 0
     if (collected > 0) {
       try {
         const refresh = await refreshPlayersAndChampionStats()
@@ -316,6 +317,15 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       } catch (e) {
         console.warn(`${LOG_PREFIX} Players refresh failed:`, e)
       }
+    }
+    try {
+      const enrich = await enrichPlayers(25)
+      playersEnriched = enrich.enriched
+      if (playersEnriched > 0) {
+        console.log(`${LOG_PREFIX} Players enriched: ${playersEnriched} (summoner_name, rank)`)
+      }
+    } catch (e) {
+      console.warn(`${LOG_PREFIX} Players enrichment failed:`, e)
     }
     const duration = Math.round((Date.now() - startTime.getTime()) / 1000)
     console.log(

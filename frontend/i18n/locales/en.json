@@ -570,7 +570,16 @@
       "viewAllPlayers": "View all players",
       "hideAllPlayers": "Hide list",
       "allPlayersEmpty": "No players in database yet.",
-      "games": "games"
+      "games": "games",
+      "searchPlayers": "Search",
+      "searchPlayersPlaceholder": "Summoner name or PUUID…",
+      "noSearchResults": "No players match the search.",
+      "noName": "—",
+      "colName": "Name",
+      "colPuuid": "PUUID",
+      "colRegion": "Region",
+      "colRank": "Rank",
+      "colGames": "Games / WR"
     },
     "logout": "Log out"
   }

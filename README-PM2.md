@@ -48,3 +48,18 @@ Cette commande crée un service systemd qui démarre PM2 au boot.
 ## Configuration
 
 Le fichier `ecosystem.config.js` à la racine du projet contient la configuration PM2.
+
+## Clé API Riot (admin)
+
+Quand vous enregistrez ou modifiez la clé API Riot dans l’admin (onglet Clé API Riot), le backend :
+
+1. Invalide le cache de la clé en mémoire.
+2. Lance en arrière-plan : `npm run build` (dans le répertoire backend) puis `pm2 restart <app>`.
+
+Le nom de l’app PM2 utilisée pour le restart est **lelanation-backend** par défaut. Pour le changer (ex. si votre `ecosystem.config.js` utilise un autre nom), définir la variable d’environnement :
+
+```bash
+PM2_APP_NAME=mon-app-backend
+```
+
+Si `pm2` n’est pas dans le `PATH` ou si le restart échoue, la sauvegarde de la clé réussit quand même ; un message est écrit dans les logs du backend.

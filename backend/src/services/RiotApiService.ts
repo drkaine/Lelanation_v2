@@ -222,6 +222,39 @@ export class RiotApiService {
   }
 
   /**
+   * League v4: entries by summoner id (ranked queues). Platform: euw1, eun1.
+   * Returns Solo/Duo entry if present (tier, rank = division, leaguePoints).
+   */
+  async getLeagueEntriesBySummonerId(
+    platform: 'euw1' | 'eun1',
+    summonerId: string
+  ): Promise<Result<{ tier: string; rank: string; leaguePoints: number } | null, AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const base = PLATFORM_BASE[platform]
+    if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key)
+    try {
+      const res = await withRetry429(() =>
+        client.get<Array<{ queueType: string; tier: string; rank: string; leaguePoints: number }>>(
+          `/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`
+        )
+      )
+      const entries = res.data ?? []
+      const solo = entries.find((e) => e.queueType === RANKED_SOLO_QUEUE)
+      if (!solo) return Result.ok(null)
+      return Result.ok({
+        tier: (solo.tier ?? '').toUpperCase(),
+        rank: (solo.rank ?? '').toUpperCase(),
+        leaguePoints: typeof solo.leaguePoints === 'number' ? solo.leaguePoints : 0,
+      })
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`League entries API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
    * Summoner v4 by encrypted summoner id (returns puuid for match list). Platform: euw1, eun1.
    */
   async getSummonerById(platform: 'euw1' | 'eun1', summonerId: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
@@ -254,11 +287,20 @@ export class RiotApiService {
     const client = createClient(base, key)
     try {
       const res = await withRetry429(() =>
-        client.get<{ id: string; puuid: string; name: string }>(
+        client.get<Record<string, unknown>>(
           `/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`
         )
       )
-      return Result.ok(res.data)
+      const raw = res.data ?? {}
+      const id = (raw.id ?? raw.summonerId) as string | undefined
+      const name = (raw.name ?? raw.summonerName) as string | undefined
+      const puuidRes = (raw.puuid as string) ?? puuid
+      if (!puuidRes) return Result.err(new AppError('Summoner API: no puuid in response', 'RIOT_API_ERROR'))
+      return Result.ok({
+        id: id ?? '',
+        puuid: puuidRes,
+        name: name ?? '',
+      })
     } catch (err: unknown) {
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))

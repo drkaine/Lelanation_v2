@@ -1,7 +1,9 @@
 import axios from 'axios'
+import { exec } from 'child_process'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
@@ -30,6 +32,10 @@ const metrics = MetricsService.getInstance()
 const cronStatus = new CronStatusService()
 const versionService = new VersionService()
 const youtubeService = new YouTubeService()
+
+const __dirnameAdmin = dirname(fileURLToPath(import.meta.url))
+const backendRoot = join(__dirnameAdmin, '..', '..')
+const pm2AppName = process.env.PM2_APP_NAME ?? 'lelanation-backend'
 
 const youtubeConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
@@ -333,6 +339,19 @@ router.put('/riot-apikey', async (req, res) => {
   if (writeResult.isErr()) {
     return res.status(500).json({ error: writeResult.unwrapErr().message })
   }
+  getRiotApiService().invalidateKeyCache()
+  exec(
+    `npm run build && pm2 restart ${pm2AppName}`,
+    { cwd: backendRoot, timeout: 120_000 },
+    (err, stdout, stderr) => {
+      if (err) {
+        console.warn('[admin] Riot API key saved but build/PM2 restart failed:', err.message)
+        if (stderr) console.warn('[admin] stderr:', stderr)
+      } else if (stdout) {
+        console.log('[admin] Build and PM2 restart done:', stdout.trim())
+      }
+    }
+  )
   return res.json({
     success: true,
     hasKey: value.length > 0,

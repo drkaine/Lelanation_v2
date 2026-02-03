@@ -263,31 +263,76 @@
                       : t('admin.seedPlayers.viewAllPlayers')
                 }}
               </button>
-              <div
-                v-if="allPlayersVisible"
-                class="mt-3 max-h-[400px] overflow-auto rounded border border-primary/20 bg-background/50"
-              >
-                <p v-if="allPlayersLoading" class="p-4 text-text/70">{{ t('admin.loading') }}</p>
-                <p v-else-if="allPlayersList.length === 0" class="p-4 text-text/70">
-                  {{ t('admin.seedPlayers.allPlayersEmpty') }}
-                </p>
-                <ul v-else class="divide-y divide-primary/20">
-                  <li
-                    v-for="p in allPlayersList"
-                    :key="p.puuid"
-                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-                  >
-                    <span class="font-medium text-text">{{
-                      p.summonerName || p.puuid.slice(0, 8) + '…'
-                    }}</span>
-                    <span class="text-text/70">{{ p.region }}</span>
-                    <span class="text-text/70">{{ p.rankTier || '—' }}</span>
-                    <span class="text-text/70"
-                      >{{ p.totalGames }} {{ t('admin.seedPlayers.games') }}, {{ p.winrate }}%
-                      WR</span
-                    >
-                  </li>
-                </ul>
+              <div v-if="allPlayersVisible" class="mt-3 space-y-2">
+                <div class="flex items-center gap-2">
+                  <label for="all-players-search" class="sr-only">{{
+                    t('admin.seedPlayers.searchPlayers')
+                  }}</label>
+                  <input
+                    id="all-players-search"
+                    v-model.trim="allPlayersSearchQuery"
+                    type="text"
+                    :placeholder="t('admin.seedPlayers.searchPlayersPlaceholder')"
+                    class="min-w-0 flex-1 rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text placeholder:text-text/50"
+                  />
+                </div>
+                <div
+                  class="max-h-[400px] overflow-auto rounded border border-primary/20 bg-background/50"
+                >
+                  <p v-if="allPlayersLoading" class="p-4 text-text/70">{{ t('admin.loading') }}</p>
+                  <p v-else-if="allPlayersList.length === 0" class="p-4 text-text/70">
+                    {{ t('admin.seedPlayers.allPlayersEmpty') }}
+                  </p>
+                  <p v-else-if="filteredAllPlayers.length === 0" class="p-4 text-text/70">
+                    {{ t('admin.seedPlayers.noSearchResults') }}
+                  </p>
+                  <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[500px] text-left text-sm">
+                      <thead class="sticky top-0 border-b border-primary/30 bg-surface/80">
+                        <tr>
+                          <th class="px-3 py-2 font-semibold text-text">
+                            {{ t('admin.seedPlayers.colName') }}
+                          </th>
+                          <th class="px-3 py-2 font-semibold text-text">
+                            {{ t('admin.seedPlayers.colPuuid') }}
+                          </th>
+                          <th class="px-3 py-2 font-semibold text-text">
+                            {{ t('admin.seedPlayers.colRegion') }}
+                          </th>
+                          <th class="px-3 py-2 font-semibold text-text">
+                            {{ t('admin.seedPlayers.colRank') }}
+                          </th>
+                          <th class="px-3 py-2 font-semibold text-text">
+                            {{ t('admin.seedPlayers.colGames') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-primary/20">
+                        <tr
+                          v-for="p in filteredAllPlayers"
+                          :key="p.puuid"
+                          class="hover:bg-surface/30"
+                        >
+                          <td
+                            class="min-w-[120px] px-3 py-2 font-medium text-text"
+                            :title="p.puuid"
+                          >
+                            {{ p.summonerName || t('admin.seedPlayers.noName') }}
+                          </td>
+                          <td class="px-3 py-2 font-mono text-xs text-text/60" :title="p.puuid">
+                            {{ p.puuid.slice(0, 16) }}…
+                          </td>
+                          <td class="px-3 py-2 text-text/80">{{ p.region }}</td>
+                          <td class="px-3 py-2 text-text/80">{{ p.rankTier || '—' }}</td>
+                          <td class="px-3 py-2 text-text/80">
+                            {{ p.totalGames }} {{ t('admin.seedPlayers.games') }}, {{ p.winrate }}%
+                            WR
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -502,6 +547,7 @@ const seedPlayersError = ref(false)
 const seedPlayerDeleting = ref<string | null>(null)
 
 const allPlayersVisible = ref(false)
+const allPlayersSearchQuery = ref('')
 const allPlayersList = ref<
   Array<{
     puuid: string
@@ -514,6 +560,15 @@ const allPlayersList = ref<
   }>
 >([])
 const allPlayersLoading = ref(false)
+
+const filteredAllPlayers = computed(() => {
+  const list = allPlayersList.value
+  const q = allPlayersSearchQuery.value.toLowerCase().trim()
+  if (!q) return list
+  return list.filter(
+    p => (p.summonerName?.toLowerCase().includes(q) ?? false) || p.puuid.toLowerCase().includes(q)
+  )
+})
 
 async function loadAllPlayers() {
   allPlayersLoading.value = true

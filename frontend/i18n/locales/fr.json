@@ -574,7 +574,16 @@
       "viewAllPlayers": "Voir tous les joueurs",
       "hideAllPlayers": "Masquer la liste",
       "allPlayersEmpty": "Aucun joueur en base pour l'instant.",
-      "games": "parties"
+      "games": "parties",
+      "searchPlayers": "Rechercher",
+      "searchPlayersPlaceholder": "Nom d'invocateur ou PUUID…",
+      "noSearchResults": "Aucun joueur ne correspond à la recherche.",
+      "noName": "—",
+      "colName": "Nom",
+      "colPuuid": "PUUID",
+      "colRegion": "Région",
+      "colRank": "Rang",
+      "colGames": "Parties / WR"
     },
     "logout": "Déconnexion"
   }
