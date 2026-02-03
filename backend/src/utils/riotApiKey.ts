@@ -1,11 +1,15 @@
 /**
  * Riot API key: read from admin config file first, then fallback to RIOT_API_KEY env.
- * Used by RiotApiService and match collection. Never exposed to frontend.
+ * Path is relative to backend package so Admin and cron use the same file regardless of cwd.
  */
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { FileManager } from './fileManager.js'
 
-const RIOT_API_KEY_FILE = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const BACKEND_ROOT = join(__dirname, '..', '..')
+/** Always backend/data/admin/riot-apikey.json, independent of process.cwd(). */
+export const RIOT_API_KEY_FILE = join(BACKEND_ROOT, 'data', 'admin', 'riot-apikey.json')
 
 interface RiotApikeyConfig {
   riotApiKey?: string
@@ -17,16 +21,52 @@ export function getRiotApiKey(): string | null {
 }
 
 /**
- * Get Riot API key: file (admin-configured) first, then process.env.RIOT_API_KEY.
+ * Get Riot API key: by default file (admin) first, then env.
+ * When preferEnv is true (e.g. in the script), try env first then file.
  */
-export async function getRiotApiKeyAsync(): Promise<string | null> {
+export async function getRiotApiKeyAsync(preferEnv?: boolean): Promise<string | null> {
+  const { key } = await getRiotApiKeyWithSourceAsync(preferEnv)
+  return key
+}
+
+export type RiotApiKeySource = 'file' | 'env'
+
+async function keyFromFile(): Promise<{ key: string; source: 'file' } | null> {
   const fileResult = await FileManager.readJson<RiotApikeyConfig>(RIOT_API_KEY_FILE)
   if (fileResult.isOk()) {
     const fromFile = fileResult.unwrap().riotApiKey
     if (typeof fromFile === 'string' && fromFile.trim() !== '') {
-      return fromFile.trim()
+      return { key: fromFile.trim(), source: 'file' }
     }
   }
+  return null
+}
+
+function keyFromEnv(): { key: string; source: 'env' } | null {
   const fromEnv = process.env.RIOT_API_KEY?.trim()
-  return (fromEnv && fromEnv.length > 0) ? fromEnv : null
+  if (fromEnv && fromEnv.length > 0) {
+    return { key: fromEnv, source: 'env' }
+  }
+  return null
+}
+
+/**
+ * Get Riot API key with source. By default file first then env; when preferEnv, env first then file.
+ */
+export async function getRiotApiKeyWithSourceAsync(preferEnv?: boolean): Promise<{
+  key: string | null
+  source: RiotApiKeySource | null
+}> {
+  if (preferEnv) {
+    const envKey = keyFromEnv()
+    if (envKey) return envKey
+    const fileKey = await keyFromFile()
+    if (fileKey) return fileKey
+    return { key: null, source: null }
+  }
+  const fileKey = await keyFromFile()
+  if (fileKey) return fileKey
+  const envKey = keyFromEnv()
+  if (envKey) return envKey
+  return { key: null, source: null }
 }

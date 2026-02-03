@@ -493,7 +493,8 @@
       "contact": "Contact",
       "builds": "Builds",
       "videos": "Videos",
-      "apikeyRiot": "Riot API key"
+      "apikeyRiot": "Riot API key",
+      "seedPlayers": "Seed players"
     },
     "contact": {
       "title": "Contact requests",
@@ -530,7 +531,22 @@
       "placeholder": "RGAPI-xxxx...",
       "save": "Save key",
       "saveSuccess": "Key saved.",
-      "saveError": "Failed to save key."
+      "saveError": "Failed to save key.",
+      "testKey": "Test key",
+      "testKeySuccess": "Key valid (Riot accepted the request).",
+      "testKeyError": "Key rejected by Riot.",
+      "testing": "Testing…"
+    },
+    "seedPlayers": {
+      "title": "Seed players",
+      "description": "Pseudos used as starting point for match collection. The cron fetches their matches (current patch), then PUUIDs of other players to expand the crawl.",
+      "labelPlaceholder": "Riot ID (Name#Tag) or summoner name",
+      "platform": "Platform",
+      "add": "Add",
+      "addSuccess": "Player added.",
+      "addError": "Failed to add player.",
+      "delete": "Remove",
+      "empty": "No seed players. Add pseudos to start collection from them."
     },
     "logout": "Log out"
   }

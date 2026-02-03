@@ -6,7 +6,8 @@
           <h1 class="text-3xl font-bold text-text-accent">Admin</h1>
           <p class="mt-1 text-sm text-text/70">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.builds') }} ·
-            {{ t('admin.tabs.videos') }} · {{ t('admin.tabs.apikeyRiot') }}
+            {{ t('admin.tabs.videos') }} · {{ t('admin.tabs.apikeyRiot') }} ·
+            {{ t('admin.tabs.seedPlayers') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -147,6 +148,16 @@
               >
                 {{ riotApikeySaving ? '…' : t('admin.riotApikey.save') }}
               </button>
+              <button
+                type="button"
+                class="rounded border border-primary/50 bg-background px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                :disabled="riotApikeyTesting"
+                @click="testRiotApikey"
+              >
+                {{
+                  riotApikeyTesting ? t('admin.riotApikey.testing') : t('admin.riotApikey.testKey')
+                }}
+              </button>
             </form>
             <p
               v-if="riotApikeyMessage"
@@ -155,6 +166,81 @@
             >
               {{ riotApikeyMessage }}
             </p>
+          </template>
+        </div>
+      </div>
+
+      <!-- Tab: Seed players -->
+      <div v-show="activeTab === 'seedplayers'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.seedPlayers.title') }}</h2>
+          <p class="mb-4 text-sm text-text/80">{{ t('admin.seedPlayers.description') }}</p>
+          <p v-if="seedPlayersLoading" class="text-text/70">Chargement…</p>
+          <template v-else>
+            <form class="mb-4 flex flex-wrap items-end gap-2" @submit.prevent="addSeedPlayer">
+              <div class="min-w-[200px]">
+                <label for="seed-player-label" class="mb-1 block text-sm text-text/80">{{
+                  t('admin.seedPlayers.labelPlaceholder')
+                }}</label>
+                <input
+                  id="seed-player-label"
+                  v-model="seedPlayerLabel"
+                  type="text"
+                  :placeholder="t('admin.seedPlayers.labelPlaceholder')"
+                  class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                />
+              </div>
+              <div>
+                <label for="seed-player-platform" class="mb-1 block text-sm text-text/80">{{
+                  t('admin.seedPlayers.platform')
+                }}</label>
+                <select
+                  id="seed-player-platform"
+                  v-model="seedPlayerPlatform"
+                  class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
+                >
+                  <option value="euw1">EUW</option>
+                  <option value="eun1">EUNE</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                :disabled="seedPlayersAdding || !seedPlayerLabel.trim()"
+              >
+                {{ seedPlayersAdding ? '…' : t('admin.seedPlayers.add') }}
+              </button>
+            </form>
+            <p
+              v-if="seedPlayersMessage"
+              :class="seedPlayersError ? 'text-error' : 'text-green-600'"
+              class="mb-4 text-sm"
+            >
+              {{ seedPlayersMessage }}
+            </p>
+            <p v-if="seedPlayersList.length === 0" class="text-text/70">
+              {{ t('admin.seedPlayers.empty') }}
+            </p>
+            <ul v-else class="space-y-2">
+              <li
+                v-for="p in seedPlayersList"
+                :key="p.id"
+                class="flex flex-wrap items-center justify-between gap-2 rounded border border-primary/20 bg-background/50 px-3 py-2"
+              >
+                <span class="font-medium text-text">{{ p.label }}</span>
+                <span class="text-sm text-text/70">{{
+                  p.platform === 'eun1' ? 'EUNE' : 'EUW'
+                }}</span>
+                <button
+                  type="button"
+                  class="rounded border border-primary/50 px-2 py-1 text-sm text-error transition-colors hover:bg-error/10"
+                  :disabled="seedPlayerDeleting === p.id"
+                  @click="deleteSeedPlayer(p.id)"
+                >
+                  {{ seedPlayerDeleting === p.id ? '…' : t('admin.seedPlayers.delete') }}
+                </button>
+              </li>
+            </ul>
           </template>
         </div>
       </div>
@@ -249,13 +335,14 @@ const localePath = useLocalePath()
 const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
 const authError = ref<string | null>(null)
-const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey'>('contact')
+const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey' | 'seedplayers'>('contact')
 
 const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
   { id: 'builds' as const, label: t('admin.tabs.builds') },
   { id: 'videos' as const, label: t('admin.tabs.videos') },
   { id: 'apikey' as const, label: t('admin.tabs.apikeyRiot') },
+  { id: 'seedplayers' as const, label: t('admin.tabs.seedPlayers') },
 ])
 
 // Contact
@@ -351,8 +438,39 @@ const riotApikeyMasked = ref<string | null>(null)
 const riotApikeyLoading = ref(false)
 const riotApikeyValue = ref('')
 const riotApikeySaving = ref(false)
+const riotApikeyTesting = ref(false)
 const riotApikeyMessage = ref('')
 const riotApikeyError = ref(false)
+
+async function testRiotApikey() {
+  riotApikeyMessage.value = ''
+  riotApikeyError.value = false
+  riotApikeyTesting.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-apikey/test'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (data.valid) {
+      riotApikeyMessage.value = t('admin.riotApikey.testKeySuccess')
+    } else {
+      riotApikeyError.value = true
+      let msg = data?.error ?? t('admin.riotApikey.testKeyError')
+      if (data.keySource != null && data.keyLength != null) {
+        msg += ` (source: ${data.keySource}, longueur clé: ${data.keyLength})`
+      }
+      riotApikeyMessage.value = msg
+    }
+  } catch {
+    riotApikeyError.value = true
+    riotApikeyMessage.value = t('admin.riotApikey.testKeyError')
+  } finally {
+    riotApikeyTesting.value = false
+  }
+}
 
 async function loadRiotApikey() {
   riotApikeyLoading.value = true
@@ -493,7 +611,13 @@ onMounted(async () => {
     await navigateTo(localePath('/admin/login'))
     return
   }
-  await Promise.all([loadContact(), loadBuildsStats(), loadCron(), loadRiotApikey()])
+  await Promise.all([
+    loadContact(),
+    loadBuildsStats(),
+    loadCron(),
+    loadRiotApikey(),
+    loadSeedPlayers(),
+  ])
 })
 
 watch(activeTab, tab => {
@@ -502,5 +626,7 @@ watch(activeTab, tab => {
   if (tab === 'videos' && !cron.value && !cronLoading.value) loadCron()
   if (tab === 'apikey' && riotApikeyMasked.value === null && !riotApikeyLoading.value)
     loadRiotApikey()
+  if (tab === 'seedplayers' && seedPlayersList.value.length === 0 && !seedPlayersLoading.value)
+    loadSeedPlayers()
 })
 </script>

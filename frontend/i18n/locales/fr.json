@@ -497,7 +497,8 @@
       "contact": "Contact",
       "builds": "Builds",
       "videos": "Vidéos",
-      "apikeyRiot": "Clé API Riot"
+      "apikeyRiot": "Clé API Riot",
+      "seedPlayers": "Joueurs seed"
     },
     "contact": {
       "title": "Demandes de contact",
@@ -534,7 +535,22 @@
       "placeholder": "RGAPI-xxxx...",
       "save": "Enregistrer la clé",
       "saveSuccess": "Clé enregistrée.",
-      "saveError": "Erreur lors de l'enregistrement."
+      "saveError": "Erreur lors de l'enregistrement.",
+      "testKey": "Tester la clé",
+      "testKeySuccess": "Clé valide (Riot a accepté la requête).",
+      "testKeyError": "Clé refusée par Riot.",
+      "testing": "Test en cours…"
+    },
+    "seedPlayers": {
+      "title": "Joueurs seed",
+      "description": "Pseudos utilisés comme point de départ pour la collecte de matchs. Le cron récupère leurs matchs (patch en cours), puis les PUUID des autres joueurs pour étendre la collecte.",
+      "labelPlaceholder": "Riot ID (Nom#Tag) ou nom d'invocateur",
+      "platform": "Plateforme",
+      "add": "Ajouter",
+      "addSuccess": "Joueur ajouté.",
+      "addError": "Impossible d'ajouter le joueur.",
+      "delete": "Supprimer",
+      "empty": "Aucun joueur seed. Ajoutez des pseudos pour démarrer la collecte à partir d'eux."
     },
     "logout": "Déconnexion"
   }

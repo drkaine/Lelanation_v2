@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import { promises as fs } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
+import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
+import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
 import { retryWithBackoff } from '../utils/retry.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -31,11 +33,13 @@ const youtubeConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json'
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
-const riotApikeyFile = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
+const riotApikeyFile = RIOT_API_KEY_FILE
 
 interface RiotApikeyConfig {
   riotApiKey?: string
 }
+
+type SeedPlayerPlatform = 'euw1' | 'eun1'
 
 function maskRiotApiKey(key: string): string {
   if (!key || key.length < 12) return '****'
@@ -285,10 +289,39 @@ router.get('/riot-apikey', async (_req, res) => {
   })
 })
 
+/** Test current Riot API key against Riot (EUW). Returns valid + diagnostics on failure. */
+router.get('/riot-apikey/test', async (_req, res) => {
+  const { getRiotApiKeyWithSourceAsync } = await import('../utils/riotApiKey.js')
+  const { getRiotApiService } = await import('../services/RiotApiService.js')
+  const riotApi = getRiotApiService()
+  riotApi.invalidateKeyCache()
+  const { key, source } = await getRiotApiKeyWithSourceAsync()
+  if (!key) {
+    return res.json({
+      valid: false,
+      error: 'Aucune clé configurée (fichier admin ou RIOT_API_KEY).',
+      keySource: null,
+      keyLength: 0,
+    })
+  }
+  const result = await riotApi.getChallengerLeague('euw1')
+  if (result.isOk()) {
+    return res.json({ valid: true })
+  }
+  const err = result.unwrapErr()
+  const message = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : String(err)
+  return res.json({
+    valid: false,
+    error: message,
+    keySource: source,
+    keyLength: key.length,
+  })
+})
+
 router.put('/riot-apikey', async (req, res) => {
   const raw = req.body?.riotApiKey ?? req.body?.apiKey ?? req.body?.key
   const value = typeof raw === 'string' ? raw.trim() : ''
-  const dirResult = await FileManager.ensureDir(join(process.cwd(), 'data', 'admin'))
+  const dirResult = await FileManager.ensureDir(dirname(RIOT_API_KEY_FILE))
   if (dirResult.isErr()) {
     return res.status(500).json({ error: dirResult.unwrapErr().message })
   }
@@ -303,6 +336,39 @@ router.put('/riot-apikey', async (req, res) => {
     hasKey: value.length > 0,
     maskedKey: value.length > 0 ? maskRiotApiKey(value) : undefined
   })
+})
+
+// --- Seed players (DB, for match collection) ---
+router.get('/seed-players', async (_req, res) => {
+  const rows = await prisma.seedPlayer.findMany({ orderBy: { createdAt: 'asc' } })
+  const players = rows.map((p) => ({ id: p.id, label: p.label, platform: p.platform as SeedPlayerPlatform }))
+  return res.json({ players })
+})
+
+router.post('/seed-players', async (req, res) => {
+  const rawLabel = req.body?.label ?? req.body?.name ?? req.body?.pseudo ?? ''
+  const label = typeof rawLabel === 'string' ? rawLabel.trim() : ''
+  const rawPlatform = req.body?.platform ?? req.body?.region ?? 'euw1'
+  const platform = rawPlatform === 'eun1' ? 'eun1' : 'euw1'
+
+  if (!label) {
+    return res.status(400).json({ error: 'label is required (Riot ID: Name#Tag or summoner name)' })
+  }
+
+  const created = await prisma.seedPlayer.create({ data: { label, platform } })
+  return res.status(201).json({ player: { id: created.id, label: created.label, platform: created.platform } })
+})
+
+router.delete('/seed-players/:id', async (req, res) => {
+  const id = req.params?.id
+  if (!id) return res.status(400).json({ error: 'id is required' })
+
+  try {
+    await prisma.seedPlayer.delete({ where: { id } })
+    return res.json({ success: true })
+  } catch {
+    return res.status(404).json({ error: 'Seed player not found' })
+  }
 })
 
 export default router

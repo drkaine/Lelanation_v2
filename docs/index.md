@@ -41,6 +41,7 @@ Lelanation is a League of Legends build configuration and statistics website. Th
 
 ### Data & Models
 - [Data Models](./data-models.md) ✓
+- [Riot API – Collecte de matchs](./riot-api-match-collection.md) – Workflow, limites, file PUUID, TOS
 
 ### Components & UI
 - [Component Inventory - Frontend](./component-inventory-frontend.md) ✓

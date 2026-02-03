@@ -100,3 +100,24 @@ model ChampionPlayerStats {
   @@index([championId, winrate])
   @@map("champion_player_stats")
 }
+
+// Admin-defined seed players (label = Riot ID or summoner name). Cron resolves to PUUID and uses them first.
+model SeedPlayer {
+  id        String   @id @default(uuid())
+  label     String
+  platform  String   // euw1, eun1
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([platform])
+  @@map("seed_players")
+}
+
+// PUUIDs discovered from match participants; cron drains this queue each run so the crawl expands over time.
+model PuuidCrawlQueue {
+  puuid   String   @id
+  platform String  // euw1, eun1
+  addedAt DateTime @default(now()) @map("added_at")
+
+  @@index([addedAt])
+  @@map("puuid_crawl_queue")
+}

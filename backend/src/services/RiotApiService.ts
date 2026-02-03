@@ -17,6 +17,8 @@ const QUEUE_ID_420 = 420
 
 /** Delay between requests (ms) to respect rate limits (~14 req/s) */
 const RATE_LIMIT_DELAY_MS = 70
+/** Max retries on 429 (rate limit). Backoff: Retry-After header or 60s. */
+const RATE_LIMIT_MAX_RETRIES = 3
 
 let lastRequestTime = 0
 
@@ -27,6 +29,28 @@ async function rateLimit(): Promise<void> {
     await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
   }
   lastRequestTime = Date.now()
+}
+
+async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (attempt < RATE_LIMIT_MAX_RETRIES && axios.isAxiosError(err) && err.response?.status === 429) {
+        const retryAfter = err.response.headers['retry-after']
+        const waitMs =
+          typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
+            ? parseInt(retryAfter, 10) * 1000
+            : 60_000
+        await new Promise((r) => setTimeout(r, waitMs))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastErr
 }
 
 function createClient(baseURL: string, apiKey: string): AxiosInstance {
@@ -91,15 +115,27 @@ export interface MatchSummary {
 
 export class RiotApiService {
   private apiKey: string | null = null
+  /** When true, ensureKey() uses env first then admin file (used by the script). */
+  private preferEnv = false
+
+  /** Set key preference for the next ensureKey() call. Used by the script: try .env first, then admin file. */
+  setKeyPreference(preferEnv: boolean): void {
+    this.preferEnv = preferEnv
+  }
 
   private async ensureKey(): Promise<string> {
     if (this.apiKey) return this.apiKey
-    const key = await getRiotApiKeyAsync()
+    const key = await getRiotApiKeyAsync(this.preferEnv)
     if (!key) {
       throw new AppError('RIOT_API_KEY not configured (env or admin Riot API key)', 'CONFIG_ERROR')
     }
     this.apiKey = key
     return key
+  }
+
+  /** Clear cached key so next request re-reads from admin file or env (e.g. after 401/403). */
+  invalidateKeyCache(): void {
+    this.apiKey = null
   }
 
   /**
@@ -118,7 +154,7 @@ export class RiotApiService {
     const client = createClient(base, key)
     const path = `/lol/league/v4/entries/${RANKED_SOLO_QUEUE}/${tier.toUpperCase()}/${division.toUpperCase()}`
     try {
-      const res = await client.get<LeagueEntry[]>(path, { params: { page } })
+      const res = await withRetry429(() => client.get<LeagueEntry[]>(path, { params: { page } }))
       const list = Array.isArray(res.data) ? res.data : []
       return Result.ok(list)
     } catch (err: unknown) {
@@ -159,18 +195,25 @@ export class RiotApiService {
     const client = createClient(base, key)
     const path = `/lol/league/v4/${listType}/by-queue/${RANKED_SOLO_QUEUE}`
     try {
-      const res = await client.get<LeagueListDTO>(path)
-      const entries = res.data?.entries ?? []
+      const res = await withRetry429(() => client.get<LeagueListDTO>(path))
+      const rawEntries = res.data?.entries ?? []
       const tier = (res.data?.tier ?? '').toUpperCase()
-      const list: LeagueEntry[] = entries.map((e) => ({
-        summonerId: e.summonerId,
-        summonerName: e.summonerName,
-        leaguePoints: e.leaguePoints,
-        rank: e.rank,
-        wins: e.wins,
-        losses: e.losses,
-        tier,
-      }))
+      const list: LeagueEntry[] = rawEntries
+        .map((e) => {
+          const raw = e as Record<string, unknown>
+          const summonerId = (raw.summonerId ?? raw.summoner_id) as string | undefined
+          if (!summonerId || typeof summonerId !== 'string') return null
+          return {
+            summonerId,
+            summonerName: (raw.summonerName ?? raw.summoner_name ?? '') as string,
+            leaguePoints: (raw.leaguePoints ?? raw.league_points ?? 0) as number,
+            rank: (raw.rank ?? '') as string,
+            wins: (raw.wins ?? 0) as number,
+            losses: (raw.losses ?? 0) as number,
+            tier,
+          }
+        })
+        .filter((e): e is LeagueEntry => e !== null)
       return Result.ok(list)
     } catch (err: unknown) {
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
@@ -188,7 +231,11 @@ export class RiotApiService {
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
     const client = createClient(base, key)
     try {
-      const res = await client.get<{ id: string; puuid: string; name: string }>(`/lol/summoner/v4/summoners/${encodeURIComponent(summonerId)}`)
+      const res = await withRetry429(() =>
+        client.get<{ id: string; puuid: string; name: string }>(
+          `/lol/summoner/v4/summoners/${encodeURIComponent(summonerId)}`
+        )
+      )
       return Result.ok(res.data)
     } catch (err: unknown) {
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
@@ -206,7 +253,58 @@ export class RiotApiService {
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
     const client = createClient(base, key)
     try {
-      const res = await client.get<{ id: string; puuid: string; name: string }>(`/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`)
+      const res = await withRetry429(() =>
+        client.get<{ id: string; puuid: string; name: string }>(
+          `/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`
+        )
+      )
+      return Result.ok(res.data)
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
+   * Account v1: Riot ID (gameName#tagLine) → PUUID. Regional Europe.
+   */
+  async getAccountByRiotId(gameName: string, tagLine: string): Promise<Result<{ puuid: string }, AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const client = createClient(REGIONAL_BASE, key)
+    try {
+      const res = await withRetry429(() =>
+        client.get<{ puuid: string }>(
+          `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+        )
+      )
+      const puuid = res.data?.puuid
+      if (!puuid) return Result.err(new AppError('Account API: no puuid in response', 'RIOT_API_ERROR'))
+      return Result.ok({ puuid })
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`Account API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
+   * Summoner v4 by name. Platform: euw1, eun1.
+   */
+  async getSummonerByName(
+    platform: 'euw1' | 'eun1',
+    summonerName: string
+  ): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const base = PLATFORM_BASE[platform]
+    if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key)
+    try {
+      const res = await withRetry429(() =>
+        client.get<{ id: string; puuid: string; name: string }>(
+          `/lol/summoner/v4/summoners/by-name/${encodeURIComponent(summonerName)}`
+        )
+      )
       return Result.ok(res.data)
     } catch (err: unknown) {
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
@@ -228,9 +326,11 @@ export class RiotApiService {
     const start = options.start ?? 0
     const queue = options.queue ?? QUEUE_ID_420
     try {
-      const res = await client.get<string[]>(
-        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
-        { params: { count, start, queue } }
+      const res = await withRetry429(() =>
+        client.get<string[]>(
+          `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
+          { params: { count, start, queue } }
+        )
       )
       const ids = Array.isArray(res.data) ? res.data : []
       return Result.ok(ids)
@@ -248,7 +348,9 @@ export class RiotApiService {
     const key = await this.ensureKey()
     const client = createClient(REGIONAL_BASE, key)
     try {
-      const res = await client.get<MatchSummary>(`/lol/match/v5/matches/${encodeURIComponent(matchId)}`)
+      const res = await withRetry429(() =>
+        client.get<MatchSummary>(`/lol/match/v5/matches/${encodeURIComponent(matchId)}`)
+      )
       return Result.ok(res.data)
     } catch (err: unknown) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
