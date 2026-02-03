@@ -5,7 +5,6 @@ import compression from 'compression'
 import syncRoutes from './routes/sync.js'
 import gameDataRoutes from './routes/gameData.js'
 import youtubeRoutes from './routes/youtube.js'
-import sharedBuildsRoutes from './routes/sharedBuilds.js'
 import buildsRoutes from './routes/builds.js'
 import adminRoutes from './routes/admin.js'
 import imageRoutes from './routes/images.js'
@@ -43,7 +42,6 @@ app.get('/health', (_req, res) => {
 app.use('/api/sync', syncRoutes)
 app.use('/api/game-data', gameDataRoutes)
 app.use('/api/youtube', youtubeRoutes)
-app.use('/api/shared-builds', sharedBuildsRoutes)
 app.use('/api/builds', buildsRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/images', imageRoutes)

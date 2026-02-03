@@ -68,6 +68,23 @@ router.get('/version', async (_req, res) => {
 })
 
 /**
+ * Get versions recap (version + release date per patch)
+ * Used for match collection (patch filter), archiving, stats by patch.
+ */
+router.get('/versions', async (_req, res) => {
+  const versionsPath = join(backendDataDir, 'versions.json')
+  const frontendVersionsPath = join(frontendDataDir, 'versions.json')
+  const readResult = await readGameDataFile(versionsPath, frontendVersionsPath)
+  if (readResult.isErr()) {
+    if (readResult.unwrapErr() instanceof NotFoundError) {
+      return res.status(404).json({ error: 'versions.json not found' })
+    }
+    return res.status(500).json({ error: 'Failed to read versions data' })
+  }
+  return res.json(readResult.unwrap())
+})
+
+/**
  * Get champions data
  */
 router.get('/champions', async (req, res) => {

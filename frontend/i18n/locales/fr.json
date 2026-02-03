@@ -161,6 +161,8 @@
     "rank": "Rang",
     "minGames": "Min. parties",
     "noData": "Aucune donnée.",
+    "gameDataItemsHint": "Données objets non chargées : les noms/icônes s'afficheront après chargement du game data.",
+    "gameDataRunesHint": "Données runes non chargées : les noms s'afficheront après chargement du game data.",
     "runesSetup": "Setup runes",
     "allChampions": "Tous les champions"
   },

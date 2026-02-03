@@ -249,8 +249,13 @@ export class RiotApiService {
         leaguePoints: typeof solo.leaguePoints === 'number' ? solo.leaguePoints : 0,
       })
     } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
-      return Result.err(new AppError(`League entries API: ${message}`, 'RIOT_API_ERROR', err))
+      const hint =
+        status === 403
+          ? ' League-v4 may be disabled for your API key: check product permissions in Riot Developer Portal.'
+          : ''
+      return Result.err(new AppError(`League entries API: ${message}${hint}`, 'RIOT_API_ERROR', err))
     }
   }
 

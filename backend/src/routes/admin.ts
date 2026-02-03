@@ -129,16 +129,6 @@ router.get('/cron', async (_req, res) => {
     })
   )
 
-  // Shared builds count (server-side only)
-  let sharedBuildsCount = 0
-  try {
-    const dir = join(process.cwd(), 'data', 'shared-builds')
-    const entries = await fs.readdir(dir, { withFileTypes: true })
-    sharedBuildsCount = entries.filter((e) => e.isFile() && e.name.endsWith('.json')).length
-  } catch {
-    sharedBuildsCount = 0
-  }
-
   return res.json({
     cronJobs,
     dataDragon: {
@@ -148,9 +138,6 @@ router.get('/cron', async (_req, res) => {
     },
     youtube: {
       channels: ytStatus
-    },
-    metrics: {
-      sharedBuildsCount
     }
   })
 })
@@ -200,6 +187,44 @@ router.delete('/contact/:type/:index', async (req, res) => {
     return res.status(500).json({ error: writeResult.unwrapErr().message })
   }
   return res.json({ ok: true })
+})
+
+// --- Players with empty rank (for enrichment / verification) ---
+router.get('/players-missing-rank', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500)
+    const players = await prisma.player.findMany({
+      where: { currentRankTier: null },
+      take: limit,
+      select: {
+        puuid: true,
+        summonerId: true,
+        summonerName: true,
+        region: true,
+        totalGames: true,
+        lastSeen: true,
+      },
+      orderBy: { lastSeen: 'desc' },
+    })
+    const total = await prisma.player.count({ where: { currentRankTier: null } })
+    return res.json({
+      total,
+      returned: players.length,
+      players: players.map((p) => ({
+        puuid: p.puuid,
+        summonerId: p.summonerId,
+        summonerName: p.summonerName,
+        region: p.region,
+        totalGames: p.totalGames,
+        lastSeen: p.lastSeen?.toISOString() ?? null,
+        hasSummonerId: !!p.summonerId,
+      })),
+    })
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to list players with missing rank',
+    })
+  }
 })
 
 // --- Builds stats ---

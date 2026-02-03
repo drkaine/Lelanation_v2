@@ -46,6 +46,80 @@ Ce document décrit comment fonctionne l’API Riot Games (League of Legends), s
 
 ---
 
+## Récupérer le rang d’un joueur (tier, division, LP)
+
+Le **rang classé** est lié au **`summonerId`**, pas au PUUID. League-v4 n’accepte que le `summonerId`.
+
+### Pipeline obligatoire
+
+```
+Riot ID (gameName#tagLine) → PUUID → summonerId → rang
+```
+
+| Étape | API | Route | Région / base |
+|-------|-----|--------|----------------|
+| 1. Riot ID → PUUID | Account-V1 | `GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}` | **Continentale** : `europe`, `americas`, `asia` |
+| 2. PUUID → summonerId | Summoner-V4 | `GET /lol/summoner/v4/summoners/by-puuid/{puuid}` | **Régionale** : `euw1`, `eun1`, `na1`, etc. |
+| 3. summonerId → rang | League-V4 | `GET /lol/league/v4/entries/by-summoner/{summonerId}` | **Régionale** : `euw1`, `eun1`, etc. |
+
+- **Account-V1** utilise une **route continentale** (routing value `europe`, `americas`, `asia`).
+- **Summoner-V4** et **League-V4** utilisent une **route régionale** (platform : `euw1`, `na1`, etc.).
+
+### Réponse League-V4 (exemple)
+
+Tableau d’entrées (Solo/Duo, Flex, etc.) :
+
+```json
+[
+  {
+    "queueType": "RANKED_SOLO_5x5",
+    "tier": "PLATINUM",
+    "rank": "II",
+    "leaguePoints": 63,
+    "wins": 124,
+    "losses": 110
+  }
+]
+```
+
+- **Joueur non classé** : tableau vide `[]`.
+- **Plusieurs rangs** : une entrée par queue (Solo/Duo, Flex). Filtrer sur `queueType === "RANKED_SOLO_5x5"` pour le rang Solo.
+
+### Erreurs à éviter
+
+| À ne pas faire | Raison |
+|----------------|--------|
+| Chercher le rang via Match-V5 | Les participants de match ne contiennent pas le rang. |
+| Utiliser le PUUID avec League-V4 | League-V4 attend **summonerId** uniquement. |
+| Utiliser une route continentale pour League-V4 | League-V4 est une API **régionale** (platform). |
+
+### Implémentation dans le projet
+
+- **RiotApiService** : `getSummonerByPuuid(platform, puuid)` → retourne `id` (summonerId) ; `getLeagueEntriesBySummonerId(platform, summonerId)` → retourne `tier`, `rank`, `leaguePoints` pour Solo/Duo.
+- **StatsPlayersRefreshService.enrichPlayers()** : pour les joueurs avec `currentRankTier` vide et `summonerId` renseigné (ou après avoir récupéré le summoner via Summoner-V4), appelle League-V4 et met à jour `Player.currentRankTier`, `currentRankDivision`, `currentRankLp`.
+
+### Vérifier les joueurs au rang vide
+
+- **Admin** : `GET /api/admin/players-missing-rank` renvoie la liste des joueurs avec `currentRankTier` vide (avec ou sans `summonerId`), pour relancer l’enrichment ou vérifier manuellement.
+- L’enrichment est limité par run (ex. 25 joueurs) pour respecter les rate limits ; plusieurs runs ou un cron dédié permettent de vider la file.
+
+### Bonnes pratiques
+
+- Mettre en cache le rang côté app (ex. colonnes `current_rank_*` sur `Player`).
+- Rafraîchir périodiquement (30–60 min) via enrichissement, pas à chaque match.
+- Ne pas requêter League-V4 à chaque affichage de joueur.
+
+### 403 Forbidden sur League-V4
+
+Si **League-V4** renvoie **403 Forbidden** alors que Summoner-V4 ou Match-V5 fonctionnent, la clé API n’a en général **pas l’accès au produit League-V4**.
+
+- **Riot Developer Portal** : chaque clé est associée à un **produit** et à des **APIs activées** (Match, League, etc.).
+- Vérifier dans le portail que **League-v4** est bien activé pour le produit utilisé.
+- En développement, les clés personnelles peuvent avoir des limites ; une clé **Production** (après validation) peut être nécessaire pour League-V4 selon la configuration.
+- Voir [Riot Developer Portal](https://developer.riotgames.com/) → votre produit → API access.
+
+---
+
 ## Workflow de collecte
 
 ```

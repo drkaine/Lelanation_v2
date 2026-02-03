@@ -316,15 +316,18 @@ export class StaticAssetsService {
         }
       }
 
-      // Copy version.json to root of data/game
-      const versionSource = join(process.cwd(), 'data', 'game', 'version.json')
-      const versionTarget = join(this.frontendPublicDir, 'data', 'game', 'version.json')
-      if (await FileManager.exists(versionSource)) {
-        const versionDir = join(this.frontendPublicDir, 'data', 'game')
-        await FileManager.ensureDir(versionDir)
-        const content = await fs.readFile(versionSource, 'utf-8')
-        await fs.writeFile(versionTarget, content, 'utf-8')
-        copied++
+      // Copy version.json and versions.json to root of data/game
+      const gameRoot = join(process.cwd(), 'data', 'game')
+      const frontendGameRoot = join(this.frontendPublicDir, 'data', 'game')
+      await FileManager.ensureDir(frontendGameRoot)
+      for (const name of ['version.json', 'versions.json']) {
+        const source = join(gameRoot, name)
+        const target = join(frontendGameRoot, name)
+        if (await FileManager.exists(source)) {
+          const content = await fs.readFile(source, 'utf-8')
+          await fs.writeFile(target, content, 'utf-8')
+          copied++
+        }
       }
 
       return Result.ok({ copied })
@@ -803,12 +806,14 @@ export class StaticAssetsService {
   }
 
   /**
-   * Copy Community Dragon data files to frontend public directory
-   * This allows the frontend to serve Community Dragon data directly (faster, more scalable)
-   * Note: Community Dragon data is not version-specific (always "latest")
+   * Copy Community Dragon data to frontend public directory, then delete from backend.
+   * Frontend serves Community Dragon data directly; backend does not keep a copy.
    */
-  async copyCommunityDragonDataToFrontend(): Promise<Result<{ copied: number }, AppError>> {
+  async copyCommunityDragonDataToFrontend(): Promise<
+    Result<{ copied: number; deleted: number }, AppError>
+  > {
     let copied = 0
+    let deleted = 0
 
     try {
       const targetCommunityDragonDir = join(this.frontendPublicDir, 'data', 'community-dragon')
@@ -825,10 +830,9 @@ export class StaticAssetsService {
         console.warn(
           `[StaticAssets] Backend Community Dragon directory not found: ${this.backendCommunityDragonDir}`
         )
-        return Result.ok({ copied: 0 })
+        return Result.ok({ copied: 0, deleted: 0 })
       }
 
-      // List all JSON files in backend Community Dragon directory
       const entries = await fs.readdir(this.backendCommunityDragonDir, { withFileTypes: true })
 
       for (const entry of entries) {
@@ -837,17 +841,26 @@ export class StaticAssetsService {
         const sourcePath = join(this.backendCommunityDragonDir, entry.name)
         const targetPath = join(targetCommunityDragonDir, entry.name)
 
-        // Copy file (always overwrite to ensure latest data)
         const content = await fs.readFile(sourcePath, 'utf-8')
         await fs.writeFile(targetPath, content, 'utf-8')
         copied++
+        await fs.unlink(sourcePath).catch(() => {})
+        deleted++
+      }
+
+      if (deleted > 0) {
+        try {
+          await fs.rm(this.backendCommunityDragonDir, { recursive: true, force: true })
+        } catch {
+          // Ignore
+        }
       }
 
       console.log(
-        `[StaticAssets] Copied ${copied} Community Dragon files to frontend`
+        `[StaticAssets] Copied ${copied} Community Dragon files to frontend, deleted ${deleted} from backend`
       )
 
-      return Result.ok({ copied })
+      return Result.ok({ copied, deleted })
     } catch (error) {
       return Result.err(
         new AppError(

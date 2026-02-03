@@ -288,6 +288,16 @@
           <p v-if="buildsData && !buildsData.builds?.length" class="px-4 py-3 text-text/70">
             {{ t('statisticsPage.noData') }}
           </p>
+          <p
+            v-else-if="
+              buildsData?.builds?.length &&
+              !itemsStore.items.length &&
+              itemsStore.status !== 'loading'
+            "
+            class="px-4 py-2 text-xs text-text/60"
+          >
+            {{ t('statisticsPage.gameDataItemsHint') }}
+          </p>
         </div>
       </div>
 
@@ -360,6 +370,16 @@
           </table>
           <p v-if="runesData && !runesData.runes?.length" class="px-4 py-3 text-text/70">
             {{ t('statisticsPage.noData') }}
+          </p>
+          <p
+            v-else-if="
+              runesData?.runes?.length &&
+              !runesStore.runePaths.length &&
+              runesStore.status !== 'loading'
+            "
+            class="px-4 py-2 text-xs text-text/60"
+          >
+            {{ t('statisticsPage.gameDataRunesHint') }}
           </p>
         </div>
       </div>
@@ -684,9 +704,19 @@ async function searchPlayer() {
   }
 }
 
-const championsForSelect = computed(() =>
-  championsStore.champions.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-)
+/** Champions for Builds/Runes dropdown: game data first, then stats list so dropdown is never empty. */
+const championsForSelect = computed(() => {
+  const fromStore = championsStore.champions
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+  if (fromStore.length > 0) return fromStore
+  const fromStats = championsData.value?.champions ?? []
+  return fromStats.map(c => ({
+    id: `stats-${c.championId}`,
+    key: String(c.championId),
+    name: championName(c.championId) ?? `Champion ${c.championId}`,
+  }))
+})
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
 function championByKey(championId: number): (typeof championsStore.champions)[0] | null {

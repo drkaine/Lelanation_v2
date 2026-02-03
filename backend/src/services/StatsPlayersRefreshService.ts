@@ -172,6 +172,7 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
   if (players.length === 0) return { enriched: 0 }
 
   let enriched = 0
+  let league403Seen = false
   for (const p of players) {
     const platform = regionToPlatform(p.region)
     const updated: {
@@ -204,7 +205,14 @@ export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
           updated.currentRankLp = entry.leaguePoints
         }
       } else {
-        console.warn(`${ENRICH_LOG} League API failed for summonerId ${summonerId.slice(0, 12)}…: ${leagueResult.unwrapErr().message}`)
+        const errMsg = leagueResult.unwrapErr().message
+        if (!league403Seen && errMsg.includes('Forbidden')) {
+          league403Seen = true
+          console.warn(
+            `${ENRICH_LOG} League API returns 403 Forbidden. Enable League-v4 for your API key in Riot Developer Portal (product / API access).`
+          )
+        }
+        console.warn(`${ENRICH_LOG} League API failed for summonerId ${summonerId.slice(0, 12)}…: ${errMsg}`)
       }
     }
 

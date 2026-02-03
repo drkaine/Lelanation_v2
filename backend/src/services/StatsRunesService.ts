@@ -75,7 +75,7 @@ export async function getRunesByChampion(
       if (p.win) entry.wins++
     }
 
-    const runes: RuneRow[] = []
+    let runes: RuneRow[] = []
     for (const [, e] of byKey) {
       if (e.games < minGames) continue
       runes.push({
@@ -87,7 +87,25 @@ export async function getRunesByChampion(
       })
     }
     runes.sort((a, b) => b.games - a.games)
-    const limited = runes.slice(0, limit)
+    let limited = runes.slice(0, limit)
+
+    // When no setup meets minGames but we have data, return top runes with at least 1 game
+    if (limited.length === 0 && totalGames > 0) {
+      runes = []
+      for (const [, e] of byKey) {
+        if (e.games < 1) continue
+        runes.push({
+          runes: e.runes,
+          games: e.games,
+          wins: e.wins,
+          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+          pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
+        })
+      }
+      runes.sort((a, b) => b.games - a.games)
+      limited = runes.slice(0, limit)
+    }
+
     return { totalGames, runes: limited }
   } catch {
     return null

@@ -161,6 +161,8 @@
     "rank": "Rank",
     "minGames": "Min. games",
     "noData": "No data.",
+    "gameDataItemsHint": "Item data not loaded: names/icons will show after game data is loaded.",
+    "gameDataRunesHint": "Runes data not loaded: names will show after game data is loaded.",
     "runesSetup": "Runes setup",
     "allChampions": "All champions"
   },

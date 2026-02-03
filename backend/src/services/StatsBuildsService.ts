@@ -79,7 +79,7 @@ export async function getBuildsByChampion(
       byKey.set(key, entry)
     }
 
-    const builds: BuildRow[] = []
+    let builds: BuildRow[] = []
     for (const [key, e] of byKey) {
       if (e.games < minGames) continue
       const items: number[] = JSON.parse(key)
@@ -92,7 +92,26 @@ export async function getBuildsByChampion(
       })
     }
     builds.sort((a, b) => b.games - a.games)
-    const limited = builds.slice(0, limit)
+    let limited = builds.slice(0, limit)
+
+    // When no build meets minGames but we have data, return top builds with at least 1 game
+    if (limited.length === 0 && totalGames > 0) {
+      builds = []
+      for (const [key, e] of byKey) {
+        if (e.games < 1) continue
+        const items: number[] = JSON.parse(key)
+        builds.push({
+          items,
+          games: e.games,
+          wins: e.wins,
+          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+          pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
+        })
+      }
+      builds.sort((a, b) => b.games - a.games)
+      limited = builds.slice(0, limit)
+    }
+
     return { totalGames, builds: limited }
   } catch {
     return null
