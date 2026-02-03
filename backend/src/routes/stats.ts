@@ -9,6 +9,8 @@ import { getRunesByChampion } from '../services/StatsRunesService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
+  getPlayerBySummonerName,
+  getChampionStatsForPlayer,
 } from '../services/StatsPlayersService.js'
 import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
 
@@ -113,6 +115,20 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
     return res.status(200).json({ totalGames: 0, runes: [], message: 'No stats yet.' })
   }
   return res.json(data)
+})
+
+/** GET /api/stats/players/search?name=... - lookup player by summoner name */
+router.get('/players/search', async (req: Request, res: Response) => {
+  const name = (req.query.name as string)?.trim()
+  if (!name) {
+    return res.status(400).json({ error: 'Query "name" is required' })
+  }
+  const player = await getPlayerBySummonerName(name)
+  if (!player) {
+    return res.status(404).json({ error: 'Player not found' })
+  }
+  const championStats = await getChampionStatsForPlayer(player.puuid)
+  return res.json({ player, championStats })
 })
 
 /** GET /api/stats/players - meilleurs joueurs (classement général) */

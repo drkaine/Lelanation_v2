@@ -124,10 +124,16 @@
   "statisticsPage": {
     "title": "LoL Statistics",
     "description": "Winrate and pickrate per champion, computed from Ranked Solo/Duo matches (EUW + EUNE). Filter by rank or role.",
+    "tabOverview": "Overview",
     "tabChampions": "Champions",
     "tabBuilds": "Builds",
     "tabRunes": "Runes",
-    "tabPlayers": "Top players",
+    "tabPlayers": "Player",
+    "overviewTitle": "Overview",
+    "overviewDescription": "Summary of aggregated statistics (Ranked Solo/Duo, EUW + EUNE).",
+    "overviewChampions": "Champions with stats",
+    "overviewNoData": "No data yet.",
+    "overviewTopChampions": "Top champions (by games played)",
     "filterRank": "Rank",
     "filterRole": "Role",
     "allRanks": "All ranks",
@@ -135,6 +141,14 @@
     "loading": "Loading…",
     "champion": "Champion",
     "selectChampion": "Select champion",
+    "searchChampion": "Search champion",
+    "searchChampionPlaceholder": "Champion name…",
+    "showing": "shown",
+    "searchPlayer": "Search player",
+    "searchPlayerPlaceholder": "Summoner name…",
+    "searchPlayerButton": "Search",
+    "searchPlayerHint": "Enter a summoner name and search to view their statistics.",
+    "playerNotFound": "Player not found.",
     "games": "Games",
     "wins": "Wins",
     "winrate": "Winrate %",
@@ -489,6 +503,7 @@
       "invalid": "Invalid username or password.",
       "error": "Connection error. Please try again."
     },
+    "loading": "Loading…",
     "tabs": {
       "contact": "Contact",
       "builds": "Builds",
@@ -546,7 +561,16 @@
       "addSuccess": "Player added.",
       "addError": "Failed to add player.",
       "delete": "Remove",
-      "empty": "No seed players. Add pseudos to start collection from them."
+      "empty": "No seed players. Add pseudos to start collection from them.",
+      "alreadyInSeedList": "This player is already in the seed list.",
+      "playerAlreadyInDatabase": "This player is already in the database (their matches are already collected).",
+      "playerAlreadyInDatabaseName": "This player ({name}) is already in the database (their matches are already collected).",
+      "allPlayersTitle": "All players in database",
+      "allPlayersDescription": "Players whose matches are already collected. Adding a player already in the database is blocked.",
+      "viewAllPlayers": "View all players",
+      "hideAllPlayers": "Hide list",
+      "allPlayersEmpty": "No players in database yet.",
+      "games": "games"
     },
     "logout": "Log out"
   }

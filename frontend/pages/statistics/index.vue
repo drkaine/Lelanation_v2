@@ -26,9 +26,90 @@
         </button>
       </div>
 
+      <!-- Tab: Overview (default, shyv.net style) -->
+      <div v-show="activeTab === 'overview'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+          <h2 class="mb-4 text-xl font-semibold text-text-accent">
+            {{ t('statisticsPage.overviewTitle') }}
+          </h2>
+          <p class="mb-4 text-text/80">
+            {{ t('statisticsPage.overviewDescription') }}
+          </p>
+          <div
+            v-if="!championsPending && championsData"
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <div class="rounded border border-primary/20 bg-background/50 p-4">
+              <div class="text-2xl font-bold text-text-accent">
+                {{ championsData.totalGames ?? 0 }}
+              </div>
+              <div class="text-sm text-text/70">{{ t('statisticsPage.totalGames') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/50 p-4">
+              <div class="text-2xl font-bold text-text-accent">
+                {{ championsData?.champions?.length ?? 0 }}
+              </div>
+              <div class="text-sm text-text/70">{{ t('statisticsPage.overviewChampions') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/50 p-4">
+              <div class="text-sm font-medium text-text">
+                {{
+                  championsData?.generatedAt ? formatGeneratedAt(championsData.generatedAt) : '—'
+                }}
+              </div>
+              <div class="text-sm text-text/70">{{ t('statisticsPage.generatedAt') }}</div>
+            </div>
+          </div>
+          <div v-else-if="championsPending" class="text-text/70">
+            {{ t('statisticsPage.loading') }}
+          </div>
+          <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
+        </div>
+        <div
+          v-if="championsData?.champions?.length"
+          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+        >
+          <h3 class="mb-3 text-lg font-medium text-text">
+            {{ t('statisticsPage.overviewTopChampions') }}
+          </h3>
+          <ul class="space-y-2">
+            <li
+              v-for="row in (championsData?.champions ?? []).slice(0, 5)"
+              :key="row.championId"
+              class="flex items-center gap-2 text-text/90"
+            >
+              <img
+                v-if="gameVersion && championByKey(row.championId)"
+                :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
+                :alt="championName(row.championId) || ''"
+                class="h-6 w-6 rounded-full object-cover"
+                width="24"
+                height="24"
+              />
+              <span>{{ championName(row.championId) || row.championId }}</span>
+              <span class="text-text/60"
+                >— {{ row.games }} {{ t('statisticsPage.games') }}, {{ row.winrate }}% WR</span
+              >
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Tab: Champions -->
       <div v-show="activeTab === 'champions'" class="space-y-4">
-        <div class="flex flex-wrap gap-4">
+        <div class="flex flex-wrap items-end gap-4">
+          <div>
+            <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
+              t('statisticsPage.searchChampion')
+            }}</label>
+            <input
+              id="champion-search"
+              v-model.trim="championSearchQuery"
+              type="text"
+              :placeholder="t('statisticsPage.searchChampionPlaceholder')"
+              class="min-w-[200px] rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+            />
+          </div>
           <div>
             <label for="filter-rank" class="mb-1 block text-sm font-medium text-text">{{
               t('statisticsPage.filterRank')
@@ -86,7 +167,7 @@
             </thead>
             <tbody class="divide-y divide-primary/20">
               <tr
-                v-for="row in championsData?.champions ?? []"
+                v-for="row in filteredChampions"
                 :key="row.championId"
                 class="hover:bg-surface/50"
               >
@@ -113,10 +194,13 @@
             </tbody>
           </table>
           <p
-            v-if="championsData?.totalGames != null && championsData?.champions?.length"
+            v-if="championsData?.totalGames != null && filteredChampions.length"
             class="border-t border-primary/20 px-4 py-2 text-xs text-text/70"
           >
             {{ t('statisticsPage.totalGames') }}: {{ championsData.totalGames }}
+            <span v-if="championSearchQuery">
+              ({{ t('statisticsPage.showing') }} {{ filteredChampions.length }})</span
+            >
           </p>
         </div>
       </div>
@@ -280,78 +364,114 @@
         </div>
       </div>
 
-      <!-- Tab: Meilleurs joueurs -->
+      <!-- Tab: Recherche joueur -->
       <div v-show="activeTab === 'players'" class="space-y-4">
-        <div class="flex flex-wrap gap-4">
-          <div>
-            <label for="players-champion" class="mb-1 block text-sm font-medium text-text">{{
-              t('statisticsPage.champion')
+        <div class="flex flex-wrap items-end gap-4">
+          <div class="min-w-[200px] flex-1">
+            <label for="player-search" class="mb-1 block text-sm font-medium text-text">{{
+              t('statisticsPage.searchPlayer')
             }}</label>
-            <select
-              id="players-champion"
-              v-model="playersChampionId"
-              class="min-w-[180px] rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            >
-              <option value="">{{ t('statisticsPage.allChampions') }}</option>
-              <option v-for="c in championsForSelect" :key="c.id" :value="c.key">
-                {{ c.name }}
-              </option>
-            </select>
-          </div>
-          <div>
-            <label for="players-rank" class="mb-1 block text-sm font-medium text-text">{{
-              t('statisticsPage.filterRank')
-            }}</label>
-            <select
-              id="players-rank"
-              v-model="playersRank"
-              class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            >
-              <option value="">{{ t('statisticsPage.allRanks') }}</option>
-              <option v-for="r in rankTiers" :key="r" :value="r">{{ r }}</option>
-            </select>
-          </div>
-          <div>
-            <label for="players-min" class="mb-1 block text-sm font-medium text-text">{{
-              t('statisticsPage.minGames')
-            }}</label>
-            <input
-              id="players-min"
-              v-model.number="playersMinGames"
-              type="number"
-              min="1"
-              class="w-24 rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            />
+            <div class="flex gap-2">
+              <input
+                id="player-search"
+                v-model.trim="playerSearchQuery"
+                type="text"
+                :placeholder="t('statisticsPage.searchPlayerPlaceholder')"
+                class="min-w-0 flex-1 rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+                @keydown.enter="searchPlayer"
+              />
+              <button
+                type="button"
+                class="rounded bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90 disabled:opacity-50"
+                :disabled="!playerSearchQuery || playerSearchPending"
+                @click="searchPlayer"
+              >
+                {{
+                  playerSearchPending
+                    ? t('statisticsPage.loading')
+                    : t('statisticsPage.searchPlayerButton')
+                }}
+              </button>
+            </div>
           </div>
         </div>
-        <div v-if="playersPending" class="text-text/70">{{ t('statisticsPage.loading') }}</div>
-        <div v-else class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-primary/30 bg-surface/50">
-              <tr>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.player') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.region') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.rank') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.games') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.winrate') }}</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr v-for="row in playersData ?? []" :key="row.puuid" class="hover:bg-surface/50">
-                <td class="px-4 py-2 font-medium text-text">
-                  {{ row.summonerName || row.maskedPuid }}
-                </td>
-                <td class="px-4 py-2 text-text/90">{{ row.region }}</td>
-                <td class="px-4 py-2 text-text/90">{{ row.rankTier || '—' }}</td>
-                <td class="px-4 py-2 text-text/90">{{ row.totalGames }}</td>
-                <td class="px-4 py-2 text-text/90">{{ row.winrate }}%</td>
-              </tr>
-            </tbody>
-          </table>
-          <p v-if="playersData && !playersData.length" class="px-4 py-3 text-text/70">
-            {{ t('statisticsPage.noData') }}
-          </p>
+        <div v-if="playerSearchError" class="rounded border border-error bg-surface p-3 text-error">
+          {{ playerSearchError }}
         </div>
+        <div v-else-if="playerSearchResult" class="space-y-4">
+          <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+            <h3 class="mb-2 text-lg font-semibold text-text">
+              {{ playerSearchResult.player.summonerName || playerSearchResult.player.maskedPuid }}
+            </h3>
+            <div class="flex flex-wrap gap-4 text-sm text-text/90">
+              <span>{{ t('statisticsPage.region') }}: {{ playerSearchResult.player.region }}</span>
+              <span
+                >{{ t('statisticsPage.rank') }}:
+                {{ playerSearchResult.player.rankTier || '—' }}</span
+              >
+              <span
+                >{{ t('statisticsPage.games') }}: {{ playerSearchResult.player.totalGames }}</span
+              >
+              <span
+                >{{ t('statisticsPage.winrate') }}: {{ playerSearchResult.player.winrate }}%</span
+              >
+            </div>
+          </div>
+          <div class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-primary/30 bg-surface/50">
+                <tr>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.champion') }}
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.games') }}</th>
+                  <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.wins') }}</th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.winrate') }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <tr
+                  v-for="row in playerSearchResult.championStats"
+                  :key="row.championId"
+                  class="hover:bg-surface/50"
+                >
+                  <td class="px-4 py-2 font-medium text-text">
+                    <div class="flex items-center gap-2">
+                      <img
+                        v-if="gameVersion && championByKey(row.championId)"
+                        :src="
+                          getChampionImageUrl(
+                            gameVersion,
+                            championByKey(row.championId)!.image.full
+                          )
+                        "
+                        :alt="championName(row.championId) || ''"
+                        class="h-8 w-8 rounded-full object-cover"
+                        width="32"
+                        height="32"
+                      />
+                      <span>{{ championName(row.championId) || row.championId }}</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-text/90">{{ row.games }}</td>
+                  <td class="px-4 py-2 text-text/90">{{ row.wins }}</td>
+                  <td class="px-4 py-2 text-text/90">{{ row.winrate }}%</td>
+                </tr>
+              </tbody>
+            </table>
+            <p
+              v-if="playerSearchResult.championStats && !playerSearchResult.championStats.length"
+              class="px-4 py-3 text-text/70"
+            >
+              {{ t('statisticsPage.noData') }}
+            </p>
+          </div>
+        </div>
+        <p v-else class="text-text/70">
+          {{ t('statisticsPage.searchPlayerHint') }}
+        </p>
       </div>
     </div>
   </div>
@@ -382,13 +502,35 @@ const { version: gameVersion } = useGameVersion()
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
-const activeTab = ref<'champions' | 'builds' | 'runes' | 'players'>('champions')
+const activeTab = ref<'overview' | 'champions' | 'builds' | 'runes' | 'players'>('overview')
 const tabs = computed(() => [
+  { id: 'overview' as const, label: t('statisticsPage.tabOverview') },
   { id: 'champions' as const, label: t('statisticsPage.tabChampions') },
   { id: 'builds' as const, label: t('statisticsPage.tabBuilds') },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes') },
   { id: 'players' as const, label: t('statisticsPage.tabPlayers') },
 ])
+
+const championSearchQuery = ref('')
+const filteredChampions = computed(() => {
+  const list = championsData.value?.champions ?? []
+  const q = championSearchQuery.value.toLowerCase()
+  if (!q) return list
+  return list.filter(row => {
+    const name = championName(row.championId)?.toLowerCase() ?? ''
+    return name.includes(q) || String(row.championId).includes(q)
+  })
+})
+
+function formatGeneratedAt(value: string | null | undefined): string {
+  if (!value) return '—'
+  try {
+    const d = new Date(value)
+    return d.toLocaleString(locale.value)
+  } catch {
+    return value
+  }
+}
 
 const filterRank = ref('')
 const filterRole = ref('')
@@ -503,45 +645,44 @@ async function loadRunes() {
 }
 watch([runesChampionId, runesRank], loadRunes)
 
-// Players
-const playersChampionId = ref('')
-const playersRank = ref('')
-const playersMinGames = ref(50)
-const playersData = ref<Array<{
-  puuid: string
-  maskedPuid: string
-  summonerName: string | null
-  region: string
-  rankTier: string | null
-  totalGames: number
-  totalWins: number
-  winrate: number
-}> | null>(null)
-const playersPending = ref(false)
-const playersQuery = computed(() => {
-  const params = new URLSearchParams()
-  if (playersRank.value) params.set('rankTier', playersRank.value)
-  params.set('minGames', String(playersMinGames.value || 1))
-  params.set('limit', playersChampionId.value ? '50' : '100')
-  return params.toString() ? `?${params.toString()}` : ''
-})
-async function loadPlayers() {
-  playersPending.value = true
+// Player search (by summoner name)
+const playerSearchQuery = ref('')
+const playerSearchPending = ref(false)
+const playerSearchError = ref<string | null>(null)
+const playerSearchResult = ref<{
+  player: {
+    puuid: string
+    maskedPuid: string
+    summonerName: string | null
+    region: string
+    rankTier: string | null
+    totalGames: number
+    totalWins: number
+    winrate: number
+  }
+  championStats: Array<{ championId: number; games: number; wins: number; winrate: number }>
+} | null>(null)
+
+async function searchPlayer() {
+  const name = playerSearchQuery.value.trim()
+  if (!name) return
+  playerSearchPending.value = true
+  playerSearchError.value = null
+  playerSearchResult.value = null
   try {
-    const base = playersChampionId.value
-      ? `/api/stats/champions/${playersChampionId.value}/players`
-      : '/api/stats/players'
-    const res = await $fetch<{ players: typeof playersData.value }>(
-      apiUrl(`${base}${playersQuery.value}`)
-    )
-    playersData.value = res.players ?? []
-  } catch {
-    playersData.value = []
+    const res = await $fetch<{
+      player: NonNullable<typeof playerSearchResult.value>['player']
+      championStats: NonNullable<typeof playerSearchResult.value>['championStats']
+    }>(apiUrl(`/api/stats/players/search?name=${encodeURIComponent(name)}`))
+    playerSearchResult.value = res
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    playerSearchError.value =
+      msg.includes('404') || msg.includes('not found') ? t('statisticsPage.playerNotFound') : msg
   } finally {
-    playersPending.value = false
+    playerSearchPending.value = false
   }
 }
-watch([playersChampionId, playersRank, playersMinGames], loadPlayers)
 
 const championsForSelect = computed(() =>
   championsStore.champions.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
@@ -586,7 +727,6 @@ function runeSetupLabel(runesUnknown: unknown): string {
 watch(activeTab, tab => {
   if (tab === 'builds' && buildsChampionId.value) loadBuilds()
   if (tab === 'runes' && runesChampionId.value) loadRunes()
-  if (tab === 'players') loadPlayers()
 })
 
 onMounted(async () => {

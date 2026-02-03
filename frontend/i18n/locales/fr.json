@@ -124,10 +124,16 @@
   "statisticsPage": {
     "title": "Statistiques LoL",
     "description": "Winrate et pickrate par champion, calculés à partir des matchs Ranked Solo/Duo (EUW + EUNE). Filtrez par rang ou rôle.",
+    "tabOverview": "Vue d'ensemble",
     "tabChampions": "Champions",
     "tabBuilds": "Builds",
     "tabRunes": "Runes",
-    "tabPlayers": "Meilleurs joueurs",
+    "tabPlayers": "Joueur",
+    "overviewTitle": "Vue d'ensemble",
+    "overviewDescription": "Résumé des statistiques agrégées (Ranked Solo/Duo, EUW + EUNE).",
+    "overviewChampions": "Champions avec stats",
+    "overviewNoData": "Aucune donnée pour l'instant.",
+    "overviewTopChampions": "Top champions (par nombre de parties)",
     "filterRank": "Rang",
     "filterRole": "Rôle",
     "allRanks": "Tous les rangs",
@@ -135,6 +141,14 @@
     "loading": "Chargement…",
     "champion": "Champion",
     "selectChampion": "Choisir un champion",
+    "searchChampion": "Rechercher un champion",
+    "searchChampionPlaceholder": "Nom du champion…",
+    "showing": "affichés",
+    "searchPlayer": "Rechercher un joueur",
+    "searchPlayerPlaceholder": "Nom d'invocateur…",
+    "searchPlayerButton": "Rechercher",
+    "searchPlayerHint": "Saisissez un nom d'invocateur et lancez la recherche pour afficher ses statistiques.",
+    "playerNotFound": "Joueur introuvable.",
     "games": "Parties",
     "wins": "Victoires",
     "winrate": "Winrate %",
@@ -493,6 +507,7 @@
       "invalid": "Identifiant ou mot de passe incorrect.",
       "error": "Erreur de connexion. Réessayez."
     },
+    "loading": "Chargement…",
     "tabs": {
       "contact": "Contact",
       "builds": "Builds",
@@ -550,7 +565,16 @@
       "addSuccess": "Joueur ajouté.",
       "addError": "Impossible d'ajouter le joueur.",
       "delete": "Supprimer",
-      "empty": "Aucun joueur seed. Ajoutez des pseudos pour démarrer la collecte à partir d'eux."
+      "empty": "Aucun joueur seed. Ajoutez des pseudos pour démarrer la collecte à partir d'eux.",
+      "alreadyInSeedList": "Ce joueur est déjà dans la liste seed.",
+      "playerAlreadyInDatabase": "Ce joueur est déjà en base (ses matchs sont déjà collectés).",
+      "playerAlreadyInDatabaseName": "Ce joueur ({name}) est déjà en base (ses matchs sont déjà collectés).",
+      "allPlayersTitle": "Tous les joueurs en base",
+      "allPlayersDescription": "Liste des joueurs dont les matchs sont déjà collectés. L'ajout d'un joueur déjà présent en base est bloqué.",
+      "viewAllPlayers": "Voir tous les joueurs",
+      "hideAllPlayers": "Masquer la liste",
+      "allPlayersEmpty": "Aucun joueur en base pour l'instant.",
+      "games": "parties"
     },
     "logout": "Déconnexion"
   }

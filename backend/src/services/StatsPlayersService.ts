@@ -66,6 +66,65 @@ export async function getTopPlayers(options: {
   }
 }
 
+export interface PlayerChampionStatRow {
+  championId: number
+  games: number
+  wins: number
+  winrate: number
+}
+
+/** Find a player by summoner name (case-insensitive partial match). */
+export async function getPlayerBySummonerName(summonerName: string): Promise<PlayerRow | null> {
+  if (!isDatabaseConfigured() || !summonerName?.trim()) return null
+  const name = summonerName.trim()
+  try {
+    const player = await prisma.player.findFirst({
+      where: {
+        summonerName: { contains: name, mode: 'insensitive' },
+      },
+    })
+    if (!player) return null
+    return {
+      puuid: player.puuid,
+      maskedPuid: maskPuuid(player.puuid),
+      summonerName: player.summonerName,
+      region: player.region,
+      rankTier: player.currentRankTier,
+      totalGames: player.totalGames,
+      totalWins: player.totalWins,
+      winrate:
+        player.totalGames > 0
+          ? Math.round((player.totalWins / player.totalGames) * 10000) / 100
+          : 0,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Champion stats for a given player (puuid). */
+export async function getChampionStatsForPlayer(
+  puuid: string,
+  limit = 50
+): Promise<PlayerChampionStatRow[]> {
+  if (!isDatabaseConfigured()) return []
+  try {
+    const rows = await prisma.championPlayerStats.findMany({
+      where: { puuid },
+      orderBy: [{ games: 'desc' }],
+      take: limit,
+    })
+    return rows.map((r) => ({
+      championId: r.championId,
+      games: r.games,
+      wins: r.wins,
+      winrate: Number(r.winrate),
+    }))
+  } catch {
+    return []
+  }
+}
+
 export async function getTopPlayersByChampion(options: {
   championId: number
   rankTier?: string | null

@@ -340,6 +340,33 @@ router.put('/riot-apikey', async (req, res) => {
   })
 })
 
+// --- All players (DB, for admin visibility) ---
+router.get('/players', async (req, res) => {
+  const limit = Math.min(Math.max(1, parseInt(String(req.query?.limit || 500), 10) || 500), 2000)
+  const rows = await prisma.player.findMany({
+    orderBy: [{ totalGames: 'desc' }],
+    take: limit,
+    select: {
+      puuid: true,
+      summonerName: true,
+      region: true,
+      currentRankTier: true,
+      totalGames: true,
+      totalWins: true,
+    },
+  })
+  const players = rows.map((p) => ({
+    puuid: p.puuid,
+    summonerName: p.summonerName,
+    region: p.region,
+    rankTier: p.currentRankTier,
+    totalGames: p.totalGames,
+    totalWins: p.totalWins,
+    winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
+  }))
+  return res.json({ players, total: players.length })
+})
+
 // --- Seed players (DB, for match collection) ---
 router.get('/seed-players', async (_req, res) => {
   const rows = await prisma.seedPlayer.findMany({ orderBy: { createdAt: 'asc' } })
@@ -385,7 +412,16 @@ router.post('/seed-players', async (req, res) => {
     return res.status(400).json({ error: 'Invalid Riot ID format (use Name#Tag or Name-Tag)' })
   }
 
-  // Validate player exists via Riot API (Account-v1 Riot ID only; Summoner by-name is deprecated)
+  // Block if already in seed list (same label, case-insensitive)
+  const existingSeed = await prisma.seedPlayer.findFirst({
+    where: { label: { equals: labelToStore, mode: 'insensitive' } },
+  })
+  if (existingSeed) {
+    return res.status(409).json({ error: 'Already in seed list', code: 'ALREADY_SEED' })
+  }
+
+  // Validate player exists via Riot API and get puuid
+  let puuid: string
   try {
     const riotApi = getRiotApiService()
     const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
@@ -405,12 +441,23 @@ router.post('/seed-players', async (req, res) => {
       }
       return res.status(400).json({ error: err.message || 'Riot API error' })
     }
+    puuid = accountResult.unwrap().puuid
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     if (message.includes('RIOT_API_KEY') || message.includes('not configured')) {
       return res.status(400).json({ error: 'Riot API key not configured. Set it in Admin > Riot API key.' })
     }
     return res.status(400).json({ error: message || 'Validation failed' })
+  }
+
+  // Block if player already in database (we already collect their matches)
+  const existingPlayer = await prisma.player.findUnique({ where: { puuid } })
+  if (existingPlayer) {
+    return res.status(409).json({
+      error: 'Player already in database',
+      code: 'ALREADY_PLAYER',
+      summonerName: existingPlayer.summonerName ?? undefined,
+    })
   }
 
   const created = await prisma.seedPlayer.create({ data: { label: labelToStore, platform } })

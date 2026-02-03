@@ -241,6 +241,55 @@
                 </button>
               </li>
             </ul>
+
+            <div class="mt-6 border-t border-primary/20 pt-4">
+              <h3 class="mb-2 text-sm font-medium text-text">
+                {{ t('admin.seedPlayers.allPlayersTitle') }}
+              </h3>
+              <p class="mb-2 text-xs text-text/70">
+                {{ t('admin.seedPlayers.allPlayersDescription') }}
+              </p>
+              <button
+                type="button"
+                class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                :disabled="allPlayersLoading"
+                @click="toggleAllPlayers"
+              >
+                {{
+                  allPlayersLoading
+                    ? t('admin.loading')
+                    : allPlayersVisible
+                      ? t('admin.seedPlayers.hideAllPlayers')
+                      : t('admin.seedPlayers.viewAllPlayers')
+                }}
+              </button>
+              <div
+                v-if="allPlayersVisible"
+                class="mt-3 max-h-[400px] overflow-auto rounded border border-primary/20 bg-background/50"
+              >
+                <p v-if="allPlayersLoading" class="p-4 text-text/70">{{ t('admin.loading') }}</p>
+                <p v-else-if="allPlayersList.length === 0" class="p-4 text-text/70">
+                  {{ t('admin.seedPlayers.allPlayersEmpty') }}
+                </p>
+                <ul v-else class="divide-y divide-primary/20">
+                  <li
+                    v-for="p in allPlayersList"
+                    :key="p.puuid"
+                    class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+                  >
+                    <span class="font-medium text-text">{{
+                      p.summonerName || p.puuid.slice(0, 8) + '…'
+                    }}</span>
+                    <span class="text-text/70">{{ p.region }}</span>
+                    <span class="text-text/70">{{ p.rankTier || '—' }}</span>
+                    <span class="text-text/70"
+                      >{{ p.totalGames }} {{ t('admin.seedPlayers.games') }}, {{ p.winrate }}%
+                      WR</span
+                    >
+                  </li>
+                </ul>
+              </div>
+            </div>
           </template>
         </div>
       </div>
@@ -452,6 +501,43 @@ const seedPlayersMessage = ref('')
 const seedPlayersError = ref(false)
 const seedPlayerDeleting = ref<string | null>(null)
 
+const allPlayersVisible = ref(false)
+const allPlayersList = ref<
+  Array<{
+    puuid: string
+    summonerName: string | null
+    region: string
+    rankTier: string | null
+    totalGames: number
+    totalWins: number
+    winrate: number
+  }>
+>([])
+const allPlayersLoading = ref(false)
+
+async function loadAllPlayers() {
+  allPlayersLoading.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/players?limit=500'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    allPlayersList.value = data?.players ?? []
+  } catch {
+    allPlayersList.value = []
+  } finally {
+    allPlayersLoading.value = false
+  }
+}
+
+function toggleAllPlayers() {
+  if (!allPlayersVisible.value && allPlayersList.value.length === 0) loadAllPlayers()
+  allPlayersVisible.value = !allPlayersVisible.value
+}
+
 async function loadSeedPlayers() {
   seedPlayersLoading.value = true
   try {
@@ -494,7 +580,15 @@ async function addSeedPlayer() {
       seedPlayersList.value = [...seedPlayersList.value, data.player]
     } else {
       seedPlayersError.value = true
-      seedPlayersMessage.value = (data?.error as string) ?? t('admin.seedPlayers.addError')
+      if (res.status === 409 && data?.code === 'ALREADY_SEED') {
+        seedPlayersMessage.value = t('admin.seedPlayers.alreadyInSeedList')
+      } else if (res.status === 409 && data?.code === 'ALREADY_PLAYER') {
+        seedPlayersMessage.value = data?.summonerName
+          ? t('admin.seedPlayers.playerAlreadyInDatabaseName', { name: data.summonerName })
+          : t('admin.seedPlayers.playerAlreadyInDatabase')
+      } else {
+        seedPlayersMessage.value = (data?.error as string) ?? t('admin.seedPlayers.addError')
+      }
     }
   } catch {
     seedPlayersError.value = true
