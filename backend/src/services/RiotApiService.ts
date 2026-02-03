@@ -314,10 +314,17 @@ export class RiotApiService {
 
   /**
    * Match v5: match IDs by puuid. Region = europe (covers EUW+EUNE). queue=420 only.
+   * startTime/endTime: epoch seconds; only match IDs in (startTime, endTime] are returned (avoids duplicates across runs).
    */
   async getMatchIdsByPuuid(
     puuid: string,
-    options: { count?: number; start?: number; queue?: number } = {}
+    options: {
+      count?: number
+      start?: number
+      queue?: number
+      startTime?: number
+      endTime?: number
+    } = {}
   ): Promise<Result<string[], AppError>> {
     await rateLimit()
     const key = await this.ensureKey()
@@ -325,11 +332,14 @@ export class RiotApiService {
     const count = options.count ?? 20
     const start = options.start ?? 0
     const queue = options.queue ?? QUEUE_ID_420
+    const params: Record<string, number> = { count, start, queue }
+    if (typeof options.startTime === 'number') params.startTime = options.startTime
+    if (typeof options.endTime === 'number') params.endTime = options.endTime
     try {
       const res = await withRetry429(() =>
         client.get<string[]>(
           `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
-          { params: { count, start, queue } }
+          { params }
         )
       )
       const ids = Array.isArray(res.data) ? res.data : []

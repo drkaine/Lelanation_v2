@@ -543,8 +543,8 @@
     },
     "seedPlayers": {
       "title": "Joueurs seed",
-      "description": "Pseudos utilisés comme point de départ pour la collecte de matchs. Le cron récupère leurs matchs (patch en cours), puis les PUUID des autres joueurs pour étendre la collecte.",
-      "labelPlaceholder": "Riot ID (Nom#Tag) ou nom d'invocateur",
+      "description": "Riot ID utilisés comme point de départ pour la collecte de matchs. Le cron récupère leurs matchs (patch en cours), puis les PUUID des autres joueurs pour étendre la collecte. Format : Nom#Tag ou Nom-Tag (ex. Urpog#URGOT). Sur op.gg, le Riot ID est dans l’URL : /summoners/euw/Urpog-URGOT → saisir Urpog-URGOT ou Urpog#URGOT.",
+      "labelPlaceholder": "Riot ID (Nom#Tag ou Nom-Tag, ex. Urpog#URGOT)",
       "platform": "Plateforme",
       "add": "Ajouter",
       "addSuccess": "Joueur ajouté.",

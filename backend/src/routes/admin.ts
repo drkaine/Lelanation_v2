@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
@@ -5,6 +6,7 @@ import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
+import { getRiotApiService } from '../services/RiotApiService.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
@@ -345,6 +347,29 @@ router.get('/seed-players', async (_req, res) => {
   return res.json({ players })
 })
 
+/** Tag line used when user enters only game name (no #, no -): try Riot ID with platform as tag. */
+const PLATFORM_TAG: Record<string, string> = { euw1: 'EUW', eun1: 'EUN1' }
+
+/** Parse label into gameName + tagLine. Supports: Name#Tag, Name-Tag (op.gg style), or Name (use platform tag). */
+function parseRiotIdLabel(label: string, platform: string): { gameName: string; tagLine: string; labelToStore: string } {
+  if (label.includes('#')) {
+    const parts = label.split('#').map((s: string) => s.trim())
+    const gameName = parts[0] ?? ''
+    const tagLine = parts[1] ?? ''
+    return { gameName, tagLine, labelToStore: label }
+  }
+  const lastDash = label.lastIndexOf('-')
+  if (lastDash > 0 && lastDash < label.length - 1) {
+    const gameName = label.slice(0, lastDash).trim()
+    const tagLine = label.slice(lastDash + 1).trim()
+    if (gameName && tagLine) {
+      return { gameName, tagLine, labelToStore: `${gameName}#${tagLine}` }
+    }
+  }
+  const tagLine = PLATFORM_TAG[platform] ?? 'EUW'
+  return { gameName: label, tagLine, labelToStore: `${label}#${tagLine}` }
+}
+
 router.post('/seed-players', async (req, res) => {
   const rawLabel = req.body?.label ?? req.body?.name ?? req.body?.pseudo ?? ''
   const label = typeof rawLabel === 'string' ? rawLabel.trim() : ''
@@ -355,7 +380,40 @@ router.post('/seed-players', async (req, res) => {
     return res.status(400).json({ error: 'label is required (Riot ID: Name#Tag or summoner name)' })
   }
 
-  const created = await prisma.seedPlayer.create({ data: { label, platform } })
+  const { gameName, tagLine, labelToStore } = parseRiotIdLabel(label, platform)
+  if (!gameName || !tagLine) {
+    return res.status(400).json({ error: 'Invalid Riot ID format (use Name#Tag or Name-Tag)' })
+  }
+
+  // Validate player exists via Riot API (Account-v1 Riot ID only; Summoner by-name is deprecated)
+  try {
+    const riotApi = getRiotApiService()
+    const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
+    if (accountResult.isErr()) {
+      const err = accountResult.unwrapErr()
+      const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
+      if (status === 404) {
+        if (label.includes('#') || label.includes('-')) {
+          return res.status(400).json({ error: 'Player not found (Riot ID does not exist)' })
+        }
+        return res.status(400).json({
+          error: `No player "${label}" with tag ${tagLine}. This player may use another tag (e.g. Urpog#URGOT). Copy the Riot ID from op.gg: in the URL it appears as Name-Tag (e.g. Urpog-URGOT). Paste that in the field.`,
+        })
+      }
+      if (status === 401 || status === 403) {
+        return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
+      }
+      return res.status(400).json({ error: err.message || 'Riot API error' })
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (message.includes('RIOT_API_KEY') || message.includes('not configured')) {
+      return res.status(400).json({ error: 'Riot API key not configured. Set it in Admin > Riot API key.' })
+    }
+    return res.status(400).json({ error: message || 'Validation failed' })
+  }
+
+  const created = await prisma.seedPlayer.create({ data: { label: labelToStore, platform } })
   return res.status(201).json({ player: { id: created.id, label: created.label, platform: created.platform } })
 })
 

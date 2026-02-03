@@ -69,9 +69,9 @@ Expand : en mémoire (run courant) + persistance en DB (PuuidCrawlQueue) pour le
 1. **Seed Admin (DB)** : joueurs en base (`SeedPlayer`). Admin > Joueurs seed (Riot ID `Nom#Tag` ou nom d’invocateur + plateforme). Résolution : Riot ID → Account-v1 → PUUID ; nom d’invocateur → Summoner-v4 by-name → PUUID.
 2. **Drain file PUUID (DB)** : au début de chaque run, le cron lit jusqu’à `MAX_PUUIDS_PER_RUN` entrées dans `PuuidCrawlQueue` (ordre `addedAt`), les ajoute à la file en mémoire, puis les supprime de la table.
 3. **Seed League** : Challenger (4), Grandmaster (3), Master (3) par plateforme (EUW, EUNE). Conversion : summonerId → Summoner-v4 → puuid.
-4. **Match IDs** : par PUUID, queue 420 (Ranked Solo/Duo), ~20 IDs par joueur.
-5. **Match details** : pour chaque match non déjà en base.
-6. **Expansion** : extraction des 10 PUUIDs participants ; ajout en mémoire (run courant) et `createMany` en DB (`PuuidCrawlQueue`, `skipDuplicates: true`) pour les runs suivants.
+4. **Match IDs** : par PUUID, queue 420, ~20 IDs par joueur. **Fenêtre de dates** : premier run = `endTime=now` (matchs récents) ; runs suivants = `startTime=dernier run`, `endTime=now` (évite de redemander les mêmes IDs et les doublons).
+5. **Match details** : pour chaque match ID, si déjà en base (`hasMatch(matchId)`) on skip ; sinon fetch détail puis `upsertMatchFromRiot` (pas de doublon).
+6. **Expansion** : extraction des 10 PUUIDs participants ; ajout en mémoire (run courant) et `createMany` en DB (`PuuidCrawlQueue`, `skipDuplicates: true`) pour les runs suivants. Les matchs déjà vus ne sont pas re-traités.
 7. **Refresh** : après collecte, mise à jour des joueurs et stats champions (PostgreSQL).
 
 ---
@@ -99,8 +99,8 @@ Expand : en mémoire (run courant) + persistance en DB (PuuidCrawlQueue) pour le
 
 - **Rate limiting** : `RiotApiService` applique un délai fixe entre chaque requête (ex. 70 ms).
 - **Cache clé** : clé API lue depuis fichier admin ou `RIOT_API_KEY` ; cache invalidé en cas de 401/403.
-- **Déduplication** : `hasMatch(matchId)` avant fetch détaillé ; `upsertMatchFromRiot` évite les doublons.
-- **File PUUID** : dans un run, après stockage d’un match, les PUUIDs des participants sont ajoutés à une file (en mémoire, bornée) et traités dans la même exécution pour étendre le graphe.
+- **Déduplication** : `hasMatch(matchId)` avant fetch détaillé ; `upsertMatchFromRiot` évite les doublons. Les match IDs demandés à Riot sont filtrés par date : premier run = jusqu’à maintenant ; runs suivants = entre `lastSuccessAt` (dernier run) et maintenant, donc pas de reprise des mêmes matchs.
+- **File PUUID** : dans un run, après stockage d’un match, les PUUIDs des participants sont ajoutés à une file (en mémoire, bornée) et à `PuuidCrawlQueue` en DB pour les runs suivants ; on ne retraite pas les matchs déjà en base.
 
 ### Schéma de données (résumé)
 

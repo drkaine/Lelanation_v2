@@ -52,7 +52,7 @@
               class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
             >
               <option value="">{{ t('statisticsPage.allRoles') }}</option>
-              <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
+              <option v-for="r in roles" :key="r.value" :value="r.value">{{ r.label }}</option>
             </select>
           </div>
         </div>
@@ -91,7 +91,19 @@
                 class="hover:bg-surface/50"
               >
                 <td class="px-4 py-2 font-medium text-text">
-                  {{ championName(row.championId) || row.championId }}
+                  <div class="flex items-center gap-2">
+                    <img
+                      v-if="gameVersion && championByKey(row.championId)"
+                      :src="
+                        getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)
+                      "
+                      :alt="championName(row.championId) || ''"
+                      class="h-8 w-8 rounded-full object-cover"
+                      width="32"
+                      height="32"
+                    />
+                    <span>{{ championName(row.championId) || row.championId }}</span>
+                  </div>
                 </td>
                 <td class="px-4 py-2 text-text/90">{{ row.games }}</td>
                 <td class="px-4 py-2 text-text/90">{{ row.wins }}</td>
@@ -122,7 +134,7 @@
               class="min-w-[180px] rounded border border-primary/50 bg-background px-3 py-2 text-text"
             >
               <option value="">{{ t('statisticsPage.selectChampion') }}</option>
-              <option v-for="c in championsForSelect" :key="c.id" :value="c.id">
+              <option v-for="c in championsForSelect" :key="c.id" :value="c.key">
                 {{ c.name }}
               </option>
             </select>
@@ -208,7 +220,7 @@
               class="min-w-[180px] rounded border border-primary/50 bg-background px-3 py-2 text-text"
             >
               <option value="">{{ t('statisticsPage.selectChampion') }}</option>
-              <option v-for="c in championsForSelect" :key="c.id" :value="c.id">
+              <option v-for="c in championsForSelect" :key="c.id" :value="c.key">
                 {{ c.name }}
               </option>
             </select>
@@ -281,7 +293,7 @@
               class="min-w-[180px] rounded border border-primary/50 bg-background px-3 py-2 text-text"
             >
               <option value="">{{ t('statisticsPage.allChampions') }}</option>
-              <option v-for="c in championsForSelect" :key="c.id" :value="c.id">
+              <option v-for="c in championsForSelect" :key="c.id" :value="c.key">
                 {{ c.name }}
               </option>
             </select>
@@ -354,7 +366,7 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { getItemImageUrl } from '~/utils/imageUrl'
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 
 definePageMeta({
   layout: 'default',
@@ -392,7 +404,13 @@ const rankTiers = [
   'GRANDMASTER',
   'CHALLENGER',
 ]
-const roles = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY']
+const roles = [
+  { value: 'TOP', label: 'Top' },
+  { value: 'JUNGLE', label: 'Jungle' },
+  { value: 'MIDDLE', label: 'Mid' },
+  { value: 'BOTTOM', label: 'ADC' },
+  { value: 'UTILITY', label: 'Support' },
+]
 
 // Champions
 const championsData = ref<{
@@ -529,9 +547,14 @@ const championsForSelect = computed(() =>
   championsStore.champions.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''))
 )
 
+/** Resolve champion by numeric id (API uses Riot champion key). */
+function championByKey(championId: number): (typeof championsStore.champions)[0] | null {
+  const champ = championsStore.champions.find(c => c.key === String(championId))
+  return champ ?? null
+}
+
 function championName(championId: number): string | null {
-  const champ = championsStore.champions.find(c => c.id === String(championId))
-  return champ?.name ?? null
+  return championByKey(championId)?.name ?? null
 }
 
 function itemName(itemId: number): string | null {

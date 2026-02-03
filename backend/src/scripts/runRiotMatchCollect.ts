@@ -31,7 +31,18 @@ async function main(): Promise<void> {
       console.warn('[riot:collect] Key from .env rejected by Riot (401/403), retrying with Admin key…')
       riotApi.invalidateKeyCache()
       riotApi.setKeyPreference(false)
-      await runRiotMatchCollectOnce()
+      try {
+        await runRiotMatchCollectOnce()
+      } catch (retryErr) {
+        if (isRiotAuthError(retryErr)) {
+          console.error(
+            '[riot:collect] Riot API key invalid or expired (401/403). Development keys expire after 24h.'
+          )
+          console.error('[riot:collect] Regenerate a key at https://developer.riotgames.com and set it in Admin or RIOT_API_KEY.')
+          process.exit(1)
+        }
+        throw retryErr
+      }
     } else {
       throw err
     }
@@ -41,6 +52,6 @@ async function main(): Promise<void> {
 main()
   .then(() => process.exit(0))
   .catch((err) => {
-    console.error('[riot:collect]', err)
+    if (!isRiotAuthError(err)) console.error('[riot:collect]', err)
     process.exit(1)
   })

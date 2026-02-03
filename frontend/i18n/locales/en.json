@@ -539,8 +539,8 @@
     },
     "seedPlayers": {
       "title": "Seed players",
-      "description": "Pseudos used as starting point for match collection. The cron fetches their matches (current patch), then PUUIDs of other players to expand the crawl.",
-      "labelPlaceholder": "Riot ID (Name#Tag) or summoner name",
+      "description": "Riot IDs used as starting point for match collection. The cron fetches their matches (current patch), then PUUIDs of other players to expand the crawl. Format: Name#Tag or Name-Tag (e.g. Urpog#URGOT). On op.gg the Riot ID is in the URL: /summoners/euw/Urpog-URGOT → enter Urpog-URGOT or Urpog#URGOT.",
+      "labelPlaceholder": "Riot ID (Name#Tag or Name-Tag, e.g. Urpog#URGOT)",
       "platform": "Platform",
       "add": "Add",
       "addSuccess": "Player added.",

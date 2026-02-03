@@ -67,6 +67,9 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }
     )
+    const statusResult = await cronStatus.getStatus()
+    const lastSuccessAt =
+      statusResult.isOk() ? statusResult.unwrap().jobs.riotMatchCollect?.lastSuccessAt ?? null : null
     await cronStatus.markStart('riotMatchCollect')
 
     const apiKey = await import('../utils/riotApiKey.js').then((m) => m.getRiotApiKeyAsync())
@@ -90,6 +93,12 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
     const toPersistQueue: PuuidItem[] = []
     let collected = 0
     let errors = 0
+
+    /** Match IDs requested in (matchStartTime, matchEndTime] to avoid duplicates: first run = recent only; next runs = since last success. */
+    const matchEndTime = Math.floor(Date.now() / 1000)
+    const matchStartTime = lastSuccessAt
+      ? Math.floor(new Date(lastSuccessAt).getTime() / 1000)
+      : undefined
 
     // 0) Admin seed players from DB (Riot ID or summoner name) → PUUID queue
     const seedPlayers = await prisma.seedPlayer.findMany({ orderBy: { createdAt: 'asc' } })
@@ -118,7 +127,16 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
         } else {
           const summonerResult = await riotApi.getSummonerByName(platform, label)
           if (summonerResult.isErr()) {
-            if (isRiotAuthError(summonerResult.unwrapErr())) throw summonerResult.unwrapErr()
+            const err = summonerResult.unwrapErr()
+            const status = err?.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
+            if (status === 403) {
+              console.warn(
+                `${LOG_PREFIX} Seed "${label}" (${platform}): Riot no longer allows lookup by summoner name. Use Riot ID (Name#Tag) in Admin.`
+              )
+              errors++
+              continue
+            }
+            if (isRiotAuthError(err)) throw err
             errors++
             continue
           }
@@ -225,6 +243,8 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       const matchIdsResult = await riotApi.getMatchIdsByPuuid(item.puuid, {
         count: MATCH_IDS_PER_SUMMONER,
         queue: 420,
+        endTime: matchEndTime,
+        ...(matchStartTime != null && { startTime: matchStartTime }),
       })
       if (matchIdsResult.isErr()) {
         errors++
