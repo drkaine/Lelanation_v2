@@ -9,7 +9,6 @@ const QUEUE_ID_420 = 420
 /** Raw participant from Riot (loose type for item0..item6, perks) */
 interface RiotParticipant {
   puuid: string
-  summonerId?: string
   championId: number
   teamId: number
   win: boolean
@@ -71,8 +70,6 @@ export async function upsertMatchFromRiot(
 
   const gameVersion =
     typeof info.gameVersion === 'string' ? info.gameVersion : undefined
-  const gameCreation =
-    typeof info.gameCreation === 'number' ? BigInt(info.gameCreation) : null
   const gameDuration = typeof info.gameDuration === 'number' ? info.gameDuration : null
   const participants = Array.isArray(info.participants) ? info.participants : []
 
@@ -82,9 +79,9 @@ export async function upsertMatchFromRiot(
       region,
       queueId: QUEUE_ID_420,
       gameVersion: gameVersion ?? null,
-      gameCreation,
       gameDuration,
       platformId: region,
+      rank: null,
     },
   })
 
@@ -94,11 +91,9 @@ export async function upsertMatchFromRiot(
     return {
       matchId: match.id,
       puuid: p.puuid ?? '',
-      summonerId: p.summonerId ?? null,
       championId: p.championId ?? 0,
       win: Boolean(p.win),
       role,
-      lane: null,
       teamPosition: p.teamPosition ?? p.individualPosition ?? null,
       rankTier: null,
       rankDivision: null,

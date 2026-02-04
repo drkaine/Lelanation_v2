@@ -98,7 +98,6 @@ export interface MatchSummary {
   metadata: { matchId: string }
   info: {
     gameId?: number
-    gameCreation: number
     gameDuration: number
     gameVersion?: string
     queueId: number

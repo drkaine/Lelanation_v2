@@ -10,6 +10,8 @@
     "sync:data": "tsx src/scripts/syncData.ts",
     "riot:collect": "tsx src/scripts/runRiotMatchCollect.ts",
     "riot:worker": "tsx src/scripts/runRiotMatchCollectWorker.ts",
+    "riot:backfill-ranks": "tsx src/scripts/runBackfillParticipantRanks.ts",
+    "riot:refresh-match-ranks": "tsx src/scripts/runRefreshMatchRanks.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit"

@@ -1,10 +1,37 @@
 /**
  * Refreshes players (totalGames, totalWins) from participants.
  * Champion stats are computed on the fly from participants; no pre-aggregated table.
+ * Backfills participant rank (rankTier, rankDivision, rankLp) from Riot League API and Match.rank.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { getRiotApiService } from './RiotApiService.js'
+
+const TIER_ORDER = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
+const DIVISION_ORDER = ['IV', 'III', 'II', 'I'] as const
+
+/** Convert tier+division+lp to a numeric score (higher = higher rank). MASTER+ have no division (use 0). */
+function rankToScore(tier: string, division: string, lp: number): number {
+  const t = TIER_ORDER.indexOf(tier.toUpperCase() as (typeof TIER_ORDER)[number])
+  const tierIdx = t >= 0 ? t : 0
+  const d = DIVISION_ORDER.indexOf(division.toUpperCase() as (typeof DIVISION_ORDER)[number])
+  const divIdx = d >= 0 ? d : 0
+  const isMasterPlus = tierIdx >= TIER_ORDER.indexOf('MASTER')
+  const div = isMasterPlus ? 0 : divIdx
+  return tierIdx * 4 + div + lp / 100
+}
+
+/** Convert numeric score back to tier+division string (e.g. "GOLD_II"). Rounds to nearest tier/division. */
+function scoreToRankLabel(score: number): string {
+  if (score <= 0) return 'IRON_IV'
+  const tierIdx = Math.min(Math.floor(score / 4), TIER_ORDER.length - 1)
+  const remainder = score - tierIdx * 4
+  const tier = TIER_ORDER[Math.max(0, tierIdx)]
+  if (tier === 'MASTER' || tier === 'GRANDMASTER' || tier === 'CHALLENGER') return tier
+  const divIdx = Math.min(Math.floor(remainder), DIVISION_ORDER.length - 1)
+  const div = DIVISION_ORDER[Math.max(0, divIdx)]
+  return `${tier}_${div}`
+}
 
 export async function refreshPlayersAndChampionStats(): Promise<{
   playersUpserted: number
@@ -12,7 +39,7 @@ export async function refreshPlayersAndChampionStats(): Promise<{
 }> {
   if (!isDatabaseConfigured()) return { playersUpserted: 0, championStatsUpserted: 0 }
   const participants = await prisma.participant.findMany({
-    select: { puuid: true, summonerId: true, win: true, matchId: true },
+    select: { puuid: true, win: true, matchId: true },
   })
   const matchIds = [...new Set(participants.map((p) => p.matchId))]
   const matches = await prisma.match.findMany({
@@ -22,15 +49,12 @@ export async function refreshPlayersAndChampionStats(): Promise<{
   const matchRegion = new Map<string, string>()
   for (const m of matches) matchRegion.set(String(m.id), m.region)
 
-  const byPuuid = new Map<
-    string,
-    { summonerId: string | null; region: string; totalGames: number; totalWins: number }
-  >()
+  const byPuuid = new Map<string, { region: string; totalGames: number; totalWins: number }>()
   for (const p of participants) {
     const region = matchRegion.get(String(p.matchId)) ?? 'euw1'
     let entry = byPuuid.get(p.puuid)
     if (!entry) {
-      entry = { summonerId: p.summonerId ?? null, region, totalGames: 0, totalWins: 0 }
+      entry = { region, totalGames: 0, totalWins: 0 }
       byPuuid.set(p.puuid, entry)
     }
     entry.totalGames++
@@ -43,7 +67,6 @@ export async function refreshPlayersAndChampionStats(): Promise<{
       where: { puuid },
       create: {
         puuid,
-        summonerId: e.summonerId,
         region: e.region,
         totalGames: e.totalGames,
         totalWins: e.totalWins,
@@ -105,4 +128,92 @@ export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> 
   }
   console.log(`${ENRICH_LOG} Enriched ${enriched} players (summoner_name)`)
   return { enriched }
+}
+
+const BACKFILL_RANK_LOG = '[backfill-rank]'
+
+/**
+ * Backfill participant rank (rankTier, rankDivision, rankLp) for participants missing it.
+ * Uses Riot League API by puuid (Solo/Duo). One API call per distinct puuid; updates all participant rows for that puuid.
+ */
+export async function backfillParticipantRanks(limit = 200): Promise<{ updated: number; errors: number }> {
+  if (!isDatabaseConfigured()) {
+    console.warn(`${BACKFILL_RANK_LOG} Skipped: database not configured`)
+    return { updated: 0, errors: 0 }
+  }
+  const riotApi = getRiotApiService()
+  const participants = await prisma.participant.findMany({
+    where: { rankTier: null },
+    select: { puuid: true, matchId: true },
+  })
+  const matchIds = [...new Set(participants.map((p) => p.matchId))]
+  const matches = await prisma.match.findMany({
+    where: { id: { in: matchIds } },
+    select: { id: true, region: true },
+  })
+  const matchRegion = new Map<string, string>()
+  for (const m of matches) matchRegion.set(String(m.id), m.region)
+
+  const puuidToRegion = new Map<string, string>()
+  for (const p of participants) {
+    const region = matchRegion.get(String(p.matchId)) ?? 'euw1'
+    const platform = region === 'eun1' ? 'eun1' : 'euw1'
+    if (!puuidToRegion.has(p.puuid)) puuidToRegion.set(p.puuid, platform)
+  }
+  const puuids = [...puuidToRegion.keys()].slice(0, limit)
+
+  let updated = 0
+  let errors = 0
+  for (const puuid of puuids) {
+    const platform = puuidToRegion.get(puuid) === 'eun1' ? 'eun1' : 'euw1'
+    const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
+    if (leagueResult.isErr()) {
+      errors++
+      continue
+    }
+    const entryData = leagueResult.unwrap()
+    if (!entryData) continue
+    const { tier, rank: division, leaguePoints } = entryData
+    const result = await prisma.participant.updateMany({
+      where: { puuid, rankTier: null },
+      data: { rankTier: tier, rankDivision: division, rankLp: leaguePoints },
+    })
+    updated += result.count
+  }
+  console.log(`${BACKFILL_RANK_LOG} Updated ${updated} participants (${puuids.length} PUUIDs), ${errors} errors`)
+  return { updated, errors }
+}
+
+/**
+ * Recompute Match.rank from participants (average rank of players in the match).
+ * Only participants with rankTier set are included; matches with no rank data get rank = null.
+ */
+export async function refreshMatchRanks(): Promise<{ matchesUpdated: number }> {
+  if (!isDatabaseConfigured()) return { matchesUpdated: 0 }
+  const participants = await prisma.participant.findMany({
+    where: { rankTier: { not: null }, rankDivision: { not: null } },
+    select: { matchId: true, rankTier: true, rankDivision: true, rankLp: true },
+  })
+  const byMatch = new Map<string, number[]>()
+  for (const p of participants) {
+    const tier = p.rankTier!
+    const div = p.rankDivision!
+    const lp = p.rankLp ?? 0
+    const score = rankToScore(tier, div, lp)
+    const key = String(p.matchId)
+    if (!byMatch.has(key)) byMatch.set(key, [])
+    byMatch.get(key)!.push(score)
+  }
+  let matchesUpdated = 0
+  for (const [matchIdStr, scores] of byMatch) {
+    if (scores.length === 0) continue
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+    const rankLabel = scoreToRankLabel(avg)
+    await prisma.match.update({
+      where: { id: BigInt(matchIdStr) },
+      data: { rank: rankLabel },
+    })
+    matchesUpdated++
+  }
+  return { matchesUpdated }
 }

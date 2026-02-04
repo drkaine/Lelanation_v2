@@ -9,6 +9,10 @@ import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { getRiotApiService } from '../services/RiotApiService.js'
+import {
+  backfillParticipantRanks,
+  refreshMatchRanks,
+} from '../services/StatsPlayersRefreshService.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
@@ -222,7 +226,32 @@ router.get('/players-missing-summoner-name', async (req, res) => {
     })
   } catch (e) {
     return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Failed to list players with missing rank',
+      error: e instanceof Error ? e.message : 'Failed to list players with missing summoner name',
+    })
+  }
+})
+
+// --- Backfill participant rank (rankTier, rankDivision, rankLp) from Riot League API ---
+router.post('/backfill-participant-ranks', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || '200'), 10) || 200, 500)
+    const result = await backfillParticipantRanks(limit)
+    return res.json(result)
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Backfill participant ranks failed',
+    })
+  }
+})
+
+// --- Recompute Match.rank from participants (average rank of players in the match) ---
+router.post('/refresh-match-ranks', async (_req, res) => {
+  try {
+    const result = await refreshMatchRanks()
+    return res.json(result)
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Refresh match ranks failed',
     })
   }
 })

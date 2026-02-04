@@ -16,9 +16,9 @@ model Match {
   region        String   // euw1, eun1
   queueId       Int      @map("queue_id") // 420 = Ranked Solo/Duo
   gameVersion   String?  @map("game_version")
-  gameCreation  BigInt?  @map("game_creation")
   gameDuration  Int?     @map("game_duration")
   platformId    String?  @map("platform_id")
+  rank          String?  // average rank of players in the match, e.g. "GOLD_II"
   createdAt     DateTime @default(now()) @map("created_at")
 
   participants Participant[]
@@ -30,11 +30,9 @@ model Participant {
   id              BigInt   @id @default(autoincrement())
   matchId         BigInt   @map("match_id")
   puuid           String
-  summonerId      String?  @map("summoner_id")
   championId      Int      @map("champion_id")
   win             Boolean
   role            String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY
-  lane            String?
   teamPosition    String?  @map("team_position")
   rankTier        String?  @map("rank_tier")
   rankDivision    String?  @map("rank_division")

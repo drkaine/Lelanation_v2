@@ -195,8 +195,8 @@ Sans étape d’enrichment, ces colonnes restent donc `NULL`.
 
 ### Schéma de données (résumé)
 
-- **matches** : `matchId`, `region`, `queueId`, `gameVersion`, `gameCreation`, `gameDuration`.
-- **participants** : par match, `puuid`, `championId`, `win`, `role`, `items`, `kills`/`deaths`/`assists`, etc.
+- **matches** : `matchId`, `region`, `queueId`, `gameVersion`, `gameDuration`, `rank` (rang moyen des joueurs de la partie, ex. `GOLD_II`).
+- **participants** : par match, `puuid`, `championId`, `win`, `role`, `teamPosition`, `rankTier`/`rankDivision`/`rankLp`, `items`, `kills`/`deaths`/`assists`, etc. (pas de `summoner_id` ni `lane`).
 - **players** : une ligne par `puuid` (summoner_id, summoner_name, region, last_seen, created_at, updated_at, rang, totalGames, etc.) — source unique pour le crawl et l’affichage.
 - **Stats champion par joueur** : calculées à la volée depuis **participants** (pas de table pré-agrégée).
 
@@ -225,6 +225,14 @@ Le champ `gameVersion` (ex. `"15.1.123.456"`) est stocké sur chaque match. Pour
 - **Worker** : `npm run riot:worker` (depuis `backend/`). Boucle infinie : un cycle = crawl (avec retry + backoff en cas d’erreur transitoire), refresh + enrichissement, puis N passes d’enrichissement, puis pause. En cas d’erreur (réseau, 429, 5xx) : jusqu’à 3 tentatives avec backoff (30s, 60s, 120s) avant de passer au cycle suivant. 401/403 : retry une fois avec la clé Admin puis exit si échec. **Redémarrage** : en production, lancer le worker sous PM2 (ou systemd) avec `autorestart: true` pour que tout crash du process relance le worker.
 - **Cron** : exécution périodique via `setupRiotMatchCollect()`. Une seule exécution par créneau.
 - **One-shot** : `npm run riot:collect` pour un seul cycle.
+
+### Rangs participants et Match.rank
+
+Les participants ont `rankTier`, `rankDivision`, `rankLp` (rang Solo/Duo au moment du match). L’API Match v5 ne les fournit pas ; ils sont remplis via l’API League v4 (by-puuid). Pour les entrées déjà en base sans rang :
+
+- **Backfill + refresh Match.rank** (recommandé) : depuis `backend/`, `npm run riot:backfill-ranks` (ou `npm run riot:backfill-ranks -- 200` pour une limite). Lance le backfill des rangs participants puis recalcule `Match.rank` pour tous les matchs. Variable d’environnement optionnelle : `RIOT_BACKFILL_RANK_LIMIT` (défaut 200).
+- **Refresh Match.rank seul** : `npm run riot:refresh-match-ranks` pour recalculer uniquement `Match.rank` à partir des participants déjà remplis.
+- **Via l’API admin** : `POST /api/admin/backfill-participant-ranks?limit=200` et `POST /api/admin/refresh-match-ranks` (auth admin, port selon `PORT` dans `.env`).
 
 ---
 
