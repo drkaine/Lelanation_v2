@@ -226,9 +226,7 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
     if (collected > 0) {
       try {
         const refresh = await refreshPlayersAndChampionStats()
-        console.log(
-          `${LOG_PREFIX} Players refresh: ${refresh.playersUpserted} players, ${refresh.championStatsUpserted} champion stats`
-        )
+        console.log(`${LOG_PREFIX} Players refresh: ${refresh.playersUpserted} players`)
       } catch (e) {
         console.warn(`${LOG_PREFIX} Players refresh failed:`, e)
       }

@@ -1,5 +1,5 @@
 /**
- * Top players (from players + champion_player_stats). Requires refresh job to populate.
+ * Top players and champion stats: computed on the fly from participants (no pre-aggregated table).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -109,29 +109,39 @@ export async function getPlayerBySummonerName(summonerName: string): Promise<Pla
   }
 }
 
-/** Champion stats for a given player (puuid). */
+/** Champion stats for a given player (puuid), computed from participants. */
 export async function getChampionStatsForPlayer(
   puuid: string,
   limit = 50
 ): Promise<PlayerChampionStatRow[]> {
   if (!isDatabaseConfigured()) return []
   try {
-    const rows = await prisma.championPlayerStats.findMany({
-      where: { puuid },
-      orderBy: [{ games: 'desc' }],
-      take: limit,
-    })
+    const rows = await prisma.$queryRaw<
+      Array<{ championId: number; games: number; wins: number; winrate: number }>
+    >`
+      SELECT
+        champion_id AS "championId",
+        COUNT(*)::int AS games,
+        SUM(CASE WHEN win THEN 1 ELSE 0 END)::int AS wins,
+        ROUND(100.0 * SUM(CASE WHEN win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate
+      FROM participants
+      WHERE puuid = ${puuid}
+      GROUP BY champion_id
+      ORDER BY games DESC
+      LIMIT ${limit}
+    `
     return rows.map((r) => ({
       championId: r.championId,
       games: r.games,
       wins: r.wins,
-      winrate: Number(r.winrate),
+      winrate: r.winrate,
     }))
   } catch {
     return []
   }
 }
 
+/** Top players by champion, computed from participants (on the fly). */
 export async function getTopPlayersByChampion(options: {
   championId: number
   rankTier?: string | null
@@ -141,38 +151,70 @@ export async function getTopPlayersByChampion(options: {
   if (!isDatabaseConfigured()) return []
   const { championId, rankTier, minGames = 20, limit = 50 } = options
   try {
-    const where: { championId: number; games: { gte: number }; puuid?: { in: string[] } } = {
-      championId,
-      games: { gte: minGames },
+    type Row = {
+      puuid: string
+      summonerName: string | null
+      region: string
+      games: number
+      wins: number
+      winrate: number
+      avgKills: number | null
+      avgDeaths: number | null
+      avgAssists: number | null
     }
-    if (rankTier != null && rankTier !== '') {
-      const puuids = await prisma.participant.findMany({
-        where: { rankTier },
-        select: { puuid: true },
-        distinct: ['puuid'],
-      })
-      where.puuid = { in: puuids.map((r) => r.puuid) }
-    }
-
-    const rows = await prisma.championPlayerStats.findMany({
-      where,
-      include: { player: true },
-      orderBy: [{ winrate: 'desc' }, { games: 'desc' }],
-      take: limit,
-    })
-
+    const rows: Row[] =
+      rankTier != null && rankTier !== ''
+        ? await prisma.$queryRaw<Row[]>`
+            SELECT
+              p.puuid,
+              pl.summoner_name AS "summonerName",
+              pl.region,
+              COUNT(*)::int AS games,
+              SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
+              ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
+              ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
+              ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
+              ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
+            FROM participants p
+            JOIN players pl ON pl.puuid = p.puuid
+            WHERE p.champion_id = ${championId}
+              AND p.puuid IN (SELECT puuid FROM participants WHERE rank_tier = ${rankTier} LIMIT 10000)
+            GROUP BY p.puuid, pl.summoner_name, pl.region
+            HAVING COUNT(*) >= ${minGames}
+            ORDER BY winrate DESC, games DESC
+            LIMIT ${limit}
+          `
+        : await prisma.$queryRaw<Row[]>`
+            SELECT
+              p.puuid,
+              pl.summoner_name AS "summonerName",
+              pl.region,
+              COUNT(*)::int AS games,
+              SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
+              ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
+              ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
+              ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
+              ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
+            FROM participants p
+            JOIN players pl ON pl.puuid = p.puuid
+            WHERE p.champion_id = ${championId}
+            GROUP BY p.puuid, pl.summoner_name, pl.region
+            HAVING COUNT(*) >= ${minGames}
+            ORDER BY winrate DESC, games DESC
+            LIMIT ${limit}
+          `
     return rows.map((r) => ({
       puuid: r.puuid,
       maskedPuid: maskPuuid(r.puuid),
-      summonerName: r.player.summonerName,
-      region: r.player.region,
+      summonerName: r.summonerName,
+      region: r.region,
       rankTier: null,
       games: r.games,
       wins: r.wins,
-      winrate: Number(r.winrate),
-      avgKills: r.avgKills != null ? Number(r.avgKills) : null,
-      avgDeaths: r.avgDeaths != null ? Number(r.avgDeaths) : null,
-      avgAssists: r.avgAssists != null ? Number(r.avgAssists) : null,
+      winrate: r.winrate,
+      avgKills: r.avgKills,
+      avgDeaths: r.avgDeaths,
+      avgAssists: r.avgAssists,
     }))
   } catch {
     return []

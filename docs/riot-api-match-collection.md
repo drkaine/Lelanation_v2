@@ -155,7 +155,7 @@ Refresh + enrichment (stats, summoner_name, rank)
 5. **Match details** : si déjà en base on skip ; sinon `upsertMatchFromRiot` (pas de doublon).
 6. **Participants → players** : pour chaque participant du match, upsert dans **players** (puuid, region, summoner_id si dispo, last_seen = null en création). Tous les joueurs rencontrés sont ainsi ajoutés pour un crawl futur, sans doublon.
 7. **last_seen** : après avoir crawlé un joueur (récupéré ses matchs), mise à jour `players.last_seen = now()` pour ce puuid.
-8. **Refresh** : agrégation joueurs et champion_player_stats depuis **participants**.
+8. **Refresh** : agrégation joueurs (totalGames, totalWins) depuis **participants**. Les stats par champion sont calculées à la volée depuis **participants**.
 9. **Enrichment** : Summoner-v4 (by-puuid) et League-v4 pour remplir summoner_name, current_rank_* ; recopie du rang sur **Participant**.
 
 ### Pourquoi certains champs Player sont vides
@@ -198,7 +198,7 @@ Sans étape d’enrichment, ces colonnes restent donc `NULL`.
 - **matches** : `matchId`, `region`, `queueId`, `gameVersion`, `gameCreation`, `gameDuration`.
 - **participants** : par match, `puuid`, `championId`, `win`, `role`, `items`, `kills`/`deaths`/`assists`, etc.
 - **players** : une ligne par `puuid` (summoner_id, summoner_name, region, last_seen, created_at, updated_at, rang, totalGames, etc.) — source unique pour le crawl et l’affichage.
-- **champion_player_stats** : stats par joueur et champion (winrate, moyennes KDA).
+- **Stats champion par joueur** : calculées à la volée depuis **participants** (pas de table pré-agrégée).
 
 ### Filtrage par patch
 

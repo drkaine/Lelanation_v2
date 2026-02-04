@@ -108,10 +108,7 @@ Le schéma est défini dans `backend/prisma/schema.prisma`. Principales tables :
 
 - **matches** – Matchs Ranked Solo/Duo (Match-v5).
 - **participants** – Un joueur par match (puuid, champion, rôle, items, runes, rang, etc.).
-- **players** – Joueurs agrégés (puuid, summoner_name, region, current_rank_tier, total_games, etc.).
-- **champion_player_stats** – Stats par joueur et par champion.
-- **seed_players** – Joueurs seed admin pour la collecte.
-- **puuid_crawl_queue** – File des PUUID à traiter par le cron.
+- **players** – Joueurs (puuid, summoner_name, region, total_games, total_wins, last_seen). Source unique pour le crawl. Stats champion par joueur : calculées à la volée depuis **participants**.
 
 Détails des modèles : voir `backend/prisma/schema.prisma` et [Data Models](./data-models.md) (à jour avec le schéma Prisma si documenté).
 

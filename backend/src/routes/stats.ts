@@ -180,7 +180,7 @@ router.post('/aggregate', async (_req: Request, res: Response) => {
   }
 })
 
-/** POST /api/stats/refresh-players - rafraîchir players + champion_player_stats (admin / cron) */
+/** POST /api/stats/refresh-players - rafraîchir players (totalGames, totalWins) depuis participants */
 router.post('/refresh-players', async (_req: Request, res: Response) => {
   try {
     const result = await refreshPlayersAndChampionStats()

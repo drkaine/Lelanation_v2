@@ -69,32 +69,8 @@ model Player {
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  championStats ChampionPlayerStats[]
-
   @@index([region])
   @@index([lastSeen])
   @@map("players")
-}
-
-model ChampionPlayerStats {
-  id          BigInt   @id @default(autoincrement())
-  puuid       String   @map("puuid")
-  championId  Int      @map("champion_id")
-  games       Int      @default(0)
-  wins        Int      @default(0)
-  winrate     Decimal  @db.Decimal(5, 2)
-  avgKills    Decimal? @map("avg_kills") @db.Decimal(5, 2)
-  avgDeaths   Decimal? @map("avg_deaths") @db.Decimal(5, 2)
-  avgAssists  Decimal? @map("avg_assists") @db.Decimal(5, 2)
-  lastPlayed  DateTime? @map("last_played")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  player Player @relation(fields: [puuid], references: [puuid], onDelete: Cascade)
-
-  @@unique([puuid, championId])
-  @@index([puuid])
-  @@index([championId])
-  @@index([championId, winrate])
-  @@map("champion_player_stats")
 }
 
