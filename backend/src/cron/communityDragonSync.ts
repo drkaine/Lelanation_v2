@@ -19,14 +19,14 @@ export function setupCommunityDragonSync(): void {
     console.log('[Cron] Starting Community Dragon synchronization...')
 
     // Send start notification
-    await discordService.sendSuccess(
-      '🔄 Community Dragon Sync Started',
-      'The daily synchronization cron job has started',
-      {
-        startedAt: startTime.toISOString(),
-        scheduledTime: '03:00 UTC',
-      }
-    )
+    // await discordService.sendSuccess(
+    //   '🔄 Community Dragon Sync Started',
+    //   'The daily synchronization cron job has started',
+    //   {
+    //     startedAt: startTime.toISOString(),
+    //     scheduledTime: '03:00 UTC',
+    //   }
+    // )
 
     await cronStatus.markStart('communityDragonSync')
 
@@ -94,11 +94,11 @@ export function setupCommunityDragonSync(): void {
         successContext
       )
     } else {
-      await discordService.sendSuccess(
-        '✅ Community Dragon Sync Completed Successfully',
-        `All champion data synchronized from Community Dragon`,
-        successContext
-      )
+      // await discordService.sendSuccess(
+      //   '✅ Community Dragon Sync Completed Successfully',
+      //   `All champion data synchronized from Community Dragon`,
+      //   successContext
+      // )
     }
   }, {
     timezone: 'Etc/UTC'

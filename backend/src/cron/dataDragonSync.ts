@@ -24,29 +24,29 @@ export function setupDataDragonSync(): void {
     
     try {
       // Send start notification
-      await discordService.sendSuccess(
-        '🔄 Data Dragon Sync - Démarrage',
-        'Le cron de synchronisation quotidien a démarré',
-        {
-          startedAt: startTime.toISOString(),
-          scheduledTime: '02:00 UTC',
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '🔄 Data Dragon Sync - Démarrage',
+      //   'Le cron de synchronisation quotidien a démarré',
+      //   {
+      //     startedAt: startTime.toISOString(),
+      //     scheduledTime: '02:00 UTC',
+      //     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      //   }
+      // )
       
       await cronStatus.markStart('dataDragonSync')
 
       // Step 1: Check for new version
       console.log('[Cron] Step 1/4: Checking for new version...')
-      await discordService.sendSuccess(
-        '📋 Data Dragon Sync - Étape 1/4',
-        'Vérification de la version du jeu',
-        {
-          step: '1/4',
-          action: 'Version Check',
-          timestamp: new Date().toISOString()
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '📋 Data Dragon Sync - Étape 1/4',
+      //   'Vérification de la version du jeu',
+      //   {
+      //     step: '1/4',
+      //     action: 'Version Check',
+      //     timestamp: new Date().toISOString()
+      //   }
+      // )
 
       const versionCheckResult = await versionService.checkForNewVersion()
       if (versionCheckResult.isErr()) {
@@ -75,17 +75,17 @@ export function setupDataDragonSync(): void {
       if (!versionInfo.hasNew && versionInfo.current) {
         console.log(`[Cron] No new version available. Current: ${versionInfo.current}`)
         
-        const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-        await discordService.sendSuccess(
-          '✅ Data Dragon Sync - Aucune mise à jour nécessaire',
-          `Version actuelle à jour. Aucune synchronisation nécessaire.`,
-          {
-            currentVersion: versionInfo.current,
-            latestVersion: versionInfo.latest,
-            duration: `${duration}s`,
-            timestamp: new Date().toISOString()
-          }
-        )
+        // const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+        // await discordService.sendSuccess(
+        //   '✅ Data Dragon Sync - Aucune mise à jour nécessaire',
+        //   `Version actuelle à jour. Aucune synchronisation nécessaire.`,
+        //   {
+        //     currentVersion: versionInfo.current,
+        //     latestVersion: versionInfo.latest,
+        //     duration: `${duration}s`,
+        //     timestamp: new Date().toISOString()
+        //   }
+        // )
         await cronStatus.markSuccess('dataDragonSync')
         return
       }
@@ -93,29 +93,29 @@ export function setupDataDragonSync(): void {
       console.log(`[Cron] Syncing game data for version: ${versionToSync}`)
       
       // Send notification about version update
-      await discordService.sendSuccess(
-        '🔄 Data Dragon Sync - Nouvelle version détectée',
-        `Démarrage de la synchronisation pour la nouvelle version`,
-        {
-          step: '1/4',
-          currentVersion: versionInfo.current || 'Aucune',
-          newVersion: versionToSync,
-          timestamp: new Date().toISOString()
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '🔄 Data Dragon Sync - Nouvelle version détectée',
+      //   `Démarrage de la synchronisation pour la nouvelle version`,
+      //   {
+      //     step: '1/4',
+      //     currentVersion: versionInfo.current || 'Aucune',
+      //     newVersion: versionToSync,
+      //     timestamp: new Date().toISOString()
+      //   }
+      // )
 
       // Step 2: Sync game data
       console.log('[Cron] Step 2/4: Syncing game data...')
-      await discordService.sendSuccess(
-        '🔄 Data Dragon Sync - Étape 2/4',
-        'Synchronisation des données du jeu',
-        {
-          step: '2/4',
-          action: 'Data Sync',
-          version: versionToSync,
-          timestamp: new Date().toISOString()
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '🔄 Data Dragon Sync - Étape 2/4',
+      //   'Synchronisation des données du jeu',
+      //   {
+      //     step: '2/4',
+      //     action: 'Data Sync',
+      //     version: versionToSync,
+      //     timestamp: new Date().toISOString()
+      //   }
+      // )
 
       const syncResult = await retryWithBackoff(
         () => dataDragonService.syncGameData(versionToSync),
@@ -161,29 +161,29 @@ export function setupDataDragonSync(): void {
         `[Cron] Data Dragon sync completed successfully. Version: ${syncData.version}, Synced at: ${syncData.syncedAt.toISOString()}`
       )
 
-      await discordService.sendSuccess(
-        '✅ Data Dragon Sync - Étape 2/4 terminée',
-        'Synchronisation des données terminée avec succès',
-        {
-          step: '2/4',
-          version: syncData.version,
-          syncedAt: syncData.syncedAt.toISOString(),
-          timestamp: new Date().toISOString()
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '✅ Data Dragon Sync - Étape 2/4 terminée',
+      //   'Synchronisation des données terminée avec succès',
+      //   {
+      //     step: '2/4',
+      //     version: syncData.version,
+      //     syncedAt: syncData.syncedAt.toISOString(),
+      //     timestamp: new Date().toISOString()
+      //   }
+      // )
 
       // Step 3: Copy static assets to frontend
       console.log(`[Cron] Step 3/4: Copying static assets to frontend...`)
-      await discordService.sendSuccess(
-        '📦 Data Dragon Sync - Étape 3/4',
-        'Copie des assets statiques vers le frontend',
-        {
-          step: '3/4',
-          action: 'Copy Assets',
-          version: syncData.version,
-          timestamp: new Date().toISOString()
-        }
-      )
+      // await discordService.sendSuccess(
+      //   '📦 Data Dragon Sync - Étape 3/4',
+      //   'Copie des assets statiques vers le frontend',
+      //   {
+      //     step: '3/4',
+      //     action: 'Copy Assets',
+      //     version: syncData.version,
+      //     timestamp: new Date().toISOString()
+      //   }
+      // )
 
       const copyResult = await staticAssets.copyAllAssetsToFrontend(
         syncData.version,
@@ -198,17 +198,17 @@ export function setupDataDragonSync(): void {
         console.log(
           `[Cron] Static assets copied: ${assetsStats.dataCopied} data files, ${assetsStats.imagesCopied} images (${assetsStats.imagesSkipped} skipped)`
         )
-        await discordService.sendSuccess(
-          '✅ Data Dragon Sync - Étape 3/4 terminée',
-          'Copie des assets statiques terminée avec succès',
-          {
-            step: '3/4',
-            dataFiles: assetsStats.dataCopied,
-            imagesCopied: assetsStats.imagesCopied,
-            imagesSkipped: assetsStats.imagesSkipped,
-            timestamp: new Date().toISOString()
-          }
-        )
+        // await discordService.sendSuccess(
+        //   '✅ Data Dragon Sync - Étape 3/4 terminée',
+        //   'Copie des assets statiques terminée avec succès',
+        //   {
+        //     step: '3/4',
+        //     dataFiles: assetsStats.dataCopied,
+        //     imagesCopied: assetsStats.imagesCopied,
+        //     imagesSkipped: assetsStats.imagesSkipped,
+        //     timestamp: new Date().toISOString()
+        //   }
+        // )
       } else {
         const copyError = copyResult.unwrapErr()
         console.warn(
@@ -245,11 +245,11 @@ export function setupDataDragonSync(): void {
         successContext.imagesSkipped = assetsStats.imagesSkipped
       }
       
-      await discordService.sendSuccess(
-        '✅ Data Dragon Sync - Synchronisation terminée avec succès',
-        `Données synchronisées et assets statiques copiés vers le frontend`,
-        successContext
-      )
+      // await discordService.sendSuccess(
+      //   '✅ Data Dragon Sync - Synchronisation terminée avec succès',
+      //   `Données synchronisées et assets statiques copiés vers le frontend`,
+      //   successContext
+      // )
     } catch (error) {
       // Catch any unexpected errors
       console.error('[Cron] Unexpected error in Data Dragon sync:', error)

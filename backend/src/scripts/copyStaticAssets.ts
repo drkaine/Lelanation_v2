@@ -15,13 +15,13 @@ async function main() {
   console.log('[Copy Static Assets] Starting...')
 
   const discordService = new DiscordService()
-  await discordService.sendSuccess(
-    '🔄 Copy Static Assets Started',
-    'Copying static assets to frontend',
-    {
-      startedAt: startTime.toISOString(),
-    }
-  )
+  // await discordService.sendSuccess(
+  //   '🔄 Copy Static Assets Started',
+  //   'Copying static assets to frontend',
+  //   {
+  //     startedAt: startTime.toISOString(),
+  //   }
+  // )
 
   const versionService = new VersionService()
   const staticAssets = new StaticAssetsService()
@@ -140,11 +140,11 @@ async function main() {
     successContext.frontendRestarted = true
   }
 
-  await discordService.sendSuccess(
-    '✅ Copy Static Assets Completed Successfully',
-    'Static assets copied to frontend successfully',
-    successContext
-  )
+  // await discordService.sendSuccess(
+  //   '✅ Copy Static Assets Completed Successfully',
+  //   'Static assets copied to frontend successfully',
+  //   successContext
+  // )
 
   console.log('[Copy Static Assets] Completed successfully!')
 }

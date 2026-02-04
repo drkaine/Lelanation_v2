@@ -58,15 +58,15 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
   }
 
   try {
-    await discordService.sendSuccess(
-      '🔄 Stats LoL – Démarrage',
-      'Le cron de récupération des matchs Ranked Solo/Duo (EUW + EUNE) a démarré.',
-      {
-        startedAt: startTime.toISOString(),
-        schedule: CRON_SCHEDULE,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }
-    )
+    // await discordService.sendSuccess(
+    //   '🔄 Stats LoL – Démarrage',
+    //   'Le cron de récupération des matchs Ranked Solo/Duo (EUW + EUNE) a démarré.',
+    //   {
+    //     startedAt: startTime.toISOString(),
+    //     schedule: CRON_SCHEDULE,
+    //     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    //   }
+    // )
     const statusResult = await cronStatus.getStatus()
     const lastSuccessAt =
       statusResult.isOk() ? statusResult.unwrap().jobs.riotMatchCollect?.lastSuccessAt ?? null : null
@@ -303,14 +303,9 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       }
     }
 
-    let playersUpserted = 0
-    let championStatsUpserted = 0
-    let playersEnriched = 0
     if (collected > 0) {
       try {
         const refresh = await refreshPlayersAndChampionStats()
-        playersUpserted = refresh.playersUpserted
-        championStatsUpserted = refresh.championStatsUpserted
         console.log(
           `${LOG_PREFIX} Players refresh: ${refresh.playersUpserted} players, ${refresh.championStatsUpserted} champion stats`
         )
@@ -320,10 +315,8 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
     }
     try {
       const enrich = await enrichPlayers(25)
-      playersEnriched = enrich.enriched
-      if (playersEnriched > 0) {
-        console.log(`${LOG_PREFIX} Players enriched: ${playersEnriched} (summoner_name, rank)`)
-      }
+      console.log(`${LOG_PREFIX} Players enriched: ${enrich.enriched} (summoner_name, rank)`)
+
     } catch (e) {
       console.warn(`${LOG_PREFIX} Players enrichment failed:`, e)
     }
@@ -332,20 +325,20 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       `${LOG_PREFIX} Done: ${collected} new matches, ${errors} errors, ${processedCount} PUUIDs processed, ${duration}s`
     )
     await cronStatus.markSuccess('riotMatchCollect')
-    await discordService.sendSuccess(
-      '✅ Stats LoL – Récupération terminée',
-      collected > 0
-        ? `${collected} nouveau(x) match(s) collecté(s). Rafraîchissement joueurs : ${playersUpserted} joueurs, ${championStatsUpserted} stats par champion.`
-        : 'Aucun nouveau match (déjà en base ou pas de nouveaux matchs).',
-      {
-        collected,
-        errors,
-        duration: `${duration}s`,
-        playersUpserted,
-        championStatsUpserted,
-        finishedAt: new Date().toISOString(),
-      }
-    )
+    // await discordService.sendSuccess(
+    //   '✅ Stats LoL – Récupération terminée',
+    //   collected > 0
+    //     ? `${collected} nouveau(x) match(s) collecté(s). Rafraîchissement joueurs : ${playersUpserted} joueurs, ${championStatsUpserted} stats par champion.`
+    //     : 'Aucun nouveau match (déjà en base ou pas de nouveaux matchs).',
+    //   {
+    //     collected,
+    //     errors,
+    //     duration: `${duration}s`,
+    //     playersUpserted,
+    //     championStatsUpserted,
+    //     finishedAt: new Date().toISOString(),
+    //   }
+    // )
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
     console.error(`${LOG_PREFIX} Failed:`, error)

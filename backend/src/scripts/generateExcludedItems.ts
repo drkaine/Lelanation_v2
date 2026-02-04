@@ -143,13 +143,13 @@ async function main() {
   console.log('[Generate Excluded Items] Starting...')
 
   const discordService = new DiscordService()
-  await discordService.sendSuccess(
-    '🔄 Generate Excluded Items Started',
-    'Generating excluded items JSON file',
-    {
-      startedAt: startTime.toISOString(),
-    }
-  )
+  // await discordService.sendSuccess(
+  //   '🔄 Generate Excluded Items Started',
+  //   'Generating excluded items JSON file',
+  //   {
+  //     startedAt: startTime.toISOString(),
+  //   }
+  // )
 
   const version = '16.2.1'
   const basePath = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game', version)
@@ -179,21 +179,21 @@ async function main() {
     const stats = await generateExcludedItems(frItemPath, outputPath)
 
     // Send success notification
-    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await discordService.sendSuccess(
-      '✅ Generate Excluded Items Completed Successfully',
-      'Excluded items JSON file generated successfully',
-      {
-        excludedItems: stats.excludedCount,
-        allowedItems: stats.allowedCount,
-        totalItems: stats.totalCount,
-        outputPath: outputPath,
-        duration: `${duration}s`,
-        timestamp: new Date().toISOString(),
-      }
-    )
+    // const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
+    // await discordService.sendSuccess(
+    //   '✅ Generate Excluded Items Completed Successfully',
+    //   'Excluded items JSON file generated successfully',
+    //   {
+    //     excludedItems: stats.excludedCount,
+    //     allowedItems: stats.allowedCount,
+    //     totalItems: stats.totalCount,
+    //     outputPath: outputPath,
+    //     duration: `${duration}s`,
+    //     timestamp: new Date().toISOString(),
+    //   }
+    // )
 
-    console.log('\n✓ Script completed!')
+    console.log(`\n✓ Script completed! Excluded items: ${stats.excludedCount}`)
   } catch (error) {
     const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
     await discordService.sendAlert(

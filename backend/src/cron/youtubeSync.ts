@@ -33,14 +33,14 @@ export function setupYouTubeSync(): void {
     console.log('[Cron] Starting YouTube synchronization...')
 
     // Send start notification
-    await discordService.sendSuccess(
-      '🔄 YouTube Sync Started',
-      'The hourly YouTube synchronization cron job has started',
-      {
-        startedAt: startTime.toISOString(),
-        scheduledTime: 'Every hour (0 min) UTC',
-      }
-    )
+    // await discordService.sendSuccess(
+    //   '🔄 YouTube Sync Started',
+    //   'The hourly YouTube synchronization cron job has started',
+    //   {
+    //     startedAt: startTime.toISOString(),
+    //     scheduledTime: 'Every hour (0 min) UTC',
+    //   }
+    // )
 
     await cronStatus.markStart('youtubeSync')
 
@@ -141,11 +141,11 @@ export function setupYouTubeSync(): void {
       successContext.youtubeFilesDeleted = stats.deleted
     }
 
-    await discordService.sendSuccess(
-      '✅ YouTube Sync Completed Successfully',
-      `YouTube videos synchronized and static assets copied to frontend`,
-      successContext
-    )
+    // await discordService.sendSuccess(
+    //   '✅ YouTube Sync Completed Successfully',
+    //   `YouTube videos synchronized and static assets copied to frontend`,
+    //   successContext
+    // )
   }, {
     timezone: 'Etc/UTC'
   })

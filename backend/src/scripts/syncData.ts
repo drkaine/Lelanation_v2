@@ -22,13 +22,13 @@ async function main(): Promise<void> {
   console.log('[sync:data] Starting manual data synchronization...')
 
   const discordService = new DiscordService()
-  await discordService.sendSuccess(
-    '🔄 Manual Data Sync Started',
-    'Manual data synchronization script has started',
-    {
-      startedAt: startTime.toISOString(),
-    }
-  )
+  // await discordService.sendSuccess(
+  //   '🔄 Manual Data Sync Started',
+  //   'Manual data synchronization script has started',
+  //   {
+  //     startedAt: startTime.toISOString(),
+  //   }
+  // )
 
   // --- Data Dragon ---
   console.log('[sync:data] Checking latest Data Dragon version...')
@@ -271,11 +271,11 @@ async function main(): Promise<void> {
     successContext.frontendRestarted = true
   }
 
-  await discordService.sendSuccess(
-    '✅ Manual Data Sync Completed Successfully',
-    'All data sources synchronized and assets copied to frontend',
-    successContext
-  )
+  // await discordService.sendSuccess(
+  //   '✅ Manual Data Sync Completed Successfully',
+  //   'All data sources synchronized and assets copied to frontend',
+  //   successContext
+  // )
 }
 
 main().catch(async (error) => {
