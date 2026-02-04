@@ -22,7 +22,7 @@ async function main(): Promise<void> {
   const { getRiotApiService } = await import('../services/RiotApiService.js')
 
   const riotApi = getRiotApiService()
-  riotApi.setKeyPreference(true)
+  riotApi.setKeyPreference(false)
 
   try {
     await runRiotMatchCollectOnce()
@@ -30,7 +30,7 @@ async function main(): Promise<void> {
     if (isRiotAuthError(err)) {
       console.warn('[riot:collect] Key from .env rejected by Riot (401/403), retrying with Admin key…')
       riotApi.invalidateKeyCache()
-      riotApi.setKeyPreference(false)
+      riotApi.setKeyPreference(true)
       try {
         await runRiotMatchCollectOnce()
       } catch (retryErr) {

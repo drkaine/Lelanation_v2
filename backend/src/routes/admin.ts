@@ -189,12 +189,12 @@ router.delete('/contact/:type/:index', async (req, res) => {
   return res.json({ ok: true })
 })
 
-// --- Players with empty rank (for enrichment / verification) ---
-router.get('/players-missing-rank', async (req, res) => {
+// --- Players with empty summoner_name (for enrichment / verification) ---
+router.get('/players-missing-summoner-name', async (req, res) => {
   try {
     const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500)
     const players = await prisma.player.findMany({
-      where: { currentRankTier: null },
+      where: { summonerName: null },
       take: limit,
       select: {
         puuid: true,
@@ -206,7 +206,7 @@ router.get('/players-missing-rank', async (req, res) => {
       },
       orderBy: { lastSeen: 'desc' },
     })
-    const total = await prisma.player.count({ where: { currentRankTier: null } })
+    const total = await prisma.player.count({ where: { summonerName: null } })
     return res.json({
       total,
       returned: players.length,
@@ -394,7 +394,6 @@ router.get('/players', async (req, res) => {
       puuid: true,
       summonerName: true,
       region: true,
-      currentRankTier: true,
       totalGames: true,
       totalWins: true,
     },
@@ -403,7 +402,6 @@ router.get('/players', async (req, res) => {
     puuid: p.puuid,
     summonerName: p.summonerName,
     region: p.region,
-    rankTier: p.currentRankTier,
     totalGames: p.totalGames,
     totalWins: p.totalWins,
     winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
@@ -411,10 +409,17 @@ router.get('/players', async (req, res) => {
   return res.json({ players, total: players.length })
 })
 
-// --- Seed players (DB, for match collection) ---
+// --- Seed players (players table = single source for match crawl) ---
 router.get('/seed-players', async (_req, res) => {
-  const rows = await prisma.seedPlayer.findMany({ orderBy: { createdAt: 'asc' } })
-  const players = rows.map((p) => ({ id: p.id, label: p.label, platform: p.platform as SeedPlayerPlatform }))
+  const rows = await prisma.player.findMany({
+    orderBy: { createdAt: 'asc' },
+    select: { puuid: true, summonerName: true, region: true },
+  })
+  const players = rows.map((p) => ({
+    id: p.puuid,
+    label: p.summonerName ?? '—',
+    platform: p.region as SeedPlayerPlatform,
+  }))
   return res.json({ players })
 })
 
@@ -456,18 +461,12 @@ router.post('/seed-players', async (req, res) => {
     return res.status(400).json({ error: 'Invalid Riot ID format (use Name#Tag or Name-Tag)' })
   }
 
-  // Block if already in seed list (same label, case-insensitive)
-  const existingSeed = await prisma.seedPlayer.findFirst({
-    where: { label: { equals: labelToStore, mode: 'insensitive' } },
-  })
-  if (existingSeed) {
-    return res.status(409).json({ error: 'Already in seed list', code: 'ALREADY_SEED' })
-  }
-
-  // Validate player exists via Riot API and get puuid
+  // Resolve Riot ID via API and get puuid + summoner info
+  const riotApi = getRiotApiService()
   let puuid: string
+  let summonerId: string | null = null
+  let summonerName: string | null = labelToStore
   try {
-    const riotApi = getRiotApiService()
     const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
     if (accountResult.isErr()) {
       const err = accountResult.unwrapErr()
@@ -486,6 +485,12 @@ router.post('/seed-players', async (req, res) => {
       return res.status(400).json({ error: err.message || 'Riot API error' })
     }
     puuid = accountResult.unwrap().puuid
+    const summonerResult = await riotApi.getSummonerByPuuid(platform === 'eun1' ? 'eun1' : 'euw1', puuid)
+    if (summonerResult.isOk()) {
+      const s = summonerResult.unwrap()
+      summonerId = s.id || null
+      if (s.name) summonerName = s.name
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err)
     if (message.includes('RIOT_API_KEY') || message.includes('not configured')) {
@@ -494,29 +499,39 @@ router.post('/seed-players', async (req, res) => {
     return res.status(400).json({ error: message || 'Validation failed' })
   }
 
-  // Block if player already in database (we already collect their matches)
+  const region = platform === 'eun1' ? 'eun1' : 'euw1'
   const existingPlayer = await prisma.player.findUnique({ where: { puuid } })
   if (existingPlayer) {
     return res.status(409).json({
-      error: 'Player already in database',
+      error: 'Player already in list',
       code: 'ALREADY_PLAYER',
       summonerName: existingPlayer.summonerName ?? undefined,
     })
   }
 
-  const created = await prisma.seedPlayer.create({ data: { label: labelToStore, platform } })
-  return res.status(201).json({ player: { id: created.id, label: created.label, platform: created.platform } })
+  await prisma.player.create({
+    data: {
+      puuid,
+      summonerId,
+      summonerName,
+      region,
+      lastSeen: null,
+    },
+  })
+  return res.status(201).json({
+    player: { id: puuid, label: summonerName ?? '—', platform: region },
+  })
 })
 
 router.delete('/seed-players/:id', async (req, res) => {
-  const id = req.params?.id
-  if (!id) return res.status(400).json({ error: 'id is required' })
+  const puuid = req.params?.id
+  if (!puuid) return res.status(400).json({ error: 'id is required' })
 
   try {
-    await prisma.seedPlayer.delete({ where: { id } })
+    await prisma.player.delete({ where: { puuid } })
     return res.json({ success: true })
   } catch {
-    return res.status(404).json({ error: 'Seed player not found' })
+    return res.status(404).json({ error: 'Player not found' })
   }
 })
 

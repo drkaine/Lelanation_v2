@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "sync:data": "tsx src/scripts/syncData.ts",
     "riot:collect": "tsx src/scripts/runRiotMatchCollect.ts",
+    "riot:worker": "tsx src/scripts/runRiotMatchCollectWorker.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit"

@@ -105,7 +105,7 @@ Tableau d’entrées (Solo/Duo, Flex, etc.) :
 
 ### Vérifier les joueurs au rang vide
 
-- **Admin** : `GET /api/admin/players-missing-rank` renvoie la liste des joueurs avec `currentRankTier` vide (avec ou sans `summonerId`), pour relancer l’enrichment ou vérifier manuellement.
+- **Admin** : `GET /api/admin/players-missing-summoner-name` renvoie la liste des joueurs avec `summoner_name` vide, pour relancer l’enrichment ou vérifier manuellement.
 - L’enrichment est limité par run (ex. 25 joueurs) pour respecter les rate limits ; plusieurs runs ou un cron dédié permettent de vider la file.
 
 ### Bonnes pratiques
@@ -128,31 +128,35 @@ Si **League-V4** renvoie **403 Forbidden** alors que Summoner-V4 ou Match-V5 fon
 ## Workflow de collecte
 
 ```
-Seed players (DB: SeedPlayer) + file PUUID persistée (DB: PuuidCrawlQueue)
+Une seule table **players** (puuid, summoner_id, summoner_name, region, last_seen, created_at, updated_at) sert de source pour le crawl : admin y ajoute des seeds (avec infos complètes), les joueurs rencontrés dans les matchs y sont upsertés, et le cron utilise `last_seen` pour prioriser qui crawler.
+
+```
+Admin : ajout seed → players (puuid, summoner_id, summoner_name, region, last_seen = null)
    ↓
-League-v4: Challenger / GM / Master → summonerId → Summoner-v4 → puuid
+League-v4 : Challenger / GM / Master → Summoner-v4 → upsert players (sans doublon)
    ↓
-PUUID queue en mémoire (seed + drain DB + participants des matchs)
+Crawl : SELECT players ORDER BY last_seen ASC NULLS FIRST LIMIT N
    ↓
-Match-v5: match IDs by PUUID (queue 420, pagination)
+Match-v5 : match IDs by PUUID (queue 420) → match details
    ↓
-Match-v5: match details
+Pour chaque match inséré : extraction des 10 participants → upsert players (puuid, region, summoner_id, last_seen = null)
    ↓
-Extract participants (10 PUUIDs par match)
+Après crawl d’un joueur : UPDATE players SET last_seen = now()
    ↓
-Expand : en mémoire (run courant) + persistance en DB (PuuidCrawlQueue) pour les runs suivants
+Refresh + enrichment (stats, summoner_name, rank)
 ```
 
 ### Étapes implémentées
 
-1. **Seed Admin (DB)** : joueurs en base (`SeedPlayer`). Admin > Joueurs seed (Riot ID `Nom#Tag` ou nom d’invocateur + plateforme). Résolution : Riot ID → Account-v1 → PUUID ; nom d’invocateur → Summoner-v4 by-name → PUUID.
-2. **Drain file PUUID (DB)** : au début de chaque run, le cron lit jusqu’à `MAX_PUUIDS_PER_RUN` entrées dans `PuuidCrawlQueue` (ordre `addedAt`), les ajoute à la file en mémoire, puis les supprime de la table.
-3. **Seed League** : Challenger (4), Grandmaster (3), Master (3) par plateforme (EUW, EUNE). Conversion : summonerId → Summoner-v4 → puuid.
-4. **Match IDs** : par PUUID, queue 420, ~20 IDs par joueur. **Fenêtre de dates** : premier run = `endTime=now` (matchs récents) ; runs suivants = `startTime=dernier run`, `endTime=now` (évite de redemander les mêmes IDs et les doublons).
-5. **Match details** : pour chaque match ID, si déjà en base (`hasMatch(matchId)`) on skip ; sinon fetch détail puis `upsertMatchFromRiot` (pas de doublon).
-6. **Expansion** : extraction des 10 PUUIDs participants ; ajout en mémoire (run courant) et `createMany` en DB (`PuuidCrawlQueue`, `skipDuplicates: true`) pour les runs suivants. Les matchs déjà vus ne sont pas re-traités.
-7. **Refresh** : après collecte, mise à jour des joueurs et stats champions (PostgreSQL).
-8. **Enrichment** (optionnel) : pour les joueurs en base, appel Summoner-v4 (by puuid) et League-v4 (by summonerId) pour remplir `summoner_name`, `current_rank_tier`, `current_rank_division`. Les mêmes valeurs de rang sont recopiées sur les lignes **Participant** (`rank_tier`, `rank_division`, `rank_lp`) pour ce puuid, car l’API Match ne fournit pas le rang par participant.
+1. **Seed Admin** : Admin > Joueurs seed. Résolution Riot ID (Account-v1) → puuid ; Summoner-v4 by-puuid → summoner_id, summoner_name. Création dans **players** (puuid, summoner_id, summoner_name, region, last_seen = null). Pas de doublon (unicité sur puuid).
+2. **Seed League** : Challenger (4), Grandmaster (3), Master (3) par plateforme (EUW, EUNE). Summoner-v4 → upsert dans **players** (last_seen = null).
+3. **Crawl** : lecture de **players** ordonnée par `last_seen ASC NULLS FIRST`, limite `MAX_PUUIDS_PER_RUN`. Les joueurs jamais crawlé (last_seen null) passent en premier.
+4. **Match IDs** : par joueur crawlé, queue 420, fenêtre de dates (premier run = récents ; runs suivants = depuis lastSuccessAt).
+5. **Match details** : si déjà en base on skip ; sinon `upsertMatchFromRiot` (pas de doublon).
+6. **Participants → players** : pour chaque participant du match, upsert dans **players** (puuid, region, summoner_id si dispo, last_seen = null en création). Tous les joueurs rencontrés sont ainsi ajoutés pour un crawl futur, sans doublon.
+7. **last_seen** : après avoir crawlé un joueur (récupéré ses matchs), mise à jour `players.last_seen = now()` pour ce puuid.
+8. **Refresh** : agrégation joueurs et champion_player_stats depuis **participants**.
+9. **Enrichment** : Summoner-v4 (by-puuid) et League-v4 pour remplir summoner_name, current_rank_* ; recopie du rang sur **Participant**.
 
 ### Pourquoi certains champs Player sont vides
 
@@ -187,13 +191,13 @@ Sans étape d’enrichment, ces colonnes restent donc `NULL`.
 - **Rate limiting** : `RiotApiService` applique un délai fixe entre chaque requête (ex. 70 ms).
 - **Cache clé** : clé API lue depuis fichier admin ou `RIOT_API_KEY` ; cache invalidé en cas de 401/403.
 - **Déduplication** : `hasMatch(matchId)` avant fetch détaillé ; `upsertMatchFromRiot` évite les doublons. Les match IDs demandés à Riot sont filtrés par date : premier run = jusqu’à maintenant ; runs suivants = entre `lastSuccessAt` (dernier run) et maintenant, donc pas de reprise des mêmes matchs.
-- **File PUUID** : dans un run, après stockage d’un match, les PUUIDs des participants sont ajoutés à une file (en mémoire, bornée) et à `PuuidCrawlQueue` en DB pour les runs suivants ; on ne retraite pas les matchs déjà en base.
+- **Source crawl** : une seule table **players** (puuid, summoner_id, summoner_name, region, last_seen, created_at, updated_at). Les participants des matchs sont upsertés dans **players** ; le cron sélectionne les joueurs par `last_seen ASC NULLS FIRST` et met à jour `last_seen` après chaque crawl.
 
 ### Schéma de données (résumé)
 
 - **matches** : `matchId`, `region`, `queueId`, `gameVersion`, `gameCreation`, `gameDuration`.
 - **participants** : par match, `puuid`, `championId`, `win`, `role`, `items`, `kills`/`deaths`/`assists`, etc.
-- **players** : agrégation par `puuid` (région, rang, totalGames, etc.).
+- **players** : une ligne par `puuid` (summoner_id, summoner_name, region, last_seen, created_at, updated_at, rang, totalGames, etc.) — source unique pour le crawl et l’affichage.
 - **champion_player_stats** : stats par joueur et champion (winrate, moyennes KDA).
 
 ### Filtrage par patch
@@ -208,8 +212,19 @@ Le champ `gameVersion` (ex. `"15.1.123.456"`) est stocké sur chaque match. Pour
 | Variable | Description | Défaut |
 |----------|-------------|--------|
 | `RIOT_MATCH_CRON_SCHEDULE` | Cron (ex. `0 * * * *` = toutes les heures) | `0 * * * *` |
-| `RIOT_MATCH_MAX_PUUIDS_PER_RUN` | Nombre max de PUUIDs traités par run (seed + expansion) | `50` |
+| `RIOT_MATCH_MAX_PUUIDS_PER_RUN` | Nombre max de joueurs crawlé par run (depuis **players** par last_seen) | `50` |
 | `RIOT_MATCH_PATCH_PREFIX` | Préfixe de patch pour filtrer les matchs (ex. `15.1`) | (aucun) |
+| `RIOT_MATCH_CYCLE_DELAY_MS` | Pause entre deux cycles du worker (ms) | `60000` |
+| `RIOT_MATCH_ENRICH_PASSES` | Nombre de passes d'enrichissement (summoner_name) après chaque cycle du worker | `3` |
+| `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |
+| `RIOT_MATCH_CRAWL_RETRIES` | Nombre de tentatives du crawl en cas d’erreur transitoire (worker) | `3` |
+| `RIOT_MATCH_CRAWL_BACKOFF_MS` | Délai initial entre deux tentatives (backoff exponentiel, ms) | `30000` |
+
+### Worker continu (recommandé) vs cron
+
+- **Worker** : `npm run riot:worker` (depuis `backend/`). Boucle infinie : un cycle = crawl (avec retry + backoff en cas d’erreur transitoire), refresh + enrichissement, puis N passes d’enrichissement, puis pause. En cas d’erreur (réseau, 429, 5xx) : jusqu’à 3 tentatives avec backoff (30s, 60s, 120s) avant de passer au cycle suivant. 401/403 : retry une fois avec la clé Admin puis exit si échec. **Redémarrage** : en production, lancer le worker sous PM2 (ou systemd) avec `autorestart: true` pour que tout crash du process relance le worker.
+- **Cron** : exécution périodique via `setupRiotMatchCollect()`. Une seule exécution par créneau.
+- **One-shot** : `npm run riot:collect` pour un seul cycle.
 
 ---
 

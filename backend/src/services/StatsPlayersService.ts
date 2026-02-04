@@ -42,11 +42,18 @@ export async function getTopPlayers(options: {
   if (!isDatabaseConfigured()) return []
   const { rankTier, minGames = 50, limit = 100 } = options
   try {
-    const where: { currentRankTier?: string | null } = {}
-    if (rankTier != null && rankTier !== '') where.currentRankTier = rankTier
+    const where: { totalGames: { gte: number }; puuid?: { in: string[] } } = { totalGames: { gte: minGames } }
+    if (rankTier != null && rankTier !== '') {
+      const puuids = await prisma.participant.findMany({
+        where: { rankTier },
+        select: { puuid: true },
+        distinct: ['puuid'],
+      })
+      where.puuid = { in: puuids.map((r) => r.puuid) }
+    }
 
     const players = await prisma.player.findMany({
-      where: { ...where, totalGames: { gte: minGames } },
+      where,
       orderBy: [{ totalWins: 'desc' }],
       take: limit,
     })
@@ -56,7 +63,7 @@ export async function getTopPlayers(options: {
       maskedPuid: maskPuuid(p.puuid),
       summonerName: p.summonerName,
       region: p.region,
-      rankTier: p.currentRankTier,
+      rankTier: null,
       totalGames: p.totalGames,
       totalWins: p.totalWins,
       winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
@@ -89,7 +96,7 @@ export async function getPlayerBySummonerName(summonerName: string): Promise<Pla
       maskedPuid: maskPuuid(player.puuid),
       summonerName: player.summonerName,
       region: player.region,
-      rankTier: player.currentRankTier,
+      rankTier: null,
       totalGames: player.totalGames,
       totalWins: player.totalWins,
       winrate:
@@ -134,12 +141,17 @@ export async function getTopPlayersByChampion(options: {
   if (!isDatabaseConfigured()) return []
   const { championId, rankTier, minGames = 20, limit = 50 } = options
   try {
-    const where: { championId: number; games: { gte: number }; player?: { currentRankTier?: string | null } } = {
+    const where: { championId: number; games: { gte: number }; puuid?: { in: string[] } } = {
       championId,
       games: { gte: minGames },
     }
     if (rankTier != null && rankTier !== '') {
-      where.player = { currentRankTier: rankTier }
+      const puuids = await prisma.participant.findMany({
+        where: { rankTier },
+        select: { puuid: true },
+        distinct: ['puuid'],
+      })
+      where.puuid = { in: puuids.map((r) => r.puuid) }
     }
 
     const rows = await prisma.championPlayerStats.findMany({
@@ -154,7 +166,7 @@ export async function getTopPlayersByChampion(options: {
       maskedPuid: maskPuuid(r.puuid),
       summonerName: r.player.summonerName,
       region: r.player.region,
-      rankTier: r.player.currentRankTier,
+      rankTier: null,
       games: r.games,
       wins: r.wins,
       winrate: Number(r.winrate),

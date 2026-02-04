@@ -1,7 +1,7 @@
 /**
  * Refreshes players and champion_player_stats from participants (aggregation).
  * Run after match collection or on a schedule (e.g. every 12h).
- * Optionally enriches Player.summonerName (Riot ID via Account-V1 by-puuid) and currentRankTier/Division (League-V4 by-puuid).
+ * Optionally enriches Player.summonerName (Riot ID via Account-V1 by-puuid).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -90,9 +90,6 @@ export async function refreshPlayersAndChampionStats(): Promise<{
         puuid,
         summonerId: e.summonerId,
         region: e.region,
-        currentRankTier: e.lastRank.tier,
-        currentRankDivision: e.lastRank.division,
-        currentRankLp: e.lastRank.lp,
         totalGames: e.totalGames,
         totalWins: e.totalWins,
         lastSeen: new Date(),
@@ -100,9 +97,6 @@ export async function refreshPlayersAndChampionStats(): Promise<{
       update: {
         totalGames: e.totalGames,
         totalWins: e.totalWins,
-        currentRankTier: e.lastRank.tier,
-        currentRankDivision: e.lastRank.division,
-        currentRankLp: e.lastRank.lp,
         lastSeen: new Date(),
       },
     })
@@ -141,11 +135,6 @@ export async function refreshPlayersAndChampionStats(): Promise<{
   return { playersUpserted, championStatsUpserted }
 }
 
-/** Platform from Player.region (euw1, eun1). */
-function regionToPlatform(region: string): 'euw1' | 'eun1' {
-  return region === 'eun1' ? 'eun1' : 'euw1'
-}
-
 /** Continent for Account-V1 (euw1, eun1 → europe). */
 function regionToContinent(region: string): 'europe' | 'americas' | 'asia' {
   if (region === 'eun1' || region === 'euw1') return 'europe'
@@ -154,88 +143,41 @@ function regionToContinent(region: string): 'europe' | 'americas' | 'asia' {
 }
 
 /**
- * Enrich players missing summoner_name (Riot ID) or current_rank_* via Account-V1 by-puuid and League-V4 by-puuid.
+ * Enrich players missing summoner_name (Riot ID via Account-V1 by-puuid).
+ * Run with a higher limit to fill summoner_name for many players (e.g. 100).
  */
 const ENRICH_LOG = '[enrich]'
 
-export async function enrichPlayers(limit = 25): Promise<{ enriched: number }> {
+export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> {
   if (!isDatabaseConfigured()) {
     console.warn(`${ENRICH_LOG} Skipped: database not configured`)
     return { enriched: 0 }
   }
   const riotApi = getRiotApiService()
   const players = await prisma.player.findMany({
-    where: {
-      OR: [{ summonerName: null }, { currentRankTier: null }],
-    },
+    where: { summonerName: null },
     take: limit,
-    select: { puuid: true, region: true, summonerId: true, summonerName: true, currentRankTier: true },
+    select: { puuid: true, region: true },
   })
-  console.log(`${ENRICH_LOG} Found ${players.length} players to enrich (summoner_name or rank missing)`)
+  console.log(`${ENRICH_LOG} Found ${players.length} players missing summoner_name`)
   if (players.length === 0) return { enriched: 0 }
 
   let enriched = 0
-  let league403Seen = false
   for (const p of players) {
-    const platform = regionToPlatform(p.region)
-    const updated: {
-      summonerName?: string
-      currentRankTier?: string
-      currentRankDivision?: string
-      currentRankLp?: number
-    } = {}
-
-    if (!p.summonerName) {
-      const continent = regionToContinent(p.region)
-      const accountResult = await riotApi.getAccountByPuuid(continent, p.puuid)
-      if (accountResult.isOk()) {
-        const account = accountResult.unwrap()
-        if (account.riotId) updated.summonerName = account.riotId
-      } else {
-        console.warn(`${ENRICH_LOG} Account API (by-puuid) failed for puuid ${p.puuid.slice(0, 8)}…: ${accountResult.unwrapErr().message}`)
-      }
+    const continent = regionToContinent(p.region)
+    const accountResult = await riotApi.getAccountByPuuid(continent, p.puuid)
+    if (accountResult.isErr()) {
+      console.warn(`${ENRICH_LOG} Account API (by-puuid) failed for puuid ${p.puuid.slice(0, 8)}…: ${accountResult.unwrapErr().message}`)
+      continue
     }
-
-    if (!p.currentRankTier) {
-      const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, p.puuid)
-      if (leagueResult.isOk()) {
-        const entry = leagueResult.unwrap()
-        if (entry) {
-          updated.currentRankTier = entry.tier
-          updated.currentRankDivision = entry.rank
-          updated.currentRankLp = entry.leaguePoints
-        }
-      } else {
-        const errMsg = leagueResult.unwrapErr().message
-        if (!league403Seen && errMsg.includes('Forbidden')) {
-          league403Seen = true
-          console.warn(
-            `${ENRICH_LOG} League API returns 403 Forbidden. Enable League-v4 for your API key in Riot Developer Portal (product / API access).`
-          )
-        }
-        console.warn(`${ENRICH_LOG} League API failed for puuid ${p.puuid.slice(0, 12)}…: ${errMsg}`)
-      }
-    }
-
-    if (Object.keys(updated).length > 0) {
-      await prisma.player.update({
-        where: { puuid: p.puuid },
-        data: updated,
-      })
-      enriched++
-      // Backfill Participant.rankTier/rankDivision/rankLp for this puuid (Match API doesn't return rank; use current rank)
-      const participantRankData: { rankTier?: string; rankDivision?: string; rankLp?: number } = {}
-      if (updated.currentRankTier != null) participantRankData.rankTier = updated.currentRankTier
-      if (updated.currentRankDivision != null) participantRankData.rankDivision = updated.currentRankDivision
-      if (updated.currentRankLp != null) participantRankData.rankLp = updated.currentRankLp
-      if (Object.keys(participantRankData).length > 0) {
-        await prisma.participant.updateMany({
-          where: { puuid: p.puuid },
-          data: participantRankData,
-        })
-      }
-    }
+    const account = accountResult.unwrap()
+    if (!account.riotId) continue
+    await prisma.player.update({
+      where: { puuid: p.puuid },
+      data: { summonerName: account.riotId },
+    })
+    enriched++
   }
-  console.log(`${ENRICH_LOG} Enriched ${enriched} players`)
+  console.log(`${ENRICH_LOG} Enriched ${enriched} players (summoner_name)`)
   return { enriched }
 }

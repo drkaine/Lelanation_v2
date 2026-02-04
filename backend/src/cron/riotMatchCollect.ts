@@ -1,5 +1,5 @@
 /**
- * Riot match collection: seed (Admin seed players + League-v4) → PUUID queue → Match-v5 IDs → match details → expand queue from participants.
+ * Riot match collection: players table (admin + League-v4 + discovered from matches) → crawl by last_seen → Match-v5 → upsert participants into players.
  * See docs/riot-api-match-collection.md for workflow, limits, and TOS.
  * Ranked Solo/Duo (420), EUW + EUNE. Schedule: every hour (RIOT_MATCH_CRON_SCHEDULE).
  */
@@ -11,20 +11,21 @@ import { refreshPlayersAndChampionStats, enrichPlayers } from '../services/Stats
 import { CronStatusService } from '../services/CronStatusService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { isDatabaseConfigured, prisma } from '../db.js'
-import type { PuuidCrawlQueue } from '../generated/prisma/index.js'
 import type { AppError } from '../utils/errors.js'
 
 const MAX_SUMMONERS_PER_PLATFORM = 10
 const MATCH_IDS_PER_SUMMONER = 10
-/** Max PUUIDs to process per run (seed + expansion from match participants). */
+/** Max players to crawl per run (from players table, ordered by last_seen asc nulls first). */
 const MAX_PUUIDS_PER_RUN = Math.max(20, parseInt(process.env.RIOT_MATCH_MAX_PUUIDS_PER_RUN ?? '50', 10) || 50)
+/** Players to enrich (summoner_name) per run. */
+const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
 const CRON_SCHEDULE = process.env.RIOT_MATCH_CRON_SCHEDULE ?? '0 * * * *' // every hour at minute 0
 
 type Platform = 'euw1' | 'eun1'
 
-interface PuuidItem {
-  platform: Platform
+interface CrawlRow {
   puuid: string
+  region: string
 }
 
 function isRiotAuthError(err: unknown): boolean {
@@ -87,92 +88,15 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
     }
 
     const platforms: Platform[] = ['euw1', 'eun1']
-    const puuidQueue: PuuidItem[] = []
-    const seenPuuids = new Set<string>()
-    /** PUUIDs discovered from match participants to persist for future runs. */
-    const toPersistQueue: PuuidItem[] = []
     let collected = 0
     let errors = 0
 
-    /** Match IDs requested in (matchStartTime, matchEndTime] to avoid duplicates: first run = recent only; next runs = since last success. */
     const matchEndTime = Math.floor(Date.now() / 1000)
     const matchStartTime = lastSuccessAt
       ? Math.floor(new Date(lastSuccessAt).getTime() / 1000)
       : undefined
 
-    // 0) Admin seed players from DB (Riot ID or summoner name) → PUUID queue
-    const seedPlayers = await prisma.seedPlayer.findMany({ orderBy: { createdAt: 'asc' } })
-    for (const player of seedPlayers) {
-      const label = typeof player.label === 'string' ? player.label.trim() : ''
-      const platform = player.platform === 'eun1' ? 'eun1' : 'euw1'
-      if (!label) continue
-      try {
-        if (label.includes('#')) {
-          const [gameName, tagLine] = label.split('#').map((s: string) => s.trim())
-          if (!gameName || !tagLine) {
-            console.warn(`${LOG_PREFIX} Invalid Riot ID format: ${label}`)
-            continue
-          }
-          const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
-          if (accountResult.isErr()) {
-            if (isRiotAuthError(accountResult.unwrapErr())) throw accountResult.unwrapErr()
-            errors++
-            continue
-          }
-          const puuid = accountResult.unwrap().puuid
-          if (!seenPuuids.has(puuid)) {
-            seenPuuids.add(puuid)
-            puuidQueue.push({ platform, puuid })
-          }
-        } else {
-          const summonerResult = await riotApi.getSummonerByName(platform, label)
-          if (summonerResult.isErr()) {
-            const err = summonerResult.unwrapErr()
-            const status = err?.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
-            if (status === 403) {
-              console.warn(
-                `${LOG_PREFIX} Seed "${label}" (${platform}): Riot no longer allows lookup by summoner name. Use Riot ID (Name#Tag) in Admin.`
-              )
-              errors++
-              continue
-            }
-            if (isRiotAuthError(err)) throw err
-            errors++
-            continue
-          }
-          const puuid = summonerResult.unwrap().puuid
-          if (!seenPuuids.has(puuid)) {
-            seenPuuids.add(puuid)
-            puuidQueue.push({ platform, puuid })
-          }
-        }
-      } catch (e) {
-        if (isRiotAuthError(e)) throw e
-        console.warn(`${LOG_PREFIX} Seed player ${label} (${platform}):`, e)
-        errors++
-      }
-    }
-
-    // 0b) Drain persistent PUUID queue from DB (discovered in previous runs)
-    const drained = await prisma.puuidCrawlQueue.findMany({
-      orderBy: { addedAt: 'asc' },
-      take: MAX_PUUIDS_PER_RUN,
-    })
-    if (drained.length > 0) {
-      await prisma.puuidCrawlQueue.deleteMany({
-        where: { puuid: { in: drained.map((r: PuuidCrawlQueue) => r.puuid) } },
-      })
-      for (const r of drained as PuuidCrawlQueue[]) {
-        const platform = (r.platform === 'eun1' ? 'eun1' : 'euw1') as Platform
-        if (!seenPuuids.has(r.puuid)) {
-          seenPuuids.add(r.puuid)
-          puuidQueue.push({ platform, puuid: r.puuid })
-        }
-      }
-      console.log(`${LOG_PREFIX} Drained ${drained.length} PUUIDs from crawl queue`)
-    }
-
-    // 1) Seed: League-v4 → Summoner-v4 → PUUID queue
+    // 1) League-v4 seed: Challenger / GM / Master → upsert into players
     for (const platform of platforms) {
         const entries: Array<{ summonerId: string }> = []
 
@@ -226,21 +150,27 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
             errors++
             continue
           }
-          const puuid = summonerResult.unwrap().puuid
-          if (!seenPuuids.has(puuid)) {
-            seenPuuids.add(puuid)
-            puuidQueue.push({ platform, puuid })
-          }
+          const s = summonerResult.unwrap()
+          await prisma.player.upsert({
+            where: { puuid: s.puuid },
+            create: { puuid: s.puuid, summonerId: s.id || null, summonerName: s.name || null, region: platform, lastSeen: null },
+            update: {},
+          })
         }
       }
 
-    // 2) Process PUUID queue (seed + expansion from match participants), bounded
+    // 2) Crawl: players ordered by last_seen asc nulls first
+    const playersToCrawl = await prisma.$queryRaw<CrawlRow[]>`
+      SELECT puuid, region FROM players
+      ORDER BY last_seen ASC NULLS FIRST
+      LIMIT ${MAX_PUUIDS_PER_RUN}
+    `
     let processedCount = 0
-    while (puuidQueue.length > 0 && processedCount < MAX_PUUIDS_PER_RUN) {
-      const item = puuidQueue.shift()!
+    for (const row of playersToCrawl) {
+      const platform = (row.region === 'eun1' ? 'eun1' : 'euw1') as Platform
       processedCount++
 
-      const matchIdsResult = await riotApi.getMatchIdsByPuuid(item.puuid, {
+      const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
         count: MATCH_IDS_PER_SUMMONER,
         queue: 420,
         endTime: matchEndTime,
@@ -248,6 +178,7 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       })
       if (matchIdsResult.isErr()) {
         errors++
+        await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
         continue
       }
       const matchIds = matchIdsResult.unwrap()
@@ -270,37 +201,26 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
           ) {
             continue
           }
-          const { inserted } = await upsertMatchFromRiot(item.platform, matchData)
+          const { inserted } = await upsertMatchFromRiot(platform, matchData)
           if (inserted) {
             collected++
             const participants = matchData.info?.participants ?? []
             for (const p of participants) {
               const participantPuuid = typeof p.puuid === 'string' ? p.puuid.trim() : ''
-              if (participantPuuid && !seenPuuids.has(participantPuuid)) {
-                seenPuuids.add(participantPuuid)
-                const entry: PuuidItem = { platform: item.platform, puuid: participantPuuid }
-                puuidQueue.push(entry)
-                toPersistQueue.push(entry)
-              }
+              if (!participantPuuid) continue
+              const summonerId = typeof (p as { summonerId?: string }).summonerId === 'string' ? (p as { summonerId: string }).summonerId : null
+              await prisma.player.upsert({
+                where: { puuid: participantPuuid },
+                create: { puuid: participantPuuid, summonerId, region: platform, lastSeen: null },
+                update: { summonerId: summonerId ?? undefined },
+              })
             }
           }
         } catch (e) {
           errors++
         }
       }
-    }
-
-    // Persist discovered PUUIDs for future runs (skipDuplicates for already-queued)
-    if (toPersistQueue.length > 0) {
-      try {
-        const { count } = await prisma.puuidCrawlQueue.createMany({
-          data: toPersistQueue.map(({ platform, puuid }) => ({ platform, puuid })),
-          skipDuplicates: true,
-        })
-        if (count > 0) console.log(`${LOG_PREFIX} Queued ${count} new PUUIDs for future crawl`)
-      } catch (e) {
-        console.warn(`${LOG_PREFIX} Failed to persist PUUID queue:`, e)
-      }
+      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
     }
 
     if (collected > 0) {
@@ -314,8 +234,8 @@ export async function runRiotMatchCollectOnce(): Promise<void> {
       }
     }
     try {
-      const enrich = await enrichPlayers(25)
-      console.log(`${LOG_PREFIX} Players enriched: ${enrich.enriched} (summoner_name, rank)`)
+      const enrich = await enrichPlayers(ENRICH_PER_RUN)
+      console.log(`${LOG_PREFIX} Players enriched: ${enrich.enriched} (summoner_name)`)
 
     } catch (e) {
       console.warn(`${LOG_PREFIX} Players enrichment failed:`, e)

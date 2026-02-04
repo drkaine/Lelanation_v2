@@ -23,6 +23,27 @@ module.exports = {
         exec_mode: 'fork'
       },
       {
+        name: 'lelanation-riot-worker',
+        cwd: 'path/to/backend',
+        script: 'npx',
+        args: 'tsx src/scripts/runRiotMatchCollectWorker.ts',
+        interpreter: 'none',
+        env: {
+          NODE_ENV: 'development'
+        },
+        // DATABASE_URL et RIOT_API_KEY lus depuis backend/.env
+        // Optionnel : RIOT_MATCH_CYCLE_DELAY_MS, RIOT_MATCH_ENRICH_PASSES, RIOT_MATCH_ENRICH_PER_PASS
+        error_file: 'path/to/logs/riot-worker-error.log',
+        out_file: 'path/to/logs/riot-worker-out.log',
+        log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+        merge_logs: true,
+        autorestart: true,
+        watch: false,
+        max_memory_restart: '512M',
+        instances: 1,
+        exec_mode: 'fork'
+      },
+      {
         name: 'lelanation-frontend',
         cwd: 'path',
         script: 'node',
