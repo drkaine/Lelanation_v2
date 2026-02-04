@@ -139,6 +139,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
+import { getFallbackGameVersion } from '~/config/version'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 
@@ -147,7 +148,7 @@ const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
 const versionStore = useVersionStore()
-const gameVersion = computed(() => versionStore.currentVersion || '14.1.1')
+const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
 
 // Map i18n locale to Riot Games locale code
 const getRiotLocale = (locale: string): string => {

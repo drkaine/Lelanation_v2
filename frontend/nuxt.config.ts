@@ -1,5 +1,31 @@
 /// <reference types="node" />
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+
+/** Read fallback game version from backend/data/game/version.json at build time */
+function getFallbackGameVersionFromBackend(): string {
+  const cwd = process.cwd()
+  const candidates = [
+    join(cwd, 'backend', 'data', 'game', 'version.json'),
+    join(cwd, '..', 'backend', 'data', 'game', 'version.json'),
+  ]
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      try {
+        const data = JSON.parse(readFileSync(path, 'utf-8')) as { currentVersion?: string }
+        if (data?.currentVersion && typeof data.currentVersion === 'string') {
+          return data.currentVersion
+        }
+      } catch {
+        // ignore
+      }
+      break
+    }
+  }
+  return '16.3.1'
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -37,6 +63,8 @@ export default defineNuxtConfig({
       // Matomo: set NUXT_PUBLIC_MATOMO_HOST and NUXT_PUBLIC_MATOMO_SITE_ID to enable
       matomoHost: process.env.NUXT_PUBLIC_MATOMO_HOST || '',
       matomoSiteId: process.env.NUXT_PUBLIC_MATOMO_SITE_ID || '',
+      /** Fallback game version from backend/data/game/version.json (read at build time) */
+      fallbackGameVersion: getFallbackGameVersionFromBackend(),
     },
   },
   site: {

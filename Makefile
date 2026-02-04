@@ -108,4 +108,4 @@ format-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run format
 
 clean:
-	rm -rf "$(BACKEND_DIR)/dist" "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/.nuxt"
+	rm -rf "$(BACKEND_DIR)/dist" "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/.nuxt" "$(FRONTEND_DIR)/node_modules/.cache/nuxt"

@@ -1,4 +1,5 @@
 import type { Build, RunePath } from '~/types/build'
+import { getFallbackGameVersion } from '~/config/version'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -22,7 +23,8 @@ export async function migrateBuildToCurrent(
 
   const versionStore = useVersionStore()
   if (!versionStore.currentVersion) await versionStore.loadCurrentVersion()
-  const currentVersion = versionStore.currentVersion || build.gameVersion || 'unknown'
+  const currentVersion =
+    versionStore.currentVersion || build.gameVersion || getFallbackGameVersion()
 
   const championsStore = useChampionsStore()
   const itemsStore = useItemsStore()

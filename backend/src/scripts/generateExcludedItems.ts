@@ -137,6 +137,25 @@ async function generateExcludedItems(
   }
 }
 
+/** Path to version.json (source of truth for game version) */
+const VERSION_FILE = join(process.cwd(), 'data', 'game', 'version.json')
+
+function getCurrentVersionFromFile(): string {
+  if (!fs.existsSync(VERSION_FILE)) {
+    throw new Error(
+      `version.json not found at ${VERSION_FILE}. Run data sync first.`
+    )
+  }
+  const raw = fs.readFileSync(VERSION_FILE, 'utf-8')
+  const data = JSON.parse(raw) as { currentVersion?: string }
+  if (!data?.currentVersion || typeof data.currentVersion !== 'string') {
+    throw new Error(
+      `Invalid version.json: missing or invalid currentVersion at ${VERSION_FILE}`
+    )
+  }
+  return data.currentVersion
+}
+
 // Main execution
 async function main() {
   const startTime = new Date()
@@ -151,7 +170,8 @@ async function main() {
   //   }
   // )
 
-  const version = '16.2.1'
+  const version = getCurrentVersionFromFile()
+  console.log(`[Generate Excluded Items] Using version from version.json: ${version}`)
   const basePath = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game', version)
 
   const frItemPath = join(basePath, 'fr_FR', 'item.json')

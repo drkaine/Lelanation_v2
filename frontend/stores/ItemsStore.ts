@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useVersionStore } from './VersionStore'
+import { getFallbackGameVersion } from '~/config/version'
 import type { Item } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
@@ -67,7 +68,7 @@ export const useItemsStore = defineStore('items', {
         if (!versionStore.currentVersion) {
           await versionStore.loadCurrentVersion()
         }
-        const version = versionStore.currentVersion || '14.1.1'
+        const version = versionStore.currentVersion || getFallbackGameVersion()
 
         let data: any
         let useStatic = false

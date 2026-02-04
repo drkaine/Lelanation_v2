@@ -45,7 +45,7 @@
         <div class="champion-portrait-container">
           <img
             v-if="selectedChampion"
-            :src="getChampionImageUrl(version, selectedChampion.image.full)"
+            :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
             :alt="selectedChampion.name"
             class="champion-portrait"
             @mouseenter="showTooltip = true"
@@ -64,7 +64,7 @@
           <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
             <img
               v-if="spell"
-              :src="getSpellImageUrl(version, spell.image.full)"
+              :src="getSpellImageUrl(versionForImages, spell.image.full)"
               :alt="spell.name"
               class="summoner-spell-icon"
               :title="spell?.name || ''"
@@ -171,7 +171,7 @@
         <div class="starting-items-row">
           <div v-for="item in startingItems" :key="`starter-${item.id}`" class="item-wrapper">
             <img
-              :src="getItemImageUrl(version, item.image.full)"
+              :src="getItemImageUrl(versionForImages, item.image.full)"
               :alt="item.name"
               class="item-icon"
               :title="item?.name || 'Item'"
@@ -188,7 +188,7 @@
             <!-- Une seule paire de bottes : icône complète -->
             <img
               v-if="bootsItems.length === 1 && bootsItems[0]"
-              :src="getItemImageUrl(version, bootsItems[0].image.full)"
+              :src="getItemImageUrl(versionForImages, bootsItems[0].image.full)"
               :alt="bootsItems[0].name"
               class="boots-icon-single"
               :title="bootsItems[0]?.name || 'Boots'"
@@ -219,7 +219,7 @@
             <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
               <div class="item-wrapper">
                 <img
-                  :src="getItemImageUrl(version, item.image.full)"
+                  :src="getItemImageUrl(versionForImages, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
                   :title="item?.name || 'Item'"
@@ -244,7 +244,7 @@
             <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
               <div class="item-wrapper">
                 <img
-                  :src="getItemImageUrl(version, item.image.full)"
+                  :src="getItemImageUrl(versionForImages, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
                   :title="item?.name || 'Item'"
@@ -277,7 +277,11 @@
             <div class="skill-icon-wrapper">
               <img
                 :src="
-                  getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
+                  getChampionSpellImageUrl(
+                    versionForImages,
+                    selectedChampion?.id || '',
+                    ability.image.full
+                  )
                 "
                 :alt="ability.name"
                 class="skill-icon"
@@ -315,7 +319,11 @@
             <div class="skill-icon-wrapper">
               <img
                 :src="
-                  getChampionSpellImageUrl(version, selectedChampion?.id || '', ability.image.full)
+                  getChampionSpellImageUrl(
+                    versionForImages,
+                    selectedChampion?.id || '',
+                    ability.image.full
+                  )
                 "
                 :alt="ability.name"
                 class="skill-icon"
@@ -354,7 +362,7 @@
         <div class="tooltip-top">
           <div class="tooltip-present">
             <img
-              :src="getChampionImageUrl(version, selectedChampion.image.full)"
+              :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
               :alt="selectedChampion.name"
               class="tooltip-champion-image"
             />
@@ -383,7 +391,12 @@
             >
               <div class="tooltip-spell-img-container">
                 <img
-                  :src="getChampionPassiveImageUrl(version, selectedChampion.passive.image.full)"
+                  :src="
+                    getChampionPassiveImageUrl(
+                      versionForImages,
+                      selectedChampion.passive.image.full
+                    )
+                  "
                   :alt="selectedChampion.passive.name"
                   class="tooltip-spell-img"
                 />
@@ -409,7 +422,13 @@
                   :data-spell-key="['Q', 'W', 'E', 'R'][index]"
                 >
                   <img
-                    :src="getChampionSpellImageUrl(version, selectedChampion.id, spell.image.full)"
+                    :src="
+                      getChampionSpellImageUrl(
+                        versionForImages,
+                        selectedChampion.id,
+                        spell.image.full
+                      )
+                    "
                     :alt="spell.name"
                     class="tooltip-spell-img"
                   />
@@ -453,7 +472,7 @@
           @dragend="onDragEnd"
         >
           <img
-            :src="getItemImageUrl(version, item.image.full)"
+            :src="getItemImageUrl(versionForImages, item.image.full)"
             :alt="item.name"
             class="items-manager-icon"
           />
@@ -527,8 +546,10 @@ const selectedChampion = computed(() => {
 })
 
 const { version: defaultVersion } = useGameVersion()
-// Utiliser la version du build si disponible, sinon la version courante
+// Version affichée (build ou courante)
 const version = computed(() => displayBuild.value?.gameVersion || defaultVersion.value)
+// Version pour les URLs d'images : toujours la version courante (assets disponibles côté serveur)
+const versionForImages = defaultVersion
 
 // Rôles
 const allRoles: Role[] = ['top', 'jungle', 'mid', 'adc', 'support']
@@ -748,7 +769,7 @@ const secondaryPath = computed(() => {
 
 const secondaryPathIcon = computed(() => {
   if (!secondaryPath.value) return null
-  return getRunePathImageUrl(version.value, secondaryPath.value.icon)
+  return getRunePathImageUrl(versionForImages.value, secondaryPath.value.icon)
 })
 
 const secondaryPathName = computed(() => {
@@ -787,7 +808,7 @@ const getRuneIconById = (runeId: number): string => {
   }
 
   const rune = findRuneById(runeId)
-  return rune ? getRuneImageUrl(version.value, rune.icon) : ''
+  return rune ? getRuneImageUrl(versionForImages.value, rune.icon) : ''
 }
 
 const getRuneNameById = (runeId: number): string => {
@@ -956,7 +977,7 @@ const resetItemsOnly = () => {
 const getBootBackgroundStyle = (item?: Item | null) => {
   if (!item) return {}
   return {
-    backgroundImage: `url(${getItemImageUrl(version.value, item.image.full)})`,
+    backgroundImage: `url(${getItemImageUrl(versionForImages.value, item.image.full)})`,
   }
 }
 

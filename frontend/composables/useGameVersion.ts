@@ -1,8 +1,6 @@
 import { computed, onMounted } from 'vue'
 import { useVersionStore } from '~/stores/VersionStore'
-
-// Fallback version should match the latest available data
-const FALLBACK_VERSION = '16.2.1'
+import { getFallbackGameVersion } from '~/config/version'
 
 export function useGameVersion() {
   const versionStore = useVersionStore()
@@ -13,7 +11,7 @@ export function useGameVersion() {
     }
   })
 
-  const version = computed(() => versionStore.currentVersion || FALLBACK_VERSION)
+  const version = computed(() => versionStore.currentVersion || getFallbackGameVersion())
 
   return { version, versionStore }
 }

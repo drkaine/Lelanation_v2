@@ -10,6 +10,7 @@ import type {
   CalculatedStats,
   Role,
 } from '~/types/build'
+import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { useVersionStore } from '~/stores/VersionStore'
@@ -369,7 +370,7 @@ export const useBuildStore = defineStore('build', {
         if (!versionStore.currentVersion) {
           await versionStore.loadCurrentVersion()
         }
-        this.currentBuild.gameVersion = versionStore.currentVersion || '16.2.1'
+        this.currentBuild.gameVersion = versionStore.currentVersion || getFallbackGameVersion()
 
         // 1) Sauvegarde locale (localStorage) pour l'UX rapide
         const savedBuilds = this.getSavedBuilds()
