@@ -515,6 +515,7 @@
       "builds": "Builds",
       "videos": "Vidéos",
       "apikeyRiot": "Clé API Riot",
+      "riotMatch": "Collecte matchs",
       "seedPlayers": "Joueurs seed"
     },
     "contact": {
@@ -543,6 +544,20 @@
       "addChannelSuccess": "Chaîne ajoutée.",
       "addChannelError": "Impossible d'ajouter la chaîne.",
       "channels": "Chaînes"
+    },
+    "riotMatch": {
+      "title": "Collecte matchs Riot",
+      "pollerStatus": "Poller",
+      "pollerActive": "Actif",
+      "pollerStopped": "Arrêté",
+      "pollerLastBeat": "Dernier battement",
+      "cronStatus": "Dernière exécution",
+      "lastSuccess": "Dernier succès",
+      "lastFailure": "Dernier échec",
+      "trigger": "Relancer la collecte maintenant",
+      "triggerSuccess": "Collecte lancée : {collected} nouveau(x) match(s), {errors} erreur(s).",
+      "triggerError": "Échec de la collecte.",
+      "description": "Une exécution manuelle du cron de collecte (matchs Ranked Solo/Duo EUW/EUNE). Si le worker (poller) est arrêté, relancez-le côté serveur (PM2 ou npm run riot:worker)."
     },
     "riotApikey": {
       "title": "Clé API Riot",

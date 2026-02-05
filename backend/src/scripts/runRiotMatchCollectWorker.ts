@@ -15,11 +15,13 @@
  */
 import axios from 'axios'
 import { config } from 'dotenv'
+import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { enrichPlayers } from '../services/StatsPlayersRefreshService.js'
 import { getRiotApiService } from '../services/RiotApiService.js'
+import { DiscordService } from '../services/DiscordService.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
@@ -32,6 +34,22 @@ const CRAWL_BACKOFF_MS = Math.max(5000, parseInt(process.env.RIOT_MATCH_CRAWL_BA
 
 const LOG = '[riot:worker]'
 
+const HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
+
+async function writeHeartbeat(): Promise<void> {
+  try {
+    const dir = join(process.cwd(), 'data', 'cron')
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(
+      HEARTBEAT_FILE,
+      JSON.stringify({ lastBeat: new Date().toISOString() }, null, 0),
+      'utf-8'
+    )
+  } catch {
+    // ignore
+  }
+}
+
 function isRiotAuthError(err: unknown): boolean {
   const cause = err && typeof err === 'object' && 'cause' in err ? (err as { cause: unknown }).cause : err
   return axios.isAxiosError(cause) && (cause.response?.status === 401 || cause.response?.status === 403)
@@ -42,12 +60,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Run crawl with retries: auth error → retry with Admin key once; other errors → backoff and retry up to CRAWL_RETRIES. */
-async function runCrawlWithRetry(riotApi: ReturnType<typeof getRiotApiService>): Promise<void> {
+async function runCrawlWithRetry(
+  riotApi: ReturnType<typeof getRiotApiService>
+): Promise<{ collected: number; errors: number }> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= CRAWL_RETRIES; attempt++) {
     try {
-      await runRiotMatchCollectOnce()
-      return
+      const result = await runRiotMatchCollectOnce()
+      return result
     } catch (err) {
       lastErr = err
       if (isRiotAuthError(err)) {
@@ -55,8 +75,8 @@ async function runCrawlWithRetry(riotApi: ReturnType<typeof getRiotApiService>):
         riotApi.invalidateKeyCache()
         riotApi.setKeyPreference(true)
         try {
-          await runRiotMatchCollectOnce()
-          return
+          const result = await runRiotMatchCollectOnce()
+          return result
         } catch (retryErr) {
           if (isRiotAuthError(retryErr)) {
             console.error(`${LOG} Riot API key invalid or expired. Set RIOT_API_KEY or Admin key.`)
@@ -71,14 +91,17 @@ async function runCrawlWithRetry(riotApi: ReturnType<typeof getRiotApiService>):
         await sleep(backoff)
       } else {
         console.error(`${LOG} Crawl failed after ${CRAWL_RETRIES} attempts:`, lastErr)
+        throw lastErr
       }
     }
   }
+  throw lastErr
 }
 
 async function main(): Promise<void> {
   const riotApi = getRiotApiService()
   riotApi.setKeyPreference(false)
+  const discordService = new DiscordService()
 
   let running = true
   const onStop = () => {
@@ -93,17 +116,44 @@ async function main(): Promise<void> {
   )
 
   let cycle = 0
+  let consecutiveZeroCycles = 0
   while (running) {
     cycle++
     const cycleStart = Date.now()
     try {
-      await runCrawlWithRetry(riotApi)
+      const { collected, errors } = await runCrawlWithRetry(riotApi)
+      if (collected === 0) {
+        consecutiveZeroCycles++
+        // Notify only after 2+ consecutive cycles with no new matches to avoid spam
+        if (consecutiveZeroCycles >= 2) {
+          await discordService.sendAlert(
+            '⚠️ Poller Riot – Aucun nouveau match',
+            `Cycle ${cycle} : aucun nouveau match depuis ${consecutiveZeroCycles} cycle(s) (${errors} erreur(s) API).`,
+            undefined,
+            { cycle, consecutiveZeroCycles, errors, timestamp: new Date().toISOString() }
+          )
+        }
+      } else {
+        consecutiveZeroCycles = 0
+      }
     } catch (err) {
       if (isRiotAuthError(err)) {
         console.error(`${LOG} Riot API key invalid or expired. Exiting.`)
+        await discordService.sendAlert(
+          '❌ Poller Riot – Arrêt (clé API invalide)',
+          'La clé API Riot a été rejetée (401/403). Le worker s’arrête. Définissez une clé valide (RIOT_API_KEY ou Admin).',
+          err instanceof Error ? err : new Error(String(err)),
+          { cycle, timestamp: new Date().toISOString() }
+        )
         process.exit(1)
       }
       console.error(`${LOG} Crawl error (will retry next cycle):`, err)
+      await discordService.sendAlert(
+        '❌ Poller Riot – Échec après tentatives',
+        `La collecte a échoué après ${CRAWL_RETRIES} tentative(s). Prochain cycle dans ${CYCLE_DELAY_MS / 1000}s.`,
+        err instanceof Error ? err : new Error(String(err)),
+        { cycle, retries: CRAWL_RETRIES, timestamp: new Date().toISOString() }
+      )
     }
 
     if (!running) break
@@ -121,10 +171,17 @@ async function main(): Promise<void> {
 
     const elapsed = Math.round((Date.now() - cycleStart) / 1000)
     console.log(`${LOG} Cycle ${cycle} done in ${elapsed}s, sleeping ${CYCLE_DELAY_MS / 1000}s…`)
+    await writeHeartbeat()
     await sleep(CYCLE_DELAY_MS)
   }
 
   console.log(`${LOG} Stopped after ${cycle} cycle(s).`)
+  await discordService.sendAlert(
+    '🛑 Poller Riot – Arrêt',
+    `Le worker de collecte Riot a été arrêté après ${cycle} cycle(s) (SIGINT/SIGTERM). Relancez-le manuellement ou via l’admin.`,
+    undefined,
+    { cycles: cycle, timestamp: new Date().toISOString() }
+  )
 }
 
 main().catch((err) => {

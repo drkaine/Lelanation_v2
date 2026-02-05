@@ -10,12 +10,26 @@ interface VersionInfo {
   lastSyncTimestamp: number
 }
 
+interface VersionsRecapEntry {
+  version: string
+  releaseDate: string
+  patchLabel: string
+}
+
+interface VersionsRecapJson {
+  updatedAt?: string
+  description?: string
+  versions: VersionsRecapEntry[]
+}
+
 export class VersionService {
   private readonly versionFile: string
+  private readonly versionsFile: string
   private readonly dataDragonService: DataDragonService
 
   constructor(dataDir: string = join(process.cwd(), 'data', 'game')) {
     this.versionFile = join(dataDir, 'version.json')
+    this.versionsFile = join(dataDir, 'versions.json')
     this.dataDragonService = new DataDragonService(dataDir)
   }
 
@@ -49,7 +63,8 @@ export class VersionService {
   }
 
   /**
-   * Update version info after successful sync
+   * Update version info after successful sync.
+   * Also ensures versions.json contains this version (for match collection filter).
    */
   async updateVersion(version: string): Promise<Result<void, AppError>> {
     const versionInfo: VersionInfo = {
@@ -58,7 +73,52 @@ export class VersionService {
       lastSyncTimestamp: Date.now()
     }
 
-    return FileManager.writeJson(this.versionFile, versionInfo)
+    const writeResult = await FileManager.writeJson(this.versionFile, versionInfo)
+    if (writeResult.isErr()) return writeResult
+
+    const recapResult = await this.ensureVersionInVersionsRecap(version)
+    if (recapResult.isErr()) {
+      // Don't fail the whole update; version.json is the source of truth
+      console.warn('[VersionService] Failed to update versions.json:', recapResult.unwrapErr())
+    }
+    return Result.ok(undefined)
+  }
+
+  /**
+   * Add the given version to data/game/versions.json if not already present (newest first).
+   * Uses today as releaseDate and derives patchLabel from version (e.g. 16.4.1 -> 16.4).
+   */
+  private async ensureVersionInVersionsRecap(version: string): Promise<Result<void, AppError>> {
+    const now = new Date()
+    const releaseDate = now.toISOString().slice(0, 10) // YYYY-MM-DD
+    const patchLabel = version.replace(/\.\d+$/, '') // 16.4.1 -> 16.4
+    const newEntry: VersionsRecapEntry = { version, releaseDate, patchLabel }
+
+    let data: VersionsRecapJson
+    const readResult = await FileManager.readJson<VersionsRecapJson>(this.versionsFile)
+    if (readResult.isErr()) {
+      const err = readResult.unwrapErr()
+      if (err.code !== 'FILE_NOT_FOUND') return Result.err(err)
+      data = {
+        updatedAt: now.toISOString(),
+        description:
+          'Recap of game versions with release dates. Used for match collection (patch filter), archiving, and stats by patch.',
+        versions: [newEntry]
+      }
+    } else {
+      data = readResult.unwrap()
+      if (!data.versions || !Array.isArray(data.versions)) {
+        data = { ...data, versions: [newEntry] }
+      } else {
+        const exists = data.versions.some((e) => e.version === version)
+        if (!exists) {
+          data.versions = [newEntry, ...data.versions]
+        }
+      }
+      data.updatedAt = now.toISOString()
+    }
+
+    return FileManager.writeJson(this.versionsFile, data)
   }
 
   /**

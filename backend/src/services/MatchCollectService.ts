@@ -85,6 +85,9 @@ export async function upsertMatchFromRiot(
     },
   })
 
+  // Rank (rankTier, rankDivision, rankLp) is never in Match-v5 payload. It is filled later by
+  // backfillParticipantRanks (Riot League API by puuid). Run npm run riot:backfill-ranks or
+  // POST /admin/backfill-participant-ranks; the cron can also run a limited backfill after collect.
   const createMany = participants.map((p: RiotParticipant) => {
     const role = normalizeRole(p.teamPosition, p.individualPosition)
     const items = itemsArray(p)

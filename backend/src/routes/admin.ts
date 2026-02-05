@@ -13,6 +13,7 @@ import {
   backfillParticipantRanks,
   refreshMatchRanks,
 } from '../services/StatsPlayersRefreshService.js'
+import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
@@ -108,6 +109,18 @@ router.get('/cron', async (_req, res) => {
   const ytConfigResult = await FileManager.readJson<YouTubeChannelsConfig>(youtubeConfigFile)
   const ytConfig = ytConfigResult.isOk() ? ytConfigResult.unwrap() : { channels: [] }
 
+  const riotWorkerHeartbeatPath = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
+  let riotWorker: { lastBeat: string | null; active: boolean } = { lastBeat: null, active: false }
+  const heartbeatResult = await FileManager.readJson<{ lastBeat?: string }>(riotWorkerHeartbeatPath)
+  if (heartbeatResult.isOk()) {
+    const data = heartbeatResult.unwrap()
+    const lastBeat = data?.lastBeat ?? null
+    if (lastBeat) {
+      const beatMs = new Date(lastBeat).getTime()
+      riotWorker = { lastBeat, active: Date.now() - beatMs < 10 * 60 * 1000 } // active if beat within 10 min
+    }
+  }
+
   const ytStatus = await Promise.all(
     (ytConfig.channels ?? []).map(async (entry) => {
       const channelId = typeof entry === 'string' ? entry : entry.channelId
@@ -135,6 +148,7 @@ router.get('/cron', async (_req, res) => {
 
   return res.json({
     cronJobs,
+    riotWorker,
     dataDragon: {
       currentVersion: gameVersion?.currentVersion || null,
       lastSyncDate: gameVersion?.lastSyncDate || null,
@@ -252,6 +266,18 @@ router.post('/refresh-match-ranks', async (_req, res) => {
   } catch (e) {
     return res.status(500).json({
       error: e instanceof Error ? e.message : 'Refresh match ranks failed',
+    })
+  }
+})
+
+// --- Trigger Riot match collection (one run, used by admin "Relancer la collecte") ---
+router.post('/riot-collect-now', async (_req, res) => {
+  try {
+    const result = await runRiotMatchCollectOnce()
+    return res.json({ success: true, ...result })
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Riot match collect failed',
     })
   }
 })

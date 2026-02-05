@@ -77,13 +77,13 @@
             <div class="mt-4 w-full max-w-[300px] space-y-2">
               <div class="flex items-center justify-end gap-2">
                 <!-- Bouton Theorycraft (visible pour tous) -->
-                <button
+                <!-- <button
                   class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
                   :title="t('theorycraft.testBuild')"
                   @click.stop="goToTheorycraft"
                 >
                   <span>{{ t('theorycraft.testBuild') }}</span>
-                </button>
+                </button> -->
                 <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
                 <div v-if="!isUserBuild" class="flex items-center gap-1">
                   <!-- Bouton Upvote -->
@@ -500,14 +500,14 @@ const copyBuildImage = async () => {
   }
 }
 
-const goToTheorycraft = async () => {
-  if (!build.value) return
-  // Charger le build dans le store theorycraft avant de naviguer
-  const { useTheorycraftStore } = await import('~/stores/TheorycraftStore')
-  const theorycraftStore = useTheorycraftStore()
-  theorycraftStore.loadBuild(build.value)
-  navigateTo(localePath('/theorycraft'))
-}
+// const goToTheorycraft = async () => {
+//   if (!build.value) return
+//   // Charger le build dans le store theorycraft avant de naviguer
+//   const { useTheorycraftStore } = await import('~/stores/TheorycraftStore')
+//   const theorycraftStore = useTheorycraftStore()
+//   theorycraftStore.loadBuild(build.value)
+//   navigateTo(localePath('/theorycraft'))
+// }
 
 const confirmDelete = () => {
   if (!build.value) return

@@ -151,12 +151,16 @@ Refresh + enrichment (stats, summoner_name, rank)
 1. **Seed Admin** : Admin > Joueurs seed. Résolution Riot ID (Account-v1) → puuid ; Summoner-v4 by-puuid → summoner_id, summoner_name. Création dans **players** (puuid, summoner_id, summoner_name, region, last_seen = null). Pas de doublon (unicité sur puuid).
 2. **Seed League** : Challenger (4), Grandmaster (3), Master (3) par plateforme (EUW, EUNE). Summoner-v4 → upsert dans **players** (last_seen = null).
 3. **Crawl** : lecture de **players** ordonnée par `last_seen ASC NULLS FIRST`, limite `MAX_PUUIDS_PER_RUN`. Les joueurs jamais crawlé (last_seen null) passent en premier.
-4. **Match IDs** : par joueur crawlé, queue 420, fenêtre de dates (premier run = récents ; runs suivants = depuis lastSuccessAt).
-5. **Match details** : si déjà en base on skip ; sinon `upsertMatchFromRiot` (pas de doublon).
+4. **Match IDs** : par joueur crawlé, queue 420, fenêtre de dates (premier run = récents ; runs suivants = depuis lastSuccessAt, plancher = date de sortie de la plus ancienne version dans `data/game/versions.json`).
+5. **Match details** : si déjà en base on skip. Sinon **filtre par version** : seuls les matchs dont `gameVersion` est dans les versions autorisées (`data/game/versions.json` + `version.json` currentVersion) sont insérés ; les autres (ex. 15.22.724.5161) sont ignorés. Puis `upsertMatchFromRiot` (pas de doublon).
 6. **Participants → players** : pour chaque participant du match, upsert dans **players** (puuid, region, summoner_id si dispo, last_seen = null en création). Tous les joueurs rencontrés sont ainsi ajoutés pour un crawl futur, sans doublon.
 7. **last_seen** : après avoir crawlé un joueur (récupéré ses matchs), mise à jour `players.last_seen = now()` pour ce puuid.
 8. **Refresh** : agrégation joueurs (totalGames, totalWins) depuis **participants**. Les stats par champion sont calculées à la volée depuis **participants**.
-9. **Enrichment** : Summoner-v4 (by-puuid) et League-v4 pour remplir summoner_name, current_rank_* ; recopie du rang sur **Participant**.
+9. **Récupération des données manquantes** (à chaque passage du cron) :
+   - **Nouveaux participants** : dès qu’un match est inséré, les rangs des participants de ce match sont récupérés immédiatement via League-v4 (`backfillRanksForNewMatch`), un appel API par PUUID distinct du match.
+   - **Participants sans rank (reste / legacy)** : backfill en batch via `backfillParticipantRanks` (jusqu’à `RIOT_BACKFILL_RANKS_MAX_BATCHES` × `RIOT_BACKFILL_RANKS_PER_RUN` PUUIDs par cycle) pour rattraper les anciens participants ou les cas où l’appel immédiat a échoué.
+   - **Matchs sans rank** : recalcul de `Match.rank` (moyenne des rangs des participants) à partir des participants qui ont un rank (`refreshMatchRanks`).
+10. **Enrichment** : Summoner-v4 (by-puuid) pour remplir summoner_name.
 
 ### Pourquoi certains champs Player sont vides
 
@@ -164,6 +168,25 @@ Refresh + enrichment (stats, summoner_name, rank)
 - **`current_rank_tier` / `current_rank_division`** : les participants des matchs ne contiennent pas le rang actuel. De plus, `MatchCollectService` ne lit pas le rang côté Riot. Ils sont remplis par un **enrichment** (appel League-v4 entries by summonerId) après le refresh.
 
 Sans étape d’enrichment, ces colonnes restent donc `NULL`.
+
+### Pourquoi certains participants n’ont pas de rank (rank_tier / rank_division / rank_lp)
+
+L’API **Match-v5** ne renvoie **jamais** le rang des joueurs dans le payload d’un match. À l’insertion, les participants sont créés avec `rank_tier`, `rank_division`, `rank_lp` à `NULL`, puis le rang est récupéré **immédiatement** pour ce match (League-v4 par PUUID) via `backfillRanksForNewMatch`.
+
+En complément, un backfill en batch (`backfillParticipantRanks`) rattrape les participants restés sans rank (anciens en base ou échec de l’appel immédiat) :
+
+- **Script manuel** : `npm run riot:backfill-ranks` (depuis `backend/`) ou `npm run riot:backfill-ranks -- 200` pour une limite de 200 PUUIDs.
+- **Admin** : `POST /admin/backfill-participant-ranks` avec optionnel `{ "limit": 200 }`.
+- **Cron** : si `RIOT_BACKFILL_RANKS_PER_RUN` > 0, le cron lance ce backfill en plusieurs batches après chaque passage (legacy / rattrapage).
+
+Un participant peut rester sans rank si : (1) le joueur est **non classé** (pas d’entrée Solo/Duo) ; (2) l’API League-v4 a renvoyé une erreur (rate limit, 403, etc.) pour ce PUUID.
+
+### Nettoyer les matchs d’une mauvaise version (game_version)
+
+Si des matchs ont été insérés avec une `game_version` qui n’est pas dans les versions autorisées (ex. 15.22.724.5161), supprimez-les avec le script (les participants sont supprimés en cascade) :
+
+- Par IDs : `npm run riot:cleanup-matches -- --ids=346,347,348`
+- Par version : `npm run riot:cleanup-matches -- --game-version=15.22.724.5161`
 
 ---
 
@@ -219,12 +242,22 @@ Le champ `gameVersion` (ex. `"15.1.123.456"`) est stocké sur chaque match. Pour
 | `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |
 | `RIOT_MATCH_CRAWL_RETRIES` | Nombre de tentatives du crawl en cas d’erreur transitoire (worker) | `3` |
 | `RIOT_MATCH_CRAWL_BACKOFF_MS` | Délai initial entre deux tentatives (backoff exponentiel, ms) | `30000` |
+| `RIOT_BACKFILL_RANKS_PER_RUN` | Nombre de PUUIDs traités par batch de backfill (0 = désactivé). | `200` |
+| `RIOT_BACKFILL_RANKS_MAX_BATCHES` | Nombre max de batches de backfill par cycle (drain de la file). | `3` |
 
 ### Worker continu (recommandé) vs cron
 
 - **Worker** : `npm run riot:worker` (depuis `backend/`). Boucle infinie : un cycle = crawl (avec retry + backoff en cas d’erreur transitoire), refresh + enrichissement, puis N passes d’enrichissement, puis pause. En cas d’erreur (réseau, 429, 5xx) : jusqu’à 3 tentatives avec backoff (30s, 60s, 120s) avant de passer au cycle suivant. 401/403 : retry une fois avec la clé Admin puis exit si échec. **Redémarrage** : en production, lancer le worker sous PM2 (ou systemd) avec `autorestart: true` pour que tout crash du process relance le worker.
 - **Cron** : exécution périodique via `setupRiotMatchCollect()`. Une seule exécution par créneau.
 - **One-shot** : `npm run riot:collect` pour un seul cycle.
+
+### Statut cron et « dernier récupéré »
+
+L’admin affiche pour chaque job un **lastSuccessAt** (dernière **fin** de run **réussie**). Pour `riotMatchCollect`, si cette date reste ancienne (ex. 04/02 14:38 alors qu’on est le 05/02 09h), cela signifie qu’**aucun run ne s’est terminé avec succès** depuis : soit le cron ne tourne pas (process arrêté, mauvaise planification), soit chaque run échoue (exception avant `markSuccess`).
+
+- **Safeguard** : si `lastSuccessAt` a plus de 12 h, le prochain run utilise une fenêtre de repli (dernières 24 h) pour demander les matchs à Riot, afin de continuer à récupérer des matchs récents même après une longue période sans succès.
+- **Logs** : au début du crawl, le backend log `Match window: <start> -> <end>` (UTC) pour vérifier la fenêtre utilisée.
+- **Vérifications** : s’assurer que le backend (cron ou worker) tourne, consulter les logs au moment du run, ou lancer manuellement `npm run riot:collect` depuis `backend/` et regarder les erreurs éventuelles.
 
 ### Rangs participants et Match.rank
 

@@ -7,7 +7,7 @@
           <p class="mt-1 text-sm text-text/70">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.builds') }} ·
             {{ t('admin.tabs.videos') }} · {{ t('admin.tabs.apikeyRiot') }} ·
-            {{ t('admin.tabs.seedPlayers') }}
+            {{ t('admin.tabs.riotMatch') }} · {{ t('admin.tabs.seedPlayers') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -108,6 +108,78 @@
               <div class="text-2xl font-bold text-text">{{ buildsStats?.private ?? '—' }}</div>
               <div class="text-sm text-text/70">{{ t('admin.builds.private') }}</div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Riot match collect -->
+      <div v-show="activeTab === 'riotmatch'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.riotMatch.title') }}</h2>
+          <p class="mb-4 text-sm text-text/80">{{ t('admin.riotMatch.description') }}</p>
+          <p v-if="cronLoading" class="text-text/70">Chargement…</p>
+          <template v-else>
+            <div class="mb-4 flex flex-wrap items-center gap-3">
+              <span class="text-sm font-medium text-text"
+                >{{ t('admin.riotMatch.pollerStatus') }} :</span
+              >
+              <span
+                :class="
+                  cron?.riotWorker?.active
+                    ? 'bg-green-600/20 text-green-700 dark:text-green-400'
+                    : 'bg-text/10 text-text/70'
+                "
+                class="rounded px-2 py-0.5 text-sm font-medium"
+              >
+                {{
+                  cron?.riotWorker?.active
+                    ? t('admin.riotMatch.pollerActive')
+                    : t('admin.riotMatch.pollerStopped')
+                }}
+              </span>
+              <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
+                ({{ t('admin.riotMatch.pollerLastBeat') }} :
+                {{ formatRiotDate(cron.riotWorker.lastBeat) }})
+              </span>
+            </div>
+            <div class="mb-4">
+              <h3 class="mb-2 text-sm font-medium text-text">
+                {{ t('admin.riotMatch.cronStatus') }}
+              </h3>
+              <div class="space-y-1 text-sm text-text/80">
+                <p>
+                  {{ t('admin.riotMatch.lastSuccess') }} :
+                  {{ formatRiotDate(cron?.cronJobs?.riotMatchCollect?.lastSuccessAt) ?? '—' }}
+                </p>
+                <p v-if="cron?.cronJobs?.riotMatchCollect?.lastFailureAt">
+                  {{ t('admin.riotMatch.lastFailure') }} :
+                  {{ formatRiotDate(cron?.cronJobs?.riotMatchCollect?.lastFailureAt) }}
+                  <span
+                    v-if="cron?.cronJobs?.riotMatchCollect?.lastFailureMessage"
+                    class="text-text/60"
+                  >
+                    ({{ cron.cronJobs.riotMatchCollect.lastFailureMessage }})
+                  </span>
+                </p>
+              </div>
+            </div>
+          </template>
+          <div>
+            <button
+              type="button"
+              class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              :disabled="riotCollectTriggering"
+              @click="triggerRiotCollect"
+            >
+              {{ riotCollectTriggering ? '…' : t('admin.riotMatch.trigger') }}
+            </button>
+            <p
+              v-if="riotCollectMessage"
+              :class="riotCollectError ? 'text-error' : 'text-green-600'"
+              class="mt-2 text-sm"
+            >
+              {{ riotCollectMessage }}
+            </p>
           </div>
         </div>
       </div>
@@ -429,13 +501,16 @@ const localePath = useLocalePath()
 const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
 const authError = ref<string | null>(null)
-const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey' | 'seedplayers'>('contact')
+const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey' | 'riotmatch' | 'seedplayers'>(
+  'contact'
+)
 
 const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
   { id: 'builds' as const, label: t('admin.tabs.builds') },
   { id: 'videos' as const, label: t('admin.tabs.videos') },
   { id: 'apikey' as const, label: t('admin.tabs.apikeyRiot') },
+  { id: 'riotmatch' as const, label: t('admin.tabs.riotMatch') },
   { id: 'seedplayers' as const, label: t('admin.tabs.seedPlayers') },
 ])
 
@@ -519,6 +594,9 @@ async function loadBuildsStats() {
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
+const riotCollectTriggering = ref(false)
+const riotCollectMessage = ref('')
+const riotCollectError = ref(false)
 const videosTriggering = ref(false)
 const videosTriggerMessage = ref('')
 const videosTriggerError = ref(false)
@@ -749,6 +827,26 @@ async function saveRiotApikey() {
   }
 }
 
+function formatRiotDate(iso: string | null | undefined): string {
+  if (!iso || typeof iso !== 'string') return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  const now = Date.now()
+  const diffMs = now - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  const diffH = Math.floor(diffMs / 3600000)
+  if (diffMin < 1) return 'à l’instant'
+  if (diffMin < 60) return `il y a ${diffMin} min`
+  if (diffH < 24) return `il y a ${diffH} h`
+  return d.toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 async function loadCron() {
   cronLoading.value = true
   try {
@@ -763,6 +861,36 @@ async function loadCron() {
     authError.value = t('admin.login.error')
   } finally {
     cronLoading.value = false
+  }
+}
+
+async function triggerRiotCollect() {
+  riotCollectMessage.value = ''
+  riotCollectError.value = false
+  riotCollectTriggering.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      riotCollectMessage.value = t('admin.riotMatch.triggerSuccess', {
+        collected: data.collected ?? 0,
+        errors: data.errors ?? 0,
+      })
+      await loadCron()
+    } else {
+      riotCollectError.value = true
+      riotCollectMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
+    }
+  } catch {
+    riotCollectError.value = true
+    riotCollectMessage.value = t('admin.riotMatch.triggerError')
+  } finally {
+    riotCollectTriggering.value = false
   }
 }
 
@@ -849,7 +977,7 @@ onMounted(async () => {
 watch(activeTab, tab => {
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if (tab === 'builds' && buildsStats.value === null && !buildsLoading.value) loadBuildsStats()
-  if (tab === 'videos' && !cron.value && !cronLoading.value) loadCron()
+  if ((tab === 'videos' || tab === 'riotmatch') && !cron.value && !cronLoading.value) loadCron()
   if (tab === 'apikey' && riotApikeyMasked.value === null && !riotApikeyLoading.value)
     loadRiotApikey()
   if (tab === 'seedplayers' && seedPlayersList.value.length === 0 && !seedPlayersLoading.value)

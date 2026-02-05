@@ -133,8 +133,43 @@ export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> 
 const BACKFILL_RANK_LOG = '[backfill-rank]'
 
 /**
+ * Fetch ranks for participants of a newly inserted match and update them immediately.
+ * Called right after upsertMatchFromRiot(inserted=true). One League API call per distinct puuid in the match.
+ */
+export async function backfillRanksForNewMatch(
+  matchId: string,
+  region: 'euw1' | 'eun1',
+  puuids: string[]
+): Promise<{ updated: number }> {
+  if (!isDatabaseConfigured() || puuids.length === 0) return { updated: 0 }
+  const match = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
+  if (!match) return { updated: 0 }
+  const riotApi = getRiotApiService()
+  const platform = region === 'eun1' ? 'eun1' : 'euw1'
+  const distinctPuuids = [...new Set(puuids.filter((p) => p && p.trim() !== ''))]
+  let updated = 0
+  for (const puuid of distinctPuuids) {
+    const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
+    if (leagueResult.isErr()) continue
+    const entry = leagueResult.unwrap()
+    if (!entry) continue
+    const result = await prisma.participant.updateMany({
+      where: { matchId: match.id, puuid },
+      data: {
+        rankTier: entry.tier,
+        rankDivision: entry.rank,
+        rankLp: entry.leaguePoints,
+      },
+    })
+    updated += result.count
+  }
+  return { updated }
+}
+
+/**
  * Backfill participant rank (rankTier, rankDivision, rankLp) for participants missing it.
  * Uses Riot League API by puuid (Solo/Duo). One API call per distinct puuid; updates all participant rows for that puuid.
+ * Used for legacy backlog; new participants get rank via backfillRanksForNewMatch right after match insert.
  */
 export async function backfillParticipantRanks(limit = 200): Promise<{ updated: number; errors: number }> {
   if (!isDatabaseConfigured()) {
