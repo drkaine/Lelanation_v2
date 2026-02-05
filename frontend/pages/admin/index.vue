@@ -167,7 +167,7 @@
               </div>
             </div>
           </template>
-          <div>
+          <div class="flex flex-wrap items-center gap-3">
             <button
               type="button"
               class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
@@ -176,12 +176,21 @@
             >
               {{ riotCollectTriggering ? '…' : t('admin.riotMatch.trigger') }}
             </button>
+            <button
+              v-if="cron?.riotWorker?.active"
+              type="button"
+              class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:text-red-400"
+              :disabled="riotStopTriggering"
+              @click="triggerRiotWorkerStop"
+            >
+              {{ riotStopTriggering ? '…' : t('admin.riotMatch.stopPoller') }}
+            </button>
             <p
-              v-if="riotCollectMessage"
-              :class="riotCollectError ? 'text-error' : 'text-green-600'"
+              v-if="riotCollectMessage || riotStopMessage"
+              :class="riotCollectError || riotStopError ? 'text-error' : 'text-green-600'"
               class="mt-2 text-sm"
             >
-              {{ riotCollectMessage }}
+              {{ riotCollectMessage || riotStopMessage }}
             </p>
           </div>
         </div>
@@ -600,6 +609,9 @@ const cronLoading = ref(false)
 const riotCollectTriggering = ref(false)
 const riotCollectMessage = ref('')
 const riotCollectError = ref(false)
+const riotStopTriggering = ref(false)
+const riotStopMessage = ref('')
+const riotStopError = ref(false)
 const videosTriggering = ref(false)
 const videosTriggerMessage = ref('')
 const videosTriggerError = ref(false)
@@ -870,6 +882,7 @@ async function loadCron() {
 async function triggerRiotCollect() {
   riotCollectMessage.value = ''
   riotCollectError.value = false
+  riotStopMessage.value = ''
   riotCollectTriggering.value = true
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
@@ -891,6 +904,34 @@ async function triggerRiotCollect() {
     riotCollectMessage.value = t('admin.riotMatch.triggerError')
   } finally {
     riotCollectTriggering.value = false
+  }
+}
+
+async function triggerRiotWorkerStop() {
+  riotStopMessage.value = ''
+  riotStopError.value = false
+  riotCollectMessage.value = ''
+  riotStopTriggering.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-worker-stop'), { method: 'POST' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok && data?.success) {
+      riotStopMessage.value = data.message ?? t('admin.riotMatch.stopPollerSuccess')
+      await loadCron()
+    } else {
+      riotStopError.value = true
+      riotStopMessage.value = data?.error ?? t('admin.riotMatch.stopPollerError')
+    }
+  } catch {
+    riotStopError.value = true
+    riotStopMessage.value = t('admin.riotMatch.stopPollerError')
+  } finally {
+    riotStopTriggering.value = false
   }
 }
 

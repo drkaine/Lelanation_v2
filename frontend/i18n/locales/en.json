@@ -550,6 +550,25 @@
       "addChannelError": "Failed to add channel.",
       "channels": "Channels"
     },
+    "riotMatch": {
+      "title": "Riot match collection",
+      "pollerStatus": "Last activity",
+      "pollerActive": "Active",
+      "pollerStopped": "None recent",
+      "pollerLastBeat": "Last heartbeat",
+      "pollerHint": "Active = a collect succeeded in the last 10 minutes (worker or button below).",
+      "cronStatus": "Last run",
+      "lastSuccess": "Last success",
+      "lastFailure": "Last failure",
+      "trigger": "Run collect now",
+      "stopPoller": "Stop poller",
+      "stopPollerSuccess": "Stop request sent. The worker will exit at the end of the current cycle.",
+      "stopPollerError": "Failed to send stop request.",
+      "triggerSuccess": "Collect completed: {collected} new match(es), {errors} error(s).",
+      "triggerBackground": "Collect started in background. Refresh in 2–5 min to see updated status.",
+      "triggerError": "Collect failed.",
+      "description": "Manual run of the match collection cron (Ranked Solo/Duo EUW/EUNE). If the worker (npm run riot:worker) is stopped, the button runs a single collect in background."
+    },
     "riotApikey": {
       "title": "Riot API key",
       "description": "Key used for Riot API calls (developer.riotgames.com). Stored on the server and overrides the RIOT_API_KEY environment variable when set.",

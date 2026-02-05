@@ -35,6 +35,7 @@ const CRAWL_BACKOFF_MS = Math.max(5000, parseInt(process.env.RIOT_MATCH_CRAWL_BA
 const LOG = '[riot:worker]'
 
 const HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
+const STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
 
 async function writeHeartbeat(): Promise<void> {
   try {
@@ -112,12 +113,22 @@ async function main(): Promise<void> {
   process.on('SIGTERM', onStop)
 
   console.log(
-    `${LOG} Starting worker (cycle delay=${CYCLE_DELAY_MS}ms, enrich passes=${ENRICH_PASSES_AFTER_CYCLE}, per pass=${ENRICH_PER_PASS}, crawl retries=${CRAWL_RETRIES}). Stop with Ctrl+C.`
+    `${LOG} Starting worker (cycle delay=${CYCLE_DELAY_MS}ms, enrich passes=${ENRICH_PASSES_AFTER_CYCLE}, per pass=${ENRICH_PER_PASS}, crawl retries=${CRAWL_RETRIES}). Stop with Ctrl+C or admin "Stopper le poller".`
   )
 
   let cycle = 0
   let consecutiveZeroCycles = 0
   while (running) {
+    try {
+      await fs.access(STOP_REQUEST_FILE)
+      await fs.unlink(STOP_REQUEST_FILE)
+      console.log(`${LOG} Stop requested from admin, exiting after this cycle.`)
+      running = false
+      break
+    } catch {
+      // no stop file, continue
+    }
+
     cycle++
     const cycleStart = Date.now()
     try {

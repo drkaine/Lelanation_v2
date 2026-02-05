@@ -282,6 +282,30 @@ router.post('/riot-collect-now', (_req, res) => {
   })
 })
 
+// --- Request Riot worker to stop (used by admin "Stopper le poller") ---
+// Writes a stop-request file; the worker (npm run riot:worker) checks it at the start of each cycle and exits.
+const RIOT_WORKER_STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
+router.post('/riot-worker-stop', async (_req, res) => {
+  try {
+    const dir = join(process.cwd(), 'data', 'cron')
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(
+      RIOT_WORKER_STOP_REQUEST_FILE,
+      JSON.stringify({ requestedAt: new Date().toISOString() }, null, 0),
+      'utf-8'
+    )
+    return res.json({
+      success: true,
+      message: 'Demande d’arrêt envoyée. Le worker s’arrêtera à la fin du cycle en cours (sous 1–2 min).',
+    })
+  } catch (e) {
+    return res.status(500).json({
+      success: false,
+      error: e instanceof Error ? e.message : 'Failed to write stop request',
+    })
+  }
+})
+
 // --- Builds stats ---
 router.get('/builds/stats', async (_req, res) => {
   try {
