@@ -4,7 +4,9 @@
  * Ranked Solo/Duo (420), EUW + EUNE. Schedule: every hour (RIOT_MATCH_CRON_SCHEDULE).
  */
 import axios from 'axios'
+import { promises as fs } from 'fs'
 import cron from 'node-cron'
+import { join } from 'path'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.js'
 import {
@@ -330,6 +332,18 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       `${LOG_PREFIX} Done: ${collected} new matches, ${errors} errors, ${processedCount} PUUIDs processed, ${duration}s`
     )
     await cronStatus.markSuccess('riotMatchCollect')
+    // Update heartbeat so admin "Poller" status shows Actif after any successful run (worker, cron, or manual)
+    try {
+      const dir = join(process.cwd(), 'data', 'cron')
+      await fs.mkdir(dir, { recursive: true })
+      await fs.writeFile(
+        join(dir, 'riot-worker-heartbeat.json'),
+        JSON.stringify({ lastBeat: new Date().toISOString() }, null, 0),
+        'utf-8'
+      )
+    } catch {
+      // ignore
+    }
     return { collected, errors }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))

@@ -547,17 +547,19 @@
     },
     "riotMatch": {
       "title": "Collecte matchs Riot",
-      "pollerStatus": "Poller",
+      "pollerStatus": "Dernière activité",
       "pollerActive": "Actif",
-      "pollerStopped": "Arrêté",
+      "pollerStopped": "Aucune récente",
       "pollerLastBeat": "Dernier battement",
+      "pollerHint": "Actif = une collecte a réussi dans les 10 dernières minutes (worker ou bouton ci-dessous).",
       "cronStatus": "Dernière exécution",
       "lastSuccess": "Dernier succès",
       "lastFailure": "Dernier échec",
       "trigger": "Relancer la collecte maintenant",
       "triggerSuccess": "Collecte lancée : {collected} nouveau(x) match(s), {errors} erreur(s).",
+      "triggerBackground": "Collecte lancée en arrière-plan. Actualisez la page dans 2–5 min pour voir « Dernier succès » et « Dernière activité » à jour.",
       "triggerError": "Échec de la collecte.",
-      "description": "Une exécution manuelle du cron de collecte (matchs Ranked Solo/Duo EUW/EUNE). Si le worker (poller) est arrêté, relancez-le côté serveur (PM2 ou npm run riot:worker)."
+      "description": "Une exécution manuelle du cron de collecte (matchs Ranked Solo/Duo EUW/EUNE). Si le worker (npm run riot:worker) est arrêté, le bouton lance une seule collecte en arrière-plan."
     },
     "riotApikey": {
       "title": "Clé API Riot",

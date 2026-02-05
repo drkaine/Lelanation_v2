@@ -271,15 +271,15 @@ router.post('/refresh-match-ranks', async (_req, res) => {
 })
 
 // --- Trigger Riot match collection (one run, used by admin "Relancer la collecte") ---
-router.post('/riot-collect-now', async (_req, res) => {
-  try {
-    const result = await runRiotMatchCollectOnce()
-    return res.json({ success: true, ...result })
-  } catch (e) {
-    return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Riot match collect failed',
-    })
-  }
+// Runs in background to avoid 504 (collect can take several minutes). Returns 202 immediately.
+router.post('/riot-collect-now', (_req, res) => {
+  res.status(202).json({
+    success: true,
+    message: 'Collecte lancée en arrière-plan. Actualisez la page dans quelques minutes pour voir le résultat.',
+  })
+  runRiotMatchCollectOnce().catch((e) => {
+    console.error('[admin] riot-collect-now background run failed:', e)
+  })
 })
 
 // --- Builds stats ---

@@ -119,28 +119,31 @@
           <p class="mb-4 text-sm text-text/80">{{ t('admin.riotMatch.description') }}</p>
           <p v-if="cronLoading" class="text-text/70">Chargement…</p>
           <template v-else>
-            <div class="mb-4 flex flex-wrap items-center gap-3">
-              <span class="text-sm font-medium text-text"
-                >{{ t('admin.riotMatch.pollerStatus') }} :</span
-              >
-              <span
-                :class="
-                  cron?.riotWorker?.active
-                    ? 'bg-green-600/20 text-green-700 dark:text-green-400'
-                    : 'bg-text/10 text-text/70'
-                "
-                class="rounded px-2 py-0.5 text-sm font-medium"
-              >
-                {{
-                  cron?.riotWorker?.active
-                    ? t('admin.riotMatch.pollerActive')
-                    : t('admin.riotMatch.pollerStopped')
-                }}
-              </span>
-              <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
-                ({{ t('admin.riotMatch.pollerLastBeat') }} :
-                {{ formatRiotDate(cron.riotWorker.lastBeat) }})
-              </span>
+            <div class="mb-4">
+              <div class="mb-1 flex flex-wrap items-center gap-3">
+                <span class="text-sm font-medium text-text"
+                  >{{ t('admin.riotMatch.pollerStatus') }} :</span
+                >
+                <span
+                  :class="
+                    cron?.riotWorker?.active
+                      ? 'bg-green-600/20 text-green-700 dark:text-green-400'
+                      : 'bg-text/10 text-text/70'
+                  "
+                  class="rounded px-2 py-0.5 text-sm font-medium"
+                >
+                  {{
+                    cron?.riotWorker?.active
+                      ? t('admin.riotMatch.pollerActive')
+                      : t('admin.riotMatch.pollerStopped')
+                  }}
+                </span>
+                <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
+                  ({{ t('admin.riotMatch.pollerLastBeat') }} :
+                  {{ formatRiotDate(cron.riotWorker.lastBeat) }})
+                </span>
+              </div>
+              <p class="text-xs text-text/60">{{ t('admin.riotMatch.pollerHint') }}</p>
             </div>
             <div class="mb-4">
               <h3 class="mb-2 text-sm font-medium text-text">
@@ -876,11 +879,8 @@ async function triggerRiotCollect() {
       return
     }
     const data = await res.json()
-    if (res.ok) {
-      riotCollectMessage.value = t('admin.riotMatch.triggerSuccess', {
-        collected: data.collected ?? 0,
-        errors: data.errors ?? 0,
-      })
+    if (res.ok || res.status === 202) {
+      riotCollectMessage.value = data.message ?? t('admin.riotMatch.triggerBackground')
       await loadCron()
     } else {
       riotCollectError.value = true
