@@ -8,6 +8,8 @@ import { isDatabaseConfigured } from '../db.js'
 import { getRiotApiService } from './RiotApiService.js'
 
 const TIER_ORDER = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
+/** Sentinel for participants whose Solo/Duo rank could not be fetched (unranked, decayed, etc.). Excluded from Match.rank and from "ranked" stats. */
+export const UNRANKED_TIER = 'UNRANKED'
 const DIVISION_ORDER = ['IV', 'III', 'II', 'I'] as const
 
 /** Convert tier+division+lp to a numeric score (higher = higher rank). MASTER+ have no division (use 0). */
@@ -207,7 +209,15 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
       continue
     }
     const entryData = leagueResult.unwrap()
-    if (!entryData) continue
+    if (!entryData) {
+      // Player has no Solo/Duo entry (unranked, decayed, etc.). Mark as UNRANKED so we stop retrying.
+      const result = await prisma.participant.updateMany({
+        where: { puuid, rankTier: null },
+        data: { rankTier: UNRANKED_TIER, rankDivision: undefined, rankLp: undefined },
+      })
+      updated += result.count
+      continue
+    }
     const { tier, rank: division, leaguePoints } = entryData
     const result = await prisma.participant.updateMany({
       where: { puuid, rankTier: null },
@@ -221,16 +231,20 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
 
 /**
  * Recompute Match.rank from participants (average rank of players in the match).
- * Only participants with rankTier set are included; matches with no rank data get rank = null.
+ * Only participants with a real rank (tier + division) are included; UNRANKED and null are excluded.
  */
 export async function refreshMatchRanks(): Promise<{ matchesUpdated: number }> {
   if (!isDatabaseConfigured()) return { matchesUpdated: 0 }
   const participants = await prisma.participant.findMany({
-    where: { rankTier: { not: null }, rankDivision: { not: null } },
+    where: {
+      rankTier: { in: [...TIER_ORDER] },
+      rankDivision: { not: null },
+    },
     select: { matchId: true, rankTier: true, rankDivision: true, rankLp: true },
   })
   const byMatch = new Map<string, number[]>()
   for (const p of participants) {
+    if (p.rankTier === UNRANKED_TIER) continue
     const tier = p.rankTier!
     const div = p.rankDivision!
     const lp = p.rankLp ?? 0
