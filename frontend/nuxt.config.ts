@@ -32,6 +32,25 @@ export default defineNuxtConfig({
   // SSR enabled by default in Nuxt 3 for MPA support
   // File-based routing via pages/ directory automatically creates routes
   ssr: true,
+  app: {
+    head: {
+      title: 'Lelanation - Builds League of Legends',
+      titleTemplate: '%s | Lelanation',
+      meta: [
+        { charset: 'utf-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        {
+          name: 'description',
+          content:
+            'Plateforme de builds et guides League of Legends par la communauté Lelariva. Créez, optimisez et partagez vos builds. Statistiques, theorycraft, vidéos.',
+        },
+        { name: 'robots', content: 'index, follow' },
+      ],
+      link: [
+        { rel: 'canonical', href: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr' },
+      ],
+    },
+  },
   modules: [
     '@nuxtjs/tailwindcss',
     '@nuxt/icon',
@@ -109,9 +128,8 @@ export default defineNuxtConfig({
           '/statistics',
           '/privacy',
           '/legal',
-          '/admin',
         ],
-        exclude: ['/api/**'],
+        exclude: ['/api/**', '/admin', '/admin/**'],
       },
     },
   },

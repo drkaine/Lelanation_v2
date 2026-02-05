@@ -38,6 +38,23 @@
 <script setup lang="ts">
 // Page d'accueil - Landing page pour Lelanation
 const { t } = useI18n()
+const config = useRuntimeConfig().public
+const siteUrl = (config.siteUrl as string) || 'https://lelanation.fr'
+
+useHead({
+  title: () => t('seo.homeTitle'),
+  meta: [{ name: 'description', content: () => t('seo.homeDescription') }],
+})
+useSeoMeta({
+  ogTitle: () => t('seo.homeTitle'),
+  ogDescription: () => t('seo.homeDescription'),
+  ogType: 'website',
+  ogUrl: siteUrl,
+  ogLocale: 'fr_FR',
+  twitterCard: 'summary_large_image',
+  twitterTitle: () => t('seo.homeTitle'),
+  twitterDescription: () => t('seo.homeDescription'),
+})
 
 interface SocialLink {
   href: string

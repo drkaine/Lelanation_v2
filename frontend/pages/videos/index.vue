@@ -170,6 +170,17 @@ import type { YouTubeVideo } from '~/types/youtube'
 const youtube = useYouTubeStore()
 const isLoadingAll = ref(false)
 const route = useRoute()
+const { t } = useI18n()
+
+useHead({
+  title: () => t('videosPage.metaTitle'),
+  meta: [{ name: 'description', content: () => t('videosPage.metaDescription') }],
+})
+useSeoMeta({
+  ogTitle: () => t('videosPage.metaTitle'),
+  ogDescription: () => t('videosPage.metaDescription'),
+  ogType: 'website',
+})
 const router = useRouter()
 
 const creators = computed(() => youtube.creators)

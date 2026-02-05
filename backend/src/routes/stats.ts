@@ -24,6 +24,7 @@ router.get('/champions', async (req: Request, res: Response) => {
   if (!data) {
     return res.status(200).json({
       totalGames: 0,
+      totalMatches: 0,
       champions: [],
       generatedAt: null,
       message: 'No stats yet. Run match collection and aggregation first.'
@@ -31,6 +32,7 @@ router.get('/champions', async (req: Request, res: Response) => {
   }
   return res.json({
     totalGames: data.totalGames,
+    totalMatches: data.totalMatches,
     champions: data.champions,
     generatedAt: data.generatedAt
   })

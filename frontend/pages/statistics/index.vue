@@ -41,7 +41,7 @@
           >
             <div class="rounded border border-primary/20 bg-background/50 p-4">
               <div class="text-2xl font-bold text-text-accent">
-                {{ championsData.totalGames ?? 0 }}
+                {{ championsData.totalMatches ?? championsData.totalGames ?? 0 }}
               </div>
               <div class="text-sm text-text/70">{{ t('statisticsPage.totalGames') }}</div>
             </div>
@@ -194,10 +194,14 @@
             </tbody>
           </table>
           <p
-            v-if="championsData?.totalGames != null && filteredChampions.length"
+            v-if="
+              (championsData?.totalMatches != null || championsData?.totalGames != null) &&
+              filteredChampions.length
+            "
             class="border-t border-primary/20 px-4 py-2 text-xs text-text/70"
           >
-            {{ t('statisticsPage.totalGames') }}: {{ championsData.totalGames }}
+            {{ t('statisticsPage.totalGames') }}:
+            {{ championsData.totalMatches ?? championsData.totalGames }}
             <span v-if="championSearchQuery">
               ({{ t('statisticsPage.showing') }} {{ filteredChampions.length }})</span
             >
@@ -513,6 +517,17 @@ definePageMeta({
 })
 
 const { t, locale } = useI18n()
+
+useHead({
+  title: () => t('statisticsPage.metaTitle'),
+  meta: [{ name: 'description', content: () => t('statisticsPage.metaDescription') }],
+})
+useSeoMeta({
+  ogTitle: () => t('statisticsPage.metaTitle'),
+  ogDescription: () => t('statisticsPage.metaDescription'),
+  ogType: 'website',
+})
+
 const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
@@ -577,6 +592,7 @@ const roles = [
 // Champions
 const championsData = ref<{
   totalGames: number
+  totalMatches?: number
   champions: Array<{
     championId: number
     games: number

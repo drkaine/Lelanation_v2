@@ -97,6 +97,11 @@ useHead({
     { name: 'robots', content: 'index,follow' },
   ],
 })
+useSeoMeta({
+  ogTitle: () => t('privacy.metaTitle'),
+  ogDescription: () => t('privacy.metaDescription'),
+  ogType: 'website',
+})
 
 const lastUpdateDate = computed(() =>
   new Date().toLocaleDateString(locale.value === 'fr' ? 'fr-FR' : 'en-US', {

@@ -177,6 +177,16 @@ type VisibilityFilterValue = 'all' | 'private' | 'public'
 const myBuildsVisibilityFilter = ref<VisibilityFilterValue>('all')
 const { t } = useI18n()
 
+useHead({
+  title: () => t('buildsPage.metaTitle'),
+  meta: [{ name: 'description', content: () => t('buildsPage.metaDescription') }],
+})
+useSeoMeta({
+  ogTitle: () => t('buildsPage.metaTitle'),
+  ogDescription: () => t('buildsPage.metaDescription'),
+  ogType: 'website',
+})
+
 const visibilityFilterOptions = computed<{ value: VisibilityFilterValue; label: string }[]>(() => [
   { value: 'all', label: t('buildsPage.all') },
   { value: 'private', label: t('buildsPage.private') },

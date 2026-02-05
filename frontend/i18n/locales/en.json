@@ -29,7 +29,9 @@
   },
   "seo": {
     "homeTitle": "Lelanation - League of Legends builds platform",
-    "homeDescription": "League of Legends builds and guides by the Lelariva community"
+    "homeDescription": "League of Legends builds and guides by the Lelariva community. Create, optimize and share your builds. Statistics, theorycraft, videos.",
+    "defaultTitle": "Lelanation - League of Legends builds",
+    "defaultDescription": "League of Legends builds and guides by the Lelariva community. Create, optimize and share your builds."
   },
   "cookies": {
     "title": "Cookies & storage preferences",
@@ -124,6 +126,8 @@
   "statisticsPage": {
     "title": "LoL Statistics",
     "description": "Winrate and pickrate per champion, computed from Ranked Solo/Duo matches (EUW + EUNE). Filter by rank or role.",
+    "metaTitle": "LoL Statistics - Winrate and pickrate by champion | Lelanation",
+    "metaDescription": "League of Legends statistics: winrate and pickrate by champion, popular builds and runes. Ranked Solo/Duo EUW and EUNE. Filter by rank and role.",
     "tabOverview": "Overview",
     "tabChampions": "Champions",
     "tabBuilds": "Builds",
@@ -267,6 +271,8 @@
     "selectChampionFirst": "Please select a champion first"
   },
   "buildsPage": {
+    "metaTitle": "League of Legends builds - Create and discover builds | Lelanation",
+    "metaDescription": "Create and discover League of Legends builds by the community. Runes, items, skill order. Lelariva and community builds.",
     "createBuild": "Create Build",
     "discover": "Discover",
     "myBuilds": "My Builds",
@@ -442,6 +448,10 @@
     "legal": "Legal notice",
     "privacy": "Privacy & Cookies",
     "contact": "Contact"
+  },
+  "videosPage": {
+    "metaTitle": "League of Legends videos - Builds and guides | Lelanation",
+    "metaDescription": "League of Legends videos and guides: builds, tier lists, meta. Lelariva and community content. Discover popular builds on video."
   },
   "contactModal": {
     "title": "Contact us",

@@ -29,7 +29,9 @@
   },
   "seo": {
     "homeTitle": "Lelanation - Plateforme de builds League of Legends",
-    "homeDescription": "Plateforme de builds et guides League of Legends par la communauté Lelariva"
+    "homeDescription": "Plateforme de builds et guides League of Legends par la communauté Lelariva. Créez, optimisez et partagez vos builds. Statistiques, theorycraft, vidéos.",
+    "defaultTitle": "Lelanation - Builds League of Legends",
+    "defaultDescription": "Plateforme de builds et guides League of Legends par la communauté Lelariva. Créez, optimisez et partagez vos builds."
   },
   "cookies": {
     "title": "Gestion des cookies et du stockage",
@@ -124,6 +126,8 @@
   "statisticsPage": {
     "title": "Statistiques LoL",
     "description": "Winrate et pickrate par champion, calculés à partir des matchs Ranked Solo/Duo (EUW + EUNE). Filtrez par rang ou rôle.",
+    "metaTitle": "Statistiques LoL - Winrate et pickrate par champion | Lelanation",
+    "metaDescription": "Statistiques League of Legends : winrate et pickrate par champion, builds et runes populaires. Données Ranked Solo/Duo EUW et EUNE. Filtres par rang et rôle.",
     "tabOverview": "Vue d'ensemble",
     "tabChampions": "Champions",
     "tabBuilds": "Builds",
@@ -267,6 +271,8 @@
     "selectChampionFirst": "Veuillez d'abord sélectionner un champion"
   },
   "buildsPage": {
+    "metaTitle": "Builds League of Legends - Créer et découvrir des builds | Lelanation",
+    "metaDescription": "Créez et découvrez des builds League of Legends par la communauté. Runes, objets, ordre des compétences. Builds de Lelariva et de la communauté.",
     "createBuild": "Créer un Build",
     "discover": "Découvrir",
     "myBuilds": "Mes Builds",
@@ -446,6 +452,10 @@
     "legal": "Mentions légales",
     "privacy": "Confidentialité & Cookies",
     "contact": "Contact"
+  },
+  "videosPage": {
+    "metaTitle": "Vidéos League of Legends - Builds et guides | Lelanation",
+    "metaDescription": "Vidéos et guides League of Legends : builds, tier lists, meta. Contenu Lelariva et communauté. Découvrez les builds populaires en vidéo."
   },
   "contactModal": {
     "title": "Nous contacter",

@@ -15,7 +15,10 @@ export interface ChampionStats {
 }
 
 export interface AggregatedStats {
+  /** Total participant rows (used for pickrate denominator). */
   totalGames: number
+  /** Total distinct matches (for display as "Total parties"). */
+  totalMatches: number
   champions: ChampionStats[]
   generatedAt: string | null
 }
@@ -39,11 +42,12 @@ export class RiotStatsAggregator {
 
       const all = await prisma.participant.findMany({
         where,
-        select: { championId: true, win: true, role: true },
+        select: { matchId: true, championId: true, win: true, role: true },
       })
       const totalGames = all.length
+      const totalMatches = new Set(all.map((p) => p.matchId)).size
       if (totalGames === 0) {
-        return { totalGames: 0, champions: [], generatedAt: new Date().toISOString() }
+        return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
       }
 
       const byChamp = new Map<
@@ -92,6 +96,7 @@ export class RiotStatsAggregator {
 
       return {
         totalGames,
+        totalMatches,
         champions,
         generatedAt: new Date().toISOString(),
       }
@@ -108,6 +113,7 @@ export class RiotStatsAggregator {
     if (result) return result
     return {
       totalGames: 0,
+      totalMatches: 0,
       champions: [],
       generatedAt: new Date().toISOString(),
     }
