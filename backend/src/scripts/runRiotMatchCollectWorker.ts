@@ -8,8 +8,8 @@
  *
  * Env:
  *   RIOT_MATCH_CYCLE_DELAY_MS     - Pause between cycles (default 60_000 = 1 min).
- *   RIOT_MATCH_ENRICH_PASSES      - Extra enrich passes per cycle (default 3).
- *   RIOT_MATCH_ENRICH_PER_PASS    - Players to enrich per pass (default 150).
+ *   RIOT_MATCH_ENRICH_PASSES      - Enrich passes per cycle (default 1). Réduire le blocage avant le prochain crawl.
+ *   RIOT_MATCH_ENRICH_PER_PASS    - Players to enrich per pass (default 50). 150 = ~1 min d’API en série.
  *   RIOT_MATCH_CRAWL_RETRIES      - Retries for crawl on transient error (default 3).
  *   RIOT_MATCH_CRAWL_BACKOFF_MS   - Initial backoff between retries (default 30_000).
  */
@@ -27,8 +27,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
 const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '60000', 10) || 60000)
-const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '3', 10) || 3)
-const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
+const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '1', 10) || 1)
+const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '50', 10) || 50)
 const CRAWL_RETRIES = Math.max(1, parseInt(process.env.RIOT_MATCH_CRAWL_RETRIES ?? '3', 10) || 3)
 const CRAWL_BACKOFF_MS = Math.max(5000, parseInt(process.env.RIOT_MATCH_CRAWL_BACKOFF_MS ?? '30000', 10) || 30000)
 

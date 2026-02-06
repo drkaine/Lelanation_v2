@@ -345,15 +345,15 @@ const communityDragonSpellData = ref<Record<string, CommunityDragonSpellDamageDa
 const engineSpellDefinitions = ref<SpellDefinition[]>([])
 
 watch(
-  () => champion.value?.id,
-  async championId => {
-    if (!championId) {
+  () => (champion.value ? (champion.value.key ?? champion.value.id) : null),
+  async championIdOrKey => {
+    if (!championIdOrKey) {
       communityDragonSpellData.value = {}
       engineSpellDefinitions.value = []
       return
     }
-    communityDragonSpellData.value = await getCommunityDragonSpellDamage(championId)
-    engineSpellDefinitions.value = await loadCommunityDragonSpellDefinitions(championId)
+    communityDragonSpellData.value = await getCommunityDragonSpellDamage(championIdOrKey)
+    engineSpellDefinitions.value = await loadCommunityDragonSpellDefinitions(championIdOrKey)
   },
   { immediate: true }
 )

@@ -15,116 +15,39 @@ interface ChampionData {
   }
 }
 
+const CD_BASE =
+  'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global'
+
 /**
- * Service for fetching champion data from Community Dragon
- * Community Dragon provides more detailed game data than Data Dragon
+ * Locale for Community Dragon (default = en_US, use fr_fr for French).
+ * Full list: default, fr_fr, de_de, es_es, it_it, pt_br, ja_jp, ko_kr, zh_cn, etc.
+ */
+function getCommunityDragonLocale(): string {
+  const env = process.env.COMMUNITY_DRAGON_LOCALE ?? ''
+  return env && /^[a-z]{2}_[a-z]{2}$/i.test(env) ? env.toLowerCase() : 'fr_fr'
+}
+
+/**
+ * Service for fetching champion data from Community Dragon (v1 API).
+ * Uses configurable locale (default fr_fr); default = en_US on CD.
  */
 export class CommunityDragonService {
   private readonly api: AxiosInstance
-  private readonly baseUrl = 'https://raw.communitydragon.org/latest/game/data/characters'
   private readonly dataDir: string
   private readonly versionService: VersionService
+  /** Locale used for sync (e.g. fr_fr, default). */
+  public readonly locale: string
 
-  // Special champion variants/forms that need to be fetched
-  private readonly specialVariants = [
-    'aniviaegg',
-    'aniviaiceblock',
-    'annietibbers',
-    'apheliosturret',
-    'aprilfool2025_clickablediscoball',
-    'auroraspirits',
-    'azirsundisc',
-    'azirtowerclicker',
-    'azirultsoldier',
-    'bardfollower',
-    'bardhealthshrine',
-    'bardpickup',
-    'bardpickupnoicon',
-    'bardportalclickable',
-    'belvethspore',
-    'belvethvoidling',
-    'caitlyntrap',
-    'cassiopeia_death',
-    'elisespider',
-    'elisespiderling',
-    'fiddlestickseffigy',
-    'fizzbait',
-    'fizzshark',
-    'gangplankbarrel',
-    'gnarbig',
-    'illaoiminion',
-    'ireliablades',
-    'ivernminion',
-    'iverntotem',
-    'jarvanivstandard',
-    'jarvanivwall',
-    'jhintrap',
-    'jinxmine',
-    'kalistaaltar',
-    'kalistaspawn',
-    'kindredjunglebountyminion',
-    'kindredwolf',
-    'kledmount',
-    'kledrider',
-    'kogmawdead',
-    'lissandrapassive',
-    'lulufaerie',
-    'lulupolymorphcritter',
-    'malzaharvoidling',
-    'maokaisproutling',
-    'miliominion',
-    'monkeykingclone',
-    'monkeykingflying',
-    'naafiripackmate',
-    'nasusult',
-    'nidaleecougar',
-    'nidaleespear',
-    'nunusnowball',
-    'olafaxe',
-    'oriannaball',
-    'oriannanoball',
-    'ornnram',
-    'quinnvalor',
-    'rammusdbc',
-    'rammuspb',
-    'reksaitunnel',
-    'sennasoul',
-    'shacobox',
-    'shenspirit',
-    'shyvanadragon',
-    'swaindemonform',
-    'syndraorbs',
-    'syndrasphere',
-    'taliyahwallchunk',
-    'teemomushroom',
-    'threshlantern',
-    'trundlewall',
-    'turret',
-    'turretovergrowth',
-    'turretrubble',
-    'viegosoul',
-    'viktorsingularity',
-    'yorickbigghoul',
-    'yorickghoulmelee',
-    'yorickwghoul',
-    'yorickwinvisible',
-    'zacrebirthbloblet',
-    'zedshadow',
-    'zoeorbs',
-    'zyragraspingplant',
-    'zyrapassive',
-    'zyraseed',
-    'zyrathornplant',
-    'inhibitor',
-    'nexus',
-    'destroyedtower',
-  ]
-
-  constructor(dataDir: string = join(process.cwd(), 'data', 'community-dragon')) {
+  constructor(
+    dataDir: string = join(process.cwd(), 'data', 'community-dragon'),
+    locale: string = getCommunityDragonLocale()
+  ) {
     this.dataDir = dataDir
+    this.locale = locale
     this.versionService = new VersionService()
+    const baseUrl = `${CD_BASE}/${this.locale}/v1/champions`
     this.api = axios.create({
-      baseURL: this.baseUrl,
+      baseURL: baseUrl,
       timeout: 30000,
       headers: {
         'User-Agent': 'Lelanation/1.0',
@@ -133,9 +56,9 @@ export class CommunityDragonService {
   }
 
   /**
-   * Get list of champion IDs from local champion.json
+   * Get list of champion numeric keys from Data Dragon champion.json (v1 API uses numeric id).
    */
-  private async getChampionIds(): Promise<Result<string[], AppError>> {
+  private async getChampionKeys(): Promise<Result<string[], AppError>> {
     try {
       const versionResult = await this.versionService.getCurrentVersion()
       if (versionResult.isErr()) {
@@ -197,77 +120,48 @@ export class CommunityDragonService {
         return Result.err(new AppError('Invalid champion.json structure', 'DATA_ERROR'))
       }
 
-      // Extract champion IDs (keys are champion IDs like "Aatrox", "Ahri", etc.)
-      const championIds = Object.keys(championData.data)
-      return Result.ok(championIds)
+      // v1 API uses numeric key (champion.key from Data Dragon)
+      const keys = Object.values(championData.data).map(c => c.key)
+      return Result.ok(keys)
     } catch (error) {
       return Result.err(
-        new AppError('Failed to get champion IDs', 'FILE_ERROR', error)
+        new AppError('Failed to get champion keys', 'FILE_ERROR', error)
       )
     }
   }
 
   /**
-   * Fetch Community Dragon data for a specific champion/variant
+   * Fetch v1 champion JSON by numeric key (e.g. 1.json, 266.json).
    */
-  private async fetchChampionData(
-    championName: string
-  ): Promise<Result<unknown, AppError>> {
+  private async fetchChampionData(key: string): Promise<Result<unknown, AppError>> {
     try {
-      const url = `/${championName}/${championName}.bin.json`
-      const response = await this.api.get<unknown>(url)
-
+      const response = await this.api.get<unknown>(`/${key}.json`)
       if (!response.data) {
-        return Result.err(
-          new ExternalApiError(`No data returned for ${championName}`, response.status)
-        )
+        return Result.err(new ExternalApiError(`No data returned for ${key}`, response.status))
       }
-
       return Result.ok(response.data)
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        // 404 is expected for some variants that don't exist
         if (error.response?.status === 404) {
-          return Result.err(
-            new ExternalApiError(
-              `Champion variant not found: ${championName}`,
-              404,
-              error
-            )
-          )
+          return Result.err(new ExternalApiError(`Champion not found: ${key}`, 404, error))
         }
         return Result.err(
-          new ExternalApiError(
-            `Failed to fetch ${championName}: ${error.message}`,
-            error.response?.status,
-            error
-          )
+          new ExternalApiError(`Failed to fetch ${key}: ${error.message}`, error.response?.status, error)
         )
       }
-      return Result.err(
-        new ExternalApiError(`Failed to fetch ${championName}`, undefined, error)
-      )
+      return Result.err(new ExternalApiError(`Failed to fetch ${key}`, undefined, error))
     }
   }
 
   /**
-   * Save champion data to file
+   * Save champion data as {key}.json (e.g. 1.json, 266.json).
    */
-  private async saveChampionData(
-    championName: string,
-    data: unknown
-  ): Promise<Result<void, AppError>> {
+  private async saveChampionData(key: string, data: unknown): Promise<Result<void, AppError>> {
     try {
-      const filePath = join(this.dataDir, `${championName}.json`)
+      const filePath = join(this.dataDir, `${key}.json`)
       return await FileManager.writeJson(filePath, data)
     } catch (error) {
-      return Result.err(
-        new AppError(
-          `Failed to save data for ${championName}`,
-          'FILE_ERROR',
-          error
-        )
-      )
+      return Result.err(new AppError(`Failed to save data for ${key}`, 'FILE_ERROR', error))
     }
   }
 
@@ -298,8 +192,7 @@ export class CommunityDragonService {
         )
       }
 
-      // Get list of champions
-      const championsResult = await this.getChampionIds()
+      const championsResult = await this.getChampionKeys()
       if (championsResult.isErr()) {
         return Result.err(
           new AppError(
@@ -310,65 +203,50 @@ export class CommunityDragonService {
         )
       }
 
-      const championIds = championsResult.unwrap()
-      const allChampions = [...championIds, ...this.specialVariants]
-
+      const championKeys = championsResult.unwrap()
       let synced = 0
       let failed = 0
       let skipped = 0
       const errors: Array<{ champion: string; error: string }> = []
 
-      console.log(`[CommunityDragon] Starting sync for ${allChampions.length} champions/variants...`)
+      console.log(
+        `[CommunityDragon] Starting sync for ${championKeys.length} champions (v1 API, locale=${this.locale})...`
+      )
 
-      // Fetch data for each champion (with rate limiting)
-      for (const championName of allChampions) {
+      for (const key of championKeys) {
         try {
-          // Convert champion ID to lowercase for URL (e.g., "Aatrox" -> "aatrox")
-          const urlName = championName.toLowerCase()
-
-          const fetchResult = await this.fetchChampionData(urlName)
+          const fetchResult = await this.fetchChampionData(key)
           if (fetchResult.isErr()) {
             const error = fetchResult.unwrapErr()
-            // Skip 404 errors (variant doesn't exist)
             if (error instanceof ExternalApiError && error.statusCode === 404) {
               skipped++
-              console.log(`[CommunityDragon] Skipped ${championName} (not found)`)
+              console.log(`[CommunityDragon] Skipped ${key} (not found)`)
               continue
             }
             failed++
-            errors.push({
-              champion: championName,
-              error: error.message,
-            })
-            console.error(`[CommunityDragon] Failed to fetch ${championName}: ${error.message}`)
+            errors.push({ champion: key, error: error.message })
+            console.error(`[CommunityDragon] Failed to fetch ${key}: ${error.message}`)
             continue
           }
 
           const data = fetchResult.unwrap()
-          const saveResult = await this.saveChampionData(championName, data)
+          const saveResult = await this.saveChampionData(key, data)
           if (saveResult.isErr()) {
             failed++
-            errors.push({
-              champion: championName,
-              error: saveResult.unwrapErr().message,
-            })
-            console.error(`[CommunityDragon] Failed to save ${championName}: ${saveResult.unwrapErr().message}`)
+            errors.push({ champion: key, error: saveResult.unwrapErr().message })
+            console.error(`[CommunityDragon] Failed to save ${key}: ${saveResult.unwrapErr().message}`)
             continue
           }
 
           synced++
-          console.log(`[CommunityDragon] Synced ${championName} (${synced}/${allChampions.length})`)
+          console.log(`[CommunityDragon] Synced ${key} (${synced}/${championKeys.length})`)
 
-          // Rate limiting: wait 100ms between requests to avoid overwhelming the server
           await new Promise(resolve => setTimeout(resolve, 100))
         } catch (error) {
           failed++
           const errorMessage = error instanceof Error ? error.message : String(error)
-          errors.push({
-            champion: championName,
-            error: errorMessage,
-          })
-          console.error(`[CommunityDragon] Unexpected error for ${championName}: ${errorMessage}`)
+          errors.push({ champion: key, error: errorMessage })
+          console.error(`[CommunityDragon] Unexpected error for ${key}: ${errorMessage}`)
         }
       }
 

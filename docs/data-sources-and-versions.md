@@ -2,13 +2,26 @@
 
 ## Community Dragon
 
-**Community Dragon** fournit les définitions de sorts des champions (theorycraft). Le flux :
+**Community Dragon** fournit les définitions de sorts des champions (theorycraft), avec les **bonnes valeurs** (coefficients, effectAmounts, cooldown/cost par rang) et les **textes localisés** (noms, descriptions, sorts) selon la locale.
 
-1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON par champion et les enregistre dans `backend/data/community-dragon/`.
-2. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie ces fichiers vers `frontend/public/data/community-dragon/`, puis **supprime les fichiers du backend** pour ne pas dupliquer les données.
-3. **Utilisation** : le frontend charge les sorts via `/data/community-dragon/{ChampionName}.json`.
+**Source** : API v1 Riot game data, par **locale** (default = en_US sur CD, on utilise `fr_fr` pour le français) :  
+`https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/{locale}/v1/champions/{id}.json`  
+Ex. `global/fr_fr/v1/champions/1.json` = Annie en français, `global/default/v1/champions/1.json` = Annie en anglais.  
+Locales disponibles : `default`, `fr_fr`, `de_de`, `es_es`, `it_it`, `pt_br`, `ja_jp`, `ko_kr`, `zh_cn`, etc.
+
+**Locale** : par défaut le sync utilise `fr_fr`. Pour une autre langue, définir la variable d’environnement `COMMUNITY_DRAGON_LOCALE` (ex. `COMMUNITY_DRAGON_LOCALE=en_gb`).
+
+Le flux :
+
+1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON v1 par **clé numérique** (depuis Data Dragon `champion.json`) pour la locale configurée, et les enregistre dans `backend/data/community-dragon/` (ex. `266.json`).
+2. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie ces fichiers vers `frontend/public/data/community-dragon/`, puis **supprime les fichiers du backend**.
+3. **Utilisation** : le frontend charge les sorts via `/data/community-dragon/{championKey}.json`. Le parser détecte le format v1 (tableau `spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown et coût.
 
 Le backend ne conserve pas de copie après la copie vers le frontend.
+
+### Pourquoi garder Data Dragon champion.json / championFull.json ?
+
+Les JSON v1 de Community Dragon contiennent : noms, titres, descriptions, sorts (avec coefficients, coûts, cooldowns), passif, icônes (`squarePortraitPath`), rôles. Ils **ne contiennent pas** les **stats de base** des champions (PV, attaque, armure, résistance magique, etc. et leur croissance par niveau). Or le theorycraft et la page build ont besoin de ces stats (formules de dégâts, tableau de stats par niveau). Ces stats sont fournies par Data Dragon (`champion.json` / `championFull.json`). On conserve donc Data Dragon pour la liste des champions et leurs stats de base ; Community Dragon est utilisé pour les données de sorts (theorycraft) et, si on le souhaite plus tard, on pourra générer une liste / un “champion full” à partir de CD (noms, descriptions) fusionné avec les stats DDragon pour n’avoir qu’une seule source de vérité côté textes.
 
 ---
 

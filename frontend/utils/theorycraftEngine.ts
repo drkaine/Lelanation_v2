@@ -106,24 +106,101 @@ function getCharacterSpellPaths(json: CommunityDragonJson, championId: string): 
   return []
 }
 
-/** Normalize champion id to CommunityDragon file name (e.g. Aatrox, JarvanIV). */
-export function getCommunityDragonChampionFileName(championId: string): string {
-  return championId
+/** Normalize champion id/key to CommunityDragon file name. v1 API uses numeric key (e.g. 266), old used name (e.g. Aatrox). */
+export function getCommunityDragonChampionFileName(championIdOrKey: string): string {
+  return championIdOrKey
+}
+
+/** v1 champion JSON (rcp-be-lol-game-data/global/default/v1/champions/{id}.json). */
+interface CommunityDragonV1Spell {
+  spellKey: string
+  name?: string
+  coefficients?: { coefficient1?: number; coefficient2?: number }
+  effectAmounts?: Record<string, number[]>
+  costCoefficients?: number[]
+  cooldownCoefficients?: number[]
+}
+
+interface CommunityDragonV1Json {
+  id?: number
+  name?: string
+  spells?: CommunityDragonV1Spell[]
+}
+
+function isV1ChampionJson(json: unknown): json is CommunityDragonV1Json {
+  return (
+    json != null &&
+    typeof json === 'object' &&
+    Array.isArray((json as CommunityDragonV1Json).spells) &&
+    (json as CommunityDragonV1Json).spells!.length > 0
+  )
+}
+
+/**
+ * Parse v1 champion JSON into SpellDefinitions (coefficients, effectAmounts, cost/cooldown per rank).
+ */
+function parseCommunityDragonV1Spells(json: CommunityDragonV1Json): SpellDefinition[] {
+  const championName = json.name ?? ''
+  const spells = json.spells ?? []
+  const definitions: SpellDefinition[] = []
+
+  for (let i = 0; i < Math.min(4, spells.length); i++) {
+    const s = spells[i]
+    const key = (SPELL_KEYS[Math.max(0, Math.min(i, 3))] ??
+      s.spellKey?.toUpperCase()?.[0] ??
+      'Q') as 'Q' | 'W' | 'E' | 'R'
+    const spellId = championName ? `${championName}${key}` : `${key}`
+
+    let baseDamageByRank: number[] = [0]
+    if (s.effectAmounts) {
+      for (const k of Object.keys(s.effectAmounts)) {
+        const arr = s.effectAmounts[k]
+        if (Array.isArray(arr) && arr.some((v: number) => typeof v === 'number' && v !== 0)) {
+          const slice = arr.slice(0, 6).filter((v): v is number => typeof v === 'number')
+          if (slice.length >= 1) {
+            baseDamageByRank = slice
+            break
+          }
+        }
+      }
+    }
+
+    const coef = s.coefficients ?? {}
+    const scaling: SpellScaling = {}
+    if (coef.coefficient1 != null && coef.coefficient1 !== 0) scaling.apRatio = coef.coefficient1
+    if (coef.coefficient2 != null && coef.coefficient2 !== 0) scaling.adRatio = coef.coefficient2
+
+    const cooldownByRank = s.cooldownCoefficients?.length ? s.cooldownCoefficients : [0]
+    const costByRank = s.costCoefficients?.length ? s.costCoefficients : [0]
+
+    definitions.push({
+      key,
+      spellId,
+      baseDamageByRank: baseDamageByRank.length > 0 ? baseDamageByRank : [0],
+      cooldownByRank: cooldownByRank.length > 0 ? cooldownByRank : [0],
+      costByRank: costByRank.length > 0 ? costByRank : [0],
+      scaling,
+    })
+  }
+
+  return definitions
 }
 
 /**
  * Load CommunityDragon JSON from static path and return spell definitions.
- * Path: /data/community-dragon/{championId}.json (no fetch to web).
+ * Tries v1 format first (file by numeric key: /data/community-dragon/266.json), then old format (by name).
+ * v1 provides coefficients, effectAmounts, cost/cooldown per rank.
  */
 export async function loadCommunityDragonSpellDefinitions(
-  championId: string
+  championIdOrKey: string
 ): Promise<SpellDefinition[]> {
-  const fileName = getCommunityDragonChampionFileName(championId)
+  const fileName = getCommunityDragonChampionFileName(championIdOrKey)
   const url = `/data/community-dragon/${fileName}.json`
   const res = await fetch(url)
   if (!res.ok) return []
-  const json = (await res.json()) as CommunityDragonJson
-  return parseCommunityDragonSpells(championId, json)
+  const json = (await res.json()) as CommunityDragonV1Json | CommunityDragonJson
+  if (isV1ChampionJson(json)) return parseCommunityDragonV1Spells(json)
+  return parseCommunityDragonSpells(championIdOrKey, json as CommunityDragonJson)
 }
 
 function getDataValues(spell: SpellDataResource): Map<string, number[]> {

@@ -14,6 +14,7 @@
     "riot:refresh-match-ranks": "tsx src/scripts/runRefreshMatchRanks.ts",
     "riot:cleanup-matches": "tsx src/scripts/runCleanupMatches.ts",
     "riot:discover-players": "tsx src/scripts/runRiotPlayerDiscovery.ts",
+    "riot:enrich": "tsx src/scripts/runRiotEnrich.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit"
