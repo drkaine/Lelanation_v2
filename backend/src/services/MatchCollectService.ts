@@ -19,20 +19,79 @@ interface RiotParticipant {
   assists?: number
   champLevel?: number
   goldEarned?: number
+  goldSpent?: number
   totalDamageDealtToChampions?: number
   totalMinionsKilled?: number
   visionScore?: number
   firstBloodKill?: boolean
   firstBloodAssist?: boolean
+  firstTowerAssist?: boolean
+  firstTowerKill?: boolean
   gameEndedInSurrender?: boolean
+  gameEndedInEarlySurrender?: boolean
+  teamEarlySurrendered?: boolean
   riotIdGameName?: string
   riotIdTagline?: string
+  baronKills?: number
+  consumablesPurchased?: number
+  damageDealtToBuildings?: number
+  damageDealtToEpicMonsters?: number
+  damageDealtToObjectives?: number
+  damageDealtToTurrets?: number
+  damageSelfMitigated?: number
+  doubleKills?: number
+  dragonKills?: number
+  inhibitorKills?: number
+  inhibitorTakedowns?: number
+  inhibitorsLost?: number
+  itemsPurchased?: number
+  killingSprees?: number
+  largestCriticalStrike?: number
+  largestKillingSpree?: number
+  largestMultiKill?: number
+  longestTimeSpentLiving?: number
+  magicDamageDealt?: number
+  magicDamageDealtToChampions?: number
+  magicDamageTaken?: number
+  neutralMinionsKilled?: number
+  objectivesStolen?: number
+  objectivesStolenAssists?: number
+  pentaKills?: number
+  physicalDamageDealt?: number
+  physicalDamageDealtToChampions?: number
+  physicalDamageTaken?: number
+  placement?: number
+  quadraKills?: number
+  roleBoundItem?: number
+  sightWardsBoughtInGame?: number
   spell1Casts?: number
   spell2Casts?: number
   spell3Casts?: number
   spell4Casts?: number
   summoner1Casts?: number
   summoner2Casts?: number
+  timeCCingOthers?: number
+  totalAllyJungleMinionsKilled?: number
+  totalDamageDealt?: number
+  totalDamageShieldedOnTeammates?: number
+  totalDamageTaken?: number
+  totalEnemyJungleMinionsKilled?: number
+  totalHeal?: number
+  totalHealsOnTeammates?: number
+  totalTimeCCDealt?: number
+  totalTimeSpentDead?: number
+  totalUnitsHealed?: number
+  tripleKills?: number
+  trueDamageDealt?: number
+  trueDamageDealtToChampions?: number
+  trueDamageTaken?: number
+  turretKills?: number
+  turretTakedowns?: number
+  turretsLost?: number
+  unrealKills?: number
+  visionWardsBoughtInGame?: number
+  wardsKilled?: number
+  wardsPlaced?: number
   item0?: number
   item1?: number
   item2?: number
@@ -44,6 +103,15 @@ interface RiotParticipant {
   challenges?: unknown
   summoner1Id?: number
   summoner2Id?: number
+}
+
+function num(p: RiotParticipant, key: keyof RiotParticipant): number | undefined {
+  const v = p[key]
+  return typeof v === 'number' ? v : undefined
+}
+function bool(p: RiotParticipant, key: keyof RiotParticipant): boolean | undefined {
+  const v = p[key]
+  return typeof v === 'boolean' ? v : undefined
 }
 
 function normalizeRole(teamPosition?: string, individualPosition?: string): string | null {
@@ -147,14 +215,72 @@ export async function upsertMatchFromRiot(
         typeof p.firstBloodKill === 'boolean' ? p.firstBloodKill : undefined,
       firstBloodAssist:
         typeof p.firstBloodAssist === 'boolean' ? p.firstBloodAssist : undefined,
-      gameEndedInSurrender:
-        typeof p.gameEndedInSurrender === 'boolean' ? p.gameEndedInSurrender : undefined,
-      spell1Casts: typeof p.spell1Casts === 'number' ? p.spell1Casts : undefined,
-      spell2Casts: typeof p.spell2Casts === 'number' ? p.spell2Casts : undefined,
-      spell3Casts: typeof p.spell3Casts === 'number' ? p.spell3Casts : undefined,
-      spell4Casts: typeof p.spell4Casts === 'number' ? p.spell4Casts : undefined,
-      summoner1Casts: typeof p.summoner1Casts === 'number' ? p.summoner1Casts : undefined,
-      summoner2Casts: typeof p.summoner2Casts === 'number' ? p.summoner2Casts : undefined,
+      gameEndedInSurrender: bool(p, 'gameEndedInSurrender'),
+      gameEndedInEarlySurrender: bool(p, 'gameEndedInEarlySurrender'),
+      teamEarlySurrendered: bool(p, 'teamEarlySurrendered'),
+      firstTowerAssist: bool(p, 'firstTowerAssist'),
+      firstTowerKill: bool(p, 'firstTowerKill'),
+      baronKills: num(p, 'baronKills'),
+      consumablesPurchased: num(p, 'consumablesPurchased'),
+      damageDealtToBuildings: num(p, 'damageDealtToBuildings'),
+      damageDealtToEpicMonsters: num(p, 'damageDealtToEpicMonsters'),
+      damageDealtToObjectives: num(p, 'damageDealtToObjectives'),
+      damageDealtToTurrets: num(p, 'damageDealtToTurrets'),
+      damageSelfMitigated: num(p, 'damageSelfMitigated'),
+      doubleKills: num(p, 'doubleKills'),
+      dragonKills: num(p, 'dragonKills'),
+      goldSpent: num(p, 'goldSpent'),
+      inhibitorKills: num(p, 'inhibitorKills'),
+      inhibitorTakedowns: num(p, 'inhibitorTakedowns'),
+      inhibitorsLost: num(p, 'inhibitorsLost'),
+      itemsPurchased: num(p, 'itemsPurchased'),
+      killingSprees: num(p, 'killingSprees'),
+      largestCriticalStrike: num(p, 'largestCriticalStrike'),
+      largestKillingSpree: num(p, 'largestKillingSpree'),
+      largestMultiKill: num(p, 'largestMultiKill'),
+      longestTimeSpentLiving: num(p, 'longestTimeSpentLiving'),
+      magicDamageDealt: num(p, 'magicDamageDealt'),
+      magicDamageDealtToChampions: num(p, 'magicDamageDealtToChampions'),
+      magicDamageTaken: num(p, 'magicDamageTaken'),
+      neutralMinionsKilled: num(p, 'neutralMinionsKilled'),
+      objectivesStolen: num(p, 'objectivesStolen'),
+      objectivesStolenAssists: num(p, 'objectivesStolenAssists'),
+      pentaKills: num(p, 'pentaKills'),
+      physicalDamageDealt: num(p, 'physicalDamageDealt'),
+      physicalDamageDealtToChampions: num(p, 'physicalDamageDealtToChampions'),
+      physicalDamageTaken: num(p, 'physicalDamageTaken'),
+      placement: num(p, 'placement'),
+      quadraKills: num(p, 'quadraKills'),
+      roleBoundItem: num(p, 'roleBoundItem'),
+      sightWardsBoughtInGame: num(p, 'sightWardsBoughtInGame'),
+      timeCCingOthers: num(p, 'timeCCingOthers'),
+      totalAllyJungleMinionsKilled: num(p, 'totalAllyJungleMinionsKilled'),
+      totalDamageDealt: num(p, 'totalDamageDealt'),
+      totalDamageShieldedOnTeammates: num(p, 'totalDamageShieldedOnTeammates'),
+      totalDamageTaken: num(p, 'totalDamageTaken'),
+      totalEnemyJungleMinionsKilled: num(p, 'totalEnemyJungleMinionsKilled'),
+      totalHeal: num(p, 'totalHeal'),
+      totalHealsOnTeammates: num(p, 'totalHealsOnTeammates'),
+      totalTimeCCDealt: num(p, 'totalTimeCCDealt'),
+      totalTimeSpentDead: num(p, 'totalTimeSpentDead'),
+      totalUnitsHealed: num(p, 'totalUnitsHealed'),
+      tripleKills: num(p, 'tripleKills'),
+      trueDamageDealt: num(p, 'trueDamageDealt'),
+      trueDamageDealtToChampions: num(p, 'trueDamageDealtToChampions'),
+      trueDamageTaken: num(p, 'trueDamageTaken'),
+      turretKills: num(p, 'turretKills'),
+      turretTakedowns: num(p, 'turretTakedowns'),
+      turretsLost: num(p, 'turretsLost'),
+      unrealKills: num(p, 'unrealKills'),
+      visionWardsBoughtInGame: num(p, 'visionWardsBoughtInGame'),
+      wardsKilled: num(p, 'wardsKilled'),
+      wardsPlaced: num(p, 'wardsPlaced'),
+      spell1Casts: num(p, 'spell1Casts'),
+      spell2Casts: num(p, 'spell2Casts'),
+      spell3Casts: num(p, 'spell3Casts'),
+      spell4Casts: num(p, 'spell4Casts'),
+      summoner1Casts: num(p, 'summoner1Casts'),
+      summoner2Casts: num(p, 'summoner2Casts'),
       statPerks,
       items: items.length ? items : undefined,
       runes,
