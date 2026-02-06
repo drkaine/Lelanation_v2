@@ -10,40 +10,61 @@ datasource db {
   provider = "postgresql"
 }
 
+// Niveau match: champs légers, teams en Json compact (bans + objectives) pour éviter tables séparées.
 model Match {
-  id            BigInt   @id @default(autoincrement())
-  matchId       String   @unique @map("match_id")
-  region        String   // euw1, eun1
-  queueId       Int      @map("queue_id") // 420 = Ranked Solo/Duo
-  gameVersion   String?  @map("game_version")
-  gameDuration  Int?     @map("game_duration")
-  platformId    String?  @map("platform_id")
-  rank          String?  // average rank of players in the match, e.g. "GOLD_II"
-  createdAt     DateTime @default(now()) @map("created_at")
+  id               BigInt   @id @default(autoincrement())
+  matchId          String   @unique @map("match_id")
+  region           String   // euw1, eun1
+  queueId          Int      @map("queue_id") // 420 = Ranked Solo/Duo
+  gameVersion      String?  @map("game_version")
+  gameDuration     Int?     @map("game_duration")
+  platformId       String?  @map("platform_id")
+  endOfGameResult  String?  @map("end_of_game_result") // GameComplete, Remake, etc. — filtre matchs valides
+  rank             String?  // average rank of players in the match, e.g. "GOLD_II"
+  teams            Json?    // [{ bans: [{ championId }], objectives: { baron, dragon, tower, ... } }, ...]
+  createdAt        DateTime @default(now()) @map("created_at")
 
   participants Participant[]
 
+  @@index([endOfGameResult])
   @@map("matches")
 }
 
+// Participant: colonnes indexées pour agrégations; bans/objectives dans Match.teams.
+// riotIdGameName/riotIdTagline du payload → remplissent Player.summoner_name à la collecte (pas stockés ici).
 model Participant {
-  id              BigInt   @id @default(autoincrement())
-  matchId         BigInt   @map("match_id")
-  puuid           String
-  championId      Int      @map("champion_id")
-  win             Boolean
-  role            String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY
-  teamPosition    String?  @map("team_position")
-  rankTier        String?  @map("rank_tier")
-  rankDivision    String?  @map("rank_division")
-  rankLp          Int?     @map("rank_lp")
-  items           Json?    // [item_id, ...]
-  runes           Json?
-  summonerSpells Json?     @map("summoner_spells")
-  kills           Int      @default(0)
-  deaths          Int      @default(0)
-  assists         Int      @default(0)
-  createdAt       DateTime @default(now()) @map("created_at")
+  id                          BigInt   @id @default(autoincrement())
+  matchId                     BigInt   @map("match_id")
+  puuid                       String
+  championId                  Int      @map("champion_id")
+  win                         Boolean
+  role                        String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY (dérivé teamPosition/individualPosition)
+  rankTier                    String?  @map("rank_tier")
+  rankDivision                String?  @map("rank_division")
+  rankLp                      Int?     @map("rank_lp")
+  kills                       Int      @default(0)
+  deaths                      Int      @default(0)
+  assists                     Int      @default(0)
+  champLevel                  Int?     @map("champ_level")
+  goldEarned                  Int?     @map("gold_earned")
+  totalDamageDealtToChampions Int?     @map("total_damage_dealt_to_champions")
+  totalMinionsKilled          Int?     @map("total_minions_killed")
+  visionScore                 Int?     @map("vision_score")
+  firstBloodKill              Boolean? @map("first_blood_kill")
+  firstBloodAssist            Boolean? @map("first_blood_assist")
+  gameEndedInSurrender        Boolean? @map("game_ended_in_surrender")
+  spell1Casts                 Int?     @map("spell1_casts")
+  spell2Casts                 Int?     @map("spell2_casts")
+  spell3Casts                 Int?     @map("spell3_casts")
+  spell4Casts                 Int?     @map("spell4_casts")
+  summoner1Casts              Int?     @map("summoner1_casts")
+  summoner2Casts              Int?     @map("summoner2_casts")
+  statPerks                   Json?    @map("stat_perks") // { defense, flex, offense } — champs dédié (api-riot perks.statPerks)
+  items                       Json?    // [item_id, ...]
+  runes                       Json?    // perks.styles (runes détaillées)
+  summonerSpells              Json?    @map("summoner_spells") // [summoner1Id, summoner2Id]
+  challenges                  Json?    // optionnel; null si pas utilisé
+  createdAt                   DateTime @default(now()) @map("created_at")
 
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
 
@@ -53,6 +74,7 @@ model Participant {
   @@index([rankTier])
   @@index([role])
   @@index([championId, rankTier])
+  @@index([gameEndedInSurrender])
   @@map("participants")
 }
 

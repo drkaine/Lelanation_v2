@@ -54,7 +54,7 @@ async function runDiscovery(riotApi: ReturnType<typeof import('../services/RiotA
 
   const seedRows = await prisma.$queryRaw<{ puuid: string; region: string }[]>`
     SELECT puuid, region FROM players
-    ORDER BY last_seen ASC NULLS FIRST
+    ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
     LIMIT ${maxSeeds}
   `
 

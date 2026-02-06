@@ -27,7 +27,7 @@ import type { AppError } from '../utils/errors.js'
 
 const MAX_SUMMONERS_PER_PLATFORM = 10
 const MATCH_IDS_PER_SUMMONER = 10
-/** Max players to crawl per run (from players table, ordered by last_seen asc nulls first). */
+/** Max players to crawl per run (from players table: last_seen IS NULL first, then last_seen ASC). */
 const MAX_PUUIDS_PER_RUN = Math.max(20, parseInt(process.env.RIOT_MATCH_MAX_PUUIDS_PER_RUN ?? '50', 10) || 50)
 /** Players to enrich (summoner_name) per run. */
 const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
@@ -206,10 +206,10 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
         }
       }
 
-    // 2) Crawl: players ordered by last_seen asc nulls first
+    // 2) Crawl: players with last_seen IS NULL first, then oldest last_seen
     const playersToCrawl = await prisma.$queryRaw<CrawlRow[]>`
       SELECT puuid, region FROM players
-      ORDER BY last_seen ASC NULLS FIRST
+      ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
       LIMIT ${MAX_PUUIDS_PER_RUN}
     `
     let processedCount = 0
