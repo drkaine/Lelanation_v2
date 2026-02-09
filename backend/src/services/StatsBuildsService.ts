@@ -1,5 +1,5 @@
 /**
- * Builds stats by champion: most played builds, best winrate (from participants).
+ * Builds stats by champion via get_builds_by_champion() (single round-trip).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -21,10 +21,21 @@ export interface BuildsByChampionOptions {
   limit?: number
 }
 
-function itemsKey(items: number[] | null): string {
-  if (!items || !Array.isArray(items)) return '[]'
-  const sorted = [...items].filter((x) => typeof x === 'number').sort((a, b) => a - b)
-  return JSON.stringify(sorted)
+type BuildsRow = Array<{ get_builds_by_champion: RawBuildsResult | null }>
+interface RawBuildsResult {
+  totalGames: number
+  builds: Array<{
+    items: number[] | string[]
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+  }>
+}
+
+function toItemsArray(raw: number[] | string[] | unknown): number[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((x) => (typeof x === 'number' ? x : parseInt(String(x), 10))).filter((n) => !Number.isNaN(n))
 }
 
 export async function getBuildsByChampion(
@@ -33,86 +44,28 @@ export async function getBuildsByChampion(
   if (!isDatabaseConfigured()) return null
   const { championId, rankTier, role, patch, minGames = 10, limit = 20 } = options
   try {
-    const where: { championId: number; rankTier?: string | null; role?: string | null } = {
-      championId,
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const pRole = role != null && role !== '' ? role : null
+    const pPatch = patch != null && patch !== '' ? patch : null
+
+    const rows = await prisma.$queryRaw<BuildsRow>`
+      SELECT get_builds_by_champion(${championId}, ${pRankTier}, ${pRole}, ${pPatch}, ${minGames}, ${limit}) AS get_builds_by_champion
+    `
+    const raw = rows[0]?.get_builds_by_champion
+    if (!raw) return { totalGames: 0, builds: [] }
+
+    const builds: BuildRow[] = (raw.builds ?? []).map((b) => ({
+      items: toItemsArray(b.items),
+      games: Number(b.games),
+      wins: Number(b.wins),
+      winrate: Number(b.winrate),
+      pickrate: Number(b.pickrate),
+    }))
+
+    return {
+      totalGames: Number(raw.totalGames) ?? 0,
+      builds,
     }
-    if (rankTier != null && rankTier !== '') where.rankTier = rankTier
-    if (role != null && role !== '') where.role = role
-
-    const participants = await prisma.participant.findMany({
-      where,
-      select: {
-        items: true,
-        win: true,
-        matchId: true,
-      },
-    })
-
-    if (participants.length === 0) {
-      return { totalGames: 0, builds: [] }
-    }
-
-    const matchIds = [...new Set(participants.map((p) => p.matchId))]
-    let matchFilter: { id: bigint }[] | null = null
-    if (patch != null && patch !== '') {
-      const matches = await prisma.match.findMany({
-        where: { id: { in: matchIds }, gameVersion: { contains: patch, mode: 'insensitive' } },
-        select: { id: true },
-      })
-      matchFilter = matches
-    }
-    const filtered =
-      matchFilter != null && matchFilter.length > 0
-        ? participants.filter((p) => matchFilter!.some((m) => m.id === p.matchId))
-        : participants
-    const totalGames = filtered.length
-    if (totalGames === 0) return { totalGames: 0, builds: [] }
-
-    const byKey = new Map<string, { games: number; wins: number }>()
-    for (const p of filtered) {
-      const raw = p.items
-      const arr = Array.isArray(raw) ? (raw as number[]) : []
-      const key = itemsKey(arr)
-      const entry = byKey.get(key) ?? { games: 0, wins: 0 }
-      entry.games++
-      if (p.win) entry.wins++
-      byKey.set(key, entry)
-    }
-
-    let builds: BuildRow[] = []
-    for (const [key, e] of byKey) {
-      if (e.games < minGames) continue
-      const items: number[] = JSON.parse(key)
-      builds.push({
-        items,
-        games: e.games,
-        wins: e.wins,
-        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
-        pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
-      })
-    }
-    builds.sort((a, b) => b.games - a.games)
-    let limited = builds.slice(0, limit)
-
-    // When no build meets minGames but we have data, return top builds with at least 1 game
-    if (limited.length === 0 && totalGames > 0) {
-      builds = []
-      for (const [key, e] of byKey) {
-        if (e.games < 1) continue
-        const items: number[] = JSON.parse(key)
-        builds.push({
-          items,
-          games: e.games,
-          wins: e.wins,
-          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
-          pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
-        })
-      }
-      builds.sort((a, b) => b.games - a.games)
-      limited = builds.slice(0, limit)
-    }
-
-    return { totalGames, builds: limited }
   } catch {
     return null
   }

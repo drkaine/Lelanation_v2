@@ -533,7 +533,18 @@
       "videos": "Vidéos",
       "apikeyRiot": "Clé API Riot",
       "riotMatch": "Collecte matchs",
-      "seedPlayers": "Joueurs seed"
+      "seedPlayers": "Joueurs seed",
+      "cronStatus": "Statut crons"
+    },
+    "cronStatus": {
+      "title": "Statut des crons (data/cron/status.json)",
+      "job": "Job",
+      "lastStart": "Dernier démarrage",
+      "lastSuccess": "Dernier succès",
+      "lastFailure": "Dernier échec",
+      "lastFailureMessage": "Message d'échec",
+      "riotWorker": "Worker Riot (poller)",
+      "noData": "Aucune donnée."
     },
     "contact": {
       "title": "Demandes de contact",

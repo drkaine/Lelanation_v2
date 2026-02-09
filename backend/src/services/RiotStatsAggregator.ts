@@ -1,5 +1,5 @@
 /**
- * Aggregates LoL stats from PostgreSQL participants (Ranked Solo/Duo).
+ * Aggregates LoL stats from PostgreSQL via get_stats_champions() (single round-trip).
  * Winrate / pickrate by champion; optional filters by rank and role.
  */
 import { prisma } from '../db.js'
@@ -28,77 +28,62 @@ export interface LoadStatsOptions {
   role?: string | null
 }
 
+type ChampionsRow = Array<{ get_stats_champions: RawChampionsResult | null }>
+interface RawChampionsResult {
+  totalGames: number
+  totalMatches: number
+  champions: Array<{
+    championId: number
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+    byRole?: Record<string, { games: number; wins: number; winrate: number }>
+  }>
+  generatedAt: string | null
+}
+
 export class RiotStatsAggregator {
   /**
-   * Load stats from DB (computed from participants). Returns null if DB not configured or no data.
+   * Load stats from DB via get_stats_champions(). Returns null if DB not configured or no data.
    */
   async load(options: LoadStatsOptions = {}): Promise<AggregatedStats | null> {
     if (!isDatabaseConfigured()) return null
     try {
       const { rankTier, role } = options
-      const where: { rankTier?: string | null; role?: string | null } = {}
-      if (rankTier != null && rankTier !== '') where.rankTier = rankTier
-      if (role != null && role !== '') where.role = role
+      const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+      const pRole = role != null && role !== '' ? role : null
 
-      const all = await prisma.participant.findMany({
-        where,
-        select: { matchId: true, championId: true, win: true, role: true },
+      const rows = await prisma.$queryRaw<ChampionsRow>`
+        SELECT get_stats_champions(${pRankTier}, ${pRole}) AS get_stats_champions
+      `
+      const raw = rows[0]?.get_stats_champions
+      if (!raw) return null
+
+      const champions: ChampionStats[] = (raw.champions ?? []).map((c) => {
+        const byRole = c.byRole && typeof c.byRole === 'object' && Object.keys(c.byRole).length > 0 ? c.byRole : undefined
+        return {
+          championId: Number(c.championId),
+          games: Number(c.games),
+          wins: Number(c.wins),
+          winrate: Number(c.winrate),
+          pickrate: Number(c.pickrate),
+          ...(byRole && { byRole }),
+        }
       })
-      const totalGames = all.length
-      const totalMatches = new Set(all.map((p) => p.matchId)).size
-      if (totalGames === 0) {
-        return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
-      }
 
-      const byChamp = new Map<
-        number,
-        { games: number; wins: number; byRole: Map<string, { games: number; wins: number }> }
-      >()
-      for (const p of all) {
-        const cid = p.championId
-        let entry = byChamp.get(cid)
-        if (!entry) {
-          entry = { games: 0, wins: 0, byRole: new Map() }
-          byChamp.set(cid, entry)
-        }
-        entry.games++
-        if (p.win) entry.wins++
-        const r = p.role ?? 'UNKNOWN'
-        let re = entry.byRole.get(r)
-        if (!re) {
-          re = { games: 0, wins: 0 }
-          entry.byRole.set(r, re)
-        }
-        re.games++
-        if (p.win) re.wins++
-      }
-
-      const champions: ChampionStats[] = []
-      for (const [championId, e] of byChamp) {
-        const byRole: Record<string, { games: number; wins: number; winrate: number }> = {}
-        for (const [r, re] of e.byRole) {
-          byRole[r] = {
-            games: re.games,
-            wins: re.wins,
-            winrate: re.games > 0 ? Math.round((re.wins / re.games) * 10000) / 100 : 0,
-          }
-        }
-        champions.push({
-          championId,
-          games: e.games,
-          wins: e.wins,
-          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
-          pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
-          byRole: Object.keys(byRole).length ? byRole : undefined,
-        })
-      }
-      champions.sort((a, b) => b.games - a.games)
+      const generatedAt =
+        raw.generatedAt == null
+          ? null
+          : typeof raw.generatedAt === 'string'
+            ? raw.generatedAt
+            : (raw.generatedAt as unknown as Date)?.toISOString?.() ?? String(raw.generatedAt)
 
       return {
-        totalGames,
-        totalMatches,
+        totalGames: Number(raw.totalGames) ?? 0,
+        totalMatches: Number(raw.totalMatches) ?? 0,
         champions,
-        generatedAt: new Date().toISOString(),
+        generatedAt,
       }
     } catch {
       return null

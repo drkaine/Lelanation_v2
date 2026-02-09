@@ -70,6 +70,39 @@ export async function getPatchTimeWindows(nowEpochSec?: number): Promise<PatchTi
 }
 
 /**
+ * Version prefixes (e.g. 16.1, 16.2, 16.3) from versions.json, sorted by release date ascending.
+ * Used to detect players crawled with old single-window logic (only newest version) and reset last_seen.
+ */
+export async function getVersionPrefixesSortedByReleaseDate(): Promise<string[]> {
+  let baseDir = DATA_GAME_DIR
+  const versionsPath = join(baseDir, 'versions.json')
+  let versionsResult = await FileManager.readJson<VersionsJson>(versionsPath)
+  if (versionsResult.isErr()) {
+    const cwdDir = join(process.cwd(), 'data', 'game')
+    if (cwdDir !== baseDir) {
+      const fallbackResult = await FileManager.readJson<VersionsJson>(join(cwdDir, 'versions.json'))
+      if (fallbackResult.isOk()) versionsResult = fallbackResult
+    }
+  }
+  if (versionsResult.isErr()) return []
+  const data = versionsResult.unwrap()
+  const list = (data?.versions ?? []).filter(
+    (v): v is { version: string; releaseDate: string } =>
+      typeof v?.version === 'string' && typeof (v as { releaseDate?: string }).releaseDate === 'string'
+  )
+  if (list.length === 0) return []
+  const sorted = list
+    .map((v) => {
+      const parts = v.version.trim().split('.')
+      const prefix = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v.version.trim()
+      return { prefix, epoch: new Date(v.releaseDate.trim()).getTime() / 1000 }
+    })
+    .filter((v) => !Number.isNaN(v.epoch))
+    .sort((a, b) => a.epoch - b.epoch)
+  return sorted.map((v) => v.prefix)
+}
+
+/**
  * Load allowed game versions from data/game/versions.json and version.json (currentVersion).
  * Returns a set of version strings and the oldest release date for time-window filtering.
  * Source of truth: versions.json (all patches to collect); version.json adds currentVersion if missing.

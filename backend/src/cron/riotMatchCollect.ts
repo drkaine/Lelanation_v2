@@ -22,6 +22,7 @@ import {
   loadAllowedGameVersions,
   isAllowedGameVersion,
   getPatchTimeWindows,
+  getVersionPrefixesSortedByReleaseDate,
 } from '../services/AllowedGameVersions.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { DiscordService } from '../services/DiscordService.js'
@@ -148,6 +149,40 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       )
     }
 
+    // Vérif: joueurs avec last_seen qui n'ont des matchs que sur la version la plus récente (ex. 16.3) → reset last_seen pour re-crawl avec toutes les fenêtres (16.1, 16.2, 16.3)
+    if (patchWindows.length > 1) {
+      const versionPrefixes = await getVersionPrefixesSortedByReleaseDate()
+      const oldPrefixes = versionPrefixes.slice(0, -1)
+      if (oldPrefixes.length > 0) {
+        const participantsWithOldVersion = await prisma.participant.findMany({
+          where: {
+            match: {
+              AND: [
+                { gameVersion: { not: null } },
+                { OR: oldPrefixes.map((prefix) => ({ gameVersion: { startsWith: `${prefix}.` } })) },
+              ],
+            },
+          },
+          select: { puuid: true },
+          distinct: ['puuid'],
+        })
+        const puuidSet = new Set(participantsWithOldVersion.map((r) => r.puuid))
+        const toReset = await prisma.player.findMany({
+          where: { lastSeen: { not: null }, puuid: { notIn: [...puuidSet] } },
+          select: { puuid: true },
+        })
+        if (toReset.length > 0) {
+          await prisma.player.updateMany({
+            where: { puuid: { in: toReset.map((r) => r.puuid) } },
+            data: { lastSeen: null },
+          })
+          console.log(
+            `${LOG_PREFIX} Reset last_seen for ${toReset.length} player(s) with matches only in newest version (re-crawl with all patch windows)`
+          )
+        }
+      }
+    }
+
     // 1) League-v4 seed: Challenger / GM / Master → upsert into players
     for (const platform of platforms) {
         const entries: Array<{ summonerId: string }> = []
@@ -223,6 +258,7 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       const platform = (row.region === 'eun1' ? 'eun1' : 'euw1') as Platform
       processedCount++
 
+      let matchIdsFetchFailed = false
       const allMatchIds = new Set<string>()
       for (const win of patchWindows) {
         const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
@@ -233,9 +269,13 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
         })
         if (matchIdsResult.isErr()) {
           errors++
+          matchIdsFetchFailed = true
           break
         }
         for (const id of matchIdsResult.unwrap()) allMatchIds.add(id)
+      }
+      if (matchIdsFetchFailed) {
+        continue
       }
       if (allMatchIds.size === 0 && patchWindows.length > 0) {
         await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
@@ -243,13 +283,18 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       }
       const matchIds = [...allMatchIds]
 
+      let hadMatchFetchError = false
       for (const matchId of matchIds) {
         try {
           if (await hasMatch(matchId)) continue
           const matchResult = await riotApi.getMatch(matchId)
           if (matchResult.isErr()) {
-            if ((matchResult.unwrapErr() as { details?: { status?: number } }).details?.status === 404) continue
+            const err = matchResult.unwrapErr() as AppError & { cause?: unknown }
+            const status =
+              err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
+            if (status === 404) continue
             errors++
+            hadMatchFetchError = true
             continue
           }
           const matchData = matchResult.unwrap()
@@ -287,9 +332,12 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
           }
         } catch (e) {
           errors++
+          hadMatchFetchError = true
         }
       }
-      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
+      if (!hadMatchFetchError) {
+        await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
+      }
     }
 
     if (collected > 0) {

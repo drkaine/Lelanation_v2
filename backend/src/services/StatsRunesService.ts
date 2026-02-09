@@ -1,5 +1,5 @@
 /**
- * Runes stats by champion: most played setups, best winrate (from participants).
+ * Runes stats by champion via get_runes_by_champion() (single round-trip).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -20,13 +20,16 @@ export interface RunesByChampionOptions {
   limit?: number
 }
 
-function runesKey(runes: unknown): string {
-  if (runes == null) return 'null'
-  try {
-    return JSON.stringify(runes)
-  } catch {
-    return 'null'
-  }
+type RunesRow = Array<{ get_runes_by_champion: RawRunesResult | null }>
+interface RawRunesResult {
+  totalGames: number
+  runes: Array<{
+    runes: unknown
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+  }>
 }
 
 export async function getRunesByChampion(
@@ -35,78 +38,27 @@ export async function getRunesByChampion(
   if (!isDatabaseConfigured()) return null
   const { championId, rankTier, patch, minGames = 10, limit = 20 } = options
   try {
-    const where: { championId: number; rankTier?: string | null } = { championId }
-    if (rankTier != null && rankTier !== '') where.rankTier = rankTier
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const pPatch = patch != null && patch !== '' ? patch : null
 
-    const participants = await prisma.participant.findMany({
-      where,
-      select: { runes: true, win: true, matchId: true },
-    })
+    const rows = await prisma.$queryRaw<RunesRow>`
+      SELECT get_runes_by_champion(${championId}, ${pRankTier}, ${pPatch}, ${minGames}, ${limit}) AS get_runes_by_champion
+    `
+    const raw = rows[0]?.get_runes_by_champion
+    if (!raw) return { totalGames: 0, runes: [] }
 
-    if (participants.length === 0) {
-      return { totalGames: 0, runes: [] }
+    const runes: RuneRow[] = (raw.runes ?? []).map((r) => ({
+      runes: r.runes,
+      games: Number(r.games),
+      wins: Number(r.wins),
+      winrate: Number(r.winrate),
+      pickrate: Number(r.pickrate),
+    }))
+
+    return {
+      totalGames: Number(raw.totalGames) ?? 0,
+      runes,
     }
-
-    const matchIds = [...new Set(participants.map((p) => p.matchId))]
-    let matchFilter: { id: bigint }[] | null = null
-    if (patch != null && patch !== '') {
-      const matches = await prisma.match.findMany({
-        where: { id: { in: matchIds }, gameVersion: { contains: patch, mode: 'insensitive' } },
-        select: { id: true },
-      })
-      matchFilter = matches
-    }
-    const filtered =
-      matchFilter != null && matchFilter.length > 0
-        ? participants.filter((p) => matchFilter!.some((m) => m.id === p.matchId))
-        : participants
-    const totalGames = filtered.length
-    if (totalGames === 0) return { totalGames: 0, runes: [] }
-
-    const byKey = new Map<string, { games: number; wins: number; runes: unknown }>()
-    for (const p of filtered) {
-      const key = runesKey(p.runes)
-      let entry = byKey.get(key)
-      if (!entry) {
-        entry = { games: 0, wins: 0, runes: p.runes }
-        byKey.set(key, entry)
-      }
-      entry.games++
-      if (p.win) entry.wins++
-    }
-
-    let runes: RuneRow[] = []
-    for (const [, e] of byKey) {
-      if (e.games < minGames) continue
-      runes.push({
-        runes: e.runes,
-        games: e.games,
-        wins: e.wins,
-        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
-        pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
-      })
-    }
-    runes.sort((a, b) => b.games - a.games)
-    let limited = runes.slice(0, limit)
-
-    // When no setup meets minGames but we have data, return top runes with at least 1 game
-    if (limited.length === 0 && totalGames > 0) {
-      runes = []
-      for (const [, e] of byKey) {
-        if (e.games < 1) continue
-        runes.push({
-          runes: e.runes,
-          games: e.games,
-          wins: e.wins,
-          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
-          pickrate: totalGames > 0 ? Math.round((e.games / totalGames) * 10000) / 100 : 0,
-        })
-      }
-      runes.sort((a, b) => b.games - a.games)
-      limited = runes.slice(0, limit)
-    }
-
-    return { totalGames, runes: limited }
   } catch {
     return null
   }

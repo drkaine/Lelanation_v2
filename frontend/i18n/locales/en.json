@@ -528,7 +528,19 @@
       "builds": "Builds",
       "videos": "Videos",
       "apikeyRiot": "Riot API key",
-      "seedPlayers": "Seed players"
+      "riotMatch": "Match collection",
+      "seedPlayers": "Seed players",
+      "cronStatus": "Cron status"
+    },
+    "cronStatus": {
+      "title": "Cron status (data/cron/status.json)",
+      "job": "Job",
+      "lastStart": "Last start",
+      "lastSuccess": "Last success",
+      "lastFailure": "Last failure",
+      "lastFailureMessage": "Failure message",
+      "riotWorker": "Riot worker (poller)",
+      "noData": "No data."
     },
     "contact": {
       "title": "Contact requests",

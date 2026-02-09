@@ -4,10 +4,11 @@
       <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 class="text-3xl font-bold text-text-accent">Admin</h1>
-          <p class="mt-1 text-sm text-text/70">
+          <p class="mt-1 hidden text-sm text-text/70 sm:block">
             {{ t('admin.tabs.contact') }} · {{ t('admin.tabs.builds') }} ·
             {{ t('admin.tabs.videos') }} · {{ t('admin.tabs.apikeyRiot') }} ·
-            {{ t('admin.tabs.riotMatch') }} · {{ t('admin.tabs.seedPlayers') }}
+            {{ t('admin.tabs.riotMatch') }} · {{ t('admin.tabs.seedPlayers') }} ·
+            {{ t('admin.tabs.cronStatus') }}
           </p>
         </div>
         <div class="flex items-center gap-2">
@@ -28,22 +29,33 @@
         {{ authError }}
       </div>
 
-      <!-- Tabs -->
-      <div class="mb-4 flex gap-2 border-b border-primary/30 pb-2">
-        <button
-          v-for="tab in adminTabs"
-          :key="tab.id"
-          type="button"
-          :class="[
-            'rounded px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === tab.id
-              ? 'bg-accent text-background'
-              : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
-          ]"
-          @click="activeTab = tab.id"
+      <!-- Tabs (responsive: wrap + scroll on small, select on mobile) -->
+      <div class="mb-4 border-b border-primary/30 pb-2">
+        <select
+          v-model="activeTab"
+          class="mb-2 w-full rounded border border-primary/50 bg-surface px-3 py-2 text-sm text-text sm:hidden"
+          aria-label="Onglet admin"
         >
-          {{ tab.label }}
-        </button>
+          <option v-for="tab in adminTabs" :key="tab.id" :value="tab.id">
+            {{ tab.label }}
+          </option>
+        </select>
+        <div class="flex flex-wrap gap-2 overflow-x-auto pb-1 sm:flex-nowrap">
+          <button
+            v-for="tab in adminTabs"
+            :key="tab.id"
+            type="button"
+            :class="[
+              'shrink-0 rounded px-3 py-2 text-sm font-medium transition-colors sm:px-4',
+              activeTab === tab.id
+                ? 'bg-accent text-background'
+                : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
+            ]"
+            @click="activeTab = tab.id"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
 
       <!-- Tab: Contact -->
@@ -193,6 +205,82 @@
               {{ riotCollectMessage || riotStopMessage }}
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- Tab: Cron status (status.json) -->
+      <div v-show="activeTab === 'cronstatus'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">
+            {{ t('admin.cronStatus.title') }}
+          </h2>
+          <p v-if="cronLoading" class="text-text/70">{{ t('admin.loading') }}</p>
+          <template v-else-if="cron?.cronJobs">
+            <div class="mb-4 rounded border border-primary/20 bg-background/50 p-3">
+              <h3 class="mb-2 text-sm font-medium text-text">
+                {{ t('admin.cronStatus.riotWorker') }}
+              </h3>
+              <p class="text-sm text-text/80">
+                <span
+                  :class="
+                    cron?.riotWorker?.active ? 'text-green-600 dark:text-green-400' : 'text-text/70'
+                  "
+                >
+                  {{
+                    cron?.riotWorker?.active
+                      ? t('admin.riotMatch.pollerActive')
+                      : t('admin.riotMatch.pollerStopped')
+                  }}
+                </span>
+                <span v-if="cron?.riotWorker?.lastBeat" class="text-text/60">
+                  — {{ t('admin.riotMatch.pollerLastBeat') }}:
+                  {{ formatRiotDate(cron.riotWorker.lastBeat) }}
+                </span>
+              </p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[520px] text-left text-sm">
+                <thead class="border-b border-primary/30 bg-surface/50">
+                  <tr>
+                    <th class="px-3 py-2 font-semibold text-text">
+                      {{ t('admin.cronStatus.job') }}
+                    </th>
+                    <th class="px-3 py-2 font-semibold text-text">
+                      {{ t('admin.cronStatus.lastStart') }}
+                    </th>
+                    <th class="px-3 py-2 font-semibold text-text">
+                      {{ t('admin.cronStatus.lastSuccess') }}
+                    </th>
+                    <th class="px-3 py-2 font-semibold text-text">
+                      {{ t('admin.cronStatus.lastFailure') }}
+                    </th>
+                    <th class="px-3 py-2 font-semibold text-text">
+                      {{ t('admin.cronStatus.lastFailureMessage') }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-primary/20">
+                  <tr
+                    v-for="(job, jobId) in cron.cronJobs"
+                    :key="jobId"
+                    class="hover:bg-surface/50"
+                  >
+                    <td class="px-3 py-2 font-medium text-text">{{ jobId }}</td>
+                    <td class="px-3 py-2 text-text/90">{{ formatRiotDate(job?.lastStartAt) }}</td>
+                    <td class="px-3 py-2 text-text/90">{{ formatRiotDate(job?.lastSuccessAt) }}</td>
+                    <td class="px-3 py-2 text-text/90">{{ formatRiotDate(job?.lastFailureAt) }}</td>
+                    <td
+                      class="max-w-[200px] truncate px-3 py-2 text-text/80 sm:max-w-[280px]"
+                      :title="job?.lastFailureMessage ?? ''"
+                    >
+                      {{ job?.lastFailureMessage ?? '—' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+          <p v-else class="text-text/70">{{ t('admin.cronStatus.noData') }}</p>
         </div>
       </div>
 
@@ -513,9 +601,9 @@ const localePath = useLocalePath()
 const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
 const authError = ref<string | null>(null)
-const activeTab = ref<'contact' | 'builds' | 'videos' | 'apikey' | 'riotmatch' | 'seedplayers'>(
-  'contact'
-)
+const activeTab = ref<
+  'contact' | 'builds' | 'videos' | 'apikey' | 'riotmatch' | 'seedplayers' | 'cronstatus'
+>('contact')
 
 const adminTabs = computed(() => [
   { id: 'contact' as const, label: t('admin.tabs.contact') },
@@ -524,6 +612,7 @@ const adminTabs = computed(() => [
   { id: 'apikey' as const, label: t('admin.tabs.apikeyRiot') },
   { id: 'riotmatch' as const, label: t('admin.tabs.riotMatch') },
   { id: 'seedplayers' as const, label: t('admin.tabs.seedPlayers') },
+  { id: 'cronstatus' as const, label: t('admin.tabs.cronStatus') },
 ])
 
 // Contact
@@ -1018,7 +1107,13 @@ onMounted(async () => {
 watch(activeTab, tab => {
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if (tab === 'builds' && buildsStats.value === null && !buildsLoading.value) loadBuildsStats()
-  if ((tab === 'videos' || tab === 'riotmatch') && !cron.value && !cronLoading.value) loadCron()
+  if (
+    (tab === 'videos' || tab === 'riotmatch' || tab === 'cronstatus') &&
+    !cron.value &&
+    !cronLoading.value
+  )
+    loadCron()
+  if (tab === 'cronstatus' && cron.value && !cronLoading.value) loadCron()
   if (tab === 'apikey' && riotApikeyMasked.value === null && !riotApikeyLoading.value)
     loadRiotApikey()
   if (tab === 'seedplayers' && seedPlayersList.value.length === 0 && !seedPlayersLoading.value)
