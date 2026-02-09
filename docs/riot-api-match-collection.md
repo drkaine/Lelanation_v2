@@ -202,7 +202,7 @@ Si des matchs ont été insérés avec une `game_version` qui n’est pas dans l
 
 ### Bonnes pratiques
 
-- Crawler **lentement** (délai entre requêtes, ex. 70 ms).
+- Crawler **lentement** : respect des limites Riot (20 req/s, 100 req/2 min) via `RiotApiService`.
 - Stocker **localement** (PostgreSQL), déduplication par `matchId`.
 - Filtrer par **queue** (420) et optionnellement par **patch** (`gameVersion`).
 - Surveiller les quotas et respecter les **TOS Riot**.
@@ -211,7 +211,7 @@ Si des matchs ont été insérés avec une `game_version` qui n’est pas dans l
 
 ## Architecture technique (backend)
 
-- **Rate limiting** : `RiotApiService` applique un délai fixe entre chaque requête (ex. 70 ms).
+- **Rate limiting** : `RiotApiService` applique 20 req/s (50 ms entre requêtes) et une fenêtre glissante 100 req/2 min.
 - **Cache clé** : clé API lue depuis fichier admin ou `RIOT_API_KEY` ; cache invalidé en cas de 401/403.
 - **Déduplication** : `hasMatch(matchId)` avant fetch détaillé ; `upsertMatchFromRiot` évite les doublons. Les match IDs demandés à Riot sont filtrés par date : premier run = jusqu’à maintenant ; runs suivants = entre `lastSuccessAt` (dernier run) et maintenant, donc pas de reprise des mêmes matchs.
 - **Source crawl** : une seule table **players** (puuid, summoner_id, summoner_name, region, last_seen, created_at, updated_at). Les participants des matchs sont upsertés dans **players** ; le cron sélectionne les joueurs par `last_seen ASC NULLS FIRST` et met à jour `last_seen` après chaque crawl.
@@ -223,12 +223,12 @@ Si des matchs ont été insérés avec une `game_version` qui n’est pas dans l
 - **players** : une ligne par `puuid` (summoner_id, summoner_name, region, last_seen, created_at, updated_at, rang, totalGames, etc.) — source unique pour le crawl et l’affichage.
 - **Stats champion par joueur** : calculées à la volée depuis **participants** (pas de table pré-agrégée).
 
-### Filtrage par patch
+### Filtrage par patch (versions autorisées)
 
-Le champ `gameVersion` (ex. `"15.1.123.456"`) est stocké sur chaque match. Pour filtrer par patch :
+La liste des patches pour lesquels on collecte les matchs est définie dans **`backend/data/game/versions.json`** (et complétée par `version.json`). Chaque entrée (ex. `16.1.1`, `16.2.1`, `16.3.1`) autorise tous les matchs dont `gameVersion` correspond à ce patch (ex. `16.1.xxx`, `16.2.xxx`, `16.3.xxx`).
 
-- En **collecte** : variable d’environnement `RIOT_MATCH_PATCH_PREFIX` (ex. `15.1`) pour ignorer les matchs dont `gameVersion` ne commence pas par ce préfixe.
-- En **requêtes** : filtrer en SQL/Prisma sur `Match.gameVersion` (e.g. `startsWith` ou parsing).
+- **Collecte** : `loadAllowedGameVersions()` charge `versions.json` ; la fenêtre de dates (`matchStartTime`) commence au plus tôt à la **date de sortie la plus ancienne** des versions listées (`releaseDate`), afin d’inclure les matchs de tous les patches (16.1, 16.2, 16.3, etc.). Chaque match récupéré est accepté seulement si `isAllowedGameVersion(gameVersion, allowedVersions)` est vrai.
+- **Requêtes** : filtrer en SQL/Prisma sur `Match.gameVersion` (ex. `startsWith` ou parsing).
 
 ### Variables d’environnement (collecte)
 
@@ -236,7 +236,6 @@ Le champ `gameVersion` (ex. `"15.1.123.456"`) est stocké sur chaque match. Pour
 |----------|-------------|--------|
 | `RIOT_MATCH_CRON_SCHEDULE` | Cron (ex. `0 * * * *` = toutes les heures) | `0 * * * *` |
 | `RIOT_MATCH_MAX_PUUIDS_PER_RUN` | Nombre max de joueurs crawlé par run (depuis **players** par last_seen) | `50` |
-| `RIOT_MATCH_PATCH_PREFIX` | Préfixe de patch pour filtrer les matchs (ex. `15.1`) | (aucun) |
 | `RIOT_MATCH_CYCLE_DELAY_MS` | Pause entre deux cycles du worker (ms) | `60000` |
 | `RIOT_MATCH_ENRICH_PASSES` | Nombre de passes d'enrichissement (summoner_name) après chaque cycle du worker | `3` |
 | `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |

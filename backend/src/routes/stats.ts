@@ -13,9 +13,27 @@ import {
   getChampionStatsForPlayer,
 } from '../services/StatsPlayersService.js'
 import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
+import { getOverviewStats } from '../services/StatsOverviewService.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
+
+/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count */
+router.get('/overview', async (_req: Request, res: Response) => {
+  const data = await getOverviewStats()
+  if (!data) {
+    return res.status(200).json({
+      totalMatches: 0,
+      lastUpdate: null,
+      topWinrateChampions: [],
+      matchesByDivision: [],
+      matchesByVersion: [],
+      playerCount: 0,
+      message: 'No stats yet. Run match collection first.',
+    })
+  }
+  return res.json(data)
+})
 
 router.get('/champions', async (req: Request, res: Response) => {
   const rankTier = (req.query.rankTier as string) || undefined

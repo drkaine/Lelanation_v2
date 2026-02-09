@@ -357,33 +357,21 @@ export class DataDragonService {
    */
   async saveGameData(
     version: string,
-    champions: ChampionData,
+    championsFull: Record<string, any>,
     items: ItemData,
     runes: RuneData[],
     summonerSpells: SummonerSpellData,
-    language: string = 'fr_FR',
-    championsFull?: Record<string, any>
+    language: string = 'fr_FR'
   ): Promise<Result<void, AppError>> {
     const versionDir = join(this.dataDir, version, language)
 
-    // Save champions
-    const championsPath = join(versionDir, 'champion.json')
-    const championsResult = await FileManager.writeJson(championsPath, {
-      data: champions
+    // Single source: championFull only (champion.json removed; merge step overlays CD later)
+    const championsFullPath = join(versionDir, 'championFull.json')
+    const championsFullResult = await FileManager.writeJson(championsFullPath, {
+      data: championsFull
     })
-    if (championsResult.isErr()) {
-      return championsResult
-    }
-
-    // Save champions full (with spells and passive) if provided
-    if (championsFull) {
-      const championsFullPath = join(versionDir, 'championFull.json')
-      const championsFullResult = await FileManager.writeJson(championsFullPath, {
-        data: championsFull
-      })
-      if (championsFullResult.isErr()) {
-        return championsFullResult
-      }
+    if (championsFullResult.isErr()) {
+      return championsFullResult
     }
 
     // Save items
@@ -435,22 +423,15 @@ export class DataDragonService {
     // Use first language for image downloads (images are language-agnostic)
     const primaryLanguage = languages[0] || 'fr_FR'
 
-    // Sync for each language
+    // Sync for each language (single champion source: championFull only)
     for (const language of languages) {
-      // Fetch all data (including full champion data with spells and passive)
-      const [championsResult, championsFullResult, itemsResult, runesResult, spellsResult] =
-        await Promise.all([
-          this.fetchChampions(gameVersion, language),
-          this.fetchChampionsFull(gameVersion, language),
-          this.fetchItems(gameVersion, language),
-          this.fetchRunes(gameVersion, language),
-          this.fetchSummonerSpells(gameVersion, language)
-        ])
+      const [championsFullResult, itemsResult, runesResult, spellsResult] = await Promise.all([
+        this.fetchChampionsFull(gameVersion, language),
+        this.fetchItems(gameVersion, language),
+        this.fetchRunes(gameVersion, language),
+        this.fetchSummonerSpells(gameVersion, language)
+      ])
 
-      // Check for errors
-      if (championsResult.isErr()) {
-        return Result.err(championsResult.unwrapErr())
-      }
       if (championsFullResult.isErr()) {
         return Result.err(championsFullResult.unwrapErr())
       }
@@ -464,15 +445,13 @@ export class DataDragonService {
         return Result.err(spellsResult.unwrapErr())
       }
 
-      // Save data (including full champion data)
       const saveResult = await this.saveGameData(
         gameVersion,
-        championsResult.unwrap(),
+        championsFullResult.unwrap(),
         itemsResult.unwrap(),
         runesResult.unwrap(),
         spellsResult.unwrap(),
-        language,
-        championsFullResult.unwrap()
+        language
       )
 
       if (saveResult.isErr()) {
@@ -509,29 +488,25 @@ export class DataDragonService {
         // Continue anyway - not critical
       }
 
-      // Fetch champion data for images (already fetched in sync loop above)
+      // Fetch data for images (champion list from championFull)
       const championsFullResult = await this.fetchChampionsFull(
         gameVersion,
         primaryLanguage
       )
-      const championsResult = await this.fetchChampions(gameVersion, primaryLanguage)
       const itemsResult = await this.fetchItems(gameVersion, primaryLanguage)
       const runesResult = await this.fetchRunes(gameVersion, primaryLanguage)
       const spellsResult = await this.fetchSummonerSpells(gameVersion, primaryLanguage)
 
       if (
         championsFullResult.isErr() ||
-        championsResult.isErr() ||
         itemsResult.isErr() ||
         runesResult.isErr() ||
         spellsResult.isErr()
       ) {
         console.warn('[DataDragon] Failed to fetch data for image download, skipping images')
       } else {
-        // Download images in parallel
-        // Type assertions needed because DataDragon API returns partial data
-        // We use 'as unknown as' to safely cast since we know the actual API response includes image fields
-        const championsData = championsResult.unwrap() as unknown as Record<
+        const championsFullData = championsFullResult.unwrap()
+        const championsData = championsFullData as unknown as Record<
           string,
           { id: string; image: { full: string } }
         >
@@ -564,7 +539,7 @@ export class DataDragonService {
           this.imageService.downloadSummonerSpellImages(gameVersion, spellsData),
           this.imageService.downloadChampionSpellImages(
             gameVersion,
-            championsFullResult.unwrap()
+            championsFullData
           )
         ])
 

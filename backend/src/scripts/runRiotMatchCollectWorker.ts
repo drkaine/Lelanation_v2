@@ -19,7 +19,7 @@ import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
-import { enrichPlayers } from '../services/StatsPlayersRefreshService.js'
+import { enrichPlayers, countPlayersMissingSummonerName } from '../services/StatsPlayersRefreshService.js'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { DiscordService } from '../services/DiscordService.js'
 
@@ -169,12 +169,17 @@ async function main(): Promise<void> {
 
     if (!running) break
 
-    for (let p = 0; p < ENRICH_PASSES_AFTER_CYCLE && running; p++) {
-      try {
-        const { enriched } = await enrichPlayers(ENRICH_PER_PASS)
-        if (enriched === 0) break
-      } catch (e) {
-        console.warn(`${LOG} Enrich pass failed:`, e)
+    const missingSummonerName = await countPlayersMissingSummonerName()
+    if (missingSummonerName === 0) {
+      console.log(`${LOG} Enrich skip (0 players sans summoner_name), quota réservé à la collecte matchs`)
+    } else {
+      for (let p = 0; p < ENRICH_PASSES_AFTER_CYCLE && running; p++) {
+        try {
+          const { enriched } = await enrichPlayers(ENRICH_PER_PASS)
+          if (enriched === 0) break
+        } catch (e) {
+          console.warn(`${LOG} Enrich pass failed:`, e)
+        }
       }
     }
 

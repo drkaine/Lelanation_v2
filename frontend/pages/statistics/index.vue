@@ -26,7 +26,7 @@
         </button>
       </div>
 
-      <!-- Tab: Overview (default, shyv.net style) -->
+      <!-- Tab: Overview (default) -->
       <div v-show="activeTab === 'overview'" class="space-y-6">
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
           <h2 class="mb-4 text-xl font-semibold text-text-accent">
@@ -35,63 +35,101 @@
           <p class="mb-4 text-text/80">
             {{ t('statisticsPage.overviewDescription') }}
           </p>
-          <div
-            v-if="!championsPending && championsData"
-            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          >
-            <div class="rounded border border-primary/20 bg-background/50 p-4">
-              <div class="text-2xl font-bold text-text-accent">
-                {{ championsData.totalMatches ?? championsData.totalGames ?? 0 }}
-              </div>
-              <div class="text-sm text-text/70">{{ t('statisticsPage.totalGames') }}</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/50 p-4">
-              <div class="text-2xl font-bold text-text-accent">
-                {{ championsData?.champions?.length ?? 0 }}
-              </div>
-              <div class="text-sm text-text/70">{{ t('statisticsPage.overviewChampions') }}</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/50 p-4">
-              <div class="text-sm font-medium text-text">
-                {{
-                  championsData?.generatedAt ? formatGeneratedAt(championsData.generatedAt) : '—'
-                }}
-              </div>
-              <div class="text-sm text-text/70">{{ t('statisticsPage.generatedAt') }}</div>
-            </div>
-          </div>
-          <div v-else-if="championsPending" class="text-text/70">
+          <div v-if="overviewPending" class="text-text/70">
             {{ t('statisticsPage.loading') }}
           </div>
-          <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
-        </div>
-        <div
-          v-if="championsData?.champions?.length"
-          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-        >
-          <h3 class="mb-3 text-lg font-medium text-text">
-            {{ t('statisticsPage.overviewTopChampions') }}
-          </h3>
-          <ul class="space-y-2">
-            <li
-              v-for="row in (championsData?.champions ?? []).slice(0, 5)"
-              :key="row.championId"
-              class="flex items-center gap-2 text-text/90"
+          <div v-else-if="overviewData" class="space-y-6">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div class="rounded border border-primary/20 bg-background/50 p-4">
+                <div class="text-2xl font-bold text-text-accent">
+                  {{ overviewData.totalMatches }}
+                </div>
+                <div class="text-sm text-text/70">
+                  {{ t('statisticsPage.overviewTotalMatches') }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/50 p-4">
+                <div class="text-sm font-medium text-text">
+                  {{ overviewData.lastUpdate ? formatGeneratedAt(overviewData.lastUpdate) : '—' }}
+                </div>
+                <div class="text-sm text-text/70">{{ t('statisticsPage.overviewLastUpdate') }}</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/50 p-4">
+                <div class="text-2xl font-bold text-text-accent">
+                  {{ overviewData.playerCount }}
+                </div>
+                <div class="text-sm text-text/70">
+                  {{ t('statisticsPage.overviewPlayerCountDistinct') }}
+                </div>
+              </div>
+            </div>
+            <div
+              v-if="overviewData.matchesByDivision.length"
+              class="rounded-lg border border-primary/20 bg-background/50 p-4"
             >
-              <img
-                v-if="gameVersion && championByKey(row.championId)"
-                :src="getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)"
-                :alt="championName(row.championId) || ''"
-                class="h-6 w-6 rounded-full object-cover"
-                width="24"
-                height="24"
-              />
-              <span>{{ championName(row.championId) || row.championId }}</span>
-              <span class="text-text/60"
-                >— {{ row.games }} {{ t('statisticsPage.games') }}, {{ row.winrate }}% WR</span
-              >
-            </li>
-          </ul>
+              <h3 class="mb-3 text-sm font-semibold text-text">
+                {{ t('statisticsPage.overviewMatchesByDivision') }}
+              </h3>
+              <div class="flex flex-wrap gap-3">
+                <span
+                  v-for="d in overviewData.matchesByDivision"
+                  :key="d.rankTier"
+                  class="rounded px-3 py-1.5 text-sm font-medium"
+                  :style="divisionStyle(d.rankTier)"
+                >
+                  {{ d.rankTier }}: {{ d.matchCount }}
+                </span>
+              </div>
+            </div>
+            <div
+              v-if="overviewData.matchesByVersion?.length"
+              class="rounded-lg border border-primary/20 bg-background/50 p-4"
+            >
+              <h3 class="mb-3 text-sm font-semibold text-text">
+                {{ t('statisticsPage.overviewMatchesByVersion') }}
+              </h3>
+              <div class="flex flex-wrap gap-3">
+                <span
+                  v-for="v in overviewData.matchesByVersion"
+                  :key="v.version"
+                  class="rounded bg-surface/80 px-3 py-1.5 text-sm font-medium text-text/90"
+                >
+                  {{ v.version }}: {{ v.matchCount }}
+                </span>
+              </div>
+            </div>
+            <div
+              v-if="overviewData.topWinrateChampions.length"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+            >
+              <h3 class="mb-3 text-lg font-medium text-text">
+                {{ t('statisticsPage.overviewTopWinrateChampions') }}
+              </h3>
+              <ul class="space-y-2">
+                <li
+                  v-for="row in overviewData.topWinrateChampions"
+                  :key="row.championId"
+                  class="flex items-center gap-2 text-text/90"
+                >
+                  <img
+                    v-if="gameVersion && championByKey(row.championId)"
+                    :src="
+                      getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)
+                    "
+                    :alt="championName(row.championId) || ''"
+                    class="h-6 w-6 rounded-full object-cover"
+                    width="24"
+                    height="24"
+                  />
+                  <span>{{ championName(row.championId) || row.championId }}</span>
+                  <span class="text-text/60">
+                    — {{ row.games }} {{ t('statisticsPage.games') }}, {{ row.winrate }}% WR
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
         </div>
       </div>
 
@@ -567,6 +605,52 @@ function formatGeneratedAt(value: string | null | undefined): string {
   }
 }
 
+/** Official LoL rank tier colors (background + text for contrast). */
+const DIVISION_COLORS: Record<string, { bg: string; text: string }> = {
+  IRON: { bg: '#5e5e5e', text: '#fff' },
+  BRONZE: { bg: '#cd7f32', text: '#fff' },
+  SILVER: { bg: '#c0c0c0', text: '#1f2937' },
+  GOLD: { bg: '#ffd700', text: '#1f2937' },
+  PLATINUM: { bg: '#00d4aa', text: '#0f172a' },
+  EMERALD: { bg: '#10b981', text: '#fff' },
+  DIAMOND: { bg: '#00bfff', text: '#0f172a' },
+  MASTER: { bg: '#9d4edd', text: '#fff' },
+  GRANDMASTER: { bg: '#c41e3a', text: '#fff' },
+  CHALLENGER: { bg: '#fbbf24', text: '#1f2937' },
+  UNRANKED: { bg: '#6b7280', text: '#fff' },
+}
+function divisionStyle(rankTier: string): { backgroundColor: string; color: string } {
+  const c = DIVISION_COLORS[rankTier] ?? { bg: '#4b5563', text: '#fff' }
+  return { backgroundColor: c.bg, color: c.text }
+}
+
+// Overview (vue d'ensemble)
+const overviewData = ref<{
+  totalMatches: number
+  lastUpdate: string | null
+  topWinrateChampions: Array<{
+    championId: number
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+  }>
+  matchesByDivision: Array<{ rankTier: string; matchCount: number }>
+  matchesByVersion?: Array<{ version: string; matchCount: number }>
+  playerCount: number
+} | null>(null)
+const overviewPending = ref(true)
+async function loadOverview() {
+  overviewPending.value = true
+  try {
+    overviewData.value = await $fetch(apiUrl('/api/stats/overview'))
+  } catch {
+    overviewData.value = null
+  } finally {
+    overviewPending.value = false
+  }
+}
+
 const filterRank = ref('')
 const filterRole = ref('')
 const rankTiers = [
@@ -771,6 +855,7 @@ function runeSetupLabel(runesUnknown: unknown): string {
 }
 
 watch(activeTab, tab => {
+  if (tab === 'overview') loadOverview()
   if (tab === 'builds' && buildsChampionId.value) loadBuilds()
   if (tab === 'runes' && runesChampionId.value) loadRunes()
 })
@@ -782,6 +867,7 @@ onMounted(async () => {
     itemsStore.loadItems(riotLocale.value),
     runesStore.loadRunes(riotLocale.value),
   ])
+  await loadOverview()
   await loadChampions()
 })
 </script>

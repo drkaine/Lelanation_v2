@@ -1,6 +1,6 @@
 /**
  * Riot API client: League v4, Match v5. EUW/EUNE only.
- * Rate limit: ~15 req/s (delay 70ms between calls). Queue 420 = Ranked Solo/Duo.
+ * Rate limits: 20 requests/s, 100 requests/2 min. Queue 420 = Ranked Solo/Duo.
  */
 import axios, { type AxiosInstance } from 'axios'
 import { getRiotApiKeyAsync } from '../utils/riotApiKey.js'
@@ -20,19 +20,33 @@ const CONTINENT_BASE: Record<string, string> = {
 const RANKED_SOLO_QUEUE = 'RANKED_SOLO_5x5'
 const QUEUE_ID_420 = 420
 
-/** Delay between requests (ms) to respect rate limits (~14 req/s) */
-const RATE_LIMIT_DELAY_MS = 70
+/** 20 requests per second → 50ms between requests */
+const RATE_LIMIT_DELAY_MS = 50
+/** 100 requests per 2 minutes (sliding window) */
+const RATE_LIMIT_PER_TWO_MIN = 100
+const RATE_LIMIT_TWO_MIN_MS = 2 * 60 * 1000
 /** Max retries on 429 (rate limit). Backoff: Retry-After header or 60s. */
 const RATE_LIMIT_MAX_RETRIES = 3
 
 let lastRequestTime = 0
+const requestTimestamps: number[] = []
 
 async function rateLimit(): Promise<void> {
-  const now = Date.now()
+  let now = Date.now()
   const elapsed = now - lastRequestTime
   if (elapsed < RATE_LIMIT_DELAY_MS) {
     await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
   }
+  now = Date.now()
+  const cutoff = now - RATE_LIMIT_TWO_MIN_MS
+  while (requestTimestamps.length > 0 && requestTimestamps[0] <= cutoff) requestTimestamps.shift()
+  while (requestTimestamps.length >= RATE_LIMIT_PER_TWO_MIN) {
+    const waitMs = requestTimestamps[0] + RATE_LIMIT_TWO_MIN_MS - now
+    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
+    now = Date.now()
+    while (requestTimestamps.length > 0 && requestTimestamps[0] <= now - RATE_LIMIT_TWO_MIN_MS) requestTimestamps.shift()
+  }
+  requestTimestamps.push(Date.now())
   lastRequestTime = Date.now()
 }
 

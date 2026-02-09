@@ -116,7 +116,25 @@ router.get('/champions', async (req, res) => {
     filename
   )
 
-  const readResult = await readGameDataFile(backendPath, frontendPath)
+  let readResult = await readGameDataFile(backendPath, frontendPath)
+  if (readResult.isErr() && !full) {
+    const err = readResult.unwrapErr()
+    if (err instanceof NotFoundError) {
+      const fullBackend = join(
+        backendDataDir,
+        versionInfo.currentVersion,
+        language,
+        'championFull.json'
+      )
+      const fullFrontend = join(
+        frontendDataDir,
+        versionInfo.currentVersion,
+        language,
+        'championFull.json'
+      )
+      readResult = await readGameDataFile(fullBackend, fullFrontend)
+    }
+  }
   if (readResult.isErr()) {
     if (readResult.unwrapErr() instanceof NotFoundError) {
       return res.status(404).json({ error: 'Champions data not found' })

@@ -13,15 +13,16 @@ Locales disponibles : `default`, `fr_fr`, `de_de`, `es_es`, `it_it`, `pt_br`, `j
 
 Le flux :
 
-1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON v1 par **clé numérique** (depuis Data Dragon `champion.json`) pour la locale configurée, et les enregistre dans `backend/data/community-dragon/` (ex. `266.json`).
-2. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie ces fichiers vers `frontend/public/data/community-dragon/`, puis **supprime les fichiers du backend**.
-3. **Utilisation** : le frontend charge les sorts via `/data/community-dragon/{championKey}.json`. Le parser détecte le format v1 (tableau `spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown et coût.
+1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON v1 par **clé numérique** (depuis championFull.json) pour la locale configurée, et les enregistre dans `backend/data/community-dragon/` (ex. `266.json`).
+2. **Fusion** : `ChampionMergeService.mergeChampionFull()` fusionne DDragon (stats, images, structure) et CD (noms, descriptions, sorts) dans un seul `championFull.json` (par langue).
+3. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie les JSON CD vers `frontend/public/data/community-dragon/`, puis supprime les fichiers du backend. Les championFull fusionnés sont déjà dans le répertoire game (DDragon) et sont copiés avec le reste des assets.
+4. **Utilisation** : le frontend charge la liste champions via championFull fusionné ; les sorts détaillés (theorycraft) via `/data/community-dragon/{championKey}.json`. Le parser détecte le format v1 (tableau `spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown et coût.
 
 Le backend ne conserve pas de copie après la copie vers le frontend.
 
-### Pourquoi garder Data Dragon champion.json / championFull.json ?
+### Fusion CD + Data Dragon (une seule source)
 
-Les JSON v1 de Community Dragon contiennent : noms, titres, descriptions, sorts (avec coefficients, coûts, cooldowns), passif, icônes (`squarePortraitPath`), rôles. Ils **ne contiennent pas** les **stats de base** des champions (PV, attaque, armure, résistance magique, etc. et leur croissance par niveau). Or le theorycraft et la page build ont besoin de ces stats (formules de dégâts, tableau de stats par niveau). Ces stats sont fournies par Data Dragon (`champion.json` / `championFull.json`). On conserve donc Data Dragon pour la liste des champions et leurs stats de base ; Community Dragon est utilisé pour les données de sorts (theorycraft) et, si on le souhaite plus tard, on pourra générer une liste / un “champion full” à partir de CD (noms, descriptions) fusionné avec les stats DDragon pour n’avoir qu’une seule source de vérité côté textes.
+Après le sync CD, une fusion (ChampionMergeService) combine DDragon (stats de base, images, structure) et CD (noms/titres/descriptions, sorts avec coefficients/coûts/cooldowns) dans un seul championFull.json (ex. fr_FR). Une seule source côté affichage ; champion.json n'est plus produit. L'API sert championFull même si on demande champions sans full=true (fallback).
 
 ---
 

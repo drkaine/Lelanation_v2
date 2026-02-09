@@ -5,14 +5,8 @@ import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { VersionService } from './VersionService.js'
 
-interface ChampionData {
-  data: {
-    [key: string]: {
-      id: string
-      key: string
-      name: string
-    }
-  }
+interface ChampionFullData {
+  data: Record<string, { key: string; [k: string]: unknown }>
 }
 
 const CD_BASE =
@@ -56,7 +50,7 @@ export class CommunityDragonService {
   }
 
   /**
-   * Get list of champion numeric keys from Data Dragon champion.json (v1 API uses numeric id).
+   * Get list of champion numeric keys from championFull.json (single source after merge).
    */
   private async getChampionKeys(): Promise<Result<string[], AppError>> {
     try {
@@ -72,17 +66,14 @@ export class CommunityDragonService {
         return Result.err(new AppError('No game version found', 'VERSION_ERROR'))
       }
 
-      // Try to read from backend data directory first
       const backendPath = join(
         process.cwd(),
         'data',
         'game',
         versionInfo.currentVersion,
         'fr_FR',
-        'champion.json'
+        'championFull.json'
       )
-
-      // Fallback to frontend public directory
       const frontendPath = join(
         process.cwd(),
         '..',
@@ -92,36 +83,34 @@ export class CommunityDragonService {
         'game',
         versionInfo.currentVersion,
         'fr_FR',
-        'champion.json'
+        'championFull.json'
       )
 
-      let championData: ChampionData | null = null
-
-      // Try backend first
-      const backendResult = await FileManager.readJson<ChampionData>(backendPath)
+      let championData: ChampionFullData | null = null
+      const backendResult = await FileManager.readJson<ChampionFullData>(backendPath)
       if (backendResult.isOk()) {
         championData = backendResult.unwrap()
       } else {
-        // Try frontend
-        const frontendResult = await FileManager.readJson<ChampionData>(frontendPath)
+        const frontendResult = await FileManager.readJson<ChampionFullData>(frontendPath)
         if (frontendResult.isOk()) {
           championData = frontendResult.unwrap()
         } else {
           return Result.err(
             new AppError(
-              'Failed to read champion.json from both backend and frontend',
+              'Failed to read championFull.json from both backend and frontend',
               'FILE_ERROR'
             )
           )
         }
       }
 
-      if (!championData?.data) {
-        return Result.err(new AppError('Invalid champion.json structure', 'DATA_ERROR'))
+      if (!championData?.data || typeof championData.data !== 'object') {
+        return Result.err(new AppError('Invalid championFull structure', 'DATA_ERROR'))
       }
 
-      // v1 API uses numeric key (champion.key from Data Dragon)
-      const keys = Object.values(championData.data).map(c => c.key)
+      const keys = Object.values(championData.data)
+        .map(c => c?.key)
+        .filter((k): k is string => typeof k === 'string')
       return Result.ok(keys)
     } catch (error) {
       return Result.err(

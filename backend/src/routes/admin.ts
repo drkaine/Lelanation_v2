@@ -12,6 +12,7 @@ import { getRiotApiService } from '../services/RiotApiService.js'
 import {
   backfillParticipantRanks,
   refreshMatchRanks,
+  countParticipantsMissingRank,
 } from '../services/StatsPlayersRefreshService.js'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { prisma } from '../db.js'
@@ -248,6 +249,10 @@ router.get('/players-missing-summoner-name', async (req, res) => {
 // --- Backfill participant rank (rankTier, rankDivision, rankLp) from Riot League API ---
 router.post('/backfill-participant-ranks', async (req, res) => {
   try {
+    const missingCount = await countParticipantsMissingRank()
+    if (missingCount === 0) {
+      return res.json({ updated: 0, errors: 0, skipped: true, reason: 'Aucun participant sans rank' })
+    }
     const limit = Math.min(parseInt(String(req.query.limit || '200'), 10) || 200, 500)
     const result = await backfillParticipantRanks(limit)
     return res.json(result)

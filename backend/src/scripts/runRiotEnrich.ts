@@ -12,7 +12,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
 async function main(): Promise<void> {
-  const { enrichPlayers } = await import('../services/StatsPlayersRefreshService.js')
+  const { enrichPlayers, countPlayersMissingSummonerName } = await import('../services/StatsPlayersRefreshService.js')
+  const missingCount = await countPlayersMissingSummonerName()
+  if (missingCount === 0) {
+    console.log('[riot:enrich] Rien à faire : 0 joueur sans summoner_name.')
+    return
+  }
   const limit = process.env.ENRICH_LIMIT ? parseInt(process.env.ENRICH_LIMIT, 10) : 150
   if (Number.isNaN(limit) || limit < 1) {
     console.error('[riot:enrich] Invalid ENRICH_LIMIT, using 150')

@@ -15,10 +15,13 @@ import {
   backfillRanksForNewMatch,
   backfillParticipantRanks,
   refreshMatchRanks,
+  countPlayersMissingSummonerName,
+  countParticipantsMissingRank,
 } from '../services/StatsPlayersRefreshService.js'
 import {
   loadAllowedGameVersions,
   isAllowedGameVersion,
+  getPatchTimeWindows,
 } from '../services/AllowedGameVersions.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { DiscordService } from '../services/DiscordService.js'
@@ -113,35 +116,37 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
     let errors = 0
 
     const matchEndTime = Math.floor(Date.now() / 1000)
-    let matchStartTime = lastSuccessAt
-      ? Math.floor(new Date(lastSuccessAt).getTime() / 1000)
-      : undefined
-
-    // If lastSuccessAt is too old (cron didn't complete successfully for a long time), use a fallback
-    // window so we still fetch recent matches instead of relying on a stale timestamp.
-    if (lastSuccessAt != null) {
-      const lastSuccessMs = new Date(lastSuccessAt).getTime()
-      if (Date.now() - lastSuccessMs > LAST_SUCCESS_MAX_AGE_MS) {
-        matchStartTime = matchEndTime - FALLBACK_WINDOW_SEC
-        console.warn(
-          `${LOG_PREFIX} lastSuccessAt is old (${lastSuccessAt}); using fallback window: last ${FALLBACK_WINDOW_SEC / 3600}h`
-        )
-      }
-    }
 
     // Allowed game versions (from data/game/versions.json + version.json) for filtering match collection
-    const { allowedVersions, oldestReleaseEpochSec } = await loadAllowedGameVersions()
-    if (oldestReleaseEpochSec != null && matchStartTime != null) {
-      matchStartTime = Math.max(matchStartTime, oldestReleaseEpochSec)
-    } else if (oldestReleaseEpochSec != null) {
-      matchStartTime = oldestReleaseEpochSec
-    }
+    const { allowedVersions } = await loadAllowedGameVersions()
     if (allowedVersions.size > 0) {
       console.log(`${LOG_PREFIX} Allowed game versions: ${[...allowedVersions].sort().join(', ')}`)
     }
-    const windowStart = matchStartTime != null ? new Date(matchStartTime * 1000).toISOString() : 'none'
-    const windowEnd = new Date(matchEndTime * 1000).toISOString()
-    console.log(`${LOG_PREFIX} Match window: ${windowStart} -> ${windowEnd}`)
+
+    // Fenêtres par patch (16.1, 16.2, 16.3…) pour récupérer des matchs de chaque version, pas seulement la plus récente
+    let patchWindows = await getPatchTimeWindows(matchEndTime)
+    if (patchWindows.length === 0) {
+      // Fallback: une seule fenêtre [oldestRelease, now] ou [lastSuccessAt, now]
+      const { oldestReleaseEpochSec } = await loadAllowedGameVersions()
+      let matchStartTime = lastSuccessAt ? Math.floor(new Date(lastSuccessAt).getTime() / 1000) : undefined
+      if (lastSuccessAt != null && Date.now() - new Date(lastSuccessAt).getTime() > LAST_SUCCESS_MAX_AGE_MS) {
+        matchStartTime = matchEndTime - FALLBACK_WINDOW_SEC
+      }
+      if (oldestReleaseEpochSec != null) {
+        matchStartTime = matchStartTime != null ? Math.max(matchStartTime, oldestReleaseEpochSec) : oldestReleaseEpochSec
+      }
+      if (matchStartTime != null) {
+        patchWindows = [{ startTime: matchStartTime, endTime: matchEndTime }]
+      }
+      if (patchWindows.length > 0) {
+        const w = patchWindows[0]
+        console.log(`${LOG_PREFIX} Match window: ${new Date(w.startTime * 1000).toISOString()} -> ${new Date(w.endTime * 1000).toISOString()}`)
+      }
+    } else {
+      console.log(
+        `${LOG_PREFIX} Patch windows: ${patchWindows.length} (${patchWindows.map((w) => `${new Date(w.startTime * 1000).toISOString().slice(0, 10)}→${new Date(w.endTime * 1000).toISOString().slice(0, 10)}`).join(', ')})`
+      )
+    }
 
     // 1) League-v4 seed: Challenger / GM / Master → upsert into players
     for (const platform of platforms) {
@@ -213,22 +218,30 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       LIMIT ${MAX_PUUIDS_PER_RUN}
     `
     let processedCount = 0
+    const matchIdsPerPlayer = patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
     for (const row of playersToCrawl) {
       const platform = (row.region === 'eun1' ? 'eun1' : 'euw1') as Platform
       processedCount++
 
-      const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
-        count: MATCH_IDS_PER_SUMMONER,
-        queue: 420,
-        endTime: matchEndTime,
-        ...(matchStartTime != null && { startTime: matchStartTime }),
-      })
-      if (matchIdsResult.isErr()) {
-        errors++
+      const allMatchIds = new Set<string>()
+      for (const win of patchWindows) {
+        const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
+          count: matchIdsPerPlayer,
+          queue: 420,
+          startTime: win.startTime,
+          endTime: win.endTime,
+        })
+        if (matchIdsResult.isErr()) {
+          errors++
+          break
+        }
+        for (const id of matchIdsResult.unwrap()) allMatchIds.add(id)
+      }
+      if (allMatchIds.size === 0 && patchWindows.length > 0) {
         await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
         continue
       }
-      const matchIds = matchIdsResult.unwrap()
+      const matchIds = [...allMatchIds]
 
       for (const matchId of matchIds) {
         try {
@@ -290,21 +303,26 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
 
     // ——— Récupération des données manquantes : participants sans rank, matchs sans rank ———
     // Participants : rank (rankTier/rankDivision/rankLp) absent du payload Match-v5 → backfill via League-v4 by PUUID.
-    // Drain backlog: run several batches per cycle so participants sans rank are cleared quickly.
+    // Skip backfill when none missing so API quota is reserved for match collection.
     if (BACKFILL_RANKS_PER_RUN > 0) {
       try {
-        let totalUpdated = 0
-        let totalErrors = 0
-        for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
-          const backfill = await backfillParticipantRanks(BACKFILL_RANKS_PER_RUN)
-          totalUpdated += backfill.updated
-          totalErrors += backfill.errors
-          if (backfill.updated === 0) break
-        }
-        if (totalUpdated > 0 || totalErrors > 0) {
-          console.log(
-            `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
-          )
+        const missingRankCount = await countParticipantsMissingRank()
+        if (missingRankCount === 0) {
+          console.log(`${LOG_PREFIX} Backfill participants sans rank: skip (0 manquants)`)
+        } else {
+          let totalUpdated = 0
+          let totalErrors = 0
+          for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
+            const backfill = await backfillParticipantRanks(BACKFILL_RANKS_PER_RUN)
+            totalUpdated += backfill.updated
+            totalErrors += backfill.errors
+            if (backfill.updated === 0) break
+          }
+          if (totalUpdated > 0 || totalErrors > 0) {
+            console.log(
+              `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
+            )
+          }
         }
       } catch (e) {
         console.warn(`${LOG_PREFIX} Backfill participants sans rank failed:`, e)
@@ -321,9 +339,13 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
     }
 
     try {
-      const enrich = await enrichPlayers(ENRICH_PER_RUN)
-      console.log(`${LOG_PREFIX} Players enriched: ${enrich.enriched} (summoner_name)`)
-
+      const missingSummonerNameCount = await countPlayersMissingSummonerName()
+      if (missingSummonerNameCount === 0) {
+        console.log(`${LOG_PREFIX} Enrich summoner_name: skip (0 manquants), quota réservé à la collecte matchs`)
+      } else {
+        const enrich = await enrichPlayers(ENRICH_PER_RUN)
+        console.log(`${LOG_PREFIX} Players enriched: ${enrich.enriched} (summoner_name)`)
+      }
     } catch (e) {
       console.warn(`${LOG_PREFIX} Players enrichment failed:`, e)
     }

@@ -1,11 +1,16 @@
 /**
  * Load allowed game versions from backend/data/game/versions.json and version.json.
  * Used by match collection to only ingest matches from patches we have data for.
+ * Path is resolved relative to backend package so the same file is used regardless of process.cwd().
  */
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { FileManager } from '../utils/fileManager.js'
 
-const DATA_GAME_DIR = join(process.cwd(), 'data', 'game')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const BACKEND_ROOT = join(__dirname, '..', '..')
+/** Always backend/data/game (versions.json = source of truth for which patches to collect). */
+const DATA_GAME_DIR = join(BACKEND_ROOT, 'data', 'game')
 
 interface VersionsJson {
   versions?: Array<{ version: string; releaseDate?: string }>
@@ -22,16 +27,71 @@ export interface AllowedGameVersionsResult {
   oldestReleaseEpochSec: number | null
 }
 
+export interface PatchTimeWindow {
+  startTime: number
+  endTime: number
+}
+
+/**
+ * Build time windows per patch from versions.json (release dates).
+ * Each window covers [releaseDate_i, releaseDate_{i+1}) and the last covers [releaseDate_last, now].
+ * Used to request match IDs per patch so we get 16.1, 16.2, 16.3 matches (not only the most recent patch).
+ */
+export async function getPatchTimeWindows(nowEpochSec?: number): Promise<PatchTimeWindow[]> {
+  const now = nowEpochSec ?? Math.floor(Date.now() / 1000)
+  const windows: PatchTimeWindow[] = []
+  let baseDir = DATA_GAME_DIR
+  const versionsPath = join(baseDir, 'versions.json')
+  let versionsResult = await FileManager.readJson<VersionsJson>(versionsPath)
+  if (versionsResult.isErr()) {
+    const cwdDir = join(process.cwd(), 'data', 'game')
+    if (cwdDir !== baseDir) {
+      const fallbackResult = await FileManager.readJson<VersionsJson>(join(cwdDir, 'versions.json'))
+      if (fallbackResult.isOk()) versionsResult = fallbackResult
+    }
+  }
+  if (versionsResult.isErr()) return windows
+  const data = versionsResult.unwrap()
+  const list = (data?.versions ?? []).filter(
+    (v): v is { version: string; releaseDate: string } =>
+      typeof v?.version === 'string' && typeof (v as { releaseDate?: string }).releaseDate === 'string'
+  )
+  if (list.length === 0) return windows
+  const sorted = list
+    .map((v) => ({ version: v.version, epoch: new Date(v.releaseDate.trim()).getTime() / 1000 }))
+    .filter((v) => !Number.isNaN(v.epoch))
+    .sort((a, b) => a.epoch - b.epoch)
+  for (let i = 0; i < sorted.length; i++) {
+    const startTime = Math.floor(sorted[i].epoch)
+    const endTime = i < sorted.length - 1 ? Math.floor(sorted[i + 1].epoch) : now
+    if (endTime > startTime) windows.push({ startTime, endTime })
+  }
+  return windows
+}
+
 /**
  * Load allowed game versions from data/game/versions.json and version.json (currentVersion).
  * Returns a set of version strings and the oldest release date for time-window filtering.
+ * Source of truth: versions.json (all patches to collect); version.json adds currentVersion if missing.
  */
 export async function loadAllowedGameVersions(): Promise<AllowedGameVersionsResult> {
   const allowed = new Set<string>()
   let oldestReleaseEpochSec: number | null = null
 
-  const versionsPath = join(DATA_GAME_DIR, 'versions.json')
-  const versionsResult = await FileManager.readJson<VersionsJson>(versionsPath)
+  let baseDir = DATA_GAME_DIR
+  const versionsPath = join(baseDir, 'versions.json')
+  let versionsResult = await FileManager.readJson<VersionsJson>(versionsPath)
+  if (versionsResult.isErr()) {
+    const cwdDir = join(process.cwd(), 'data', 'game')
+    if (cwdDir !== baseDir) {
+      const fallbackPath = join(cwdDir, 'versions.json')
+      const fallbackResult = await FileManager.readJson<VersionsJson>(fallbackPath)
+      if (fallbackResult.isOk()) {
+        versionsResult = fallbackResult
+        baseDir = cwdDir
+      }
+    }
+  }
   if (versionsResult.isOk()) {
     const data = versionsResult.unwrap()
     const list = data?.versions ?? []
@@ -50,7 +110,7 @@ export async function loadAllowedGameVersions(): Promise<AllowedGameVersionsResu
     }
   }
 
-  const versionPath = join(DATA_GAME_DIR, 'version.json')
+  const versionPath = join(baseDir, 'version.json')
   const versionResult = await FileManager.readJson<VersionJson>(versionPath)
   if (versionResult.isOk()) {
     const current = versionResult.unwrap()?.currentVersion

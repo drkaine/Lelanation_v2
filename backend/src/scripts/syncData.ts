@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { join } from 'path'
 import { DataDragonService } from '../services/DataDragonService.js'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
+import { ChampionMergeService } from '../services/ChampionMergeService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { DiscordService } from '../services/DiscordService.js'
@@ -128,6 +129,17 @@ async function main(): Promise<void> {
         `[sync:data]   ... and ${cdSyncData.errors.length - 10} more errors`
       )
     }
+  }
+
+  // --- Merge champions (CD + DDragon) → single championFull (only for CD locale: fr_FR) ---
+  console.log('[sync:data] Merging champion data (Community Dragon + Data Dragon)...')
+  const championMergeService = new ChampionMergeService()
+  const mergeResult = await championMergeService.mergeChampionFull(ddSyncData.version, 'fr_FR')
+  if (mergeResult.isErr()) {
+    console.warn('[sync:data] Merge failed:', mergeResult.unwrapErr().message)
+  } else {
+    const { merged, skipped } = mergeResult.unwrap()
+    console.log(`[sync:data] Champion merge OK (fr_FR): ${merged} merged, ${skipped} skipped`)
   }
 
   // --- YouTube ---

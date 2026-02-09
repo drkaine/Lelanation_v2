@@ -93,6 +93,22 @@ function regionToContinent(region: string): 'europe' | 'americas' | 'asia' {
 }
 
 /**
+ * Count players without summoner_name. Used to skip enrichment when 0 and reserve API quota for match collection.
+ */
+export async function countPlayersMissingSummonerName(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  return prisma.player.count({ where: { summonerName: null } })
+}
+
+/**
+ * Count participants without rank (rankTier null). Used to skip backfill when 0 and reserve API quota for match collection.
+ */
+export async function countParticipantsMissingRank(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  return prisma.participant.count({ where: { rankTier: null } })
+}
+
+/**
  * Enrich players missing summoner_name (Riot ID via Account-V1 by-puuid).
  * Run with a higher limit to fill summoner_name for many players (e.g. 100).
  */
