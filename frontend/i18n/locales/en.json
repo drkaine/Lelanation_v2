@@ -144,6 +144,8 @@
     "overviewPlayerCountDistinct": "Distinct participants (players collected)",
     "overviewMatchesByDivision": "Matches by division",
     "overviewMatchesByVersion": "Matches by version (16.x)",
+    "overviewFilterByVersion": "Filter by version",
+    "overviewVersionAll": "All",
     "overviewTopWinrateChampions": "Top winrate champions (min. 20 games)",
     "filterRank": "Rank",
     "filterRole": "Role",

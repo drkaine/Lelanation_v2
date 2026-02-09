@@ -86,16 +86,35 @@
               class="rounded-lg border border-primary/20 bg-background/50 p-4"
             >
               <h3 class="mb-3 text-sm font-semibold text-text">
-                {{ t('statisticsPage.overviewMatchesByVersion') }}
+                {{ t('statisticsPage.overviewFilterByVersion') }}
               </h3>
-              <div class="flex flex-wrap gap-3">
-                <span
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    overviewVersionFilter === null
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
+                  ]"
+                  @click="setOverviewVersionFilter(null)"
+                >
+                  {{ t('statisticsPage.overviewVersionAll') }}
+                </button>
+                <button
                   v-for="v in overviewData.matchesByVersion"
                   :key="v.version"
-                  class="rounded bg-surface/80 px-3 py-1.5 text-sm font-medium text-text/90"
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    overviewVersionFilter === v.version
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
+                  ]"
+                  @click="setOverviewVersionFilter(v.version)"
                 >
-                  {{ v.version }}: {{ v.matchCount }}
-                </span>
+                  {{ v.version }} ({{ v.matchCount }})
+                </button>
               </div>
             </div>
             <div
@@ -640,15 +659,25 @@ const overviewData = ref<{
   playerCount: number
 } | null>(null)
 const overviewPending = ref(true)
+/** Selected version filter for overview (null = all versions). */
+const overviewVersionFilter = ref<string | null>(null)
 async function loadOverview() {
   overviewPending.value = true
   try {
-    overviewData.value = await $fetch(apiUrl('/api/stats/overview'))
+    const url =
+      overviewVersionFilter.value != null && overviewVersionFilter.value !== ''
+        ? apiUrl('/api/stats/overview?version=' + encodeURIComponent(overviewVersionFilter.value))
+        : apiUrl('/api/stats/overview')
+    overviewData.value = await $fetch(url)
   } catch {
     overviewData.value = null
   } finally {
     overviewPending.value = false
   }
+}
+function setOverviewVersionFilter(version: string | null) {
+  overviewVersionFilter.value = version
+  loadOverview()
 }
 
 const filterRank = ref('')

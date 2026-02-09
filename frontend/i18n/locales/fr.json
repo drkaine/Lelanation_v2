@@ -144,6 +144,8 @@
     "overviewPlayerCountDistinct": "Participants distincts (joueurs récupérés)",
     "overviewMatchesByDivision": "Parties par division",
     "overviewMatchesByVersion": "Parties par version (16.x)",
+    "overviewFilterByVersion": "Filtrer par version",
+    "overviewVersionAll": "Toutes",
     "overviewTopWinrateChampions": "Top winrate champions (min. 20 parties)",
     "filterRank": "Rang",
     "filterRole": "Rôle",

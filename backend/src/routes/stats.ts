@@ -18,9 +18,10 @@ import { getOverviewStats } from '../services/StatsOverviewService.js'
 const router = Router()
 const aggregator = new RiotStatsAggregator()
 
-/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count */
-router.get('/overview', async (_req: Request, res: Response) => {
-  const data = await getOverviewStats()
+/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 to filter by patch */
+router.get('/overview', async (req: Request, res: Response) => {
+  const version = (req.query.version as string) || undefined
+  const data = await getOverviewStats(version ?? null)
   if (!data) {
     return res.status(200).json({
       totalMatches: 0,

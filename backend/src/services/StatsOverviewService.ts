@@ -27,12 +27,13 @@ type OverviewRow = Array<{ get_stats_overview: OverviewStats | null }>
 
 /**
  * Load overview stats for the statistics page. Returns null if DB not configured.
- * Single round-trip via get_stats_overview() (views + function in DB).
+ * Single round-trip via get_stats_overview(p_version). Optional version filters by game_version (e.g. "16.1").
  */
-export async function getOverviewStats(): Promise<OverviewStats | null> {
+export async function getOverviewStats(version?: string | null): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const rows = await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview() AS get_stats_overview`
+    const pVersion = version != null && version !== '' ? version : null
+    const rows = await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}) AS get_stats_overview`
     const raw = rows[0]?.get_stats_overview
     if (!raw) return null
 
