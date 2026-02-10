@@ -185,6 +185,8 @@ export interface OverviewTeamsStats {
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
+    /** Top 20 champions by total ban count (byWin + byLoss), with ban rate % over all bans. */
+    top20Total: Array<{ championId: number; count: number; banRatePercent: string }>
   }
   objectives: {
     firstBlood: { firstByWin: number; firstByLoss: number }
@@ -237,6 +239,19 @@ export async function getOverviewTeamsStats(
     const byLossRaw = Array.isArray(raw.bans?.byLoss) ? raw.bans.byLoss.map(mapBan) : []
     const totalBansByWin = byWinRaw.reduce((acc, b) => acc + b.count, 0)
     const totalBansByLoss = byLossRaw.reduce((acc, b) => acc + b.count, 0)
+    const byChamp = new Map<number, number>()
+    for (const b of byWinRaw) byChamp.set(b.championId, (byChamp.get(b.championId) ?? 0) + b.count)
+    for (const b of byLossRaw) byChamp.set(b.championId, (byChamp.get(b.championId) ?? 0) + b.count)
+    const totalBansAll = Array.from(byChamp.values()).reduce((a, n) => a + n, 0)
+    const top20Total = Array.from(byChamp.entries())
+      .map(([championId, count]) => ({
+        championId,
+        count,
+        banRatePercent:
+          totalBansAll > 0 ? (Math.round((count / totalBansAll) * 1000) / 10).toFixed(1) + '%' : '—',
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20)
     const objWithKills = (o: Record<string, unknown>): ObjectiveWithDistribution => {
       const distWin = (o?.distributionByWin as Record<string, number>) ?? {}
       const distLoss = (o?.distributionByLoss as Record<string, number>) ?? {}
@@ -263,6 +278,7 @@ export async function getOverviewTeamsStats(
       bans: {
         byWin: addBanRate(byWinRaw, totalBansByWin),
         byLoss: addBanRate(byLossRaw, totalBansByLoss),
+        top20Total,
       },
       objectives: {
         firstBlood: objFirstOnly((raw.objectives?.firstBlood as Record<string, number>) ?? {}),

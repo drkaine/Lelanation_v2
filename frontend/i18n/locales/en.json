@@ -160,6 +160,7 @@
     "overviewTeamsBans": "Bans",
     "overviewTeamsBansByWin": "Banned by winning team",
     "overviewTeamsBansByLoss": "Banned by losing team",
+    "overviewTeamsBansTop20Total": "Top 20 ban rate (total)",
     "overviewTeamsObjectives": "Objectives",
     "overviewTeamsObjective": "Objective",
     "overviewTeamsFirst": "First",

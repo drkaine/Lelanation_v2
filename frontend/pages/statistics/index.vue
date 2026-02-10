@@ -539,6 +539,36 @@
                       </div>
                     </div>
                   </div>
+                  <div>
+                    <h4 class="mb-2 text-sm font-medium text-text">
+                      {{ t('statisticsPage.overviewTeamsBansTop20Total') }}
+                    </h4>
+                    <div class="flex flex-wrap gap-2">
+                      <div
+                        v-for="b in overviewTeamsData.bans.top20Total"
+                        :key="'total-' + b.championId"
+                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                        :title="championName(b.championId) ?? String(b.championId)"
+                      >
+                        <img
+                          v-if="gameVersion && championByKey(b.championId)"
+                          :src="
+                            getChampionImageUrl(
+                              gameVersion,
+                              championByKey(b.championId)!.image.full
+                            )
+                          "
+                          :alt="championName(b.championId) ?? ''"
+                          class="h-6 w-6 rounded-full object-cover"
+                          width="24"
+                          height="24"
+                        />
+                        <span class="text-xs text-text/80"
+                          >{{ b.count }} ({{ b.banRatePercent }})</span
+                        >
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </details>
@@ -864,6 +894,7 @@ const overviewTeamsData = ref<{
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
+    top20Total: Array<{ championId: number; count: number; banRatePercent: string }>
   }
   objectives: {
     firstBlood: { firstByWin: number; firstByLoss: number }
