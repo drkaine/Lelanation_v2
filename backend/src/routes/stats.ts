@@ -22,10 +22,11 @@ import {
 const router = Router()
 const aggregator = new RiotStatsAggregator()
 
-/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 to filter by patch */
+/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview', async (req: Request, res: Response) => {
   const version = (req.query.version as string) || undefined
-  const data = await getOverviewStats(version ?? null)
+  const rankTier = (req.query.rankTier as string) || undefined
+  const data = await getOverviewStats(version ?? null, rankTier ?? null)
   if (!data) {
     return res.status(200).json({
       totalMatches: 0,
@@ -40,10 +41,11 @@ router.get('/overview', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 */
+/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-detail', async (req: Request, res: Response) => {
   const version = (req.query.version as string) || undefined
-  const data = await getOverviewDetailStats(version ?? null)
+  const rankTier = (req.query.rankTier as string) || undefined
+  const data = await getOverviewDetailStats(version ?? null, rankTier ?? null)
   if (!data) {
     return res.status(200).json({
       totalParticipants: 0,
@@ -58,10 +60,11 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss from matches.teams. Query: ?version=16.1 */
+/** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss from matches.teams. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-teams', async (req: Request, res: Response) => {
   const version = (req.query.version as string) || undefined
-  const data = await getOverviewTeamsStats(version ?? null)
+  const rankTier = (req.query.rankTier as string) || undefined
+  const data = await getOverviewTeamsStats(version ?? null, rankTier ?? null)
   if (!data) {
     return res.status(200).json({
       matchCount: 0,

@@ -27,13 +27,17 @@ type OverviewRow = Array<{ get_stats_overview: OverviewStats | null }>
 
 /**
  * Load overview stats for the statistics page. Returns null if DB not configured.
- * Single round-trip via get_stats_overview(p_version). Optional version filters by game_version (e.g. "16.1").
+ * Single round-trip via get_stats_overview(p_version, p_rank_tier). Optional filters by version and rank tier (e.g. GOLD).
  */
-export async function getOverviewStats(version?: string | null): Promise<OverviewStats | null> {
+export async function getOverviewStats(
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const rows = await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}) AS get_stats_overview`
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows = await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
     const raw = rows[0]?.get_stats_overview
     if (!raw) return null
 
@@ -106,12 +110,14 @@ export interface OverviewDetailStats {
 type OverviewDetailRow = Array<{ get_stats_overview_detail: OverviewDetailStats | null }>
 
 export async function getOverviewDetailStats(
-  version?: string | null
+  version?: string | null,
+  rankTier?: string | null
 ): Promise<OverviewDetailStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const rows = await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}) AS get_stats_overview_detail`
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows = await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
     const raw = rows[0]?.get_stats_overview_detail
     if (!raw) return null
 
@@ -213,12 +219,14 @@ export interface ObjectiveWithDistribution {
 type OverviewTeamsRow = Array<{ get_stats_overview_teams: OverviewTeamsStats | null }>
 
 export async function getOverviewTeamsStats(
-  version?: string | null
+  version?: string | null,
+  rankTier?: string | null
 ): Promise<OverviewTeamsStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const rows = await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}) AS get_stats_overview_teams`
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows = await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
     const raw = rows[0]?.get_stats_overview_teams
     if (!raw) return null
 

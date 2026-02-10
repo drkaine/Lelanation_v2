@@ -70,15 +70,36 @@
               <h3 class="mb-3 text-sm font-semibold text-text">
                 {{ t('statisticsPage.overviewMatchesByDivision') }}
               </h3>
-              <div class="flex flex-wrap gap-3">
-                <span
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    overviewDivisionFilter === null
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
+                  ]"
+                  @click="setOverviewDivisionFilter(null)"
+                >
+                  {{ t('statisticsPage.overviewDivisionAll') }}
+                </button>
+                <button
                   v-for="d in overviewData.matchesByDivision"
                   :key="d.rankTier"
-                  class="rounded px-3 py-1.5 text-sm font-medium"
-                  :style="divisionStyle(d.rankTier)"
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                    overviewDivisionFilter === d.rankTier
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
+                  ]"
+                  :style="
+                    overviewDivisionFilter !== d.rankTier ? divisionStyle(d.rankTier) : undefined
+                  "
+                  @click="setOverviewDivisionFilter(d.rankTier)"
                 >
-                  {{ d.rankTier }}: {{ d.matchCount }}
-                </span>
+                  {{ d.rankTier }}: {{ d.matchCount }} ({{ divisionPercent(d) }}%)
+                </button>
               </div>
             </div>
             <div
@@ -803,6 +824,8 @@ const overviewData = ref<{
 const overviewPending = ref(true)
 /** Selected version filter for overview (null = all versions). */
 const overviewVersionFilter = ref<string | null>(null)
+/** Selected division (rank tier) filter for overview (null = all divisions). */
+const overviewDivisionFilter = ref<string | null>(null)
 /** Overview detail (runes, items, spells) from GET /api/stats/overview-detail */
 const overviewDetailData = ref<{
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
@@ -857,14 +880,21 @@ const overviewDetailMaxSpellPick = computed(() => {
   if (!list?.length) return 1
   return Math.max(...list.map(s => s.pickrate), 1)
 })
+function overviewQueryParams(): string {
+  const params = new URLSearchParams()
+  if (overviewVersionFilter.value != null && overviewVersionFilter.value !== '') {
+    params.set('version', overviewVersionFilter.value)
+  }
+  if (overviewDivisionFilter.value != null && overviewDivisionFilter.value !== '') {
+    params.set('rankTier', overviewDivisionFilter.value)
+  }
+  const q = params.toString()
+  return q ? '?' + q : ''
+}
 async function loadOverview() {
   overviewPending.value = true
   try {
-    const url =
-      overviewVersionFilter.value != null && overviewVersionFilter.value !== ''
-        ? apiUrl('/api/stats/overview?version=' + encodeURIComponent(overviewVersionFilter.value))
-        : apiUrl('/api/stats/overview')
-    overviewData.value = await $fetch(url)
+    overviewData.value = await $fetch(apiUrl('/api/stats/overview' + overviewQueryParams()))
   } catch {
     overviewData.value = null
   } finally {
@@ -876,12 +906,9 @@ async function loadOverview() {
 async function loadOverviewDetail() {
   overviewDetailPending.value = true
   try {
-    const version =
-      overviewVersionFilter.value != null && overviewVersionFilter.value !== ''
-        ? overviewVersionFilter.value
-        : undefined
-    const q = version ? '?version=' + encodeURIComponent(version) : ''
-    overviewDetailData.value = await $fetch(apiUrl('/api/stats/overview-detail' + q))
+    overviewDetailData.value = await $fetch(
+      apiUrl('/api/stats/overview-detail' + overviewQueryParams())
+    )
   } catch {
     overviewDetailData.value = null
   } finally {
@@ -952,12 +979,9 @@ const overviewTeamsPending = ref(false)
 async function loadOverviewTeams() {
   overviewTeamsPending.value = true
   try {
-    const version =
-      overviewVersionFilter.value != null && overviewVersionFilter.value !== ''
-        ? overviewVersionFilter.value
-        : undefined
-    const q = version ? '?version=' + encodeURIComponent(version) : ''
-    overviewTeamsData.value = await $fetch(apiUrl('/api/stats/overview-teams' + q))
+    overviewTeamsData.value = await $fetch(
+      apiUrl('/api/stats/overview-teams' + overviewQueryParams())
+    )
   } catch {
     overviewTeamsData.value = null
   } finally {
@@ -1041,6 +1065,16 @@ function objectiveRow(key: string): {
 function setOverviewVersionFilter(version: string | null) {
   overviewVersionFilter.value = version
   loadOverview()
+}
+function setOverviewDivisionFilter(division: string | null) {
+  overviewDivisionFilter.value = division
+  loadOverview()
+}
+/** Percentage of matches for this division (relative to current total). */
+function divisionPercent(d: { matchCount: number }): string {
+  const total = overviewData.value?.totalMatches ?? 0
+  if (!total) return '0'
+  return (Math.round((d.matchCount / total) * 10000) / 100).toFixed(2)
 }
 
 const filterRank = ref('')

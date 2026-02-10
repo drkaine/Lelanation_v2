@@ -143,6 +143,7 @@
     "overviewPlayerCount": "Joueurs récupérés",
     "overviewPlayerCountDistinct": "Participants distincts (joueurs récupérés)",
     "overviewMatchesByDivision": "Parties par division",
+    "overviewDivisionAll": "Toutes",
     "overviewMatchesByVersion": "Parties par version (16.x)",
     "overviewFilterByVersion": "Filtrer par version",
     "overviewVersionAll": "Toutes",

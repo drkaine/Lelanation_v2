@@ -143,6 +143,7 @@
     "overviewPlayerCount": "Players collected",
     "overviewPlayerCountDistinct": "Distinct participants (players collected)",
     "overviewMatchesByDivision": "Matches by division",
+    "overviewDivisionAll": "All",
     "overviewMatchesByVersion": "Matches by version (16.x)",
     "overviewFilterByVersion": "Filter by version",
     "overviewVersionAll": "All",
