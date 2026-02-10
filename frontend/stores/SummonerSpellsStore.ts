@@ -19,9 +19,14 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
   }),
 
   getters: {
+    /**
+     * Resolve a spell by id (from Participants.summonerSpells / stats API).
+     * Data comes from public/data/game/{version}/{lang}/summoner.json; each spell has "key" = numeric id.
+     */
     getSpellById() {
       return (id: string): SummonerSpell | undefined => {
-        return this.spells.find(spell => spell.id === id || spell.key === id)
+        const normalized = String(id).trim()
+        return this.spells.find(spell => spell.key === normalized || spell.id === normalized)
       }
     },
   },
@@ -42,10 +47,10 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
         let data: any
         let useStatic = false
 
-        // Try static file first (only in browser, not SSR)
+        // Load from public/data/game/{version}/{language}/summoner.json (Data Dragon format).
+        // Used to resolve spell ids from Participants.summonerSpells in stats (overview detail).
         if (process.client) {
           try {
-            // Add cache-busting parameter based on version to force reload after sync
             const staticUrl = getGameDataUrl(version, 'summoner', language)
             const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
             const staticResponse = await fetch(urlWithCacheBust, {

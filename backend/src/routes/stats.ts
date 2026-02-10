@@ -13,7 +13,11 @@ import {
   getChampionStatsForPlayer,
 } from '../services/StatsPlayersService.js'
 import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
-import { getOverviewStats } from '../services/StatsOverviewService.js'
+import {
+  getOverviewStats,
+  getOverviewDetailStats,
+  getOverviewTeamsStats,
+} from '../services/StatsOverviewService.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -31,6 +35,46 @@ router.get('/overview', async (req: Request, res: Response) => {
       matchesByVersion: [],
       playerCount: 0,
       message: 'No stats yet. Run match collection first.',
+    })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 */
+router.get('/overview-detail', async (req: Request, res: Response) => {
+  const version = (req.query.version as string) || undefined
+  const data = await getOverviewDetailStats(version ?? null)
+  if (!data) {
+    return res.status(200).json({
+      totalParticipants: 0,
+      runes: [],
+      runeSets: [],
+      items: [],
+      itemSets: [],
+      itemsByOrder: {},
+      summonerSpells: [],
+    })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss from matches.teams. Query: ?version=16.1 */
+router.get('/overview-teams', async (req: Request, res: Response) => {
+  const version = (req.query.version as string) || undefined
+  const data = await getOverviewTeamsStats(version ?? null)
+  if (!data) {
+    return res.status(200).json({
+      matchCount: 0,
+      bans: { byWin: [], byLoss: [] },
+      objectives: {
+        firstBlood: { firstByWin: 0, firstByLoss: 0 },
+        baron: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        dragon: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        tower: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        inhibitor: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        riftHerald: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        horde: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+      },
     })
   }
   return res.json(data)

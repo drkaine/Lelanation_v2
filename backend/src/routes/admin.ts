@@ -470,18 +470,36 @@ router.put('/riot-apikey', async (req, res) => {
 
 // --- All players (DB, for admin visibility) ---
 router.get('/players', async (req, res) => {
-  const limit = Math.min(Math.max(1, parseInt(String(req.query?.limit || 500), 10) || 500), 2000)
-  const rows = await prisma.player.findMany({
-    orderBy: [{ totalGames: 'desc' }],
-    take: limit,
-    select: {
-      puuid: true,
-      summonerName: true,
-      region: true,
-      totalGames: true,
-      totalWins: true,
-    },
-  })
+  const limit = Math.min(Math.max(1, parseInt(String(req.query?.limit || 15), 10) || 15), 2000)
+  const offset = Math.max(0, parseInt(String(req.query?.offset || 0), 10) || 0)
+  const search = typeof req.query?.search === 'string' ? req.query.search.trim() : ''
+
+  const where = search
+    ? {
+        OR: [
+          { summonerName: { contains: search, mode: 'insensitive' as const } },
+          { puuid: { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
+    : undefined
+
+  const [rows, total] = await Promise.all([
+    prisma.player.findMany({
+      where,
+      orderBy: [{ totalGames: 'desc' }],
+      skip: offset,
+      take: limit,
+      select: {
+        puuid: true,
+        summonerName: true,
+        region: true,
+        totalGames: true,
+        totalWins: true,
+      },
+    }),
+    prisma.player.count({ where }),
+  ])
+
   const players = rows.map((p) => ({
     puuid: p.puuid,
     summonerName: p.summonerName,
@@ -490,7 +508,7 @@ router.get('/players', async (req, res) => {
     totalWins: p.totalWins,
     winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
   }))
-  return res.json({ players, total: players.length })
+  return res.json({ players, total })
 })
 
 // --- Seed players (players table = single source for match crawl) ---

@@ -436,7 +436,7 @@
                 }}
               </button>
               <div v-if="allPlayersVisible" class="mt-3 space-y-2">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <label for="all-players-search" class="sr-only">{{
                     t('admin.seedPlayers.searchPlayers')
                   }}</label>
@@ -446,17 +446,26 @@
                     type="text"
                     :placeholder="t('admin.seedPlayers.searchPlayersPlaceholder')"
                     class="min-w-0 flex-1 rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text placeholder:text-text/50"
+                    @keyup.enter="onAllPlayersSearch"
                   />
+                  <button
+                    type="button"
+                    class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10"
+                    @click="onAllPlayersSearch"
+                  >
+                    {{ t('admin.seedPlayers.searchPlayers') }}
+                  </button>
                 </div>
                 <div
                   class="max-h-[400px] overflow-auto rounded border border-primary/20 bg-background/50"
                 >
                   <p v-if="allPlayersLoading" class="p-4 text-text/70">{{ t('admin.loading') }}</p>
                   <p v-else-if="allPlayersList.length === 0" class="p-4 text-text/70">
-                    {{ t('admin.seedPlayers.allPlayersEmpty') }}
-                  </p>
-                  <p v-else-if="filteredAllPlayers.length === 0" class="p-4 text-text/70">
-                    {{ t('admin.seedPlayers.noSearchResults') }}
+                    {{
+                      allPlayersSearchQuery.trim()
+                        ? t('admin.seedPlayers.noSearchResults')
+                        : t('admin.seedPlayers.allPlayersEmpty')
+                    }}
                   </p>
                   <div v-else class="overflow-x-auto">
                     <table class="w-full min-w-[500px] text-left text-sm">
@@ -480,11 +489,7 @@
                         </tr>
                       </thead>
                       <tbody class="divide-y divide-primary/20">
-                        <tr
-                          v-for="p in filteredAllPlayers"
-                          :key="p.puuid"
-                          class="hover:bg-surface/30"
-                        >
+                        <tr v-for="p in allPlayersList" :key="p.puuid" class="hover:bg-surface/30">
                           <td
                             class="min-w-[120px] px-3 py-2 font-medium text-text"
                             :title="p.puuid"
@@ -503,6 +508,34 @@
                         </tr>
                       </tbody>
                     </table>
+                  </div>
+                </div>
+                <div
+                  v-if="allPlayersTotalPages > 1 || allPlayersTotal > 0"
+                  class="flex flex-wrap items-center justify-between gap-2 rounded border border-primary/20 bg-background/30 px-3 py-2 text-sm text-text/80"
+                >
+                  <span>{{ allPlayersRangeText }}</span>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                      :disabled="allPlayersPage <= 1 || allPlayersLoading"
+                      @click="goToAllPlayersPage(allPlayersPage - 1)"
+                    >
+                      {{ t('admin.pagination.prev') }}
+                    </button>
+                    <span class="px-2">
+                      {{ t('admin.pagination.page') }} {{ allPlayersPage }} /
+                      {{ allPlayersTotalPages }}
+                    </span>
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+                      :disabled="allPlayersPage >= allPlayersTotalPages || allPlayersLoading"
+                      @click="goToAllPlayersPage(allPlayersPage + 1)"
+                    >
+                      {{ t('admin.pagination.next') }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -728,14 +761,17 @@ const seedPlayersMessage = ref('')
 const seedPlayersError = ref(false)
 const seedPlayerDeleting = ref<string | null>(null)
 
+const ALL_PLAYERS_PAGE_SIZE = 15
 const allPlayersVisible = ref(false)
 const allPlayersSearchQuery = ref('')
+const allPlayersPage = ref(1)
+const allPlayersTotal = ref(0)
 const allPlayersList = ref<
   Array<{
     puuid: string
     summonerName: string | null
     region: string
-    rankTier: string | null
+    rankTier?: string | null
     totalGames: number
     totalWins: number
     winrate: number
@@ -743,19 +779,27 @@ const allPlayersList = ref<
 >([])
 const allPlayersLoading = ref(false)
 
-const filteredAllPlayers = computed(() => {
-  const list = allPlayersList.value
-  const q = allPlayersSearchQuery.value.toLowerCase().trim()
-  if (!q) return list
-  return list.filter(
-    p => (p.summonerName?.toLowerCase().includes(q) ?? false) || p.puuid.toLowerCase().includes(q)
-  )
+const allPlayersTotalPages = computed(() =>
+  Math.max(1, Math.ceil(allPlayersTotal.value / ALL_PLAYERS_PAGE_SIZE))
+)
+const allPlayersRangeText = computed(() => {
+  const total = allPlayersTotal.value
+  if (total === 0) return '0'
+  const start = (allPlayersPage.value - 1) * ALL_PLAYERS_PAGE_SIZE + 1
+  const end = Math.min(allPlayersPage.value * ALL_PLAYERS_PAGE_SIZE, total)
+  return `${start}–${end} / ${total}`
 })
 
 async function loadAllPlayers() {
   allPlayersLoading.value = true
   try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/players?limit=500'))
+    const offset = (allPlayersPage.value - 1) * ALL_PLAYERS_PAGE_SIZE
+    const params = new URLSearchParams({
+      limit: String(ALL_PLAYERS_PAGE_SIZE),
+      offset: String(offset),
+    })
+    if (allPlayersSearchQuery.value.trim()) params.set('search', allPlayersSearchQuery.value.trim())
+    const res = await fetchWithAuth(apiUrl(`/api/admin/players?${params.toString()}`))
     if (res.status === 401) {
       clearAuth()
       await navigateTo(localePath('/admin/login'))
@@ -763,16 +807,33 @@ async function loadAllPlayers() {
     }
     const data = await res.json()
     allPlayersList.value = data?.players ?? []
+    allPlayersTotal.value = data?.total ?? 0
   } catch {
     allPlayersList.value = []
+    allPlayersTotal.value = 0
   } finally {
     allPlayersLoading.value = false
   }
 }
 
+function goToAllPlayersPage(page: number) {
+  const p = Math.max(1, Math.min(page, allPlayersTotalPages.value))
+  if (p === allPlayersPage.value) return
+  allPlayersPage.value = p
+  loadAllPlayers()
+}
+
 function toggleAllPlayers() {
-  if (!allPlayersVisible.value && allPlayersList.value.length === 0) loadAllPlayers()
+  if (!allPlayersVisible.value) {
+    allPlayersPage.value = 1
+    loadAllPlayers()
+  }
   allPlayersVisible.value = !allPlayersVisible.value
+}
+
+function onAllPlayersSearch() {
+  allPlayersPage.value = 1
+  loadAllPlayers()
 }
 
 async function loadSeedPlayers() {

@@ -70,3 +70,211 @@ export async function getOverviewStats(version?: string | null): Promise<Overvie
     return null
   }
 }
+
+/** Overview detail: runes (per perk), rune sets, items, item sets, items by order, summoner spells. */
+export interface OverviewDetailStats {
+  totalParticipants: number
+  runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  runeSets: Array<{
+    runes: unknown
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  items: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  itemSets: Array<{
+    items: number[]
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  itemsByOrder: Record<
+    string,
+    Array<{ itemId: number; games: number; wins: number; winrate: number }>
+  >
+  summonerSpells: Array<{
+    spellId: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+}
+
+type OverviewDetailRow = Array<{ get_stats_overview_detail: OverviewDetailStats | null }>
+
+export async function getOverviewDetailStats(
+  version?: string | null
+): Promise<OverviewDetailStats | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const pVersion = version != null && version !== '' ? version : null
+    const rows = await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}) AS get_stats_overview_detail`
+    const raw = rows[0]?.get_stats_overview_detail
+    if (!raw) return null
+
+    const mapRune = (r: { runeId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
+      runeId: Number(r.runeId),
+      games: Number(r.games),
+      wins: Number(r.wins),
+      pickrate: Number(r.pickrate),
+      winrate: Number(r.winrate),
+    })
+    const mapRuneSet = (rs: { runes: unknown; games: number; wins: number; pickrate: number; winrate: number }) => ({
+      runes: rs.runes,
+      games: Number(rs.games),
+      wins: Number(rs.wins),
+      pickrate: Number(rs.pickrate),
+      winrate: Number(rs.winrate),
+    })
+    const mapItem = (i: { itemId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
+      itemId: Number(i.itemId),
+      games: Number(i.games),
+      wins: Number(i.wins),
+      pickrate: Number(i.pickrate),
+      winrate: Number(i.winrate),
+    })
+    const mapItemSet = (is: { items: number[]; games: number; wins: number; pickrate: number; winrate: number }) => ({
+      items: Array.isArray(is.items) ? is.items.map(Number) : [],
+      games: Number(is.games),
+      wins: Number(is.wins),
+      pickrate: Number(is.pickrate),
+      winrate: Number(is.winrate),
+    })
+    const mapSpell = (s: { spellId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
+      spellId: Number(s.spellId),
+      games: Number(s.games),
+      wins: Number(s.wins),
+      pickrate: Number(s.pickrate),
+      winrate: Number(s.winrate),
+    })
+
+    const itemsByOrder: Record<string, Array<{ itemId: number; games: number; wins: number; winrate: number }>> = {}
+    if (raw.itemsByOrder && typeof raw.itemsByOrder === 'object') {
+      for (const [slot, arr] of Object.entries(raw.itemsByOrder)) {
+        itemsByOrder[slot] = Array.isArray(arr)
+          ? arr.map((x: { itemId: number; games: number; wins: number; winrate: number }) => ({
+              itemId: Number(x.itemId),
+              games: Number(x.games),
+              wins: Number(x.wins),
+              winrate: Number(x.winrate),
+            }))
+          : []
+      }
+    }
+
+    return {
+      totalParticipants: Number(raw.totalParticipants) ?? 0,
+      runes: Array.isArray(raw.runes) ? raw.runes.map(mapRune) : [],
+      runeSets: Array.isArray(raw.runeSets) ? raw.runeSets.map(mapRuneSet) : [],
+      items: Array.isArray(raw.items) ? raw.items.map(mapItem) : [],
+      itemSets: Array.isArray(raw.itemSets) ? raw.itemSets.map(mapItemSet) : [],
+      itemsByOrder,
+      summonerSpells: Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : [],
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Stats from matches.teams: bans and objectives (first + kills + distribution for %). */
+export interface OverviewTeamsStats {
+  matchCount: number
+  bans: {
+    byWin: Array<{ championId: number; count: number; banRatePercent: string }>
+    byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
+  }
+  objectives: {
+    firstBlood: { firstByWin: number; firstByLoss: number }
+    baron: ObjectiveWithDistribution
+    dragon: ObjectiveWithDistribution
+    tower: ObjectiveWithDistribution
+    inhibitor: ObjectiveWithDistribution
+    riftHerald: ObjectiveWithDistribution
+    horde: ObjectiveWithDistribution
+  }
+}
+
+export interface ObjectiveWithDistribution {
+  firstByWin: number
+  firstByLoss: number
+  killsByWin: number
+  killsByLoss: number
+  /** Count of matches (by winning team) per kill count: { "0": n, "1": m, ... } */
+  distributionByWin: Record<string, number>
+  /** Count of matches (by losing team) per kill count */
+  distributionByLoss: Record<string, number>
+}
+
+type OverviewTeamsRow = Array<{ get_stats_overview_teams: OverviewTeamsStats | null }>
+
+export async function getOverviewTeamsStats(
+  version?: string | null
+): Promise<OverviewTeamsStats | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const pVersion = version != null && version !== '' ? version : null
+    const rows = await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}) AS get_stats_overview_teams`
+    const raw = rows[0]?.get_stats_overview_teams
+    if (!raw) return null
+
+    const mapBan = (b: { championId: number; count: number }) => ({
+      championId: Number(b.championId),
+      count: Number(b.count),
+    })
+    const addBanRate = (
+      list: Array<{ championId: number; count: number }>,
+      total: number
+    ): Array<{ championId: number; count: number; banRatePercent: string }> =>
+      list.map((b) => ({
+        ...b,
+        banRatePercent:
+          total > 0 ? (Math.round((b.count / total) * 1000) / 10).toFixed(1) + '%' : '—',
+      }))
+    const byWinRaw = Array.isArray(raw.bans?.byWin) ? raw.bans.byWin.map(mapBan) : []
+    const byLossRaw = Array.isArray(raw.bans?.byLoss) ? raw.bans.byLoss.map(mapBan) : []
+    const totalBansByWin = byWinRaw.reduce((acc, b) => acc + b.count, 0)
+    const totalBansByLoss = byLossRaw.reduce((acc, b) => acc + b.count, 0)
+    const objWithKills = (o: Record<string, unknown>): ObjectiveWithDistribution => {
+      const distWin = (o?.distributionByWin as Record<string, number>) ?? {}
+      const distLoss = (o?.distributionByLoss as Record<string, number>) ?? {}
+      const distWinNum: Record<string, number> = {}
+      const distLossNum: Record<string, number> = {}
+      for (const k of Object.keys(distWin)) distWinNum[k] = Number(distWin[k])
+      for (const k of Object.keys(distLoss)) distLossNum[k] = Number(distLoss[k])
+      return {
+        firstByWin: Number(o?.firstByWin ?? 0),
+        firstByLoss: Number(o?.firstByLoss ?? 0),
+        killsByWin: Number(o?.killsByWin ?? 0),
+        killsByLoss: Number(o?.killsByLoss ?? 0),
+        distributionByWin: distWinNum,
+        distributionByLoss: distLossNum,
+      }
+    }
+    const objFirstOnly = (o: Record<string, number>) => ({
+      firstByWin: Number(o?.firstByWin ?? 0),
+      firstByLoss: Number(o?.firstByLoss ?? 0),
+    })
+
+    return {
+      matchCount: Number(raw.matchCount) ?? 0,
+      bans: {
+        byWin: addBanRate(byWinRaw, totalBansByWin),
+        byLoss: addBanRate(byLossRaw, totalBansByLoss),
+      },
+      objectives: {
+        firstBlood: objFirstOnly((raw.objectives?.firstBlood as Record<string, number>) ?? {}),
+        baron: objWithKills((raw.objectives?.baron ?? {}) as unknown as Record<string, unknown>),
+        dragon: objWithKills((raw.objectives?.dragon ?? {}) as unknown as Record<string, unknown>),
+        tower: objWithKills((raw.objectives?.tower ?? {}) as unknown as Record<string, unknown>),
+        inhibitor: objWithKills((raw.objectives?.inhibitor ?? {}) as unknown as Record<string, unknown>),
+        riftHerald: objWithKills((raw.objectives?.riftHerald ?? {}) as unknown as Record<string, unknown>),
+        horde: objWithKills((raw.objectives?.horde ?? {}) as unknown as Record<string, unknown>),
+      },
+    }
+  } catch {
+    return null
+  }
+}
