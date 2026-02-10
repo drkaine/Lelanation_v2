@@ -10,10 +10,11 @@ import { getRiotApiService } from './RiotApiService.js'
 const TIER_ORDER = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
 /** Sentinel for participants whose Solo/Duo rank could not be fetched (unranked, decayed, etc.). Excluded from Match.rank and from "ranked" stats. */
 export const UNRANKED_TIER = 'UNRANKED'
+export { TIER_ORDER }
 const DIVISION_ORDER = ['IV', 'III', 'II', 'I'] as const
 
 /** Convert tier+division+lp to a numeric score (higher = higher rank). MASTER+ have no division (use 0). */
-function rankToScore(tier: string, division: string, lp: number): number {
+export function rankToScore(tier: string, division: string, lp: number): number {
   const t = TIER_ORDER.indexOf(tier.toUpperCase() as (typeof TIER_ORDER)[number])
   const tierIdx = t >= 0 ? t : 0
   const d = DIVISION_ORDER.indexOf(division.toUpperCase() as (typeof DIVISION_ORDER)[number])
@@ -24,7 +25,7 @@ function rankToScore(tier: string, division: string, lp: number): number {
 }
 
 /** Convert numeric score back to tier+division string (e.g. "GOLD_II"). Rounds to nearest tier/division. */
-function scoreToRankLabel(score: number): string {
+export function scoreToRankLabel(score: number): string {
   if (score <= 0) return 'IRON_IV'
   const tierIdx = Math.min(Math.floor(score / 4), TIER_ORDER.length - 1)
   const remainder = score - tierIdx * 4
@@ -150,9 +151,52 @@ export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> 
 
 const BACKFILL_RANK_LOG = '[backfill-rank]'
 
+export type RankEntry = { tier: string; rank: string; leaguePoints: number }
+
+/**
+ * Récupère les rangs de tous les puuids en parallèle (League API). Un appel par puuid, tous en même temps.
+ * Utilisé avant d'insérer un match pour avoir match + participants avec rangs en une seule persistance.
+ */
+export async function fetchRanksForPuuids(
+  platform: 'euw1' | 'eun1',
+  puuids: string[]
+): Promise<Map<string, RankEntry | null>> {
+  const distinct = [...new Set(puuids.filter((p) => p && p.trim() !== ''))]
+  if (distinct.length === 0) return new Map()
+  const riotApi = getRiotApiService()
+  const results = await Promise.all(
+    distinct.map(async (puuid) => {
+      const res = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
+      if (res.isErr()) return { puuid, entry: null as RankEntry | null }
+      return { puuid, entry: res.unwrap() }
+    })
+  )
+  const map = new Map<string, RankEntry | null>()
+  for (const { puuid, entry } of results) map.set(puuid, entry)
+  return map
+}
+
+/**
+ * Calcule le rang moyen (label type "GOLD_II") à partir des entrées rank. Exclut UNRANKED et null.
+ */
+export function computeMatchRankLabel(
+  entries: Map<string, RankEntry | null>
+): string | null {
+  const scores: number[] = []
+  for (const entry of entries.values()) {
+    if (!entry || entry.tier === UNRANKED_TIER) continue
+    const div = entry.rank ?? ''
+    const lp = typeof entry.leaguePoints === 'number' ? entry.leaguePoints : 0
+    scores.push(rankToScore(entry.tier, div, lp))
+  }
+  if (scores.length === 0) return null
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+  return scoreToRankLabel(avg)
+}
+
 /**
  * Fetch ranks for participants of a newly inserted match and update them immediately.
- * Called right after upsertMatchFromRiot(inserted=true). One League API call per distinct puuid in the match.
+ * Préférer le flux : fetchRanksForPuuids + upsertMatchFromRiot(..., rankByPuuid) pour tout en une fois.
  */
 export async function backfillRanksForNewMatch(
   matchId: string,
@@ -162,22 +206,15 @@ export async function backfillRanksForNewMatch(
   if (!isDatabaseConfigured() || puuids.length === 0) return { updated: 0 }
   const match = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
   if (!match) return { updated: 0 }
-  const riotApi = getRiotApiService()
-  const platform = region === 'eun1' ? 'eun1' : 'euw1'
-  const distinctPuuids = [...new Set(puuids.filter((p) => p && p.trim() !== ''))]
+  const rankByPuuid = await fetchRanksForPuuids(region === 'eun1' ? 'eun1' : 'euw1', puuids)
   let updated = 0
-  for (const puuid of distinctPuuids) {
-    const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
-    if (leagueResult.isErr()) continue
-    const entry = leagueResult.unwrap()
-    if (!entry) continue
+  for (const [puuid, entry] of rankByPuuid) {
+    const data = entry
+      ? { rankTier: entry.tier, rankDivision: entry.rank, rankLp: entry.leaguePoints }
+      : { rankTier: UNRANKED_TIER, rankDivision: undefined, rankLp: undefined }
     const result = await prisma.participant.updateMany({
       where: { matchId: match.id, puuid },
-      data: {
-        rankTier: entry.tier,
-        rankDivision: entry.rank,
-        rankLp: entry.leaguePoints,
-      },
+      data,
     })
     updated += result.count
   }

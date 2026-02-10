@@ -1,8 +1,14 @@
 /**
  * Persists Riot Match v5 data into PostgreSQL. Queue 420 only. Region euw1/eun1.
+00 * Optionally accepts rankByPuuid (rangs récupérés en parallèle) pour créer match + participants avec rangs en une fois.
  */
 import { prisma } from '../db.js'
 import type { MatchSummary } from './RiotApiService.js'
+import {
+  computeMatchRankLabel,
+  UNRANKED_TIER,
+  type RankEntry,
+} from './StatsPlayersRefreshService.js'
 
 const QUEUE_ID_420 = 420
 
@@ -138,7 +144,8 @@ function itemsArray(p: RiotParticipant): number[] {
 
 export async function upsertMatchFromRiot(
   region: 'euw1' | 'eun1',
-  data: MatchSummary
+  data: MatchSummary,
+  rankByPuuid?: Map<string, RankEntry | null>
 ): Promise<{ matchId: string; inserted: boolean }> {
   const matchId = data.metadata?.matchId
   if (!matchId) throw new Error('Missing metadata.matchId')
@@ -162,6 +169,9 @@ export async function upsertMatchFromRiot(
   const teams = Array.isArray(infoExt.teams) ? (infoExt.teams as object) : null
   const participants = Array.isArray(info.participants) ? info.participants : []
 
+  const matchRank =
+    rankByPuuid != null && rankByPuuid.size > 0 ? computeMatchRankLabel(rankByPuuid) : null
+
   const match = await prisma.match.create({
     data: {
       matchId,
@@ -172,14 +182,17 @@ export async function upsertMatchFromRiot(
       platformId: region,
       endOfGameResult: endOfGameResult ?? null,
       teams: teams ?? undefined,
-      rank: null,
+      rank: matchRank,
     },
   })
 
-  // Rank (rankTier, rankDivision, rankLp) is never in Match-v5 payload. It is filled later by
-  // backfillParticipantRanks (Riot League API by puuid). Run npm run riot:backfill-ranks or
   // POST /admin/backfill-participant-ranks; the cron can also run a limited backfill after collect.
   const createMany = participants.map((p: RiotParticipant) => {
+    const puuid = p.puuid ?? ''
+    const entry = rankByPuuid?.get(puuid)
+    const rankTier = entry ? entry.tier : entry === null ? UNRANKED_TIER : null
+    const rankDivision = entry ? entry.rank : undefined
+    const rankLp = entry ? entry.leaguePoints : undefined
     const role = normalizeRole(p.teamPosition, p.individualPosition)
     const items = itemsArray(p)
     const perks = p.perks
@@ -192,13 +205,13 @@ export async function upsertMatchFromRiot(
     const runes = perks?.styles != null ? (perks.styles as object) : (p.perks as unknown) ?? undefined
     return {
       matchId: match.id,
-      puuid: p.puuid ?? '',
+      puuid,
       championId: p.championId ?? 0,
       win: Boolean(p.win),
       role,
-      rankTier: null,
-      rankDivision: null,
-      rankLp: null,
+      rankTier,
+      rankDivision: rankDivision ?? null,
+      rankLp: rankLp ?? null,
       kills: typeof p.kills === 'number' ? p.kills : 0,
       deaths: typeof p.deaths === 'number' ? p.deaths : 0,
       assists: typeof p.assists === 'number' ? p.assists : 0,

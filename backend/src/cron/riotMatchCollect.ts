@@ -12,7 +12,7 @@ import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.j
 import {
   refreshPlayersAndChampionStats,
   enrichPlayers,
-  backfillRanksForNewMatch,
+  fetchRanksForPuuids,
   backfillParticipantRanks,
   refreshMatchRanks,
   countPlayersMissingSummonerName,
@@ -167,15 +167,32 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
           distinct: ['puuid'],
         })
         const puuidSet = new Set(participantsWithOldVersion.map((r) => r.puuid))
-        const toReset = await prisma.player.findMany({
-          where: { lastSeen: { not: null }, puuid: { notIn: [...puuidSet] } },
-          select: { puuid: true },
-        })
-        if (toReset.length > 0) {
+        // Avoid DB param limit: fetch players with lastSeen in pages, filter in memory, then update in batches
+        const PAGE_SIZE = 2000
+        const UPDATE_BATCH = 500
+        const toReset: Array<{ puuid: string }> = []
+        let cursor: string | undefined
+        do {
+          const page = await prisma.player.findMany({
+            where: { lastSeen: { not: null } },
+            select: { puuid: true },
+            take: PAGE_SIZE,
+            ...(cursor !== undefined ? { skip: 1, cursor: { puuid: cursor } } : {}),
+          })
+          for (const r of page) {
+            if (!puuidSet.has(r.puuid)) toReset.push(r)
+          }
+          if (page.length < PAGE_SIZE) break
+          cursor = page[page.length - 1].puuid
+        } while (true)
+        for (let i = 0; i < toReset.length; i += UPDATE_BATCH) {
+          const batch = toReset.slice(i, i + UPDATE_BATCH)
           await prisma.player.updateMany({
-            where: { puuid: { in: toReset.map((r) => r.puuid) } },
+            where: { puuid: { in: batch.map((r) => r.puuid) } },
             data: { lastSeen: null },
           })
+        }
+        if (toReset.length > 0) {
           console.log(
             `${LOG_PREFIX} Reset last_seen for ${toReset.length} player(s) with matches only in newest version (re-crawl with all patch windows)`
           )
@@ -302,23 +319,21 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
           if (allowedVersions.size > 0 && !isAllowedGameVersion(gameVersion, allowedVersions)) {
             continue
           }
-          const { inserted } = await upsertMatchFromRiot(platform, matchData)
+          const participants = matchData.info?.participants ?? []
+          const puuids = participants
+            .map((p: { puuid?: string }) => (typeof p.puuid === 'string' ? p.puuid.trim() : ''))
+            .filter((puuid: string) => puuid !== '')
+          let rankByPuuid: Map<string, { tier: string; rank: string; leaguePoints: number } | null> | undefined
+          try {
+            if (puuids.length > 0) {
+              rankByPuuid = await fetchRanksForPuuids(platform, puuids)
+            }
+          } catch (rankErr) {
+            errors++
+          }
+          const { inserted } = await upsertMatchFromRiot(platform, matchData, rankByPuuid)
           if (inserted) {
             collected++
-            const participants = matchData.info?.participants ?? []
-            const puuids = participants
-              .map((p: { puuid?: string }) => (typeof p.puuid === 'string' ? p.puuid.trim() : ''))
-              .filter((puuid: string) => puuid !== '')
-            // Récupération immédiate du rang des participants (League API) pour ce match
-            try {
-              const matchId = matchData.metadata?.matchId
-              if (matchId && puuids.length > 0) {
-                await backfillRanksForNewMatch(matchId, platform, puuids)
-              }
-            } catch (rankErr) {
-              // Ne pas faire échouer la collecte ; le backfill en batch rattrapera plus tard
-              errors++
-            }
             for (const p of participants) {
               const participantPuuid = typeof p.puuid === 'string' ? p.puuid.trim() : ''
               if (!participantPuuid) continue
