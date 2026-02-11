@@ -237,12 +237,21 @@ La liste des patches pour lesquels on collecte les matchs est définie dans **`b
 | `RIOT_MATCH_CRON_SCHEDULE` | Cron (ex. `0 * * * *` = toutes les heures) | `0 * * * *` |
 | `RIOT_MATCH_MAX_PUUIDS_PER_RUN` | Nombre max de joueurs crawlé par run (depuis **players** par last_seen) | `50` |
 | `RIOT_MATCH_CYCLE_DELAY_MS` | Pause entre deux cycles du worker (ms) | `60000` |
+| `RIOT_MATCH_RATE_LIMIT_PAUSE_MS` | Pause quand 429 Rate Limit (ms) | `300000` (5 min) |
 | `RIOT_MATCH_ENRICH_PASSES` | Nombre de passes d'enrichissement (summoner_name) après chaque cycle du worker | `3` |
 | `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |
 | `RIOT_MATCH_CRAWL_RETRIES` | Nombre de tentatives du crawl en cas d’erreur transitoire (worker) | `3` |
 | `RIOT_MATCH_CRAWL_BACKOFF_MS` | Délai initial entre deux tentatives (backoff exponentiel, ms) | `30000` |
 | `RIOT_BACKFILL_RANKS_PER_RUN` | Nombre de PUUIDs traités par batch de backfill (0 = désactivé). | `200` |
 | `RIOT_BACKFILL_RANKS_MAX_BATCHES` | Nombre max de batches de backfill par cycle (drain de la file). | `3` |
+
+### Blocage « aucun nouveau match » malgré des joueurs non pollés
+
+Si le poller signale « aucun nouveau match » en boucle alors que vous avez des milliers de joueurs non pollés (`last_seen IS NULL`) :
+
+- **Cause** : En cas d’erreurs API (429, 5xx, etc.), `last_seen` n’était pas mis à jour pour ces joueurs. Les mêmes 50 joueurs étaient retentés à chaque cycle.
+- **Correction** : `last_seen` est désormais toujours mis à jour après traitement d’un joueur, même en cas d’erreur. Le poller progresse dans la file ; les joueurs en erreur seront recrawlés plus tard.
+- **Erreurs nombreuses (ex. 130/cycle)** : Souvent liées aux rate limits Riot (100 req/2 min). Réduire `RIOT_MATCH_MAX_PUUIDS_PER_RUN=20` pour limiter les appels API et les erreurs.
 
 ### Worker continu (recommandé) vs cron
 

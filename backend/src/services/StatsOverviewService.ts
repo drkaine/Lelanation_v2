@@ -25,6 +25,16 @@ export interface OverviewStats {
 
 type OverviewRow = Array<{ get_stats_overview: OverviewStats | null }>
 
+/** Raw shape from DB (JSONB); may be string when driver does not parse. */
+interface RawOverviewResult {
+  totalMatches?: number | null
+  lastUpdate?: string | null
+  topWinrateChampions?: unknown
+  matchesByDivision?: unknown
+  matchesByVersion?: unknown
+  playerCount?: number | null
+}
+
 /**
  * Load overview stats for the statistics page. Returns null if DB not configured.
  * Single round-trip via get_stats_overview(p_version, p_rank_tier). Optional filters by version and rank tier (e.g. GOLD).
@@ -37,18 +47,31 @@ export async function getOverviewStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
-    const raw = rows[0]?.get_stats_overview
-    if (!raw) return null
+    const rows =
+      await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
+    let raw: unknown = rows[0]?.get_stats_overview ?? (rows[0] as Record<string, unknown>)?.['get_stats_overview']
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw) as RawOverviewResult
+      } catch {
+        console.warn('[getOverviewStats] raw is string but not valid JSON')
+        return null
+      }
+    }
+    if (!raw || typeof raw !== 'object') {
+      console.warn('[getOverviewStats] no raw result, keys:', rows[0] ? Object.keys(rows[0]) : 'no row', 'type:', typeof raw)
+      return null
+    }
+    const r = raw as RawOverviewResult
 
     const lastUpdate =
-      raw.lastUpdate == null ? null : typeof raw.lastUpdate === 'string' ? raw.lastUpdate : String(raw.lastUpdate)
+      r.lastUpdate == null ? null : typeof r.lastUpdate === 'string' ? r.lastUpdate : String(r.lastUpdate)
 
     return {
-      totalMatches: Number(raw.totalMatches) ?? 0,
+      totalMatches: Number(r.totalMatches) ?? 0,
       lastUpdate,
-      topWinrateChampions: Array.isArray(raw.topWinrateChampions)
-        ? raw.topWinrateChampions.map((c: { championId: number; games: number; wins: number; winrate: number; pickrate: number }) => ({
+      topWinrateChampions: Array.isArray(r.topWinrateChampions)
+        ? (r.topWinrateChampions as Array<{ championId: number; games: number; wins: number; winrate: number; pickrate: number }>).map((c) => ({
             championId: Number(c.championId),
             games: Number(c.games),
             wins: Number(c.wins),
@@ -56,21 +79,22 @@ export async function getOverviewStats(
             pickrate: Number(c.pickrate),
           }))
         : [],
-      matchesByDivision: Array.isArray(raw.matchesByDivision)
-        ? raw.matchesByDivision.map((d: { rankTier: string; matchCount: number }) => ({
+      matchesByDivision: Array.isArray(r.matchesByDivision)
+        ? (r.matchesByDivision as Array<{ rankTier: string; matchCount: number }>).map((d) => ({
             rankTier: String(d.rankTier ?? '').trim(),
             matchCount: Number(d.matchCount) ?? 0,
           }))
         : [],
-      matchesByVersion: Array.isArray(raw.matchesByVersion)
-        ? raw.matchesByVersion.map((v: { version: string; matchCount: number }) => ({
+      matchesByVersion: Array.isArray(r.matchesByVersion)
+        ? (r.matchesByVersion as Array<{ version: string; matchCount: number }>).map((v) => ({
             version: String(v.version ?? '').trim(),
             matchCount: Number(v.matchCount) ?? 0,
           }))
         : [],
-      playerCount: Number(raw.playerCount) ?? 0,
+      playerCount: Number(r.playerCount) ?? 0,
     }
-  } catch {
+  } catch (err) {
+    console.error('[getOverviewStats]', err)
     return null
   }
 }
@@ -117,7 +141,8 @@ export async function getOverviewDetailStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
+    const rows =
+      await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
     const raw = rows[0]?.get_stats_overview_detail
     if (!raw) return null
 
@@ -180,7 +205,8 @@ export async function getOverviewDetailStats(
       itemsByOrder,
       summonerSpells: Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : [],
     }
-  } catch {
+  } catch (err) {
+    console.error('[getOverviewDetailStats]', err)
     return null
   }
 }
@@ -226,7 +252,8 @@ export async function getOverviewTeamsStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+    const rows =
+      await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
     const raw = rows[0]?.get_stats_overview_teams
     if (!raw) return null
 
@@ -298,7 +325,8 @@ export async function getOverviewTeamsStats(
         horde: objWithKills((raw.objectives?.horde ?? {}) as unknown as Record<string, unknown>),
       },
     }
-  } catch {
+  } catch (err) {
+    console.error('[getOverviewTeamsStats]', err)
     return null
   }
 }

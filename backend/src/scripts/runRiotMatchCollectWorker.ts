@@ -8,6 +8,7 @@
  *
  * Env:
  *   RIOT_MATCH_CYCLE_DELAY_MS     - Pause between cycles (default 60_000 = 1 min).
+ *   RIOT_MATCH_RATE_LIMIT_PAUSE_MS - Pause when 429 rate limit (default 300_000 = 5 min).
  *   RIOT_MATCH_ENRICH_PASSES      - Enrich passes per cycle (default 1). Réduire le blocage avant le prochain crawl.
  *   RIOT_MATCH_ENRICH_PER_PASS    - Players to enrich per pass (default 50). 150 = ~1 min d’API en série.
  *   RIOT_MATCH_CRAWL_RETRIES      - Retries for crawl on transient error (default 3).
@@ -27,6 +28,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
 const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '60000', 10) || 60000)
+const RATE_LIMIT_PAUSE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_RATE_LIMIT_PAUSE_MS ?? '300000', 10) || 300000)
 const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '1', 10) || 1)
 const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '50', 10) || 50)
 const CRAWL_RETRIES = Math.max(1, parseInt(process.env.RIOT_MATCH_CRAWL_RETRIES ?? '3', 10) || 3)
@@ -63,7 +65,7 @@ function sleep(ms: number): Promise<void> {
 /** Run crawl with retries: auth error → retry with Admin key once; other errors → backoff and retry up to CRAWL_RETRIES. */
 async function runCrawlWithRetry(
   riotApi: ReturnType<typeof getRiotApiService>
-): Promise<{ collected: number; errors: number }> {
+): Promise<{ collected: number; errors: number; rateLimitHit?: boolean }> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= CRAWL_RETRIES; attempt++) {
     try {
@@ -132,7 +134,19 @@ async function main(): Promise<void> {
     cycle++
     const cycleStart = Date.now()
     try {
-      const { collected, errors } = await runCrawlWithRetry(riotApi)
+      const { collected, errors, rateLimitHit } = await runCrawlWithRetry(riotApi)
+      if (rateLimitHit) {
+        console.warn(`${LOG} Rate limit (429) détecté, pause ${RATE_LIMIT_PAUSE_MS / 1000}s avant prochain cycle`)
+        await discordService.sendAlert(
+          '⏸️ Poller Riot – Rate limit (429)',
+          `Riot a renvoyé Rate Limit Exceeded. Pause de ${RATE_LIMIT_PAUSE_MS / 1000}s avant le prochain cycle.`,
+          undefined,
+          { cycle, pauseSeconds: RATE_LIMIT_PAUSE_MS / 1000, timestamp: new Date().toISOString() }
+        )
+        await sleep(RATE_LIMIT_PAUSE_MS)
+        consecutiveZeroCycles = 0
+        continue
+      }
       if (collected === 0) {
         consecutiveZeroCycles++
         // Notify only after 2+ consecutive cycles with no new matches to avoid spam

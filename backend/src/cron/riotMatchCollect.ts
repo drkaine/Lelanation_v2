@@ -57,6 +57,11 @@ function isRiotAuthError(err: unknown): boolean {
   return axios.isAxiosError(cause) && (cause.response?.status === 401 || cause.response?.status === 403)
 }
 
+function isRateLimitError(err: unknown): boolean {
+  const cause = err && typeof err === 'object' && 'cause' in err ? (err as { cause: unknown }).cause : err
+  return axios.isAxiosError(cause) && cause.response?.status === 429
+}
+
 const LOG_PREFIX = '[Riot match collect]'
 
 /**
@@ -64,7 +69,11 @@ const LOG_PREFIX = '[Riot match collect]'
  * Used by the cron, the worker, and the npm script `riot:collect`.
  * Returns { collected, errors } on success; throws on failure.
  */
-export async function runRiotMatchCollectOnce(): Promise<{ collected: number; errors: number }> {
+export async function runRiotMatchCollectOnce(): Promise<{
+  collected: number
+  errors: number
+  rateLimitHit?: boolean
+}> {
   const riotApi = getRiotApiService()
   const cronStatus = new CronStatusService()
   const discordService = new DiscordService()
@@ -80,7 +89,7 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       undefined,
       { startedAt: startTime.toISOString() }
     )
-    return { collected: 0, errors: 0 }
+    return { collected: 0, errors: 0, rateLimitHit: false }
   }
 
   try {
@@ -109,7 +118,7 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
           err,
           { startedAt: startTime.toISOString() }
       )
-      return { collected: 0, errors: 0 }
+      return { collected: 0, errors: 0, rateLimitHit: false }
     }
 
     const platforms: Platform[] = ['euw1', 'eun1']
@@ -270,6 +279,7 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       LIMIT ${MAX_PUUIDS_PER_RUN}
     `
     let processedCount = 0
+    let rateLimitHit = false
     const matchIdsPerPlayer = patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
     for (const row of playersToCrawl) {
       const platform = (row.region === 'eun1' ? 'eun1' : 'euw1') as Platform
@@ -285,6 +295,11 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
           endTime: win.endTime,
         })
         if (matchIdsResult.isErr()) {
+          const err = matchIdsResult.unwrapErr()
+          if (isRateLimitError(err)) {
+            rateLimitHit = true
+            console.warn(`${LOG_PREFIX} Rate limit (429) on getMatchIds, pausing poller`)
+          }
           errors++
           matchIdsFetchFailed = true
           break
@@ -292,6 +307,9 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
         for (const id of matchIdsResult.unwrap()) allMatchIds.add(id)
       }
       if (matchIdsFetchFailed) {
+        if (rateLimitHit) break
+        // Mark as seen so we don't retry the same player endlessly on API errors. They'll be re-crawled later (last_seen ASC).
+        await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
         continue
       }
       if (allMatchIds.size === 0 && patchWindows.length > 0) {
@@ -300,7 +318,6 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
       }
       const matchIds = [...allMatchIds]
 
-      let hadMatchFetchError = false
       for (const matchId of matchIds) {
         try {
           if (await hasMatch(matchId)) continue
@@ -310,8 +327,12 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
             const status =
               err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
             if (status === 404) continue
+            if (status === 429) {
+              rateLimitHit = true
+              console.warn(`${LOG_PREFIX} Rate limit (429) on getMatch, pausing poller`)
+              break
+            }
             errors++
-            hadMatchFetchError = true
             continue
           }
           const matchData = matchResult.unwrap()
@@ -346,13 +367,17 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
             }
           }
         } catch (e) {
+          if (isRateLimitError(e)) {
+            rateLimitHit = true
+            console.warn(`${LOG_PREFIX} Rate limit (429) on getMatch (catch), pausing poller`)
+            break
+          }
           errors++
-          hadMatchFetchError = true
         }
       }
-      if (!hadMatchFetchError) {
-        await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
-      }
+      if (rateLimitHit) break
+      // Always update last_seen so we make progress through the queue. Players with fetch errors will be re-crawled later (last_seen ASC).
+      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
     }
 
     if (collected > 0) {
@@ -429,7 +454,7 @@ export async function runRiotMatchCollectOnce(): Promise<{ collected: number; er
     } catch {
       // ignore
     }
-    return { collected, errors }
+    return { collected, errors, rateLimitHit }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
     console.error(`${LOG_PREFIX} Failed:`, error)

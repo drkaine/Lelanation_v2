@@ -38,11 +38,30 @@
           <div v-if="overviewPending" class="text-text/70">
             {{ t('statisticsPage.loading') }}
           </div>
+          <div
+            v-else-if="overviewError"
+            class="rounded border border-error/50 bg-error/10 p-4 text-error"
+          >
+            <p class="mb-2">{{ overviewError }}</p>
+            <button
+              type="button"
+              class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-background hover:opacity-90"
+              @click="loadOverview()"
+            >
+              {{ t('statisticsPage.retry') }}
+            </button>
+          </div>
           <div v-else-if="overviewData" class="space-y-6">
+            <div
+              v-if="overviewData.totalMatches === 0"
+              class="rounded border border-primary/30 bg-surface/50 p-4 text-text/80"
+            >
+              {{ overviewData.message ?? t('statisticsPage.overviewNoData') }}
+            </div>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div class="rounded border border-primary/20 bg-background/50 p-4">
                 <div class="text-2xl font-bold text-text-accent">
-                  {{ overviewData.totalMatches }}
+                  {{ overviewData.totalMatches ?? 0 }}
                 </div>
                 <div class="text-sm text-text/70">
                   {{ t('statisticsPage.overviewTotalMatches') }}
@@ -56,7 +75,7 @@
               </div>
               <div class="rounded border border-primary/20 bg-background/50 p-4">
                 <div class="text-2xl font-bold text-text-accent">
-                  {{ overviewData.playerCount }}
+                  {{ overviewData.playerCount ?? 0 }}
                 </div>
                 <div class="text-sm text-text/70">
                   {{ t('statisticsPage.overviewPlayerCountDistinct') }}
@@ -64,7 +83,7 @@
               </div>
             </div>
             <div
-              v-if="overviewData.matchesByDivision.length"
+              v-if="(overviewData.matchesByDivision ?? []).length"
               class="rounded-lg border border-primary/20 bg-background/50 p-4"
             >
               <h3 class="mb-3 text-sm font-semibold text-text">
@@ -84,7 +103,7 @@
                   {{ t('statisticsPage.overviewDivisionAll') }}
                 </button>
                 <button
-                  v-for="d in overviewData.matchesByDivision"
+                  v-for="d in overviewData.matchesByDivision ?? []"
                   :key="d.rankTier"
                   type="button"
                   :class="[
@@ -103,7 +122,7 @@
               </div>
             </div>
             <div
-              v-if="overviewData.matchesByVersion?.length"
+              v-if="(overviewData.matchesByVersion ?? []).length"
               class="rounded-lg border border-primary/20 bg-background/50 p-4"
             >
               <h3 class="mb-3 text-sm font-semibold text-text">
@@ -123,7 +142,7 @@
                   {{ t('statisticsPage.overviewVersionAll') }}
                 </button>
                 <button
-                  v-for="v in overviewData.matchesByVersion"
+                  v-for="v in overviewData.matchesByVersion ?? []"
                   :key="v.version"
                   type="button"
                   :class="[
@@ -140,7 +159,7 @@
             </div>
             <div class="grid gap-4 lg:grid-cols-2">
               <div
-                v-if="overviewData.topWinrateChampions.length"
+                v-if="(overviewData.topWinrateChampions ?? []).length"
                 class="rounded-lg border border-primary/30 bg-surface/30 p-6"
               >
                 <h3 class="mb-3 text-lg font-medium text-text">
@@ -148,7 +167,7 @@
                 </h3>
                 <ul class="space-y-2">
                   <li
-                    v-for="row in overviewData.topWinrateChampions"
+                    v-for="row in overviewData.topWinrateChampions ?? []"
                     :key="row.championId"
                     class="flex items-center gap-2 text-text/90"
                   >
@@ -566,7 +585,7 @@
                     </h4>
                     <div class="flex flex-wrap gap-2">
                       <div
-                        v-for="b in overviewTeamsData.bans.top20Total"
+                        v-for="b in overviewTeamsData.bans?.top20Total ?? []"
                         :key="'total-' + b.championId"
                         class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
                         :title="championName(b.championId) ?? String(b.championId)"
@@ -807,9 +826,11 @@ function divisionStyle(rankTier: string): { backgroundColor: string; color: stri
 }
 
 // Overview (vue d'ensemble)
+const overviewError = ref<string | null>(null)
 const overviewData = ref<{
   totalMatches: number
   lastUpdate: string | null
+  message?: string
   topWinrateChampions: Array<{
     championId: number
     games: number
@@ -893,10 +914,21 @@ function overviewQueryParams(): string {
 }
 async function loadOverview() {
   overviewPending.value = true
+  overviewError.value = null
+  const url = apiUrl('/api/stats/overview' + overviewQueryParams())
   try {
-    overviewData.value = await $fetch(apiUrl('/api/stats/overview' + overviewQueryParams()))
-  } catch {
+    const data = await $fetch(url)
+    overviewData.value = data as typeof overviewData.value
+    if (import.meta.dev && data && typeof data === 'object' && 'totalMatches' in data) {
+      console.log('[stats/overview]', (data as { totalMatches: number }).totalMatches, 'matches')
+    }
+  } catch (err) {
+    console.error('[stats/overview] fetch failed', url, err)
     overviewData.value = null
+    overviewError.value =
+      err instanceof Error
+        ? err.message
+        : 'Impossible de charger les statistiques (vérifiez que le backend est démarré).'
   } finally {
     overviewPending.value = false
   }
@@ -1070,9 +1102,10 @@ function setOverviewDivisionFilter(division: string | null) {
   overviewDivisionFilter.value = division
   loadOverview()
 }
-/** Percentage of matches for this division (relative to current total). */
+/** Percentage of matches for this division (relative to total from divisions breakdown - unaffected by division filter). */
 function divisionPercent(d: { matchCount: number }): string {
-  const total = overviewData.value?.totalMatches ?? 0
+  const divisions = overviewData.value?.matchesByDivision ?? []
+  const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
   if (!total) return '0'
   return (Math.round((d.matchCount / total) * 10000) / 100).toFixed(2)
 }

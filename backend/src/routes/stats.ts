@@ -28,6 +28,7 @@ router.get('/overview', async (req: Request, res: Response) => {
   const rankTier = (req.query.rankTier as string) || undefined
   const data = await getOverviewStats(version ?? null, rankTier ?? null)
   if (!data) {
+    console.warn('[GET /overview] getOverviewStats returned null, sending fallback')
     return res.status(200).json({
       totalMatches: 0,
       lastUpdate: null,
@@ -68,7 +69,7 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
   if (!data) {
     return res.status(200).json({
       matchCount: 0,
-      bans: { byWin: [], byLoss: [] },
+      bans: { byWin: [], byLoss: [], top20Total: [] },
       objectives: {
         firstBlood: { firstByWin: 0, firstByLoss: 0 },
         baron: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },

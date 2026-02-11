@@ -310,8 +310,8 @@ BEGIN
     'itemSets', (SELECT j FROM itemsets_json),
     'itemsByOrder', COALESCE((SELECT j FROM items_by_order_json), '{}'::jsonb),
     'summonerSpells', (SELECT j FROM spells_json)
-  ) INTO result
-  FROM (SELECT 1) _;
+  )
+  FROM (SELECT 1) _
     $query$,
     match_cond,
     total_participants,
@@ -319,7 +319,7 @@ BEGIN
     total_participants,
     total_participants,
     total_participants
-  );
+  ) INTO result;
 
   RETURN result;
 END;
