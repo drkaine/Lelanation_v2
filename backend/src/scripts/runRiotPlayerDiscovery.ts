@@ -144,14 +144,10 @@ async function runDiscovery(riotApi: ReturnType<typeof import('../services/RiotA
       for (const p of info.participants) {
         const puuid = typeof p.puuid === 'string' ? p.puuid.trim() : ''
         if (!puuid) continue
-        const summonerId =
-          typeof (p as { summonerId?: string }).summonerId === 'string'
-            ? (p as { summonerId: string }).summonerId
-            : null
         await prisma.player.upsert({
           where: { puuid },
-          create: { puuid, summonerId, region, lastSeen: null },
-          update: { summonerId: summonerId ?? undefined },
+          create: { puuid, region, lastSeen: null },
+          update: {},
         })
         totalPlayersUpserted++
         playersThisSeed++

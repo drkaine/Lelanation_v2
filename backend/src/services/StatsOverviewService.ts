@@ -244,6 +244,46 @@ export interface ObjectiveWithDistribution {
 
 type OverviewTeamsRow = Array<{ get_stats_overview_teams: OverviewTeamsStats | null }>
 
+/** Duration vs winrate by 5-min buckets (uses version and rank_tier filters). */
+export interface OverviewDurationWinrateStats {
+  buckets: Array<{
+    durationMin: number
+    matchCount: number
+    wins: number
+    winrate: number
+  }>
+}
+
+type OverviewDurationWinrateRow = Array<{ get_stats_overview_duration_winrate: OverviewDurationWinrateStats | null }>
+
+export async function getOverviewDurationWinrateStats(
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewDurationWinrateStats | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const pVersion = version != null && version !== '' ? version : null
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows =
+      await prisma.$queryRaw<OverviewDurationWinrateRow>`SELECT get_stats_overview_duration_winrate(${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
+    const raw = rows[0]?.get_stats_overview_duration_winrate
+    if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
+      return { buckets: [] }
+    }
+    return {
+      buckets: raw.buckets.map((b: { durationMin: number; matchCount: number; wins: number; winrate: number }) => ({
+        durationMin: Number(b.durationMin),
+        matchCount: Number(b.matchCount),
+        wins: Number(b.wins),
+        winrate: Number(b.winrate),
+      })),
+    }
+  } catch (err) {
+    console.error('[getOverviewDurationWinrateStats]', err)
+    return null
+  }
+}
+
 export async function getOverviewTeamsStats(
   version?: string | null,
   rankTier?: string | null

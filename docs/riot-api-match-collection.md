@@ -131,31 +131,30 @@ Si **League-V4** renvoie **403 Forbidden** alors que Summoner-V4 ou Match-V5 fon
 Une seule table **players** (puuid, summoner_id, summoner_name, region, last_seen, created_at, updated_at) sert de source pour le crawl : admin y ajoute des seeds (avec infos complètes), les joueurs rencontrés dans les matchs y sont upsertés, et le cron utilise `last_seen` pour prioriser qui crawler.
 
 ```
-Admin : ajout seed → players (puuid, summoner_id, summoner_name, region, last_seen = null)
+Phase 0 : players avec summoner_name manquant → enrichissement (Account-v1 by-puuid)
    ↓
-League-v4 : Challenger / GM / Master → Summoner-v4 → upsert players (sans doublon)
+Phase 1 : SELECT players (region=EUW1) ORDER BY last_seen ASC NULLS FIRST LIMIT N
    ↓
-Crawl : SELECT players ORDER BY last_seen ASC NULLS FIRST LIMIT N
+Match-v5 : match IDs by PUUID (queue 420, versions.json). Si déjà pollé: [last_seen,now]; sinon patch windows
    ↓
-Match-v5 : match IDs by PUUID (queue 420) → match details
+UPDATE last_seen après récupération IDs. Déduplication vs DB → getMatch par match non présent
    ↓
-Pour chaque match inséré : extraction des 10 participants → upsert players (puuid, region, summoner_id, last_seen = null)
+Filtre version → upsert match + participants → players. Erreur : skip (log, Discord)
    ↓
 Après crawl d’un joueur : UPDATE players SET last_seen = now()
    ↓
-Refresh + enrichment (stats, summoner_name, rank)
+Région : EUW1 uniquement.
 ```
 
 ### Étapes implémentées
 
-1. **Seed Admin** : Admin > Joueurs seed. Résolution Riot ID (Account-v1) → puuid ; Summoner-v4 by-puuid → summoner_id, summoner_name. Création dans **players** (puuid, summoner_id, summoner_name, region, last_seen = null). Pas de doublon (unicité sur puuid).
-2. **Seed League** : Challenger (4), Grandmaster (3), Master (3) par plateforme (EUW, EUNE). Summoner-v4 → upsert dans **players** (last_seen = null).
-3. **Crawl** : lecture de **players** ordonnée par `last_seen ASC NULLS FIRST`, limite `MAX_PUUIDS_PER_RUN`. Les joueurs jamais crawlé (last_seen null) passent en premier.
-4. **Match IDs** : par joueur crawlé, queue 420, fenêtre de dates (premier run = récents ; runs suivants = depuis lastSuccessAt, plancher = date de sortie de la plus ancienne version dans `data/game/versions.json`).
-5. **Match details** : si déjà en base on skip. Sinon **filtre par version** : seuls les matchs dont `gameVersion` est dans les versions autorisées (`data/game/versions.json` + `version.json` currentVersion) sont insérés ; les autres (ex. 15.22.724.5161) sont ignorés. Puis `upsertMatchFromRiot` (pas de doublon).
-6. **Participants → players** : pour chaque participant du match, upsert dans **players** (puuid, region, summoner_id si dispo, last_seen = null en création). Tous les joueurs rencontrés sont ainsi ajoutés pour un crawl futur, sans doublon.
-7. **last_seen** : après avoir crawlé un joueur (récupéré ses matchs), mise à jour `players.last_seen = now()` pour ce puuid.
-8. **Refresh** : agrégation joueurs (totalGames, totalWins) depuis **participants**. Les stats par champion sont calculées à la volée depuis **participants**.
+1. **Phase 0** : Si des players ont `summoner_name` vide, on les enrichit d'abord (Account-v1 by-puuid → Riot ID). Un batch par cycle.
+2. **Crawl** : lecture de **players** (region=EUW1) ordonnée par `last_seen ASC NULLS FIRST`, limite `MAX_PUUIDS_PER_RUN`.
+3. **Match IDs** : queue 420. Fenêtre : si `last_seen` déjà set → [last_seen, now] ; sinon fenêtres par patch (`versions.json`).
+4. **last_seen** : mis à jour immédiatement après récupération des match IDs.
+5. **Match details** : déduplication vs DB (hasMatch). Filtre par version puis `upsertMatchFromRiot`. Erreur match/player → skip (log + Discord).
+6. **Participants → players** : upsert dans **players** pour chaque participant (puuid, region, summoner_id, last_seen = null en création).
+7. **Refresh** : agrégation joueurs (totalGames, totalWins) depuis **participants**.
 9. **Récupération des données manquantes** (à chaque passage du cron) :
    - **Nouveaux participants** : dès qu’un match est inséré, les rangs des participants de ce match sont récupérés immédiatement via League-v4 (`backfillRanksForNewMatch`), un appel API par PUUID distinct du match.
    - **Participants sans rank (reste / legacy)** : backfill en batch via `backfillParticipantRanks` (jusqu’à `RIOT_BACKFILL_RANKS_MAX_BATCHES` × `RIOT_BACKFILL_RANKS_PER_RUN` PUUIDs par cycle) pour rattraper les anciens participants ou les cas où l’appel immédiat a échoué.
@@ -197,7 +196,7 @@ Si des matchs ont été insérés avec une `game_version` qui n’est pas dans l
 | Match IDs par appel | Max 100, pagination (start/count) |
 | Rate limits | Stricts (ex. 20 req/s par méthode, 100 req/2 min par app) |
 | Queue | On ne collecte que la queue 420 (Ranked Solo/Duo) |
-| Région | EUW (euw1) + EUNE (eun1), endpoint régional `europe` pour Match-v5 |
+| Région | EUW1 uniquement pour le moment, endpoint régional `europe` pour Match-v5 |
 | Couverture | Impossible d’avoir 100 % des matchs ; crawler lentement et localement |
 
 ### Bonnes pratiques
@@ -240,6 +239,12 @@ La liste des patches pour lesquels on collecte les matchs est définie dans **`b
 | `RIOT_MATCH_RATE_LIMIT_PAUSE_MS` | Pause quand 429 Rate Limit (ms) | `300000` (5 min) |
 | `RIOT_MATCH_5XX_PAUSE_MS` | Pause quand beaucoup d'erreurs 5xx (ms, défaut = RATE_LIMIT_PAUSE_MS) | `300000` |
 | `RIOT_MATCH_5XX_PAUSE_THRESHOLD` | Seuil d'erreurs 5xx avant pause (riotMatchCollect) | `50` |
+| `RIOT_MATCH_BACKOFF_BASE_MS` | Base pour pause exponentielle (401/403, 5xx) : pause = BASE × 2^attempt (ms) | `60000` |
+| `RIOT_MATCH_FAST_BACKLOG_THRESHOLD` | Seuil de joueurs non pollés pour activer le mode rapide | `20000` |
+| `RIOT_MATCH_FAST_PUUIDS` | Joueurs par run en mode rapide | `100` |
+| `RIOT_MATCH_FAST_CYCLE_DELAY_MS` | Délai entre cycles en mode rapide (worker) | `30000` (30 s) |
+| `RIOT_5XX_MAX_RETRIES` | Nombre de retries sur 5xx (0–5). Mettre à 0 si l’API Riot renvoie 500 en masse. | `5` |
+| `RIOT_MATCH_5XX_SKIP_AFTER` | Après N erreurs 5xx consécutives par joueur, passer au joueur suivant (évite de bloquer). | `5` |
 | `RIOT_MATCH_ENRICH_PASSES` | Nombre de passes d'enrichissement (summoner_name) après chaque cycle du worker | `3` |
 | `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |
 | `RIOT_MATCH_CRAWL_RETRIES` | Nombre de tentatives du crawl en cas d’erreur transitoire (worker) | `3` |
@@ -253,7 +258,8 @@ Si le poller signale « aucun nouveau match » en boucle alors que vous avez des
 
 - **Cause** : En cas d’erreurs API (429, 5xx, etc.), `last_seen` n’était pas mis à jour pour ces joueurs. Les mêmes 50 joueurs étaient retentés à chaque cycle.
 - **Correction** : `last_seen` est désormais toujours mis à jour après traitement d’un joueur, même en cas d’erreur. Le poller progresse dans la file ; les joueurs en erreur seront recrawlés plus tard.
-- **Erreurs nombreuses (ex. 130/cycle)** : Souvent liées aux rate limits Riot (100 req/2 min). Réduire `RIOT_MATCH_MAX_PUUIDS_PER_RUN=20` pour limiter les appels API et les erreurs.
+- **Erreurs nombreuses (ex. 130/cycle)** : Souvent liées aux rate limits Riot (100 req/2 min) ou aux erreurs 500/503 de l’API Riot. Vérifier [Riot Status](https://status.riotgames.com/). En cas de backlog élevé (> 20k joueurs non pollés), le **mode rapide** s’active automatiquement : 1 fenêtre de patch, pas de fetch des rangs (backfill plus tard), 100 joueurs/run, délai 30 s entre cycles.
+- **Mode rapide** : Quand `players where last_seen IS NULL` ≥ `RIOT_MATCH_FAST_BACKLOG_THRESHOLD` (défaut 20k), on réduit les appels API (1 fenêtre, skip rank) pour vider la file plus vite. Les rangs sont rattrapés par le backfill.
 
 ### Worker continu (recommandé) vs cron
 

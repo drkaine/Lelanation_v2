@@ -1,6 +1,8 @@
 /**
  * Top players and champion stats: computed on the fly from participants (no pre-aggregated table).
+ * total_games/total_wins from view players_with_stats.
  */
+import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 
@@ -42,23 +44,44 @@ export async function getTopPlayers(options: {
   if (!isDatabaseConfigured()) return []
   const { rankTier, minGames = 50, limit = 100 } = options
   try {
-    const where: { totalGames: { gte: number }; puuid?: { in: string[] } } = { totalGames: { gte: minGames } }
     if (rankTier != null && rankTier !== '') {
       const puuids = await prisma.participant.findMany({
         where: { rankTier },
         select: { puuid: true },
         distinct: ['puuid'],
       })
-      where.puuid = { in: puuids.map((r) => r.puuid) }
+      const puuidList = puuids.map((r) => r.puuid)
+      if (puuidList.length === 0) return []
+      const rows = await prisma.$queryRaw<
+        Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
+      >(Prisma.sql`
+        SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
+        FROM players_with_stats
+        WHERE total_games >= ${minGames} AND puuid = ANY(${puuidList})
+        ORDER BY total_wins DESC
+        LIMIT ${limit}
+      `)
+      return rows.map((p) => ({
+        puuid: p.puuid,
+        maskedPuid: maskPuuid(p.puuid),
+        summonerName: p.summonerName,
+        region: p.region,
+        rankTier: null,
+        totalGames: p.totalGames,
+        totalWins: p.totalWins,
+        winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
+      }))
     }
-
-    const players = await prisma.player.findMany({
-      where,
-      orderBy: [{ totalWins: 'desc' }],
-      take: limit,
-    })
-
-    return players.map((p) => ({
+    const rows = await prisma.$queryRaw<
+      Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
+    >(Prisma.sql`
+      SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
+      FROM players_with_stats
+      WHERE total_games >= ${minGames}
+      ORDER BY total_wins DESC
+      LIMIT ${limit}
+    `)
+    return rows.map((p) => ({
       puuid: p.puuid,
       maskedPuid: maskPuuid(p.puuid),
       summonerName: p.summonerName,
@@ -84,25 +107,27 @@ export interface PlayerChampionStatRow {
 export async function getPlayerBySummonerName(summonerName: string): Promise<PlayerRow | null> {
   if (!isDatabaseConfigured() || !summonerName?.trim()) return null
   const name = summonerName.trim()
+  const pattern = `%${name}%`
   try {
-    const player = await prisma.player.findFirst({
-      where: {
-        summonerName: { contains: name, mode: 'insensitive' },
-      },
-    })
-    if (!player) return null
+    const rows = await prisma.$queryRaw<
+      Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
+    >(Prisma.sql`
+      SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
+      FROM players_with_stats
+      WHERE summoner_name ILIKE ${pattern}
+      LIMIT 1
+    `)
+    const p = rows[0]
+    if (!p) return null
     return {
-      puuid: player.puuid,
-      maskedPuid: maskPuuid(player.puuid),
-      summonerName: player.summonerName,
-      region: player.region,
+      puuid: p.puuid,
+      maskedPuid: maskPuuid(p.puuid),
+      summonerName: p.summonerName,
+      region: p.region,
       rankTier: null,
-      totalGames: player.totalGames,
-      totalWins: player.totalWins,
-      winrate:
-        player.totalGames > 0
-          ? Math.round((player.totalWins / player.totalGames) * 10000) / 100
-          : 0,
+      totalGames: p.totalGames,
+      totalWins: p.totalWins,
+      winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
     }
   } catch {
     return null

@@ -21,6 +21,7 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { enrichPlayers, countPlayersMissingSummonerName } from '../services/StatsPlayersRefreshService.js'
+import { prisma } from '../db.js'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { DiscordService } from '../services/DiscordService.js'
 
@@ -28,9 +29,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
 const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '60000', 10) || 60000)
+/** In fast mode (high backlog): shorter delay between cycles. Default 30s. */
+const FAST_CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_FAST_CYCLE_DELAY_MS ?? '30000', 10) || 30000)
+const FAST_BACKLOG_THRESHOLD = Math.max(5000, parseInt(process.env.RIOT_MATCH_FAST_BACKLOG_THRESHOLD ?? '20000', 10) || 20000)
 const RATE_LIMIT_PAUSE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_RATE_LIMIT_PAUSE_MS ?? '300000', 10) || 300000)
-/** Pause when Riot returns many 5xx (default same as rate limit). Set RIOT_MATCH_5XX_PAUSE_MS to override. */
-const SERVER_ERROR_5XX_PAUSE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_5XX_PAUSE_MS ?? String(RATE_LIMIT_PAUSE_MS), 10) || RATE_LIMIT_PAUSE_MS)
+/** Base pause for exponential backoff on auth/5xx (ms). Pause = BASE * 2^attempt. */
+const EXPONENTIAL_BACKOFF_BASE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_BACKOFF_BASE_MS ?? '60000', 10) || 60000)
 const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '1', 10) || 1)
 const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '50', 10) || 50)
 const CRAWL_RETRIES = Math.max(1, parseInt(process.env.RIOT_MATCH_CRAWL_RETRIES ?? '3', 10) || 3)
@@ -64,31 +68,52 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Run crawl with retries: auth error → retry with Admin key once; other errors → backoff and retry up to CRAWL_RETRIES. */
+/** Run crawl with retries. Auth error → exponential backoff + retry Admin key; 5xx → exponential backoff. */
 async function runCrawlWithRetry(
-  riotApi: ReturnType<typeof getRiotApiService>
-): Promise<{ collected: number; errors: number; rateLimitHit?: boolean; serverError5xx?: boolean }> {
+  riotApi: ReturnType<typeof getRiotApiService>,
+  discordService: DiscordService
+): Promise<{
+  collected: number
+  errors: number
+  rateLimitHit?: boolean
+  serverError5xx?: boolean
+  authError?: boolean
+}> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= CRAWL_RETRIES; attempt++) {
     try {
       const result = await runRiotMatchCollectOnce()
+      if (result.authError) {
+        const backoff = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
+        console.warn(`${LOG} Clé API rejetée (401/403), pause ${backoff / 1000}s (attempt ${attempt}/${CRAWL_RETRIES})…`)
+        await discordService.sendAlert(
+          '⏸️ Poller Riot – Clé API rejetée (401/403)',
+          `Riot a renvoyé 401/403. Pause exponentielle de ${backoff / 1000}s (attempt ${attempt}/${CRAWL_RETRIES}) avant retry.`,
+          undefined,
+          { attempt, backoffSeconds: backoff / 1000, timestamp: new Date().toISOString() }
+        )
+        await sleep(backoff)
+        riotApi.invalidateKeyCache()
+        riotApi.setKeyPreference(attempt > 1)
+        if (attempt >= CRAWL_RETRIES) {
+          throw new Error('Riot API key invalid or expired after retries')
+        }
+        continue
+      }
       return result
     } catch (err) {
       lastErr = err
       if (isRiotAuthError(err)) {
-        console.warn(`${LOG} Key rejected (401/403), retrying with Admin key…`)
+        const backoff = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
+        console.warn(`${LOG} Key rejected (401/403), retrying with Admin key after ${backoff / 1000}s…`)
+        await sleep(backoff)
         riotApi.invalidateKeyCache()
         riotApi.setKeyPreference(true)
-        try {
-          const result = await runRiotMatchCollectOnce()
-          return result
-        } catch (retryErr) {
-          if (isRiotAuthError(retryErr)) {
-            console.error(`${LOG} Riot API key invalid or expired. Set RIOT_API_KEY or Admin key.`)
-            throw retryErr
-          }
-          lastErr = retryErr
+        if (attempt < CRAWL_RETRIES) {
+          continue
         }
+        console.error(`${LOG} Riot API key invalid or expired. Set RIOT_API_KEY or Admin key.`)
+        throw err
       }
       if (attempt < CRAWL_RETRIES) {
         const backoff = CRAWL_BACKOFF_MS * Math.pow(2, attempt - 1)
@@ -122,6 +147,7 @@ async function main(): Promise<void> {
 
   let cycle = 0
   let consecutiveZeroCycles = 0
+  let consecutive5xxCycles = 0
   while (running) {
     try {
       await fs.access(STOP_REQUEST_FILE)
@@ -136,7 +162,7 @@ async function main(): Promise<void> {
     cycle++
     const cycleStart = Date.now()
     try {
-      const { collected, errors, rateLimitHit, serverError5xx } = await runCrawlWithRetry(riotApi)
+      const { collected, errors, rateLimitHit, serverError5xx } = await runCrawlWithRetry(riotApi, discordService)
       if (rateLimitHit) {
         console.warn(`${LOG} Rate limit (429) détecté, pause ${RATE_LIMIT_PAUSE_MS / 1000}s avant prochain cycle`)
         await discordService.sendAlert(
@@ -150,17 +176,20 @@ async function main(): Promise<void> {
         continue
       }
       if (serverError5xx) {
-        console.warn(`${LOG} Many 5xx errors from Riot, pause ${SERVER_ERROR_5XX_PAUSE_MS / 1000}s before next cycle`)
+        consecutive5xxCycles++
+        const pauseMs = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, Math.min(consecutive5xxCycles - 1, 5))
+        console.warn(`${LOG} Many 5xx errors from Riot, pause ${pauseMs / 1000}s (attempt ${consecutive5xxCycles}) before next cycle`)
         await discordService.sendAlert(
           '⏸️ Poller Riot – Erreurs serveur (5xx)',
-          `Riot renvoie beaucoup d'erreurs 500/503. Pause de ${SERVER_ERROR_5XX_PAUSE_MS / 1000}s avant le prochain cycle.`,
+          `Riot renvoie beaucoup d'erreurs 500/503. Pause de ${pauseMs / 1000}s (attempt ${consecutive5xxCycles}) avant le prochain cycle.`,
           undefined,
-          { cycle, errors, pauseSeconds: SERVER_ERROR_5XX_PAUSE_MS / 1000, timestamp: new Date().toISOString() }
+          { cycle, errors, pauseSeconds: pauseMs / 1000, attempt: consecutive5xxCycles, timestamp: new Date().toISOString() }
         )
-        await sleep(SERVER_ERROR_5XX_PAUSE_MS)
+        await sleep(pauseMs)
         consecutiveZeroCycles = 0
         continue
       }
+      consecutive5xxCycles = 0
       if (collected === 0) {
         consecutiveZeroCycles++
         // Notify only after 2+ consecutive cycles with no new matches to avoid spam
@@ -213,10 +242,12 @@ async function main(): Promise<void> {
 
     if (!running) break
 
+    const unpoledCount = await prisma.player.count({ where: { lastSeen: null } }).catch(() => 0)
+    const cycleDelayMs = unpoledCount >= FAST_BACKLOG_THRESHOLD ? FAST_CYCLE_DELAY_MS : CYCLE_DELAY_MS
     const elapsed = Math.round((Date.now() - cycleStart) / 1000)
-    console.log(`${LOG} Cycle ${cycle} done in ${elapsed}s, sleeping ${CYCLE_DELAY_MS / 1000}s…`)
+    console.log(`${LOG} Cycle ${cycle} done in ${elapsed}s, sleeping ${cycleDelayMs / 1000}s…`)
     await writeHeartbeat()
-    await sleep(CYCLE_DELAY_MS)
+    await sleep(cycleDelayMs)
   }
 
   console.log(`${LOG} Stopped after ${cycle} cycle(s).`)

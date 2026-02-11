@@ -36,54 +36,15 @@ export function scoreToRankLabel(score: number): string {
   return `${tier}_${div}`
 }
 
+/**
+ * @deprecated total_games/total_wins are now computed via view players_with_stats.
+ * Kept for backward compatibility; returns no-op.
+ */
 export async function refreshPlayersAndChampionStats(): Promise<{
   playersUpserted: number
   championStatsUpserted: number
 }> {
-  if (!isDatabaseConfigured()) return { playersUpserted: 0, championStatsUpserted: 0 }
-  const participants = await prisma.participant.findMany({
-    select: { puuid: true, win: true, matchId: true },
-  })
-  const matchIds = [...new Set(participants.map((p) => p.matchId))]
-  const matches = await prisma.match.findMany({
-    where: { id: { in: matchIds } },
-    select: { id: true, region: true },
-  })
-  const matchRegion = new Map<string, string>()
-  for (const m of matches) matchRegion.set(String(m.id), m.region)
-
-  const byPuuid = new Map<string, { region: string; totalGames: number; totalWins: number }>()
-  for (const p of participants) {
-    const region = matchRegion.get(String(p.matchId)) ?? 'euw1'
-    let entry = byPuuid.get(p.puuid)
-    if (!entry) {
-      entry = { region, totalGames: 0, totalWins: 0 }
-      byPuuid.set(p.puuid, entry)
-    }
-    entry.totalGames++
-    if (p.win) entry.totalWins++
-  }
-
-  let playersUpserted = 0
-  for (const [puuid, e] of byPuuid) {
-    await prisma.player.upsert({
-      where: { puuid },
-      create: {
-        puuid,
-        region: e.region,
-        totalGames: e.totalGames,
-        totalWins: e.totalWins,
-        lastSeen: new Date(),
-      },
-      update: {
-        totalGames: e.totalGames,
-        totalWins: e.totalWins,
-        lastSeen: new Date(),
-      },
-    })
-    playersUpserted++
-  }
-  return { playersUpserted, championStatsUpserted: 0 }
+  return { playersUpserted: 0, championStatsUpserted: 0 }
 }
 
 /** Continent for Account-V1 (euw1, eun1 → europe). */

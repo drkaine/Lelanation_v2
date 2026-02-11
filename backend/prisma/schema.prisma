@@ -138,15 +138,11 @@ model Participant {
 }
 
 model Player {
-  puuid              String    @id
-  summonerId         String?   @map("summoner_id")
-  summonerName       String?   @map("summoner_name")
-  region             String
-  totalGames         Int       @default(0) @map("total_games")
-  totalWins          Int       @default(0) @map("total_wins")
-  lastSeen           DateTime? @map("last_seen")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  puuid        String    @id
+  summonerName String?   @map("summoner_name")
+  region       String
+  lastSeen     DateTime? @map("last_seen")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   @@index([region])
   @@index([lastSeen])

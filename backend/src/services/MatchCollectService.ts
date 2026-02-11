@@ -322,7 +322,7 @@ function formatRiotId(gameName?: string, tagline?: string): string | null {
 
 /**
  * Upsert Player: créer si absent, remplir summoner_name depuis riotIdGameName#riotIdTagline quand nouveau ou vide.
- * totalGames/totalWins restent gérés par refreshPlayersAndChampionStats (agrégation sur tous les participants).
+ * total_games/total_wins : via vue players_with_stats (agrégation depuis participants).
  */
 async function upsertPlayersSummonerNameFromParticipants(
   region: string,
@@ -351,8 +351,6 @@ async function upsertPlayersSummonerNameFromParticipants(
         puuid: p.puuid,
         region,
         summonerName: summonerName ?? undefined,
-        totalGames: 0,
-        totalWins: 0,
         lastSeen: new Date(),
       },
       update: {

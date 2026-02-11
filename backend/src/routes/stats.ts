@@ -12,11 +12,11 @@ import {
   getPlayerBySummonerName,
   getChampionStatsForPlayer,
 } from '../services/StatsPlayersService.js'
-import { refreshPlayersAndChampionStats } from '../services/StatsPlayersRefreshService.js'
 import {
   getOverviewStats,
   getOverviewDetailStats,
   getOverviewTeamsStats,
+  getOverviewDurationWinrateStats,
 } from '../services/StatsOverviewService.js'
 
 const router = Router()
@@ -57,6 +57,17 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
       itemsByOrder: {},
       summonerSpells: [],
     })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-duration-winrate - duration (5-min buckets) vs winrate. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/overview-duration-winrate', async (req: Request, res: Response) => {
+  const version = (req.query.version as string) || undefined
+  const rankTier = (req.query.rankTier as string) || undefined
+  const data = await getOverviewDurationWinrateStats(version ?? null, rankTier ?? null)
+  if (!data) {
+    return res.status(200).json({ buckets: [] })
   }
   return res.json(data)
 })
@@ -249,14 +260,12 @@ router.post('/aggregate', async (_req: Request, res: Response) => {
   }
 })
 
-/** POST /api/stats/refresh-players - rafraîchir players (totalGames, totalWins) depuis participants */
+/** POST /api/stats/refresh-players - no-op: total_games/total_wins via view players_with_stats */
 router.post('/refresh-players', async (_req: Request, res: Response) => {
   try {
-    const result = await refreshPlayersAndChampionStats()
     return res.json({
       ok: true,
-      playersUpserted: result.playersUpserted,
-      championStatsUpserted: result.championStatsUpserted,
+      message: 'Stats computed from view players_with_stats, no refresh needed',
     })
   } catch (err) {
     return res.status(500).json({

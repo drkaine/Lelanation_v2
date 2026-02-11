@@ -617,6 +617,146 @@
             {{ t('statisticsPage.overviewTeamsNoData') }}
           </div>
         </div>
+
+        <!-- Durée de partie vs winrate (courbe, filtre version/division) -->
+        <div
+          v-if="overviewDurationWinrateData?.buckets?.length"
+          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+        >
+          <h3 class="mb-3 text-lg font-semibold text-text">
+            {{ t('statisticsPage.overviewDurationWinrateTitle') }}
+          </h3>
+          <p class="mb-4 text-sm text-text/60">
+            {{ t('statisticsPage.overviewDurationWinrateDescription') }}
+          </p>
+          <div class="relative min-h-[380px] w-full">
+            <svg
+              viewBox="0 0 440 340"
+              class="h-full min-h-[360px] w-full"
+              preserveAspectRatio="xMidYMid meet"
+              @mouseleave="durationWinrateTooltip = null"
+            >
+              <defs>
+                <linearGradient id="durationWinrateGradient" x1="0" y1="1" x2="0" y2="0">
+                  <stop offset="0" stop-color="var(--color-accent)" stop-opacity="0.3" />
+                  <stop offset="1" stop-color="var(--color-accent)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <g transform="translate(50, 30)">
+                <!-- Axes (style League of Graphs: abscisse durée, ordonnée winrate, 0 en bas à droite) -->
+                <g class="text-text/70">
+                  <!-- Axe X (durée) en bas -->
+                  <line
+                    x1="0"
+                    y1="230"
+                    x2="280"
+                    y2="230"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    stroke-opacity="0.5"
+                  />
+                  <template v-for="tick in durationWinrateAxisX.ticks" :key="'x-' + tick.value">
+                    <line
+                      :x1="tick.x"
+                      :y1="230"
+                      :x2="tick.x"
+                      :y2="234"
+                      stroke="currentColor"
+                      stroke-width="1"
+                      stroke-opacity="0.5"
+                    />
+                    <text :x="tick.x" y="246" text-anchor="middle" class="fill-current text-[10px]">
+                      {{ tick.value }}
+                    </text>
+                  </template>
+                  <!-- Axe Y (winrate) à droite, 0 en bas -->
+                  <line
+                    x1="280"
+                    y1="20"
+                    x2="280"
+                    y2="230"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    stroke-opacity="0.5"
+                  />
+                  <template v-for="tick in durationWinrateAxisY.ticks" :key="'y-' + tick.value">
+                    <line
+                      x1="276"
+                      :y1="tick.y"
+                      x2="280"
+                      :y2="tick.y"
+                      stroke="currentColor"
+                      stroke-width="1"
+                      stroke-opacity="0.5"
+                    />
+                    <text
+                      x="288"
+                      :y="tick.y"
+                      text-anchor="start"
+                      dominant-baseline="middle"
+                      class="fill-current text-[10px]"
+                    >
+                      {{ tick.value }}%
+                    </text>
+                  </template>
+                </g>
+                <polygon
+                  v-if="durationWinrateChartPoints"
+                  :points="durationWinrateChartPoints"
+                  fill="url(#durationWinrateGradient)"
+                />
+                <polyline
+                  v-if="durationWinrateChartLinePoints"
+                  :points="durationWinrateChartLinePoints"
+                  fill="none"
+                  stroke="var(--color-accent)"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <circle
+                  v-for="(pt, i) in durationWinrateChartPointsList"
+                  :key="i"
+                  :cx="pt.x"
+                  :cy="pt.y"
+                  :r="durationWinrateTooltip?.index === i ? 8 : 6"
+                  fill="var(--color-accent)"
+                  class="cursor-pointer transition-all"
+                  @mouseenter="durationWinrateTooltip = { ...pt, index: i }"
+                  @mouseleave="durationWinrateTooltip = null"
+                >
+                  <title>{{ pt.label }}</title>
+                </circle>
+              </g>
+            </svg>
+            <Transition name="fade">
+              <div
+                v-if="durationWinrateTooltip"
+                class="absolute right-4 top-4 z-10 min-w-[140px] rounded-lg border border-primary/30 bg-surface/95 px-3 py-2 text-sm text-text shadow-lg backdrop-blur-sm"
+              >
+                <div class="font-medium">
+                  {{ durationWinrateTooltip.durationLabel }}
+                </div>
+                <div class="mt-1 text-text/80">
+                  {{ t('statisticsPage.overviewDurationWinrateTooltipWinrate') }}:
+                  {{ durationWinrateTooltip.winrate }}%
+                </div>
+                <div class="text-text/70">
+                  {{ t('statisticsPage.overviewDurationWinrateTooltipMatches') }}:
+                  {{ durationWinrateTooltip.matchCount }}
+                </div>
+              </div>
+            </Transition>
+            <div class="absolute bottom-0 left-14 right-4 text-center text-sm text-text/60">
+              {{ t('statisticsPage.overviewDurationWinrateAxisX') }}
+            </div>
+            <div
+              class="absolute right-4 top-1/2 w-6 -translate-y-1/2 -rotate-90 text-center text-sm text-text/60"
+            >
+              {{ t('statisticsPage.overviewDurationWinrateAxisY') }}
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Tab: Champions -->
@@ -920,9 +1060,11 @@ async function loadOverview() {
     const data = await $fetch(url)
     overviewData.value = data as typeof overviewData.value
     if (import.meta.dev && data && typeof data === 'object' && 'totalMatches' in data) {
+      // eslint-disable-next-line no-console
       console.log('[stats/overview]', (data as { totalMatches: number }).totalMatches, 'matches')
     }
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('[stats/overview] fetch failed', url, err)
     overviewData.value = null
     overviewError.value =
@@ -934,7 +1076,112 @@ async function loadOverview() {
   }
   loadOverviewDetail()
   loadOverviewTeams()
+  loadOverviewDurationWinrate()
 }
+/** Duration vs winrate (5-min buckets, uses version + rank filters). */
+const overviewDurationWinrateData = ref<{
+  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
+} | null>(null)
+async function loadOverviewDurationWinrate() {
+  try {
+    overviewDurationWinrateData.value = await $fetch(
+      apiUrl('/api/stats/overview-duration-winrate' + overviewQueryParams())
+    )
+  } catch {
+    overviewDurationWinrateData.value = null
+  }
+}
+const CHART_W = 320
+const CHART_H = 260
+const CHART_PAD = { left: 0, right: 40, top: 20, bottom: 30 }
+const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
+const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
+const durationWinrateTooltip = ref<{
+  durationLabel: string
+  winrate: number
+  matchCount: number
+  index: number
+} | null>(null)
+/** Points for line chart: X=duration (abscisse), Y=winrate (ordonnée). Style League of Graphs, 0 en bas à droite. */
+function durationWinrateChartScaled(
+  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
+) {
+  const empty = {
+    pts: [] as string[],
+    linePts: '',
+    closedPts: '',
+    list: [] as {
+      x: number
+      y: number
+      label: string
+      durationLabel: string
+      winrate: number
+      matchCount: number
+    }[],
+    axisX: { ticks: [] as { value: number; x: number }[] },
+    axisY: { ticks: [] as { value: number; y: number }[] },
+    minDur: 0,
+    maxDur: 0,
+    minWr: 0,
+    maxWr: 100,
+  }
+  if (!buckets.length) return empty
+  const sorted = [...buckets].sort((a, b) => a.durationMin - b.durationMin)
+  const minDur = Math.min(...sorted.map(b => b.durationMin))
+  const maxDur = Math.max(...sorted.map(b => b.durationMin + 5))
+  const durRange = maxDur - minDur || 1
+  const pts = sorted.map(b => {
+    const midDur = b.durationMin + 2.5
+    const x = CHART_PAD.left + ((midDur - minDur) / durRange) * PLOT_W
+    const y = CHART_PAD.top + PLOT_H - (b.winrate / 100) * PLOT_H
+    return {
+      x,
+      y,
+      label: `${b.durationMin}-${b.durationMin + 5} min: ${b.winrate}% WR (${b.matchCount})`,
+      durationLabel: `${b.durationMin}-${b.durationMin + 5} min`,
+      winrate: b.winrate,
+      matchCount: b.matchCount,
+    }
+  })
+  const x0 = CHART_PAD.left
+  const x1 = CHART_PAD.left + PLOT_W
+  const linePts = pts.map(p => `${p.x},${p.y}`).join(' ')
+  const closedPts = `${x0},${CHART_PAD.top + PLOT_H} ${linePts} ${x1},${CHART_PAD.top + PLOT_H}`
+  const axisXTicks: { value: number; x: number }[] = []
+  const step = durRange <= 15 ? 5 : durRange <= 30 ? 10 : 15
+  for (let v = Math.ceil(minDur / step) * step; v <= maxDur; v += step) {
+    axisXTicks.push({
+      value: v,
+      x: CHART_PAD.left + ((v - minDur) / durRange) * PLOT_W,
+    })
+  }
+  const axisYTicks: { value: number; y: number }[] = []
+  for (let v = 0; v <= 100; v += 20) {
+    axisYTicks.push({
+      value: v,
+      y: CHART_PAD.top + PLOT_H - (v / 100) * PLOT_H,
+    })
+  }
+  return {
+    pts,
+    linePts,
+    closedPts,
+    list: pts,
+    axisX: { ticks: axisXTicks },
+    axisY: { ticks: axisYTicks },
+    minDur,
+    maxDur,
+  }
+}
+const durationWinrateChartBuckets = computed(() => overviewDurationWinrateData.value?.buckets ?? [])
+const durationWinrateChartScaledData = computed(() =>
+  durationWinrateChartScaled(durationWinrateChartBuckets.value)
+)
+const durationWinrateChartPoints = computed(() => durationWinrateChartScaledData.value.closedPts)
+const durationWinrateChartLinePoints = computed(() => durationWinrateChartScaledData.value.linePts)
+const durationWinrateChartPointsList = computed(() => durationWinrateChartScaledData.value.list)
+const durationWinrateAxisX = computed(() => durationWinrateChartScaledData.value.axisX)
+const durationWinrateAxisY = computed(() => durationWinrateChartScaledData.value.axisY)
 async function loadOverviewDetail() {
   overviewDetailPending.value = true
   try {
@@ -1249,3 +1496,14 @@ onMounted(async () => {
   await loadChampions()
 })
 </script>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

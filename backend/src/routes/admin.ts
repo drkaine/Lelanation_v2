@@ -15,6 +15,7 @@ import {
   countParticipantsMissingRank,
 } from '../services/StatsPlayersRefreshService.js'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
+import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
@@ -215,14 +216,7 @@ router.get('/players-missing-summoner-name', async (req, res) => {
     const players = await prisma.player.findMany({
       where: { summonerName: null },
       take: limit,
-      select: {
-        puuid: true,
-        summonerId: true,
-        summonerName: true,
-        region: true,
-        totalGames: true,
-        lastSeen: true,
-      },
+      select: { puuid: true, summonerName: true, region: true, lastSeen: true },
       orderBy: { lastSeen: 'desc' },
     })
     const total = await prisma.player.count({ where: { summonerName: null } })
@@ -231,12 +225,9 @@ router.get('/players-missing-summoner-name', async (req, res) => {
       returned: players.length,
       players: players.map((p) => ({
         puuid: p.puuid,
-        summonerId: p.summonerId,
         summonerName: p.summonerName,
         region: p.region,
-        totalGames: p.totalGames,
         lastSeen: p.lastSeen?.toISOString() ?? null,
-        hasSummonerId: !!p.summonerId,
       })),
     })
   } catch (e) {
@@ -474,30 +465,30 @@ router.get('/players', async (req, res) => {
   const offset = Math.max(0, parseInt(String(req.query?.offset || 0), 10) || 0)
   const search = typeof req.query?.search === 'string' ? req.query.search.trim() : ''
 
-  const where = search
-    ? {
-        OR: [
-          { summonerName: { contains: search, mode: 'insensitive' as const } },
-          { puuid: { contains: search, mode: 'insensitive' as const } },
-        ],
-      }
-    : undefined
+  const likePattern = search ? `%${search}%` : ''
+  const whereFragment = search
+    ? Prisma.sql`WHERE (summoner_name ILIKE ${likePattern} OR puuid::text ILIKE ${likePattern})`
+    : Prisma.sql``
 
   const [rows, total] = await Promise.all([
-    prisma.player.findMany({
-      where,
-      orderBy: [{ totalGames: 'desc' }],
-      skip: offset,
-      take: limit,
-      select: {
-        puuid: true,
-        summonerName: true,
-        region: true,
-        totalGames: true,
-        totalWins: true,
-      },
-    }),
-    prisma.player.count({ where }),
+    prisma.$queryRaw<
+      Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
+    >(Prisma.sql`
+      SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
+      FROM players_with_stats
+      ${whereFragment}
+      ORDER BY total_games DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `),
+    search
+      ? prisma
+          .$queryRaw<[{ count: bigint }]>(Prisma.sql`
+            SELECT COUNT(*)::bigint AS count FROM players_with_stats
+            WHERE (summoner_name ILIKE ${likePattern} OR puuid::text ILIKE ${likePattern})
+          `)
+          .then((r) => Number(r[0]?.count ?? 0))
+      : prisma.player.count(),
   ])
 
   const players = rows.map((p) => ({
@@ -566,7 +557,6 @@ router.post('/seed-players', async (req, res) => {
   // Resolve Riot ID via API and get puuid + summoner info
   const riotApi = getRiotApiService()
   let puuid: string
-  let summonerId: string | null = null
   let summonerName: string | null = labelToStore
   try {
     const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
@@ -590,7 +580,6 @@ router.post('/seed-players', async (req, res) => {
     const summonerResult = await riotApi.getSummonerByPuuid(platform === 'eun1' ? 'eun1' : 'euw1', puuid)
     if (summonerResult.isOk()) {
       const s = summonerResult.unwrap()
-      summonerId = s.id || null
       if (s.name) summonerName = s.name
     }
   } catch (err: unknown) {
@@ -614,7 +603,6 @@ router.post('/seed-players', async (req, res) => {
   await prisma.player.create({
     data: {
       puuid,
-      summonerId,
       summonerName,
       region,
       lastSeen: null,

@@ -27,8 +27,8 @@ const RATE_LIMIT_PER_TWO_MIN = 100
 const RATE_LIMIT_TWO_MIN_MS = 2 * 60 * 1000
 /** Max retries on 429 (rate limit). Backoff: Retry-After header or 60s. */
 const RATE_LIMIT_MAX_RETRIES = 3
-/** Max retries on 5xx (server error). Backoff: 5s, 10s, 20s, 40s, 80s. Riot often returns 500/503 during outages. */
-const RETRY_5XX_MAX = 5
+/** Max retries on 5xx (server error). Backoff: 5s, 10s, 20s, 40s, 80s. Riot often returns 500/503 during outages. Reduce via RIOT_5XX_MAX_RETRIES when API is unstable. */
+const RETRY_5XX_MAX = Math.min(5, Math.max(0, parseInt(process.env.RIOT_5XX_MAX_RETRIES ?? '5', 10) || 5))
 const RETRY_5XX_BACKOFF_MS = 5000
 
 let lastRequestTime = 0
