@@ -390,7 +390,7 @@
             >
               {{ seedPlayersMessage }}
             </p>
-            <p v-if="seedPlayersList.length === 0" class="text-text/70">
+            <!-- <p v-if="seedPlayersList.length === 0" class="text-text/70">
               {{ t('admin.seedPlayers.empty') }}
             </p>
             <ul v-else class="space-y-2">
@@ -412,7 +412,7 @@
                   {{ seedPlayerDeleting === p.id ? '…' : t('admin.seedPlayers.delete') }}
                 </button>
               </li>
-            </ul>
+            </ul> -->
 
             <div class="mt-6 border-t border-primary/20 pt-4">
               <h3 class="mb-2 text-sm font-medium text-text">
@@ -836,22 +836,23 @@ function onAllPlayersSearch() {
   loadAllPlayers()
 }
 
-async function loadSeedPlayers() {
+function loadSeedPlayers() {
   seedPlayersLoading.value = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/seed-players'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    seedPlayersList.value = data?.players ?? []
-  } catch {
-    authError.value = t('admin.login.error')
-  } finally {
-    seedPlayersLoading.value = false
-  }
+  // try {
+  //   const res = await fetchWithAuth(apiUrl('/api/admin/seed-players'))
+  //   if (res.status === 401) {
+  //     clearAuth()
+  //     await navigateTo(localePath('/admin/login'))
+  //     return
+  //   }
+  //   const data = await res.json()
+  //   seedPlayersList.value = data?.players ?? []
+  // } catch {
+  //   authError.value = t('admin.login.error')
+  // } finally {
+  //   seedPlayersLoading.value = false
+  // }
+  seedPlayersLoading.value = false
 }
 
 async function addSeedPlayer() {
@@ -896,6 +897,8 @@ async function addSeedPlayer() {
   }
 }
 
+// Used in seed players list (currently commented in template)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function deleteSeedPlayer(id: string) {
   seedPlayerDeleting.value = id
   try {

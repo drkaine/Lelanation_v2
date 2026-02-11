@@ -29,6 +29,8 @@ config({ path: join(__dirname, '..', '..', '.env') })
 
 const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '60000', 10) || 60000)
 const RATE_LIMIT_PAUSE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_RATE_LIMIT_PAUSE_MS ?? '300000', 10) || 300000)
+/** Pause when Riot returns many 5xx (default same as rate limit). Set RIOT_MATCH_5XX_PAUSE_MS to override. */
+const SERVER_ERROR_5XX_PAUSE_MS = Math.max(60_000, parseInt(process.env.RIOT_MATCH_5XX_PAUSE_MS ?? String(RATE_LIMIT_PAUSE_MS), 10) || RATE_LIMIT_PAUSE_MS)
 const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '1', 10) || 1)
 const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '50', 10) || 50)
 const CRAWL_RETRIES = Math.max(1, parseInt(process.env.RIOT_MATCH_CRAWL_RETRIES ?? '3', 10) || 3)
@@ -65,7 +67,7 @@ function sleep(ms: number): Promise<void> {
 /** Run crawl with retries: auth error → retry with Admin key once; other errors → backoff and retry up to CRAWL_RETRIES. */
 async function runCrawlWithRetry(
   riotApi: ReturnType<typeof getRiotApiService>
-): Promise<{ collected: number; errors: number; rateLimitHit?: boolean }> {
+): Promise<{ collected: number; errors: number; rateLimitHit?: boolean; serverError5xx?: boolean }> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= CRAWL_RETRIES; attempt++) {
     try {
@@ -134,7 +136,7 @@ async function main(): Promise<void> {
     cycle++
     const cycleStart = Date.now()
     try {
-      const { collected, errors, rateLimitHit } = await runCrawlWithRetry(riotApi)
+      const { collected, errors, rateLimitHit, serverError5xx } = await runCrawlWithRetry(riotApi)
       if (rateLimitHit) {
         console.warn(`${LOG} Rate limit (429) détecté, pause ${RATE_LIMIT_PAUSE_MS / 1000}s avant prochain cycle`)
         await discordService.sendAlert(
@@ -144,6 +146,18 @@ async function main(): Promise<void> {
           { cycle, pauseSeconds: RATE_LIMIT_PAUSE_MS / 1000, timestamp: new Date().toISOString() }
         )
         await sleep(RATE_LIMIT_PAUSE_MS)
+        consecutiveZeroCycles = 0
+        continue
+      }
+      if (serverError5xx) {
+        console.warn(`${LOG} Many 5xx errors from Riot, pause ${SERVER_ERROR_5XX_PAUSE_MS / 1000}s before next cycle`)
+        await discordService.sendAlert(
+          '⏸️ Poller Riot – Erreurs serveur (5xx)',
+          `Riot renvoie beaucoup d'erreurs 500/503. Pause de ${SERVER_ERROR_5XX_PAUSE_MS / 1000}s avant le prochain cycle.`,
+          undefined,
+          { cycle, errors, pauseSeconds: SERVER_ERROR_5XX_PAUSE_MS / 1000, timestamp: new Date().toISOString() }
+        )
+        await sleep(SERVER_ERROR_5XX_PAUSE_MS)
         consecutiveZeroCycles = 0
         continue
       }

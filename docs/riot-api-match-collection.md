@@ -238,6 +238,8 @@ La liste des patches pour lesquels on collecte les matchs est définie dans **`b
 | `RIOT_MATCH_MAX_PUUIDS_PER_RUN` | Nombre max de joueurs crawlé par run (depuis **players** par last_seen) | `50` |
 | `RIOT_MATCH_CYCLE_DELAY_MS` | Pause entre deux cycles du worker (ms) | `60000` |
 | `RIOT_MATCH_RATE_LIMIT_PAUSE_MS` | Pause quand 429 Rate Limit (ms) | `300000` (5 min) |
+| `RIOT_MATCH_5XX_PAUSE_MS` | Pause quand beaucoup d'erreurs 5xx (ms, défaut = RATE_LIMIT_PAUSE_MS) | `300000` |
+| `RIOT_MATCH_5XX_PAUSE_THRESHOLD` | Seuil d'erreurs 5xx avant pause (riotMatchCollect) | `50` |
 | `RIOT_MATCH_ENRICH_PASSES` | Nombre de passes d'enrichissement (summoner_name) après chaque cycle du worker | `3` |
 | `RIOT_MATCH_ENRICH_PER_PASS` | Joueurs à enrichir par passe (worker) | `150` |
 | `RIOT_MATCH_CRAWL_RETRIES` | Nombre de tentatives du crawl en cas d’erreur transitoire (worker) | `3` |

@@ -27,6 +27,9 @@ const RATE_LIMIT_PER_TWO_MIN = 100
 const RATE_LIMIT_TWO_MIN_MS = 2 * 60 * 1000
 /** Max retries on 429 (rate limit). Backoff: Retry-After header or 60s. */
 const RATE_LIMIT_MAX_RETRIES = 3
+/** Max retries on 5xx (server error). Backoff: 5s, 10s, 20s, 40s, 80s. Riot often returns 500/503 during outages. */
+const RETRY_5XX_MAX = 5
+const RETRY_5XX_BACKOFF_MS = 5000
 
 let lastRequestTime = 0
 const requestTimestamps: number[] = []
@@ -52,17 +55,31 @@ async function rateLimit(): Promise<void> {
 
 async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
   let lastErr: unknown
-  for (let attempt = 0; attempt <= RATE_LIMIT_MAX_RETRIES; attempt++) {
+  const maxAttempts = Math.max(RATE_LIMIT_MAX_RETRIES, RETRY_5XX_MAX) + 1
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     try {
       return await fn()
     } catch (err) {
       lastErr = err
-      if (attempt < RATE_LIMIT_MAX_RETRIES && axios.isAxiosError(err) && err.response?.status === 429) {
-        const retryAfter = err.response.headers['retry-after']
+      if (!axios.isAxiosError(err)) throw err
+      const status = err.response?.status ?? 0
+      // 429: wait Retry-After or 60s
+      if (status === 429 && attempt <= RATE_LIMIT_MAX_RETRIES) {
+        const retryAfter = err.response?.headers?.['retry-after']
         const waitMs =
           typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
             ? parseInt(retryAfter, 10) * 1000
             : 60_000
+        await new Promise((r) => setTimeout(r, waitMs))
+        continue
+      }
+      // 5xx: retry with backoff (transient server errors from Riot). 503 may include Retry-After.
+      if (status >= 500 && status < 600 && attempt <= RETRY_5XX_MAX) {
+        const retryAfter = err.response?.headers?.['retry-after']
+        const waitMs =
+          typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
+            ? parseInt(retryAfter, 10) * 1000
+            : RETRY_5XX_BACKOFF_MS * Math.pow(2, attempt)
         await new Promise((r) => setTimeout(r, waitMs))
         continue
       }

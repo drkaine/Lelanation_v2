@@ -69,10 +69,14 @@ const LOG_PREFIX = '[Riot match collect]'
  * Used by the cron, the worker, and the npm script `riot:collect`.
  * Returns { collected, errors } on success; throws on failure.
  */
+/** When 5xx errors exceed this, pause the poller to avoid hammering Riot during outages. */
+const SERVER_ERROR_5XX_THRESHOLD = Math.max(20, parseInt(process.env.RIOT_MATCH_5XX_PAUSE_THRESHOLD ?? '50', 10) || 50)
+
 export async function runRiotMatchCollectOnce(): Promise<{
   collected: number
   errors: number
   rateLimitHit?: boolean
+  serverError5xx?: boolean
 }> {
   const riotApi = getRiotApiService()
   const cronStatus = new CronStatusService()
@@ -89,7 +93,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
       undefined,
       { startedAt: startTime.toISOString() }
     )
-    return { collected: 0, errors: 0, rateLimitHit: false }
+    return { collected: 0, errors: 0, rateLimitHit: false, serverError5xx: false }
   }
 
   try {
@@ -118,7 +122,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
           err,
           { startedAt: startTime.toISOString() }
       )
-      return { collected: 0, errors: 0, rateLimitHit: false }
+      return { collected: 0, errors: 0, rateLimitHit: false, serverError5xx: false }
     }
 
     const platforms: Platform[] = ['euw1', 'eun1']
@@ -159,6 +163,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
     }
 
     // Vérif: joueurs avec last_seen qui n'ont des matchs que sur la version la plus récente (ex. 16.3) → reset last_seen pour re-crawl avec toutes les fenêtres (16.1, 16.2, 16.3)
+    let resetPuuidsForCrawl: string[] = []
     if (patchWindows.length > 1) {
       const versionPrefixes = await getVersionPrefixesSortedByReleaseDate()
       const oldPrefixes = versionPrefixes.slice(0, -1)
@@ -202,6 +207,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
           })
         }
         if (toReset.length > 0) {
+          resetPuuidsForCrawl = toReset.slice(0, MAX_PUUIDS_PER_RUN).map((r) => r.puuid)
           console.log(
             `${LOG_PREFIX} Reset last_seen for ${toReset.length} player(s) with matches only in newest version (re-crawl with all patch windows)`
           )
@@ -272,14 +278,26 @@ export async function runRiotMatchCollectOnce(): Promise<{
         }
       }
 
-    // 2) Crawl: players with last_seen IS NULL first, then oldest last_seen
-    const playersToCrawl = await prisma.$queryRaw<CrawlRow[]>`
+    // 2) Crawl: when we just reset players, crawl those first (same cycle). Else: last_seen IS NULL first, then oldest last_seen.
+    const playersToCrawl: CrawlRow[] =
+      resetPuuidsForCrawl.length > 0
+        ? await prisma.player
+            .findMany({
+              where: { puuid: { in: resetPuuidsForCrawl } },
+              select: { puuid: true, region: true },
+            })
+            .then((rows) => rows as CrawlRow[])
+        : await prisma.$queryRaw<CrawlRow[]>`
       SELECT puuid, region FROM players
       ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
       LIMIT ${MAX_PUUIDS_PER_RUN}
     `
     let processedCount = 0
     let rateLimitHit = false
+    let skippedAlreadyInDb = 0
+    let skippedVersionFilter = 0
+    const versionFilteredExamples = new Set<string>()
+    const errorStatusCounts = new Map<number, number>()
     const matchIdsPerPlayer = patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
     for (const row of playersToCrawl) {
       const platform = (row.region === 'eun1' ? 'eun1' : 'euw1') as Platform
@@ -295,10 +313,14 @@ export async function runRiotMatchCollectOnce(): Promise<{
           endTime: win.endTime,
         })
         if (matchIdsResult.isErr()) {
-          const err = matchIdsResult.unwrapErr()
+          const err = matchIdsResult.unwrapErr() as AppError & { cause?: unknown }
+          const status =
+            err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
           if (isRateLimitError(err)) {
             rateLimitHit = true
             console.warn(`${LOG_PREFIX} Rate limit (429) on getMatchIds, pausing poller`)
+          } else if (status != null) {
+            errorStatusCounts.set(status, (errorStatusCounts.get(status) ?? 0) + 1)
           }
           errors++
           matchIdsFetchFailed = true
@@ -320,7 +342,10 @@ export async function runRiotMatchCollectOnce(): Promise<{
 
       for (const matchId of matchIds) {
         try {
-          if (await hasMatch(matchId)) continue
+          if (await hasMatch(matchId)) {
+            skippedAlreadyInDb++
+            continue
+          }
           const matchResult = await riotApi.getMatch(matchId)
           if (matchResult.isErr()) {
             const err = matchResult.unwrapErr() as AppError & { cause?: unknown }
@@ -332,12 +357,15 @@ export async function runRiotMatchCollectOnce(): Promise<{
               console.warn(`${LOG_PREFIX} Rate limit (429) on getMatch, pausing poller`)
               break
             }
+            errorStatusCounts.set(status ?? 0, (errorStatusCounts.get(status ?? 0) ?? 0) + 1)
             errors++
             continue
           }
           const matchData = matchResult.unwrap()
           const gameVersion = typeof matchData.info?.gameVersion === 'string' ? matchData.info.gameVersion : ''
           if (allowedVersions.size > 0 && !isAllowedGameVersion(gameVersion, allowedVersions)) {
+            skippedVersionFilter++
+            if (versionFilteredExamples.size < 5) versionFilteredExamples.add(gameVersion || '(empty)')
             continue
           }
           const participants = matchData.info?.participants ?? []
@@ -441,6 +469,20 @@ export async function runRiotMatchCollectOnce(): Promise<{
     console.log(
       `${LOG_PREFIX} Done: ${collected} new matches, ${errors} errors, ${processedCount} PUUIDs processed, ${duration}s`
     )
+    if (collected === 0 && (errors > 0 || skippedAlreadyInDb > 0 || skippedVersionFilter > 0)) {
+      const errSummary =
+        errorStatusCounts.size > 0
+          ? `, errorStatuses=${JSON.stringify(Object.fromEntries(errorStatusCounts))}`
+          : ''
+      console.log(
+        `${LOG_PREFIX} Diagnostic: skippedAlreadyInDb=${skippedAlreadyInDb}, skippedVersionFilter=${skippedVersionFilter}${errSummary}, allowedVersions=[${[...allowedVersions].sort().join(', ')}]`
+      )
+      if (versionFilteredExamples.size > 0) {
+        console.warn(
+          `${LOG_PREFIX} Version-filtered examples (add to versions.json if patch is live): ${[...versionFilteredExamples].join(', ')}`
+        )
+      }
+    }
     await cronStatus.markSuccess('riotMatchCollect')
     // Update heartbeat so admin "Poller" status shows Actif after any successful run (worker, cron, or manual)
     try {
@@ -454,7 +496,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
     } catch {
       // ignore
     }
-    return { collected, errors, rateLimitHit }
+    const total5xx = [...errorStatusCounts.entries()].reduce(
+      (sum, [status, count]) => (status >= 500 && status < 600 ? sum + count : sum),
+      0
+    )
+    const serverError5xx = total5xx >= SERVER_ERROR_5XX_THRESHOLD
+    return { collected, errors, rateLimitHit, serverError5xx }
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err))
     console.error(`${LOG_PREFIX} Failed:`, error)
