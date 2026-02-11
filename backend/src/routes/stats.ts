@@ -17,7 +17,9 @@ import {
   getOverviewDetailStats,
   getOverviewTeamsStats,
   getOverviewDurationWinrateStats,
+  getOverviewProgressionStats,
 } from '../services/StatsOverviewService.js'
+import { isDatabaseConfigured } from '../db.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -28,11 +30,16 @@ router.get('/overview', async (req: Request, res: Response) => {
   const rankTier = (req.query.rankTier as string) || undefined
   const data = await getOverviewStats(version ?? null, rankTier ?? null)
   if (!data) {
-    console.warn('[GET /overview] getOverviewStats returned null, sending fallback')
+    const reason = !isDatabaseConfigured()
+      ? 'DATABASE_URL not configured'
+      : 'Query failed or no data'
+    console.warn('[GET /overview] getOverviewStats returned null:', reason)
     return res.status(200).json({
       totalMatches: 0,
       lastUpdate: null,
       topWinrateChampions: [],
+      topPickrateChampions: [],
+      topBanrateChampions: [],
       matchesByDivision: [],
       matchesByVersion: [],
       playerCount: 0,
@@ -68,6 +75,17 @@ router.get('/overview-duration-winrate', async (req: Request, res: Response) => 
   const data = await getOverviewDurationWinrateStats(version ?? null, rankTier ?? null)
   if (!data) {
     return res.status(200).json({ buckets: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-progression - WR delta from oldest version to all since. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/overview-progression', async (req: Request, res: Response) => {
+  const version = (req.query.version as string) || undefined
+  const rankTier = (req.query.rankTier as string) || undefined
+  const data = await getOverviewProgressionStats(version ?? null, rankTier ?? null)
+  if (!data) {
+    return res.status(200).json({ oldestVersion: null, gainers: [], losers: [] })
   }
   return res.json(data)
 })
@@ -141,6 +159,7 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
     wins: row.wins,
     winrate: row.winrate,
     pickrate: row.pickrate,
+    banrate: row.banrate,
     byRole: row.byRole,
     totalGames: data.totalGames,
     generatedAt: data.generatedAt

@@ -11,6 +11,7 @@ export interface ChampionStats {
   wins: number
   winrate: number
   pickrate: number
+  banrate?: number
   byRole?: Record<string, { games: number; wins: number; winrate: number }>
 }
 
@@ -38,6 +39,7 @@ interface RawChampionsResult {
     wins: number
     winrate: number
     pickrate: number
+    banrate?: number
     byRole?: Record<string, { games: number; wins: number; winrate: number }>
   }>
   generatedAt: string | null
@@ -68,6 +70,7 @@ export class RiotStatsAggregator {
           wins: Number(c.wins),
           winrate: Number(c.winrate),
           pickrate: Number(c.pickrate),
+          ...(c.banrate != null && { banrate: Number(c.banrate) }),
           ...(byRole && { byRole }),
         }
       })

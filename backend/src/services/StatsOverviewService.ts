@@ -16,6 +16,20 @@ export interface OverviewStats {
     winrate: number
     pickrate: number
   }>
+  /** Top 5 by pickrate (for Fast Stats encart). */
+  topPickrateChampions?: Array<{
+    championId: number
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+  }>
+  /** Top 5 by banrate (for Fast Stats encart). */
+  topBanrateChampions?: Array<{
+    championId: number
+    banCount: number
+    banrate: number
+  }>
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
   /** Match count per game version (16.x only, e.g. 16.1, 16.2, 16.3). */
   matchesByVersion: Array<{ version: string; matchCount: number }>
@@ -30,6 +44,8 @@ interface RawOverviewResult {
   totalMatches?: number | null
   lastUpdate?: string | null
   topWinrateChampions?: unknown
+  topPickrateChampions?: unknown
+  topBanrateChampions?: unknown
   matchesByDivision?: unknown
   matchesByVersion?: unknown
   playerCount?: number | null
@@ -79,6 +95,22 @@ export async function getOverviewStats(
             pickrate: Number(c.pickrate),
           }))
         : [],
+      topPickrateChampions: Array.isArray(r.topPickrateChampions)
+        ? (r.topPickrateChampions as Array<{ championId: number; games: number; wins: number; winrate: number; pickrate: number }>).map((c) => ({
+            championId: Number(c.championId),
+            games: Number(c.games),
+            wins: Number(c.wins),
+            winrate: Number(c.winrate),
+            pickrate: Number(c.pickrate),
+          }))
+        : [],
+      topBanrateChampions: Array.isArray(r.topBanrateChampions)
+        ? (r.topBanrateChampions as Array<{ championId: number; banCount: number; banrate: number }>).map((c) => ({
+            championId: Number(c.championId),
+            banCount: Number(c.banCount ?? 0),
+            banrate: Number(c.banrate ?? 0),
+          }))
+        : [],
       matchesByDivision: Array.isArray(r.matchesByDivision)
         ? (r.matchesByDivision as Array<{ rankTier: string; matchCount: number }>).map((d) => ({
             rankTier: String(d.rankTier ?? '').trim(),
@@ -94,7 +126,10 @@ export async function getOverviewStats(
       playerCount: Number(r.playerCount) ?? 0,
     }
   } catch (err) {
-    console.error('[getOverviewStats]', err)
+    console.error('[getOverviewStats]', err instanceof Error ? err.message : err)
+    if (err instanceof Error && err.cause) {
+      console.error('[getOverviewStats] cause:', err.cause)
+    }
     return null
   }
 }
@@ -280,6 +315,57 @@ export async function getOverviewDurationWinrateStats(
     }
   } catch (err) {
     console.error('[getOverviewDurationWinrateStats]', err)
+    return null
+  }
+}
+
+/** Progression: delta WR from oldest version to all since. For "Winrate depuis X" encart. */
+export interface OverviewProgressionStats {
+  oldestVersion: string | null
+  gainers: Array<{
+    championId: number
+    wrOldest: number
+    wrSince: number
+    delta: number
+  }>
+  losers: Array<{
+    championId: number
+    wrOldest: number
+    wrSince: number
+    delta: number
+  }>
+}
+
+type OverviewProgressionRow = Array<{ get_stats_overview_progression: OverviewProgressionStats | null }>
+
+export async function getOverviewProgressionStats(
+  versionOldest?: string | null,
+  rankTier?: string | null
+): Promise<OverviewProgressionStats | null> {
+  if (!isDatabaseConfigured()) return null
+  if (!versionOldest || versionOldest === '') {
+    return { oldestVersion: null, gainers: [], losers: [] }
+  }
+  try {
+    const pVersion = versionOldest
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows =
+      await prisma.$queryRaw<OverviewProgressionRow>`SELECT get_stats_overview_progression(${pVersion}, ${pRankTier}) AS get_stats_overview_progression`
+    const raw = rows[0]?.get_stats_overview_progression
+    if (!raw) return { oldestVersion: versionOldest, gainers: [], losers: [] }
+    const mapEntry = (e: { championId: number; wrOldest: number; wrSince: number; delta: number }) => ({
+      championId: Number(e.championId),
+      wrOldest: Number(e.wrOldest),
+      wrSince: Number(e.wrSince),
+      delta: Number(e.delta),
+    })
+    return {
+      oldestVersion: raw.oldestVersion ?? versionOldest,
+      gainers: Array.isArray(raw.gainers) ? raw.gainers.map(mapEntry) : [],
+      losers: Array.isArray(raw.losers) ? raw.losers.map(mapEntry) : [],
+    }
+  } catch (err) {
+    console.error('[getOverviewProgressionStats]', err)
     return null
   }
 }
