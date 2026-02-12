@@ -35,6 +35,7 @@ model Match {
 model Participant {
   id                          BigInt   @id @default(autoincrement())
   matchId                     BigInt   @map("match_id")
+  teamId                      Int?     @map("team_id") // 100 = blue, 200 = red (Riot convention)
   puuid                       String
   championId                  Int      @map("champion_id")
   win                         Boolean

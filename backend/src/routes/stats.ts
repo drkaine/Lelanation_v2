@@ -16,6 +16,7 @@ import {
   getOverviewStats,
   getOverviewDetailStats,
   getOverviewTeamsStats,
+  getOverviewSidesStats,
   getOverviewDurationWinrateStats,
   getOverviewProgressionStats,
 } from '../services/StatsOverviewService.js'
@@ -31,6 +32,16 @@ function queryString(value: unknown): string | null {
   else if (typeof value === 'string') s = value
   if (s == null || s === '' || s === '[]' || s.startsWith('[')) return null
   return s
+}
+
+/** Return array of strings from query param (single value or repeated). */
+function queryStringArray(value: unknown): string[] {
+  if (value == null) return []
+  if (Array.isArray(value)) {
+    return value.filter((x): x is string => typeof x === 'string' && x !== '' && !x.startsWith('['))
+  }
+  if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
+  return []
 }
 
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD */
@@ -117,6 +128,48 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
         riftHerald: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
         horde: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
       },
+    })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-sides - winrate, champions, objectives, bans by side. Query: ?version=16.1&version=16.2&rankTier=GOLD&rankTier=PLATINUM (multi-select) */
+router.get('/overview-sides', async (req: Request, res: Response) => {
+  const version = queryStringArray(req.query.version)
+  const rankTier = queryStringArray(req.query.rankTier)
+  const data = await getOverviewSidesStats(
+    version.length ? version : null,
+    rankTier.length ? rankTier : null
+  )
+  if (!data) {
+    const emptyObjTable = {
+      firstBlood: { firstByBlue: 0, firstByRed: 0 },
+      baron: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      dragon: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      tower: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      inhibitor: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      riftHerald: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      horde: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+    }
+    return res.status(200).json({
+      matchCount: 0,
+      sideWinrate: { blue: { matches: 0, wins: 0, winrate: 0 }, red: { matches: 0, wins: 0, winrate: 0 } },
+      championWinrateBySide: { blue: [], red: [] },
+      championPickBySide: { blue: [], red: [] },
+      objectivesBySide: {
+        blue: {
+          firstBlood: 0, baronFirst: 0, baronKills: 0, dragonFirst: 0, dragonKills: 0,
+          towerFirst: 0, towerKills: 0, inhibitorFirst: 0, inhibitorKills: 0,
+          riftHeraldFirst: 0, riftHeraldKills: 0, hordeFirst: 0, hordeKills: 0,
+        },
+        red: {
+          firstBlood: 0, baronFirst: 0, baronKills: 0, dragonFirst: 0, dragonKills: 0,
+          towerFirst: 0, towerKills: 0, inhibitorFirst: 0, inhibitorKills: 0,
+          riftHeraldFirst: 0, riftHeraldKills: 0, hordeFirst: 0, hordeKills: 0,
+        },
+      },
+      objectivesBySideTable: emptyObjTable,
+      bansBySide: { blue: [], red: [] },
     })
   }
   return res.json(data)

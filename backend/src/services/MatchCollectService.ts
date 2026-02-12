@@ -203,8 +203,10 @@ export async function upsertMatchFromRiot(
         ? (perks.statPerks as object)
         : undefined
     const runes = perks?.styles != null ? (perks.styles as object) : (p.perks as unknown) ?? undefined
+    const teamId = p.teamId === 100 || p.teamId === 200 ? p.teamId : null
     return {
       matchId: match.id,
+      teamId,
       puuid,
       championId: p.championId ?? 0,
       win: Boolean(p.win),

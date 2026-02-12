@@ -483,3 +483,412 @@ export async function getOverviewTeamsStats(
     return null
   }
 }
+
+/** Normalize version/rankTier to non-empty string array (for multi-select). */
+function toParamArray(value: string | string[] | null | undefined): string[] {
+  if (value == null) return []
+  if (Array.isArray(value)) {
+    return value.filter((s): s is string => typeof s === 'string' && s !== '' && !s.startsWith('['))
+  }
+  if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
+  return []
+}
+
+/** Build SQL condition for version + rank; supports multiple versions and rank tiers (OR within each). */
+function buildMatchCond(
+  pVersion: string | string[] | null | undefined,
+  pRankTier: string | string[] | null | undefined
+): string {
+  const esc = (s: string) => String(s).replace(/'/g, "''")
+  const versions = toParamArray(pVersion)
+  const rankTiers = toParamArray(pRankTier)
+  const versionCond =
+    versions.length === 0
+      ? '1=1'
+      : `(${versions.map((v) => `m.game_version IS NOT NULL AND m.game_version LIKE '${esc(v)}.%'`).join(' OR ')})`
+  const rankCond =
+    rankTiers.length === 0
+      ? '1=1'
+      : `(${rankTiers
+          .map(
+            (r) =>
+              `m.rank IS NOT NULL AND m.rank != '' AND UPPER(TRIM(split_part(m.rank, '_', 1))) = UPPER(TRIM('${esc(r)}'))`
+          )
+          .join(' OR ')})`
+  return `${versionCond} AND ${rankCond}`
+}
+
+/** Side = Blue (100) vs Red (200). */
+export interface OverviewSidesStats {
+  matchCount: number
+  sideWinrate: {
+    blue: { matches: number; wins: number; winrate: number }
+    red: { matches: number; wins: number; winrate: number }
+  }
+  championWinrateBySide: {
+    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
+    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
+  }
+  /** Top 20 by games (most played) per side. */
+  championPickBySide: {
+    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
+    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
+  }
+  objectivesBySide: {
+    blue: ObjectiveCountsBySide
+    red: ObjectiveCountsBySide
+  }
+  /** Same shape as overview teams objectives: first + distribution for table (Blue/Red columns). */
+  objectivesBySideTable: {
+    firstBlood: { firstByBlue: number; firstByRed: number }
+    baron: ObjectiveSideWithDistribution
+    dragon: ObjectiveSideWithDistribution
+    tower: ObjectiveSideWithDistribution
+    inhibitor: ObjectiveSideWithDistribution
+    riftHerald: ObjectiveSideWithDistribution
+    horde: ObjectiveSideWithDistribution
+  }
+  bansBySide: {
+    blue: Array<{ championId: number; count: number }>
+    red: Array<{ championId: number; count: number }>
+  }
+}
+
+export interface ObjectiveSideWithDistribution {
+  firstByBlue: number
+  firstByRed: number
+  killsByBlue: number
+  killsByRed: number
+  distributionByBlue: Record<string, number>
+  distributionByRed: Record<string, number>
+}
+
+export interface ObjectiveCountsBySide {
+  firstBlood: number
+  baronFirst: number
+  baronKills: number
+  dragonFirst: number
+  dragonKills: number
+  towerFirst: number
+  towerKills: number
+  inhibitorFirst: number
+  inhibitorKills: number
+  riftHeraldFirst: number
+  riftHeraldKills: number
+  hordeFirst: number
+  hordeKills: number
+}
+
+export async function getOverviewSidesStats(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
+): Promise<OverviewSidesStats | null> {
+  if (!isDatabaseConfigured()) return null
+  const matchCond = buildMatchCond(version, rankTier)
+
+  try {
+    // 1) Side winrate: from participants with team_id 100/200
+    const sideWinrateSql = `
+      SELECT p.team_id AS team_id,
+             COUNT(DISTINCT p.match_id)::int AS matches,
+             COUNT(DISTINCT CASE WHEN p.win THEN p.match_id END)::int AS wins
+      FROM participants p
+      INNER JOIN matches m ON m.id = p.match_id
+      WHERE ${matchCond} AND p.team_id IN (100, 200)
+      GROUP BY p.team_id
+    `
+    const sideRows = await prisma.$queryRawUnsafe<
+      Array<{ team_id: number; matches: number; wins: number }>
+    >(sideWinrateSql)
+    const blueRow = sideRows.find((r) => r.team_id === 100)
+    const redRow = sideRows.find((r) => r.team_id === 200)
+    const toSide = (r: { matches: number; wins: number } | undefined) => {
+      const matches = r ? Number(r.matches) : 0
+      const wins = r ? Number(r.wins) : 0
+      return {
+        matches,
+        wins,
+        winrate: matches > 0 ? Math.round((wins / matches) * 1000) / 10 : 0,
+      }
+    }
+    const totalMatchCount = (blueRow ? Number(blueRow.matches) : 0) + (redRow ? Number(redRow.matches) : 0)
+
+    // 2) Champion winrate by side (top 20 each)
+    const champBySideSql = `
+      SELECT p.team_id AS team_id, p.champion_id AS champion_id,
+             COUNT(*)::int AS games,
+             SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins
+      FROM participants p
+      INNER JOIN matches m ON m.id = p.match_id
+      WHERE ${matchCond} AND p.team_id IN (100, 200)
+      GROUP BY p.team_id, p.champion_id
+      HAVING COUNT(*) >= 10
+    `
+    const champRows = await prisma.$queryRawUnsafe<
+      Array<{ team_id: number; champion_id: number; games: number; wins: number }>
+    >(champBySideSql)
+    const blueChamps = champRows
+      .filter((r) => r.team_id === 100)
+      .map((r) => ({
+        championId: Number(r.champion_id),
+        games: Number(r.games),
+        wins: Number(r.wins),
+        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.winrate - a.winrate)
+      .slice(0, 20)
+    const redChamps = champRows
+      .filter((r) => r.team_id === 200)
+      .map((r) => ({
+        championId: Number(r.champion_id),
+        games: Number(r.games),
+        wins: Number(r.wins),
+        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.winrate - a.winrate)
+      .slice(0, 20)
+
+    // 2b) Most played by side (top 20 by games)
+    const bluePick = champRows
+      .filter((r) => r.team_id === 100)
+      .map((r) => ({
+        championId: Number(r.champion_id),
+        games: Number(r.games),
+        wins: Number(r.wins),
+        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 20)
+    const redPick = champRows
+      .filter((r) => r.team_id === 200)
+      .map((r) => ({
+        championId: Number(r.champion_id),
+        games: Number(r.games),
+        wins: Number(r.wins),
+        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 20)
+
+    // 3) Objectives by side from match.teams (100 / 200)
+    const objBySideSql = `
+      WITH match_teams AS (
+        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'objectives' AS objectives
+        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
+        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
+          AND (elem->>'teamId')::int IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
+      ),
+      base AS (SELECT match_id, team_id FROM match_teams),
+      mt AS (SELECT match_id, team_id, objectives FROM match_teams WHERE objectives IS NOT NULL)
+      SELECT
+        mt.team_id,
+        SUM(CASE WHEN (mt.objectives->'champion'->>'first')::boolean THEN 1 ELSE 0 END)::int AS first_blood,
+        SUM(CASE WHEN (mt.objectives->'baron'->>'first')::boolean THEN 1 ELSE 0 END)::int AS baron_first,
+        SUM(COALESCE((mt.objectives->'baron'->>'kills')::int, 0))::int AS baron_kills,
+        SUM(CASE WHEN (mt.objectives->'dragon'->>'first')::boolean THEN 1 ELSE 0 END)::int AS dragon_first,
+        SUM(COALESCE((mt.objectives->'dragon'->>'kills')::int, 0))::int AS dragon_kills,
+        SUM(CASE WHEN (mt.objectives->'tower'->>'first')::boolean THEN 1 ELSE 0 END)::int AS tower_first,
+        SUM(COALESCE((mt.objectives->'tower'->>'kills')::int, 0))::int AS tower_kills,
+        SUM(CASE WHEN (mt.objectives->'inhibitor'->>'first')::boolean THEN 1 ELSE 0 END)::int AS inhibitor_first,
+        SUM(COALESCE((mt.objectives->'inhibitor'->>'kills')::int, 0))::int AS inhibitor_kills,
+        SUM(CASE WHEN (mt.objectives->'riftHerald'->>'first')::boolean THEN 1 ELSE 0 END)::int AS rift_herald_first,
+        SUM(COALESCE((mt.objectives->'riftHerald'->>'kills')::int, 0))::int AS rift_herald_kills,
+        SUM(CASE WHEN (mt.objectives->'horde'->>'first')::boolean THEN 1 ELSE 0 END)::int AS horde_first,
+        SUM(COALESCE((mt.objectives->'horde'->>'kills')::int, 0))::int AS horde_kills
+      FROM mt
+      GROUP BY mt.team_id
+    `
+    const objRows = await prisma.$queryRawUnsafe<
+      Array<{
+        team_id: number
+        first_blood: number
+        baron_first: number
+        baron_kills: number
+        dragon_first: number
+        dragon_kills: number
+        tower_first: number
+        tower_kills: number
+        inhibitor_first: number
+        inhibitor_kills: number
+        rift_herald_first: number
+        rift_herald_kills: number
+        horde_first: number
+        horde_kills: number
+      }>
+    >(objBySideSql)
+
+    const toObj = (r: (typeof objRows)[0] | undefined): ObjectiveCountsBySide => ({
+      firstBlood: r ? Number(r.first_blood) : 0,
+      baronFirst: r ? Number(r.baron_first) : 0,
+      baronKills: r ? Number(r.baron_kills) : 0,
+      dragonFirst: r ? Number(r.dragon_first) : 0,
+      dragonKills: r ? Number(r.dragon_kills) : 0,
+      towerFirst: r ? Number(r.tower_first) : 0,
+      towerKills: r ? Number(r.tower_kills) : 0,
+      inhibitorFirst: r ? Number(r.inhibitor_first) : 0,
+      inhibitorKills: r ? Number(r.inhibitor_kills) : 0,
+      riftHeraldFirst: r ? Number(r.rift_herald_first) : 0,
+      riftHeraldKills: r ? Number(r.rift_herald_kills) : 0,
+      hordeFirst: r ? Number(r.horde_first) : 0,
+      hordeKills: r ? Number(r.horde_kills) : 0,
+    })
+    const blueObj = toObj(objRows.find((r) => r.team_id === 100))
+    const redObj = toObj(objRows.find((r) => r.team_id === 200))
+
+    // 3b) Distribution per objective (per-team kill count -> match count) for table
+    const distSql = `
+      WITH match_teams AS (
+        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'objectives' AS objectives
+        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
+        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
+          AND (elem->>'teamId')::int IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
+      ),
+      mt AS (SELECT match_id, team_id, objectives FROM match_teams WHERE objectives IS NOT NULL)
+      SELECT mt.team_id,
+             COALESCE((mt.objectives->'baron'->>'kills')::int, 0) AS baron_kills,
+             COALESCE((mt.objectives->'dragon'->>'kills')::int, 0) AS dragon_kills,
+             COALESCE((mt.objectives->'tower'->>'kills')::int, 0) AS tower_kills,
+             COALESCE((mt.objectives->'inhibitor'->>'kills')::int, 0) AS inhibitor_kills,
+             COALESCE((mt.objectives->'riftHerald'->>'kills')::int, 0) AS rift_herald_kills,
+             COALESCE((mt.objectives->'horde'->>'kills')::int, 0) AS horde_kills
+      FROM mt
+    `
+    const distRows = await prisma.$queryRawUnsafe<
+      Array<{
+        team_id: number
+        baron_kills: number
+        dragon_kills: number
+        tower_kills: number
+        inhibitor_kills: number
+        rift_herald_kills: number
+        horde_kills: number
+      }>
+    >(distSql)
+    const objKeys = ['baron', 'dragon', 'tower', 'inhibitor', 'riftHerald', 'horde'] as const
+    const killKeys = [
+      'baron_kills',
+      'dragon_kills',
+      'tower_kills',
+      'inhibitor_kills',
+      'rift_herald_kills',
+      'horde_kills',
+    ] as const
+    const buildDist = (teamId: 100 | 200) => {
+      const rows = distRows.filter((r) => r.team_id === teamId)
+      const out: Record<string, Record<string, number>> = {}
+      for (let i = 0; i < objKeys.length; i++) {
+        const key = objKeys[i]
+        const col = killKeys[i]
+        const counts: Record<string, number> = {}
+        for (const row of rows) {
+          const k = String((row as Record<string, number>)[col] ?? 0)
+          counts[k] = (counts[k] ?? 0) + 1
+        }
+        out[key] = counts
+      }
+      return out
+    }
+    const distBlue = buildDist(100)
+    const distRed = buildDist(200)
+    const objectivesBySideTable = {
+      firstBlood: {
+        firstByBlue: blueObj.firstBlood,
+        firstByRed: redObj.firstBlood,
+      },
+      baron: {
+        firstByBlue: blueObj.baronFirst,
+        firstByRed: redObj.baronFirst,
+        killsByBlue: blueObj.baronKills,
+        killsByRed: redObj.baronKills,
+        distributionByBlue: distBlue.baron ?? {},
+        distributionByRed: distRed.baron ?? {},
+      },
+      dragon: {
+        firstByBlue: blueObj.dragonFirst,
+        firstByRed: redObj.dragonFirst,
+        killsByBlue: blueObj.dragonKills,
+        killsByRed: redObj.dragonKills,
+        distributionByBlue: distBlue.dragon ?? {},
+        distributionByRed: distRed.dragon ?? {},
+      },
+      tower: {
+        firstByBlue: blueObj.towerFirst,
+        firstByRed: redObj.towerFirst,
+        killsByBlue: blueObj.towerKills,
+        killsByRed: redObj.towerKills,
+        distributionByBlue: distBlue.tower ?? {},
+        distributionByRed: distRed.tower ?? {},
+      },
+      inhibitor: {
+        firstByBlue: blueObj.inhibitorFirst,
+        firstByRed: redObj.inhibitorFirst,
+        killsByBlue: blueObj.inhibitorKills,
+        killsByRed: redObj.inhibitorKills,
+        distributionByBlue: distBlue.inhibitor ?? {},
+        distributionByRed: distRed.inhibitor ?? {},
+      },
+      riftHerald: {
+        firstByBlue: blueObj.riftHeraldFirst,
+        firstByRed: redObj.riftHeraldFirst,
+        killsByBlue: blueObj.riftHeraldKills,
+        killsByRed: redObj.riftHeraldKills,
+        distributionByBlue: distBlue.riftHerald ?? {},
+        distributionByRed: distRed.riftHerald ?? {},
+      },
+      horde: {
+        firstByBlue: blueObj.hordeFirst,
+        firstByRed: redObj.hordeFirst,
+        killsByBlue: blueObj.hordeKills,
+        killsByRed: redObj.hordeKills,
+        distributionByBlue: distBlue.horde ?? {},
+        distributionByRed: distRed.horde ?? {},
+      },
+    }
+
+    // 4) Bans by side from match.teams
+    const bansBySideSql = `
+      WITH match_teams AS (
+        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'bans' AS bans
+        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
+        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
+          AND (elem->>'teamId') IS NOT NULL AND (elem->>'teamId') ~ '^(100|200)$'
+          AND ${matchCond}
+      ),
+      ban_rows AS (
+        SELECT mt.team_id, (b->>'championId')::int AS champion_id, COUNT(*)::int AS cnt
+        FROM match_teams mt, jsonb_array_elements(COALESCE(mt.bans, '[]'::jsonb)) AS b
+        WHERE mt.bans IS NOT NULL AND jsonb_typeof(mt.bans) = 'array'
+          AND b->>'championId' IS NOT NULL AND (b->>'championId') ~ '^\\d+$'
+        GROUP BY mt.team_id, (b->>'championId')::int
+      )
+      SELECT team_id, champion_id, cnt FROM ban_rows ORDER BY team_id, cnt DESC
+    `
+    const banRows = await prisma.$queryRawUnsafe<
+      Array<{ team_id: number; champion_id: number; cnt: number }>
+    >(bansBySideSql)
+    const blueBans = banRows
+      .filter((r) => r.team_id === 100)
+      .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
+      .sort((a, b) => b.count - a.count)
+    const redBans = banRows
+      .filter((r) => r.team_id === 200)
+      .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
+      .sort((a, b) => b.count - a.count)
+
+    return {
+      matchCount: totalMatchCount,
+      sideWinrate: {
+        blue: toSide(blueRow),
+        red: toSide(redRow),
+      },
+      championWinrateBySide: { blue: blueChamps, red: redChamps },
+      championPickBySide: { blue: bluePick, red: redPick },
+      objectivesBySide: { blue: blueObj, red: redObj },
+      objectivesBySideTable,
+      bansBySide: { blue: blueBans, red: redBans },
+    }
+  } catch (err) {
+    console.error('[getOverviewSidesStats]', err)
+    return null
+  }
+}
