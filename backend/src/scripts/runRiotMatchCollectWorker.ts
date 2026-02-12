@@ -28,7 +28,8 @@ import { DiscordService } from '../services/DiscordService.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
-const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '60000', 10) || 60000)
+/** Normal mode: 2 min between cycles to refill rate limit (100 req/2 min). */
+const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '120000', 10) || 120000)
 /** In fast mode (high backlog): shorter delay between cycles. Default 30s. */
 const FAST_CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_FAST_CYCLE_DELAY_MS ?? '30000', 10) || 30000)
 const FAST_BACKLOG_THRESHOLD = Math.max(5000, parseInt(process.env.RIOT_MATCH_FAST_BACKLOG_THRESHOLD ?? '20000', 10) || 20000)

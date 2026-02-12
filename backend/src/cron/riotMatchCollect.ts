@@ -36,9 +36,12 @@ import { isDatabaseConfigured, prisma } from '../db.js'
 import type { AppError } from '../utils/errors.js'
 
 const PLATFORM_EUW1 = 'euw1' as const
-const MATCH_IDS_PER_SUMMONER = 10
-/** Max players to crawl per run (from players table: last_seen IS NULL first, then last_seen ASC). */
+/** Match IDs requested per summoner (split across patch windows). Higher = more data per player, bounded by request budget. */
+const MATCH_IDS_PER_SUMMONER = Math.max(10, parseInt(process.env.RIOT_MATCH_IDS_PER_SUMMONER ?? '20', 10) || 20)
+/** Max players to crawl per run (from players table: last_seen IS NULL first, then last_seen ASC). Budget will stop earlier in normal mode. */
 const MAX_PUUIDS_PER_RUN = Math.max(20, parseInt(process.env.RIOT_MATCH_MAX_PUUIDS_PER_RUN ?? '50', 10) || 50)
+/** Normal mode: cap API requests per cycle to stay under 100/2min. getMatchIds=1, getMatch+ranks=11 per match. */
+const REQUEST_BUDGET_PER_CYCLE = Math.min(100, Math.max(50, parseInt(process.env.RIOT_MATCH_REQUEST_BUDGET ?? '95', 10) || 95))
 /** When unpoled players exceed this, enable fast mode: 1 patch window, skip rank fetch, more players per run. */
 const FAST_BACKLOG_THRESHOLD = Math.max(5000, parseInt(process.env.RIOT_MATCH_FAST_BACKLOG_THRESHOLD ?? '20000', 10) || 20000)
 const FAST_MAX_PUUIDS = Math.max(MAX_PUUIDS_PER_RUN, parseInt(process.env.RIOT_MATCH_FAST_PUUIDS ?? '100', 10) || 100)
@@ -194,7 +197,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
     const matchIdsPerPlayer =
       patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
 
+    /** Normal mode only: count API requests to stay under 100/2min (getMatchIds=1, getMatch+fetchRanks=11 per match). */
+    let requestCount = 0
+    let requestBudgetExhausted = false
+
     for (const row of playersToCrawl) {
+      if (requestBudgetExhausted) break
       const processedIdx = playersToCrawl.indexOf(row) + 1
       if (processedIdx % 20 === 1 || processedIdx === playersToCrawl.length) {
         console.log(`${LOG_PREFIX} Crawling player ${processedIdx}/${playersToCrawl.length}…`)
@@ -219,12 +227,18 @@ export async function runRiotMatchCollectOnce(): Promise<{
       }
 
       for (const win of windows) {
+        if (!fastMode && requestCount >= REQUEST_BUDGET_PER_CYCLE) {
+          requestBudgetExhausted = true
+          console.log(`${LOG_PREFIX} Request budget reached (${requestCount}/${REQUEST_BUDGET_PER_CYCLE}), next cycle in 2 min`)
+          break
+        }
         const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
           count: matchIdsPerPlayer,
           queue: 420,
           startTime: win.startTime,
           endTime: win.endTime,
         })
+        if (!fastMode) requestCount++
         if (matchIdsResult.isErr()) {
           const err = matchIdsResult.unwrapErr() as AppError & { cause?: unknown }
           const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
@@ -263,9 +277,6 @@ export async function runRiotMatchCollectOnce(): Promise<{
         continue
       }
 
-      // Update last_seen immediately after fetching match IDs
-      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
-
       // Deduplicate vs DB
       const matchIds = [...allMatchIds]
       const toFetch: string[] = []
@@ -279,6 +290,11 @@ export async function runRiotMatchCollectOnce(): Promise<{
 
       let consecutive5xx = 0
       for (const matchId of toFetch) {
+        if (!fastMode && requestCount + 11 > REQUEST_BUDGET_PER_CYCLE) {
+          requestBudgetExhausted = true
+          console.log(`${LOG_PREFIX} Request budget reached (${requestCount}/${REQUEST_BUDGET_PER_CYCLE}), next cycle in 2 min`)
+          break
+        }
         try {
           const matchResult = await riotApi.getMatch(matchId)
           if (matchResult.isErr()) {
@@ -286,6 +302,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
             const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
             if (status === 404) {
               consecutive5xx = 0
+              if (!fastMode) requestCount += 1
               continue
             }
             if (status === 429) {
@@ -304,6 +321,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
             } else {
               consecutive5xx = 0
             }
+            if (!fastMode) requestCount += 1
             errorStatusCounts.set(status ?? 0, (errorStatusCounts.get(status ?? 0) ?? 0) + 1)
             errors++
             console.warn(`${LOG_PREFIX} getMatch failed for ${matchId}: ${(err as Error).message}`)
@@ -319,6 +337,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
           const matchData = matchResult.unwrap()
           const gameVersion = typeof matchData.info?.gameVersion === 'string' ? matchData.info.gameVersion : ''
           if (allowedVersions.size > 0 && !isAllowedGameVersion(gameVersion, allowedVersions)) {
+            if (!fastMode) requestCount += 1
             skippedVersionFilter++
             if (versionFilteredExamples.size < 5) versionFilteredExamples.add(gameVersion || '(empty)')
             continue
@@ -331,10 +350,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
           if (!fastMode && puuids.length > 0) {
             try {
               rankByPuuid = await fetchRanksForPuuids(PLATFORM_EUW1, puuids)
+              requestCount += 10
             } catch (rankErr) {
               errors++
             }
           }
+          if (!fastMode) requestCount += 1
           const { inserted } = await upsertMatchFromRiot(PLATFORM_EUW1, matchData, rankByPuuid)
           if (inserted) {
             collected++
@@ -349,6 +370,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
             }
           }
         } catch (e) {
+          if (!fastMode) requestCount += 1
           if (isRateLimitError(e)) {
             rateLimitHit = true
             console.warn(`${LOG_PREFIX} Rate limit (429) on getMatch (catch), pausing poller`)
@@ -365,6 +387,8 @@ export async function runRiotMatchCollectOnce(): Promise<{
         }
       }
       if (rateLimitHit) break
+      // Update last_seen after processing (so if we hit budget we retry same player next cycle and continue fetching)
+      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
     }
 
     if (collected > 0) {
