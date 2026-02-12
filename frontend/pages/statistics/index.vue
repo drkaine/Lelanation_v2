@@ -53,40 +53,42 @@
           </div>
           <div v-else-if="overviewData" class="space-y-6">
             <div
-              v-if="overviewData.totalMatches === 0"
+              v-if="!overviewHasAnyStats"
               class="rounded border border-primary/30 bg-surface/50 p-4 text-text/80"
             >
               {{ overviewData.message ?? t('statisticsPage.overviewNoData') }}
             </div>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div class="rounded border border-primary/20 bg-background/50 p-4">
-                <div class="text-2xl font-bold text-text-accent">
-                  {{ overviewData.totalMatches ?? 0 }}
-                </div>
-                <div class="text-sm text-text/70">
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <h3 class="mb-3 text-lg font-medium text-text">
                   {{ t('statisticsPage.overviewTotalMatches') }}
+                </h3>
+                <div class="text-2xl font-bold text-text-accent">
+                  {{ overviewEffectiveTotalMatches }}
                 </div>
               </div>
-              <div class="rounded border border-primary/20 bg-background/50 p-4">
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <h3 class="mb-3 text-lg font-medium text-text">
+                  {{ t('statisticsPage.overviewLastUpdate') }}
+                </h3>
                 <div class="text-sm font-medium text-text">
                   {{ overviewData.lastUpdate ? formatGeneratedAt(overviewData.lastUpdate) : '—' }}
                 </div>
-                <div class="text-sm text-text/70">{{ t('statisticsPage.overviewLastUpdate') }}</div>
               </div>
-              <div class="rounded border border-primary/20 bg-background/50 p-4">
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <h3 class="mb-3 text-lg font-medium text-text">
+                  {{ t('statisticsPage.overviewPlayerCountDistinct') }}
+                </h3>
                 <div class="text-2xl font-bold text-text-accent">
                   {{ overviewData.playerCount ?? 0 }}
-                </div>
-                <div class="text-sm text-text/70">
-                  {{ t('statisticsPage.overviewPlayerCountDistinct') }}
                 </div>
               </div>
             </div>
             <div
-              v-if="(overviewData.matchesByDivision ?? []).length"
-              class="rounded-lg border border-primary/20 bg-background/50 p-4"
+              v-if="(overviewData.matchesByDivision ?? []).length && overviewData.totalMatches > 0"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-6"
             >
-              <h3 class="mb-3 text-sm font-semibold text-text">
+              <h3 class="mb-3 text-lg font-medium text-text">
                 {{ t('statisticsPage.overviewMatchesByDivision') }}
               </h3>
               <div class="flex flex-wrap gap-2">
@@ -123,9 +125,9 @@
             </div>
             <div
               v-if="(overviewData.matchesByVersion ?? []).length"
-              class="rounded-lg border border-primary/20 bg-background/50 p-4"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-6"
             >
-              <h3 class="mb-3 text-sm font-semibold text-text">
+              <h3 class="mb-3 text-lg font-medium text-text">
                 {{ t('statisticsPage.overviewFilterByVersion') }}
               </h3>
               <div class="flex flex-wrap gap-2">
@@ -158,8 +160,8 @@
               </div>
             </div>
 
-            <!-- Fast Stats encarts (style Porofessor) -->
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <!-- Fast Stats encarts (même style que card Objectifs) -->
+            <div class="grid gap-4 sm:grid-cols-2">
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
                 <h3 class="mb-3 text-lg font-medium text-text">
                   {{ t('statisticsPage.fastStatsMostPicked') }}
@@ -320,13 +322,10 @@
                 <h3 class="mb-3 text-lg font-medium text-text">
                   {{ t('statisticsPage.fastStatsMostBanned') }}
                 </h3>
-                <table
-                  v-if="(overviewData.topBanrateChampions ?? []).length"
-                  class="w-full text-sm"
-                >
+                <table v-if="overviewEffectiveTopBanrateChampions.length" class="w-full text-sm">
                   <tbody>
                     <tr
-                      v-for="(row, idx) in (overviewData.topBanrateChampions ?? []).slice(0, 5)"
+                      v-for="(row, idx) in overviewEffectiveTopBanrateChampions.slice(0, 5)"
                       :key="row.championId"
                       class="border-b border-primary/10 last:border-0"
                     >
@@ -362,7 +361,7 @@
                                     100,
                                     (row.banrate /
                                       Math.max(
-                                        ...(overviewData.topBanrateChampions ?? []).map(
+                                        ...overviewEffectiveTopBanrateChampions.map(
                                           (c: { banrate: number }) => c.banrate
                                         ),
                                         1
@@ -381,10 +380,7 @@
                 <div v-else class="py-6 text-center text-text/60">
                   {{ t('statisticsPage.fastStatsNoData') }}
                 </div>
-                <div
-                  v-if="(overviewData.topBanrateChampions ?? []).length"
-                  class="mt-4 text-center"
-                >
+                <div v-if="overviewEffectiveTopBanrateChampions.length" class="mt-4 text-center">
                   <button
                     type="button"
                     class="rounded bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
@@ -844,7 +840,7 @@
 
         <!-- Bans & Objectives (from matches.teams) -->
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-          <h3 class="mb-4 text-lg font-semibold text-text">
+          <h3 class="mb-3 text-lg font-medium text-text">
             {{ t('statisticsPage.overviewTeamsTitle') }}
           </h3>
           <div v-if="overviewTeamsPending" class="py-4 text-text/70">
@@ -925,36 +921,6 @@
                       </div>
                     </div>
                   </div>
-                  <div>
-                    <h4 class="mb-2 text-sm font-medium text-text">
-                      {{ t('statisticsPage.overviewTeamsBansTop20Total') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="b in overviewTeamsData.bans?.top20Total ?? []"
-                        :key="'total-' + b.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        :title="championName(b.championId) ?? String(b.championId)"
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(b.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(b.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(b.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80"
-                          >{{ b.count }} ({{ b.banRatePercent }})</span
-                        >
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </details>
@@ -969,7 +935,7 @@
           v-if="overviewDurationWinrateData?.buckets?.length"
           class="rounded-lg border border-primary/30 bg-surface/30 p-6"
         >
-          <h3 class="mb-3 text-lg font-semibold text-text">
+          <h3 class="mb-3 text-lg font-medium text-text">
             {{ t('statisticsPage.overviewDurationWinrateTitle') }}
           </h3>
           <p class="mb-4 text-sm text-text/60">
@@ -1721,6 +1687,34 @@ async function loadOverviewTeams() {
     overviewTeamsPending.value = false
   }
 }
+
+/** True when we have at least overview totalMatches > 0 or teams matchCount > 0 (so we don't show "No stats yet" when only teams data exists). */
+const overviewHasAnyStats = computed(
+  () =>
+    (overviewData.value?.totalMatches ?? 0) > 0 || (overviewTeamsData.value?.matchCount ?? 0) > 0
+)
+/** Total parties: use overview when > 0, else teams matchCount (when overview fails but teams has data, 0 would be wrong). */
+const overviewEffectiveTotalMatches = computed(() => {
+  const total = overviewData.value?.totalMatches ?? 0
+  if (total > 0) return total
+  return overviewTeamsData.value?.matchCount ?? 0
+})
+/** Top banrate champions: from overview when present, else from teams.bans.top20Total (first 5); banrate from API banRatePercent (share of all bans). */
+const overviewEffectiveTopBanrateChampions = computed(() => {
+  const fromOverview = overviewData.value?.topBanrateChampions
+  if (fromOverview?.length) return fromOverview
+  const teams = overviewTeamsData.value?.bans?.top20Total
+  if (!teams?.length) return []
+  return teams.slice(0, 5).map(b => {
+    const pct = typeof b.banRatePercent === 'string' ? parseFloat(b.banRatePercent) : 0
+    return {
+      championId: b.championId,
+      banCount: b.count,
+      banrate: Number.isFinite(pct) ? pct : 0,
+    }
+  })
+})
+
 /** % of matches where winning team got first, and % where losing team got first. */
 function firstPercentByTeam(
   firstByWin: number,

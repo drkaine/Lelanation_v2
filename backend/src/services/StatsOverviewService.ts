@@ -3,6 +3,7 @@
  * matches per division, distinct participant count (unique puuids in participants).
  * Uses PostgreSQL views and get_stats_overview() for a single round-trip.
  */
+import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 
@@ -63,9 +64,14 @@ export async function getOverviewStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows =
-      await prisma.$queryRaw<OverviewRow>`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
-    let raw: unknown = rows[0]?.get_stats_overview ?? (rows[0] as Record<string, unknown>)?.['get_stats_overview']
+    const rows = await prisma.$queryRaw<OverviewRow>(
+      Prisma.sql`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
+    )
+    const row0 = rows[0] as Record<string, unknown> | undefined
+    let raw: unknown =
+      row0?.get_stats_overview ??
+      row0?.['get_stats_overview'] ??
+      (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
     if (typeof raw === 'string') {
       try {
         raw = JSON.parse(raw) as RawOverviewResult
@@ -176,8 +182,9 @@ export async function getOverviewDetailStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows =
-      await prisma.$queryRaw<OverviewDetailRow>`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
+    const rows = await prisma.$queryRaw<OverviewDetailRow>(
+      Prisma.sql`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
+    )
     const raw = rows[0]?.get_stats_overview_detail
     if (!raw) return null
 
@@ -299,8 +306,9 @@ export async function getOverviewDurationWinrateStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows =
-      await prisma.$queryRaw<OverviewDurationWinrateRow>`SELECT get_stats_overview_duration_winrate(${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
+    const rows = await prisma.$queryRaw<OverviewDurationWinrateRow>(
+      Prisma.sql`SELECT get_stats_overview_duration_winrate(${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
+    )
     const raw = rows[0]?.get_stats_overview_duration_winrate
     if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
       return { buckets: [] }
@@ -349,8 +357,9 @@ export async function getOverviewProgressionStats(
   try {
     const pVersion = versionOldest
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows =
-      await prisma.$queryRaw<OverviewProgressionRow>`SELECT get_stats_overview_progression(${pVersion}, ${pRankTier}) AS get_stats_overview_progression`
+    const rows = await prisma.$queryRaw<OverviewProgressionRow>(
+      Prisma.sql`SELECT get_stats_overview_progression(${pVersion}, ${pRankTier}) AS get_stats_overview_progression`
+    )
     const raw = rows[0]?.get_stats_overview_progression
     if (!raw) return { oldestVersion: versionOldest, gainers: [], losers: [] }
     const mapEntry = (e: { championId: number; wrOldest: number; wrSince: number; delta: number }) => ({
@@ -378,8 +387,9 @@ export async function getOverviewTeamsStats(
   try {
     const pVersion = version != null && version !== '' ? version : null
     const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows =
-      await prisma.$queryRaw<OverviewTeamsRow>`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+    const rows = await prisma.$queryRaw<OverviewTeamsRow>(
+      Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+    )
     const raw = rows[0]?.get_stats_overview_teams
     if (!raw) return null
 
