@@ -52,21 +52,38 @@ interface RawOverviewResult {
   playerCount?: number | null
 }
 
+/** Ensure overview query params are string | null (never array) to avoid Prisma/Postgres "syntax error at or near [" */
+function normalizeOverviewParam(
+  value: string | string[] | null | undefined
+): string | null {
+  if (value == null) return null
+  let s: string
+  if (Array.isArray(value)) {
+    const first = value[0]
+    s = typeof first === 'string' ? first : ''
+  } else {
+    s = typeof value === 'string' ? value : ''
+  }
+  if (s === '' || s === '[]' || s.startsWith('[')) return null
+  return s
+}
+
 /**
  * Load overview stats for the statistics page. Returns null if DB not configured.
  * Single round-trip via get_stats_overview(p_version, p_rank_tier). Optional filters by version and rank tier (e.g. GOLD).
  */
 export async function getOverviewStats(
-  version?: string | null,
-  rankTier?: string | null
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
 ): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewRow>(
-      Prisma.sql`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
-    )
+    const pVersion = normalizeOverviewParam(version)
+    const pRankTier = normalizeOverviewParam(rankTier)
+    const arg1 = pVersion == null ? 'NULL' : `'${String(pVersion).replace(/'/g, "''")}'`
+    const arg2 = pRankTier == null ? 'NULL' : `'${String(pRankTier).replace(/'/g, "''")}'`
+    const sql = `SELECT get_stats_overview(${arg1}, ${arg2}) AS get_stats_overview`
+    const rows = await prisma.$queryRawUnsafe<OverviewRow>(sql)
     const row0 = rows[0] as Record<string, unknown> | undefined
     let raw: unknown =
       row0?.get_stats_overview ??

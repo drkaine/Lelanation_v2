@@ -196,6 +196,14 @@
     "fastStatsNoProgression": "Aucune progression disponible.",
     "fastStatsNoData": "Aucune donnée.",
     "fastStatsSeeMore": "Voir plus",
+    "tooltipOverviewTotalMatches": "Nombre total de parties (matchs) dans la base pour le filtre sélectionné.",
+    "tooltipOverviewLastUpdate": "Date du dernier match récupéré.",
+    "tooltipOverviewPlayerCount": "Nombre de joueurs distincts (puuids) ayant participé à au moins une partie.",
+    "tooltipFastStatsMostPicked": "Pickrate = (parties jouées avec ce champion) / (total des parties) × 100. Top 5 par pickrate, min. 20 parties.",
+    "tooltipFastStatsBestWinrate": "Winrate = (victoires / parties) × 100. Top 5 par winrate, min. 20 parties.",
+    "tooltipFastStatsMostBanned": "Chaque ban est comptée : si les 2 équipes bannissent le même champion = 2 bans. Banrate = (nombre de bans du champion) / (2 × total des parties) × 100 (100 % = banni par les 2 équipes dans toutes les parties).",
+    "tooltipFastStatsWinrateSince": "Évolution : delta entre le winrate sur la version seule (ex. 16.1) et le winrate sur toutes les versions depuis (16.1 + 16.2 + …). +X % = le champion performe mieux sur l’ensemble des versions que sur la version initiale.",
+    "tooltipOverviewObjectives": "Pour chaque objectif : % des parties où l’équipe gagnante a eu le first, et % où l’équipe perdante l’a eu. Somme peut être < 100 % (ex. first blood non pris).",
     "championsSortBy": "Trier par",
     "championsSortWinrate": "Winrate",
     "championsSortPickrate": "Pickrate",
@@ -313,8 +321,7 @@
     "tenacity": "Tenacité (%)",
     "goldValue": "Valeur en or",
     "goldEfficiency": "Efficacité or (%)",
-    "goldCost": "Coût en or",
-    "disclaimer": "Les calculs sont basés sur les données officielles et les formules du wiki, mais peuvent posséder des erreurs"
+    "goldCost": "Coût en or"
   },
   "skills": {
     "key": {

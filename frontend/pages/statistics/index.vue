@@ -60,24 +60,57 @@
             </div>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.overviewTotalMatches') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipOverviewTotalMatches') }}
+                    </span>
+                  </span>
                 </h3>
                 <div class="text-2xl font-bold text-text-accent">
                   {{ overviewEffectiveTotalMatches }}
                 </div>
               </div>
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.overviewLastUpdate') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipOverviewLastUpdate') }}
+                    </span>
+                  </span>
                 </h3>
                 <div class="text-sm font-medium text-text">
                   {{ overviewData.lastUpdate ? formatGeneratedAt(overviewData.lastUpdate) : '—' }}
                 </div>
               </div>
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.overviewPlayerCountDistinct') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipOverviewPlayerCount') }}
+                    </span>
+                  </span>
                 </h3>
                 <div class="text-2xl font-bold text-text-accent">
                   {{ overviewData.playerCount ?? 0 }}
@@ -163,8 +196,19 @@
             <!-- Fast Stats encarts (même style que card Objectifs) -->
             <div class="grid gap-4 sm:grid-cols-2">
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.fastStatsMostPicked') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
+                    </span>
+                  </span>
                 </h3>
                 <table
                   v-if="(overviewData.topPickrateChampions ?? []).length"
@@ -241,8 +285,19 @@
                 </div>
               </div>
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.fastStatsBestWinrate') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
+                    </span>
+                  </span>
                 </h3>
                 <table
                   v-if="(overviewData.topWinrateChampions ?? []).length"
@@ -319,8 +374,19 @@
                 </div>
               </div>
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.fastStatsMostBanned') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
+                    </span>
+                  </span>
                 </h3>
                 <table v-if="overviewEffectiveTopBanrateChampions.length" class="w-full text-sm">
                   <tbody>
@@ -391,7 +457,9 @@
                 </div>
               </div>
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{
                     oldestVersionForProgression
                       ? t('statisticsPage.fastStatsWinrateSince', {
@@ -399,6 +467,15 @@
                         })
                       : t('statisticsPage.fastStatsWinrateProgression')
                   }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
+                    </span>
+                  </span>
                 </h3>
                 <table
                   v-if="
@@ -534,8 +611,19 @@
                 v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
                 class="rounded-lg border border-primary/30 bg-surface/30 p-6"
               >
-                <h3 class="mb-3 text-lg font-medium text-text">
+                <h3
+                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                >
                   {{ t('statisticsPage.overviewTeamsObjectives') }}
+                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                    ⓘ
+                    <span
+                      role="tooltip"
+                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden max-w-[18rem] -translate-x-1/2 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs font-normal text-text shadow-lg group-hover/tooltip:block"
+                    >
+                      {{ t('statisticsPage.tooltipOverviewObjectives') }}
+                    </span>
+                  </span>
                 </h3>
                 <p class="mb-3 text-xs text-text/60">
                   {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
