@@ -172,19 +172,28 @@ export async function upsertMatchFromRiot(
   const matchRank =
     rankByPuuid != null && rankByPuuid.size > 0 ? computeMatchRankLabel(rankByPuuid) : null
 
-  const match = await prisma.match.create({
-    data: {
-      matchId,
-      region,
-      queueId: QUEUE_ID_420,
-      gameVersion: gameVersion ?? null,
-      gameDuration,
-      platformId: region,
-      endOfGameResult: endOfGameResult ?? null,
-      teams: teams ?? undefined,
-      rank: matchRank,
-    },
-  })
+  let match: { id: bigint }
+  try {
+    match = await prisma.match.create({
+      data: {
+        matchId,
+        region,
+        queueId: QUEUE_ID_420,
+        gameVersion: gameVersion ?? null,
+        gameDuration,
+        platformId: region,
+        endOfGameResult: endOfGameResult ?? null,
+        teams: teams ?? undefined,
+        rank: matchRank,
+      },
+    })
+  } catch (e) {
+    const err = e as { code?: string }
+    if (err?.code === 'P2002') {
+      return { matchId, inserted: false }
+    }
+    throw e
+  }
 
   // POST /admin/backfill-participant-ranks; the cron can also run a limited backfill after collect.
   const createMany = participants.map((p: RiotParticipant) => {

@@ -5,7 +5,20 @@
         {{ t('statisticsPage.title') }}
       </h1>
       <p class="mb-6 text-text/80">
-        {{ t('statisticsPage.description') }}
+        <template v-if="overviewData">
+          {{
+            t('statisticsPage.overviewDescriptionSummary', {
+              lastUpdate: overviewData.lastUpdate
+                ? formatGeneratedAt(overviewData.lastUpdate)
+                : '—',
+              total: overviewEffectiveTotalMatches,
+              count: overviewData.playerCount ?? 0,
+            })
+          }}
+        </template>
+        <template v-else>
+          {{ t('statisticsPage.description') }}
+        </template>
       </p>
 
       <!-- Tabs -->
@@ -32,9 +45,6 @@
           <h2 class="mb-4 text-xl font-semibold text-text-accent">
             {{ t('statisticsPage.overviewTitle') }}
           </h2>
-          <p class="mb-4 text-text/80">
-            {{ t('statisticsPage.overviewDescription') }}
-          </p>
           <div v-if="overviewPending" class="text-text/70">
             {{ t('statisticsPage.loading') }}
           </div>
@@ -52,71 +62,6 @@
             </button>
           </div>
           <div v-else-if="overviewData" class="space-y-6">
-            <div
-              v-if="!overviewHasAnyStats"
-              class="rounded border border-primary/30 bg-surface/50 p-4 text-text/80"
-            >
-              {{ overviewData.message ?? t('statisticsPage.overviewNoData') }}
-            </div>
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
-                  {{ t('statisticsPage.overviewTotalMatches') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
-                    ⓘ
-                    <span
-                      role="tooltip"
-                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                    >
-                      {{ t('statisticsPage.tooltipOverviewTotalMatches') }}
-                    </span>
-                  </span>
-                </h3>
-                <div class="text-2xl font-bold text-text-accent">
-                  {{ overviewEffectiveTotalMatches }}
-                </div>
-              </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
-                  {{ t('statisticsPage.overviewLastUpdate') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
-                    ⓘ
-                    <span
-                      role="tooltip"
-                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                    >
-                      {{ t('statisticsPage.tooltipOverviewLastUpdate') }}
-                    </span>
-                  </span>
-                </h3>
-                <div class="text-sm font-medium text-text">
-                  {{ overviewData.lastUpdate ? formatGeneratedAt(overviewData.lastUpdate) : '—' }}
-                </div>
-              </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
-                  {{ t('statisticsPage.overviewPlayerCountDistinct') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
-                    ⓘ
-                    <span
-                      role="tooltip"
-                      class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                    >
-                      {{ t('statisticsPage.tooltipOverviewPlayerCount') }}
-                    </span>
-                  </span>
-                </h3>
-                <div class="text-2xl font-bold text-text-accent">
-                  {{ overviewData.playerCount ?? 0 }}
-                </div>
-              </div>
-            </div>
             <div
               v-if="(overviewData.matchesByDivision ?? []).length && overviewData.totalMatches > 0"
               class="rounded-lg border border-primary/30 bg-surface/30 p-6"
@@ -577,36 +522,6 @@
             </div>
 
             <div class="grid gap-4 lg:grid-cols-2">
-              <div
-                v-if="(overviewData.topWinrateChampions ?? []).length"
-                class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.overviewTopWinrateChampions') }}
-                </h3>
-                <ul class="space-y-2">
-                  <li
-                    v-for="row in overviewData.topWinrateChampions ?? []"
-                    :key="row.championId"
-                    class="flex items-center gap-2 text-text/90"
-                  >
-                    <img
-                      v-if="gameVersion && championByKey(row.championId)"
-                      :src="
-                        getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)
-                      "
-                      :alt="championName(row.championId) || ''"
-                      class="h-6 w-6 rounded-full object-cover"
-                      width="24"
-                      height="24"
-                    />
-                    <span>{{ championName(row.championId) || row.championId }}</span>
-                    <span class="text-text/60">
-                      — {{ row.games }} {{ t('statisticsPage.games') }}, {{ row.winrate }}% WR
-                    </span>
-                  </li>
-                </ul>
-              </div>
               <div
                 v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
                 class="rounded-lg border border-primary/30 bg-surface/30 p-6"
@@ -1135,151 +1050,6 @@
           class="rounded-lg border border-primary/30 bg-surface/30 p-6"
         >
           <div class="py-4 text-text/70">{{ t('statisticsPage.overviewTeamsNoData') }}</div>
-        </div>
-
-        <!-- Durée de partie vs winrate (courbe, filtre version/division) -->
-        <div
-          v-if="overviewDurationWinrateData?.buckets?.length"
-          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-        >
-          <h3 class="mb-3 text-lg font-medium text-text">
-            {{ t('statisticsPage.overviewDurationWinrateTitle') }}
-          </h3>
-          <p class="mb-4 text-sm text-text/60">
-            {{ t('statisticsPage.overviewDurationWinrateDescription') }}
-          </p>
-          <div class="relative min-h-[380px] w-full">
-            <svg
-              viewBox="0 0 440 340"
-              class="h-full min-h-[360px] w-full"
-              preserveAspectRatio="xMidYMid meet"
-              @mouseleave="durationWinrateTooltip = null"
-            >
-              <defs>
-                <linearGradient id="durationWinrateGradient" x1="0" y1="1" x2="0" y2="0">
-                  <stop offset="0" stop-color="var(--color-accent)" stop-opacity="0.3" />
-                  <stop offset="1" stop-color="var(--color-accent)" stop-opacity="0" />
-                </linearGradient>
-              </defs>
-              <g transform="translate(50, 30)">
-                <!-- Axes: winrate à gauche, durée en bas, 0 en commun (bas-gauche) -->
-                <g class="text-text/70">
-                  <!-- Axe X (durée) en bas -->
-                  <line
-                    :x1="CHART_PAD.left"
-                    :y1="CHART_PAD.top + PLOT_H"
-                    :x2="CHART_PAD.left + PLOT_W"
-                    :y2="CHART_PAD.top + PLOT_H"
-                    stroke="currentColor"
-                    stroke-width="1"
-                    stroke-opacity="0.5"
-                  />
-                  <template v-for="tick in durationWinrateAxisX.ticks" :key="'x-' + tick.value">
-                    <line
-                      :x1="tick.x"
-                      :y1="CHART_PAD.top + PLOT_H"
-                      :x2="tick.x"
-                      :y2="CHART_PAD.top + PLOT_H + 4"
-                      stroke="currentColor"
-                      stroke-width="1"
-                      stroke-opacity="0.5"
-                    />
-                    <text
-                      :x="tick.x"
-                      :y="CHART_PAD.top + PLOT_H + 16"
-                      text-anchor="middle"
-                      class="fill-current text-[10px]"
-                    >
-                      {{ tick.value }}
-                    </text>
-                  </template>
-                  <!-- Axe Y (winrate) à gauche, 0 en bas -->
-                  <line
-                    :x1="CHART_PAD.left"
-                    :y1="CHART_PAD.top + PLOT_H"
-                    :x2="CHART_PAD.left"
-                    :y2="CHART_PAD.top"
-                    stroke="currentColor"
-                    stroke-width="1"
-                    stroke-opacity="0.5"
-                  />
-                  <template v-for="tick in durationWinrateAxisY.ticks" :key="'y-' + tick.value">
-                    <line
-                      :x1="CHART_PAD.left - 4"
-                      :y1="tick.y"
-                      :x2="CHART_PAD.left"
-                      :y2="tick.y"
-                      stroke="currentColor"
-                      stroke-width="1"
-                      stroke-opacity="0.5"
-                    />
-                    <text
-                      :x="CHART_PAD.left - 6"
-                      :y="tick.y"
-                      text-anchor="end"
-                      dominant-baseline="middle"
-                      class="fill-current text-[10px]"
-                    >
-                      {{ tick.value }}%
-                    </text>
-                  </template>
-                </g>
-                <path
-                  v-if="durationWinrateChartClosedPath"
-                  :d="durationWinrateChartClosedPath"
-                  fill="url(#durationWinrateGradient)"
-                />
-                <path
-                  v-if="durationWinrateChartLinePath"
-                  :d="durationWinrateChartLinePath"
-                  fill="none"
-                  stroke="var(--color-accent)"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <circle
-                  v-for="(pt, i) in durationWinrateChartPointsList"
-                  :key="i"
-                  :cx="pt.x"
-                  :cy="pt.y"
-                  :r="durationWinrateTooltip?.index === i ? 8 : 6"
-                  fill="var(--color-accent)"
-                  class="cursor-pointer transition-all"
-                  @mouseenter="durationWinrateTooltip = { ...pt, index: i }"
-                  @mouseleave="durationWinrateTooltip = null"
-                >
-                  <title>{{ pt.label }}</title>
-                </circle>
-              </g>
-            </svg>
-            <Transition name="fade">
-              <div
-                v-if="durationWinrateTooltip"
-                class="absolute right-4 top-4 z-10 min-w-[140px] rounded-lg border border-primary/30 bg-surface/95 px-3 py-2 text-sm text-text shadow-lg backdrop-blur-sm"
-              >
-                <div class="font-medium">
-                  {{ durationWinrateTooltip.durationLabel }}
-                </div>
-                <div class="mt-1 text-text/80">
-                  {{ t('statisticsPage.overviewDurationWinrateTooltipWinrate') }}:
-                  {{ durationWinrateTooltip.winrate }}%
-                </div>
-                <div class="text-text/70">
-                  {{ t('statisticsPage.overviewDurationWinrateTooltipMatches') }}:
-                  {{ durationWinrateTooltip.matchCount }}
-                </div>
-              </div>
-            </Transition>
-            <div class="absolute bottom-0 left-14 right-4 text-center text-sm text-text/60">
-              {{ t('statisticsPage.overviewDurationWinrateAxisX') }}
-            </div>
-            <div
-              class="absolute left-2 top-1/2 w-6 origin-left -translate-y-1/2 -rotate-90 text-center text-sm text-text/60"
-            >
-              {{ t('statisticsPage.overviewDurationWinrateAxisY') }}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -2109,18 +1879,37 @@ function overviewQueryParams(): string {
   const q = params.toString()
   return q ? '?' + q : ''
 }
+const STATS_FETCH_TIMEOUT_MS = 90_000
+
 async function loadOverview() {
   overviewPending.value = true
   overviewError.value = null
-  const url = apiUrl('/api/stats/overview' + overviewQueryParams())
+  const baseUrl = apiUrl('/api/stats')
+  const query = overviewQueryParams()
   try {
-    const data = await $fetch(url)
-    overviewData.value = data as typeof overviewData.value
-    if (import.meta.dev && data && typeof data === 'object' && 'totalMatches' in data) {
+    const overviewRes = await $fetch(baseUrl + '/overview' + query, {
+      timeout: STATS_FETCH_TIMEOUT_MS,
+    })
+    overviewData.value = overviewRes as typeof overviewData.value
+    if (
+      import.meta.dev &&
+      overviewRes &&
+      typeof overviewRes === 'object' &&
+      'totalMatches' in overviewRes
+    ) {
       // eslint-disable-next-line no-console
-      console.log('[stats/overview]', (data as { totalMatches: number }).totalMatches, 'matches')
+      console.log(
+        '[stats/overview]',
+        (overviewRes as { totalMatches: number }).totalMatches,
+        'matches'
+      )
     }
+    loadOverviewDetail()
+    loadOverviewTeams()
+    loadOverviewDurationWinrate()
+    loadOverviewProgression()
   } catch (err) {
+    const url = baseUrl + '/overview' + query
     // eslint-disable-next-line no-console
     console.error('[stats/overview] fetch failed', url, err)
     overviewData.value = null
@@ -2131,10 +1920,6 @@ async function loadOverview() {
   } finally {
     overviewPending.value = false
   }
-  loadOverviewDetail()
-  loadOverviewTeams()
-  loadOverviewDurationWinrate()
-  loadOverviewProgression()
 }
 /** Duration vs winrate (5-min buckets, uses version + rank filters). */
 const overviewDurationWinrateData = ref<{
@@ -2184,6 +1969,7 @@ const CHART_H = 260
 const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
 const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
 const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used when duration winrate chart is rendered
 const durationWinrateTooltip = ref<{
   durationLabel: string
   winrate: number
@@ -2286,6 +2072,8 @@ const durationWinrateChartBuckets = computed(() => overviewDurationWinrateData.v
 const durationWinrateChartScaledData = computed(() =>
   durationWinrateChartScaled(durationWinrateChartBuckets.value)
 )
+/* Chart SVG paths/axes for duration winrate - reserved for chart UI */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 const durationWinrateChartClosedPath = computed(
   () => durationWinrateChartScaledData.value.closedPath
 )
@@ -2293,6 +2081,7 @@ const durationWinrateChartLinePath = computed(() => durationWinrateChartScaledDa
 const durationWinrateChartPointsList = computed(() => durationWinrateChartScaledData.value.list)
 const durationWinrateAxisX = computed(() => durationWinrateChartScaledData.value.axisX)
 const durationWinrateAxisY = computed(() => durationWinrateChartScaledData.value.axisY)
+/* eslint-enable @typescript-eslint/no-unused-vars */
 async function loadOverviewDetail() {
   overviewDetailPending.value = true
   try {
@@ -2558,6 +2347,7 @@ async function loadOverviewTeams() {
 }
 
 /** True when we have at least overview totalMatches > 0 or teams matchCount > 0 (so we don't show "No stats yet" when only teams data exists). */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Fallback for empty state
 const overviewHasAnyStats = computed(
   () =>
     (overviewData.value?.totalMatches ?? 0) > 0 || (overviewTeamsData.value?.matchCount ?? 0) > 0
@@ -2807,15 +2597,18 @@ watch([sidesVersionFilter, sidesDivisionFilter], () => {
 })
 
 onMounted(async () => {
-  if (!versionStore.currentVersion) await versionStore.loadCurrentVersion()
+  const versionPromise = versionStore.currentVersion
+    ? Promise.resolve()
+    : versionStore.loadCurrentVersion()
   await Promise.all([
+    versionPromise,
     championsStore.loadChampions(riotLocale.value),
     itemsStore.loadItems(riotLocale.value),
     runesStore.loadRunes(riotLocale.value),
     summonerSpellsStore.loadSummonerSpells(riotLocale.value),
+    loadOverview(),
+    loadChampions(),
   ])
-  await loadOverview()
-  await loadChampions()
 })
 </script>
 

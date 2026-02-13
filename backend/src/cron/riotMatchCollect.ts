@@ -76,6 +76,22 @@ function isRateLimitError(err: unknown): boolean {
   return axios.isAxiosError(cause) && cause.response?.status === 429
 }
 
+/** Extract error code (Prisma P2002, HTTP status, etc.) and source for Discord context. */
+function extractErrorContext(err: unknown): Record<string, unknown> {
+  const ctx: Record<string, unknown> = {}
+  if (err && typeof err === 'object') {
+    const e = err as Record<string, unknown>
+    if (typeof e.code === 'string') ctx.errorCode = e.code
+    if (typeof e.message === 'string') ctx.errorMessage = e.message
+    const cause = e.cause
+    if (axios.isAxiosError(cause) && cause.response) {
+      ctx.httpStatus = cause.response.status
+      ctx.httpData = typeof cause.response.data === 'object' ? JSON.stringify(cause.response.data).slice(0, 500) : String(cause.response.data).slice(0, 500)
+    }
+  }
+  return ctx
+}
+
 const LOG_PREFIX = '[Riot match collect]'
 
 /**
@@ -325,11 +341,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
             errorStatusCounts.set(status ?? 0, (errorStatusCounts.get(status ?? 0) ?? 0) + 1)
             errors++
             console.warn(`${LOG_PREFIX} getMatch failed for ${matchId}: ${(err as Error).message}`)
+            const apiCtx = { matchId, status, timestamp: new Date().toISOString(), ...extractErrorContext(err) }
             await discordService.sendAlert(
               '⚠️ Poller Riot – Erreur getMatch',
               `Échec getMatch pour ${matchId}. Match ignoré.`,
               err instanceof Error ? err : new Error(String(err)),
-              { matchId, status, timestamp: new Date().toISOString() }
+              apiCtx
             )
             continue
           }
@@ -378,12 +395,17 @@ export async function runRiotMatchCollectOnce(): Promise<{
           }
           errors++
           console.warn(`${LOG_PREFIX} getMatch exception for ${matchId}:`, e)
-          await discordService.sendAlert(
-            '⚠️ Poller Riot – Exception getMatch',
-            `Exception lors de la récupération du match ${matchId}. Match ignoré.`,
-            e instanceof Error ? e : new Error(String(e)),
-            { matchId, timestamp: new Date().toISOString() }
-          )
+          const errObj = e as Record<string, unknown>
+          const isPrismaUnique = errObj?.code === 'P2002'
+          const source = isPrismaUnique ? 'upsertMatch (DB)' : 'getMatch/upsertMatch'
+          const title = isPrismaUnique
+            ? '⚠️ Poller Riot – Match déjà en base (race)'
+            : '⚠️ Poller Riot – Exception traitement match'
+          const message = isPrismaUnique
+            ? `Contrainte unique sur ${matchId}. Match déjà inséré par un autre worker. Ignoré.`
+            : `Exception lors du traitement du match ${matchId}. Match ignoré.`
+          const errCtx = { matchId, source, timestamp: new Date().toISOString(), ...extractErrorContext(e) }
+          await discordService.sendAlert(title, message, e instanceof Error ? e : new Error(String(e)), errCtx)
         }
       }
       if (rateLimitHit) break
