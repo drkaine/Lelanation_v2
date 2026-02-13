@@ -17,6 +17,7 @@ import cron from 'node-cron'
 import { join } from 'path'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.js'
+import { invalidateOverviewDetailCache } from '../services/StatsOverviewService.js'
 import {
   enrichPlayers,
   fetchRanksForPuuids,
@@ -50,8 +51,9 @@ const FAST_MAX_PUUIDS = Math.max(MAX_PUUIDS_PER_RUN, parseInt(process.env.RIOT_M
 const CONSECUTIVE_5XX_SKIP_THRESHOLD = Math.max(3, parseInt(process.env.RIOT_MATCH_5XX_SKIP_AFTER ?? '5', 10) || 5)
 /** Players to enrich (summoner_name) per run. */
 const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
-/** Participant ranks to backfill per cron run (distinct puuids). 0 = disabled. Increase or run riot:backfill-ranks if many null ranks. */
+/** Participant ranks to backfill per cron run (distinct puuids). 0 = use default 200 (backfill always runs). */
 const BACKFILL_RANKS_PER_RUN = Math.max(0, parseInt(process.env.RIOT_BACKFILL_RANKS_PER_RUN ?? '200', 10) || 0)
+const BACKFILL_RANKS_DEFAULT_WHEN_ZERO = 200
 const BACKFILL_RANKS_MAX_BATCHES = Math.max(1, parseInt(process.env.RIOT_BACKFILL_RANKS_MAX_BATCHES ?? '3', 10) || 1)
 const CRON_SCHEDULE = process.env.RIOT_MATCH_CRON_SCHEDULE ?? '0 * * * *'
 /** If lastSuccessAt is older than this (ms), use fallback window. */
@@ -60,6 +62,9 @@ const FALLBACK_WINDOW_SEC = 24 * 60 * 60
 
 /** When 5xx errors exceed this, pause the poller. */
 const SERVER_ERROR_5XX_THRESHOLD = Math.max(20, parseInt(process.env.RIOT_MATCH_5XX_PAUSE_THRESHOLD ?? '50', 10) || 50)
+
+/** Cap du nombre de matchs par vieille version (hors dernière version autorisée). Défaut 100_000. 0 = pas de plafond. */
+const MAX_MATCHES_OLD_VERSION = Math.max(0, parseInt(process.env.RIOT_MAX_MATCHES_OLD_VERSION ?? '100000', 10) || 100000)
 
 interface CrawlRow {
   puuid: string
@@ -175,8 +180,13 @@ export async function runRiotMatchCollectOnce(): Promise<{
     }
 
     const { allowedVersions } = await loadAllowedGameVersions()
+    const sortedAllowedVersions = [...allowedVersions].sort()
+    const latestAllowedVersion =
+      sortedAllowedVersions.length > 0 ? sortedAllowedVersions[sortedAllowedVersions.length - 1]! : null
+    /** Cache du nombre de matchs par version (pour plafond vieilles versions). */
+    const versionMatchCountCache = new Map<string, number>()
     if (allowedVersions.size > 0) {
-      console.log(`${LOG_PREFIX} Allowed game versions: ${[...allowedVersions].sort().join(', ')}`)
+      console.log(`${LOG_PREFIX} Allowed game versions: ${sortedAllowedVersions.join(', ')}`)
     }
 
     // Patch windows for unpoled players; for already polled: [last_seen, now]
@@ -198,10 +208,13 @@ export async function runRiotMatchCollectOnce(): Promise<{
       patchWindows = [patchWindows[patchWindows.length - 1]!]
     }
 
+    // Ne pas repoller les joueurs déjà pollés aujourd'hui (UTC)
+    const startOfTodayUtc = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z')
     const playersToCrawl = await prisma.$queryRaw<CrawlRow[]>`
       SELECT puuid, region, last_seen AS "lastSeen"
       FROM players
       WHERE region = ${PLATFORM_EUW1}
+        AND (last_seen IS NULL OR last_seen < ${startOfTodayUtc})
       ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
       LIMIT ${effectiveMaxPuuids}
     `
@@ -209,6 +222,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
     let rateLimitHit = false
     let skippedAlreadyInDb = 0
     let skippedVersionFilter = 0
+    let skippedCapOldVersion = 0
     const errorStatusCounts = new Map<number, number>()
     const versionFilteredExamples = new Set<string>()
     const matchIdsPerPlayer =
@@ -360,6 +374,24 @@ export async function runRiotMatchCollectOnce(): Promise<{
             if (versionFilteredExamples.size < 5) versionFilteredExamples.add(gameVersion || '(empty)')
             continue
           }
+          // Plafond vieilles versions: ne pas dépasser MAX_MATCHES_OLD_VERSION par version (hors dernière autorisée)
+          if (
+            MAX_MATCHES_OLD_VERSION > 0 &&
+            latestAllowedVersion != null &&
+            gameVersion !== '' &&
+            gameVersion !== latestAllowedVersion
+          ) {
+            let count = versionMatchCountCache.get(gameVersion)
+            if (count === undefined) {
+              count = await prisma.match.count({ where: { gameVersion } })
+              versionMatchCountCache.set(gameVersion, count)
+            }
+            if (count >= MAX_MATCHES_OLD_VERSION) {
+              if (!fastMode) requestCount += 1
+              skippedCapOldVersion++
+              continue
+            }
+          }
           const participants = matchData.info?.participants ?? []
           const puuids = participants
             .map((p: { puuid?: string }) => (typeof p.puuid === 'string' ? p.puuid.trim() : ''))
@@ -377,11 +409,18 @@ export async function runRiotMatchCollectOnce(): Promise<{
           }
           if (!fastMode) requestCount += 1
           const { inserted } = await upsertMatchFromRiot(PLATFORM_EUW1, matchData, rankByPuuid)
-          if (inserted && !fastMode && rankFetchFailed && puuids.length > 0) {
-            try {
-              await backfillRanksForNewMatch(matchId, PLATFORM_EUW1, puuids)
-            } catch (backfillErr) {
-              console.warn(`${LOG_PREFIX} Backfill ranks for new match ${matchId} failed:`, backfillErr)
+          if (inserted && gameVersion) {
+            const cached = versionMatchCountCache.get(gameVersion)
+            if (cached !== undefined) versionMatchCountCache.set(gameVersion, cached + 1)
+          }
+          if (inserted && puuids.length > 0) {
+            const needBackfill = fastMode || rankFetchFailed
+            if (needBackfill) {
+              try {
+                await backfillRanksForNewMatch(matchId, PLATFORM_EUW1, puuids)
+              } catch (backfillErr) {
+                console.warn(`${LOG_PREFIX} Backfill ranks for new match ${matchId} failed:`, backfillErr)
+              }
             }
           }
           if (inserted) {
@@ -427,30 +466,29 @@ export async function runRiotMatchCollectOnce(): Promise<{
       console.log(`${LOG_PREFIX} ${collected} new matches, stats via view players_with_stats`)
     }
 
-    // Backfill participants sans rank
-    if (BACKFILL_RANKS_PER_RUN > 0) {
-      try {
-        const missingRankCount = await countParticipantsMissingRank()
-        if (missingRankCount === 0) {
-          console.log(`${LOG_PREFIX} Backfill participants sans rank: skip (0 manquants)`)
-        } else {
-          let totalUpdated = 0
-          let totalErrors = 0
-          for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
-            const backfill = await backfillParticipantRanks(BACKFILL_RANKS_PER_RUN)
-            totalUpdated += backfill.updated
-            totalErrors += backfill.errors
-            if (backfill.updated === 0) break
-          }
-          if (totalUpdated > 0 || totalErrors > 0) {
-            console.log(
-              `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
-            )
-          }
+    // Fin de cycle: backfill des participants sans rank seulement si nécessaire (vérif manquants → skip si 0)
+    const effectiveBackfillLimit = BACKFILL_RANKS_PER_RUN > 0 ? BACKFILL_RANKS_PER_RUN : BACKFILL_RANKS_DEFAULT_WHEN_ZERO
+    try {
+      const missingRankCount = await countParticipantsMissingRank()
+      if (missingRankCount === 0) {
+        console.log(`${LOG_PREFIX} Backfill participants sans rank: skip (0 manquants)`)
+      } else {
+        let totalUpdated = 0
+        let totalErrors = 0
+        for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
+          const backfill = await backfillParticipantRanks(effectiveBackfillLimit)
+          totalUpdated += backfill.updated
+          totalErrors += backfill.errors
+          if (backfill.updated === 0) break
         }
-      } catch (e) {
-        console.warn(`${LOG_PREFIX} Backfill participants sans rank failed:`, e)
+        if (totalUpdated > 0 || totalErrors > 0) {
+          console.log(
+            `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
+          )
+        }
       }
+    } catch (e) {
+      console.warn(`${LOG_PREFIX} Backfill participants sans rank failed:`, e)
     }
 
     try {
@@ -466,13 +504,21 @@ export async function runRiotMatchCollectOnce(): Promise<{
     console.log(
       `${LOG_PREFIX} Done: ${collected} new matches, ${errors} errors, ${playersToCrawl.length} players processed, ${duration}s`
     )
-    if (collected === 0 && (errors > 0 || skippedAlreadyInDb > 0 || skippedVersionFilter > 0)) {
+    if (skippedCapOldVersion > 0) {
+      console.log(
+        `${LOG_PREFIX} Plafond vieilles versions: ${skippedCapOldVersion} match(s) ignoré(s) (max ${MAX_MATCHES_OLD_VERSION}/version)`
+      )
+    }
+    if (
+      collected === 0 &&
+      (errors > 0 || skippedAlreadyInDb > 0 || skippedVersionFilter > 0 || skippedCapOldVersion > 0)
+    ) {
       const errSummary =
         errorStatusCounts.size > 0
           ? `, errorStatuses=${JSON.stringify(Object.fromEntries(errorStatusCounts))}`
           : ''
       console.log(
-        `${LOG_PREFIX} Diagnostic: skippedAlreadyInDb=${skippedAlreadyInDb}, skippedVersionFilter=${skippedVersionFilter}${errSummary}`
+        `${LOG_PREFIX} Diagnostic: skippedAlreadyInDb=${skippedAlreadyInDb}, skippedVersionFilter=${skippedVersionFilter}, skippedCapOldVersion=${skippedCapOldVersion}${errSummary}`
       )
       if (versionFilteredExamples.size > 0) {
         console.warn(
@@ -481,6 +527,16 @@ export async function runRiotMatchCollectOnce(): Promise<{
       }
     }
     await cronStatus.markSuccess('riotMatchCollect')
+    // Rafraîchir la vue matérialisée overview-detail (runes/items/sorts) en arrière-plan
+    if (collected > 0) {
+      prisma
+        .$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_overview_detail_base')
+        .then(() => {
+          invalidateOverviewDetailCache()
+          console.log(`${LOG_PREFIX} mv_overview_detail_base refreshed`)
+        })
+        .catch((e) => console.warn(`${LOG_PREFIX} mv_overview_detail_base refresh failed:`, e))
+    }
     try {
       const dir = join(process.cwd(), 'data', 'cron')
       await fs.mkdir(dir, { recursive: true })

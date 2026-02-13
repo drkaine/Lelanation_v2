@@ -80,10 +80,9 @@ export async function getOverviewStats(
   try {
     const pVersion = normalizeOverviewParam(version)
     const pRankTier = normalizeOverviewParam(rankTier)
-    const arg1 = pVersion == null ? 'NULL' : `'${String(pVersion).replace(/'/g, "''")}'`
-    const arg2 = pRankTier == null ? 'NULL' : `'${String(pRankTier).replace(/'/g, "''")}'`
-    const sql = `SELECT get_stats_overview(${arg1}, ${arg2}) AS get_stats_overview`
-    const rows = await prisma.$queryRawUnsafe<OverviewRow>(sql)
+    const rows = await prisma.$queryRaw<OverviewRow>(
+      Prisma.sql`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
+    )
     const row0 = rows[0] as Record<string, unknown> | undefined
     let raw: unknown =
       row0?.get_stats_overview ??
@@ -191,20 +190,45 @@ export interface OverviewDetailStats {
 
 type OverviewDetailRow = Array<{ get_stats_overview_detail: OverviewDetailStats | null }>
 
+/** Item IDs to exclude from overview detail stats (e.g. support items, trinkets). */
+const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
+
+/** Cache overview-detail par (version, rankTier, includeSmite) pour éviter 504 sur requêtes répétées. TTL 10 min. */
+const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
+const overviewDetailCache = new Map<
+  string,
+  { data: OverviewDetailStats; expiresAt: number }
+>()
+
+function overviewDetailCacheKey(
+  pVersion: string | null,
+  pRankTier: string | null,
+  includeSmite: boolean
+): string {
+  return `${pVersion ?? ''}|${pRankTier ?? ''}|${includeSmite}`
+}
+
 export async function getOverviewDetailStats(
   version?: string | null,
   rankTier?: string | null,
   includeSmite?: boolean
 ): Promise<OverviewDetailStats | null> {
   if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const key = overviewDetailCacheKey(pVersion, pRankTier, includeSmite ?? false)
+  const now = Date.now()
+  const cached = overviewDetailCache.get(key)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const rows = await prisma.$queryRaw<OverviewDetailRow>(
       Prisma.sql`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
     )
     const raw = rows[0]?.get_stats_overview_detail
-    if (!raw) return null
+    if (!raw) {
+      console.warn('[getOverviewDetailStats] no raw result from get_stats_overview_detail (rows[0] falsy or empty)')
+      return null
+    }
 
     const mapRune = (r: { runeId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
       runeId: Number(r.runeId),
@@ -245,7 +269,7 @@ export async function getOverviewDetailStats(
     const itemsByOrder: Record<string, Array<{ itemId: number; games: number; wins: number; winrate: number }>> = {}
     if (raw.itemsByOrder && typeof raw.itemsByOrder === 'object') {
       for (const [slot, arr] of Object.entries(raw.itemsByOrder)) {
-        itemsByOrder[slot] = Array.isArray(arr)
+        const mapped = Array.isArray(arr)
           ? arr.map((x: { itemId: number; games: number; wins: number; winrate: number }) => ({
               itemId: Number(x.itemId),
               games: Number(x.games),
@@ -253,24 +277,49 @@ export async function getOverviewDetailStats(
               winrate: Number(x.winrate),
             }))
           : []
+        itemsByOrder[slot] = mapped.filter(x => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(x.itemId))
       }
     }
 
     const rawSpells = Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : []
     const summonerSpells = includeSmite ? rawSpells : rawSpells.filter(s => s.spellId !== 11)
-    return {
+    const mappedItems = Array.isArray(raw.items) ? raw.items.map(mapItem) : []
+    const items = mappedItems.filter(i => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(i.itemId))
+    const mappedItemSets = Array.isArray(raw.itemSets) ? raw.itemSets.map(mapItemSet) : []
+    const itemSets = mappedItemSets.filter(
+      set => !set.items.some(id => OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id))
+    )
+    const data: OverviewDetailStats = {
       totalParticipants: Number(raw.totalParticipants) ?? 0,
       runes: Array.isArray(raw.runes) ? raw.runes.map(mapRune) : [],
       runeSets: Array.isArray(raw.runeSets) ? raw.runeSets.map(mapRuneSet) : [],
-      items: Array.isArray(raw.items) ? raw.items.map(mapItem) : [],
-      itemSets: Array.isArray(raw.itemSets) ? raw.itemSets.map(mapItemSet) : [],
+      items,
+      itemSets,
       itemsByOrder,
       summonerSpells,
     }
+    overviewDetailCache.set(key, { data, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
+    return data
   } catch (err) {
     console.error('[getOverviewDetailStats]', err)
     return null
   }
+}
+
+/** Invalider le cache overview-detail (ex. après REFRESH MATERIALIZED VIEW mv_overview_detail_base). */
+export function invalidateOverviewDetailCache(): void {
+  overviewDetailCache.clear()
+}
+
+/** Empty overview detail payload (when DB returns null or error). */
+export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
+  totalParticipants: 0,
+  runes: [],
+  runeSets: [],
+  items: [],
+  itemSets: [],
+  itemsByOrder: {},
+  summonerSpells: [],
 }
 
 /** Stats from matches.teams: bans and objectives (first + kills + distribution for %). */

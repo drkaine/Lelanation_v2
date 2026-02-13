@@ -77,6 +77,7 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
   const data = await getOverviewDetailStats(version, rankTier, includeSmite)
   if (!data) {
+    console.warn('[GET /overview-detail] no data (version=%s rankTier=%s)', version ?? 'null', rankTier ?? 'null')
     return res.status(200).json({
       totalParticipants: 0,
       runes: [],

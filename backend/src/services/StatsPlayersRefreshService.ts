@@ -193,25 +193,21 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
     return { updated: 0, errors: 0 }
   }
   const riotApi = getRiotApiService()
-  const participants = await prisma.participant.findMany({
-    where: { rankTier: null },
-    select: { puuid: true, matchId: true },
-  })
-  const matchIds = [...new Set(participants.map((p) => p.matchId))]
-  const matches = await prisma.match.findMany({
-    where: { id: { in: matchIds } },
-    select: { id: true, region: true },
-  })
-  const matchRegion = new Map<string, string>()
-  for (const m of matches) matchRegion.set(String(m.id), m.region)
-
+  // Requête limitée (distinct puuids) pour ne pas charger des centaines de milliers de lignes en mémoire
+  const rows = await prisma.$queryRaw<{ puuid: string; region: string }[]>`
+    SELECT DISTINCT ON (p.puuid) p.puuid, m.region
+    FROM participants p
+    INNER JOIN matches m ON m.id = p.match_id
+    WHERE p.rank_tier IS NULL
+    ORDER BY p.puuid
+    LIMIT ${limit}
+  `
   const puuidToRegion = new Map<string, string>()
-  for (const p of participants) {
-    const region = matchRegion.get(String(p.matchId)) ?? 'euw1'
-    const platform = region === 'eun1' ? 'eun1' : 'euw1'
-    if (!puuidToRegion.has(p.puuid)) puuidToRegion.set(p.puuid, platform)
+  for (const r of rows) {
+    const platform = r.region === 'eun1' ? 'eun1' : 'euw1'
+    puuidToRegion.set(r.puuid, platform)
   }
-  const puuids = [...puuidToRegion.keys()].slice(0, limit)
+  const puuids = rows.map((r) => r.puuid)
 
   let updated = 0
   let errors = 0

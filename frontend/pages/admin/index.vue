@@ -156,6 +156,7 @@
                 </span>
               </div>
               <p class="text-xs text-text/60">{{ t('admin.riotMatch.pollerHint') }}</p>
+              <p class="mt-1 text-xs text-text/50">{{ t('admin.riotMatch.workerStartHint') }}</p>
             </div>
             <div class="mb-4">
               <h3 class="mb-2 text-sm font-medium text-text">
@@ -189,6 +190,15 @@
               {{ riotCollectTriggering ? '…' : t('admin.riotMatch.trigger') }}
             </button>
             <button
+              type="button"
+              class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80 disabled:opacity-50"
+              :disabled="riotBackfillTriggering"
+              :title="t('admin.riotMatch.backfillTitle')"
+              @click="triggerRiotBackfillRanks"
+            >
+              {{ riotBackfillTriggering ? '…' : t('admin.riotMatch.backfillRanks') }}
+            </button>
+            <button
               v-if="cron?.riotWorker?.active"
               type="button"
               class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:text-red-400"
@@ -198,11 +208,15 @@
               {{ riotStopTriggering ? '…' : t('admin.riotMatch.stopPoller') }}
             </button>
             <p
-              v-if="riotCollectMessage || riotStopMessage"
-              :class="riotCollectError || riotStopError ? 'text-error' : 'text-green-600'"
+              v-if="riotCollectMessage || riotStopMessage || riotBackfillMessage"
+              :class="
+                riotCollectError || riotStopError || riotBackfillError
+                  ? 'text-error'
+                  : 'text-green-600'
+              "
               class="mt-2 text-sm"
             >
-              {{ riotCollectMessage || riotStopMessage }}
+              {{ riotCollectMessage || riotStopMessage || riotBackfillMessage }}
             </p>
           </div>
         </div>
@@ -734,6 +748,9 @@ const riotCollectError = ref(false)
 const riotStopTriggering = ref(false)
 const riotStopMessage = ref('')
 const riotStopError = ref(false)
+const riotBackfillTriggering = ref(false)
+const riotBackfillMessage = ref('')
+const riotBackfillError = ref(false)
 const videosTriggering = ref(false)
 const videosTriggerMessage = ref('')
 const videosTriggerError = ref(false)
@@ -1085,6 +1102,36 @@ async function triggerRiotWorkerStop() {
     riotStopMessage.value = t('admin.riotMatch.stopPollerError')
   } finally {
     riotStopTriggering.value = false
+  }
+}
+
+async function triggerRiotBackfillRanks() {
+  riotBackfillMessage.value = ''
+  riotBackfillError.value = false
+  riotCollectMessage.value = ''
+  riotStopMessage.value = ''
+  riotBackfillTriggering.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-backfill-ranks?limit=200'), {
+      method: 'POST',
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok || res.status === 202) {
+      riotBackfillMessage.value = data.message ?? t('admin.riotMatch.backfillBackground')
+    } else {
+      riotBackfillError.value = true
+      riotBackfillMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
+    }
+  } catch {
+    riotBackfillError.value = true
+    riotBackfillMessage.value = t('admin.riotMatch.triggerError')
+  } finally {
+    riotBackfillTriggering.value = false
   }
 }
 

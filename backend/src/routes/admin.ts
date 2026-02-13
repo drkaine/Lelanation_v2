@@ -278,6 +278,32 @@ router.post('/riot-collect-now', (_req, res) => {
   })
 })
 
+// --- Trigger backfill participant ranks in background (like riot-collect-now, avoids 504) ---
+// Worker = long-running process (npm run riot:worker). Backfill = one-shot fill of missing ranks.
+router.post('/riot-backfill-ranks', (req, res) => {
+  const limit = Math.min(parseInt(String(req.query?.limit || '200'), 10) || 200, 5000)
+  res.status(202).json({
+    success: true,
+    message: `Backfill rangs lancé en arrière-plan (limit=${limit}). Actualisez dans quelques minutes.`,
+  })
+  ;(async () => {
+    try {
+      const missingCount = await countParticipantsMissingRank()
+      if (missingCount === 0) {
+        const { matchesUpdated } = await refreshMatchRanks()
+        console.log('[admin] riot-backfill-ranks: 0 participants sans rank, Match.rank refresh:', matchesUpdated)
+        return
+      }
+      const { updated, errors } = await backfillParticipantRanks(limit)
+      console.log('[admin] riot-backfill-ranks: updated=', updated, 'errors=', errors)
+      const { matchesUpdated } = await refreshMatchRanks()
+      console.log('[admin] riot-backfill-ranks: matchesUpdated=', matchesUpdated)
+    } catch (e) {
+      console.error('[admin] riot-backfill-ranks failed:', e)
+    }
+  })()
+})
+
 // --- Request Riot worker to stop (used by admin "Stopper le poller") ---
 // Writes a stop-request file; the worker (npm run riot:worker) checks it at the start of each cycle and exits.
 const RIOT_WORKER_STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')

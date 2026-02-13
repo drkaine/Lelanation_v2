@@ -15,6 +15,7 @@ import { setupRiotMatchCollect } from './cron/riotMatchCollect.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { MetricsService } from './services/MetricsService.js'
+import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -66,6 +67,13 @@ app.listen(PORT, () => {
   console.log(`Cron jobs initialized`)
   console.log(`Current time: ${new Date().toISOString()}`)
   console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
+  // Précharger le cache overview-detail (cas sans filtre) pour limiter les 504 sur première requête
+  setTimeout(() => {
+    getOverviewDetailStats(null, null, false).then(
+      (d) => d && console.log('[Server] Overview-detail cache warmed'),
+      (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
+    )
+  }, 15_000)
 })
 
 export default app
