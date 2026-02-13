@@ -178,7 +178,9 @@ En complément, un backfill en batch (`backfillParticipantRanks`) rattrape les p
 - **Admin** : `POST /admin/backfill-participant-ranks` avec optionnel `{ "limit": 200 }`.
 - **Cron** : si `RIOT_BACKFILL_RANKS_PER_RUN` > 0, le cron lance ce backfill en plusieurs batches après chaque passage (legacy / rattrapage).
 
-Un participant peut rester sans rank si : (1) le joueur est **non classé** (pas d’entrée Solo/Duo) ; (2) l’API League-v4 a renvoyé une erreur (rate limit, 403, etc.) pour ce PUUID.
+Un participant peut rester sans rank si : (1) le joueur est **non classé** (pas d’entrée Solo/Duo) ; (2) l’API League-v4 a renvoyé une erreur (rate limit, 403, etc.) pour ce PUUID ; (3) **mode rapide** (backlog > seuil) : les rangs ne sont pas récupérés à l’insertion pour économiser les appels API ; (4) l’appel de rang a échoué juste avant l’insertion (un fallback backfill est alors fait pour ce match).
+
+**Beaucoup de matchs/participants avec rank null** : augmenter `RIOT_BACKFILL_RANKS_PER_RUN` (ex. 500) et/ou lancer le script avec une limite plus haute : `npm run riot:backfill-ranks -- 2000` (jusqu’à 5000 PUUIDs par exécution).
 
 ### Nettoyer les matchs d’une mauvaise version (game_version)
 

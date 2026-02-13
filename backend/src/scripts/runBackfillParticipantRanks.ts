@@ -1,7 +1,9 @@
 /**
  * Backfill participant rank (rankTier, rankDivision, rankLp) from Riot League API,
  * then recompute Match.rank for all matches.
- * Usage: npm run riot:backfill-ranks (from backend/) or npm run riot:backfill-ranks -- 200
+ * Use this to fix many participants/matches with null rank (e.g. after fast mode or API failures).
+ *
+ * Usage: npm run riot:backfill-ranks (from backend/) or npm run riot:backfill-ranks -- 2000
  * Env: RIOT_BACKFILL_RANK_LIMIT (default 200) = max distinct puuids to process per run.
  */
 import { config } from 'dotenv'
@@ -24,7 +26,7 @@ async function main(): Promise<void> {
     const limitArg = process.argv[2]
     const limitEnv = process.env.RIOT_BACKFILL_RANK_LIMIT
     const limit = limitArg ? parseInt(limitArg, 10) : (limitEnv ? parseInt(limitEnv, 10) : 200)
-    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 200
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 5000) : 200
 
     console.log('[riot:backfill-ranks] Backfilling participant ranks (limit=%d, %d manquants)...', safeLimit, missingCount)
     const { updated, errors } = await backfillParticipantRanks(safeLimit)

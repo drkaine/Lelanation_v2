@@ -18,6 +18,7 @@ import {
   getOverviewTeamsStats,
   getOverviewSidesStats,
   getOverviewDurationWinrateStats,
+  getDurationWinrateByChampion,
   getOverviewProgressionStats,
 } from '../services/StatsOverviewService.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -69,11 +70,12 @@ router.get('/overview', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1 (include Smite in spells, e.g. for champion page) */
 router.get('/overview-detail', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
-  const data = await getOverviewDetailStats(version, rankTier)
+  const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
+  const data = await getOverviewDetailStats(version, rankTier, includeSmite)
   if (!data) {
     return res.status(200).json({
       totalParticipants: 0,
@@ -226,6 +228,21 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
     totalGames: data.totalGames,
     generatedAt: data.generatedAt
   })
+})
+
+/** GET /api/stats/champions/:championId/duration-winrate - duration (5-min buckets) vs winrate for this champion. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/champions/:championId/duration-winrate', async (req: Request, res: Response) => {
+  const championId = parseInt(String(req.params.championId), 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const data = await getDurationWinrateByChampion(championId, version, rankTier)
+  if (!data) {
+    return res.status(200).json({ buckets: [] })
+  }
+  return res.json(data)
 })
 
 /** GET /api/stats/champions/:championId/builds */

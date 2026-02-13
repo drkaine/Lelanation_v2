@@ -20,6 +20,7 @@ import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.j
 import {
   enrichPlayers,
   fetchRanksForPuuids,
+  backfillRanksForNewMatch,
   backfillParticipantRanks,
   refreshMatchRanks,
   countPlayersMissingSummonerName,
@@ -49,7 +50,7 @@ const FAST_MAX_PUUIDS = Math.max(MAX_PUUIDS_PER_RUN, parseInt(process.env.RIOT_M
 const CONSECUTIVE_5XX_SKIP_THRESHOLD = Math.max(3, parseInt(process.env.RIOT_MATCH_5XX_SKIP_AFTER ?? '5', 10) || 5)
 /** Players to enrich (summoner_name) per run. */
 const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
-/** Participant ranks to backfill per cron run. 0 = disabled. */
+/** Participant ranks to backfill per cron run (distinct puuids). 0 = disabled. Increase or run riot:backfill-ranks if many null ranks. */
 const BACKFILL_RANKS_PER_RUN = Math.max(0, parseInt(process.env.RIOT_BACKFILL_RANKS_PER_RUN ?? '200', 10) || 0)
 const BACKFILL_RANKS_MAX_BATCHES = Math.max(1, parseInt(process.env.RIOT_BACKFILL_RANKS_MAX_BATCHES ?? '3', 10) || 1)
 const CRON_SCHEDULE = process.env.RIOT_MATCH_CRON_SCHEDULE ?? '0 * * * *'
@@ -364,16 +365,25 @@ export async function runRiotMatchCollectOnce(): Promise<{
             .map((p: { puuid?: string }) => (typeof p.puuid === 'string' ? p.puuid.trim() : ''))
             .filter((puuid: string) => puuid !== '')
           let rankByPuuid: Map<string, { tier: string; rank: string; leaguePoints: number } | null> | undefined
+          let rankFetchFailed = false
           if (!fastMode && puuids.length > 0) {
             try {
               rankByPuuid = await fetchRanksForPuuids(PLATFORM_EUW1, puuids)
               requestCount += 10
             } catch (rankErr) {
+              rankFetchFailed = true
               errors++
             }
           }
           if (!fastMode) requestCount += 1
           const { inserted } = await upsertMatchFromRiot(PLATFORM_EUW1, matchData, rankByPuuid)
+          if (inserted && !fastMode && rankFetchFailed && puuids.length > 0) {
+            try {
+              await backfillRanksForNewMatch(matchId, PLATFORM_EUW1, puuids)
+            } catch (backfillErr) {
+              console.warn(`${LOG_PREFIX} Backfill ranks for new match ${matchId} failed:`, backfillErr)
+            }
+          }
           if (inserted) {
             collected++
             for (const p of participants) {

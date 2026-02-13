@@ -193,7 +193,8 @@ type OverviewDetailRow = Array<{ get_stats_overview_detail: OverviewDetailStats 
 
 export async function getOverviewDetailStats(
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | null,
+  includeSmite?: boolean
 ): Promise<OverviewDetailStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
@@ -255,6 +256,8 @@ export async function getOverviewDetailStats(
       }
     }
 
+    const rawSpells = Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : []
+    const summonerSpells = includeSmite ? rawSpells : rawSpells.filter(s => s.spellId !== 11)
     return {
       totalParticipants: Number(raw.totalParticipants) ?? 0,
       runes: Array.isArray(raw.runes) ? raw.runes.map(mapRune) : [],
@@ -262,7 +265,7 @@ export async function getOverviewDetailStats(
       items: Array.isArray(raw.items) ? raw.items.map(mapItem) : [],
       itemSets: Array.isArray(raw.itemSets) ? raw.itemSets.map(mapItemSet) : [],
       itemsByOrder,
-      summonerSpells: Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : [],
+      summonerSpells,
     }
   } catch (err) {
     console.error('[getOverviewDetailStats]', err)
@@ -340,6 +343,37 @@ export async function getOverviewDurationWinrateStats(
     }
   } catch (err) {
     console.error('[getOverviewDurationWinrateStats]', err)
+    return null
+  }
+}
+
+/** Duration vs winrate by 5-min buckets for a specific champion. */
+export async function getDurationWinrateByChampion(
+  championId: number,
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewDurationWinrateStats | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const pVersion = version != null && version !== '' ? version : null
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows = await prisma.$queryRaw<OverviewDurationWinrateRow>(
+      Prisma.sql`SELECT get_stats_duration_winrate_by_champion(${championId}, ${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
+    )
+    const raw = rows[0]?.get_stats_overview_duration_winrate
+    if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
+      return { buckets: [] }
+    }
+    return {
+      buckets: raw.buckets.map((b: { durationMin: number; matchCount: number; wins: number; winrate: number }) => ({
+        durationMin: Number(b.durationMin),
+        matchCount: Number(b.matchCount),
+        wins: Number(b.wins),
+        winrate: Number(b.winrate),
+      })),
+    }
+  } catch (err) {
+    console.error('[getDurationWinrateByChampion]', err)
     return null
   }
 }

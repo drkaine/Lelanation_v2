@@ -138,14 +138,16 @@
               </div>
             </div>
 
-            <!-- Fast Stats encarts (même style que card Objectifs) -->
+            <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
             <div class="grid gap-4 sm:grid-cols-2">
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
+              <!-- Champions les plus choisis -->
+              <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
                   {{ t('statisticsPage.fastStatsMostPicked') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                  <span
+                    class="relative ml-1 inline-flex cursor-help text-text/50"
+                    aria-hidden="true"
+                  >
                     ⓘ
                     <span
                       role="tooltip"
@@ -157,17 +159,17 @@
                 </h3>
                 <table
                   v-if="(overviewData.topPickrateChampions ?? []).length"
-                  class="w-full text-sm"
+                  class="fast-stat-table w-full text-sm"
                 >
                   <tbody>
                     <tr
                       v-for="(row, idx) in (overviewData.topPickrateChampions ?? []).slice(0, 5)"
                       :key="row.championId"
-                      class="border-b border-primary/10 last:border-0"
+                      class="fast-stat-row"
                     >
-                      <td class="py-1.5">
+                      <td class="py-1">
                         <div class="flex items-center gap-2">
-                          <span class="w-5 text-text/60">{{ idx + 1 }}.</span>
+                          <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                           <img
                             v-if="gameVersion && championByKey(row.championId)"
                             :src="
@@ -177,20 +179,22 @@
                               )
                             "
                             :alt="championName(row.championId) || ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
+                            class="h-5 w-5 shrink-0 rounded-full object-cover"
+                            width="20"
+                            height="20"
                           />
-                          <span class="font-medium">{{
+                          <span class="min-w-0 truncate text-sm font-medium text-text">{{
                             championName(row.championId) || row.championId
                           }}</span>
                         </div>
                       </td>
-                      <td class="py-1.5 text-right">
+                      <td class="w-[140px] py-1 pl-2">
                         <div class="flex items-center justify-end gap-2">
-                          <div class="h-2 w-16 overflow-hidden rounded bg-surface">
+                          <div
+                            class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                          >
                             <div
-                              class="h-full bg-accent"
+                              class="h-full rounded bg-accent transition-[width]"
                               :style="{
                                 width:
                                   Math.min(
@@ -207,7 +211,9 @@
                               }"
                             />
                           </div>
-                          <span class="min-w-[3rem]">{{ row.pickrate }}%</span>
+                          <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
+                            >{{ row.pickrate }}%</span
+                          >
                         </div>
                       </td>
                     </tr>
@@ -218,23 +224,26 @@
                 </div>
                 <div
                   v-if="(overviewData.topPickrateChampions ?? []).length"
-                  class="mt-4 text-center"
+                  class="mt-2 text-center"
                 >
                   <button
                     type="button"
-                    class="rounded bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+                    class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
                     @click="goToChampionsWithSort('pickrate')"
                   >
                     {{ t('statisticsPage.fastStatsSeeMore') }}
                   </button>
                 </div>
               </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
+
+              <!-- Meilleurs champions -->
+              <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
                   {{ t('statisticsPage.fastStatsBestWinrate') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                  <span
+                    class="relative ml-1 inline-flex cursor-help text-text/50"
+                    aria-hidden="true"
+                  >
                     ⓘ
                     <span
                       role="tooltip"
@@ -246,17 +255,17 @@
                 </h3>
                 <table
                   v-if="(overviewData.topWinrateChampions ?? []).length"
-                  class="w-full text-sm"
+                  class="fast-stat-table w-full text-sm"
                 >
                   <tbody>
                     <tr
                       v-for="(row, idx) in (overviewData.topWinrateChampions ?? []).slice(0, 5)"
                       :key="row.championId"
-                      class="border-b border-primary/10 last:border-0"
+                      class="fast-stat-row"
                     >
-                      <td class="py-1.5">
+                      <td class="py-1">
                         <div class="flex items-center gap-2">
-                          <span class="w-5 text-text/60">{{ idx + 1 }}.</span>
+                          <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                           <img
                             v-if="gameVersion && championByKey(row.championId)"
                             :src="
@@ -266,20 +275,22 @@
                               )
                             "
                             :alt="championName(row.championId) || ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
+                            class="h-5 w-5 shrink-0 rounded-full object-cover"
+                            width="20"
+                            height="20"
                           />
-                          <span class="font-medium">{{
+                          <span class="min-w-0 truncate text-sm font-medium text-text">{{
                             championName(row.championId) || row.championId
                           }}</span>
                         </div>
                       </td>
-                      <td class="py-1.5 text-right">
+                      <td class="w-[140px] py-1 pl-2">
                         <div class="flex items-center justify-end gap-2">
-                          <div class="h-2 w-16 overflow-hidden rounded bg-surface">
+                          <div
+                            class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                          >
                             <div
-                              class="h-full bg-success/80"
+                              class="h-full rounded bg-success transition-[width]"
                               :style="{
                                 width: (() => {
                                   const list = overviewData.topWinrateChampions ?? []
@@ -296,7 +307,9 @@
                               }"
                             />
                           </div>
-                          <span class="min-w-[3rem]">{{ row.winrate }}%</span>
+                          <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
+                            >{{ row.winrate }}%</span
+                          >
                         </div>
                       </td>
                     </tr>
@@ -307,23 +320,26 @@
                 </div>
                 <div
                   v-if="(overviewData.topWinrateChampions ?? []).length"
-                  class="mt-4 text-center"
+                  class="mt-2 text-center"
                 >
                   <button
                     type="button"
-                    class="rounded bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+                    class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
                     @click="goToChampionsWithSort('winrate')"
                   >
                     {{ t('statisticsPage.fastStatsSeeMore') }}
                   </button>
                 </div>
               </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
+
+              <!-- Champions les plus bannis -->
+              <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
                   {{ t('statisticsPage.fastStatsMostBanned') }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                  <span
+                    class="relative ml-1 inline-flex cursor-help text-text/50"
+                    aria-hidden="true"
+                  >
                     ⓘ
                     <span
                       role="tooltip"
@@ -333,16 +349,19 @@
                     </span>
                   </span>
                 </h3>
-                <table v-if="overviewEffectiveTopBanrateChampions.length" class="w-full text-sm">
+                <table
+                  v-if="overviewEffectiveTopBanrateChampions.length"
+                  class="fast-stat-table w-full text-sm"
+                >
                   <tbody>
                     <tr
                       v-for="(row, idx) in overviewEffectiveTopBanrateChampions.slice(0, 5)"
                       :key="row.championId"
-                      class="border-b border-primary/10 last:border-0"
+                      class="fast-stat-row"
                     >
-                      <td class="py-1.5">
+                      <td class="py-1">
                         <div class="flex items-center gap-2">
-                          <span class="w-5 text-text/60">{{ idx + 1 }}.</span>
+                          <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                           <img
                             v-if="gameVersion && championByKey(row.championId)"
                             :src="
@@ -352,20 +371,22 @@
                               )
                             "
                             :alt="championName(row.championId) || ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
+                            class="h-5 w-5 shrink-0 rounded-full object-cover"
+                            width="20"
+                            height="20"
                           />
-                          <span class="font-medium">{{
+                          <span class="min-w-0 truncate text-sm font-medium text-text">{{
                             championName(row.championId) || row.championId
                           }}</span>
                         </div>
                       </td>
-                      <td class="py-1.5 text-right">
+                      <td class="w-[140px] py-1 pl-2">
                         <div class="flex items-center justify-end gap-2">
-                          <div class="h-2 w-16 overflow-hidden rounded bg-surface">
+                          <div
+                            class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                          >
                             <div
-                              class="h-full bg-error/80"
+                              class="h-full rounded bg-error transition-[width]"
                               :style="{
                                 width:
                                   Math.min(
@@ -382,7 +403,9 @@
                               }"
                             />
                           </div>
-                          <span class="min-w-[3rem]">{{ row.banrate }}%</span>
+                          <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
+                            >{{ row.banrate }}%</span
+                          >
                         </div>
                       </td>
                     </tr>
@@ -391,20 +414,20 @@
                 <div v-else class="py-6 text-center text-text/60">
                   {{ t('statisticsPage.fastStatsNoData') }}
                 </div>
-                <div v-if="overviewEffectiveTopBanrateChampions.length" class="mt-4 text-center">
+                <div v-if="overviewEffectiveTopBanrateChampions.length" class="mt-2 text-center">
                   <button
                     type="button"
-                    class="rounded bg-accent px-4 py-2 text-sm font-medium text-background hover:opacity-90"
+                    class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
                     @click="goToChampionsWithSort('banrate')"
                   >
                     {{ t('statisticsPage.fastStatsSeeMore') }}
                   </button>
                 </div>
               </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <h3
-                  class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
-                >
+
+              <!-- Winrates depuis X -->
+              <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
                   {{
                     oldestVersionForProgression
                       ? t('statisticsPage.fastStatsWinrateSince', {
@@ -412,7 +435,10 @@
                         })
                       : t('statisticsPage.fastStatsWinrateProgression')
                   }}
-                  <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
+                  <span
+                    class="relative ml-1 inline-flex cursor-help text-text/50"
+                    aria-hidden="true"
+                  >
                     ⓘ
                     <span
                       role="tooltip"
@@ -428,15 +454,15 @@
                       (overviewProgressionData?.losers?.length ?? 0) >
                     0
                   "
-                  class="w-full text-sm"
+                  class="fast-stat-table w-full text-sm"
                 >
                   <tbody>
                     <template
                       v-for="g in (overviewProgressionData?.gainers ?? []).slice(0, 3)"
                       :key="'g-' + g.championId"
                     >
-                      <tr class="border-b border-primary/10">
-                        <td class="py-1.5">
+                      <tr class="fast-stat-row">
+                        <td class="py-1">
                           <div class="flex items-center gap-2">
                             <img
                               v-if="gameVersion && championByKey(g.championId)"
@@ -447,17 +473,47 @@
                                 )
                               "
                               :alt="championName(g.championId) || ''"
-                              class="h-6 w-6 rounded-full object-cover"
-                              width="24"
-                              height="24"
+                              class="h-5 w-5 shrink-0 rounded-full object-cover"
+                              width="20"
+                              height="20"
                             />
-                            <span class="font-medium">{{
+                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
                               championName(g.championId) || g.championId
                             }}</span>
                           </div>
                         </td>
-                        <td class="py-1.5 text-right">
-                          <span class="text-success">+{{ g.delta }}%</span>
+                        <td class="w-[140px] py-1 pl-2">
+                          <div class="flex items-center justify-end gap-2">
+                            <div
+                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                            >
+                              <div
+                                class="h-full rounded bg-success transition-[width]"
+                                :style="{
+                                  width:
+                                    Math.min(
+                                      100,
+                                      (Math.abs(g.delta) /
+                                        Math.max(
+                                          ...[
+                                            ...(overviewProgressionData?.gainers ?? []).map(g2 =>
+                                              Math.abs(g2.delta)
+                                            ),
+                                            ...(overviewProgressionData?.losers ?? []).map(l =>
+                                              Math.abs(l.delta)
+                                            ),
+                                          ],
+                                          1
+                                        )) *
+                                        100
+                                    ) + '%',
+                                }"
+                              />
+                            </div>
+                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-success"
+                              >+{{ g.delta }}%</span
+                            >
+                          </div>
                         </td>
                       </tr>
                     </template>
@@ -469,16 +525,14 @@
                       "
                       class="border-b border-primary/20"
                     >
-                      <td colspan="2" class="py-1">
-                        <div class="h-px bg-primary/20" />
-                      </td>
+                      <td colspan="2" class="py-1"><div class="h-px bg-primary/20" /></td>
                     </tr>
                     <template
                       v-for="l in (overviewProgressionData?.losers ?? []).slice(0, 3)"
                       :key="'l-' + l.championId"
                     >
-                      <tr class="border-b border-primary/10 last:border-0">
-                        <td class="py-1.5">
+                      <tr class="fast-stat-row">
+                        <td class="py-1">
                           <div class="flex items-center gap-2">
                             <img
                               v-if="gameVersion && championByKey(l.championId)"
@@ -489,17 +543,47 @@
                                 )
                               "
                               :alt="championName(l.championId) || ''"
-                              class="h-6 w-6 rounded-full object-cover"
-                              width="24"
-                              height="24"
+                              class="h-5 w-5 shrink-0 rounded-full object-cover"
+                              width="20"
+                              height="20"
                             />
-                            <span class="font-medium">{{
+                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
                               championName(l.championId) || l.championId
                             }}</span>
                           </div>
                         </td>
-                        <td class="py-1.5 text-right">
-                          <span class="text-error">{{ l.delta }}%</span>
+                        <td class="w-[140px] py-1 pl-2">
+                          <div class="flex items-center justify-end gap-2">
+                            <div
+                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                            >
+                              <div
+                                class="h-full rounded bg-error transition-[width]"
+                                :style="{
+                                  width:
+                                    Math.min(
+                                      100,
+                                      (Math.abs(l.delta) /
+                                        Math.max(
+                                          ...[
+                                            ...(overviewProgressionData?.gainers ?? []).map(g2 =>
+                                              Math.abs(g2.delta)
+                                            ),
+                                            ...(overviewProgressionData?.losers ?? []).map(l2 =>
+                                              Math.abs(l2.delta)
+                                            ),
+                                          ],
+                                          1
+                                        )) *
+                                        100
+                                    ) + '%',
+                                }"
+                              />
+                            </div>
+                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-error"
+                              >{{ l.delta }}%</span
+                            >
+                          </div>
                         </td>
                       </tr>
                     </template>
@@ -517,6 +601,190 @@
                 </table>
                 <div v-else class="py-6 text-center text-text/60">
                   {{ t('statisticsPage.fastStatsNoProgression') }}
+                </div>
+              </div>
+
+              <!-- Bans par équipe gagnante -->
+              <div
+                v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
+                class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4"
+              >
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
+                  {{ t('statisticsPage.overviewTeamsBansByWin') }}
+                </h3>
+                <table
+                  v-if="(overviewTeamsData.bans.byWin ?? []).length"
+                  class="fast-stat-table w-full text-sm"
+                >
+                  <tbody>
+                    <tr
+                      v-for="(b, idx) in (overviewTeamsData.bans.byWin ?? []).slice(
+                        0,
+                        bansExpandByWin ? 20 : 5
+                      )"
+                      :key="'win-' + b.championId"
+                      class="fast-stat-row"
+                    >
+                      <td class="py-1">
+                        <div class="flex items-center gap-2">
+                          <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                          <img
+                            v-if="gameVersion && championByKey(b.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(b.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(b.championId) || ''"
+                            class="h-5 w-5 shrink-0 rounded-full object-cover"
+                            width="20"
+                            height="20"
+                          />
+                          <span class="min-w-0 truncate text-sm font-medium text-text">{{
+                            championName(b.championId) || b.championId
+                          }}</span>
+                        </div>
+                      </td>
+                      <td class="w-[140px] py-1 pl-2">
+                        <div class="flex items-center justify-end gap-2">
+                          <div
+                            class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                          >
+                            <div
+                              class="h-full rounded bg-success transition-[width]"
+                              :style="{
+                                width:
+                                  Math.min(
+                                    100,
+                                    ((parseFloat(String(b.banRatePercent).replace(',', '.')) || 0) /
+                                      Math.max(
+                                        ...(overviewTeamsData.bans.byWin ?? []).map(
+                                          x =>
+                                            parseFloat(
+                                              String(x.banRatePercent).replace(',', '.')
+                                            ) || 0
+                                        ),
+                                        1
+                                      )) *
+                                      100
+                                  ) + '%',
+                              }"
+                            />
+                          </div>
+                          <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
+                            >{{ b.banRatePercent }}%</span
+                          >
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-if="(overviewTeamsData.bans.byWin ?? []).length" class="mt-2 text-center">
+                  <button
+                    v-if="(overviewTeamsData.bans.byWin ?? []).length > 5"
+                    type="button"
+                    class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
+                    @click="bansExpandByWin = !bansExpandByWin"
+                  >
+                    {{
+                      bansExpandByWin
+                        ? t('statisticsPage.showLess')
+                        : t('statisticsPage.fastStatsSeeMore')
+                    }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Bans par équipe perdante -->
+              <div
+                v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
+                class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4"
+              >
+                <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
+                  {{ t('statisticsPage.overviewTeamsBansByLoss') }}
+                </h3>
+                <table
+                  v-if="(overviewTeamsData.bans.byLoss ?? []).length"
+                  class="fast-stat-table w-full text-sm"
+                >
+                  <tbody>
+                    <tr
+                      v-for="(b, idx) in (overviewTeamsData.bans.byLoss ?? []).slice(
+                        0,
+                        bansExpandByLoss ? 20 : 5
+                      )"
+                      :key="'loss-' + b.championId"
+                      class="fast-stat-row"
+                    >
+                      <td class="py-1">
+                        <div class="flex items-center gap-2">
+                          <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                          <img
+                            v-if="gameVersion && championByKey(b.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(b.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(b.championId) || ''"
+                            class="h-5 w-5 shrink-0 rounded-full object-cover"
+                            width="20"
+                            height="20"
+                          />
+                          <span class="min-w-0 truncate text-sm font-medium text-text">{{
+                            championName(b.championId) || b.championId
+                          }}</span>
+                        </div>
+                      </td>
+                      <td class="w-[140px] py-1 pl-2">
+                        <div class="flex items-center justify-end gap-2">
+                          <div
+                            class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                          >
+                            <div
+                              class="h-full rounded bg-error transition-[width]"
+                              :style="{
+                                width:
+                                  Math.min(
+                                    100,
+                                    ((parseFloat(String(b.banRatePercent).replace(',', '.')) || 0) /
+                                      Math.max(
+                                        ...(overviewTeamsData.bans.byLoss ?? []).map(
+                                          x =>
+                                            parseFloat(
+                                              String(x.banRatePercent).replace(',', '.')
+                                            ) || 0
+                                        ),
+                                        1
+                                      )) *
+                                      100
+                                  ) + '%',
+                              }"
+                            />
+                          </div>
+                          <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
+                            >{{ b.banRatePercent }}%</span
+                          >
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div v-if="(overviewTeamsData.bans.byLoss ?? []).length" class="mt-2 text-center">
+                  <button
+                    v-if="(overviewTeamsData.bans.byLoss ?? []).length > 5"
+                    type="button"
+                    class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
+                    @click="bansExpandByLoss = !bansExpandByLoss"
+                  >
+                    {{
+                      bansExpandByLoss
+                        ? t('statisticsPage.showLess')
+                        : t('statisticsPage.fastStatsSeeMore')
+                    }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -919,137 +1187,6 @@
           class="rounded-lg border border-primary/30 bg-surface/30 p-6"
         >
           <div class="py-4 text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
-        </div>
-
-        <!-- Bans (from matches.teams) – 3 cards like Objectifs -->
-        <div
-          v-if="overviewTeamsPending"
-          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-        >
-          <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
-        </div>
-        <template v-else-if="overviewTeamsData && overviewTeamsData.matchCount > 0">
-          <p class="mb-2 text-sm text-text/70">
-            {{
-              t('statisticsPage.overviewTeamsMatchCount', { count: overviewTeamsData.matchCount })
-            }}
-          </p>
-          <div class="grid gap-4 sm:grid-cols-3">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h3 class="mb-3 text-lg font-medium text-green-600 dark:text-green-400">
-                {{ t('statisticsPage.overviewTeamsBansByWin') }}
-              </h3>
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="b in overviewTeamsData.bans.byWin.slice(0, bansExpandByWin ? 20 : 5)"
-                  :key="'win-' + b.championId"
-                  class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                  :title="championName(b.championId) ?? String(b.championId)"
-                >
-                  <img
-                    v-if="gameVersion && championByKey(b.championId)"
-                    :src="getChampionImageUrl(gameVersion, championByKey(b.championId)!.image.full)"
-                    :alt="championName(b.championId) ?? ''"
-                    class="h-6 w-6 rounded-full object-cover"
-                    width="24"
-                    height="24"
-                  />
-                  <span class="text-xs text-text/80">{{ b.count }} ({{ b.banRatePercent }})</span>
-                </div>
-              </div>
-              <button
-                v-if="overviewTeamsData.bans.byWin.length > 5"
-                type="button"
-                class="mt-2 text-sm font-medium text-accent hover:underline"
-                @click="bansExpandByWin = !bansExpandByWin"
-              >
-                {{
-                  bansExpandByWin
-                    ? t('statisticsPage.showLess')
-                    : t('statisticsPage.fastStatsSeeMore')
-                }}
-              </button>
-            </div>
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h3 class="mb-3 text-lg font-medium text-red-600 dark:text-red-400">
-                {{ t('statisticsPage.overviewTeamsBansByLoss') }}
-              </h3>
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="b in overviewTeamsData.bans.byLoss.slice(0, bansExpandByLoss ? 20 : 5)"
-                  :key="'loss-' + b.championId"
-                  class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                  :title="championName(b.championId) ?? String(b.championId)"
-                >
-                  <img
-                    v-if="gameVersion && championByKey(b.championId)"
-                    :src="getChampionImageUrl(gameVersion, championByKey(b.championId)!.image.full)"
-                    :alt="championName(b.championId) ?? ''"
-                    class="h-6 w-6 rounded-full object-cover"
-                    width="24"
-                    height="24"
-                  />
-                  <span class="text-xs text-text/80">{{ b.count }} ({{ b.banRatePercent }})</span>
-                </div>
-              </div>
-              <button
-                v-if="overviewTeamsData.bans.byLoss.length > 5"
-                type="button"
-                class="mt-2 text-sm font-medium text-accent hover:underline"
-                @click="bansExpandByLoss = !bansExpandByLoss"
-              >
-                {{
-                  bansExpandByLoss
-                    ? t('statisticsPage.showLess')
-                    : t('statisticsPage.fastStatsSeeMore')
-                }}
-              </button>
-            </div>
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h3 class="mb-3 text-lg font-medium text-text">
-                {{ t('statisticsPage.overviewTeamsBansTop20Total') }}
-              </h3>
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="b in (overviewTeamsData.bans.top20Total ?? []).slice(
-                    0,
-                    bansExpandTop20 ? 20 : 5
-                  )"
-                  :key="'total-' + b.championId"
-                  class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                  :title="championName(b.championId) ?? String(b.championId)"
-                >
-                  <img
-                    v-if="gameVersion && championByKey(b.championId)"
-                    :src="getChampionImageUrl(gameVersion, championByKey(b.championId)!.image.full)"
-                    :alt="championName(b.championId) ?? ''"
-                    class="h-6 w-6 rounded-full object-cover"
-                    width="24"
-                    height="24"
-                  />
-                  <span class="text-xs text-text/80">{{ b.count }} ({{ b.banRatePercent }})</span>
-                </div>
-              </div>
-              <button
-                v-if="(overviewTeamsData.bans.top20Total ?? []).length > 5"
-                type="button"
-                class="mt-2 text-sm font-medium text-accent hover:underline"
-                @click="bansExpandTop20 = !bansExpandTop20"
-              >
-                {{
-                  bansExpandTop20
-                    ? t('statisticsPage.showLess')
-                    : t('statisticsPage.fastStatsSeeMore')
-                }}
-              </button>
-            </div>
-          </div>
-        </template>
-        <div
-          v-else-if="!overviewTeamsPending"
-          class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-        >
-          <div class="py-4 text-text/70">{{ t('statisticsPage.overviewTeamsNoData') }}</div>
         </div>
       </div>
 
@@ -1567,6 +1704,7 @@
               <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
               <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
               <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
+              <option value="wins">{{ t('statisticsPage.wins') }}</option>
             </select>
           </div>
           <div>
@@ -1628,14 +1766,95 @@
                 <th class="px-4 py-3 font-semibold text-text">
                   {{ t('statisticsPage.champion') }}
                 </th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.games') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.wins') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">{{ t('statisticsPage.winrate') }}</th>
-                <th class="px-4 py-3 font-semibold text-text">
-                  {{ t('statisticsPage.pickrate') }}
+                <th
+                  class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
+                  :class="
+                    championsSortOrder === 'games'
+                      ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                      : 'hover:bg-surface/50'
+                  "
+                  @click="setChampionsSort('games')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    {{ t('statisticsPage.games') }}
+                    <template v-if="championsSortOrder === 'games'">
+                      <span class="text-amber-500" aria-hidden="true">{{
+                        championsSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </template>
+                  </span>
                 </th>
-                <th class="px-4 py-3 font-semibold text-text">
-                  {{ t('statisticsPage.banrate') }}
+                <th
+                  class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
+                  :class="
+                    championsSortOrder === 'wins'
+                      ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                      : 'hover:bg-surface/50'
+                  "
+                  @click="setChampionsSort('wins')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    {{ t('statisticsPage.wins') }}
+                    <template v-if="championsSortOrder === 'wins'">
+                      <span class="text-amber-500" aria-hidden="true">{{
+                        championsSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </template>
+                  </span>
+                </th>
+                <th
+                  class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
+                  :class="
+                    championsSortOrder === 'winrate'
+                      ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                      : 'hover:bg-surface/50'
+                  "
+                  @click="setChampionsSort('winrate')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    {{ t('statisticsPage.winrate') }}
+                    <template v-if="championsSortOrder === 'winrate'">
+                      <span class="text-amber-500" aria-hidden="true">{{
+                        championsSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </template>
+                  </span>
+                </th>
+                <th
+                  class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
+                  :class="
+                    championsSortOrder === 'pickrate'
+                      ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                      : 'hover:bg-surface/50'
+                  "
+                  @click="setChampionsSort('pickrate')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    {{ t('statisticsPage.pickrate') }}
+                    <template v-if="championsSortOrder === 'pickrate'">
+                      <span class="text-amber-500" aria-hidden="true">{{
+                        championsSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </template>
+                  </span>
+                </th>
+                <th
+                  class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
+                  :class="
+                    championsSortOrder === 'banrate'
+                      ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                      : 'hover:bg-surface/50'
+                  "
+                  @click="setChampionsSort('banrate')"
+                >
+                  <span class="inline-flex items-center gap-1">
+                    {{ t('statisticsPage.banrate') }}
+                    <template v-if="championsSortOrder === 'banrate'">
+                      <span class="text-amber-500" aria-hidden="true">{{
+                        championsSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </template>
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -1643,7 +1862,8 @@
               <tr
                 v-for="row in filteredChampions"
                 :key="row.championId"
-                class="hover:bg-surface/50"
+                class="cursor-pointer hover:bg-surface/50"
+                @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
               >
                 <td class="px-4 py-2 font-medium text-text">
                   <div class="flex items-center gap-2">
@@ -1657,7 +1877,9 @@
                       width="32"
                       height="32"
                     />
-                    <span>{{ championName(row.championId) || row.championId }}</span>
+                    <span class="text-accent underline-offset-2 hover:underline">{{
+                      championName(row.championId) || row.championId
+                    }}</span>
                   </div>
                 </td>
                 <td class="px-4 py-2 text-text/90">{{ row.games }}</td>
@@ -1711,6 +1933,7 @@ definePageMeta({
 })
 
 const { t, locale } = useI18n()
+const localePath = useLocalePath()
 
 useHead({
   title: () => t('statisticsPage.metaTitle'),
@@ -1741,7 +1964,13 @@ const tabs = computed(() => [
 
 const championSearchQuery = ref('')
 /** Sort order for Champions tab (from Fast Stats "Voir plus" or selector). */
-const championsSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'games'>('winrate')
+const championsSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'games' | 'wins'>('winrate')
+/** Sort direction: desc = highest first (default), asc = lowest first. */
+const championsSortDir = ref<'asc' | 'desc'>('desc')
+// Quand on change de colonne (ex. via le menu "Trier par"), repasser en décroissant par défaut.
+watch(championsSortOrder, () => {
+  championsSortDir.value = 'desc'
+})
 const filteredChampions = computed(() => {
   const list = championsData.value?.champions ?? []
   const q = championSearchQuery.value.toLowerCase()
@@ -1752,13 +1981,27 @@ const filteredChampions = computed(() => {
       })
     : [...list]
   const sort = championsSortOrder.value
+  const dir = championsSortDir.value
+  const mult = dir === 'desc' ? 1 : -1
   return filtered.sort((a, b) => {
-    if (sort === 'winrate') return (b.winrate ?? 0) - (a.winrate ?? 0)
-    if (sort === 'pickrate') return (b.pickrate ?? 0) - (a.pickrate ?? 0)
-    if (sort === 'banrate') return (b.banrate ?? 0) - (a.banrate ?? 0)
-    return (b.games ?? 0) - (a.games ?? 0)
+    let diff = 0
+    if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
+    else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
+    else if (sort === 'banrate') diff = (b.banrate ?? 0) - (a.banrate ?? 0)
+    else if (sort === 'wins') diff = (b.wins ?? 0) - (a.wins ?? 0)
+    else diff = (b.games ?? 0) - (a.games ?? 0)
+    return mult * diff
   })
 })
+/** Click on sortable column header: same column toggles asc/desc, else set column and desc. */
+function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate' | 'banrate') {
+  if (championsSortOrder.value === col) {
+    championsSortDir.value = championsSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    championsSortOrder.value = col
+    championsSortDir.value = 'desc'
+  }
+}
 /** Navigate to Champions tab with sort and sync overview filters. */
 function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
   championsSortOrder.value = sort
@@ -2082,11 +2325,15 @@ const durationWinrateChartPointsList = computed(() => durationWinrateChartScaled
 const durationWinrateAxisX = computed(() => durationWinrateChartScaledData.value.axisX)
 const durationWinrateAxisY = computed(() => durationWinrateChartScaledData.value.axisY)
 /* eslint-enable @typescript-eslint/no-unused-vars */
+/** Shorter timeout for heavy overview-detail so we don't wait for 504 (gateway often times out before backend). */
+const OVERVIEW_DETAIL_TIMEOUT_MS = 20_000
+
 async function loadOverviewDetail() {
   overviewDetailPending.value = true
   try {
     overviewDetailData.value = await $fetch(
-      apiUrl('/api/stats/overview-detail' + overviewQueryParams())
+      apiUrl('/api/stats/overview-detail' + overviewQueryParams()),
+      { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
     )
   } catch {
     overviewDetailData.value = null
@@ -2157,7 +2404,6 @@ const overviewTeamsData = ref<{
 const overviewTeamsPending = ref(false)
 const bansExpandByWin = ref(false)
 const bansExpandByLoss = ref(false)
-const bansExpandTop20 = ref(false)
 
 // Overview by side (Blue / Red)
 const overviewSidesData = ref<{
@@ -2620,5 +2866,28 @@ onMounted(async () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Fast Stats cards - style LeagueOfGraphs */
+.fast-stat-card {
+  min-width: 0;
+}
+.fast-stat-title {
+  line-height: 1.4;
+}
+.fast-stat-table {
+  border-collapse: collapse;
+}
+.fast-stat-row {
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
+}
+.fast-stat-row:last-child {
+  border-bottom: none;
+}
+.fast-stat-bar-container {
+  flex-shrink: 0;
+}
+.fast-stat-button {
+  font-weight: 500;
 }
 </style>
