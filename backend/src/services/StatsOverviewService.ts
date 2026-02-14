@@ -479,6 +479,67 @@ export async function getOverviewProgressionStats(
   }
 }
 
+/** Progression complète: tous les champions avec delta WR et delta pickrate (pour onglet Progressions). */
+export interface OverviewProgressionFullStats {
+  oldestVersion: string | null
+  champions: Array<{
+    championId: number
+    wrOldest: number
+    wrSince: number
+    deltaWr: number
+    pickrateOldest: number
+    pickrateSince: number
+    deltaPick: number
+  }>
+}
+
+type OverviewProgressionFullRow = Array<{
+  get_stats_overview_progression_full: OverviewProgressionFullStats | null
+}>
+
+export async function getOverviewProgressionFullStats(
+  versionOldest?: string | null,
+  rankTier?: string | null
+): Promise<OverviewProgressionFullStats | null> {
+  if (!isDatabaseConfigured()) return null
+  if (!versionOldest || versionOldest === '') {
+    return { oldestVersion: null, champions: [] }
+  }
+  try {
+    const pVersion = versionOldest
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+    const rows = await prisma.$queryRaw<OverviewProgressionFullRow>(
+      Prisma.sql`SELECT get_stats_overview_progression_full(${pVersion}, ${pRankTier}) AS get_stats_overview_progression_full`
+    )
+    const raw = rows[0]?.get_stats_overview_progression_full
+    if (!raw) return { oldestVersion: versionOldest, champions: [] }
+    const mapEntry = (e: {
+      championId: number
+      wrOldest: number
+      wrSince: number
+      deltaWr: number
+      pickrateOldest: number
+      pickrateSince: number
+      deltaPick: number
+    }) => ({
+      championId: Number(e.championId),
+      wrOldest: Number(e.wrOldest),
+      wrSince: Number(e.wrSince),
+      deltaWr: Number(e.deltaWr),
+      pickrateOldest: Number(e.pickrateOldest),
+      pickrateSince: Number(e.pickrateSince),
+      deltaPick: Number(e.deltaPick),
+    })
+    return {
+      oldestVersion: raw.oldestVersion ?? versionOldest,
+      champions: Array.isArray(raw.champions) ? raw.champions.map(mapEntry) : [],
+    }
+  } catch (err) {
+    console.error('[getOverviewProgressionFullStats]', err)
+    return null
+  }
+}
+
 export async function getOverviewTeamsStats(
   version?: string | null,
   rankTier?: string | null

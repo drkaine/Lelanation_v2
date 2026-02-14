@@ -761,9 +761,9 @@
                                 }"
                               />
                             </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ b.banRatePercent }}%</span
-                            >
+                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text">{{
+                              b.banRatePercent
+                            }}</span>
                           </div>
                         </td>
                       </tr>
@@ -854,9 +854,9 @@
                                 }"
                               />
                             </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ b.banRatePercent }}%</span
-                            >
+                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text">{{
+                              b.banRatePercent
+                            }}</span>
                           </div>
                         </td>
                       </tr>
@@ -1004,14 +1004,6 @@
 
         <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
         <div v-show="activeTab === 'detail'" class="space-y-6">
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-            <h2 class="mb-4 text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.tabRunesItemsSpells') }}
-            </h2>
-            <p class="mb-4 text-text/80">
-              {{ t('statisticsPage.overviewDetailDescription') }}
-            </p>
-          </div>
           <template v-if="overviewDetailPending">
             <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
               <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
@@ -1164,28 +1156,39 @@
                   <h3 class="mb-3 text-lg font-medium text-text">
                     {{ t('statisticsPage.overviewDetailRuneSets') }}
                   </h3>
-                  <div class="flex flex-wrap gap-2">
+                  <div class="flex flex-wrap gap-3">
                     <div
                       v-for="(set, idx) in (overviewDetailData?.runeSets ?? []).slice(
                         0,
                         detailExpand.runeSets ? 20 : 5
                       )"
                       :key="idx"
-                      class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                      class="rune-set"
                     >
-                      <template v-for="runeId in runeIdsFromSet(set.runes)" :key="runeId">
-                        <img
-                          v-if="gameVersion && getRuneById(runeId)"
-                          :src="getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)"
-                          :alt="getRuneById(runeId)?.name ?? ''"
-                          class="h-5 w-5 object-contain"
-                          width="20"
-                          height="20"
-                        />
-                      </template>
-                      <span class="text-xs text-text/70"
-                        >{{ set.pickrate }}% — {{ set.winrate }}%</span
-                      >
+                      <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
+                        <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
+                        <div class="rune-set-wr" :style="{ '--n': set.winrate }">
+                          {{ Math.round(set.winrate) }}%
+                        </div>
+                      </div>
+                      <div class="rune-set-runes">
+                        <div
+                          v-for="runeId in runeIdsFromSet(set.runes)"
+                          :key="runeId"
+                          class="rune-set-tooltip"
+                          :title="getRuneById(runeId)?.name ?? ''"
+                        >
+                          <div class="rune-set-rune">
+                            <div
+                              v-if="gameVersion && getRuneById(runeId)"
+                              class="rune-set-img"
+                              :style="{
+                                '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                              }"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <button
@@ -1344,6 +1347,144 @@
               <div class="py-4 text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
             </div>
           </template>
+        </div>
+
+        <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
+        <div v-show="activeTab === 'progressions'" class="space-y-6">
+          <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+            <h2 class="mb-4 text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.progressionsTitle') }}
+            </h2>
+            <p class="mb-4 text-text/80">
+              {{
+                t('statisticsPage.progressionsDescription', {
+                  version: progressionFullData?.oldestVersion ?? '—',
+                })
+              }}
+            </p>
+            <div v-if="progressionFullPending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div v-else-if="!progressionFullData?.oldestVersion" class="text-text/70">
+              {{ t('statisticsPage.progressionsNoVersion') }}
+            </div>
+            <div v-else-if="progressionFullData" class="space-y-8">
+              <!-- Progression du winrate -->
+              <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+                <h3 class="mb-3 text-lg font-medium text-text">
+                  {{ t('statisticsPage.progressionsWinrateTable') }}
+                </h3>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-primary/30 text-left text-text/80">
+                        <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
+                        <th class="pb-2 pr-2 text-right">
+                          {{ t('statisticsPage.progressionsWinrateCol') }}
+                        </th>
+                        <th class="pb-2 pl-2 text-right">
+                          {{ t('statisticsPage.progressionsDelta') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="row in progressionFullData.champions"
+                        :key="'wr-' + row.championId"
+                        class="border-b border-primary/20"
+                      >
+                        <td class="py-1.5 pr-2">
+                          <NuxtLink
+                            :to="localePath('/statistics/champion/' + row.championId)"
+                            class="flex items-center gap-2 hover:text-accent"
+                          >
+                            <img
+                              v-if="gameVersion && championByKey(row.championId)"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(row.championId)!.image.full
+                                )
+                              "
+                              :alt="championName(row.championId) ?? ''"
+                              class="h-6 w-6 shrink-0 rounded-full object-cover"
+                              width="24"
+                              height="24"
+                            />
+                            <span>{{ championName(row.championId) || row.championId }}</span>
+                          </NuxtLink>
+                        </td>
+                        <td class="py-1.5 text-right">{{ row.wrSince.toFixed(1) }}%</td>
+                        <td
+                          class="py-1.5 pl-2 text-right"
+                          :class="row.deltaWr >= 0 ? 'text-success' : 'text-error'"
+                        >
+                          {{ row.deltaWr >= 0 ? '+' : '' }}{{ row.deltaWr.toFixed(2) }}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <!-- Progression de la popularité -->
+              <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+                <h3 class="mb-3 text-lg font-medium text-text">
+                  {{ t('statisticsPage.progressionsPopularityTable') }}
+                </h3>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-primary/30 text-left text-text/80">
+                        <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
+                        <th class="pb-2 pr-2 text-right">
+                          {{ t('statisticsPage.progressionsPopularity') }}
+                        </th>
+                        <th class="pb-2 pl-2 text-right">
+                          {{ t('statisticsPage.progressionsDelta') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="row in progressionFullByPickrate"
+                        :key="'pick-' + row.championId"
+                        class="border-b border-primary/20"
+                      >
+                        <td class="py-1.5 pr-2">
+                          <NuxtLink
+                            :to="localePath('/statistics/champion/' + row.championId)"
+                            class="flex items-center gap-2 hover:text-accent"
+                          >
+                            <img
+                              v-if="gameVersion && championByKey(row.championId)"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(row.championId)!.image.full
+                                )
+                              "
+                              :alt="championName(row.championId) ?? ''"
+                              class="h-6 w-6 shrink-0 rounded-full object-cover"
+                              width="24"
+                              height="24"
+                            />
+                            <span>{{ championName(row.championId) || row.championId }}</span>
+                          </NuxtLink>
+                        </td>
+                        <td class="py-1.5 text-right">{{ row.pickrateSince.toFixed(1) }}%</td>
+                        <td
+                          class="py-1.5 pl-2 text-right"
+                          :class="row.deltaPick >= 0 ? 'text-success' : 'text-error'"
+                        >
+                          {{ row.deltaPick >= 0 ? '+' : '' }}{{ row.deltaPick.toFixed(2) }}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Tab: Par côté (Blue / Red) -->
@@ -2042,9 +2183,10 @@ const { version: gameVersion } = useGameVersion()
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
-const activeTab = ref<'overview' | 'sides' | 'champions' | 'detail'>('overview')
+const activeTab = ref<'overview' | 'progressions' | 'sides' | 'champions' | 'detail'>('overview')
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview') },
+  { id: 'progressions' as const, label: t('statisticsPage.tabProgressions') },
   { id: 'sides' as const, label: t('statisticsPage.tabSides') },
   { id: 'champions' as const, label: t('statisticsPage.tabChampions') },
   { id: 'detail' as const, label: t('statisticsPage.tabRunesItemsSpells') },
@@ -2298,13 +2440,62 @@ async function loadOverviewProgression() {
     overviewProgressionData.value = null
   }
 }
-/** Version to use for progression: selected version or oldest from matchesByVersion. */
+/** Normalise une version (ex. "16.3.123") en préfixe pour l’API (ex. "16.3"). */
+function normalizeVersionToPrefix(v: string | null | undefined): string | null {
+  if (!v || typeof v !== 'string') return null
+  const parts = v.trim().split('.')
+  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
+  return parts[0] || null
+}
+/** Version to use for progression: selected version, oldest from matchesByVersion, or current game version. */
 const oldestVersionForProgression = computed(() => {
   if (overviewVersionFilter.value) return overviewVersionFilter.value
   const versions = overviewData.value?.matchesByVersion ?? []
-  if (!versions.length) return null
-  const sorted = [...versions].sort((a, b) => a.version.localeCompare(b.version))
-  return sorted[0]?.version ?? null
+  if (versions.length) {
+    const sorted = [...versions].sort((a, b) => a.version.localeCompare(b.version))
+    const first = sorted[0]?.version
+    if (first) return first
+  }
+  return normalizeVersionToPrefix(versionStore.currentVersion)
+})
+
+/** Progressions complètes (tous les champions, WR + pickrate) pour onglet Progressions. */
+const progressionFullData = ref<{
+  oldestVersion: string | null
+  champions: Array<{
+    championId: number
+    wrOldest: number
+    wrSince: number
+    deltaWr: number
+    pickrateOldest: number
+    pickrateSince: number
+    deltaPick: number
+  }>
+} | null>(null)
+const progressionFullPending = ref(false)
+async function loadProgressionsFull() {
+  const oldest = oldestVersionForProgression.value
+  if (!oldest) {
+    progressionFullData.value = null
+    return
+  }
+  progressionFullPending.value = true
+  const params = new URLSearchParams()
+  params.set('version', oldest)
+  if (overviewDivisionFilter.value) params.set('rankTier', overviewDivisionFilter.value)
+  const q = params.toString() ? '?' + params.toString() : ''
+  try {
+    progressionFullData.value = await $fetch(apiUrl('/api/stats/overview-progression-full' + q))
+  } catch {
+    progressionFullData.value = null
+  } finally {
+    progressionFullPending.value = false
+  }
+}
+/** Même liste que progressionFullData.champions mais triée par delta pickrate (pour table popularité). */
+const progressionFullByPickrate = computed(() => {
+  const list = progressionFullData.value?.champions ?? []
+  return [...list].sort((a, b) => b.deltaPick - a.deltaPick)
 })
 const CHART_W = 320
 const CHART_H = 260
@@ -2954,14 +3145,21 @@ function sortedItemsBySlot(
   return [...list].sort((a, b) => b.games - a.games)
 }
 
-watch(activeTab, tab => {
+watch(activeTab, async tab => {
   if (tab === 'overview') loadOverview()
+  if (tab === 'progressions') {
+    if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
+    if (!oldestVersionForProgression.value && !versionStore.currentVersion)
+      await versionStore.loadCurrentVersion()
+    loadProgressionsFull()
+  }
   if (tab === 'sides') loadOverviewSides()
   if (tab === 'detail' && !overviewDetailData.value && !overviewDetailPending.value)
     loadOverviewDetail()
 })
 watch([statsVersionFilter, statsDivisionFilter], () => {
   if (activeTab.value === 'sides') loadOverviewSides()
+  if (activeTab.value === 'progressions') loadProgressionsFull()
 })
 
 onMounted(async () => {
@@ -3079,5 +3277,69 @@ onMounted(async () => {
 .overview-rune-no-stat {
   color: rgb(var(--rgb-text) / 0.5);
   font-size: 0.7rem;
+}
+
+/* Rune set display (shyv-style: stat bar + rune row) */
+.rune-set {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.2);
+  background: rgb(var(--rgb-surface) / 0.5);
+}
+.rune-set-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 3rem;
+  flex-shrink: 0;
+}
+.rune-set-pr {
+  width: 100%;
+  max-width: 2.5rem;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(var(--rgb-primary) / 0.25);
+  overflow: hidden;
+}
+.rune-set-pr::after {
+  content: '';
+  display: block;
+  width: calc(var(--n, 0) * 1%);
+  max-width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: rgb(var(--rgb-accent));
+}
+.rune-set-wr {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text));
+}
+.rune-set-runes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rune-set-tooltip {
+  cursor: help;
+}
+.rune-set-rune {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rune-set-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: rgb(var(--rgb-primary) / 0.15);
+  background-image: var(--img);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 </style>

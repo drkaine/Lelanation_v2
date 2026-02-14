@@ -414,23 +414,36 @@
             <div v-if="runesPending" class="py-4 text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
-            <div v-else-if="runesData?.runes?.length" class="flex flex-wrap gap-2">
+            <div v-else-if="runesData?.runes?.length" class="flex flex-wrap gap-3">
               <div
                 v-for="(r, idx) in runesData.runes.slice(0, runesExpand ? 15 : 6)"
                 :key="idx"
-                class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                class="rune-set"
               >
-                <template v-for="runeId in runeIdsFromSet(r.runes)" :key="runeId">
-                  <img
-                    v-if="gameVersion && getRuneById(runeId)"
-                    :src="getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)"
-                    :alt="getRuneById(runeId)?.name ?? ''"
-                    class="h-6 w-6 object-contain"
-                    width="24"
-                    height="24"
-                  />
-                </template>
-                <span class="text-xs text-text/80">{{ r.pickrate }}% — {{ r.winrate }}%</span>
+                <div class="rune-set-stat" :data-pct="r.pickrate + '%'">
+                  <div class="rune-set-pr" :style="{ '--n': r.pickrate }" />
+                  <div class="rune-set-wr" :style="{ '--n': r.winrate }">
+                    {{ Math.round(r.winrate) }}%
+                  </div>
+                </div>
+                <div class="rune-set-runes">
+                  <div
+                    v-for="runeId in runeIdsFromSet(r.runes)"
+                    :key="runeId"
+                    class="rune-set-tooltip"
+                    :title="getRuneById(runeId)?.name ?? ''"
+                  >
+                    <div class="rune-set-rune">
+                      <div
+                        v-if="gameVersion && getRuneById(runeId)"
+                        class="rune-set-img"
+                        :style="{
+                          '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                        }"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
               <button
                 v-if="(runesData.runes?.length ?? 0) > 6"
@@ -1156,5 +1169,69 @@ useHead({
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* Rune set display (shyv-style: stat bar + rune row) */
+.rune-set {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.2);
+  background: rgb(var(--rgb-surface) / 0.5);
+}
+.rune-set-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 3rem;
+  flex-shrink: 0;
+}
+.rune-set-pr {
+  width: 100%;
+  max-width: 2.5rem;
+  height: 4px;
+  border-radius: 2px;
+  background: rgb(var(--rgb-primary) / 0.25);
+  overflow: hidden;
+}
+.rune-set-pr::after {
+  content: '';
+  display: block;
+  width: calc(var(--n, 0) * 1%);
+  max-width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: rgb(var(--rgb-accent));
+}
+.rune-set-wr {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-text));
+}
+.rune-set-runes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.rune-set-tooltip {
+  cursor: help;
+}
+.rune-set-rune {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rune-set-img {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: rgb(var(--rgb-primary) / 0.15);
+  background-image: var(--img);
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 </style>

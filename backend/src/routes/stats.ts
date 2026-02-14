@@ -20,6 +20,7 @@ import {
   getOverviewDurationWinrateStats,
   getDurationWinrateByChampion,
   getOverviewProgressionStats,
+  getOverviewProgressionFullStats,
 } from '../services/StatsOverviewService.js'
 import { isDatabaseConfigured } from '../db.js'
 
@@ -109,6 +110,17 @@ router.get('/overview-progression', async (req: Request, res: Response) => {
   const data = await getOverviewProgressionStats(version, rankTier)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, gainers: [], losers: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-progression-full - All champions with WR and pickrate progression. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/overview-progression-full', async (req: Request, res: Response) => {
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const data = await getOverviewProgressionFullStats(version, rankTier)
+  if (!data) {
+    return res.status(200).json({ oldestVersion: null, champions: [] })
   }
   return res.json(data)
 })
