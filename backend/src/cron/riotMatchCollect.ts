@@ -17,11 +17,9 @@ import cron from 'node-cron'
 import { join } from 'path'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.js'
-import { invalidateOverviewDetailCache } from '../services/StatsOverviewService.js'
 import {
   enrichPlayers,
   fetchRanksForPuuids,
-  backfillRanksForNewMatch,
   backfillParticipantRanks,
   refreshMatchRanks,
   countPlayersMissingSummonerName,
@@ -38,12 +36,9 @@ import { isDatabaseConfigured, prisma } from '../db.js'
 import type { AppError } from '../utils/errors.js'
 
 const PLATFORM_EUW1 = 'euw1' as const
-/** Match IDs requested per summoner (split across patch windows). Higher = more data per player, bounded by request budget. */
-const MATCH_IDS_PER_SUMMONER = Math.max(10, parseInt(process.env.RIOT_MATCH_IDS_PER_SUMMONER ?? '20', 10) || 20)
-/** Max players to crawl per run (from players table: last_seen IS NULL first, then last_seen ASC). Budget will stop earlier in normal mode. */
+const MATCH_IDS_PER_SUMMONER = 10
+/** Max players to crawl per run (from players table: last_seen IS NULL first, then last_seen ASC). */
 const MAX_PUUIDS_PER_RUN = Math.max(20, parseInt(process.env.RIOT_MATCH_MAX_PUUIDS_PER_RUN ?? '50', 10) || 50)
-/** Normal mode: cap API requests per cycle to stay under 100/2min. getMatchIds=1, getMatch+ranks=11 per match. */
-const REQUEST_BUDGET_PER_CYCLE = Math.min(100, Math.max(50, parseInt(process.env.RIOT_MATCH_REQUEST_BUDGET ?? '95', 10) || 95))
 /** When unpoled players exceed this, enable fast mode: 1 patch window, skip rank fetch, more players per run. */
 const FAST_BACKLOG_THRESHOLD = Math.max(5000, parseInt(process.env.RIOT_MATCH_FAST_BACKLOG_THRESHOLD ?? '20000', 10) || 20000)
 const FAST_MAX_PUUIDS = Math.max(MAX_PUUIDS_PER_RUN, parseInt(process.env.RIOT_MATCH_FAST_PUUIDS ?? '100', 10) || 100)
@@ -51,9 +46,8 @@ const FAST_MAX_PUUIDS = Math.max(MAX_PUUIDS_PER_RUN, parseInt(process.env.RIOT_M
 const CONSECUTIVE_5XX_SKIP_THRESHOLD = Math.max(3, parseInt(process.env.RIOT_MATCH_5XX_SKIP_AFTER ?? '5', 10) || 5)
 /** Players to enrich (summoner_name) per run. */
 const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '150', 10) || 150)
-/** Participant ranks to backfill per cron run (distinct puuids). 0 = use default 200 (backfill always runs). */
+/** Participant ranks to backfill per cron run. 0 = disabled. */
 const BACKFILL_RANKS_PER_RUN = Math.max(0, parseInt(process.env.RIOT_BACKFILL_RANKS_PER_RUN ?? '200', 10) || 0)
-const BACKFILL_RANKS_DEFAULT_WHEN_ZERO = 200
 const BACKFILL_RANKS_MAX_BATCHES = Math.max(1, parseInt(process.env.RIOT_BACKFILL_RANKS_MAX_BATCHES ?? '3', 10) || 1)
 const CRON_SCHEDULE = process.env.RIOT_MATCH_CRON_SCHEDULE ?? '0 * * * *'
 /** If lastSuccessAt is older than this (ms), use fallback window. */
@@ -62,9 +56,6 @@ const FALLBACK_WINDOW_SEC = 24 * 60 * 60
 
 /** When 5xx errors exceed this, pause the poller. */
 const SERVER_ERROR_5XX_THRESHOLD = Math.max(20, parseInt(process.env.RIOT_MATCH_5XX_PAUSE_THRESHOLD ?? '50', 10) || 50)
-
-/** Cap du nombre de matchs par vieille version (hors dernière version autorisée). Défaut 100_000. 0 = pas de plafond. */
-const MAX_MATCHES_OLD_VERSION = Math.max(0, parseInt(process.env.RIOT_MAX_MATCHES_OLD_VERSION ?? '100000', 10) || 100000)
 
 interface CrawlRow {
   puuid: string
@@ -80,22 +71,6 @@ function isRiotAuthError(err: unknown): boolean {
 function isRateLimitError(err: unknown): boolean {
   const cause = err && typeof err === 'object' && 'cause' in err ? (err as { cause: unknown }).cause : err
   return axios.isAxiosError(cause) && cause.response?.status === 429
-}
-
-/** Extract error code (Prisma P2002, HTTP status, etc.) and source for Discord context. */
-function extractErrorContext(err: unknown): Record<string, unknown> {
-  const ctx: Record<string, unknown> = {}
-  if (err && typeof err === 'object') {
-    const e = err as Record<string, unknown>
-    if (typeof e.code === 'string') ctx.errorCode = e.code
-    if (typeof e.message === 'string') ctx.errorMessage = e.message
-    const cause = e.cause
-    if (axios.isAxiosError(cause) && cause.response) {
-      ctx.httpStatus = cause.response.status
-      ctx.httpData = typeof cause.response.data === 'object' ? JSON.stringify(cause.response.data).slice(0, 500) : String(cause.response.data).slice(0, 500)
-    }
-  }
-  return ctx
 }
 
 const LOG_PREFIX = '[Riot match collect]'
@@ -180,13 +155,8 @@ export async function runRiotMatchCollectOnce(): Promise<{
     }
 
     const { allowedVersions } = await loadAllowedGameVersions()
-    const sortedAllowedVersions = [...allowedVersions].sort()
-    const latestAllowedVersion =
-      sortedAllowedVersions.length > 0 ? sortedAllowedVersions[sortedAllowedVersions.length - 1]! : null
-    /** Cache du nombre de matchs par version (pour plafond vieilles versions). */
-    const versionMatchCountCache = new Map<string, number>()
     if (allowedVersions.size > 0) {
-      console.log(`${LOG_PREFIX} Allowed game versions: ${sortedAllowedVersions.join(', ')}`)
+      console.log(`${LOG_PREFIX} Allowed game versions: ${[...allowedVersions].sort().join(', ')}`)
     }
 
     // Patch windows for unpoled players; for already polled: [last_seen, now]
@@ -208,13 +178,10 @@ export async function runRiotMatchCollectOnce(): Promise<{
       patchWindows = [patchWindows[patchWindows.length - 1]!]
     }
 
-    // Ne pas repoller les joueurs déjà pollés aujourd'hui (UTC)
-    const startOfTodayUtc = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z')
     const playersToCrawl = await prisma.$queryRaw<CrawlRow[]>`
       SELECT puuid, region, last_seen AS "lastSeen"
       FROM players
       WHERE region = ${PLATFORM_EUW1}
-        AND (last_seen IS NULL OR last_seen < ${startOfTodayUtc})
       ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
       LIMIT ${effectiveMaxPuuids}
     `
@@ -222,18 +189,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
     let rateLimitHit = false
     let skippedAlreadyInDb = 0
     let skippedVersionFilter = 0
-    let skippedCapOldVersion = 0
     const errorStatusCounts = new Map<number, number>()
     const versionFilteredExamples = new Set<string>()
     const matchIdsPerPlayer =
       patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
 
-    /** Normal mode only: count API requests to stay under 100/2min (getMatchIds=1, getMatch+fetchRanks=11 per match). */
-    let requestCount = 0
-    let requestBudgetExhausted = false
-
     for (const row of playersToCrawl) {
-      if (requestBudgetExhausted) break
       const processedIdx = playersToCrawl.indexOf(row) + 1
       if (processedIdx % 20 === 1 || processedIdx === playersToCrawl.length) {
         console.log(`${LOG_PREFIX} Crawling player ${processedIdx}/${playersToCrawl.length}…`)
@@ -258,18 +219,12 @@ export async function runRiotMatchCollectOnce(): Promise<{
       }
 
       for (const win of windows) {
-        if (!fastMode && requestCount >= REQUEST_BUDGET_PER_CYCLE) {
-          requestBudgetExhausted = true
-          console.log(`${LOG_PREFIX} Request budget reached (${requestCount}/${REQUEST_BUDGET_PER_CYCLE}), next cycle in 2 min`)
-          break
-        }
         const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
           count: matchIdsPerPlayer,
           queue: 420,
           startTime: win.startTime,
           endTime: win.endTime,
         })
-        if (!fastMode) requestCount++
         if (matchIdsResult.isErr()) {
           const err = matchIdsResult.unwrapErr() as AppError & { cause?: unknown }
           const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
@@ -308,6 +263,9 @@ export async function runRiotMatchCollectOnce(): Promise<{
         continue
       }
 
+      // Update last_seen immediately after fetching match IDs
+      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
+
       // Deduplicate vs DB
       const matchIds = [...allMatchIds]
       const toFetch: string[] = []
@@ -321,11 +279,6 @@ export async function runRiotMatchCollectOnce(): Promise<{
 
       let consecutive5xx = 0
       for (const matchId of toFetch) {
-        if (!fastMode && requestCount + 11 > REQUEST_BUDGET_PER_CYCLE) {
-          requestBudgetExhausted = true
-          console.log(`${LOG_PREFIX} Request budget reached (${requestCount}/${REQUEST_BUDGET_PER_CYCLE}), next cycle in 2 min`)
-          break
-        }
         try {
           const matchResult = await riotApi.getMatch(matchId)
           if (matchResult.isErr()) {
@@ -333,7 +286,6 @@ export async function runRiotMatchCollectOnce(): Promise<{
             const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
             if (status === 404) {
               consecutive5xx = 0
-              if (!fastMode) requestCount += 1
               continue
             }
             if (status === 429) {
@@ -352,16 +304,14 @@ export async function runRiotMatchCollectOnce(): Promise<{
             } else {
               consecutive5xx = 0
             }
-            if (!fastMode) requestCount += 1
             errorStatusCounts.set(status ?? 0, (errorStatusCounts.get(status ?? 0) ?? 0) + 1)
             errors++
             console.warn(`${LOG_PREFIX} getMatch failed for ${matchId}: ${(err as Error).message}`)
-            const apiCtx = { matchId, status, timestamp: new Date().toISOString(), ...extractErrorContext(err) }
             await discordService.sendAlert(
               '⚠️ Poller Riot – Erreur getMatch',
               `Échec getMatch pour ${matchId}. Match ignoré.`,
               err instanceof Error ? err : new Error(String(err)),
-              apiCtx
+              { matchId, status, timestamp: new Date().toISOString() }
             )
             continue
           }
@@ -369,60 +319,23 @@ export async function runRiotMatchCollectOnce(): Promise<{
           const matchData = matchResult.unwrap()
           const gameVersion = typeof matchData.info?.gameVersion === 'string' ? matchData.info.gameVersion : ''
           if (allowedVersions.size > 0 && !isAllowedGameVersion(gameVersion, allowedVersions)) {
-            if (!fastMode) requestCount += 1
             skippedVersionFilter++
             if (versionFilteredExamples.size < 5) versionFilteredExamples.add(gameVersion || '(empty)')
             continue
-          }
-          // Plafond vieilles versions: ne pas dépasser MAX_MATCHES_OLD_VERSION par version (hors dernière autorisée)
-          if (
-            MAX_MATCHES_OLD_VERSION > 0 &&
-            latestAllowedVersion != null &&
-            gameVersion !== '' &&
-            gameVersion !== latestAllowedVersion
-          ) {
-            let count = versionMatchCountCache.get(gameVersion)
-            if (count === undefined) {
-              count = await prisma.match.count({ where: { gameVersion } })
-              versionMatchCountCache.set(gameVersion, count)
-            }
-            if (count >= MAX_MATCHES_OLD_VERSION) {
-              if (!fastMode) requestCount += 1
-              skippedCapOldVersion++
-              continue
-            }
           }
           const participants = matchData.info?.participants ?? []
           const puuids = participants
             .map((p: { puuid?: string }) => (typeof p.puuid === 'string' ? p.puuid.trim() : ''))
             .filter((puuid: string) => puuid !== '')
           let rankByPuuid: Map<string, { tier: string; rank: string; leaguePoints: number } | null> | undefined
-          let rankFetchFailed = false
           if (!fastMode && puuids.length > 0) {
             try {
               rankByPuuid = await fetchRanksForPuuids(PLATFORM_EUW1, puuids)
-              requestCount += 10
             } catch (rankErr) {
-              rankFetchFailed = true
               errors++
             }
           }
-          if (!fastMode) requestCount += 1
           const { inserted } = await upsertMatchFromRiot(PLATFORM_EUW1, matchData, rankByPuuid)
-          if (inserted && gameVersion) {
-            const cached = versionMatchCountCache.get(gameVersion)
-            if (cached !== undefined) versionMatchCountCache.set(gameVersion, cached + 1)
-          }
-          if (inserted && puuids.length > 0) {
-            const needBackfill = fastMode || rankFetchFailed
-            if (needBackfill) {
-              try {
-                await backfillRanksForNewMatch(matchId, PLATFORM_EUW1, puuids)
-              } catch (backfillErr) {
-                console.warn(`${LOG_PREFIX} Backfill ranks for new match ${matchId} failed:`, backfillErr)
-              }
-            }
-          }
           if (inserted) {
             collected++
             for (const p of participants) {
@@ -436,7 +349,6 @@ export async function runRiotMatchCollectOnce(): Promise<{
             }
           }
         } catch (e) {
-          if (!fastMode) requestCount += 1
           if (isRateLimitError(e)) {
             rateLimitHit = true
             console.warn(`${LOG_PREFIX} Rate limit (429) on getMatch (catch), pausing poller`)
@@ -444,51 +356,45 @@ export async function runRiotMatchCollectOnce(): Promise<{
           }
           errors++
           console.warn(`${LOG_PREFIX} getMatch exception for ${matchId}:`, e)
-          const errObj = e as Record<string, unknown>
-          const isPrismaUnique = errObj?.code === 'P2002'
-          const source = isPrismaUnique ? 'upsertMatch (DB)' : 'getMatch/upsertMatch'
-          const title = isPrismaUnique
-            ? '⚠️ Poller Riot – Match déjà en base (race)'
-            : '⚠️ Poller Riot – Exception traitement match'
-          const message = isPrismaUnique
-            ? `Contrainte unique sur ${matchId}. Match déjà inséré par un autre worker. Ignoré.`
-            : `Exception lors du traitement du match ${matchId}. Match ignoré.`
-          const errCtx = { matchId, source, timestamp: new Date().toISOString(), ...extractErrorContext(e) }
-          await discordService.sendAlert(title, message, e instanceof Error ? e : new Error(String(e)), errCtx)
+          await discordService.sendAlert(
+            '⚠️ Poller Riot – Exception getMatch',
+            `Exception lors de la récupération du match ${matchId}. Match ignoré.`,
+            e instanceof Error ? e : new Error(String(e)),
+            { matchId, timestamp: new Date().toISOString() }
+          )
         }
       }
       if (rateLimitHit) break
-      // Update last_seen after processing (so if we hit budget we retry same player next cycle and continue fetching)
-      await prisma.player.update({ where: { puuid: row.puuid }, data: { lastSeen: new Date() } })
     }
 
     if (collected > 0) {
       console.log(`${LOG_PREFIX} ${collected} new matches, stats via view players_with_stats`)
     }
 
-    // Fin de cycle: backfill des participants sans rank seulement si nécessaire (vérif manquants → skip si 0)
-    const effectiveBackfillLimit = BACKFILL_RANKS_PER_RUN > 0 ? BACKFILL_RANKS_PER_RUN : BACKFILL_RANKS_DEFAULT_WHEN_ZERO
-    try {
-      const missingRankCount = await countParticipantsMissingRank()
-      if (missingRankCount === 0) {
-        console.log(`${LOG_PREFIX} Backfill participants sans rank: skip (0 manquants)`)
-      } else {
-        let totalUpdated = 0
-        let totalErrors = 0
-        for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
-          const backfill = await backfillParticipantRanks(effectiveBackfillLimit)
-          totalUpdated += backfill.updated
-          totalErrors += backfill.errors
-          if (backfill.updated === 0) break
+    // Backfill participants sans rank
+    if (BACKFILL_RANKS_PER_RUN > 0) {
+      try {
+        const missingRankCount = await countParticipantsMissingRank()
+        if (missingRankCount === 0) {
+          console.log(`${LOG_PREFIX} Backfill participants sans rank: skip (0 manquants)`)
+        } else {
+          let totalUpdated = 0
+          let totalErrors = 0
+          for (let batch = 0; batch < BACKFILL_RANKS_MAX_BATCHES; batch++) {
+            const backfill = await backfillParticipantRanks(BACKFILL_RANKS_PER_RUN)
+            totalUpdated += backfill.updated
+            totalErrors += backfill.errors
+            if (backfill.updated === 0) break
+          }
+          if (totalUpdated > 0 || totalErrors > 0) {
+            console.log(
+              `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
+            )
+          }
         }
-        if (totalUpdated > 0 || totalErrors > 0) {
-          console.log(
-            `${LOG_PREFIX} Backfill participants sans rank: ${totalUpdated} mis à jour, ${totalErrors} erreurs`
-          )
-        }
+      } catch (e) {
+        console.warn(`${LOG_PREFIX} Backfill participants sans rank failed:`, e)
       }
-    } catch (e) {
-      console.warn(`${LOG_PREFIX} Backfill participants sans rank failed:`, e)
     }
 
     try {
@@ -504,21 +410,13 @@ export async function runRiotMatchCollectOnce(): Promise<{
     console.log(
       `${LOG_PREFIX} Done: ${collected} new matches, ${errors} errors, ${playersToCrawl.length} players processed, ${duration}s`
     )
-    if (skippedCapOldVersion > 0) {
-      console.log(
-        `${LOG_PREFIX} Plafond vieilles versions: ${skippedCapOldVersion} match(s) ignoré(s) (max ${MAX_MATCHES_OLD_VERSION}/version)`
-      )
-    }
-    if (
-      collected === 0 &&
-      (errors > 0 || skippedAlreadyInDb > 0 || skippedVersionFilter > 0 || skippedCapOldVersion > 0)
-    ) {
+    if (collected === 0 && (errors > 0 || skippedAlreadyInDb > 0 || skippedVersionFilter > 0)) {
       const errSummary =
         errorStatusCounts.size > 0
           ? `, errorStatuses=${JSON.stringify(Object.fromEntries(errorStatusCounts))}`
           : ''
       console.log(
-        `${LOG_PREFIX} Diagnostic: skippedAlreadyInDb=${skippedAlreadyInDb}, skippedVersionFilter=${skippedVersionFilter}, skippedCapOldVersion=${skippedCapOldVersion}${errSummary}`
+        `${LOG_PREFIX} Diagnostic: skippedAlreadyInDb=${skippedAlreadyInDb}, skippedVersionFilter=${skippedVersionFilter}${errSummary}`
       )
       if (versionFilteredExamples.size > 0) {
         console.warn(
@@ -527,16 +425,6 @@ export async function runRiotMatchCollectOnce(): Promise<{
       }
     }
     await cronStatus.markSuccess('riotMatchCollect')
-    // Rafraîchir la vue matérialisée overview-detail (runes/items/sorts) en arrière-plan
-    if (collected > 0) {
-      prisma
-        .$executeRawUnsafe('REFRESH MATERIALIZED VIEW CONCURRENTLY mv_overview_detail_base')
-        .then(() => {
-          invalidateOverviewDetailCache()
-          console.log(`${LOG_PREFIX} mv_overview_detail_base refreshed`)
-        })
-        .catch((e) => console.warn(`${LOG_PREFIX} mv_overview_detail_base refresh failed:`, e))
-    }
     try {
       const dir = join(process.cwd(), 'data', 'cron')
       await fs.mkdir(dir, { recursive: true })

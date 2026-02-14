@@ -93,48 +93,55 @@
           </div>
           <div class="flex flex-wrap gap-2">
             <button
-              type="button"
-              class="stats-role-btn rounded border p-1.5 transition-colors"
-              :class="
-                !statsRoleFilter
-                  ? 'border-accent bg-accent/20'
-                  : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
-              "
-              :title="t('statisticsPage.allRoles')"
-              @click="
-                statsRoleFilter = ''
-                onStatsFilterChange()
-              "
-            >
-              <span class="text-xs font-medium text-text/80">{{
-                t('statisticsPage.allRoles')
-              }}</span>
-            </button>
-            <button
               v-for="r in roles"
               :key="r.value"
               type="button"
-              class="stats-role-btn rounded border p-1.5 transition-colors"
+              class="stats-role-btn rounded border p-1 transition-colors"
               :class="
                 statsRoleFilter === r.value
                   ? 'border-accent bg-accent/20'
                   : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
               "
               :title="r.label"
-              @click="
-                statsRoleFilter = r.value
-                onStatsFilterChange()
-              "
+              @click="toggleRoleFilter(r)"
             >
               <img
                 :src="r.icon"
                 :alt="r.label"
-                class="h-6 w-6 object-contain"
-                width="24"
-                height="24"
+                class="h-3 w-3 object-contain"
+                width="12"
+                height="12"
               />
             </button>
           </div>
+        </div>
+        <div>
+          <label for="champion-sort" class="mb-1 block text-sm font-medium text-text">{{
+            t('statisticsPage.championsSortBy')
+          }}</label>
+          <select
+            id="champion-sort"
+            v-model="championsSortOrder"
+            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+          >
+            <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
+            <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
+            <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
+            <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
+            <option value="wins">{{ t('statisticsPage.wins') }}</option>
+          </select>
+        </div>
+        <div>
+          <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
+            t('statisticsPage.searchChampion')
+          }}</label>
+          <input
+            id="champion-search"
+            v-model.trim="championSearchQuery"
+            type="text"
+            :placeholder="t('statisticsPage.searchChampionPlaceholder')"
+            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+          />
         </div>
       </div>
     </aside>
@@ -142,22 +149,40 @@
     <!-- Contenu principal -->
     <div class="min-w-0 flex-1 p-4 pt-14 lg:pt-4">
       <div class="mx-auto max-w-5xl">
-        <p class="mb-6 text-text/80">
-          <template v-if="overviewData">
-            {{
-              t('statisticsPage.overviewDescriptionSummary', {
-                lastUpdate: overviewData.lastUpdate
-                  ? formatGeneratedAt(overviewData.lastUpdate)
-                  : '—',
-                total: overviewEffectiveTotalMatches,
-                count: overviewData.playerCount ?? 0,
-              })
-            }}
-          </template>
-          <template v-else>
-            {{ t('statisticsPage.description') }}
-          </template>
-        </p>
+        <div class="mb-6 text-text/80">
+          <p>
+            <template v-if="overviewData">
+              {{
+                t('statisticsPage.overviewDescriptionSummary', {
+                  lastUpdate: overviewData.lastUpdate
+                    ? formatGeneratedAt(overviewData.lastUpdate)
+                    : '—',
+                  total: overviewEffectiveTotalMatches,
+                  count: overviewData.playerCount ?? 0,
+                })
+              }}
+            </template>
+            <template v-else>
+              {{ t('statisticsPage.description') }}
+            </template>
+          </p>
+          <p v-if="overviewData && overviewDescriptionVersionsSummary" class="mt-1 text-sm">
+            {{ t('statisticsPage.overviewFilterByVersion') }} :
+            {{ overviewDescriptionVersionsSummary }}
+          </p>
+          <p
+            v-if="overviewData && overviewDivisionsForDescription.length"
+            class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm"
+          >
+            <span class="text-text/80">{{ t('statisticsPage.overviewMatchesByDivision') }} :</span>
+            <template v-for="(d, idx) in overviewDivisionsForDescription" :key="d.rankTier">
+              <span v-if="idx > 0" class="text-text/40" aria-hidden="true">·</span>
+              <span class="text-sky-400">
+                {{ d.rankTier }} ({{ d.matchCount }}, {{ divisionPercent(d) }}%)
+              </span>
+            </template>
+          </p>
+        </div>
 
         <!-- Tabs -->
         <div class="mb-4 flex flex-wrap gap-2 border-b border-primary/30 pb-2">
@@ -200,84 +225,6 @@
               </button>
             </div>
             <div v-else-if="overviewData" class="space-y-6">
-              <div
-                v-if="
-                  (overviewData.matchesByDivision ?? []).length && overviewData.totalMatches > 0
-                "
-                class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.overviewMatchesByDivision') }}
-                </h3>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    :class="[
-                      'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                      overviewDivisionFilter === null
-                        ? 'bg-accent text-background'
-                        : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
-                    ]"
-                    @click="setOverviewDivisionFilter(null)"
-                  >
-                    {{ t('statisticsPage.overviewDivisionAll') }}
-                  </button>
-                  <button
-                    v-for="d in overviewData.matchesByDivision ?? []"
-                    :key="d.rankTier"
-                    type="button"
-                    :class="[
-                      'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                      overviewDivisionFilter === d.rankTier
-                        ? 'bg-accent text-background'
-                        : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
-                    ]"
-                    :style="
-                      overviewDivisionFilter !== d.rankTier ? divisionStyle(d.rankTier) : undefined
-                    "
-                    @click="setOverviewDivisionFilter(d.rankTier)"
-                  >
-                    {{ d.rankTier }}: {{ d.matchCount }} ({{ divisionPercent(d) }}%)
-                  </button>
-                </div>
-              </div>
-              <div
-                v-if="(overviewData.matchesByVersion ?? []).length"
-                class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.overviewFilterByVersion') }}
-                </h3>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    :class="[
-                      'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                      overviewVersionFilter === null
-                        ? 'bg-accent text-background'
-                        : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
-                    ]"
-                    @click="setOverviewVersionFilter(null)"
-                  >
-                    {{ t('statisticsPage.overviewVersionAll') }}
-                  </button>
-                  <button
-                    v-for="v in overviewData.matchesByVersion ?? []"
-                    :key="v.version"
-                    type="button"
-                    :class="[
-                      'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                      overviewVersionFilter === v.version
-                        ? 'bg-accent text-background'
-                        : 'bg-surface/80 text-text/90 hover:bg-primary/20 hover:text-text',
-                    ]"
-                    @click="setOverviewVersionFilter(v.version)"
-                  >
-                    {{ v.version }} ({{ v.matchCount }})
-                  </button>
-                </div>
-              </div>
-
               <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
               <div class="grid gap-4 sm:grid-cols-2">
                 <!-- Champions les plus choisis -->
@@ -1882,36 +1829,6 @@
 
         <!-- Tab: Champions -->
         <div v-show="activeTab === 'champions'" class="space-y-4">
-          <div class="flex flex-wrap items-end gap-4">
-            <div>
-              <label for="champion-sort" class="mb-1 block text-sm font-medium text-text">{{
-                t('statisticsPage.championsSortBy')
-              }}</label>
-              <select
-                id="champion-sort"
-                v-model="championsSortOrder"
-                class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-              >
-                <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
-                <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
-                <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
-                <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
-                <option value="wins">{{ t('statisticsPage.wins') }}</option>
-              </select>
-            </div>
-            <div>
-              <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
-                t('statisticsPage.searchChampion')
-              }}</label>
-              <input
-                id="champion-search"
-                v-model.trim="championSearchQuery"
-                type="text"
-                :placeholder="t('statisticsPage.searchChampionPlaceholder')"
-                class="min-w-[200px] rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
-              />
-            </div>
-          </div>
           <div v-if="championsPending" class="text-text/70">{{ t('statisticsPage.loading') }}</div>
           <div
             v-else-if="championsError"
@@ -2189,25 +2106,6 @@ function formatGeneratedAt(value: string | null | undefined): string {
   }
 }
 
-/** Official LoL rank tier colors (background + text for contrast). */
-const DIVISION_COLORS: Record<string, { bg: string; text: string }> = {
-  IRON: { bg: '#5e5e5e', text: '#fff' },
-  BRONZE: { bg: '#cd7f32', text: '#fff' },
-  SILVER: { bg: '#c0c0c0', text: '#1f2937' },
-  GOLD: { bg: '#ffd700', text: '#1f2937' },
-  PLATINUM: { bg: '#00d4aa', text: '#0f172a' },
-  EMERALD: { bg: '#10b981', text: '#fff' },
-  DIAMOND: { bg: '#00bfff', text: '#0f172a' },
-  MASTER: { bg: '#9d4edd', text: '#fff' },
-  GRANDMASTER: { bg: '#c41e3a', text: '#fff' },
-  CHALLENGER: { bg: '#fbbf24', text: '#1f2937' },
-  UNRANKED: { bg: '#6b7280', text: '#fff' },
-}
-function divisionStyle(rankTier: string): { backgroundColor: string; color: string } {
-  const c = DIVISION_COLORS[rankTier] ?? { bg: '#4b5563', text: '#fff' }
-  return { backgroundColor: c.bg, color: c.text }
-}
-
 // Overview (vue d'ensemble)
 const overviewError = ref<string | null>(null)
 const overviewData = ref<{
@@ -2247,6 +2145,28 @@ const filtersOpen = ref(false)
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const overviewVersionFilter = computed(() => statsVersionFilter.value || null)
 const overviewDivisionFilter = computed(() => statsDivisionFilter.value || null)
+/** Résumé versions (version + nb parties) pour la description en haut de page. */
+const overviewDescriptionVersionsSummary = computed(() => {
+  const list = overviewData.value?.matchesByVersion ?? []
+  if (!list.length) return ''
+  return list.map(v => `${v.version} (${v.matchCount})`).join(', ')
+})
+/** Divisions à afficher dans la description (sans UNRANKED). */
+const overviewDivisionsForDescription = computed(() => {
+  const list = overviewData.value?.matchesByDivision ?? []
+  return list.filter(d => d.rankTier !== 'UNRANKED')
+})
+/** Pourcentage de parties pour une division (sur le total des divisions). */
+function divisionPercent(d: { matchCount: number }): string {
+  const divisions = overviewData.value?.matchesByDivision ?? []
+  const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
+  if (!total) return '0'
+  return (Math.round((d.matchCount / total) * 10000) / 100).toFixed(2)
+}
+function toggleRoleFilter(r: (typeof roles)[number]) {
+  statsRoleFilter.value = statsRoleFilter.value === r.value ? '' : r.value
+  onStatsFilterChange()
+}
 function onStatsFilterChange() {
   overviewDetailData.value = null
   overviewDetailError.value = false
@@ -2876,22 +2796,6 @@ function objectiveRow(key: string): {
     killsByLoss: obj.killsByLoss ?? 0,
   }
 }
-function setOverviewVersionFilter(version: string | null) {
-  statsVersionFilter.value = version ?? ''
-  onStatsFilterChange()
-}
-function setOverviewDivisionFilter(division: string | null) {
-  statsDivisionFilter.value = division ?? ''
-  onStatsFilterChange()
-}
-/** Percentage of matches for this division (relative to total from divisions breakdown - unaffected by division filter). */
-function divisionPercent(d: { matchCount: number }): string {
-  const divisions = overviewData.value?.matchesByDivision ?? []
-  const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
-  if (!total) return '0'
-  return (Math.round((d.matchCount / total) * 10000) / 100).toFixed(2)
-}
-
 const rankTiers = [
   'IRON',
   'BRONZE',

@@ -149,7 +149,7 @@
     "overviewPlayerCountDistinct": "Participants distincts (joueurs récupérés)",
     "overviewMatchesByDivision": "Parties par division",
     "overviewDivisionAll": "Toutes",
-    "overviewMatchesByVersion": "Parties par version (16.x)",
+    "overviewMatchesByVersion": "Parties par version",
     "overviewFilterByVersion": "Filtrer par version",
     "overviewVersionAll": "Toutes",
     "overviewDurationWinrateDescription": "Courbe lissée : abscisse = durée (min), ordonnée = winrate (%). Origine 0 en bas à gauche.",

@@ -79,25 +79,10 @@
           </div>
           <div class="flex flex-wrap gap-2">
             <button
-              type="button"
-              class="champion-role-filter-btn rounded border p-1.5 transition-colors"
-              :class="
-                !filterRole
-                  ? 'border-accent bg-accent/20'
-                  : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
-              "
-              :title="t('statisticsPage.allRoles')"
-              @click="filterRole = ''"
-            >
-              <span class="text-xs font-medium text-text/80">{{
-                t('statisticsPage.allRoles')
-              }}</span>
-            </button>
-            <button
               v-for="opt in roleOptions"
               :key="opt.value"
               type="button"
-              class="champion-role-filter-btn rounded border p-1.5 transition-colors"
+              class="champion-role-filter-btn rounded border p-1 transition-colors"
               :class="[
                 filterRole === opt.value
                   ? 'border-accent bg-accent/20'
@@ -106,17 +91,52 @@
               ]"
               :title="opt.label"
               :disabled="!rolesWithData.has(opt.value)"
-              @click="rolesWithData.has(opt.value) && (filterRole = opt.value)"
+              @click="
+                rolesWithData.has(opt.value) &&
+                (filterRole = filterRole === opt.value ? '' : opt.value)
+              "
             >
               <img
                 :src="opt.icon"
                 :alt="opt.label"
-                class="h-6 w-6 object-contain"
-                width="24"
-                height="24"
+                class="h-3 w-3 object-contain"
+                width="12"
+                height="12"
               />
             </button>
           </div>
+        </div>
+        <div>
+          <label
+            for="champion-sort-champion-page"
+            class="mb-1 block text-sm font-medium text-text"
+            >{{ t('statisticsPage.championsSortBy') }}</label
+          >
+          <select
+            id="champion-sort-champion-page"
+            v-model="championsSortOrderPlaceholder"
+            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+          >
+            <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
+            <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
+            <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
+            <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
+            <option value="wins">{{ t('statisticsPage.wins') }}</option>
+          </select>
+        </div>
+        <div v-if="showSearchChampionFilter">
+          <label
+            for="champion-search-champion-page"
+            class="mb-1 block text-sm font-medium text-text"
+            >{{ t('statisticsPage.searchChampion') }}</label
+          >
+          <input
+            id="champion-search-champion-page"
+            v-model.trim="championSearchQueryPlaceholder"
+            type="text"
+            :placeholder="t('statisticsPage.searchChampionPlaceholder')"
+            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+          />
         </div>
       </div>
     </aside>
@@ -711,6 +731,12 @@ function spellImageName(spellId: number) {
 const championFiltersOpen = ref(false)
 const filterRank = ref('')
 const filterRole = ref('')
+/** Même sélection de filtres que la page stats ; on cache uniquement « Rechercher un champion ». */
+const showSearchChampionFilter = false
+const championsSortOrderPlaceholder = ref<'winrate' | 'pickrate' | 'banrate' | 'games' | 'wins'>(
+  'winrate'
+)
+const championSearchQueryPlaceholder = ref('')
 const RANK_TIERS = [
   'IRON',
   'BRONZE',
