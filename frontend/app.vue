@@ -19,25 +19,12 @@
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
 
-const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true })
-const config = useRuntimeConfig().public
-const matomoHost = (config.matomoHost as string)?.trim()
-const matomoSiteId = config.matomoSiteId
-const matomoScript =
-  matomoHost && matomoSiteId
-    ? [
-        {
-          innerHTML: `var _paq=window._paq=window._paq||[];_paq.push(["requireConsent"]);_paq.push(["setTrackerUrl",${JSON.stringify((matomoHost.endsWith('/') ? matomoHost : matomoHost + '/') + 'matomo.php')}]);_paq.push(["setSiteId",${JSON.stringify(String(matomoSiteId))}]);_paq.push(["enableLinkTracking"]);(function(){var u=${JSON.stringify(matomoHost.endsWith('/') ? matomoHost : matomoHost + '/')};var d=document,g=d.createElement("script"),s=d.getElementsByTagName("script")[0];g.async=true;g.src=u+"matomo.js";if(s&&s.parentNode)s.parentNode.insertBefore(g,s);})();`,
-          type: 'text/javascript',
-        },
-      ]
-    : []
+const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
 
 useHead(() => ({
   htmlAttrs: localeHead.value.htmlAttrs,
   link: localeHead.value.link,
   meta: localeHead.value.meta,
-  ...(matomoScript.length ? { script: matomoScript } : {}),
 }))
 </script>
 

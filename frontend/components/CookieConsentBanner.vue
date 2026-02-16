@@ -42,23 +42,30 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useCookieConsentStore } from '~/stores/CookieConsentStore'
+import { useMatomo } from '~/composables/useMatomo'
 
 const { t } = useI18n()
 const consent = useCookieConsentStore()
 const localePath = useLocalePath()
+const matomo = useMatomo()
+const router = useRouter()
 
 const shouldShow = computed(() => consent.choice === 'unknown')
 
 function accept() {
   consent.accept()
-  if (typeof window !== 'undefined' && (window as Window & { _paq?: unknown[] })._paq) {
-    const paq = (window as Window & { _paq: unknown[] })._paq
-    paq.push(['setConsentGiven'])
-    paq.push(['trackPageView'])
+  if (matomo.enabled) {
+    matomo.loadMatomo()
+    matomo.trackPageView(router.currentRoute.value.fullPath)
   }
 }
-const reject = () => consent.reject()
+
+function reject() {
+  if (matomo.enabled) matomo.sendAnonymousBeacon()
+  consent.reject()
+}
 
 onMounted(() => consent.load())
 </script>
