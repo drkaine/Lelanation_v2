@@ -63,3 +63,60 @@ export async function getRunesByChampion(
     return null
   }
 }
+
+/** Per-rune stats for a champion (like overview-detail runes but for this champion only). */
+export interface RuneStatRow {
+  runeId: number
+  games: number
+  wins: number
+  pickrate: number
+  winrate: number
+}
+
+export interface RuneStatsByChampionOptions {
+  championId: number
+  version?: string | null
+  rankTier?: string | null
+  minGames?: number
+}
+
+type RuneStatsRow = Array<{ get_rune_stats_by_champion: { totalGames: number; runes: RawRuneStat[] } | null }>
+interface RawRuneStat {
+  runeId: number
+  games: number
+  wins: number
+  pickrate: number
+  winrate: number
+}
+
+export async function getRuneStatsByChampion(
+  options: RuneStatsByChampionOptions
+): Promise<{ totalGames: number; runes: RuneStatRow[] } | null> {
+  if (!isDatabaseConfigured()) return null
+  const { championId, version, rankTier, minGames = 10 } = options
+  try {
+    const pVersion = version != null && version !== '' ? version : null
+    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+
+    const rows = await prisma.$queryRaw<RuneStatsRow>`
+      SELECT get_rune_stats_by_champion(${championId}, ${pVersion}, ${pRankTier}, ${minGames}) AS get_rune_stats_by_champion
+    `
+    const raw = rows[0]?.get_rune_stats_by_champion
+    if (!raw?.runes) return { totalGames: Number(raw?.totalGames ?? 0) || 0, runes: [] }
+
+    const runes: RuneStatRow[] = (raw.runes ?? []).map((r) => ({
+      runeId: Number(r.runeId),
+      games: Number(r.games),
+      wins: Number(r.wins),
+      pickrate: Number(r.pickrate),
+      winrate: Number(r.winrate),
+    }))
+
+    return {
+      totalGames: Number(raw.totalGames) ?? 0,
+      runes,
+    }
+  } catch {
+    return null
+  }
+}

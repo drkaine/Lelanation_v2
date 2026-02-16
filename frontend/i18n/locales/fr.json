@@ -297,7 +297,19 @@
     "championStatsWinratePercent": "% victoire",
     "championStatsBanrateTitle": "Taux de ban",
     "championStatsMainRole": "Rôle principal",
-    "championStatsMainRoleStats": "{games} parties · {winrate}% victoire"
+    "championStatsMainRoleStats": "{games} parties · {winrate}% victoire",
+    "championStatsMatchups": "Matchups",
+    "championStatsMatchupsBestAgainst": "Meilleur contre",
+    "championStatsMatchupsWorstAgainst": "Pire contre",
+    "championStatsMatchupsSeeMore": "Voir plus",
+    "championStatsPlayersMasterPlus": "Meilleurs joueurs : Master → Challenger uniquement",
+    "championStatsTabOverview": "Vue d'ensemble",
+    "championStatsTabStats": "Stats",
+    "championStatsTabCounters": "Compos / Counters",
+    "championStatsTabRunes": "Runes",
+    "championStatsTabSkills": "Skills",
+    "championStatsTabItems": "Objets",
+    "championStatsTabSpells": "Sorts d'invocateur"
   },
   "stats": {
     "title": "Statistiques",

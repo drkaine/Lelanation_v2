@@ -5,7 +5,8 @@
 import { Router, Request, Response } from 'express'
 import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
-import { getRunesByChampion } from '../services/StatsRunesService.js'
+import { getRunesByChampion, getRuneStatsByChampion } from '../services/StatsRunesService.js'
+import { getMatchupsByChampion } from '../services/StatsMatchupsService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
@@ -308,6 +309,50 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
   return res.json(data)
 })
 
+/** GET /api/stats/champions/:championId/runes-per-rune - per-rune pick/win for champion (like stats runes tab). Query: ?version=16.1 &rankTier=GOLD &minGames=10 */
+router.get('/champions/:championId/runes-per-rune', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const data = await getRuneStatsByChampion({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    minGames,
+  })
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, runes: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/matchups - winrate vs each opponent. Query: ?version=16.1 &rankTier=GOLD &minGames=10 */
+router.get('/champions/:championId/matchups', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const data = await getMatchupsByChampion({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    minGames,
+  })
+  if (!data) {
+    return res.status(200).json({ matchups: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
 /** GET /api/stats/players/search?name=... - lookup player by summoner name */
 router.get('/players/search', async (req: Request, res: Response) => {
   const name = (req.query.name as string)?.trim()
@@ -343,15 +388,19 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const rankTier = (req.query.rankTier as string) || undefined
+  const highRankOnly = req.query.highRankOnly === '1' || req.query.highRankOnly === 'true'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50
   const list = await getTopPlayersByChampion({
     championId,
     rankTier: rankTier ?? null,
+    highRankOnly,
     minGames,
     limit,
   })
-  return res.json({ players: list })
+  return res.json({
+    players: list.map((p) => ({ ...p, totalGames: p.games })),
+  })
 })
 
 /** POST /api/stats/aggregate - recalculer les agrégats (admin / cron) */

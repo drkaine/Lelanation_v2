@@ -67,10 +67,13 @@ app.listen(PORT, () => {
   console.log(`Cron jobs initialized`)
   console.log(`Current time: ${new Date().toISOString()}`)
   console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-  // Précharger le cache overview-detail (cas sans filtre) pour limiter les 504 sur première requête
+  // Précharger le cache overview-detail (sans filtre) pour les deux clés includeSmite (page stats + page champion) pour limiter les 504
   setTimeout(() => {
-    getOverviewDetailStats(null, null, false).then(
-      (d) => d && console.log('[Server] Overview-detail cache warmed'),
+    Promise.all([
+      getOverviewDetailStats(null, null, false),
+      getOverviewDetailStats(null, null, true),
+    ]).then(
+      ([a, b]) => console.log('[Server] Overview-detail cache warmed (includeSmite=false:', !!a, ', includeSmite=true:', !!b, ')'),
       (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
     )
   }, 15_000)

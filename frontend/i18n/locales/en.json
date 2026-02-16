@@ -296,7 +296,19 @@
     "championStatsWinratePercent": "Win rate",
     "championStatsBanrateTitle": "Ban rate",
     "championStatsMainRole": "Main role",
-    "championStatsMainRoleStats": "{games} games · {winrate}% win"
+    "championStatsMainRoleStats": "{games} games · {winrate}% win",
+    "championStatsMatchups": "Matchups",
+    "championStatsMatchupsBestAgainst": "Best against",
+    "championStatsMatchupsWorstAgainst": "Worst against",
+    "championStatsMatchupsSeeMore": "See more",
+    "championStatsPlayersMasterPlus": "Top players: Master to Challenger only",
+    "championStatsTabOverview": "Overview",
+    "championStatsTabStats": "Stats",
+    "championStatsTabCounters": "Compos / Counters",
+    "championStatsTabRunes": "Runes",
+    "championStatsTabSkills": "Skills",
+    "championStatsTabItems": "Items",
+    "championStatsTabSpells": "Summoner spells"
   },
   "stats": {
     "title": "Statistics",

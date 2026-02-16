@@ -204,7 +204,23 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # API Proxy
+    # Route lourde: overview-detail (runes, items, sorts) — timeout 120s, cache 10 min
+    location = /api/stats/overview-detail {
+        proxy_pass http://localhost:3500;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
+        proxy_cache api_cache;
+        proxy_cache_valid 200 10m;
+        proxy_cache_key "$scheme$request_method$host$request_uri";
+    }
+
+    # API Proxy (défaut 90s pour les autres routes)
     location /api/ {
         proxy_pass http://localhost:3500;
         proxy_http_version 1.1;
@@ -215,7 +231,6 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        # Éviter 504 sur /api/stats/overview-detail (requête lourde au premier appel)
         proxy_connect_timeout 90s;
         proxy_send_timeout 90s;
         proxy_read_timeout 90s;

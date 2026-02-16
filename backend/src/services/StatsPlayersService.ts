@@ -170,11 +170,13 @@ export async function getChampionStatsForPlayer(
 export async function getTopPlayersByChampion(options: {
   championId: number
   rankTier?: string | null
+  /** When true, only players whose latest rank is MASTER, GRANDMASTER or CHALLENGER */
+  highRankOnly?: boolean
   minGames?: number
   limit?: number
 }): Promise<ChampionPlayerRow[]> {
   if (!isDatabaseConfigured()) return []
-  const { championId, rankTier, minGames = 20, limit = 50 } = options
+  const { championId, rankTier, highRankOnly = false, minGames = 20, limit = 50 } = options
   try {
     type Row = {
       puuid: string
@@ -183,57 +185,55 @@ export async function getTopPlayersByChampion(options: {
       games: number
       wins: number
       winrate: number
+      rankTier: string | null
       avgKills: number | null
       avgDeaths: number | null
       avgAssists: number | null
     }
-    const rows: Row[] =
+    const highRankFilter = highRankOnly
+      ? Prisma.sql`AND p.puuid IN (SELECT puuid FROM participants WHERE rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER') LIMIT 50000)`
+      : Prisma.sql``
+    const rankTierFilter =
       rankTier != null && rankTier !== ''
-        ? await prisma.$queryRaw<Row[]>`
-            SELECT
-              p.puuid,
-              pl.summoner_name AS "summonerName",
-              pl.region,
-              COUNT(*)::int AS games,
-              SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
-              ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
-              ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
-              ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
-              ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
-            FROM participants p
-            JOIN players pl ON pl.puuid = p.puuid
-            WHERE p.champion_id = ${championId}
-              AND p.puuid IN (SELECT puuid FROM participants WHERE rank_tier = ${rankTier} LIMIT 10000)
-            GROUP BY p.puuid, pl.summoner_name, pl.region
-            HAVING COUNT(*) >= ${minGames}
-            ORDER BY winrate DESC, games DESC
-            LIMIT ${limit}
-          `
-        : await prisma.$queryRaw<Row[]>`
-            SELECT
-              p.puuid,
-              pl.summoner_name AS "summonerName",
-              pl.region,
-              COUNT(*)::int AS games,
-              SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
-              ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
-              ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
-              ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
-              ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
-            FROM participants p
-            JOIN players pl ON pl.puuid = p.puuid
-            WHERE p.champion_id = ${championId}
-            GROUP BY p.puuid, pl.summoner_name, pl.region
-            HAVING COUNT(*) >= ${minGames}
-            ORDER BY winrate DESC, games DESC
-            LIMIT ${limit}
-          `
+        ? Prisma.sql`AND p.puuid IN (SELECT puuid FROM participants WHERE rank_tier = ${rankTier} LIMIT 10000)`
+        : Prisma.sql``
+    const rows: Row[] = await prisma.$queryRaw<Row[]>(
+      Prisma.sql`
+      WITH latest_rank AS (
+        SELECT DISTINCT ON (p2.puuid) p2.puuid, p2.rank_tier
+        FROM participants p2
+        WHERE p2.champion_id = ${championId}
+        ORDER BY p2.puuid, p2.match_id DESC
+      )
+      SELECT
+        p.puuid,
+        pl.summoner_name AS "summonerName",
+        pl.region,
+        COUNT(*)::int AS games,
+        SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
+        ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
+        MAX(lr.rank_tier) AS "rankTier",
+        ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
+        ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
+        ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
+      FROM participants p
+      JOIN players pl ON pl.puuid = p.puuid
+      LEFT JOIN latest_rank lr ON lr.puuid = p.puuid
+      WHERE p.champion_id = ${championId}
+        ${rankTierFilter}
+        ${highRankFilter}
+      GROUP BY p.puuid, pl.summoner_name, pl.region
+      HAVING COUNT(*) >= ${minGames}
+      ORDER BY winrate DESC, games DESC
+      LIMIT ${limit}
+    `
+    )
     return rows.map((r) => ({
       puuid: r.puuid,
       maskedPuid: maskPuuid(r.puuid),
       summonerName: r.summonerName,
       region: r.region,
-      rankTier: null,
+      rankTier: r.rankTier ?? null,
       games: r.games,
       wins: r.wins,
       winrate: r.winrate,

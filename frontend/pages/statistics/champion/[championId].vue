@@ -126,6 +126,16 @@
               </button>
             </div>
           </div>
+          <div>
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-text">
+              <input
+                v-model="filterPlayersMasterPlus"
+                type="checkbox"
+                class="rounded border-primary/50"
+              />
+              {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
+            </label>
+          </div>
           <div v-if="showSearchChampionFilter">
             <label
               for="champion-search-champion-page"
@@ -144,7 +154,7 @@
       </aside>
 
       <!-- Contenu principal -->
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:pt-4">
+      <div class="min-w-0 flex-1 px-4 pb-4 pt-0">
         <div class="mx-auto max-w-6xl">
           <!-- Loading / error -->
           <div
@@ -157,508 +167,992 @@
             <p class="text-red-500">{{ error }}</p>
           </div>
           <template v-else-if="championStats">
-            <!-- Header: champion image + name -->
+            <!-- Header: bandeau fin (image + nom + infos, hauteur proche des onglets) -->
             <div
-              class="mb-6 flex flex-wrap items-center gap-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              class="champion-header-band mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-surface/30 px-3 py-1.5"
             >
               <img
                 v-if="gameVersion && championByKey(championId)"
                 :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
                 :alt="championName(championId) ?? ''"
-                class="h-24 w-24 rounded-full object-cover"
-                width="96"
-                height="96"
+                class="h-8 w-8 shrink-0 rounded-full object-cover"
+                width="32"
+                height="32"
               />
-              <div class="flex-1">
-                <h1 class="text-2xl font-bold text-text">
+              <div class="min-w-0 flex-1">
+                <h1 class="truncate text-base font-semibold text-text">
                   {{ championName(championId) || championId }}
                 </h1>
-                <div class="mt-2 flex flex-wrap gap-4 text-sm text-text/90">
+                <div class="flex flex-wrap gap-x-3 gap-y-0 text-xs text-text/80">
                   {{ t('statisticsPage.games') }}: {{ championStats.games }} ·
                   {{ t('statisticsPage.wins') }}: {{ championStats.wins }}
                 </div>
               </div>
             </div>
 
-            <!-- Donuts: Popularité (pickrate), % victoire (winrate), Taux de ban (banrate) -->
-            <div
-              class="mb-6 flex flex-wrap justify-center gap-6 rounded-lg border border-primary/30 bg-surface/30 p-6 sm:justify-start"
+            <!-- Onglets -->
+            <nav
+              class="champion-tabs mb-4 flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+              role="tablist"
             >
-              <div class="champion-donut flex flex-col items-center">
-                <div class="relative inline-flex items-center justify-center">
-                  <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                    <circle
-                      class="champion-donut-bg"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                    />
-                    <circle
-                      class="champion-donut-fill champion-donut-pickrate"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                      stroke-dasharray="251.33 251.33"
-                      :stroke-dashoffset="
-                        251.33 -
-                        (251.33 * Math.min(100, Math.max(0, championStats.pickrate ?? 0))) / 100
-                      "
-                      stroke-linecap="butt"
-                      transform="rotate(-90 50 50)"
-                    />
-                  </svg>
-                  <span class="champion-donut-value"
-                    >{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</span
-                  >
-                </div>
-                <span class="champion-donut-title">{{
-                  t('statisticsPage.championStatsPopularity')
-                }}</span>
-              </div>
-              <div class="champion-donut flex flex-col items-center">
-                <div class="relative inline-flex items-center justify-center">
-                  <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                    <circle
-                      class="champion-donut-bg"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                    />
-                    <circle
-                      class="champion-donut-fill champion-donut-winrate"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                      stroke-dasharray="251.33 251.33"
-                      :stroke-dashoffset="
-                        251.33 -
-                        (251.33 * Math.min(100, Math.max(0, championStats.winrate ?? 0))) / 100
-                      "
-                      stroke-linecap="butt"
-                      transform="rotate(-90 50 50)"
-                    />
-                  </svg>
-                  <span class="champion-donut-value"
-                    >{{ formatDonutPercent(championStats.winrate ?? 0) }}%</span
-                  >
-                </div>
-                <span class="champion-donut-title">{{
-                  t('statisticsPage.championStatsWinratePercent')
-                }}</span>
-              </div>
-              <div class="champion-donut flex flex-col items-center">
-                <div class="relative inline-flex items-center justify-center">
-                  <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                    <circle
-                      class="champion-donut-bg"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                    />
-                    <circle
-                      class="champion-donut-fill champion-donut-banrate"
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke-width="12"
-                      stroke-dasharray="251.33 251.33"
-                      :stroke-dashoffset="
-                        251.33 -
-                        (251.33 * Math.min(100, Math.max(0, championStats.banrate ?? 0))) / 100
-                      "
-                      stroke-linecap="butt"
-                      transform="rotate(-90 50 50)"
-                    />
-                  </svg>
-                  <span class="champion-donut-value"
-                    >{{ formatDonutPercent(championStats.banrate ?? 0) }}%</span
-                  >
-                </div>
-                <span class="champion-donut-title">{{
-                  t('statisticsPage.championStatsBanrateTitle')
-                }}</span>
-              </div>
-            </div>
-
-            <!-- Rôle principal (most played role) -->
-            <div
-              v-if="mainRole"
-              class="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-primary/30 bg-surface/30 p-6"
-            >
-              <div class="flex items-center gap-3">
-                <img
-                  :src="roleIconPath(mainRole.role)"
-                  :alt="roleLabel(mainRole.role)"
-                  class="h-12 w-12 object-contain"
-                  width="48"
-                  height="48"
-                />
-                <div>
-                  <div class="text-sm font-medium text-text/70">
-                    {{ t('statisticsPage.championStatsMainRole') }}
-                  </div>
-                  <div class="text-lg font-semibold text-text">{{ roleLabel(mainRole.role) }}</div>
-                  <div class="text-sm text-text/80">
-                    {{
-                      t('statisticsPage.championStatsMainRoleStats', {
-                        games: mainRole.games,
-                        winrate: mainRole.winrate,
-                      })
-                    }}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- By role (if any) -->
-            <div
-              v-if="byRoleList.length"
-              class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
-            >
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsByRole') }}
-              </h2>
-              <div class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="border-b border-primary/30">
-                      <th class="px-3 py-2 text-left font-medium text-text">
-                        {{ t('statisticsPage.filterRole') }}
-                      </th>
-                      <th class="px-3 py-2 text-right font-medium text-text">
-                        {{ t('statisticsPage.games') }}
-                      </th>
-                      <th class="px-3 py-2 text-right font-medium text-text">
-                        {{ t('statisticsPage.winrate') }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="r in byRoleList" :key="r.role" class="border-b border-primary/20">
-                      <td class="px-3 py-2 text-text/90">
-                        <span class="inline-flex items-center gap-2">
-                          <img
-                            :src="roleIconPath(r.role)"
-                            :alt="roleLabel(r.role)"
-                            class="h-5 w-5 object-contain"
-                            width="20"
-                            height="20"
-                          />
-                          {{ roleLabel(r.role) }}
-                        </span>
-                      </td>
-                      <td class="px-3 py-2 text-right text-text/90">{{ r.games }}</td>
-                      <td class="px-3 py-2 text-right text-text/90">{{ r.winrate }}%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Builds (item sets) -->
-            <div class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsBuilds') }}
-              </h2>
-              <div v-if="buildsPending" class="py-4 text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div v-else-if="buildsData?.builds?.length" class="flex flex-wrap gap-3">
+              <button
+                v-for="tab in championTabs"
+                :key="tab.id"
+                type="button"
+                role="tab"
+                :aria-selected="activeChampionTab === tab.id"
+                :class="[
+                  'champion-tab-btn rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                  activeChampionTab === tab.id
+                    ? 'border border-accent/50 bg-accent/20 text-accent'
+                    : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+                ]"
+                @click="activeChampionTab = tab.id"
+              >
+                {{ t(tab.label) }}
+              </button>
+            </nav>
+            <div class="champion-tab-panels">
+              <!-- Vue d'ensemble -->
+              <div v-show="activeChampionTab === 'overview'" role="tabpanel" class="space-y-6">
+                <!-- Donuts: Popularité (pickrate), % victoire (winrate), Taux de ban (banrate) -->
                 <div
-                  v-for="(build, idx) in buildsData.builds.slice(0, buildsExpand ? 20 : 8)"
-                  :key="idx"
-                  class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-3 py-2"
+                  class="mb-6 flex flex-wrap justify-center gap-6 rounded-lg border border-primary/30 bg-surface/30 p-6 sm:justify-start"
                 >
-                  <template v-for="itemId in build.items" :key="itemId">
-                    <img
-                      v-if="gameVersion && itemImageName(itemId)"
-                      :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
-                      :alt="itemName(itemId) ?? ''"
-                      class="h-8 w-8 object-contain"
-                      width="32"
-                      height="32"
-                    />
-                  </template>
-                  <span class="ml-1 text-xs text-text/80"
-                    >{{ build.pickrate }}% — {{ build.winrate }}%</span
-                  >
-                </div>
-                <button
-                  v-if="(buildsData.builds?.length ?? 0) > 8"
-                  type="button"
-                  class="text-sm font-medium text-accent hover:underline"
-                  @click="buildsExpand = !buildsExpand"
-                >
-                  {{
-                    buildsExpand
-                      ? t('statisticsPage.showLess')
-                      : t('statisticsPage.fastStatsSeeMore')
-                  }}
-                </button>
-              </div>
-              <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
-            </div>
-
-            <!-- Runes -->
-            <div class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsRunes') }}
-              </h2>
-              <div v-if="runesPending" class="py-4 text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div v-else-if="runesData?.runes?.length" class="flex flex-wrap gap-3">
-                <div
-                  v-for="(r, idx) in runesData.runes.slice(0, runesExpand ? 15 : 6)"
-                  :key="idx"
-                  class="rune-set"
-                >
-                  <div class="rune-set-stat" :data-pct="r.pickrate + '%'">
-                    <div class="rune-set-pr" :style="{ '--n': r.pickrate }" />
-                    <div class="rune-set-wr" :style="{ '--n': r.winrate }">
-                      {{ Math.round(r.winrate) }}%
-                    </div>
-                  </div>
-                  <div class="rune-set-runes">
-                    <div
-                      v-for="runeId in runeIdsFromSet(r.runes)"
-                      :key="runeId"
-                      class="rune-set-tooltip"
-                      :title="getRuneById(runeId)?.name ?? ''"
-                    >
-                      <div class="rune-set-rune">
-                        <div
-                          v-if="gameVersion && getRuneById(runeId)"
-                          class="rune-set-img"
-                          :style="{
-                            '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
-                          }"
+                  <div class="champion-donut flex flex-col items-center">
+                    <div class="relative inline-flex items-center justify-center">
+                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
+                        <circle
+                          class="champion-donut-bg"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
                         />
+                        <circle
+                          class="champion-donut-fill champion-donut-pickrate"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
+                          stroke-dasharray="251.33 251.33"
+                          :stroke-dashoffset="
+                            251.33 -
+                            (251.33 * Math.min(100, Math.max(0, championStats.pickrate ?? 0))) / 100
+                          "
+                          stroke-linecap="butt"
+                          transform="rotate(-90 50 50)"
+                        />
+                      </svg>
+                      <span class="champion-donut-value"
+                        >{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</span
+                      >
+                    </div>
+                    <span class="champion-donut-title">{{
+                      t('statisticsPage.championStatsPopularity')
+                    }}</span>
+                  </div>
+                  <div class="champion-donut flex flex-col items-center">
+                    <div class="relative inline-flex items-center justify-center">
+                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
+                        <circle
+                          class="champion-donut-bg"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
+                        />
+                        <circle
+                          class="champion-donut-fill champion-donut-winrate"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
+                          stroke-dasharray="251.33 251.33"
+                          :stroke-dashoffset="
+                            251.33 -
+                            (251.33 * Math.min(100, Math.max(0, championStats.winrate ?? 0))) / 100
+                          "
+                          stroke-linecap="butt"
+                          transform="rotate(-90 50 50)"
+                        />
+                      </svg>
+                      <span class="champion-donut-value"
+                        >{{ formatDonutPercent(championStats.winrate ?? 0) }}%</span
+                      >
+                    </div>
+                    <span class="champion-donut-title">{{
+                      t('statisticsPage.championStatsWinratePercent')
+                    }}</span>
+                  </div>
+                  <div class="champion-donut flex flex-col items-center">
+                    <div class="relative inline-flex items-center justify-center">
+                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
+                        <circle
+                          class="champion-donut-bg"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
+                        />
+                        <circle
+                          class="champion-donut-fill champion-donut-banrate"
+                          cx="50"
+                          cy="50"
+                          r="40"
+                          fill="none"
+                          stroke-width="12"
+                          stroke-dasharray="251.33 251.33"
+                          :stroke-dashoffset="
+                            251.33 -
+                            (251.33 * Math.min(100, Math.max(0, championStats.banrate ?? 0))) / 100
+                          "
+                          stroke-linecap="butt"
+                          transform="rotate(-90 50 50)"
+                        />
+                      </svg>
+                      <span class="champion-donut-value"
+                        >{{ formatDonutPercent(championStats.banrate ?? 0) }}%</span
+                      >
+                    </div>
+                    <span class="champion-donut-title">{{
+                      t('statisticsPage.championStatsBanrateTitle')
+                    }}</span>
+                  </div>
+                </div>
+
+                <!-- Matchups 3 best / 3 worst dans Vue d'ensemble -->
+                <div
+                  v-show="activeChampionTab === 'overview'"
+                  class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+                >
+                  <h2 class="mb-3 text-lg font-semibold text-text">
+                    {{ t('statisticsPage.championStatsMatchups') }}
+                  </h2>
+                  <div v-if="matchupsPending" class="py-4 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <template v-else-if="matchupsData?.matchups?.length">
+                    <div class="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <h3 class="mb-2 text-sm font-medium text-text/80">
+                          {{ t('statisticsPage.championStatsMatchupsBestAgainst') }}
+                        </h3>
+                        <ul class="flex flex-col gap-1.5">
+                          <li
+                            v-for="m in bestMatchups"
+                            :key="m.opponentChampionId"
+                            class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                          >
+                            <img
+                              v-if="gameVersion && championByKey(m.opponentChampionId)?.image?.full"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(m.opponentChampionId)!.image!.full
+                                )
+                              "
+                              :alt="championName(m.opponentChampionId) ?? ''"
+                              class="h-8 w-8 rounded object-cover"
+                              width="32"
+                              height="32"
+                            />
+                            <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
+                              championName(m.opponentChampionId) ?? m.opponentChampionId
+                            }}</span>
+                            <span class="text-sm font-semibold text-green-600 dark:text-green-400"
+                              >{{ Math.round(m.winrate) }}%</span
+                            >
+                          </li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h3 class="mb-2 text-sm font-medium text-text/80">
+                          {{ t('statisticsPage.championStatsMatchupsWorstAgainst') }}
+                        </h3>
+                        <ul class="flex flex-col gap-1.5">
+                          <li
+                            v-for="m in worstMatchups"
+                            :key="m.opponentChampionId"
+                            class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                          >
+                            <img
+                              v-if="gameVersion && championByKey(m.opponentChampionId)?.image?.full"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(m.opponentChampionId)!.image!.full
+                                )
+                              "
+                              :alt="championName(m.opponentChampionId) ?? ''"
+                              class="h-8 w-8 rounded object-cover"
+                              width="32"
+                              height="32"
+                            />
+                            <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
+                              championName(m.opponentChampionId) ?? m.opponentChampionId
+                            }}</span>
+                            <span class="text-sm font-semibold text-red-600 dark:text-red-400"
+                              >{{ Math.round(m.winrate) }}%</span
+                            >
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="mt-3 text-sm font-medium text-accent hover:underline"
+                      @click="scrollToMatchups"
+                    >
+                      {{ t('statisticsPage.championStatsMatchupsSeeMore') }}
+                    </button>
+                  </template>
+                  <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+                </div>
+
+                <!-- Rôle principal (most played role) -->
+                <div
+                  v-if="mainRole"
+                  class="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-primary/30 bg-surface/30 p-6"
+                >
+                  <div class="flex items-center gap-3">
+                    <img
+                      :src="roleIconPath(mainRole.role)"
+                      :alt="roleLabel(mainRole.role)"
+                      class="h-12 w-12 object-contain"
+                      width="48"
+                      height="48"
+                    />
+                    <div>
+                      <div class="text-sm font-medium text-text/70">
+                        {{ t('statisticsPage.championStatsMainRole') }}
+                      </div>
+                      <div class="text-lg font-semibold text-text">
+                        {{ roleLabel(mainRole.role) }}
+                      </div>
+                      <div class="text-sm text-text/80">
+                        {{
+                          t('statisticsPage.championStatsMainRoleStats', {
+                            games: mainRole.games,
+                            winrate: mainRole.winrate,
+                          })
+                        }}
                       </div>
                     </div>
                   </div>
                 </div>
-                <button
-                  v-if="(runesData.runes?.length ?? 0) > 6"
-                  type="button"
-                  class="text-sm font-medium text-accent hover:underline"
-                  @click="runesExpand = !runesExpand"
-                >
-                  {{
-                    runesExpand
-                      ? t('statisticsPage.showLess')
-                      : t('statisticsPage.fastStatsSeeMore')
-                  }}
-                </button>
-              </div>
-              <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
-            </div>
 
-            <!-- Summoner spells (from overview-detail, global) -->
-            <div class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsSummonerSpells') }}
-              </h2>
-              <p class="mb-2 text-xs text-text/60">
-                {{ t('statisticsPage.championStatsSummonerSpellsHint') }}
-              </p>
-              <div v-if="detailPending" class="py-4 text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div v-else-if="detailData?.summonerSpells?.length" class="flex flex-wrap gap-2">
+                <!-- Graph winrate selon durée (dans Vue d'ensemble) -->
                 <div
-                  v-for="s in detailData.summonerSpells.slice(0, 10)"
-                  :key="s.spellId"
-                  class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                  :title="spellName(s.spellId) ?? ''"
+                  v-show="activeChampionTab === 'overview'"
+                  class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
                 >
-                  <img
-                    v-if="gameVersion && spellImageName(s.spellId)"
-                    :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
-                    :alt="spellName(s.spellId) ?? ''"
-                    class="h-6 w-6 object-contain"
-                    width="24"
-                    height="24"
-                  />
-                  <span class="text-xs text-text/80">{{ s.pickrate }}% — {{ s.winrate }}%</span>
+                  <h2 class="mb-3 text-lg font-semibold text-text">
+                    {{ t('statisticsPage.championStatsDurationWinrate') }}
+                  </h2>
+                  <p class="mb-3 text-xs text-text/60">
+                    {{ t('statisticsPage.championStatsDurationWinrateChampionHint') }}
+                  </p>
+                  <div v-if="durationPending" class="py-4 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div
+                    v-else-if="durationData?.buckets?.length"
+                    class="relative flex justify-center"
+                  >
+                    <div class="relative inline-block min-h-[260px] w-full max-w-[400px]">
+                      <svg
+                        ref="durationChartSvgRef"
+                        :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+                        class="h-auto w-full"
+                        :width="CHART_W"
+                        :height="CHART_H"
+                        preserveAspectRatio="xMidYMid meet"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <linearGradient id="duration-fill-champ" x1="0" x2="0" y1="0" y2="1">
+                            <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
+                            <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
+                          </linearGradient>
+                        </defs>
+                        <path :d="durationChartData.closedPath" fill="url(#duration-fill-champ)" />
+                        <path
+                          :d="durationChartData.linePath"
+                          fill="none"
+                          stroke="rgb(var(--rgb-accent))"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                        <g v-for="(pt, i) in durationChartData.points" :key="'pt-' + i">
+                          <circle
+                            :cx="pt.x"
+                            :cy="pt.y"
+                            r="12"
+                            fill="transparent"
+                            class="cursor-pointer"
+                            @mouseenter="
+                              durationChartTooltip = {
+                                durationLabel: pt.durationLabel,
+                                winrate: pt.winrate,
+                                matchCount: pt.matchCount,
+                                x: pt.x,
+                                y: pt.y,
+                              }
+                            "
+                            @mouseleave="durationChartTooltip = null"
+                          />
+                          <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
+                        </g>
+                        <g v-for="(tick, i) in durationChartData.axisX.ticks" :key="'x-' + i">
+                          <line
+                            :x1="tick.x"
+                            :y1="CHART_PAD.top + PLOT_H"
+                            :x2="tick.x"
+                            :y2="CHART_PAD.top + PLOT_H + 4"
+                            stroke="currentColor"
+                            stroke-width="1"
+                            class="text-text/50"
+                          />
+                          <text
+                            :x="tick.x"
+                            :y="CHART_H - 6"
+                            text-anchor="middle"
+                            class="fill-text/70 text-[10px]"
+                          >
+                            {{ tick.value }}
+                          </text>
+                        </g>
+                        <g v-for="(tick, i) in durationChartData.axisY.ticks" :key="'y-' + i">
+                          <line
+                            :x1="CHART_PAD.left"
+                            :y1="tick.y"
+                            :x2="CHART_PAD.left - 4"
+                            :y2="tick.y"
+                            stroke="currentColor"
+                            stroke-width="1"
+                            class="text-text/50"
+                          />
+                          <text
+                            :x="CHART_PAD.left - 8"
+                            :y="tick.y + 4"
+                            text-anchor="end"
+                            class="fill-text/70 text-[10px]"
+                          >
+                            {{ tick.value }}%
+                          </text>
+                        </g>
+                      </svg>
+                      <div
+                        v-if="durationChartTooltip"
+                        class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
+                        :style="{
+                          left: (durationChartTooltip.x / CHART_W) * 100 + '%',
+                          top: (durationChartTooltip.y / CHART_H) * 100 + '%',
+                          transform: 'translate(-50%, -100%) translateY(-8px)',
+                        }"
+                      >
+                        <div class="font-medium text-text">
+                          {{ durationChartTooltip.durationLabel }}
+                        </div>
+                        <div class="text-text/80">
+                          {{ durationChartTooltip.winrate }}%
+                          {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
+                        </div>
+                        <div class="text-text/70">
+                          {{ durationChartTooltip.matchCount }}
+                          {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <p v-else class="py-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
                 </div>
               </div>
-              <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
-            </div>
 
-            <!-- Winrate by game duration (this champion) -->
-            <div class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsDurationWinrate') }}
-              </h2>
-              <p class="mb-3 text-xs text-text/60">
-                {{ t('statisticsPage.championStatsDurationWinrateChampionHint') }}
-              </p>
-              <div v-if="durationPending" class="py-4 text-text/70">
-                {{ t('statisticsPage.loading') }}
+              <!-- Stats: by role -->
+              <div
+                v-show="activeChampionTab === 'stats'"
+                v-if="byRoleList.length"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsByRole') }}
+                </h2>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-primary/30">
+                        <th class="px-3 py-2 text-left font-medium text-text">
+                          {{ t('statisticsPage.filterRole') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.games') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.winrate') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="r in byRoleList" :key="r.role" class="border-b border-primary/20">
+                        <td class="px-3 py-2 text-text/90">
+                          <span class="inline-flex items-center gap-2">
+                            <img
+                              :src="roleIconPath(r.role)"
+                              :alt="roleLabel(r.role)"
+                              class="h-5 w-5 object-contain"
+                              width="20"
+                              height="20"
+                            />
+                            {{ roleLabel(r.role) }}
+                          </span>
+                        </td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ r.games }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ r.winrate }}%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div v-else-if="durationData?.buckets?.length" class="relative flex justify-center">
-                <div class="relative inline-block">
-                  <svg
-                    ref="durationChartSvgRef"
-                    :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                    class="max-w-full"
-                    aria-hidden="true"
+
+              <!-- Counters: matchups card -->
+              <div
+                v-show="activeChampionTab === 'counters'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsMatchups') }}
+                </h2>
+                <div v-if="matchupsPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <template v-else-if="matchupsData?.matchups?.length">
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <h3 class="mb-2 text-sm font-medium text-text/80">
+                        {{ t('statisticsPage.championStatsMatchupsBestAgainst') }}
+                      </h3>
+                      <ul class="flex flex-col gap-1.5">
+                        <li
+                          v-for="m in bestMatchups"
+                          :key="m.opponentChampionId"
+                          class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(m.opponentChampionId)?.image?.full"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(m.opponentChampionId)!.image!.full
+                              )
+                            "
+                            :alt="championName(m.opponentChampionId) ?? ''"
+                            class="h-8 w-8 rounded object-cover"
+                            width="32"
+                            height="32"
+                          />
+                          <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
+                            championName(m.opponentChampionId) ?? m.opponentChampionId
+                          }}</span>
+                          <span class="text-sm font-semibold text-green-600 dark:text-green-400"
+                            >{{ Math.round(m.winrate) }}%</span
+                          >
+                        </li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h3 class="mb-2 text-sm font-medium text-text/80">
+                        {{ t('statisticsPage.championStatsMatchupsWorstAgainst') }}
+                      </h3>
+                      <ul class="flex flex-col gap-1.5">
+                        <li
+                          v-for="m in worstMatchups"
+                          :key="m.opponentChampionId"
+                          class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(m.opponentChampionId)?.image?.full"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(m.opponentChampionId)!.image!.full
+                              )
+                            "
+                            :alt="championName(m.opponentChampionId) ?? ''"
+                            class="h-8 w-8 rounded object-cover"
+                            width="32"
+                            height="32"
+                          />
+                          <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
+                            championName(m.opponentChampionId) ?? m.opponentChampionId
+                          }}</span>
+                          <span class="text-sm font-semibold text-red-600 dark:text-red-400"
+                            >{{ Math.round(m.winrate) }}%</span
+                          >
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="mt-3 text-sm font-medium text-accent hover:underline"
+                    @click="scrollToMatchups"
                   >
-                    <defs>
-                      <linearGradient id="duration-fill-champ" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
-                        <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
-                      </linearGradient>
-                    </defs>
-                    <path :d="durationChartData.closedPath" fill="url(#duration-fill-champ)" />
-                    <path
-                      :d="durationChartData.linePath"
-                      fill="none"
-                      stroke="rgb(var(--rgb-accent))"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                    <g v-for="(pt, i) in durationChartData.points" :key="'pt-' + i">
-                      <circle
-                        :cx="pt.x"
-                        :cy="pt.y"
-                        r="12"
-                        fill="transparent"
-                        class="cursor-pointer"
-                        @mouseenter="
-                          durationChartTooltip = {
-                            durationLabel: pt.durationLabel,
-                            winrate: pt.winrate,
-                            matchCount: pt.matchCount,
-                            x: pt.x,
-                            y: pt.y,
-                          }
-                        "
-                        @mouseleave="durationChartTooltip = null"
-                      />
-                      <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
-                    </g>
-                    <g v-for="(tick, i) in durationChartData.axisX.ticks" :key="'x-' + i">
-                      <line
-                        :x1="tick.x"
-                        :y1="CHART_PAD.top + PLOT_H"
-                        :x2="tick.x"
-                        :y2="CHART_PAD.top + PLOT_H + 4"
-                        stroke="currentColor"
-                        stroke-width="1"
-                        class="text-text/50"
-                      />
-                      <text
-                        :x="tick.x"
-                        :y="CHART_H - 6"
-                        text-anchor="middle"
-                        class="fill-text/70 text-[10px]"
-                      >
-                        {{ tick.value }}
-                      </text>
-                    </g>
-                    <g v-for="(tick, i) in durationChartData.axisY.ticks" :key="'y-' + i">
-                      <line
-                        :x1="CHART_PAD.left"
-                        :y1="tick.y"
-                        :x2="CHART_PAD.left - 4"
-                        :y2="tick.y"
-                        stroke="currentColor"
-                        stroke-width="1"
-                        class="text-text/50"
-                      />
-                      <text
-                        :x="CHART_PAD.left - 8"
-                        :y="tick.y + 4"
-                        text-anchor="end"
-                        class="fill-text/70 text-[10px]"
-                      >
-                        {{ tick.value }}%
-                      </text>
-                    </g>
-                  </svg>
+                    {{ t('statisticsPage.championStatsMatchupsSeeMore') }}
+                  </button>
+                </template>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Objets (builds) -->
+              <div
+                v-show="activeChampionTab === 'items'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsBuilds') }}
+                </h2>
+                <div v-if="buildsPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <div v-else-if="buildsData?.builds?.length" class="flex flex-wrap gap-3">
                   <div
-                    v-if="durationChartTooltip"
-                    class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
-                    :style="{
-                      left: (durationChartTooltip.x / CHART_W) * 100 + '%',
-                      top: (durationChartTooltip.y / CHART_H) * 100 + '%',
-                      transform: 'translate(-50%, -100%) translateY(-8px)',
-                    }"
+                    v-for="(build, idx) in buildsData.builds.slice(0, buildsExpand ? 20 : 8)"
+                    :key="idx"
+                    class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-3 py-2"
                   >
-                    <div class="font-medium text-text">
-                      {{ durationChartTooltip.durationLabel }}
+                    <template v-for="itemId in build.items" :key="itemId">
+                      <img
+                        v-if="gameVersion && itemImageName(itemId)"
+                        :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
+                        :alt="itemName(itemId) ?? ''"
+                        class="h-8 w-8 object-contain"
+                        width="32"
+                        height="32"
+                      />
+                    </template>
+                    <span class="ml-1 text-xs text-text/80"
+                      >{{ build.pickrate }}% — {{ build.winrate }}%</span
+                    >
+                  </div>
+                  <button
+                    v-if="(buildsData.builds?.length ?? 0) > 8"
+                    type="button"
+                    class="text-sm font-medium text-accent hover:underline"
+                    @click="buildsExpand = !buildsExpand"
+                  >
+                    {{
+                      buildsExpand
+                        ? t('statisticsPage.showLess')
+                        : t('statisticsPage.fastStatsSeeMore')
+                    }}
+                  </button>
+                </div>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Skills (placeholder) -->
+              <div
+                v-show="activeChampionTab === 'skills'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsTabSkills') }}
+                </h2>
+                <p class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Runes -->
+              <div
+                v-show="activeChampionTab === 'runes'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsRunes') }}
+                </h2>
+                <div v-if="runesPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <template v-else-if="runesData?.runes?.length">
+                  <!-- Grille par rune (winrate / pickrate comme onglet runes) -->
+                  <div
+                    v-if="championRunesByPath.some(p => p.cells.length > 0)"
+                    class="champion-runes-grid-wrap mb-6 flex flex-wrap gap-6"
+                  >
+                    <div
+                      v-for="{ path, cells } in championRunesByPath"
+                      :key="path.id"
+                      class="runes champion-overview-runes-grid"
+                    >
+                      <button
+                        v-for="(cell, idx) in cells"
+                        :key="path.id + '-' + cell.rune.id + '-' + idx"
+                        type="button"
+                        class="champion-overview-rune-cell"
+                        :class="{ 'rune main': cell.row === 0, rune: cell.row !== 0 }"
+                        :style="{ gridArea: `${cell.row + 1} / ${cell.col + 1}` }"
+                        :title="
+                          cell.rune.name +
+                          (cell.stats
+                            ? ` — ${Math.round(cell.stats.pickrate)}% pick, ${Math.round(cell.stats.winrate)}% WR`
+                            : '')
+                        "
+                      >
+                        <img
+                          v-if="gameVersion"
+                          :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
+                          :alt="cell.rune.name"
+                          class="champion-overview-rune-img"
+                          width="32"
+                          height="32"
+                        />
+                        <div v-if="cell.stats" class="champion-overview-rune-stat">
+                          <div class="champion-overview-rune-pick">
+                            {{ Math.round(cell.stats.pickrate) }}%
+                            {{ t('statisticsPage.overviewDetailPickRate') }}
+                          </div>
+                          <div class="champion-overview-rune-wr">
+                            {{ Math.round(cell.stats.winrate) }}%
+                            {{ t('statisticsPage.overviewDetailWinRate') }}
+                          </div>
+                        </div>
+                        <div
+                          v-else
+                          class="champion-overview-rune-stat champion-overview-rune-no-stat"
+                        >
+                          —
+                        </div>
+                      </button>
                     </div>
-                    <div class="text-text/80">
-                      {{ durationChartTooltip.winrate }}%
-                      {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
+                  </div>
+                  <!-- Pages de runes (sets) -->
+                  <div class="flex flex-wrap gap-3">
+                    <div
+                      v-for="(r, idx) in runesData.runes.slice(0, runesExpand ? 15 : 6)"
+                      :key="idx"
+                      class="rune-set"
+                    >
+                      <div class="rune-set-stat" :data-pct="r.pickrate + '%'">
+                        <div class="rune-set-pr" :style="{ '--n': r.pickrate }" />
+                        <div class="rune-set-pickrate text-xs text-text/70">
+                          {{ Math.round(r.pickrate) }}%
+                          {{ t('statisticsPage.overviewDetailPickRate') }}
+                        </div>
+                        <div class="rune-set-wr" :style="{ '--n': r.winrate }">
+                          {{ Math.round(r.winrate) }}%
+                          {{ t('statisticsPage.overviewDetailWinRate') }}
+                        </div>
+                      </div>
+                      <div class="rune-set-runes">
+                        <div
+                          v-for="runeId in runeIdsFromSet(r.runes)"
+                          :key="runeId"
+                          class="rune-set-tooltip"
+                          :title="getRuneById(runeId)?.name ?? ''"
+                        >
+                          <div class="rune-set-rune">
+                            <div
+                              v-if="gameVersion && getRuneById(runeId)"
+                              class="rune-set-img"
+                              :style="{
+                                '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                              }"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div class="text-text/70">
-                      {{ durationChartTooltip.matchCount }}
-                      {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                  </div>
+                  <button
+                    v-if="(runesData.runes?.length ?? 0) > 6"
+                    type="button"
+                    class="mt-2 text-sm font-medium text-accent hover:underline"
+                    @click="runesExpand = !runesExpand"
+                  >
+                    {{
+                      runesExpand
+                        ? t('statisticsPage.showLess')
+                        : t('statisticsPage.fastStatsSeeMore')
+                    }}
+                  </button>
+                </template>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Counters: liste complète matchups -->
+              <div
+                v-show="activeChampionTab === 'counters'"
+                id="champion-stats-matchups"
+                ref="matchupsSectionRef"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsMatchups') }}
+                </h2>
+                <div v-if="matchupsPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <div v-else-if="matchupsData?.matchups?.length" class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-primary/30">
+                        <th class="px-3 py-2 text-left font-medium text-text">
+                          {{ t('statisticsPage.champion') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.games') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.winrate') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="m in matchupsData.matchups"
+                        :key="m.opponentChampionId"
+                        class="border-b border-primary/20"
+                      >
+                        <td class="px-3 py-2">
+                          <span class="inline-flex items-center gap-2">
+                            <img
+                              v-if="gameVersion && championByKey(m.opponentChampionId)?.image?.full"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(m.opponentChampionId)!.image!.full
+                                )
+                              "
+                              :alt="championName(m.opponentChampionId) ?? ''"
+                              class="h-6 w-6 rounded object-cover"
+                              width="24"
+                              height="24"
+                            />
+                            {{ championName(m.opponentChampionId) ?? m.opponentChampionId }}
+                          </span>
+                        </td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ m.games }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">
+                          {{ Math.round(m.winrate) }}%
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Sorts d'invocateur -->
+              <div
+                v-show="activeChampionTab === 'spells'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsSummonerSpells') }}
+                </h2>
+                <p class="mb-2 text-xs text-text/60">
+                  {{ t('statisticsPage.championStatsSummonerSpellsHint') }}
+                </p>
+                <div v-if="detailPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <div v-else-if="detailData?.summonerSpells?.length" class="flex flex-wrap gap-2">
+                  <div
+                    v-for="s in detailData.summonerSpells.slice(0, 10)"
+                    :key="s.spellId"
+                    class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                    :title="spellName(s.spellId) ?? ''"
+                  >
+                    <img
+                      v-if="gameVersion && spellImageName(s.spellId)"
+                      :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
+                      :alt="spellName(s.spellId) ?? ''"
+                      class="h-6 w-6 object-contain"
+                      width="24"
+                      height="24"
+                    />
+                    <span class="text-xs text-text/80">{{ s.pickrate }}% — {{ s.winrate }}%</span>
+                  </div>
+                </div>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </div>
+
+              <!-- Stats: duration winrate -->
+              <div
+                v-show="activeChampionTab === 'stats'"
+                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsDurationWinrate') }}
+                </h2>
+                <p class="mb-3 text-xs text-text/60">
+                  {{ t('statisticsPage.championStatsDurationWinrateChampionHint') }}
+                </p>
+                <div v-if="durationPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <div v-else-if="durationData?.buckets?.length" class="relative flex justify-center">
+                  <div class="relative inline-block">
+                    <svg
+                      ref="durationChartSvgRef"
+                      :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+                      class="max-w-full"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <linearGradient id="duration-fill-champ" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
+                          <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
+                        </linearGradient>
+                      </defs>
+                      <path :d="durationChartData.closedPath" fill="url(#duration-fill-champ)" />
+                      <path
+                        :d="durationChartData.linePath"
+                        fill="none"
+                        stroke="rgb(var(--rgb-accent))"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <g v-for="(pt, i) in durationChartData.points" :key="'pt-' + i">
+                        <circle
+                          :cx="pt.x"
+                          :cy="pt.y"
+                          r="12"
+                          fill="transparent"
+                          class="cursor-pointer"
+                          @mouseenter="
+                            durationChartTooltip = {
+                              durationLabel: pt.durationLabel,
+                              winrate: pt.winrate,
+                              matchCount: pt.matchCount,
+                              x: pt.x,
+                              y: pt.y,
+                            }
+                          "
+                          @mouseleave="durationChartTooltip = null"
+                        />
+                        <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
+                      </g>
+                      <g v-for="(tick, i) in durationChartData.axisX.ticks" :key="'x-' + i">
+                        <line
+                          :x1="tick.x"
+                          :y1="CHART_PAD.top + PLOT_H"
+                          :x2="tick.x"
+                          :y2="CHART_PAD.top + PLOT_H + 4"
+                          stroke="currentColor"
+                          stroke-width="1"
+                          class="text-text/50"
+                        />
+                        <text
+                          :x="tick.x"
+                          :y="CHART_H - 6"
+                          text-anchor="middle"
+                          class="fill-text/70 text-[10px]"
+                        >
+                          {{ tick.value }}
+                        </text>
+                      </g>
+                      <g v-for="(tick, i) in durationChartData.axisY.ticks" :key="'y-' + i">
+                        <line
+                          :x1="CHART_PAD.left"
+                          :y1="tick.y"
+                          :x2="CHART_PAD.left - 4"
+                          :y2="tick.y"
+                          stroke="currentColor"
+                          stroke-width="1"
+                          class="text-text/50"
+                        />
+                        <text
+                          :x="CHART_PAD.left - 8"
+                          :y="tick.y + 4"
+                          text-anchor="end"
+                          class="fill-text/70 text-[10px]"
+                        >
+                          {{ tick.value }}%
+                        </text>
+                      </g>
+                    </svg>
+                    <div
+                      v-if="durationChartTooltip"
+                      class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
+                      :style="{
+                        left: (durationChartTooltip.x / CHART_W) * 100 + '%',
+                        top: (durationChartTooltip.y / CHART_H) * 100 + '%',
+                        transform: 'translate(-50%, -100%) translateY(-8px)',
+                      }"
+                    >
+                      <div class="font-medium text-text">
+                        {{ durationChartTooltip.durationLabel }}
+                      </div>
+                      <div class="text-text/80">
+                        {{ durationChartTooltip.winrate }}%
+                        {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
+                      </div>
+                      <div class="text-text/70">
+                        {{ durationChartTooltip.matchCount }}
+                        {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                      </div>
                     </div>
                   </div>
                 </div>
+                <p v-else class="py-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
               </div>
-              <p v-else class="py-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
-            </div>
 
-            <!-- Top players on this champion -->
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <h2 class="mb-3 text-lg font-semibold text-text">
-                {{ t('statisticsPage.championStatsTopPlayers') }}
-              </h2>
-              <div v-if="playersPending" class="py-4 text-text/70">
-                {{ t('statisticsPage.loading') }}
+              <!-- Stats: top players -->
+              <div
+                v-show="activeChampionTab === 'stats'"
+                class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+              >
+                <h2 class="mb-3 text-lg font-semibold text-text">
+                  {{ t('statisticsPage.championStatsTopPlayers') }}
+                </h2>
+                <div v-if="playersPending" class="py-4 text-text/70">
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <div v-else-if="playersData?.players?.length" class="overflow-x-auto">
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="border-b border-primary/30">
+                        <th class="px-3 py-2 text-left font-medium text-text">
+                          {{ t('statisticsPage.player') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.games') }}
+                        </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.winrate') }}
+                        </th>
+                        <th class="px-3 py-2 text-left font-medium text-text">
+                          {{ t('statisticsPage.rank') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr
+                        v-for="p in playersData.players"
+                        :key="p.puuid"
+                        class="border-b border-primary/20"
+                      >
+                        <td class="px-3 py-2 font-medium text-text/90">
+                          {{ p.summonerName || p.puuid?.slice(0, 8) }}
+                        </td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ p.totalGames }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ p.winrate }}%</td>
+                        <td class="px-3 py-2 text-text/80">{{ p.rankTier ?? '—' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
               </div>
-              <div v-else-if="playersData?.players?.length" class="overflow-x-auto">
-                <table class="w-full text-sm">
-                  <thead>
-                    <tr class="border-b border-primary/30">
-                      <th class="px-3 py-2 text-left font-medium text-text">
-                        {{ t('statisticsPage.player') }}
-                      </th>
-                      <th class="px-3 py-2 text-right font-medium text-text">
-                        {{ t('statisticsPage.games') }}
-                      </th>
-                      <th class="px-3 py-2 text-right font-medium text-text">
-                        {{ t('statisticsPage.winrate') }}
-                      </th>
-                      <th class="px-3 py-2 text-left font-medium text-text">
-                        {{ t('statisticsPage.rank') }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="p in playersData.players"
-                      :key="p.puuid"
-                      class="border-b border-primary/20"
-                    >
-                      <td class="px-3 py-2 font-medium text-text/90">
-                        {{ p.summonerName || p.puuid?.slice(0, 8) }}
-                      </td>
-                      <td class="px-3 py-2 text-right text-text/90">{{ p.totalGames }}</td>
-                      <td class="px-3 py-2 text-right text-text/90">{{ p.winrate }}%</td>
-                      <td class="px-3 py-2 text-text/80">{{ p.rankTier ?? '—' }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
             </div>
           </template>
         </div>
@@ -743,6 +1237,75 @@ function runeIdsFromSet(runesUnknown: unknown): number[] {
   }
   return ids
 }
+
+/** Stats par runeId : priorité API runes-per-rune (comme onglet stats), sinon dérivées des sets. */
+const championRuneStatsByRuneId = computed(() => {
+  const perRune = runesPerRuneData.value?.runes
+  if (Array.isArray(perRune) && perRune.length > 0) {
+    const result: Record<number, { pickrate: number; winrate: number; games: number }> = {}
+    for (const r of perRune) {
+      result[r.runeId] = { pickrate: r.pickrate, winrate: r.winrate, games: r.games }
+    }
+    return result
+  }
+  const data = runesData.value
+  if (!data?.runes?.length || !data.totalGames)
+    return {} as Record<number, { pickrate: number; winrate: number; games: number }>
+  const totalGames = data.totalGames
+  const acc: Record<number, { games: number; wins: number }> = {}
+  for (const set of data.runes) {
+    const ids = runeIdsFromSet(set.runes)
+    for (const runeId of ids) {
+      if (!acc[runeId]) acc[runeId] = { games: 0, wins: 0 }
+      acc[runeId].games += set.games
+      acc[runeId].wins += set.wins
+    }
+  }
+  const result: Record<number, { pickrate: number; winrate: number; games: number }> = {}
+  for (const [runeIdStr, { games, wins }] of Object.entries(acc)) {
+    const runeId = Number(runeIdStr)
+    result[runeId] = {
+      pickrate: totalGames > 0 ? (100 * games) / totalGames : 0,
+      winrate: games > 0 ? (100 * wins) / games : 0,
+      games,
+    }
+  }
+  return result
+})
+
+/** Grille runes par chemin (comme onglet runes) pour ce champion. */
+const championRunesByPath = computed(() => {
+  const stats = championRuneStatsByRuneId.value
+  return runesStore.runePaths.map(path => {
+    const cells: Array<{
+      row: number
+      col: number
+      rune: { id: number; name: string; icon: string }
+      stats: { pickrate: number; winrate: number; games: number } | null
+    }> = []
+    path.slots.forEach((slot, slotIndex) => {
+      const numCols = slotIndex === 0 ? 4 : 3
+      slot.runes.slice(0, numCols).forEach((rune, runeIndex) => {
+        const st = stats[rune.id] ?? null
+        cells.push({
+          row: slotIndex,
+          col: runeIndex,
+          rune: { id: rune.id, name: rune.name, icon: rune.icon },
+          stats: st,
+        })
+      })
+    })
+    return { path, cells }
+  })
+})
+
+/** Top 3 matchups (highest winrate vs), worst 3 (lowest winrate vs). API returns sorted by winrate DESC. */
+const bestMatchups = computed(() => (matchupsData.value?.matchups ?? []).slice(0, 3))
+const worstMatchups = computed(() => {
+  const list = matchupsData.value?.matchups ?? []
+  return list.length <= 3 ? list : list.slice(-3).reverse()
+})
+
 function spellName(spellId: number) {
   return summonerSpellsStore.getSpellById(String(spellId))?.name ?? null
 }
@@ -754,6 +1317,7 @@ const championFiltersOpen = ref(false)
 const filterVersion = ref('')
 const filterRank = ref('')
 const filterRole = ref('')
+const filterPlayersMasterPlus = ref(false)
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
 const versionsFromOverview = ref<Array<{ version: string; matchCount: number }>>([])
 /** Même sélection de filtres que la page stats ; on cache uniquement « Rechercher un champion ». */
@@ -851,6 +1415,10 @@ const runesData = ref<{
   totalGames: number
   runes: Array<{ runes: unknown; games: number; wins: number; winrate: number; pickrate: number }>
 } | null>(null)
+const runesPerRuneData = ref<{
+  totalGames: number
+  runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
+} | null>(null)
 const runesExpand = ref(false)
 
 const detailPending = ref(false)
@@ -874,8 +1442,29 @@ const playersData = ref<{
   }>
 } | null>(null)
 
-/** Short timeout for heavy global endpoints so filters stay responsive (avoid 504 wait). */
-const OVERVIEW_FETCH_TIMEOUT_MS = 15000
+const matchupsPending = ref(false)
+const matchupsData = ref<{
+  matchups: Array<{
+    opponentChampionId: number
+    games: number
+    wins: number
+    winrate: number
+  }>
+} | null>(null)
+const matchupsSectionRef = ref<HTMLElement | null>(null)
+
+const activeChampionTab = ref<
+  'overview' | 'stats' | 'counters' | 'runes' | 'skills' | 'items' | 'spells'
+>('overview')
+const championTabs = [
+  { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
+  { id: 'stats' as const, label: 'statisticsPage.championStatsTabStats' },
+  { id: 'counters' as const, label: 'statisticsPage.championStatsTabCounters' },
+  { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
+  { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
+  { id: 'items' as const, label: 'statisticsPage.championStatsTabItems' },
+  { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
+]
 
 function queryParams() {
   const p = new URLSearchParams()
@@ -935,23 +1524,53 @@ async function loadRunes() {
   runesPending.value = true
   try {
     const q = queryParams()
-    runesData.value = await $fetch(
-      apiUrl(`/api/stats/champions/${championId.value}/runes${q ? q + '&' : '?'}minGames=10`)
-    )
+    const [setsRes, perRuneRes] = await Promise.all([
+      $fetch(
+        apiUrl(`/api/stats/champions/${championId.value}/runes${q ? q + '&' : '?'}minGames=10`)
+      ).catch(() => null),
+      $fetch(
+        apiUrl(
+          `/api/stats/champions/${championId.value}/runes-per-rune${q ? q + '&' : '?'}minGames=10`
+        )
+      ).catch(() => null),
+    ])
+    runesData.value = setsRes as typeof runesData.value
+    runesPerRuneData.value = perRuneRes as typeof runesPerRuneData.value
   } catch {
     runesData.value = null
+    runesPerRuneData.value = null
   } finally {
     runesPending.value = false
   }
+}
+
+async function loadMatchups() {
+  if (!championId.value) return
+  matchupsPending.value = true
+  try {
+    const q = queryParams()
+    matchupsData.value = await $fetch(
+      apiUrl(`/api/stats/champions/${championId.value}/matchups${q ? q + '&' : '?'}minGames=10`)
+    )
+  } catch {
+    matchupsData.value = null
+  } finally {
+    matchupsPending.value = false
+  }
+}
+
+function scrollToMatchups() {
+  activeChampionTab.value = 'counters'
+  setTimeout(() => {
+    matchupsSectionRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, 50)
 }
 
 async function loadDetail() {
   detailPending.value = true
   try {
     const q = overviewQueryParams() ? overviewQueryParams() + '&' : '?'
-    detailData.value = await $fetch(apiUrl('/api/stats/overview-detail' + q + 'includeSmite=1'), {
-      timeout: OVERVIEW_FETCH_TIMEOUT_MS,
-    })
+    detailData.value = await $fetch(apiUrl('/api/stats/overview-detail' + q + 'includeSmite=1'))
   } catch {
     detailData.value = null
   } finally {
@@ -965,8 +1584,7 @@ async function loadDuration() {
   try {
     const q = overviewQueryParams()
     durationData.value = await $fetch(
-      apiUrl(`/api/stats/champions/${championId.value}/duration-winrate${q || ''}`),
-      { timeout: OVERVIEW_FETCH_TIMEOUT_MS }
+      apiUrl(`/api/stats/champions/${championId.value}/duration-winrate${q || ''}`)
     )
   } catch {
     durationData.value = null
@@ -980,8 +1598,11 @@ async function loadPlayers() {
   playersPending.value = true
   try {
     const q = queryParams()
+    const highRank = filterPlayersMasterPlus.value ? '&highRankOnly=1' : ''
     playersData.value = await $fetch(
-      apiUrl(`/api/stats/champions/${championId.value}/players${q ? q + '&' : '?'}minGames=20`)
+      apiUrl(
+        `/api/stats/champions/${championId.value}/players${q ? q + '&' : '?'}minGames=20${highRank}`
+      )
     )
   } catch {
     playersData.value = null
@@ -1094,30 +1715,31 @@ const durationChartTooltip = ref<{
 } | null>(null)
 const durationChartSvgRef = ref<SVGSVGElement | null>(null)
 
-watch([championId, filterVersion, filterRank, filterRole], () => {
+watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlus], () => {
   if (!championId.value || Number.isNaN(championId.value)) return
   loadChampion()
   loadBuilds()
   loadRunes()
+  loadMatchups()
   loadPlayers()
-  // Defer heavy global endpoints so champion/builds/runes/players load first; they use a short timeout to avoid long 504 waits.
-  setTimeout(() => {
-    loadDetail()
-    loadDuration()
-  }, 0)
+  loadDetail()
+  loadDuration()
 })
 
 async function loadVersionsForFilter() {
   try {
-    const data = await $fetch<{
-      matchesByVersion?: Array<{ version: string; matchCount: number }>
-    }>(apiUrl('/api/stats/overview'))
-    const list = data?.matchesByVersion ?? []
+    const data = await $fetch<Record<string, unknown>>(apiUrl('/api/stats/overview'))
+    const list = (data?.matchesByVersion ?? data?.matches_by_version ?? []) as Array<{
+      version?: string
+      matchCount?: number
+    }>
     versionsFromOverview.value = Array.isArray(list)
-      ? list.map(v => ({
-          version: String(v.version ?? '').trim(),
-          matchCount: Number(v.matchCount ?? 0),
-        }))
+      ? list
+          .map(v => ({
+            version: String(v.version ?? '').trim(),
+            matchCount: Number(v.matchCount ?? 0),
+          }))
+          .filter(v => v.version)
       : []
   } catch {
     versionsFromOverview.value = []
@@ -1140,11 +1762,10 @@ onMounted(async () => {
     await loadChampion()
     loadBuilds()
     loadRunes()
+    loadMatchups()
     loadPlayers()
-    setTimeout(() => {
-      loadDetail()
-      loadDuration()
-    }, 0)
+    loadDetail()
+    loadDuration()
   }
 })
 
@@ -1265,5 +1886,65 @@ useHead({
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+/* Grille runes champion (même rendu que onglet runes : pickrate + winrate par rune) */
+.champion-runes-grid-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+.champion-overview-runes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, auto);
+  gap: 0.25rem;
+  min-width: 0;
+}
+.champion-overview-rune-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.2);
+  background: rgb(var(--rgb-surface) / 0.5);
+  transition: background-color 0.15s;
+  cursor: pointer;
+  min-width: 0;
+}
+.champion-overview-rune-cell:hover {
+  background: rgb(var(--rgb-primary) / 0.15);
+}
+.champion-overview-rune-cell.rune.main {
+  border-color: rgb(var(--rgb-accent) / 0.4);
+}
+.champion-overview-rune-img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.champion-overview-rune-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  width: 100%;
+  font-size: 0.65rem;
+  line-height: 1.2;
+}
+.champion-overview-rune-pick {
+  color: rgb(var(--rgb-text) / 0.75);
+}
+.champion-overview-rune-wr {
+  font-weight: 600;
+  color: rgb(var(--rgb-text) / 0.9);
+}
+.champion-overview-rune-no-stat {
+  color: rgb(var(--rgb-text) / 0.5);
+  font-size: 0.7rem;
 }
 </style>
