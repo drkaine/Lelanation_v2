@@ -80,9 +80,17 @@ export async function getOverviewStats(
   try {
     const pVersion = normalizeOverviewParam(version)
     const pRankTier = normalizeOverviewParam(rankTier)
-    const rows = await prisma.$queryRaw<OverviewRow>(
-      Prisma.sql`SELECT get_stats_overview(${pVersion}, ${pRankTier}) AS get_stats_overview`
-    )
+    // Sans paramètres bindés quand les deux sont null (évite "syntax error at or near "[" avec certains drivers)
+    const rows: OverviewRow =
+      pVersion === null && pRankTier === null
+        ? await prisma.$queryRaw<OverviewRow>(
+            Prisma.sql`SELECT get_stats_overview(NULL, NULL) AS get_stats_overview`
+          )
+        : await prisma.$queryRawUnsafe<OverviewRow>(
+            'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
+            pVersion ?? null,
+            pRankTier ?? null
+          )
     const row0 = rows[0] as Record<string, unknown> | undefined
     let raw: unknown =
       row0?.get_stats_overview ??
