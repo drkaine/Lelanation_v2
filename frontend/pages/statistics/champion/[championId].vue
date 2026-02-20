@@ -153,9 +153,9 @@
         </div>
       </aside>
 
-      <!-- Contenu principal -->
-      <div class="min-w-0 flex-1 px-4 pb-4 pt-0">
-        <div class="mx-auto max-w-6xl">
+      <!-- Contenu principal : pleine largeur à côté des filtres (comme page stats) -->
+      <div class="min-w-0 flex-1 p-4 pt-14 lg:pl-4 lg:pt-4">
+        <div class="w-full">
           <!-- Loading / error -->
           <div
             v-if="pending"
@@ -366,7 +366,7 @@
                               championName(m.opponentChampionId) ?? m.opponentChampionId
                             }}</span>
                             <span class="text-sm font-semibold text-green-600 dark:text-green-400"
-                              >{{ Math.round(m.winrate) }}%</span
+                              >{{ Number(m.winrate).toFixed(2) }}%</span
                             >
                           </li>
                         </ul>
@@ -398,7 +398,7 @@
                               championName(m.opponentChampionId) ?? m.opponentChampionId
                             }}</span>
                             <span class="text-sm font-semibold text-red-600 dark:text-red-400"
-                              >{{ Math.round(m.winrate) }}%</span
+                              >{{ Number(m.winrate).toFixed(2) }}%</span
                             >
                           </li>
                         </ul>
@@ -465,7 +465,7 @@
                     v-else-if="durationData?.buckets?.length"
                     class="relative flex justify-center"
                   >
-                    <div class="relative inline-block min-h-[260px] w-full max-w-[400px]">
+                    <div class="relative inline-block min-h-[260px] w-full max-w-[600px]">
                       <svg
                         ref="durationChartSvgRef"
                         :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
@@ -562,7 +562,7 @@
                           {{ durationChartTooltip.durationLabel }}
                         </div>
                         <div class="text-text/80">
-                          {{ durationChartTooltip.winrate }}%
+                          {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
                           {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
                         </div>
                         <div class="text-text/70">
@@ -615,7 +615,9 @@
                           </span>
                         </td>
                         <td class="px-3 py-2 text-right text-text/90">{{ r.games }}</td>
-                        <td class="px-3 py-2 text-right text-text/90">{{ r.winrate }}%</td>
+                        <td class="px-3 py-2 text-right text-text/90">
+                          {{ Number(r.winrate).toFixed(2) }}%
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -662,7 +664,7 @@
                             championName(m.opponentChampionId) ?? m.opponentChampionId
                           }}</span>
                           <span class="text-sm font-semibold text-green-600 dark:text-green-400"
-                            >{{ Math.round(m.winrate) }}%</span
+                            >{{ Number(m.winrate).toFixed(2) }}%</span
                           >
                         </li>
                       </ul>
@@ -694,7 +696,7 @@
                             championName(m.opponentChampionId) ?? m.opponentChampionId
                           }}</span>
                           <span class="text-sm font-semibold text-red-600 dark:text-red-400"
-                            >{{ Math.round(m.winrate) }}%</span
+                            >{{ Number(m.winrate).toFixed(2) }}%</span
                           >
                         </li>
                       </ul>
@@ -739,7 +741,8 @@
                       />
                     </template>
                     <span class="ml-1 text-xs text-text/80"
-                      >{{ build.pickrate }}% — {{ build.winrate }}%</span
+                      >{{ Number(build.pickrate).toFixed(2) }}% —
+                      {{ Number(build.winrate).toFixed(2) }}%</span
                     >
                   </div>
                   <button
@@ -801,7 +804,7 @@
                         :title="
                           cell.rune.name +
                           (cell.stats
-                            ? ` — ${Math.round(cell.stats.pickrate)}% pick, ${Math.round(cell.stats.winrate)}% WR`
+                            ? ` — ${Number(cell.stats.pickrate).toFixed(2)}% pick, ${Number(cell.stats.winrate).toFixed(2)}% WR`
                             : '')
                         "
                       >
@@ -815,11 +818,11 @@
                         />
                         <div v-if="cell.stats" class="champion-overview-rune-stat">
                           <div class="champion-overview-rune-pick">
-                            {{ Math.round(cell.stats.pickrate) }}%
+                            {{ Number(cell.stats.pickrate).toFixed(2) }}%
                             {{ t('statisticsPage.overviewDetailPickRate') }}
                           </div>
                           <div class="champion-overview-rune-wr">
-                            {{ Math.round(cell.stats.winrate) }}%
+                            {{ Number(cell.stats.winrate).toFixed(2) }}%
                             {{ t('statisticsPage.overviewDetailWinRate') }}
                           </div>
                         </div>
@@ -842,11 +845,11 @@
                       <div class="rune-set-stat" :data-pct="r.pickrate + '%'">
                         <div class="rune-set-pr" :style="{ '--n': r.pickrate }" />
                         <div class="rune-set-pickrate text-xs text-text/70">
-                          {{ Math.round(r.pickrate) }}%
+                          {{ Number(r.pickrate).toFixed(2) }}%
                           {{ t('statisticsPage.overviewDetailPickRate') }}
                         </div>
                         <div class="rune-set-wr" :style="{ '--n': r.winrate }">
-                          {{ Math.round(r.winrate) }}%
+                          {{ Number(r.winrate).toFixed(2) }}%
                           {{ t('statisticsPage.overviewDetailWinRate') }}
                         </div>
                       </div>
@@ -940,7 +943,7 @@
                         </td>
                         <td class="px-3 py-2 text-right text-text/90">{{ m.games }}</td>
                         <td class="px-3 py-2 text-right text-text/90">
-                          {{ Math.round(m.winrate) }}%
+                          {{ Number(m.winrate).toFixed(2) }}%
                         </td>
                       </tr>
                     </tbody>
@@ -949,7 +952,7 @@
                 <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
               </div>
 
-              <!-- Sorts d'invocateur -->
+              <!-- Sorts d'invocateur (par champion : par sort + duos) -->
               <div
                 v-show="activeChampionTab === 'spells'"
                 class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
@@ -957,31 +960,72 @@
                 <h2 class="mb-3 text-lg font-semibold text-text">
                   {{ t('statisticsPage.championStatsSummonerSpells') }}
                 </h2>
-                <p class="mb-2 text-xs text-text/60">
+                <p class="mb-4 text-xs text-text/60">
                   {{ t('statisticsPage.championStatsSummonerSpellsHint') }}
                 </p>
-                <div v-if="detailPending" class="py-4 text-text/70">
+                <div v-if="championSpellsPending" class="py-4 text-text/70">
                   {{ t('statisticsPage.loading') }}
                 </div>
-                <div v-else-if="detailData?.summonerSpells?.length" class="flex flex-wrap gap-2">
-                  <div
-                    v-for="s in detailData.summonerSpells.slice(0, 10)"
-                    :key="s.spellId"
-                    class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                    :title="spellName(s.spellId) ?? ''"
-                  >
-                    <img
-                      v-if="gameVersion && spellImageName(s.spellId)"
-                      :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
-                      :alt="spellName(s.spellId) ?? ''"
-                      class="h-6 w-6 object-contain"
-                      width="24"
-                      height="24"
-                    />
-                    <span class="text-xs text-text/80">{{ s.pickrate }}% — {{ s.winrate }}%</span>
+                <template v-else>
+                  <!-- Par sort -->
+                  <h3 class="mb-2 text-sm font-medium text-text-accent">
+                    {{ t('statisticsPage.championStatsSummonerSpellsPerSpell') }}
+                  </h3>
+                  <div v-if="championSpellsData?.spells?.length" class="mb-6 flex flex-wrap gap-2">
+                    <div
+                      v-for="s in championSpellsData.spells"
+                      :key="s.spellId"
+                      class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                      :title="spellName(s.spellId) ?? ''"
+                    >
+                      <img
+                        v-if="gameVersion && spellImageName(s.spellId)"
+                        :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
+                        :alt="spellName(s.spellId) ?? ''"
+                        class="h-6 w-6 object-contain"
+                        width="24"
+                        height="24"
+                      />
+                      <span class="text-xs text-text/80"
+                        >{{ Number(s.pickrate).toFixed(2) }}% — {{ Number(s.winrate).toFixed(2) }}%
+                        WR ({{ s.games }})</span
+                      >
+                    </div>
                   </div>
-                </div>
-                <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+                  <p v-else class="mb-6 text-text/70">{{ t('statisticsPage.noData') }}</p>
+                  <!-- Duos -->
+                  <h3 class="mb-2 text-sm font-medium text-text-accent">
+                    {{ t('statisticsPage.championStatsSummonerSpellsDuos') }}
+                  </h3>
+                  <div v-if="championSpellsDuosData?.duos?.length" class="flex flex-wrap gap-2">
+                    <div
+                      v-for="(d, i) in championSpellsDuosData.duos"
+                      :key="i"
+                      class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                    >
+                      <img
+                        v-if="gameVersion && spellImageName(d.spellId1)"
+                        :src="getSpellImageUrl(gameVersion, spellImageName(d.spellId1)!)"
+                        :alt="spellName(d.spellId1) ?? ''"
+                        class="h-5 w-5 object-contain"
+                        width="20"
+                        height="20"
+                      />
+                      <img
+                        v-if="gameVersion && spellImageName(d.spellId2)"
+                        :src="getSpellImageUrl(gameVersion, spellImageName(d.spellId2)!)"
+                        :alt="spellName(d.spellId2) ?? ''"
+                        class="h-5 w-5 object-contain"
+                        width="20"
+                        height="20"
+                      />
+                      <span class="text-xs text-text/80"
+                        >{{ Number(d.winrate).toFixed(2) }}% ({{ d.games }})</span
+                      >
+                    </div>
+                  </div>
+                  <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
+                </template>
               </div>
 
               <!-- Stats: duration winrate -->
@@ -1093,7 +1137,7 @@
                         {{ durationChartTooltip.durationLabel }}
                       </div>
                       <div class="text-text/80">
-                        {{ durationChartTooltip.winrate }}%
+                        {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
                         {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
                       </div>
                       <div class="text-text/70">
@@ -1145,7 +1189,9 @@
                           {{ p.summonerName || p.puuid?.slice(0, 8) }}
                         </td>
                         <td class="px-3 py-2 text-right text-text/90">{{ p.totalGames }}</td>
-                        <td class="px-3 py-2 text-right text-text/90">{{ p.winrate }}%</td>
+                        <td class="px-3 py-2 text-right text-text/90">
+                          {{ Number(p.winrate).toFixed(2) }}%
+                        </td>
                         <td class="px-3 py-2 text-text/80">{{ p.rankTier ?? '—' }}</td>
                       </tr>
                     </tbody>
@@ -1400,7 +1446,7 @@ function roleIconPath(role: string) {
   return ROLE_ICON_MAP[role] ?? '/icons/roles/mid.png'
 }
 function formatDonutPercent(value: number) {
-  return Number.isFinite(value) ? (Math.round(value * 10) / 10).toFixed(1) : '0'
+  return Number.isFinite(value) ? Number(value).toFixed(2) : '0'
 }
 
 const buildsPending = ref(false)
@@ -1424,6 +1470,16 @@ const runesExpand = ref(false)
 const detailPending = ref(false)
 const detailData = ref<{
   summonerSpells?: Array<{ spellId: number; pickrate: number; winrate: number }>
+} | null>(null)
+
+const championSpellsPending = ref(false)
+const championSpellsData = ref<{
+  totalGames: number
+  spells: Array<{ spellId: number; games: number; wins: number; pickrate: number; winrate: number }>
+} | null>(null)
+const championSpellsDuosData = ref<{
+  totalGames: number
+  duos: Array<{ spellId1: number; spellId2: number; games: number; wins: number; winrate: number }>
 } | null>(null)
 
 const durationPending = ref(false)
@@ -1578,6 +1634,45 @@ async function loadDetail() {
   }
 }
 
+async function loadChampionSpells() {
+  if (!championId.value) return
+  championSpellsPending.value = true
+  championSpellsData.value = null
+  championSpellsDuosData.value = null
+  try {
+    const q = overviewQueryParams()
+    const [spellsRes, duosRes] = await Promise.all([
+      $fetch<{
+        totalGames: number
+        spells: Array<{
+          spellId: number
+          games: number
+          wins: number
+          pickrate: number
+          winrate: number
+        }>
+      }>(apiUrl(`/api/stats/champions/${championId.value}/summoner-spells${q || ''}`)),
+      $fetch<{
+        totalGames: number
+        duos: Array<{
+          spellId1: number
+          spellId2: number
+          games: number
+          wins: number
+          winrate: number
+        }>
+      }>(apiUrl(`/api/stats/champions/${championId.value}/summoner-spells-duos${q || ''}`)),
+    ])
+    championSpellsData.value = spellsRes
+    championSpellsDuosData.value = duosRes
+  } catch {
+    championSpellsData.value = null
+    championSpellsDuosData.value = null
+  } finally {
+    championSpellsPending.value = false
+  }
+}
+
 async function loadDuration() {
   if (!championId.value) return
   durationPending.value = true
@@ -1724,6 +1819,20 @@ watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlu
   loadPlayers()
   loadDetail()
   loadDuration()
+  championSpellsData.value = null
+  championSpellsDuosData.value = null
+  if (activeChampionTab.value === 'spells') loadChampionSpells()
+})
+
+watch(activeChampionTab, tab => {
+  if (
+    tab === 'spells' &&
+    championId.value &&
+    !championSpellsData.value &&
+    !championSpellsPending.value
+  ) {
+    loadChampionSpells()
+  }
 })
 
 async function loadVersionsForFilter() {

@@ -36,17 +36,24 @@ function maskPuuid(puuid: string): string {
   return `${puuid.slice(0, 4)}****...${puuid.slice(-4)}`
 }
 
+const HIGH_RANK_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
+
 export async function getTopPlayers(options: {
   rankTier?: string | null
+  /** When true, only players who have at least one participant row with rank_tier in MASTER, GRANDMASTER, CHALLENGER */
+  highRankOnly?: boolean
   minGames?: number
   limit?: number
 }): Promise<PlayerRow[]> {
   if (!isDatabaseConfigured()) return []
-  const { rankTier, minGames = 50, limit = 100 } = options
+  const { rankTier, highRankOnly = false, minGames = 50, limit = 100 } = options
   try {
     if (rankTier != null && rankTier !== '') {
+      const whereRank = highRankOnly
+        ? { rankTier: { in: [...HIGH_RANK_TIERS] } }
+        : { rankTier }
       const puuids = await prisma.participant.findMany({
-        where: { rankTier },
+        where: whereRank,
         select: { puuid: true },
         distinct: ['puuid'],
       })
@@ -72,12 +79,16 @@ export async function getTopPlayers(options: {
         winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
       }))
     }
+    const puuidFilter = highRankOnly
+      ? Prisma.sql`AND puuid IN (SELECT puuid FROM participants WHERE rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER') LIMIT 50000)`
+      : Prisma.sql``
     const rows = await prisma.$queryRaw<
       Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
     >(Prisma.sql`
       SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
       FROM players_with_stats
       WHERE total_games >= ${minGames}
+      ${puuidFilter}
       ORDER BY total_wins DESC
       LIMIT ${limit}
     `)

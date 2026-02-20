@@ -23,10 +23,43 @@ import {
   getOverviewProgressionStats,
   getOverviewProgressionFullStats,
 } from '../services/StatsOverviewService.js'
+import { getOverviewAbandons } from '../services/StatsAbandonsService.js'
+import {
+  getSummonerSpellsByChampion,
+  getSummonerSpellsDuosByChampion,
+} from '../services/StatsSummonerSpellsService.js'
 import { isDatabaseConfigured } from '../db.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
+
+/** Perf: log backend duration and set X-Backend-Time / X-Stats-Path / X-SQL-Time so the front can show everything in one place. */
+router.use((req: Request, res: Response, next) => {
+  const start = Date.now()
+  const path = req.path || req.originalUrl?.split('?')[0] || ''
+  ;(res as Response & { locals: { sqlMs?: number } }).locals = (res as Response & { locals: Record<string, unknown> }).locals || {}
+  const originalJson = res.json.bind(res)
+  res.json = function (body: unknown) {
+    const ms = Date.now() - start
+    res.set('X-Backend-Time', String(ms))
+    res.set('X-Stats-Path', path)
+    const sqlMs = (res as Response & { locals: { sqlMs?: number } }).locals?.sqlMs
+    if (typeof sqlMs === 'number') {
+      res.set('X-SQL-Time', String(sqlMs))
+    }
+    return originalJson(body)
+  }
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    const sqlMs = (res as Response & { locals: { sqlMs?: number } }).locals?.sqlMs
+    if (typeof sqlMs === 'number') {
+      console.log('[Stats backend]', req.method, path, ms + 'ms', '(SQL', sqlMs + 'ms)')
+    } else {
+      console.log('[Stats backend]', req.method, path, ms + 'ms')
+    }
+  })
+  next()
+})
 
 function queryString(value: unknown): string | null {
   if (value == null) return null
@@ -47,11 +80,16 @@ function queryStringArray(value: unknown): string[] {
   return []
 }
 
+const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
+
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
+  const sqlStart = Date.now()
   const data = await getOverviewStats(version, rankTier)
+  ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
     const reason = !isDatabaseConfigured()
       ? 'DATABASE_URL not configured'
@@ -72,12 +110,15 @@ router.get('/overview', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1 (include Smite in spells, e.g. for champion page) */
+/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1 (include Smite in spells, e.g. for champion page). Uses in-memory cache (10 min). If 504: increase proxy timeout (e.g. nginx proxy_read_timeout) or ensure cache is warmed at startup. */
 router.get('/overview-detail', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
+  const sqlStart = Date.now()
   const data = await getOverviewDetailStats(version, rankTier, includeSmite)
+  ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
     console.warn('[GET /overview-detail] no data (version=%s rankTier=%s)', version ?? 'null', rankTier ?? 'null')
     return res.status(200).json({
@@ -95,11 +136,32 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
 
 /** GET /api/stats/overview-duration-winrate - duration (5-min buckets) vs winrate. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-duration-winrate', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
   const data = await getOverviewDurationWinrateStats(version, rankTier)
   if (!data) {
     return res.status(200).json({ buckets: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-abandons - remake & surrender rates. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/overview-abandons', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const data = await getOverviewAbandons(version, rankTier)
+  if (!data) {
+    return res.status(200).json({
+      totalMatches: 0,
+      remakeCount: 0,
+      remakeRate: 0,
+      earlySurrenderCount: 0,
+      earlySurrenderRate: 0,
+      surrenderCount: 0,
+      surrenderRate: 0,
+    })
   }
   return res.json(data)
 })
@@ -191,10 +253,14 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
+/** GET /api/stats/champions - can be slow on large DB; if 504 increase proxy_read_timeout (nginx) or consider materialized view for get_stats_champions. */
 router.get('/champions', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const rankTier = (req.query.rankTier as string) || undefined
   const role = (req.query.role as string) || undefined
+  const sqlStart = Date.now()
   const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
+  ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
     return res.status(200).json({
       totalGames: 0,
@@ -353,6 +419,38 @@ router.get('/champions/:championId/matchups', async (req: Request, res: Response
   return res.json(data)
 })
 
+/** GET /api/stats/champions/:championId/summoner-spells - per-spell stats for this champion. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/champions/:championId/summoner-spells', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const data = await getSummonerSpellsByChampion(championId, version, rankTier)
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, spells: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/summoner-spells-duos - spell pairs for this champion. Query: ?version=16.1 &rankTier=GOLD */
+router.get('/champions/:championId/summoner-spells-duos', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = queryString(req.query.rankTier)
+  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, duos: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
 /** GET /api/stats/players/search?name=... - lookup player by summoner name */
 router.get('/players/search', async (req: Request, res: Response) => {
   const name = (req.query.name as string)?.trim()
@@ -367,13 +465,15 @@ router.get('/players/search', async (req: Request, res: Response) => {
   return res.json({ player, championStats })
 })
 
-/** GET /api/stats/players - meilleurs joueurs (classement général) */
+/** GET /api/stats/players - meilleurs joueurs (classement général). Par défaut Master → Challenger uniquement (stats globale). */
 router.get('/players', async (req: Request, res: Response) => {
   const rankTier = (req.query.rankTier as string) || undefined
+  const highRankOnly = req.query.highRankOnly !== '0' && req.query.highRankOnly !== 'false'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 50
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
   const list = await getTopPlayers({
     rankTier: rankTier ?? null,
+    highRankOnly,
     minGames,
     limit,
   })

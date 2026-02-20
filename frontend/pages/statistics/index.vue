@@ -146,9 +146,9 @@
       </div>
     </aside>
 
-    <!-- Contenu principal -->
-    <div class="min-w-0 flex-1 p-4 pt-14 lg:pt-4">
-      <div class="mx-auto max-w-5xl">
+    <!-- Contenu principal : pleine largeur à côté des filtres -->
+    <div class="min-w-0 flex-1 p-4 pt-14 lg:pl-4 lg:pt-4">
+      <div class="w-full">
         <div class="mb-6 text-text/80">
           <p>
             <template v-if="overviewData">
@@ -299,7 +299,7 @@
                               />
                             </div>
                             <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ row.pickrate }}%</span
+                              >{{ Number(row.pickrate).toFixed(2) }}%</span
                             >
                           </div>
                         </td>
@@ -395,7 +395,7 @@
                               />
                             </div>
                             <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ row.winrate }}%</span
+                              >{{ Number(row.winrate).toFixed(2) }}%</span
                             >
                           </div>
                         </td>
@@ -491,7 +491,7 @@
                               />
                             </div>
                             <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ row.banrate }}%</span
+                              >{{ Number(row.banrate).toFixed(2) }}%</span
                             >
                           </div>
                         </td>
@@ -599,7 +599,7 @@
                               </div>
                               <span
                                 class="min-w-[2.5rem] text-right text-sm font-medium text-success"
-                                >+{{ g.delta }}%</span
+                                >+{{ Number(g.delta).toFixed(2) }}%</span
                               >
                             </div>
                           </td>
@@ -669,7 +669,7 @@
                                 />
                               </div>
                               <span class="min-w-[2.5rem] text-right text-sm font-medium text-error"
-                                >{{ l.delta }}%</span
+                                >{{ Number(l.delta).toFixed(2) }}%</span
                               >
                             </div>
                           </td>
@@ -1056,7 +1056,7 @@
                       :title="
                         cell.rune.name +
                         (cell.stats
-                          ? ` — ${cell.stats.pickrate}% pick, ${cell.stats.winrate}% WR`
+                          ? ` — ${Number(cell.stats.pickrate).toFixed(2)}% pick, ${Number(cell.stats.winrate).toFixed(2)}% WR`
                           : '')
                       "
                     >
@@ -1070,11 +1070,11 @@
                       />
                       <div v-if="cell.stats" class="overview-rune-stat">
                         <div class="overview-rune-pick">
-                          {{ Math.round(cell.stats.pickrate) }}%
+                          {{ Number(cell.stats.pickrate).toFixed(2) }}%
                           {{ t('statisticsPage.overviewDetailPickRate') }}
                         </div>
                         <div class="overview-rune-wr">
-                          {{ Math.round(cell.stats.winrate) }}%
+                          {{ Number(cell.stats.winrate).toFixed(2) }}%
                           {{ t('statisticsPage.overviewDetailWinRate') }}
                         </div>
                       </div>
@@ -1111,11 +1111,12 @@
                     />
                     <div class="overview-rune-stat">
                       <div class="overview-rune-pick">
-                        {{ Math.round(r.pickrate) }}%
+                        {{ Number(r.pickrate).toFixed(2) }}%
                         {{ t('statisticsPage.overviewDetailPickRate') }}
                       </div>
                       <div class="overview-rune-wr">
-                        {{ Math.round(r.winrate) }}% {{ t('statisticsPage.overviewDetailWinRate') }}
+                        {{ Number(r.winrate).toFixed(2) }}%
+                        {{ t('statisticsPage.overviewDetailWinRate') }}
                       </div>
                     </div>
                   </button>
@@ -1143,7 +1144,8 @@
                         spellName(s.spellId) ?? s.spellId
                       }}</span>
                       <span class="text-xs text-text/70"
-                        >{{ s.pickrate }}% pick — {{ s.winrate }}% WR</span
+                        >{{ Number(s.pickrate).toFixed(2) }}% pick —
+                        {{ Number(s.winrate).toFixed(2) }}% WR</span
                       >
                     </div>
                   </div>
@@ -1168,7 +1170,7 @@
                       <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
                         <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
                         <div class="rune-set-wr" :style="{ '--n': set.winrate }">
-                          {{ Math.round(set.winrate) }}%
+                          {{ Number(set.winrate).toFixed(2) }}%
                         </div>
                       </div>
                       <div class="rune-set-runes">
@@ -1274,7 +1276,8 @@
                         />
                       </template>
                       <span class="text-xs text-text/70"
-                        >{{ set.pickrate }}% — {{ set.winrate }}%</span
+                        >{{ Number(set.pickrate).toFixed(2) }}% —
+                        {{ Number(set.winrate).toFixed(2) }}%</span
                       >
                     </div>
                   </div>
@@ -1314,7 +1317,12 @@
                           )"
                           :key="row.itemId"
                           class="flex items-center gap-1 rounded px-1 py-0.5"
-                          :title="(itemName(row.itemId) ?? row.itemId) + ' — ' + row.winrate + '%'"
+                          :title="
+                            (itemName(row.itemId) ?? row.itemId) +
+                            ' — ' +
+                            Number(row.winrate).toFixed(2) +
+                            '%'
+                          "
                         >
                           <img
                             v-if="gameVersion && itemImageName(row.itemId)"
@@ -1324,7 +1332,9 @@
                             width="16"
                             height="16"
                           />
-                          <span class="text-xs text-text/80">{{ row.winrate }}%</span>
+                          <span class="text-xs text-text/80"
+                            >{{ Number(row.winrate).toFixed(2) }}%</span
+                          >
                         </div>
                       </div>
                     </div>
@@ -1389,7 +1399,7 @@
                     </thead>
                     <tbody>
                       <tr
-                        v-for="row in progressionFullData.champions"
+                        v-for="row in paginatedProgressionsChampions"
                         :key="'wr-' + row.championId"
                         class="border-b border-primary/20"
                       >
@@ -1414,7 +1424,7 @@
                             <span>{{ championName(row.championId) || row.championId }}</span>
                           </NuxtLink>
                         </td>
-                        <td class="py-1.5 text-right">{{ row.wrSince.toFixed(1) }}%</td>
+                        <td class="py-1.5 text-right">{{ Number(row.wrSince).toFixed(2) }}%</td>
                         <td
                           class="py-1.5 pl-2 text-right"
                           :class="row.deltaWr >= 0 ? 'text-success' : 'text-error'"
@@ -1446,7 +1456,7 @@
                     </thead>
                     <tbody>
                       <tr
-                        v-for="row in progressionFullByPickrate"
+                        v-for="row in paginatedProgressionsByPickrate"
                         :key="'pick-' + row.championId"
                         class="border-b border-primary/20"
                       >
@@ -1471,7 +1481,9 @@
                             <span>{{ championName(row.championId) || row.championId }}</span>
                           </NuxtLink>
                         </td>
-                        <td class="py-1.5 text-right">{{ row.pickrateSince.toFixed(1) }}%</td>
+                        <td class="py-1.5 text-right">
+                          {{ Number(row.pickrateSince).toFixed(2) }}%
+                        </td>
                         <td
                           class="py-1.5 pl-2 text-right"
                           :class="row.deltaPick >= 0 ? 'text-success' : 'text-error'"
@@ -1481,6 +1493,49 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+              </div>
+              <div
+                v-if="totalProgressionsCount > 0"
+                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+              >
+                <span>{{ totalProgressionsCount }} {{ t('statisticsPage.champion') }}</span>
+                <div class="flex items-center gap-3">
+                  <label class="flex items-center gap-1.5">
+                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                    <select
+                      v-model.number="progressionsPageSize"
+                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                    >
+                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                  </label>
+                  <span class="text-text/70">
+                    {{ (progressionsPage - 1) * progressionsPageSize + 1 }}-{{
+                      Math.min(progressionsPage * progressionsPageSize, totalProgressionsCount)
+                    }}
+                    / {{ totalProgressionsCount }}
+                  </span>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="progressionsPage <= 1"
+                      @click="progressionsPage = Math.max(1, progressionsPage - 1)"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="progressionsPage >= totalProgressionsPages"
+                      @click="
+                        progressionsPage = Math.min(totalProgressionsPages, progressionsPage + 1)
+                      "
+                    >
+                      ›
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1600,7 +1655,9 @@
                           width="24"
                           height="24"
                         />
-                        <span class="text-xs text-text/80">{{ c.games }} ({{ c.winrate }}%)</span>
+                        <span class="text-xs text-text/80"
+                          >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
+                        >
                       </div>
                     </div>
                     <button
@@ -1648,7 +1705,9 @@
                           width="24"
                           height="24"
                         />
-                        <span class="text-xs text-text/80">{{ c.games }} ({{ c.winrate }}%)</span>
+                        <span class="text-xs text-text/80"
+                          >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
+                        >
                       </div>
                     </div>
                     <button
@@ -1685,7 +1744,10 @@
                         :key="'blue-' + c.championId"
                         class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
                         :title="
-                          (championName(c.championId) ?? c.championId) + ' — ' + c.winrate + '%'
+                          (championName(c.championId) ?? c.championId) +
+                          ' — ' +
+                          Number(c.winrate).toFixed(2) +
+                          '%'
                         "
                       >
                         <img
@@ -1701,7 +1763,9 @@
                           width="24"
                           height="24"
                         />
-                        <span class="text-xs text-text/80">{{ c.winrate }}% ({{ c.games }})</span>
+                        <span class="text-xs text-text/80"
+                          >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
+                        >
                       </div>
                     </div>
                     <button
@@ -1730,7 +1794,10 @@
                         :key="'red-' + c.championId"
                         class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
                         :title="
-                          (championName(c.championId) ?? c.championId) + ' — ' + c.winrate + '%'
+                          (championName(c.championId) ?? c.championId) +
+                          ' — ' +
+                          Number(c.winrate).toFixed(2) +
+                          '%'
                         "
                       >
                         <img
@@ -1746,7 +1813,9 @@
                           width="24"
                           height="24"
                         />
-                        <span class="text-xs text-text/80">{{ c.winrate }}% ({{ c.games }})</span>
+                        <span class="text-xs text-text/80"
+                          >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
+                        >
                       </div>
                     </div>
                     <button
@@ -2084,7 +2153,7 @@
               </thead>
               <tbody class="divide-y divide-primary/20">
                 <tr
-                  v-for="row in filteredChampions"
+                  v-for="row in paginatedChampions"
                   :key="row.championId"
                   class="cursor-pointer hover:bg-surface/50"
                   @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
@@ -2111,28 +2180,694 @@
                   </td>
                   <td class="px-4 py-2 text-text/90">{{ row.games }}</td>
                   <td class="px-4 py-2 text-text/90">{{ row.wins }}</td>
-                  <td class="px-4 py-2 text-text/90">{{ row.winrate }}%</td>
-                  <td class="px-4 py-2 text-text/90">{{ row.pickrate }}%</td>
+                  <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
+                  <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
                   <td class="px-4 py-2 text-text/90">
-                    {{ row.banrate ?? '—' }}{{ row.banrate != null ? '%' : '' }}
+                    {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
                   </td>
                 </tr>
               </tbody>
             </table>
-            <p
-              v-if="
-                (championsData?.totalMatches != null || championsData?.totalGames != null) &&
-                filteredChampions.length
-              "
-              class="border-t border-primary/20 px-4 py-2 text-xs text-text/70"
+            <div
+              v-if="totalChampionsCount > 0"
+              class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
             >
-              {{ t('statisticsPage.totalGames') }}:
-              {{ championsData.totalMatches ?? championsData.totalGames }}
-              <span v-if="championSearchQuery">
-                ({{ t('statisticsPage.showing') }} {{ filteredChampions.length }})</span
-              >
-            </p>
+              <span>
+                {{ t('statisticsPage.totalGames') }}:
+                {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
+                <span v-if="championSearchQuery">
+                  ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
+                >
+              </span>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1.5">
+                  <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                  <select
+                    v-model.number="championsPageSize"
+                    class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                  >
+                    <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </label>
+                <span class="text-text/70">
+                  {{ (championsPage - 1) * championsPageSize + 1 }}-{{
+                    Math.min(championsPage * championsPageSize, totalChampionsCount)
+                  }}
+                  / {{ totalChampionsCount }}
+                </span>
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                    :disabled="championsPage <= 1"
+                    @click="championsPage = Math.max(1, championsPage - 1)"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                    :disabled="championsPage >= totalChampionsPages"
+                    @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <!-- Tab: Tier list -->
+        <div v-show="activeTab === 'tierlist'" class="space-y-4">
+          <div class="flex flex-wrap items-center gap-4">
+            <h2 class="text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.tierListTitle') }}
+            </h2>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                :class="[
+                  'rounded px-3 py-1.5 text-sm font-medium',
+                  tierListViewModel === 'table'
+                    ? 'bg-accent text-background'
+                    : 'bg-surface/50 text-text/80 hover:bg-primary/20',
+                ]"
+                @click="tierListViewModel = 'table'"
+              >
+                {{ t('statisticsPage.tierListViewTable') }}
+              </button>
+              <button
+                type="button"
+                :class="[
+                  'rounded px-3 py-1.5 text-sm font-medium',
+                  tierListViewModel === 'chart'
+                    ? 'bg-accent text-background'
+                    : 'bg-surface/50 text-text/80 hover:bg-primary/20',
+                ]"
+                @click="tierListViewModel = 'chart'"
+              >
+                {{ t('statisticsPage.tierListViewChart') }}
+              </button>
+            </div>
+          </div>
+          <div v-if="championsPending" class="text-text/70">{{ t('statisticsPage.loading') }}</div>
+          <div
+            v-else-if="championsError"
+            class="rounded border border-error bg-surface p-3 text-error"
+          >
+            {{ championsError }}
+          </div>
+          <template v-else>
+            <!-- Vue tableau -->
+            <div
+              v-show="tierListViewModel === 'table'"
+              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+            >
+              <table class="w-full min-w-[500px] text-left text-sm">
+                <thead class="border-b border-primary/30 bg-surface/50">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.champion') }}
+                    </th>
+                    <th
+                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                      @click="setTierListSort('tier')"
+                    >
+                      {{ t('statisticsPage.tierListTier') }}
+                      <span v-if="tierListSortOrder === 'tier'" class="ml-1">{{
+                        tierListSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </th>
+                    <th
+                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                      @click="setTierListSort('winrate')"
+                    >
+                      {{ t('statisticsPage.winrate') }}
+                      <span v-if="tierListSortOrder === 'winrate'" class="ml-1">{{
+                        tierListSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </th>
+                    <th
+                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                      @click="setTierListSort('pickrate')"
+                    >
+                      {{ t('statisticsPage.pickrate') }}
+                      <span v-if="tierListSortOrder === 'pickrate'" class="ml-1">{{
+                        tierListSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </th>
+                    <th
+                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                      @click="setTierListSort('banrate')"
+                    >
+                      {{ t('statisticsPage.banrate') }}
+                      <span v-if="tierListSortOrder === 'banrate'" class="ml-1">{{
+                        tierListSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.tierListRole') }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-primary/20">
+                  <tr
+                    v-for="row in paginatedTierList"
+                    :key="row.championId"
+                    class="cursor-pointer hover:bg-surface/50"
+                    @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
+                  >
+                    <td class="px-4 py-2 font-medium text-text">
+                      <div class="flex items-center gap-2">
+                        <img
+                          v-if="gameVersion && championByKey(row.championId)"
+                          :src="
+                            getChampionImageUrl(
+                              gameVersion,
+                              championByKey(row.championId)!.image.full
+                            )
+                          "
+                          :alt="championName(row.championId) || ''"
+                          class="h-8 w-8 rounded-full object-cover"
+                          width="32"
+                          height="32"
+                        />
+                        <span class="text-accent underline-offset-2 hover:underline">{{
+                          championName(row.championId) || row.championId
+                        }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-2">
+                      <span
+                        :class="[
+                          'inline-flex h-7 w-7 items-center justify-center rounded font-bold text-background',
+                          row.tier === 'S' && 'bg-amber-500',
+                          row.tier === 'A' && 'bg-slate-400',
+                          row.tier === 'B' && 'bg-amber-700',
+                          row.tier === 'C' && 'bg-stone-600',
+                          row.tier === 'F' && 'bg-stone-700',
+                        ]"
+                      >
+                        {{ t('statisticsPage.tier' + row.tier) }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
+                    <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
+                    <td class="px-4 py-2 text-text/90">
+                      {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
+                    </td>
+                    <td class="px-4 py-2 text-xs text-text/70">{{ row.primaryRole ?? '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div
+                v-if="totalTierListCount > 0"
+                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+              >
+                <span>{{ t('statisticsPage.showing') }} {{ totalTierListCount }}</span>
+                <div class="flex items-center gap-3">
+                  <label class="flex items-center gap-1.5">
+                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                    <select
+                      v-model.number="championsPageSize"
+                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                    >
+                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                  </label>
+                  <span class="text-text/70">
+                    {{ (tierListPage - 1) * championsPageSize + 1 }}-{{
+                      Math.min(tierListPage * championsPageSize, totalTierListCount)
+                    }}
+                    / {{ totalTierListCount }}
+                  </span>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="tierListPage <= 1"
+                      @click="tierListPage = Math.max(1, tierListPage - 1)"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="tierListPage >= totalTierListPages"
+                      @click="tierListPage = Math.min(totalTierListPages, tierListPage + 1)"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Vue graphique : barres par champion (ordre worst → best, couleur = tier) -->
+            <div
+              v-show="tierListViewModel === 'chart'"
+              class="flex flex-col gap-4 rounded-lg border border-primary/30 bg-surface/30 p-4 lg:flex-row"
+            >
+              <div class="flex-1 overflow-x-auto">
+                <div
+                  class="tier-list-bar-chart flex items-center justify-start gap-0.5"
+                  style="min-height: 160px; min-width: min(100%, max-content)"
+                >
+                  <NuxtLink
+                    v-for="c in tierListBarChartData"
+                    :key="c.championId"
+                    :to="localePath('/statistics/champion/' + c.championId)"
+                    class="tier-list-bar-item flex h-40 flex-col items-center justify-center gap-0"
+                    :title="
+                      (championName(c.championId) || c.championId) +
+                      ' – ' +
+                      Number(c.winrate).toFixed(2) +
+                      '%'
+                    "
+                  >
+                    <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
+                      <div
+                        v-if="c.score >= 0"
+                        class="tier-bar tier-bar-up w-6 shrink-0 rounded-t"
+                        :style="{
+                          height: c.barHeight * 0.52 + 'px',
+                          minHeight: c.score > 0 ? '4px' : '0',
+                          backgroundColor: TIER_CHART_COLORS[c.tier],
+                        }"
+                      />
+                    </div>
+                    <img
+                      v-if="gameVersion && championByKey(c.championId)"
+                      :src="
+                        getChampionImageUrl(gameVersion, championByKey(c.championId)!.image.full)
+                      "
+                      :alt="championName(c.championId) || ''"
+                      class="h-8 w-8 shrink-0 rounded-full border-2 border-primary/30 object-cover"
+                      width="32"
+                      height="32"
+                    />
+                    <div class="flex min-h-[52px] flex-1 flex-col items-center justify-start">
+                      <div
+                        v-if="c.score < 0"
+                        class="tier-bar tier-bar-down w-6 shrink-0 rounded-b"
+                        :style="{
+                          height: c.barHeight * 0.52 + 'px',
+                          minHeight: c.score < 0 ? '4px' : '0',
+                          backgroundColor: TIER_CHART_COLORS[c.tier],
+                        }"
+                      />
+                    </div>
+                  </NuxtLink>
+                </div>
+                <div class="mt-1 flex justify-between text-[10px] text-text/50">
+                  <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
+                  <span>{{ t('statisticsPage.tierListChartBest') }}</span>
+                </div>
+              </div>
+              <!-- Légende des tiers (style image) -->
+              <div
+                class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 px-4 py-3 lg:w-56"
+              >
+                <div class="mb-2 text-sm font-semibold text-text">
+                  {{ t('statisticsPage.tierListLegend') }}
+                </div>
+                <div class="space-y-1.5 text-xs">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block h-4 w-4 shrink-0 rounded"
+                      style="background-color: #eab308"
+                    />
+                    <span class="font-medium text-amber-400">S</span>
+                    <span class="text-text/80">{{ t('statisticsPage.tierLegendS') }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block h-4 w-4 shrink-0 rounded"
+                      style="background-color: #38bdf8"
+                    />
+                    <span class="font-medium text-sky-400">A</span>
+                    <span class="text-text/80">{{ t('statisticsPage.tierLegendA') }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block h-4 w-4 shrink-0 rounded"
+                      style="background-color: #a78bfa"
+                    />
+                    <span class="font-medium text-violet-400">B</span>
+                    <span class="text-text/80">{{ t('statisticsPage.tierLegendB') }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block h-4 w-4 shrink-0 rounded"
+                      style="background-color: #fb923c"
+                    />
+                    <span class="font-medium text-orange-400">C</span>
+                    <span class="text-text/80">{{ t('statisticsPage.tierLegendC') }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="inline-block h-4 w-4 shrink-0 rounded"
+                      style="background-color: #dc2626"
+                    />
+                    <span class="font-medium text-red-500">F</span>
+                    <span class="text-text/80">{{ t('statisticsPage.tierLegendF') }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Tab: Durée de partie -->
+        <div v-show="activeTab === 'duration'" class="space-y-4">
+          <h2 class="text-xl font-semibold text-text-accent">
+            {{ t('statisticsPage.durationTitle') }}
+          </h2>
+          <p class="text-sm text-text/80">{{ t('statisticsPage.durationDescription') }}</p>
+          <div
+            v-if="overviewDurationWinratePending || !overviewDurationWinrateData?.buckets?.length"
+            class="text-text/70"
+          >
+            {{ t('statisticsPage.loading') }}
+          </div>
+          <div
+            v-else-if="durationWinrateChartBuckets.length"
+            class="relative flex justify-center rounded-lg border border-primary/30 bg-surface/30 p-4"
+          >
+            <div class="relative inline-block min-h-[260px] w-full max-w-[600px]">
+              <svg
+                :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+                class="h-auto w-full"
+                :width="CHART_W"
+                :height="CHART_H"
+                preserveAspectRatio="xMidYMid meet"
+                aria-hidden="true"
+              >
+                <defs>
+                  <linearGradient id="duration-fill-global" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
+                    <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
+                  </linearGradient>
+                </defs>
+                <path :d="durationWinrateChartClosedPath" fill="url(#duration-fill-global)" />
+                <path
+                  :d="durationWinrateChartLinePath"
+                  fill="none"
+                  stroke="rgb(var(--rgb-accent))"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <g v-for="(pt, i) in durationWinrateChartPointsList" :key="'dpt-' + i">
+                  <circle
+                    :cx="pt.x"
+                    :cy="pt.y"
+                    r="12"
+                    fill="transparent"
+                    class="cursor-pointer"
+                    @mouseenter="
+                      durationChartTooltip = {
+                        durationLabel: pt.durationLabel,
+                        winrate: pt.winrate,
+                        matchCount: pt.matchCount,
+                        x: pt.x,
+                        y: pt.y,
+                      }
+                    "
+                    @mouseleave="durationChartTooltip = null"
+                  />
+                  <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
+                </g>
+                <g v-for="(tick, i) in durationWinrateAxisX.ticks" :key="'dx-' + i">
+                  <line
+                    :x1="tick.x"
+                    :y1="CHART_PAD.top + PLOT_H"
+                    :y2="CHART_PAD.top + PLOT_H + 4"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    class="text-text/50"
+                  />
+                  <text
+                    :x="tick.x"
+                    :y="CHART_H - 6"
+                    text-anchor="middle"
+                    class="fill-text/70 text-[10px]"
+                  >
+                    {{ tick.value }}
+                  </text>
+                </g>
+                <g v-for="(tick, i) in durationWinrateAxisY.ticks" :key="'dy-' + i">
+                  <line
+                    :x1="CHART_PAD.left"
+                    :y1="tick.y"
+                    :x2="CHART_PAD.left - 4"
+                    :y2="tick.y"
+                    stroke="currentColor"
+                    stroke-width="1"
+                    class="text-text/50"
+                  />
+                  <text
+                    :x="CHART_PAD.left - 8"
+                    :y="tick.y + 4"
+                    text-anchor="end"
+                    class="fill-text/70 text-[10px]"
+                  >
+                    {{ tick.value }}%
+                  </text>
+                </g>
+              </svg>
+              <div
+                v-if="durationChartTooltip"
+                class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
+                :style="{
+                  left: (durationChartTooltip.x / CHART_W) * 100 + '%',
+                  top: (durationChartTooltip.y / CHART_H) * 100 + '%',
+                  transform: 'translate(-50%, -100%) translateY(-8px)',
+                }"
+              >
+                <div class="font-medium text-text">
+                  {{ durationChartTooltip.durationLabel }}
+                </div>
+                <div class="text-text/80">
+                  {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
+                  {{ t('statisticsPage.winrate') }}
+                </div>
+                <div class="text-text/70">
+                  {{ durationChartTooltip.matchCount }}
+                  {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Objets (global) -->
+        <div v-show="activeTab === 'items'" class="space-y-4">
+          <h2 class="text-xl font-semibold text-text-accent">
+            {{ t('statisticsPage.itemsTitle') }}
+          </h2>
+          <p class="text-sm text-text/80">{{ t('statisticsPage.itemsDescription') }}</p>
+          <div v-if="overviewDetailPending" class="text-text/70">
+            {{ t('statisticsPage.loading') }}
+          </div>
+          <div
+            v-else-if="overviewDetailError"
+            class="rounded border border-error/50 p-3 text-error"
+          >
+            {{ t('statisticsPage.overviewDetailTimeout') }}
+          </div>
+          <div
+            v-else-if="overviewDetailData?.items?.length"
+            class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+          >
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-primary/30 bg-surface/50">
+                <tr>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailItems') }}
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailPickRate') }} %
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailWinRate') }} %
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-surface/50">
+                  <td class="px-4 py-2">
+                    <div class="flex items-center gap-2">
+                      <img
+                        v-if="itemImageName(row.itemId)"
+                        :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                        :alt="itemName(row.itemId) || ''"
+                        class="h-8 w-8 rounded object-cover"
+                        width="32"
+                        height="32"
+                      />
+                      <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
+                  <td class="px-4 py-2 text-text/90">
+                    {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div
+              v-if="totalItemsCount > 0"
+              class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+            >
+              <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1.5">
+                  <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                  <select
+                    v-model.number="itemsPageSize"
+                    class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                  >
+                    <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </label>
+                <span class="text-text/70">
+                  {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
+                    Math.min(itemsPage * itemsPageSize, totalItemsCount)
+                  }}
+                  / {{ totalItemsCount }}
+                </span>
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                    :disabled="itemsPage <= 1"
+                    @click="itemsPage = Math.max(1, itemsPage - 1)"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                    :disabled="itemsPage >= totalItemsPages"
+                    @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+        </div>
+
+        <!-- Tab: Sorts d'invocateur (global) -->
+        <div v-show="activeTab === 'spells'" class="space-y-4">
+          <h2 class="text-xl font-semibold text-text-accent">
+            {{ t('statisticsPage.spellsTitle') }}
+          </h2>
+          <p class="text-sm text-text/80">{{ t('statisticsPage.spellsDescription') }}</p>
+          <div v-if="overviewDetailPending" class="text-text/70">
+            {{ t('statisticsPage.loading') }}
+          </div>
+          <div
+            v-else-if="overviewDetailError"
+            class="rounded border border-error/50 p-3 text-error"
+          >
+            {{ t('statisticsPage.overviewDetailTimeout') }}
+          </div>
+          <div
+            v-else-if="overviewDetailData?.summonerSpells?.length"
+            class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+          >
+            <table class="w-full text-left text-sm">
+              <thead class="border-b border-primary/30 bg-surface/50">
+                <tr>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailSummonerSpells') }}
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailPickRate') }} %
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.overviewDetailWinRate') }} %
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <tr
+                  v-for="row in overviewDetailData?.summonerSpells ?? []"
+                  :key="row.spellId"
+                  class="hover:bg-surface/50"
+                >
+                  <td class="px-4 py-2">
+                    <div class="flex items-center gap-2">
+                      <img
+                        v-if="spellImageName(row.spellId)"
+                        :src="getSpellImageUrl(gameVersion, spellImageName(row.spellId)!)"
+                        :alt="spellName(row.spellId) || ''"
+                        class="h-8 w-8 rounded object-cover"
+                        width="32"
+                        height="32"
+                      />
+                      <span class="text-text">{{ spellName(row.spellId) || row.spellId }}</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
+                  <td class="px-4 py-2 text-text/90">
+                    {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+        </div>
+
+        <!-- Tab: Abandons -->
+        <div v-show="activeTab === 'abandons'" class="space-y-4">
+          <h2 class="text-xl font-semibold text-text-accent">
+            {{ t('statisticsPage.abandonsTitle') }}
+          </h2>
+          <p class="text-sm text-text/80">{{ t('statisticsPage.abandonsDescription') }}</p>
+          <div v-if="overviewAbandonsPending" class="text-text/70">
+            {{ t('statisticsPage.loading') }}
+          </div>
+          <div v-else-if="overviewAbandonsData" class="grid gap-4 sm:grid-cols-3">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <div class="text-sm text-text/70">{{ t('statisticsPage.abandonsRemakeRate') }}</div>
+              <div class="text-2xl font-semibold text-text">
+                {{ overviewAbandonsData.remakeRate?.toFixed(2) ?? 0 }}%
+              </div>
+              <div class="text-xs text-text/50">
+                {{ overviewAbandonsData.remakeCount }} / {{ overviewAbandonsData.totalMatches }}
+              </div>
+            </div>
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <div class="text-sm text-text/70">
+                {{ t('statisticsPage.abandonsEarlySurrenderRate') }}
+              </div>
+              <div class="text-2xl font-semibold text-text">
+                {{ overviewAbandonsData.earlySurrenderRate?.toFixed(2) ?? 0 }}%
+              </div>
+              <div class="text-xs text-text/50">
+                {{ overviewAbandonsData.earlySurrenderCount }} /
+                {{ overviewAbandonsData.totalMatches }}
+              </div>
+            </div>
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <div class="text-sm text-text/70">
+                {{ t('statisticsPage.abandonsSurrenderRate') }}
+              </div>
+              <div class="text-2xl font-semibold text-text">
+                {{ overviewAbandonsData.surrenderRate?.toFixed(2) ?? 0 }}%
+              </div>
+              <div class="text-xs text-text/50">
+                {{ overviewAbandonsData.surrenderCount }} / {{ overviewAbandonsData.totalMatches }}
+              </div>
+            </div>
+          </div>
+          <div v-else class="text-text/70">{{ t('statisticsPage.noData') }}</div>
         </div>
       </div>
     </div>
@@ -2183,16 +2918,72 @@ const { version: gameVersion } = useGameVersion()
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
-const activeTab = ref<'overview' | 'progressions' | 'sides' | 'champions' | 'detail'>('overview')
+const activeTab = ref<
+  | 'overview'
+  | 'progressions'
+  | 'sides'
+  | 'champions'
+  | 'tierlist'
+  | 'duration'
+  | 'items'
+  | 'spells'
+  | 'abandons'
+  | 'detail'
+>('overview')
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview') },
+  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList') },
+  { id: 'champions' as const, label: t('statisticsPage.tabChampions') },
+  { id: 'duration' as const, label: t('statisticsPage.tabDuration') },
+  { id: 'items' as const, label: t('statisticsPage.tabItems') },
+  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells') },
+  { id: 'abandons' as const, label: t('statisticsPage.tabAbandons') },
   { id: 'progressions' as const, label: t('statisticsPage.tabProgressions') },
   { id: 'sides' as const, label: t('statisticsPage.tabSides') },
-  { id: 'champions' as const, label: t('statisticsPage.tabChampions') },
   { id: 'detail' as const, label: t('statisticsPage.tabRunesItemsSpells') },
 ])
 
 const championSearchQuery = ref('')
+/** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
+const championsPageSize = ref(20)
+const championsPage = ref(1)
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+/** Pagination Objets (onglet items). */
+const itemsPageSize = ref(20)
+const itemsPage = ref(1)
+const itemsList = computed(() => overviewDetailData.value?.items ?? [])
+const totalItemsCount = computed(() => itemsList.value.length)
+const totalItemsPages = computed(() =>
+  Math.max(1, Math.ceil(totalItemsCount.value / itemsPageSize.value))
+)
+const paginatedItems = computed(() => {
+  const list = itemsList.value
+  const size = itemsPageSize.value
+  const page = Math.min(itemsPage.value, totalItemsPages.value)
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
+/** Pagination Progressions (onglet progressions). */
+const progressionsPageSize = ref(20)
+const progressionsPage = ref(1)
+const totalProgressionsCount = computed(() => progressionFullData.value?.champions?.length ?? 0)
+const totalProgressionsPages = computed(() =>
+  Math.max(1, Math.ceil(totalProgressionsCount.value / progressionsPageSize.value))
+)
+const paginatedProgressionsChampions = computed(() => {
+  const list = progressionFullData.value?.champions ?? []
+  const size = progressionsPageSize.value
+  const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
+const paginatedProgressionsByPickrate = computed(() => {
+  const list = progressionFullByPickrate.value
+  const size = progressionsPageSize.value
+  const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
 /** Sort order for Champions tab (from Fast Stats "Voir plus" or selector). */
 const championsSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'games' | 'wins'>('winrate')
 /** Sort direction: desc = highest first (default), asc = lowest first. */
@@ -2223,6 +3014,22 @@ const filteredChampions = computed(() => {
     return mult * diff
   })
 })
+const totalChampionsCount = computed(() => filteredChampions.value.length)
+const totalChampionsPages = computed(() =>
+  Math.max(1, Math.ceil(totalChampionsCount.value / championsPageSize.value))
+)
+const paginatedChampions = computed(() => {
+  const list = filteredChampions.value
+  const size = championsPageSize.value
+  const page = Math.min(championsPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
+/** Reset to page 1 when filters or page size change. */
+watch([championSearchQuery, championsSortOrder, championsSortDir, championsPageSize], () => {
+  championsPage.value = 1
+})
+
 /** Click on sortable column header: same column toggles asc/desc, else set column and desc. */
 function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate' | 'banrate') {
   if (championsSortOrder.value === col) {
@@ -2237,6 +3044,138 @@ function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
   championsSortOrder.value = sort
   activeTab.value = 'champions'
 }
+
+/** Tier list: assign S/A/B/C/F by winrate percentiles (top 10% = S, next 20% = A, 30% B, 25% C, rest F). */
+type Tier = 'S' | 'A' | 'B' | 'C' | 'F'
+function computeTiers(
+  champions: Array<{
+    championId: number
+    winrate: number
+    pickrate: number
+    banrate?: number
+    byRole?: Record<string, { games: number }>
+  }>
+): Array<{
+  championId: number
+  winrate: number
+  pickrate: number
+  banrate?: number
+  tier: Tier
+  primaryRole: string | null
+}> {
+  if (!champions.length) return []
+  const sorted = [...champions].sort((a, b) => b.winrate - a.winrate)
+  const n = sorted.length
+  const pct = (i: number) => Math.floor((i / n) * 100)
+  const tierRanges: Array<{ tier: Tier; maxPct: number }> = [
+    { tier: 'S', maxPct: 10 },
+    { tier: 'A', maxPct: 30 },
+    { tier: 'B', maxPct: 60 },
+    { tier: 'C', maxPct: 85 },
+    { tier: 'F', maxPct: 100 },
+  ]
+  return sorted.map((c, i) => {
+    const p = pct(i)
+    let tier: Tier = 'F'
+    for (const r of tierRanges) {
+      if (p < r.maxPct) {
+        tier = r.tier
+        break
+      }
+    }
+    const byRole = (c as { byRole?: Record<string, { games: number }> }).byRole
+    let primaryRole: string | null = null
+    if (byRole && typeof byRole === 'object') {
+      const entries = Object.entries(byRole)
+      if (entries.length) {
+        const best = entries.reduce((a, b) => (b[1].games > a[1].games ? b : a))
+        primaryRole = best[0]
+      }
+    }
+    return {
+      championId: c.championId,
+      winrate: c.winrate,
+      pickrate: c.pickrate,
+      banrate: c.banrate,
+      tier,
+      primaryRole,
+    }
+  })
+}
+
+const tierListViewModel = ref<'table' | 'chart'>('table')
+const tierListSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'tier' | 'games'>('winrate')
+const tierListSortDir = ref<'asc' | 'desc'>('desc')
+const tierListPage = ref(1)
+const TIER_ORDER: Record<Tier, number> = { S: 5, A: 4, B: 3, C: 2, F: 1 }
+const championsWithTier = computed(() => {
+  const list = championsData.value?.champions ?? []
+  return computeTiers(
+    list as Array<{
+      championId: number
+      winrate: number
+      pickrate: number
+      banrate?: number
+      byRole?: Record<string, { games: number }>
+    }>
+  )
+})
+const sortedChampionsWithTier = computed(() => {
+  const list = championsWithTier.value
+  const sort = tierListSortOrder.value
+  const dir = tierListSortDir.value
+  const mult = dir === 'desc' ? 1 : -1
+  return [...list].sort((a, b) => {
+    let diff = 0
+    if (sort === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
+    else if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
+    else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
+    else if (sort === 'banrate') diff = (b.banrate ?? 0) - (a.banrate ?? 0)
+    else diff = 0
+    return mult * diff
+  })
+})
+const totalTierListCount = computed(() => sortedChampionsWithTier.value.length)
+const totalTierListPages = computed(() =>
+  Math.max(1, Math.ceil(totalTierListCount.value / championsPageSize.value))
+)
+const paginatedTierList = computed(() => {
+  const list = sortedChampionsWithTier.value
+  const size = championsPageSize.value
+  const page = Math.min(tierListPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
+/** Tier list bar chart: champions ordered by winrate (worst to best), score = (winrate - 50) for bar height. */
+const tierListBarChartData = computed(() => {
+  const list = [...championsWithTier.value].sort((a, b) => a.winrate - b.winrate)
+  const minWr = Math.min(...list.map(c => c.winrate), 50)
+  const maxWr = Math.max(...list.map(c => c.winrate), 50)
+  const range = Math.max(maxWr - 50, 50 - minWr, 1)
+  return list.map(c => ({
+    ...c,
+    score: c.winrate - 50,
+    barHeight: (Math.abs(c.winrate - 50) / range) * 100,
+  }))
+})
+const TIER_CHART_COLORS: Record<Tier, string> = {
+  S: '#eab308',
+  A: '#38bdf8',
+  B: '#a78bfa',
+  C: '#fb923c',
+  F: '#dc2626',
+}
+function setTierListSort(col: 'tier' | 'winrate' | 'pickrate' | 'banrate') {
+  if (tierListSortOrder.value === col) {
+    tierListSortDir.value = tierListSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    tierListSortOrder.value = col
+    tierListSortDir.value = 'desc'
+  }
+}
+watch([tierListSortOrder, tierListSortDir, championsPageSize], () => {
+  tierListPage.value = 1
+})
 
 function formatGeneratedAt(value: string | null | undefined): string {
   if (!value) return '—'
@@ -2365,13 +3304,53 @@ function overviewQueryParams(): string {
 }
 const STATS_FETCH_TIMEOUT_MS = 90_000
 
+/** Logs de perf (dev only) pour identifier ce qui ralentit l’affichage des stats. */
+const STATS_PERF = import.meta.dev
+function statsPerfStart(label: string): number {
+  if (!STATS_PERF) return 0
+  // eslint-disable-next-line no-console
+  console.log('[Stats perf]', label, 'start')
+  return performance.now()
+}
+function statsPerfEnd(label: string, start: number) {
+  if (!STATS_PERF || start === 0) return
+  // eslint-disable-next-line no-console
+  console.log('[Stats perf]', label, Math.round(performance.now() - start) + 'ms')
+}
+
+/** Fetch stats API and log backend timing from X-Backend-Time / X-Stats-Path (tout au même endroit que les logs front). */
+function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
+  const existingOnResponse = (options as { onResponse?: (ctx: { response: Response }) => void })
+    ?.onResponse
+  return $fetch(url, {
+    ...options,
+    onResponse: ctx => {
+      if (STATS_PERF && ctx.response?.headers) {
+        const backendMs = ctx.response.headers.get('X-Backend-Time')
+        const sqlMs = ctx.response.headers.get('X-SQL-Time')
+        const path = ctx.response.headers.get('X-Stats-Path') || url
+        if (backendMs) {
+          // eslint-disable-next-line no-console
+          console.log(
+            '[Stats perf] backend',
+            path,
+            backendMs + 'ms' + (sqlMs ? ' (SQL ' + sqlMs + 'ms)' : '')
+          )
+        }
+      }
+      existingOnResponse?.(ctx)
+    },
+  }) as Promise<T>
+}
+
 async function loadOverview() {
+  const t = statsPerfStart('loadOverview')
   overviewPending.value = true
   overviewError.value = null
   const baseUrl = apiUrl('/api/stats')
   const query = overviewQueryParams()
   try {
-    const overviewRes = await $fetch(baseUrl + '/overview' + query, {
+    const overviewRes = await statsFetch<typeof overviewData.value>(baseUrl + '/overview' + query, {
       timeout: STATS_FETCH_TIMEOUT_MS,
     })
     overviewData.value = overviewRes as typeof overviewData.value
@@ -2402,6 +3381,7 @@ async function loadOverview() {
         : 'Impossible de charger les statistiques (vérifiez que le backend est démarré).'
   } finally {
     overviewPending.value = false
+    statsPerfEnd('loadOverview', t)
     // Toujours tenter de charger runes/items/sorts même si l’overview a échoué
   }
 }
@@ -2409,13 +3389,45 @@ async function loadOverview() {
 const overviewDurationWinrateData = ref<{
   buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
 } | null>(null)
+const overviewDurationWinratePending = ref(false)
 async function loadOverviewDurationWinrate() {
+  const t = statsPerfStart('loadOverviewDurationWinrate')
+  overviewDurationWinratePending.value = true
   try {
-    overviewDurationWinrateData.value = await $fetch(
+    overviewDurationWinrateData.value = await statsFetch(
       apiUrl('/api/stats/overview-duration-winrate' + overviewQueryParams())
     )
   } catch {
     overviewDurationWinrateData.value = null
+  } finally {
+    overviewDurationWinratePending.value = false
+    statsPerfEnd('loadOverviewDurationWinrate', t)
+  }
+}
+
+/** Stats abandons (remake, surrender). GET /api/stats/overview-abandons */
+const overviewAbandonsData = ref<{
+  totalMatches: number
+  remakeCount: number
+  remakeRate: number
+  surrenderCount: number
+  surrenderRate: number
+  earlySurrenderCount: number
+  earlySurrenderRate: number
+} | null>(null)
+const overviewAbandonsPending = ref(false)
+async function loadOverviewAbandons() {
+  const t = statsPerfStart('loadOverviewAbandons')
+  overviewAbandonsPending.value = true
+  try {
+    overviewAbandonsData.value = await statsFetch(
+      apiUrl('/api/stats/overview-abandons' + overviewQueryParams())
+    )
+  } catch {
+    overviewAbandonsData.value = null
+  } finally {
+    overviewAbandonsPending.value = false
+    statsPerfEnd('loadOverviewAbandons', t)
   }
 }
 /** Progression: WR delta from oldest version to all since. For "Winrate depuis X" encart. */
@@ -2430,14 +3442,17 @@ async function loadOverviewProgression() {
     overviewProgressionData.value = null
     return
   }
+  const t = statsPerfStart('loadOverviewProgression')
   const params = new URLSearchParams()
   params.set('version', oldest)
   if (overviewDivisionFilter.value) params.set('rankTier', overviewDivisionFilter.value)
   const q = params.toString() ? '?' + params.toString() : ''
   try {
-    overviewProgressionData.value = await $fetch(apiUrl('/api/stats/overview-progression' + q))
+    overviewProgressionData.value = await statsFetch(apiUrl('/api/stats/overview-progression' + q))
   } catch {
     overviewProgressionData.value = null
+  } finally {
+    statsPerfEnd('loadOverviewProgression', t)
   }
 }
 /** Normalise une version (ex. "16.3.123") en préfixe pour l’API (ex. "16.3"). */
@@ -2479,17 +3494,19 @@ async function loadProgressionsFull() {
     progressionFullData.value = null
     return
   }
+  const t = statsPerfStart('loadProgressionsFull')
   progressionFullPending.value = true
   const params = new URLSearchParams()
   params.set('version', oldest)
   if (overviewDivisionFilter.value) params.set('rankTier', overviewDivisionFilter.value)
   const q = params.toString() ? '?' + params.toString() : ''
   try {
-    progressionFullData.value = await $fetch(apiUrl('/api/stats/overview-progression-full' + q))
+    progressionFullData.value = await statsFetch(apiUrl('/api/stats/overview-progression-full' + q))
   } catch {
     progressionFullData.value = null
   } finally {
     progressionFullPending.value = false
+    statsPerfEnd('loadProgressionsFull', t)
   }
 }
 /** Même liste que progressionFullData.champions mais triée par delta pickrate (pour table popularité). */
@@ -2497,7 +3514,7 @@ const progressionFullByPickrate = computed(() => {
   const list = progressionFullData.value?.champions ?? []
   return [...list].sort((a, b) => b.deltaPick - a.deltaPick)
 })
-const CHART_W = 320
+const CHART_W = 560
 const CHART_H = 260
 const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
 const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
@@ -2565,7 +3582,7 @@ function durationWinrateChartScaled(
     return {
       x,
       y,
-      label: `${b.durationMin}-${b.durationMin + 5} min: ${b.winrate}% WR (${b.matchCount})`,
+      label: `${b.durationMin}-${b.durationMin + 5} min: ${Number(b.winrate).toFixed(2)}% WR (${b.matchCount})`,
       durationLabel: `${b.durationMin}-${b.durationMin + 5} min`,
       winrate: b.winrate,
       matchCount: b.matchCount,
@@ -2606,7 +3623,7 @@ const durationWinrateChartScaledData = computed(() =>
   durationWinrateChartScaled(durationWinrateChartBuckets.value)
 )
 /* Chart SVG paths/axes for duration winrate - reserved for chart UI */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 const durationWinrateChartClosedPath = computed(
   () => durationWinrateChartScaledData.value.closedPath
 )
@@ -2614,18 +3631,26 @@ const durationWinrateChartLinePath = computed(() => durationWinrateChartScaledDa
 const durationWinrateChartPointsList = computed(() => durationWinrateChartScaledData.value.list)
 const durationWinrateAxisX = computed(() => durationWinrateChartScaledData.value.axisX)
 const durationWinrateAxisY = computed(() => durationWinrateChartScaledData.value.axisY)
-/* eslint-enable @typescript-eslint/no-unused-vars */
+const durationChartTooltip = ref<{
+  durationLabel: string
+  winrate: number
+  matchCount: number
+  x: number
+  y: number
+} | null>(null)
+
 /** Timeout for overview-detail (runes, items, spells). Requête lourde sur 700k+ participants; retry plus long. */
 const OVERVIEW_DETAIL_TIMEOUT_MS = 60_000
 const OVERVIEW_DETAIL_RETRY_TIMEOUT_MS = 90_000
 const overviewDetailError = ref(false)
 
 async function loadOverviewDetail(isRetry = false) {
+  const t = statsPerfStart('loadOverviewDetail' + (isRetry ? ' (retry)' : ''))
   overviewDetailPending.value = true
   overviewDetailError.value = false
   const timeoutMs = isRetry ? OVERVIEW_DETAIL_RETRY_TIMEOUT_MS : OVERVIEW_DETAIL_TIMEOUT_MS
   try {
-    overviewDetailData.value = await $fetch(
+    overviewDetailData.value = await statsFetch(
       apiUrl('/api/stats/overview-detail' + overviewQueryParams()),
       { timeout: timeoutMs }
     )
@@ -2634,6 +3659,7 @@ async function loadOverviewDetail(isRetry = false) {
     overviewDetailError.value = true
   } finally {
     overviewDetailPending.value = false
+    statsPerfEnd('loadOverviewDetail', t)
   }
 }
 
@@ -2760,9 +3786,9 @@ function firstPercentBySide(
   matchCount: number
 ): { blue: string; red: string } {
   if (!matchCount) return { blue: '—', red: '—' }
-  const bluePct = Math.round((firstByBlue / matchCount) * 1000) / 10
-  const redPct = Math.round((firstByRed / matchCount) * 1000) / 10
-  return { blue: bluePct + '%', red: redPct + '%' }
+  const bluePct = (firstByBlue / matchCount) * 100
+  const redPct = (firstByRed / matchCount) * 100
+  return { blue: Number(bluePct).toFixed(2) + '%', red: Number(redPct).toFixed(2) + '%' }
 }
 function objectiveRowSides(key: string): {
   firstByBlue: number
@@ -2801,7 +3827,7 @@ function sidesObjectiveDistributionPercentages(
   return Object.entries(dist)
     .map(([k, n]) => ({
       count: parseInt(k, 10) || 0,
-      percent: Math.round((Number(n) / total) * 1000) / 10,
+      percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
     .filter(({ percent }) => percent > 0)
     .sort((a, b) => a.count - b.count)
@@ -2815,7 +3841,7 @@ function sidesObjectiveCounts(key: string): number[] {
 function percentForCountSides(key: string, count: number, byBlue: boolean): string {
   const rows = sidesObjectiveDistributionPercentages(key, byBlue)
   const row = rows.find(r => r.count === count)
-  return row ? row.percent + '%' : '—'
+  return row ? Number(row.percent).toFixed(2) + '%' : '—'
 }
 function sidesQueryParams(): string {
   const params = new URLSearchParams()
@@ -2836,16 +3862,16 @@ const sidesDonutTotalMatches = computed(() => {
 const sidesDonutBluePct = computed(() => {
   const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return '0'
+  if (!data || !total) return '0.00'
   const pct = (data.sideWinrate.blue.wins / total) * 100
-  return (Math.round(pct * 10) / 10).toFixed(1)
+  return Number(pct).toFixed(2)
 })
 const sidesDonutRedPct = computed(() => {
   const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return '0'
+  if (!data || !total) return '0.00'
   const pct = (data.sideWinrate.red.wins / total) * 100
-  return (Math.round(pct * 10) / 10).toFixed(1)
+  return Number(pct).toFixed(2)
 })
 const sidesDonutBlueDash = computed(() => {
   const data = overviewSidesData.value
@@ -2862,26 +3888,32 @@ const sidesDonutRedDash = computed(() => {
   return sidesDonutCircumference * pct
 })
 async function loadOverviewSides() {
+  const t = statsPerfStart('loadOverviewSides')
   overviewSidesPending.value = true
   try {
-    overviewSidesData.value = await $fetch(apiUrl('/api/stats/overview-sides' + sidesQueryParams()))
+    overviewSidesData.value = await statsFetch(
+      apiUrl('/api/stats/overview-sides' + sidesQueryParams())
+    )
   } catch {
     overviewSidesData.value = null
   } finally {
     overviewSidesPending.value = false
+    statsPerfEnd('loadOverviewSides', t)
   }
 }
 
 async function loadOverviewTeams() {
+  const t = statsPerfStart('loadOverviewTeams')
   overviewTeamsPending.value = true
   try {
-    overviewTeamsData.value = await $fetch(
+    overviewTeamsData.value = await statsFetch(
       apiUrl('/api/stats/overview-teams' + overviewQueryParams())
     )
   } catch {
     overviewTeamsData.value = null
   } finally {
     overviewTeamsPending.value = false
+    statsPerfEnd('loadOverviewTeams', t)
   }
 }
 
@@ -2920,9 +3952,9 @@ function firstPercentByTeam(
   matchCount: number
 ): { win: string; loss: string } {
   if (!matchCount) return { win: '—', loss: '—' }
-  const winPct = Math.round((firstByWin / matchCount) * 1000) / 10
-  const lossPct = Math.round((firstByLoss / matchCount) * 1000) / 10
-  return { win: winPct + '%', loss: lossPct + '%' }
+  const winPct = (firstByWin / matchCount) * 100
+  const lossPct = (firstByLoss / matchCount) * 100
+  return { win: Number(winPct).toFixed(2) + '%', loss: Number(lossPct).toFixed(2) + '%' }
 }
 /** Distribution as % of matches, sorted by count (number then percent). */
 function objectiveDistributionPercentages(
@@ -2940,7 +3972,7 @@ function objectiveDistributionPercentages(
   return Object.entries(dist)
     .map(([k, n]) => ({
       count: parseInt(k, 10) || 0,
-      percent: Math.round((Number(n) / total) * 1000) / 10,
+      percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
     .filter(({ percent }) => percent > 0)
     .sort((a, b) => a.count - b.count)
@@ -2956,7 +3988,7 @@ function objectiveCounts(key: string): number[] {
 function percentForCount(key: string, count: number, byWin: boolean): string {
   const rows = objectiveDistributionPercentages(key, byWin)
   const row = rows.find(r => r.count === count)
-  return row ? row.percent + '%' : '—'
+  return row ? Number(row.percent).toFixed(2) + '%' : '—'
 }
 const objectiveKeysWithKills = ['baron', 'dragon', 'tower', 'inhibitor', 'horde'] as const
 const openObjectiveKeys = ref<Set<string>>(new Set())
@@ -3030,17 +4062,21 @@ const queryString = computed(() => {
   return params.toString() ? `?${params.toString()}` : ''
 })
 async function loadChampions() {
+  const t = statsPerfStart('loadChampions')
   championsPending.value = true
   championsError.value = null
   try {
-    championsData.value = await $fetch(apiUrl(`/api/stats/champions${queryString.value}`))
+    championsData.value = await statsFetch(apiUrl(`/api/stats/champions${queryString.value}`))
   } catch (e) {
     championsError.value = e instanceof Error ? e.message : String(e)
   } finally {
     championsPending.value = false
+    statsPerfEnd('loadChampions', t)
   }
 }
-watch([statsDivisionFilter, statsRoleFilter], loadChampions)
+watch([statsDivisionFilter, statsRoleFilter], () => {
+  if (activeTab.value === 'champions' || activeTab.value === 'tierlist') loadChampions()
+})
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
 function championByKey(championId: number): (typeof championsStore.champions)[0] | null {
@@ -3146,6 +4182,10 @@ function sortedItemsBySlot(
 }
 
 watch(activeTab, async tab => {
+  if (STATS_PERF) {
+    // eslint-disable-next-line no-console
+    console.log('[Stats perf] activeTab', tab)
+  }
   if (tab === 'overview') loadOverview()
   if (tab === 'progressions') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
@@ -3154,8 +4194,12 @@ watch(activeTab, async tab => {
     loadProgressionsFull()
   }
   if (tab === 'sides') loadOverviewSides()
-  if (tab === 'detail' && !overviewDetailData.value && !overviewDetailPending.value)
-    loadOverviewDetail()
+  if (tab === 'tierlist' || tab === 'champions') loadChampions()
+  if (tab === 'duration') loadOverviewDurationWinrate()
+  if (tab === 'items' || tab === 'spells' || tab === 'detail') {
+    if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
+  }
+  if (tab === 'abandons') loadOverviewAbandons()
 })
 watch([statsVersionFilter, statsDivisionFilter], () => {
   if (activeTab.value === 'sides') loadOverviewSides()
@@ -3168,16 +4212,28 @@ onMounted(async () => {
     : versionStore.loadCurrentVersion()
   // Priorité: overview + champions (noms dans les cartes). Les stores runes/items/sorts
   // et la liste des champions (onglet) partent en arrière-plan pour ne pas saturer l’API.
+  const tPage = statsPerfStart('page mount (version + overview + championsStore)')
+  const tVersion = statsPerfStart('version')
+  await versionPromise
+  statsPerfEnd('version', tVersion)
+  const tChampionsStore = statsPerfStart('championsStore.loadChampions')
+  const tOverview = statsPerfStart('loadOverview')
   await Promise.all([
-    versionPromise,
-    championsStore.loadChampions(riotLocale.value),
-    loadOverview(),
+    championsStore
+      .loadChampions(riotLocale.value)
+      .then(() => statsPerfEnd('championsStore.loadChampions', tChampionsStore)),
+    loadOverview().then(() => statsPerfEnd('loadOverview (initial)', tOverview)),
   ])
+  statsPerfEnd('page mount', tPage)
   // Chargement en arrière-plan (sans bloquer le rendu)
+  if (STATS_PERF) {
+    // eslint-disable-next-line no-console
+    console.log('[Stats perf] background: itemsStore, runesStore, summonerSpellsStore')
+  }
   itemsStore.loadItems(riotLocale.value)
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
-  loadChampions()
+  // Champions chargés à la demande à l’ouverture des onglets Champions / Tier list
 })
 </script>
 
