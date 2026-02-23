@@ -17,7 +17,7 @@
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
         <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
-          <BuildCard />
+          <BuildCard :sheet-tooltips="true" />
         </div>
       </div>
     </div>

@@ -163,12 +163,14 @@ import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const route = useRoute()
 const localePath = useLocalePath()
+const { isStreamerMode } = useStreamerMode()
 
 const buildToDelete = ref<string | null>(null)
 
@@ -210,6 +212,10 @@ const hasLelarivaBuilds = computed(() => {
 })
 
 const tabs = computed(() => {
+  if (isStreamerMode.value) {
+    return [{ id: 'my-builds', label: t('buildsPage.myBuilds') }]
+  }
+
   const availableTabs = [
     { id: 'discover', label: t('buildsPage.discover') },
     { id: 'my-builds', label: t('buildsPage.myBuilds') },
@@ -224,6 +230,10 @@ const tabs = computed(() => {
 
 // Initialiser activeTab depuis l'URL, localStorage, ou par défaut 'discover'
 const getInitialTab = (): string => {
+  if (isStreamerMode.value) {
+    return 'my-builds'
+  }
+
   // Priorité 1: URL query parameter
   if (route.query.tab && typeof route.query.tab === 'string') {
     return route.query.tab
@@ -264,10 +274,29 @@ watch(activeTab, async newTab => {
   await navigateTo({ query: { tab: newTab } }, { replace: true })
 })
 
+watch(
+  isStreamerMode,
+  async enabled => {
+    if (enabled && activeTab.value !== 'my-builds') {
+      activeTab.value = 'my-builds'
+      await navigateTo({ query: { tab: 'my-builds' } }, { replace: true })
+    }
+  },
+  { immediate: true }
+)
+
 // Mettre à jour activeTab quand l'URL change (pour les liens directs)
 watch(
   () => route.query.tab,
-  newTab => {
+  async newTab => {
+    if (isStreamerMode.value) {
+      if (newTab !== 'my-builds') {
+        activeTab.value = 'my-builds'
+        await navigateTo({ query: { tab: 'my-builds' } }, { replace: true })
+      }
+      return
+    }
+
     if (newTab && typeof newTab === 'string' && newTab !== activeTab.value) {
       activeTab.value = newTab
     }
@@ -298,7 +327,7 @@ watch(
   () => tabs.value.map(t => t.id),
   availableTabIds => {
     if (!availableTabIds.includes(activeTab.value)) {
-      activeTab.value = 'discover'
+      activeTab.value = isStreamerMode.value ? 'my-builds' : 'discover'
     }
   }
 )

@@ -646,7 +646,8 @@
   "footer": {
     "legal": "Legal notice",
     "privacy": "Privacy & Cookies",
-    "contact": "Contact"
+    "contact": "Contact",
+    "presentationMode": "Presentation mode"
   },
   "videosPage": {
     "metaTitle": "League of Legends videos - Builds and guides | Lelanation",

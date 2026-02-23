@@ -49,7 +49,7 @@
           <div class="flex-shrink-0 lg:w-auto">
             <div class="relative">
               <div ref="buildCardRef" :data-build-id="build.id">
-                <BuildCard :build="build" :readonly="true" />
+                <BuildCard :build="build" :readonly="true" :sheet-tooltips="true" />
               </div>
               <!-- Boutons d'action utilisateur (supprimer/modifier) -->
               <div v-if="isUserBuild" class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">

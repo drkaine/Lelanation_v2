@@ -25,6 +25,7 @@
               {{ t('createBuild.form') }}
             </button>
             <button
+              v-if="!isStreamerMode"
               type="button"
               class="px-4 py-2 text-sm font-semibold transition-colors"
               :class="
@@ -212,7 +213,7 @@
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
         <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
-          <BuildCard />
+          <BuildCard :sheet-tooltips="true" />
         </div>
       </div>
     </div>
@@ -235,6 +236,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 
 definePageMeta({
   layout: false,
@@ -257,6 +259,7 @@ const localePath = useLocalePath()
 const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const activeTab = ref<'form' | 'stats'>('form')
+const { isStreamerMode } = useStreamerMode()
 const buildName = ref('New Build')
 const buildAuthor = ref('')
 const buildDescription = ref('')
@@ -396,6 +399,12 @@ watch(
   },
   { immediate: true }
 )
+
+watch(isStreamerMode, enabled => {
+  if (enabled && activeTab.value === 'stats') {
+    activeTab.value = 'form'
+  }
+})
 </script>
 
 <style scoped>

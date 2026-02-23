@@ -48,8 +48,8 @@
             :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
             :alt="selectedChampion.name"
             class="champion-portrait"
-            @mouseenter="showTooltip = true"
-            @mouseleave="showTooltip = false"
+            @mouseenter="onChampionMouseEnter"
+            @mouseleave="onChampionMouseLeave"
           />
           <div v-else class="champion-portrait-placeholder"></div>
         </div>
@@ -67,7 +67,7 @@
               :src="getSpellImageUrl(versionForImages, spell.image.full)"
               :alt="spell.name"
               class="summoner-spell-icon"
-              :title="spell?.name || ''"
+              :title="sheetTooltip(spell?.name, 'Summoner Spell')"
             />
           </template>
           <div
@@ -91,7 +91,7 @@
               :src="getRuneIconById(keystoneRuneId)"
               alt="Keystone"
               class="keystone-icon"
-              :title="keystoneRuneId ? getRuneNameById(keystoneRuneId) || 'Rune' : ''"
+              :title="sheetTooltip(keystoneRuneId ? getRuneNameById(keystoneRuneId) : '', 'Rune')"
             />
             <div v-else class="keystone-placeholder"></div>
           </div>
@@ -106,7 +106,7 @@
                 :src="getRuneIconById(runeId)"
                 :alt="`Rune ${index + 1}`"
                 class="primary-rune-icon"
-                :title="runeId ? getRuneNameById(runeId) || 'Rune' : ''"
+                :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
               />
               <div
                 v-for="n in 3 - primaryRunesRow.length"
@@ -123,7 +123,7 @@
                 :src="secondaryPathIcon"
                 :alt="secondaryPathName"
                 class="secondary-path-icon"
-                :title="secondaryPathName || 'Secondary Path'"
+                :title="sheetTooltip(secondaryPathName, 'Secondary Path')"
               />
               <div v-else class="secondary-path-placeholder"></div>
               <!-- Runes secondaires -->
@@ -133,7 +133,7 @@
                 :src="getRuneIconById(runeId)"
                 :alt="`Secondary Rune ${index + 1}`"
                 class="secondary-rune-icon"
-                :title="runeId ? getRuneNameById(runeId) || 'Rune' : ''"
+                :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
               />
               <div
                 v-for="n in 2 - filteredSecondaryRuneIds.length"
@@ -152,7 +152,7 @@
             :src="getShardIconById(shardId)"
             :alt="`Shard ${index + 1}`"
             class="shard-icon-strip"
-            :title="shardId ? getShardNameById(shardId) || 'Shard' : ''"
+            :title="sheetTooltip(shardId ? getShardNameById(shardId) : '', 'Shard')"
           />
           <div
             v-for="n in 3 - filteredShardIds.length"
@@ -174,7 +174,7 @@
               :src="getItemImageUrl(versionForImages, item.image.full)"
               :alt="item.name"
               class="item-icon"
-              :title="item?.name || 'Item'"
+              :title="sheetTooltip(item?.name, 'Item')"
             />
           </div>
           <div
@@ -191,7 +191,7 @@
               :src="getItemImageUrl(versionForImages, bootsItems[0].image.full)"
               :alt="bootsItems[0].name"
               class="boots-icon-single"
-              :title="bootsItems[0]?.name || 'Boots'"
+              :title="sheetTooltip(bootsItems[0]?.name, 'Boots')"
             />
 
             <!-- Deux paires de bottes : image recomposée en deux moitiés -->
@@ -199,12 +199,12 @@
               <div
                 class="boots-item-split boots-item-left"
                 :style="getBootBackgroundStyle(bootsItems[0])"
-                :title="bootsItems[0]?.name || 'Boots'"
+                :title="sheetTooltip(bootsItems[0]?.name, 'Boots')"
               ></div>
               <div
                 class="boots-item-split boots-item-right"
                 :style="getBootBackgroundStyle(bootsItems[1])"
-                :title="bootsItems[1]?.name || 'Boots'"
+                :title="sheetTooltip(bootsItems[1]?.name, 'Boots')"
               ></div>
             </template>
 
@@ -222,7 +222,7 @@
                   :src="getItemImageUrl(versionForImages, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
-                  :title="item?.name || 'Item'"
+                  :title="sheetTooltip(item?.name, 'Item')"
                 />
               </div>
               <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
@@ -247,7 +247,7 @@
                   :src="getItemImageUrl(versionForImages, item.image.full)"
                   :alt="item.name"
                   class="item-icon"
-                  :title="item?.name || 'Item'"
+                  :title="sheetTooltip(item?.name, 'Item')"
                 />
               </div>
               <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
@@ -453,37 +453,49 @@
     <div v-if="!readonly" class="items-manager">
       <div class="items-manager-header">
         <div class="items-manager-title">{{ t('buildCard.itemsManagement') }}</div>
-        <button class="items-reset-btn" type="button" @click="resetItemsOnly">
-          {{ t('buildCard.resetItems') }}
-        </button>
+        <div class="items-manager-header-actions">
+          <button
+            class="items-stats-toggle-btn"
+            type="button"
+            @click="showItemStats = !showItemStats"
+          >
+            {{ showItemStats ? 'Masquer stats items' : 'Stats items' }}
+          </button>
+          <button class="items-reset-btn" type="button" @click="resetItemsOnly">
+            {{ t('buildCard.resetItems') }}
+          </button>
+        </div>
       </div>
       <div v-if="buildItems.length === 0" class="items-manager-empty">
         {{ t('buildCard.noItems') }}
       </div>
-      <div v-else class="items-manager-list">
-        <div
-          v-for="(item, index) in buildItems"
-          :key="`${item.id}-${index}`"
-          class="items-manager-row"
-          draggable="true"
-          @dragstart="onDragStart(index)"
-          @dragover.prevent
-          @drop="onDrop(index)"
-          @dragend="onDragEnd"
-        >
-          <img
-            :src="getItemImageUrl(versionForImages, item.image.full)"
-            :alt="item.name"
-            class="items-manager-icon"
-          />
-          <div class="items-manager-name">
-            <span class="items-manager-index">{{ index + 1 }}.</span>
-            {{ getItemDisplayName(item) }}
+      <div v-else>
+        <div class="items-manager-inline">
+          <template v-for="(item, index) in buildItems" :key="`${item.id}-${index}`">
+            <img
+              :src="getItemImageUrl(versionForImages, item.image.full)"
+              :alt="item.name"
+              class="items-manager-inline-icon"
+              :title="getItemDisplayName(item)"
+            />
+            <span v-if="index < buildItems.length - 1" class="items-manager-inline-separator"
+              >→</span
+            >
+          </template>
+        </div>
+
+        <div v-if="showItemStats" class="items-manager-stats">
+          <p class="items-manager-stats-note">
+            Stats des items (hors starters, et 1 seule botte prise en compte).
+          </p>
+          <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
+            Aucune stat item détectée
           </div>
-          <div class="items-manager-actions">
-            <button class="items-manager-btn danger" type="button" @click="removeItemById(item.id)">
-              ✕
-            </button>
+          <div v-else class="items-manager-stats-grid">
+            <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
+              <span class="items-manager-stats-label">{{ row.label }}</span>
+              <span class="items-manager-stats-value">{{ row.value }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -512,11 +524,13 @@ import type { Build, Item, Role } from '~/types/build'
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
   readonly?: boolean // Si true, désactive les interactions (bouton reset, toggle rôles, etc.)
+  sheetTooltips?: boolean // Active les tooltips de la sheet (summoners/runes/shards/items)
 }
 
 const props = withDefaults(defineProps<Props>(), {
   build: null,
   readonly: false,
+  sheetTooltips: false,
 })
 
 const buildStore = useBuildStore()
@@ -530,6 +544,11 @@ function getItemDisplayName(item: Item): string {
   return full?.name ?? item.name ?? item.id
 }
 
+function sheetTooltip(label?: string | null, fallback = ''): string {
+  if (!props.sheetTooltips) return ''
+  return label?.trim() || fallback
+}
+
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
 
@@ -537,6 +556,14 @@ const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
 const tooltipPosition = ref<'right' | 'left'>('right')
 const tooltipVerticalPosition = ref<'top' | 'bottom'>('top')
+
+const onChampionMouseEnter = () => {
+  showTooltip.value = true
+}
+
+const onChampionMouseLeave = () => {
+  showTooltip.value = false
+}
 
 // Utiliser le build en prop si fourni, sinon le build courant du store
 const displayBuild = computed(() => props.build || buildStore.currentBuild)
@@ -587,7 +614,7 @@ const filteredSummonerSpells = computed(() => {
 })
 const selectedShards = computed(() => displayBuild.value?.shards)
 const buildItems = computed(() => displayBuild.value?.items || [])
-const dragIndex = ref<number | null>(null)
+const showItemStats = ref(false)
 
 // Helper to check if item is boots
 const isBootsItem = (item: Item): boolean => {
@@ -618,66 +645,62 @@ const isBootsItem = (item: Item): boolean => {
   return false
 }
 
+const starterItemIds = new Set([
+  '1036',
+  '1054',
+  '1055',
+  '1056',
+  '1082',
+  '1083',
+  '3070',
+  '3865',
+  '3866',
+  '3867',
+  '2003',
+  '2009',
+  '2010',
+  '2031',
+  '2032',
+  '2033',
+  '2055',
+  '1101',
+  '1102',
+  '1103',
+])
+const starterNamePatterns = [
+  'seau',
+  'anneau de doran',
+  'lame de doran',
+  'bouclier de doran',
+  'larme de la déesse',
+  'cull',
+  'abatteur',
+  'atlas',
+  'épée de voleur',
+  'épée longue',
+  'long sword',
+  'faucheuse',
+  'fragment',
+  'potion',
+  'ward',
+  'elixir',
+  'biscuit',
+]
+const atlasUpgradeIds = new Set(['3869', '3870', '3871', '3876', '3877'])
+
+const isStarterItem = (item: Item): boolean => {
+  if (atlasUpgradeIds.has(item.id)) return false
+  const itemNameLower = item.name.toLowerCase()
+  return (
+    starterItemIds.has(item.id) ||
+    starterNamePatterns.some(pattern => itemNameLower.includes(pattern)) ||
+    Boolean(item.tags && item.tags.includes('Consumable'))
+  )
+}
+
 // Starting items (2 premiers - starter items only)
 const startingItems = computed(() => {
-  return buildItems.value
-    .filter(item => {
-      // Check if it's a starter item (not boots)
-      const itemNameLower = item.name.toLowerCase()
-      const starterPatterns = [
-        'seau',
-        'anneau de doran',
-        'lame de doran',
-        'bouclier de doran',
-        'larme de la déesse',
-        'cull',
-        'abatteur',
-        'atlas',
-        'épée de voleur',
-        'épée longue', // Long Sword
-        'long sword',
-        'faucheuse',
-        'fragment',
-        'potion',
-        'ward',
-        'elixir',
-        'biscuit',
-      ]
-      // Starters : base items uniquement. Les améliorations d'Atlas (3869, 3870, etc.) ne sont PAS des starters.
-      const atlasUpgradeIds = ['3869', '3870', '3871', '3876', '3877']
-      if (atlasUpgradeIds.includes(item.id)) {
-        return false
-      }
-      const starterIds = [
-        '1036', // Épée longue (Long Sword)
-        '1054',
-        '1055',
-        '1056',
-        '1082',
-        '1083',
-        '3070',
-        '3865', // Atlas (base)
-        '3866',
-        '3867',
-        '2003',
-        '2009',
-        '2010',
-        '2031',
-        '2032',
-        '2033',
-        '2055',
-        // Jungle pets (bébés)
-        '1101', // Scorchclaw Pup / Bébé chardent
-        '1102', // Gustwalker Hatchling / Bébé sautes-nuage
-        '1103', // Mosstomper Seedling / Bébé ixamandre
-      ]
-      return (
-        starterIds.includes(item.id) ||
-        starterPatterns.some(pattern => itemNameLower.includes(pattern)) ||
-        (item.tags && item.tags.includes('Consumable'))
-      )
-    })
-    .slice(0, 2)
+  return buildItems.value.filter(item => isStarterItem(item)).slice(0, 2)
 })
 
 // Boots items (can have 2, they share 1 slot)
@@ -942,33 +965,6 @@ const resetBuild = () => {
   buildStore.saveBuild()
 }
 
-const removeItemById = (itemId: string) => {
-  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
-  buildStore.removeItem(itemId)
-}
-
-const onDragStart = (index: number) => {
-  dragIndex.value = index
-}
-
-const onDrop = (index: number) => {
-  if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
-  if (dragIndex.value === null || dragIndex.value === index) return
-  const items = buildItems.value.slice() as Item[]
-  const moved = items.splice(dragIndex.value, 1)[0]
-  if (!moved) {
-    dragIndex.value = null
-    return
-  }
-  items.splice(index, 0, moved)
-  buildStore.setItems(items)
-  dragIndex.value = null
-}
-
-const onDragEnd = () => {
-  dragIndex.value = null
-}
-
 const resetItemsOnly = () => {
   if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
   buildStore.setItems([])
@@ -980,6 +976,91 @@ const getBootBackgroundStyle = (item?: Item | null) => {
     backgroundImage: `url(${getItemImageUrl(versionForImages.value, item.image.full)})`,
   }
 }
+
+const itemStatsTotals = computed(() => {
+  const totals = {
+    health: 0,
+    mana: 0,
+    attackDamage: 0,
+    abilityPower: 0,
+    armor: 0,
+    magicResist: 0,
+    attackSpeedPercent: 0,
+    critChancePercent: 0,
+    lifeStealPercent: 0,
+    omnivampPercent: 0,
+    movementSpeedFlat: 0,
+    movementSpeedPercent: 0,
+    healthRegen: 0,
+    manaRegen: 0,
+    lethality: 0,
+    armorPenPercent: 0,
+    magicPenPercent: 0,
+    abilityHaste: 0,
+  }
+
+  const nonStarter = buildItems.value.filter(item => !isStarterItem(item))
+  let firstBootKept = false
+  const itemsForStats = nonStarter.filter(item => {
+    if (!isBootsItem(item)) return true
+    if (firstBootKept) return false
+    firstBootKept = true
+    return true
+  })
+
+  for (const item of itemsForStats) {
+    if (!item.stats) continue
+    totals.health += item.stats.FlatHPPoolMod || 0
+    totals.mana += item.stats.FlatMPPoolMod || 0
+    totals.attackDamage += item.stats.FlatPhysicalDamageMod || 0
+    totals.abilityPower += item.stats.FlatMagicDamageMod || 0
+    totals.armor += item.stats.FlatArmorMod || 0
+    totals.magicResist += item.stats.FlatSpellBlockMod || 0
+    totals.attackSpeedPercent += item.stats.PercentAttackSpeedMod || 0
+    totals.critChancePercent += item.stats.FlatCritChanceMod || 0
+    totals.lifeStealPercent += item.stats.PercentLifeStealMod || 0
+    totals.movementSpeedFlat += item.stats.FlatMovementSpeedMod || 0
+    totals.movementSpeedPercent += item.stats.PercentMovementSpeedMod || 0
+    totals.healthRegen += item.stats.FlatHPRegenMod || 0
+    totals.manaRegen += item.stats.FlatMPRegenMod || 0
+    totals.armorPenPercent += (item.stats.rPercentArmorPenetrationMod || 0) * 100
+    totals.magicPenPercent += (item.stats.rPercentSpellPenetrationMod || 0) * 100
+    totals.abilityHaste += item.stats.rFlatCooldownModPerLevel || 0
+    totals.lethality += (item.stats as any).FlatLethality || 0
+    totals.omnivampPercent +=
+      ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
+  }
+
+  return totals
+})
+
+const itemStatsRows = computed(() => {
+  const s = itemStatsTotals.value
+  const rows: Array<{ key: string; label: string; value: string }> = []
+  const add = (key: string, label: string, value: number, suffix = '', digits = 0) => {
+    if (!Number.isFinite(value) || Math.abs(value) < 0.01) return
+    rows.push({ key, label, value: `+${value.toFixed(digits)}${suffix}` })
+  }
+  add('health', 'PV', s.health)
+  add('mana', 'Mana', s.mana)
+  add('attackDamage', 'AD', s.attackDamage)
+  add('abilityPower', 'AP', s.abilityPower)
+  add('armor', 'Armure', s.armor)
+  add('magicResist', 'RM', s.magicResist)
+  add('attackSpeedPercent', 'Vitesse d’attaque', s.attackSpeedPercent, '%', 1)
+  add('critChancePercent', 'Critique', s.critChancePercent, '%', 1)
+  add('lifeStealPercent', 'Vol de vie', s.lifeStealPercent, '%', 1)
+  add('omnivampPercent', 'Omnivamp', s.omnivampPercent, '%', 1)
+  add('movementSpeedFlat', 'Vitesse déplacement (flat)', s.movementSpeedFlat)
+  add('movementSpeedPercent', 'Vitesse déplacement', s.movementSpeedPercent, '%', 1)
+  add('healthRegen', 'Régénération PV', s.healthRegen, '', 1)
+  add('manaRegen', 'Régénération mana', s.manaRegen, '', 1)
+  add('lethality', 'Létalité', s.lethality)
+  add('armorPenPercent', 'Pénétration armure', s.armorPenPercent, '%', 1)
+  add('magicPenPercent', 'Pénétration magique', s.magicPenPercent, '%', 1)
+  add('abilityHaste', 'Hâte', s.abilityHaste)
+  return rows
+})
 
 // Persistance automatique - sauvegarder à chaque modification (seulement si pas de build en prop)
 watch(
@@ -1454,6 +1535,13 @@ watch(locale, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.items-manager-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .items-manager-title {
@@ -1472,8 +1560,21 @@ watch(locale, () => {
   cursor: pointer;
 }
 
+.items-stats-toggle-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.45);
+  background: rgba(200, 155, 60, 0.18);
+  cursor: pointer;
+}
+
 .items-reset-btn:hover {
   background: rgba(0, 0, 0, 0.55);
+}
+
+.items-stats-toggle-btn:hover {
+  background: rgba(200, 155, 60, 0.28);
 }
 
 .items-manager-empty {
@@ -1481,65 +1582,64 @@ watch(locale, () => {
   opacity: 0.7;
 }
 
-.items-manager-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.items-manager-row {
+.items-manager-inline {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.items-manager-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-}
-
-.items-manager-name {
-  flex: 1;
-  font-size: 12px;
-  overflow: hidden;
+  gap: 4px;
+  width: 100%;
+  overflow-x: auto;
   white-space: nowrap;
-  text-overflow: ellipsis;
+  padding-bottom: 4px;
 }
 
-.items-manager-index {
-  opacity: 0.7;
-  margin-right: 4px;
+.items-manager-inline-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--color-gold-300);
+  flex: 0 0 auto;
 }
 
-.items-manager-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.items-manager-btn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: inherit;
-  font-weight: 700;
+.items-manager-inline-separator {
   font-size: 12px;
-  line-height: 1;
+  color: var(--color-gold-300);
+  opacity: 0.9;
+  flex: 0 0 auto;
 }
 
-.items-manager-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+.items-manager-stats {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.items-manager-btn.danger {
-  border-color: rgba(255, 80, 80, 0.35);
-  background: rgba(255, 80, 80, 0.12);
+.items-manager-stats-note {
+  font-size: 11px;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+.items-manager-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.items-manager-stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+.items-manager-stats-label {
+  opacity: 0.85;
+}
+
+.items-manager-stats-value {
+  color: var(--color-gold-300);
+  font-weight: 600;
 }
 
 .core-items-paths {

@@ -40,13 +40,16 @@
     <div v-else class="items-list mt-2">
       <template v-for="category in categoryOrderKeys" :key="category">
         <div v-if="itemsByCategory[category]?.length > 0" class="category-section">
-          <button class="category-header" @click="toggleCategory(category)">
+          <button v-if="!isStreamerMode" class="category-header" @click="toggleCategory(category)">
             <span>{{ getCategoryLabel(category) }}</span>
             <span class="category-toggle-icon" :class="{ collapsed: !isCategoryVisible(category) }">
               ▼
             </span>
           </button>
-          <div class="category-items" :class="{ collapsed: !isCategoryVisible(category) }">
+          <div
+            class="category-items"
+            :class="{ collapsed: !isCategoryVisible(category) && !isStreamerMode }"
+          >
             <div
               v-for="item in itemsByCategory[category]"
               :key="item.id"
@@ -63,7 +66,9 @@
                   (!isSelected(item) && !canAddItem(item))
                 "
                 :title="
-                  !isSelected(item) && !canAddItem(item) ? getItemValidationError(item) || '' : ''
+                  !isStreamerMode && !isSelected(item) && !canAddItem(item)
+                    ? getItemValidationError(item) || ''
+                    : ''
                 "
                 @click="toggleItem(item)"
               >
@@ -87,7 +92,7 @@
 
       <!-- Tooltip -->
       <div
-        v-if="hoveredItem"
+        v-if="hoveredItem && !isStreamerMode"
         ref="tooltipRef"
         class="item-tooltip pointer-events-none fixed z-50 rounded-lg border border-accent bg-background shadow-lg"
         :style="tooltipStyle"
@@ -146,6 +151,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
 const { locale, t } = useI18n()
+const { isStreamerMode } = useStreamerMode()
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
@@ -437,9 +443,11 @@ const itemsByCategory = computed(() => {
 
 // Category order keys for template iteration
 const categoryOrderKeys = computed(() => {
-  return Object.keys(categoryOrder).sort(
+  const ordered = Object.keys(categoryOrder).sort(
     (a, b) => categoryOrder[a as ItemCategory] - categoryOrder[b as ItemCategory]
   ) as ItemCategory[]
+  if (!isStreamerMode.value) return ordered
+  return ordered.filter(category => category !== 'basic' && category !== 'epic')
 })
 
 // Get category label for display
@@ -831,6 +839,7 @@ const tooltipStyle = computed(() => {
 
 // Handle mouse move to update tooltip position
 const handleMouseMove = (event: MouseEvent) => {
+  if (isStreamerMode.value) return
   if (hoveredItem.value) {
     tooltipPosition.value = {
       x: event.clientX,
@@ -844,6 +853,7 @@ const handleMouseMove = (event: MouseEvent) => {
 
 // Handle item hover
 const handleItemHover = (item: Item, event: MouseEvent) => {
+  if (isStreamerMode.value) return
   hoveredItem.value = item
   tooltipPosition.value = {
     x: event.clientX,
@@ -866,6 +876,12 @@ watch(hoveredItem, async newValue => {
   } else {
     window.removeEventListener('scroll', updateTooltipPosition, true)
     window.removeEventListener('resize', updateTooltipPosition)
+  }
+})
+
+watch(isStreamerMode, enabled => {
+  if (enabled) {
+    hoveredItem.value = null
   }
 })
 

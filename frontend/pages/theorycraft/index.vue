@@ -293,6 +293,7 @@ import type { SpellDefinition } from '~/types/theorycraft'
 import { isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
 import { getChampionPassiveStacks } from '~/utils/passiveStacks'
 import { calculateMagicDamage, type EnemyTarget } from '~/utils/realDamage'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
@@ -309,6 +310,7 @@ const { t } = useI18n()
 const localePath = useLocalePath()
 const buildStore = useBuildStore()
 const theorycraftStore = useTheorycraftStore()
+const { isStreamerMode } = useStreamerMode()
 
 useHead({
   title: () => t('theorycraft.metaTitle'),
@@ -358,12 +360,18 @@ watch(
   { immediate: true }
 )
 
+watch(isStreamerMode, enabled => {
+  if (enabled && activeTheorycraftTab.value === 'stats') {
+    activeTheorycraftTab.value = 'champion'
+  }
+})
+
 const theorycraftTabs = computed(() => [
   { id: 'champion' as const, label: t('theorycraft.tabChampion') },
   { id: 'runes' as const, label: t('theorycraft.tabRunes') },
   { id: 'items' as const, label: t('theorycraft.tabItems') },
   { id: 'skillOrder' as const, label: t('theorycraft.tabSkillOrder') },
-  { id: 'stats' as const, label: t('theorycraft.tabStats') },
+  ...(!isStreamerMode.value ? [{ id: 'stats' as const, label: t('theorycraft.tabStats') }] : []),
   { id: 'skill' as const, label: t('theorycraft.tabSkill') },
   { id: 'target' as const, label: t('theorycraft.tabTarget') },
 ])
