@@ -1,9 +1,16 @@
 /**
  * Stats d'abandon : remake (participants sans items = non connectés), surrender (early / normal).
  * Remake = match où au moins un participant n'a aucun item (déco / non connecté).
+ * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+
+const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
+const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
+function abandonsCacheKey(pVersion: string | null, pRankTier: string | null): string {
+  return `${pVersion ?? ''}|${pRankTier ?? ''}`
+}
 
 export interface OverviewAbandonsResult {
   totalMatches: number
@@ -33,6 +40,10 @@ export async function getOverviewAbandons(
   if (!isDatabaseConfigured()) return null
   const pVersion = normalizeParam(version)
   const pRankTier = normalizeParam(rankTier)
+  const now = Date.now()
+  const cacheKey = abandonsCacheKey(pVersion, pRankTier)
+  const cached = abandonsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const versionPrefix = pVersion ? `${pVersion}%` : '%'
@@ -92,7 +103,7 @@ export async function getOverviewAbandons(
     )
     const surrenderCount = Number(surrenderResult[0]?.count ?? 0)
 
-    return {
+    const result: OverviewAbandonsResult = {
       totalMatches,
       remakeCount,
       remakeRate: (remakeCount / totalMatches) * 100,
@@ -101,6 +112,8 @@ export async function getOverviewAbandons(
       surrenderCount,
       surrenderRate: (surrenderCount / totalMatches) * 100,
     }
+    abandonsCache.set(cacheKey, { data: result, expiresAt: now + ABANDONS_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.warn('[getOverviewAbandons]', err)
     return null

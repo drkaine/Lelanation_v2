@@ -199,6 +199,33 @@ export class RiotApiService {
   }
 
   /**
+   * League-exp v4: entries by queue/tier/division (IRON..DIAMOND). Platform: euw1, eun1.
+   * Endpoint: /lol/league-exp/v4/entries/{queue}/{tier}/{division}
+   */
+  async getLeagueExpEntries(
+    platform: 'euw1' | 'eun1',
+    queue: string,
+    tier: 'DIAMOND' | 'EMERALD' | 'PLATINUM' | 'GOLD' | 'SILVER' | 'BRONZE' | 'IRON',
+    division: 'I' | 'II' | 'III' | 'IV',
+    page: number = 1
+  ): Promise<Result<LeagueEntry[], AppError>> {
+    await rateLimit()
+    const key = await this.ensureKey()
+    const base = PLATFORM_BASE[platform]
+    if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key)
+    const path = `/lol/league-exp/v4/entries/${encodeURIComponent(queue)}/${tier.toUpperCase()}/${division.toUpperCase()}`
+    try {
+      const res = await withRetry429(() => client.get<LeagueEntry[]>(path, { params: { page } }))
+      const list = Array.isArray(res.data) ? res.data : []
+      return Result.ok(list)
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`League-exp API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
    * League v4: Challenger league (full list). Platform: euw1, eun1.
    */
   async getChallengerLeague(platform: 'euw1' | 'eun1'): Promise<Result<LeagueEntry[], AppError>> {
@@ -472,7 +499,7 @@ export class RiotApiService {
     options: {
       count?: number
       start?: number
-      queue?: number
+      queue?: number | null
       startTime?: number
       endTime?: number
     } = {}
@@ -482,8 +509,9 @@ export class RiotApiService {
     const client = createClient(REGIONAL_BASE, key)
     const count = options.count ?? 20
     const start = options.start ?? 0
-    const queue = options.queue ?? QUEUE_ID_420
-    const params: Record<string, number> = { count, start, queue }
+    const queue = options.queue === null ? null : (options.queue ?? QUEUE_ID_420)
+    const params: Record<string, number> = { count, start }
+    if (typeof queue === 'number') params.queue = queue
     if (typeof options.startTime === 'number') params.startTime = options.startTime
     if (typeof options.endTime === 'number') params.endTime = options.endTime
     try {

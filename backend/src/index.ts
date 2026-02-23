@@ -14,8 +14,10 @@ import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupRiotMatchCollect } from './cron/riotMatchCollect.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
+import { setupStatsPrecomputedRefresh, runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
 import { getOverviewDetailStats } from './services/StatsOverviewService.js'
+import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -56,6 +58,7 @@ try {
   setupYouTubeSync()
   setupCommunityDragonSync()
   setupRiotMatchCollect()
+  setupStatsPrecomputedRefresh()
   console.log('[Server] ✅ All cron jobs initialized successfully')
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
@@ -67,7 +70,7 @@ app.listen(PORT, () => {
   console.log(`Cron jobs initialized`)
   console.log(`Current time: ${new Date().toISOString()}`)
   console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
-  // Précharger le cache overview-detail (sans filtre) pour les deux clés includeSmite (page stats + page champion) pour limiter les 504
+  // Précharger le cache overview-detail (sans filtre) pour limiter les 504
   setTimeout(() => {
     Promise.all([
       getOverviewDetailStats(null, null, false),
@@ -77,6 +80,13 @@ app.listen(PORT, () => {
       (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
     )
   }, 15_000)
+  // Préchargement étendu en arrière-plan (rankTiers, champions par rank, duration/abandons/sides) pour éviter 504 et premières requêtes lentes
+  scheduleStatsPrewarm()
+  // Remplir les tables pré-calculées tout de suite (champions par rôle en premier dans le refresh)
+  runStatsPrecomputedRefreshOnce().then(
+    (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
+    (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
+  )
 })
 
 export default app

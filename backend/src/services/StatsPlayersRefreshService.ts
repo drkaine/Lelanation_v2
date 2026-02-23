@@ -71,6 +71,26 @@ export async function countParticipantsMissingRank(): Promise<number> {
 }
 
 /**
+ * Count participants without role (role null). Used to skip role backfill when 0.
+ */
+export async function countParticipantsMissingRole(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  return prisma.participant.count({ where: { role: null } })
+}
+
+function normalizeRole(teamPosition?: string, individualPosition?: string): string | null {
+  const pos = teamPosition ?? individualPosition ?? ''
+  if (!pos || pos === 'Invalid' || pos === '') return null
+  const upper = pos.toUpperCase()
+  if (['TOP', 'JUNGLE', 'MIDDLE', 'MID', 'BOTTOM', 'BOT', 'UTILITY'].includes(upper)) {
+    if (upper === 'MID') return 'MIDDLE'
+    if (upper === 'BOT') return 'BOTTOM'
+    return upper
+  }
+  return null
+}
+
+/**
  * Enrich players missing summoner_name (Riot ID via Account-V1 by-puuid).
  * Run with a higher limit to fill summoner_name for many players (e.g. 100).
  */
@@ -237,6 +257,56 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
   }
   console.log(`${BACKFILL_RANK_LOG} Updated ${updated} participants (${puuids.length} PUUIDs), ${errors} errors`)
   return { updated, errors }
+}
+
+/**
+ * Backfill participant role for rows where role is null, by refetching recent matches from Riot.
+ * limitMatches = max number of matches to inspect in one run.
+ */
+export async function backfillParticipantRoles(limitMatches = 50): Promise<{ updated: number; errors: number; matches: number }> {
+  if (!isDatabaseConfigured()) {
+    console.warn('[backfill-role] Skipped: database not configured')
+    return { updated: 0, errors: 0, matches: 0 }
+  }
+  const riotApi = getRiotApiService()
+  const safeLimit = Number.isFinite(limitMatches) ? Math.max(1, Math.min(500, Math.trunc(limitMatches))) : 50
+  const rows = await prisma.$queryRaw<Array<{ id: bigint; matchId: string; region: string }>>`
+    SELECT m.id, m.match_id AS "matchId", m.region
+    FROM matches m
+    WHERE EXISTS (
+      SELECT 1
+      FROM participants p
+      WHERE p.match_id = m.id
+        AND p.role IS NULL
+    )
+    ORDER BY m.id DESC
+    LIMIT ${safeLimit}
+  `
+
+  let updated = 0
+  let errors = 0
+  for (const row of rows) {
+    const matchRes = await riotApi.getMatch(row.matchId)
+    if (matchRes.isErr()) {
+      errors++
+      continue
+    }
+    const match = matchRes.unwrap()
+    const participants = match.info?.participants ?? []
+    for (const p of participants) {
+      const puuid = typeof p.puuid === 'string' ? p.puuid.trim() : ''
+      if (!puuid) continue
+      const role = normalizeRole(p.teamPosition, p.individualPosition)
+      if (!role) continue
+      const r = await prisma.participant.updateMany({
+        where: { matchId: row.id, puuid, role: null },
+        data: { role },
+      })
+      updated += r.count
+    }
+  }
+
+  return { updated, errors, matches: rows.length }
 }
 
 /**

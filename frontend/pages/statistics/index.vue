@@ -3305,15 +3305,21 @@ function overviewQueryParams(): string {
 const STATS_FETCH_TIMEOUT_MS = 90_000
 
 /** Logs de perf (dev only) pour identifier ce qui ralentit l’affichage des stats. */
-const STATS_PERF = import.meta.dev
+function isStatsPerfEnabled(): boolean {
+  if (import.meta.dev) return true
+  if (import.meta.client && typeof window !== 'undefined') {
+    return new URLSearchParams(window.location.search).get('stats_perf') === '1'
+  }
+  return false
+}
 function statsPerfStart(label: string): number {
-  if (!STATS_PERF) return 0
+  if (!isStatsPerfEnabled()) return 0
   // eslint-disable-next-line no-console
   console.log('[Stats perf]', label, 'start')
   return performance.now()
 }
 function statsPerfEnd(label: string, start: number) {
-  if (!STATS_PERF || start === 0) return
+  if (!isStatsPerfEnabled() || start === 0) return
   // eslint-disable-next-line no-console
   console.log('[Stats perf]', label, Math.round(performance.now() - start) + 'ms')
 }
@@ -3325,7 +3331,7 @@ function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch
   return $fetch(url, {
     ...options,
     onResponse: ctx => {
-      if (STATS_PERF && ctx.response?.headers) {
+      if (isStatsPerfEnabled() && ctx.response?.headers) {
         const backendMs = ctx.response.headers.get('X-Backend-Time')
         const sqlMs = ctx.response.headers.get('X-SQL-Time')
         const path = ctx.response.headers.get('X-Stats-Path') || url
@@ -4182,7 +4188,7 @@ function sortedItemsBySlot(
 }
 
 watch(activeTab, async tab => {
-  if (STATS_PERF) {
+  if (isStatsPerfEnabled()) {
     // eslint-disable-next-line no-console
     console.log('[Stats perf] activeTab', tab)
   }
@@ -4212,6 +4218,14 @@ onMounted(async () => {
     : versionStore.loadCurrentVersion()
   // Priorité: overview + champions (noms dans les cartes). Les stores runes/items/sorts
   // et la liste des champions (onglet) partent en arrière-plan pour ne pas saturer l’API.
+  if (import.meta.client) {
+    // eslint-disable-next-line no-console
+    console.log(
+      isStatsPerfEnabled()
+        ? '[Stats perf] logs activés — durées dans la console'
+        : '[Stats perf] pour afficher les durées, ajoute ?stats_perf=1 à l’URL'
+    )
+  }
   const tPage = statsPerfStart('page mount (version + overview + championsStore)')
   const tVersion = statsPerfStart('version')
   await versionPromise
@@ -4226,7 +4240,7 @@ onMounted(async () => {
   ])
   statsPerfEnd('page mount', tPage)
   // Chargement en arrière-plan (sans bloquer le rendu)
-  if (STATS_PERF) {
+  if (isStatsPerfEnabled()) {
     // eslint-disable-next-line no-console
     console.log('[Stats perf] background: itemsStore, runesStore, summonerSpellsStore')
   }

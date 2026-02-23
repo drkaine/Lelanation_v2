@@ -180,44 +180,255 @@
               </div>
             </div>
           </template>
+          <div class="mt-4 space-y-3">
+            <div
+              v-for="card in riotScriptCards"
+              :key="card.id"
+              class="rounded border border-primary/20 bg-background/40 p-3"
+            >
+              <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p class="text-sm font-semibold text-text">{{ card.label }}</p>
+                  <p class="text-xs text-text/60">{{ card.description }}</p>
+                </div>
+                <span
+                  :class="riotStatusClass(riotScriptsStatus[card.id]?.status)"
+                  class="rounded px-2 py-0.5 text-xs font-medium"
+                >
+                  {{ riotStatusLabel(riotScriptsStatus[card.id]?.status) }}
+                </span>
+              </div>
+
+              <div v-if="card.fields.length" class="mb-3 grid gap-2 md:grid-cols-3">
+                <div v-for="field in card.fields" :key="`${card.id}-${field.key}`">
+                  <label class="mb-1 block text-xs font-medium text-text/70">{{
+                    field.label
+                  }}</label>
+                  <select
+                    v-if="field.type === 'select'"
+                    v-model="riotScriptFields[card.id]![field.key]"
+                    class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                  >
+                    <option
+                      v-for="opt in field.options ?? []"
+                      :key="`${card.id}-${field.key}-${opt.value}`"
+                      :value="opt.value"
+                    >
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                  <input
+                    v-else
+                    v-model="riotScriptFields[card.id]![field.key]"
+                    :type="field.type"
+                    class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                    :placeholder="field.placeholder"
+                  />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="riotScriptBusy[card.id] || isScriptActive(card.id)"
+                  @click="runRiotScript(card)"
+                >
+                  {{ riotScriptBusy[card.id] ? '…' : t('admin.riotMatch.scripts.run') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80"
+                  @click="openRiotScriptLogs(card.id, card.label)"
+                >
+                  {{ t('admin.riotMatch.scripts.logs') }}
+                </button>
+                <button
+                  v-if="isScriptActive(card.id)"
+                  type="button"
+                  class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                  :disabled="riotScriptStopBusy[card.id]"
+                  @click="stopRiotScript(card)"
+                >
+                  {{ riotScriptStopBusy[card.id] ? '…' : t('admin.riotMatch.scripts.stop') }}
+                </button>
+              </div>
+              <p v-if="riotScriptsStatus[card.id]?.lastStartAt" class="mt-2 text-xs text-text/60">
+                Start: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastStartAt) }}
+                <span v-if="riotScriptsStatus[card.id]?.lastEndAt">
+                  · Stop: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastEndAt) }}
+                </span>
+              </p>
+            </div>
+          </div>
           <div class="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-              :disabled="riotCollectTriggering"
-              @click="triggerRiotCollect"
-            >
-              {{ riotCollectTriggering ? '…' : t('admin.riotMatch.trigger') }}
-            </button>
-            <button
-              type="button"
-              class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80 disabled:opacity-50"
-              :disabled="riotBackfillTriggering"
-              :title="t('admin.riotMatch.backfillTitle')"
-              @click="triggerRiotBackfillRanks"
-            >
-              {{ riotBackfillTriggering ? '…' : t('admin.riotMatch.backfillRanks') }}
-            </button>
-            <button
-              v-if="cron?.riotWorker?.active"
-              type="button"
-              class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:opacity-50 dark:text-red-400"
-              :disabled="riotStopTriggering"
-              @click="triggerRiotWorkerStop"
-            >
-              {{ riotStopTriggering ? '…' : t('admin.riotMatch.stopPoller') }}
-            </button>
             <p
-              v-if="riotCollectMessage || riotStopMessage || riotBackfillMessage"
+              v-if="
+                riotCollectMessage ||
+                riotStopMessage ||
+                riotBackfillMessage ||
+                riotLeagueExpMessage ||
+                riotScriptMessage
+              "
               :class="
-                riotCollectError || riotStopError || riotBackfillError
+                riotCollectError ||
+                riotStopError ||
+                riotBackfillError ||
+                riotLeagueExpError ||
+                riotScriptError
                   ? 'text-error'
                   : 'text-green-600'
               "
               class="mt-2 text-sm"
             >
-              {{ riotCollectMessage || riotStopMessage || riotBackfillMessage }}
+              {{
+                riotCollectMessage ||
+                riotStopMessage ||
+                riotBackfillMessage ||
+                riotLeagueExpMessage ||
+                riotScriptMessage
+              }}
             </p>
+          </div>
+        </div>
+
+        <div
+          v-if="riotScriptLogsOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          @click.self="riotScriptLogsOpen = false"
+        >
+          <div
+            class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
+          >
+            <div class="flex items-center justify-between border-b border-primary/20 px-4 py-3">
+              <h3 class="text-sm font-semibold text-text">
+                {{ t('admin.riotMatch.scripts.logsTitle') }} - {{ riotScriptLogsTitle }}
+              </h3>
+              <button
+                type="button"
+                class="rounded border border-primary/30 px-2 py-1 text-xs text-text"
+                @click="riotScriptLogsOpen = false"
+              >
+                {{ t('admin.riotMatch.scripts.close') }}
+              </button>
+            </div>
+            <div class="max-h-[65vh] overflow-auto p-4">
+              <p v-if="riotScriptLogsLoading" class="text-sm text-text/70">Chargement…</p>
+              <p v-else-if="riotScriptLogs.length === 0" class="text-sm text-text/70">
+                {{ t('admin.riotMatch.scripts.noLogs') }}
+              </p>
+              <pre v-else class="whitespace-pre-wrap text-xs text-text">{{
+                riotScriptLogs.join('\n')
+              }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Replay links -->
+      <div v-show="activeTab === 'replays'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-2 text-lg font-semibold text-text">{{ t('admin.replays.title') }}</h2>
+          <p class="mb-4 text-sm text-text/80">{{ t('admin.replays.description') }}</p>
+
+          <div class="grid gap-3 sm:grid-cols-4">
+            <div class="sm:col-span-2">
+              <label class="mb-1 block text-xs font-medium text-text/70">
+                {{ t('admin.replays.summonerName') }}
+              </label>
+              <input
+                v-model.trim="replaySummonerName"
+                type="text"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                :placeholder="t('admin.replays.summonerPlaceholder')"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">
+                {{ t('admin.replays.region') }}
+              </label>
+              <select
+                v-model="replayRegion"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+              >
+                <option value="euw1">EUW1</option>
+                <option value="eun1">EUN1</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">
+                {{ t('admin.replays.matchCount') }}
+              </label>
+              <input
+                v-model.number="replayCount"
+                type="number"
+                min="1"
+                max="100"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+              />
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <button
+              type="button"
+              class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              :disabled="replayLoading || !replaySummonerName"
+              @click="fetchReplayLinks"
+            >
+              {{ replayLoading ? '…' : t('admin.replays.fetch') }}
+            </button>
+          </div>
+
+          <p
+            v-if="replayMessage"
+            class="mt-3 text-sm"
+            :class="replayError ? 'text-error' : 'text-green-600'"
+          >
+            {{ replayMessage }}
+          </p>
+
+          <div v-if="replayResult?.matches?.length" class="mt-4 space-y-2">
+            <p class="text-sm text-text/70">
+              {{ replayResult.summonerName }} · {{ replayResult.region }} ·
+              {{ replayResult.countReturned }}
+              {{ t('admin.replays.matches') }}
+            </p>
+            <ul class="space-y-2">
+              <li
+                v-for="m in replayResult.matches"
+                :key="m.matchId"
+                class="rounded border border-primary/20 bg-background/50 p-3"
+              >
+                <p class="text-sm font-medium text-text">{{ m.matchId }}</p>
+                <div class="mt-1 flex flex-wrap gap-3 text-sm">
+                  <a
+                    class="text-accent underline"
+                    :href="m.replayUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ t('admin.replays.replayLink') }}
+                  </a>
+                  <a
+                    class="text-text/70 underline"
+                    :href="m.matchApiUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    match API
+                  </a>
+                  <a
+                    class="text-text/70 underline"
+                    :href="m.timelineApiUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    timeline API
+                  </a>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
@@ -649,7 +860,14 @@ const { fetchWithAuth, clearAuth, checkLoggedIn } = useAdminAuth()
 
 const authError = ref<string | null>(null)
 const activeTab = ref<
-  'contact' | 'builds' | 'videos' | 'apikey' | 'riotmatch' | 'seedplayers' | 'cronstatus'
+  | 'contact'
+  | 'builds'
+  | 'videos'
+  | 'apikey'
+  | 'riotmatch'
+  | 'seedplayers'
+  | 'replays'
+  | 'cronstatus'
 >('contact')
 
 const adminTabs = computed(() => [
@@ -659,7 +877,136 @@ const adminTabs = computed(() => [
   { id: 'apikey' as const, label: t('admin.tabs.apikeyRiot') },
   { id: 'riotmatch' as const, label: t('admin.tabs.riotMatch') },
   { id: 'seedplayers' as const, label: t('admin.tabs.seedPlayers') },
+  { id: 'replays' as const, label: t('admin.tabs.replays') },
   { id: 'cronstatus' as const, label: t('admin.tabs.cronStatus') },
+])
+
+type RiotScriptField = {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'select'
+  placeholder?: string
+  defaultValue?: string
+  options?: Array<{ value: string; label: string }>
+}
+type RiotScriptCard = {
+  id: string
+  label: string
+  description: string
+  runMode: 'generic' | 'collect' | 'backfillRanks' | 'backfillRoles' | 'discoverLeagueExp'
+  fields: RiotScriptField[]
+}
+
+const riotScriptCards = computed<RiotScriptCard[]>(() => [
+  {
+    id: 'riot:worker',
+    label: t('admin.riotMatch.scripts.worker'),
+    description: t('admin.riotMatch.pollerHint'),
+    runMode: 'generic',
+    fields: [],
+  },
+  {
+    id: 'riot:collect',
+    label: t('admin.riotMatch.scripts.collectOnce'),
+    description: t('admin.riotMatch.triggerBackground'),
+    runMode: 'collect',
+    fields: [],
+  },
+  {
+    id: 'riot:backfill-ranks',
+    label: t('admin.riotMatch.scripts.backfillRanks'),
+    description: t('admin.riotMatch.backfillTitle'),
+    runMode: 'backfillRanks',
+    fields: [
+      { key: 'limit', label: 'Limit', type: 'number', defaultValue: '200', placeholder: '200' },
+    ],
+  },
+  {
+    id: 'riot:backfill-roles',
+    label: t('admin.riotMatch.scripts.backfillRoles'),
+    description: t('admin.riotMatch.scripts.backfillRoles'),
+    runMode: 'backfillRoles',
+    fields: [
+      { key: 'limit', label: 'Matches', type: 'number', defaultValue: '50', placeholder: '50' },
+    ],
+  },
+  {
+    id: 'riot:discover-league-exp',
+    label: t('admin.riotMatch.scripts.discoverLeagueExp'),
+    description: t('admin.riotMatch.leagueExpTitle'),
+    runMode: 'discoverLeagueExp',
+    fields: [
+      {
+        key: 'platform',
+        label: 'Platform',
+        type: 'select',
+        defaultValue: 'euw1',
+        options: [
+          { value: 'euw1', label: 'EUW1' },
+          { value: 'eun1', label: 'EUN1' },
+        ],
+      },
+      {
+        key: 'queue',
+        label: 'Queue',
+        type: 'select',
+        defaultValue: 'RANKED_SOLO_5x5',
+        options: [{ value: 'RANKED_SOLO_5x5', label: 'RANKED_SOLO_5x5' }],
+      },
+      {
+        key: 'tier',
+        label: 'Tier',
+        type: 'select',
+        defaultValue: 'GOLD',
+        options: [
+          { value: 'IRON', label: 'IRON' },
+          { value: 'BRONZE', label: 'BRONZE' },
+          { value: 'SILVER', label: 'SILVER' },
+          { value: 'GOLD', label: 'GOLD' },
+          { value: 'PLATINUM', label: 'PLATINUM' },
+          { value: 'EMERALD', label: 'EMERALD' },
+          { value: 'DIAMOND', label: 'DIAMOND' },
+          { value: 'MASTER', label: 'MASTER' },
+          { value: 'GRANDMASTER', label: 'GRANDMASTER' },
+          { value: 'CHALLENGER', label: 'CHALLENGER' },
+        ],
+      },
+      {
+        key: 'division',
+        label: 'Division',
+        type: 'select',
+        defaultValue: 'I',
+        options: [
+          { value: 'I', label: 'I' },
+          { value: 'II', label: 'II' },
+          { value: 'III', label: 'III' },
+          { value: 'IV', label: 'IV' },
+        ],
+      },
+      { key: 'pages', label: 'Pages', type: 'number', defaultValue: '3', placeholder: '3' },
+    ],
+  },
+  {
+    id: 'riot:refresh-match-ranks',
+    label: t('admin.riotMatch.scripts.refreshMatchRanks'),
+    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    runMode: 'generic',
+    fields: [],
+  },
+  {
+    id: 'riot:discover-players',
+    label: t('admin.riotMatch.scripts.discoverPlayers'),
+    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    runMode: 'generic',
+    fields: [],
+  },
+  {
+    id: 'riot:enrich',
+    label: t('admin.riotMatch.scripts.enrichPlayers'),
+    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    runMode: 'generic',
+    fields: [],
+  },
 ])
 
 // Contact
@@ -742,15 +1089,24 @@ async function loadBuildsStats() {
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
-const riotCollectTriggering = ref(false)
 const riotCollectMessage = ref('')
 const riotCollectError = ref(false)
-const riotStopTriggering = ref(false)
 const riotStopMessage = ref('')
 const riotStopError = ref(false)
-const riotBackfillTriggering = ref(false)
 const riotBackfillMessage = ref('')
 const riotBackfillError = ref(false)
+const riotLeagueExpMessage = ref('')
+const riotLeagueExpError = ref(false)
+const riotScriptMessage = ref('')
+const riotScriptError = ref(false)
+const riotScriptFields = ref<Record<string, Record<string, string>>>({})
+const riotScriptBusy = ref<Record<string, boolean>>({})
+const riotScriptStopBusy = ref<Record<string, boolean>>({})
+const riotScriptsStatus = ref<Record<string, any>>({})
+const riotScriptLogsOpen = ref(false)
+const riotScriptLogsLoading = ref(false)
+const riotScriptLogsTitle = ref('')
+const riotScriptLogs = ref<string[]>([])
 const videosTriggering = ref(false)
 const videosTriggerMessage = ref('')
 const videosTriggerError = ref(false)
@@ -795,6 +1151,27 @@ const allPlayersList = ref<
   }>
 >([])
 const allPlayersLoading = ref(false)
+
+// Replay links tool (admin)
+const replaySummonerName = ref('')
+const replayRegion = ref<'euw1' | 'eun1'>('euw1')
+const replayCount = ref(10)
+const replayLoading = ref(false)
+const replayError = ref(false)
+const replayMessage = ref('')
+const replayResult = ref<{
+  summonerName: string
+  puuid: string
+  region: string
+  countRequested: number
+  countReturned: number
+  matches: Array<{
+    matchId: string
+    replayUrl: string
+    matchApiUrl: string
+    timelineApiUrl: string
+  }>
+} | null>(null)
 
 const allPlayersTotalPages = computed(() =>
   Math.max(1, Math.ceil(allPlayersTotal.value / ALL_PLAYERS_PAGE_SIZE))
@@ -1049,13 +1426,117 @@ async function loadCron() {
   }
 }
 
-async function triggerRiotCollect() {
-  riotCollectMessage.value = ''
-  riotCollectError.value = false
-  riotStopMessage.value = ''
-  riotCollectTriggering.value = true
+function initRiotScriptFields() {
+  const next: Record<string, Record<string, string>> = {}
+  for (const script of riotScriptCards.value) {
+    const values: Record<string, string> = {}
+    for (const field of script.fields) values[field.key] = field.defaultValue ?? ''
+    next[script.id] = values
+  }
+  riotScriptFields.value = next
+}
+
+function riotStatusLabel(status: string | undefined) {
+  if (status === 'running') return t('admin.riotMatch.scripts.status.running')
+  if (status === 'started') return t('admin.riotMatch.scripts.status.started')
+  if (status === 'failed') return t('admin.riotMatch.scripts.status.failed')
+  return t('admin.riotMatch.scripts.status.stopped')
+}
+
+function riotStatusClass(status: string | undefined) {
+  if (status === 'running') return 'bg-green-600/20 text-green-700 dark:text-green-400'
+  if (status === 'started') return 'bg-blue-600/20 text-blue-700 dark:text-blue-300'
+  if (status === 'failed') return 'bg-red-500/20 text-red-700 dark:text-red-300'
+  return 'bg-text/10 text-text/70'
+}
+
+function isScriptActive(scriptId: string) {
+  const status = riotScriptsStatus.value?.[scriptId]?.status
+  return status === 'running' || status === 'started'
+}
+
+async function loadRiotScriptsStatus() {
   try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-scripts-status'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    const next: Record<string, any> = {}
+    for (const row of data?.scripts ?? []) next[row.script] = row
+    riotScriptsStatus.value = next
+  } catch {
+    // Keep page functional even if status endpoint fails.
+  }
+}
+
+async function openRiotScriptLogs(scriptId: string, label: string) {
+  riotScriptLogsOpen.value = true
+  riotScriptLogsLoading.value = true
+  riotScriptLogsTitle.value = label
+  riotScriptLogs.value = []
+  try {
+    const res = await fetchWithAuth(
+      apiUrl(`/api/admin/riot-script-logs?script=${encodeURIComponent(scriptId)}&lines=20`)
+    )
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    riotScriptLogs.value = Array.isArray(data?.log) ? data.log : []
+  } finally {
+    riotScriptLogsLoading.value = false
+  }
+}
+
+async function runRiotScript(card: RiotScriptCard) {
+  if (isScriptActive(card.id)) return
+  riotScriptMessage.value = ''
+  riotScriptError.value = false
+  riotScriptBusy.value[card.id] = true
+  try {
+    let res: Response
+    const f = riotScriptFields.value[card.id] ?? {}
+    if (card.runMode === 'collect') {
+      res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
+    } else if (card.runMode === 'backfillRanks') {
+      const limit = encodeURIComponent(f.limit || '200')
+      res = await fetchWithAuth(apiUrl(`/api/admin/riot-backfill-ranks?limit=${limit}`), {
+        method: 'POST',
+      })
+    } else if (card.runMode === 'backfillRoles') {
+      const limit = encodeURIComponent(f.limit || '50')
+      res = await fetchWithAuth(apiUrl(`/api/admin/riot-backfill-roles?limit=${limit}`), {
+        method: 'POST',
+      })
+    } else if (card.runMode === 'discoverLeagueExp') {
+      res = await fetchWithAuth(apiUrl('/api/admin/riot-discover-league-exp'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: f.platform || 'euw1',
+          queue: f.queue || 'RANKED_SOLO_5x5',
+          tier: f.tier || 'GOLD',
+          division: f.division || 'I',
+          pages: Number(f.pages || '3'),
+        }),
+      })
+    } else {
+      const args = card.fields
+        .map(field => (f[field.key] ?? '').trim())
+        .filter(Boolean)
+        .slice(0, 10)
+      res = await fetchWithAuth(apiUrl('/api/admin/riot-script-run'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: card.id, args }),
+      })
+    }
+
     if (res.status === 401) {
       clearAuth()
       await navigateTo(localePath('/admin/login'))
@@ -1063,57 +1544,29 @@ async function triggerRiotCollect() {
     }
     const data = await res.json()
     if (res.ok || res.status === 202) {
-      riotCollectMessage.value = data.message ?? t('admin.riotMatch.triggerBackground')
-      await loadCron()
+      riotScriptMessage.value = data.message ?? t('admin.riotMatch.scripts.backgroundLaunched')
     } else {
-      riotCollectError.value = true
-      riotCollectMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
+      riotScriptError.value = true
+      riotScriptMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
     }
   } catch {
-    riotCollectError.value = true
-    riotCollectMessage.value = t('admin.riotMatch.triggerError')
+    riotScriptError.value = true
+    riotScriptMessage.value = t('admin.riotMatch.triggerError')
   } finally {
-    riotCollectTriggering.value = false
+    riotScriptBusy.value[card.id] = false
+    await Promise.all([loadCron(), loadRiotScriptsStatus()])
   }
 }
 
-async function triggerRiotWorkerStop() {
-  riotStopMessage.value = ''
-  riotStopError.value = false
-  riotCollectMessage.value = ''
-  riotStopTriggering.value = true
+async function stopRiotScript(card: RiotScriptCard) {
+  riotScriptMessage.value = ''
+  riotScriptError.value = false
+  riotScriptStopBusy.value[card.id] = true
   try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-worker-stop'), { method: 'POST' })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok && data?.success) {
-      riotStopMessage.value = data.message ?? t('admin.riotMatch.stopPollerSuccess')
-      await loadCron()
-    } else {
-      riotStopError.value = true
-      riotStopMessage.value = data?.error ?? t('admin.riotMatch.stopPollerError')
-    }
-  } catch {
-    riotStopError.value = true
-    riotStopMessage.value = t('admin.riotMatch.stopPollerError')
-  } finally {
-    riotStopTriggering.value = false
-  }
-}
-
-async function triggerRiotBackfillRanks() {
-  riotBackfillMessage.value = ''
-  riotBackfillError.value = false
-  riotCollectMessage.value = ''
-  riotStopMessage.value = ''
-  riotBackfillTriggering.value = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-backfill-ranks?limit=200'), {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script-stop'), {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script: card.id }),
     })
     if (res.status === 401) {
       clearAuth()
@@ -1121,17 +1574,54 @@ async function triggerRiotBackfillRanks() {
       return
     }
     const data = await res.json()
-    if (res.ok || res.status === 202) {
-      riotBackfillMessage.value = data.message ?? t('admin.riotMatch.backfillBackground')
+    if (res.ok) {
+      riotScriptMessage.value = data.message ?? t('admin.riotMatch.scripts.stopRequested')
     } else {
-      riotBackfillError.value = true
-      riotBackfillMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
+      riotScriptError.value = true
+      riotScriptMessage.value = data?.error ?? t('admin.riotMatch.scripts.stopError')
     }
   } catch {
-    riotBackfillError.value = true
-    riotBackfillMessage.value = t('admin.riotMatch.triggerError')
+    riotScriptError.value = true
+    riotScriptMessage.value = t('admin.riotMatch.scripts.stopError')
   } finally {
-    riotBackfillTriggering.value = false
+    riotScriptStopBusy.value[card.id] = false
+    await Promise.all([loadCron(), loadRiotScriptsStatus()])
+  }
+}
+
+async function fetchReplayLinks() {
+  replayMessage.value = ''
+  replayError.value = false
+  replayResult.value = null
+  replayLoading.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-replay-links'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        summonerName: replaySummonerName.value,
+        region: replayRegion.value,
+        count: replayCount.value,
+      }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      replayResult.value = data
+      replayMessage.value = t('admin.replays.success', { count: data?.countReturned ?? 0 })
+    } else {
+      replayError.value = true
+      replayMessage.value = data?.error ?? t('admin.replays.error')
+    }
+  } catch {
+    replayError.value = true
+    replayMessage.value = t('admin.replays.error')
+  } finally {
+    replayLoading.value = false
   }
 }
 
@@ -1206,10 +1696,12 @@ onMounted(async () => {
     await navigateTo(localePath('/admin/login'))
     return
   }
+  initRiotScriptFields()
   await Promise.all([
     loadContact(),
     loadBuildsStats(),
     loadCron(),
+    loadRiotScriptsStatus(),
     loadRiotApikey(),
     loadSeedPlayers(),
   ])
@@ -1224,6 +1716,7 @@ watch(activeTab, tab => {
     !cronLoading.value
   )
     loadCron()
+  if (tab === 'riotmatch') loadRiotScriptsStatus()
   if (tab === 'cronstatus' && cron.value && !cronLoading.value) loadCron()
   if (tab === 'apikey' && riotApikeyMasked.value === null && !riotApikeyLoading.value)
     loadRiotApikey()

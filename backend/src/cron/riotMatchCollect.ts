@@ -32,6 +32,7 @@ import {
 } from '../services/AllowedGameVersions.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { DiscordService } from '../services/DiscordService.js'
+import { refreshStatsMaterializedViews } from '../services/StatsOverviewService.js'
 import { isDatabaseConfigured, prisma } from '../db.js'
 import type { AppError } from '../utils/errors.js'
 
@@ -404,6 +405,19 @@ export async function runRiotMatchCollectOnce(): Promise<{
       }
     } catch (e) {
       console.warn(`${LOG_PREFIX} Refresh match ranks failed:`, e)
+    }
+
+    if (collected > 0) {
+      try {
+        const refreshMv = await refreshStatsMaterializedViews()
+        if (refreshMv.ok) {
+          console.log(`${LOG_PREFIX} Stats MVs refreshed (champions, overview, overview_teams)`)
+        } else {
+          console.warn(`${LOG_PREFIX} Stats MVs refresh failed:`, refreshMv.error)
+        }
+      } catch (e) {
+        console.warn(`${LOG_PREFIX} Stats MVs refresh failed:`, e)
+      }
     }
 
     const duration = Math.round((Date.now() - startTime.getTime()) / 1000)

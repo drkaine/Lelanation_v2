@@ -29,6 +29,15 @@ import {
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
 import { isDatabaseConfigured } from '../db.js'
+import {
+  getPrecomputedChampions,
+  getPrecomputedOverview,
+  getPrecomputedOverviewTeams,
+  getPrecomputedOverviewDetail,
+  getPrecomputedDurationWinrate,
+  getPrecomputedSides,
+  getPrecomputedAbandons,
+} from '../services/StatsPrecomputedService.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -88,6 +97,13 @@ router.get('/overview', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
   const sqlStart = Date.now()
+  if (version == null) {
+    const pre = await getPrecomputedOverview(rankTier ?? null)
+    if (pre?.data) {
+      ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+      return res.json(pre.data)
+    }
+  }
   const data = await getOverviewStats(version, rankTier)
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
@@ -110,13 +126,20 @@ router.get('/overview', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1 (include Smite in spells, e.g. for champion page). Uses in-memory cache (10 min). If 504: increase proxy timeout (e.g. nginx proxy_read_timeout) or ensure cache is warmed at startup. */
+/** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1. Lit précalculé si version null. */
 router.get('/overview-detail', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
   const sqlStart = Date.now()
+  if (version == null) {
+    const pre = await getPrecomputedOverviewDetail(rankTier ?? null, includeSmite)
+    if (pre?.data) {
+      ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+      return res.json(pre.data)
+    }
+  }
   const data = await getOverviewDetailStats(version, rankTier, includeSmite)
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
@@ -134,11 +157,15 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-duration-winrate - duration (5-min buckets) vs winrate. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-duration-winrate - duration (5-min buckets) vs winrate. Query: ?version=16.1 &rankTier=GOLD. Lit précalculé si version null. */
 router.get('/overview-duration-winrate', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
+  if (version == null) {
+    const pre = await getPrecomputedDurationWinrate(rankTier ?? null)
+    if (pre?.data) return res.json(pre.data)
+  }
   const data = await getOverviewDurationWinrateStats(version, rankTier)
   if (!data) {
     return res.status(200).json({ buckets: [] })
@@ -146,11 +173,15 @@ router.get('/overview-duration-winrate', async (req: Request, res: Response) => 
   return res.json(data)
 })
 
-/** GET /api/stats/overview-abandons - remake & surrender rates. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-abandons - remake & surrender rates. Query: ?version=16.1 &rankTier=GOLD. Lit précalculé si version null. */
 router.get('/overview-abandons', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
+  if (version == null) {
+    const pre = await getPrecomputedAbandons(rankTier ?? null)
+    if (pre?.data) return res.json(pre.data)
+  }
   const data = await getOverviewAbandons(version, rankTier)
   if (!data) {
     return res.status(200).json({
@@ -188,10 +219,14 @@ router.get('/overview-progression-full', async (req: Request, res: Response) => 
   return res.json(data)
 })
 
-/** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss from matches.teams. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss. Query: ?version=16.1 &rankTier=GOLD. Lit précalculé si version null. */
 router.get('/overview-teams', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
+  if (version == null) {
+    const pre = await getPrecomputedOverviewTeams(rankTier ?? null)
+    if (pre?.data) return res.json(pre.data)
+  }
   const data = await getOverviewTeamsStats(version, rankTier)
   if (!data) {
     return res.status(200).json({
@@ -211,10 +246,14 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/overview-sides - winrate, champions, objectives, bans by side. Query: ?version=16.1&version=16.2&rankTier=GOLD&rankTier=PLATINUM (multi-select) */
+/** GET /api/stats/overview-sides - winrate, champions, objectives, bans by side. Lit précalculé si version null et un seul rankTier. */
 router.get('/overview-sides', async (req: Request, res: Response) => {
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
+  if (version.length === 0 && rankTier.length <= 1) {
+    const pre = await getPrecomputedSides(rankTier[0] ?? null)
+    if (pre?.data) return res.json(pre.data)
+  }
   const data = await getOverviewSidesStats(
     version.length ? version : null,
     rankTier.length ? rankTier : null
@@ -253,12 +292,23 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
-/** GET /api/stats/champions - can be slow on large DB; if 504 increase proxy_read_timeout (nginx) or consider materialized view for get_stats_champions. */
+/** GET /api/stats/champions - lit précalculé si disponible (version implicite null), sinon calcul live. */
 router.get('/champions', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const rankTier = (req.query.rankTier as string) || undefined
   const role = (req.query.role as string) || undefined
   const sqlStart = Date.now()
+  const pre = await getPrecomputedChampions(rankTier ?? null, role ?? null)
+  if (pre?.data) {
+    const d = pre.data as { totalGames?: number; totalMatches?: number; champions?: unknown[]; generatedAt?: string | null }
+    ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+    return res.json({
+      totalGames: d.totalGames ?? 0,
+      totalMatches: d.totalMatches ?? 0,
+      champions: d.champions ?? [],
+      generatedAt: d.generatedAt ?? null
+    })
+  }
   const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
@@ -304,6 +354,7 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
     winrate: row.winrate,
     pickrate: row.pickrate,
     banrate: row.banrate,
+    presence: row.presence,
     byRole: row.byRole,
     totalGames: data.totalGames,
     generatedAt: data.generatedAt

@@ -11,9 +11,11 @@
     "riot:collect": "tsx src/scripts/runRiotMatchCollect.ts",
     "riot:worker": "tsx src/scripts/runRiotMatchCollectWorker.ts",
     "riot:backfill-ranks": "tsx src/scripts/runBackfillParticipantRanks.ts",
+    "riot:backfill-roles": "tsx src/scripts/runBackfillParticipantRoles.ts",
     "riot:refresh-match-ranks": "tsx src/scripts/runRefreshMatchRanks.ts",
     "riot:cleanup-matches": "tsx src/scripts/runCleanupMatches.ts",
     "riot:discover-players": "tsx src/scripts/runRiotPlayerDiscovery.ts",
+    "riot:discover-league-exp": "tsx src/scripts/runRiotLeagueExpDiscovery.ts",
     "riot:enrich": "tsx src/scripts/runRiotEnrich.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
@@ -25,19 +27,19 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.9",
     "@types/node-cron": "^3.0.11",
+    "prisma": "^7.4.1",
     "tsx": "^4.21.0",
     "typescript": "^5.6.3"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",
-    "@prisma/client": "^7.3.0",
+    "@prisma/client": "^7.4.1",
     "axios": "^1.13.2",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
-    "pg": "^8.18.0",
-    "prisma": "^7.3.0"
+    "pg": "^8.18.0"
   }
 }

@@ -77,25 +77,31 @@ export async function getOverviewStats(
   rankTier?: string | string[] | null
 ): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
+  const pVersion = normalizeOverviewParam(version)
+  const pRankTier = normalizeOverviewParam(rankTier)
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewStatsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = normalizeOverviewParam(version)
-    const pRankTier = normalizeOverviewParam(rankTier)
-    // Sans paramètres bindés quand les deux sont null (évite "syntax error at or near "[" avec certains drivers)
-    const rows: OverviewRow =
-      pVersion === null && pRankTier === null
-        ? await prisma.$queryRaw<OverviewRow>(
-            Prisma.sql`SELECT get_stats_overview(NULL, NULL) AS get_stats_overview`
-          )
-        : await prisma.$queryRawUnsafe<OverviewRow>(
-            'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
-            pVersion ?? null,
-            pRankTier ?? null
-          )
-    const row0 = rows[0] as Record<string, unknown> | undefined
-    let raw: unknown =
-      row0?.get_stats_overview ??
-      row0?.['get_stats_overview'] ??
-      (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
+    let raw: unknown
+    if (pVersion === null && pRankTier === null) {
+      const mvRows = await prisma.$queryRaw<Array<{ data: unknown }>>(
+        Prisma.sql`SELECT data FROM mv_stats_overview LIMIT 1`
+      )
+      raw = mvRows[0]?.data ?? null
+    } else {
+      const rows = await prisma.$queryRawUnsafe<OverviewRow>(
+        'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
+        pVersion ?? null,
+        pRankTier ?? null
+      )
+      const row0 = rows[0] as Record<string, unknown> | undefined
+      raw =
+        row0?.get_stats_overview ??
+        row0?.['get_stats_overview'] ??
+        (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
+    }
     if (typeof raw === 'string') {
       try {
         raw = JSON.parse(raw) as RawOverviewResult
@@ -105,7 +111,7 @@ export async function getOverviewStats(
       }
     }
     if (!raw || typeof raw !== 'object') {
-      console.warn('[getOverviewStats] no raw result, keys:', rows[0] ? Object.keys(rows[0]) : 'no row', 'type:', typeof raw)
+      console.warn('[getOverviewStats] no raw result, type:', typeof raw)
       return null
     }
     const r = raw as RawOverviewResult
@@ -113,7 +119,7 @@ export async function getOverviewStats(
     const lastUpdate =
       r.lastUpdate == null ? null : typeof r.lastUpdate === 'string' ? r.lastUpdate : String(r.lastUpdate)
 
-    return {
+    const result: OverviewStats = {
       totalMatches: Number(r.totalMatches) ?? 0,
       lastUpdate,
       topWinrateChampions: Array.isArray(r.topWinrateChampions)
@@ -155,6 +161,8 @@ export async function getOverviewStats(
         : [],
       playerCount: Number(r.playerCount) ?? 0,
     }
+    overviewStatsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewStats]', err instanceof Error ? err.message : err)
     if (err instanceof Error && err.cause) {
@@ -203,6 +211,18 @@ const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
 
 /** Cache overview-detail par (version, rankTier, includeSmite) pour éviter 504 sur requêtes répétées. TTL 10 min. */
 const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
+
+/** Cache TTL 5 min pour overview, teams, duration-winrate, progression, sides. */
+const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
+const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
+const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
+const overviewDurationWinrateCache = new Map<string, { data: OverviewDurationWinrateStats; expiresAt: number }>()
+const overviewProgressionCache = new Map<string, { data: OverviewProgressionStats; expiresAt: number }>()
+const overviewProgressionFullCache = new Map<string, { data: OverviewProgressionFullStats; expiresAt: number }>()
+const overviewSidesCache = new Map<string, { data: OverviewSidesStats; expiresAt: number }>()
+function overviewCacheKey(v: string | null, r: string | null): string {
+  return `${v ?? ''}|${r ?? ''}`
+}
 const overviewDetailCache = new Map<
   string,
   { data: OverviewDetailStats; expiresAt: number }
@@ -319,6 +339,30 @@ export function invalidateOverviewDetailCache(): void {
   overviewDetailCache.clear()
 }
 
+/**
+ * Rafraîchit les vues matérialisées stats (champions, overview, overview_teams).
+ * À appeler après collecte de matchs pour que les endpoints sans filtre restent < 1 s.
+ */
+export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; error?: string }> {
+  if (!isDatabaseConfigured()) return { ok: true }
+  const views = ['mv_stats_champions', 'mv_stats_overview', 'mv_stats_overview_teams'] as const
+  const useConcurrent = String(process.env.STATS_MV_REFRESH_CONCURRENTLY ?? 'false').toLowerCase() === 'true'
+  try {
+    for (const name of views) {
+      if (useConcurrent) {
+        await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${name}`)
+      } else {
+        await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${name}`)
+      }
+    }
+    return { ok: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn('[refreshStatsMaterializedViews]', msg)
+    return { ok: false, error: msg }
+  }
+}
+
 /** Empty overview detail payload (when DB returns null or error). */
 export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   totalParticipants: 0,
@@ -380,9 +424,13 @@ export async function getOverviewDurationWinrateStats(
   rankTier?: string | null
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewDurationWinrateCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const rows = await prisma.$queryRaw<OverviewDurationWinrateRow>(
       Prisma.sql`SELECT get_stats_overview_duration_winrate(${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
     )
@@ -390,7 +438,7 @@ export async function getOverviewDurationWinrateStats(
     if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
       return { buckets: [] }
     }
-    return {
+    const result: OverviewDurationWinrateStats = {
       buckets: raw.buckets.map((b: { durationMin: number; matchCount: number; wins: number; winrate: number }) => ({
         durationMin: Number(b.durationMin),
         matchCount: Number(b.matchCount),
@@ -398,6 +446,8 @@ export async function getOverviewDurationWinrateStats(
         winrate: Number(b.winrate),
       })),
     }
+    overviewDurationWinrateCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewDurationWinrateStats]', err)
     return null
@@ -462,11 +512,14 @@ export async function getOverviewProgressionStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, gainers: [], losers: [] }
   }
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(versionOldest, pRankTier)
+  const cached = overviewProgressionCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = versionOldest
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const rows = await prisma.$queryRaw<OverviewProgressionRow>(
-      Prisma.sql`SELECT get_stats_overview_progression(${pVersion}, ${pRankTier}) AS get_stats_overview_progression`
+      Prisma.sql`SELECT get_stats_overview_progression(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression`
     )
     const raw = rows[0]?.get_stats_overview_progression
     if (!raw) return { oldestVersion: versionOldest, gainers: [], losers: [] }
@@ -476,11 +529,13 @@ export async function getOverviewProgressionStats(
       wrSince: Number(e.wrSince),
       delta: Number(e.delta),
     })
-    return {
+    const result: OverviewProgressionStats = {
       oldestVersion: raw.oldestVersion ?? versionOldest,
       gainers: Array.isArray(raw.gainers) ? raw.gainers.map(mapEntry) : [],
       losers: Array.isArray(raw.losers) ? raw.losers.map(mapEntry) : [],
     }
+    overviewProgressionCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewProgressionStats]', err)
     return null
@@ -513,11 +568,14 @@ export async function getOverviewProgressionFullStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, champions: [] }
   }
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(versionOldest, pRankTier)
+  const cached = overviewProgressionFullCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = versionOldest
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const rows = await prisma.$queryRaw<OverviewProgressionFullRow>(
-      Prisma.sql`SELECT get_stats_overview_progression_full(${pVersion}, ${pRankTier}) AS get_stats_overview_progression_full`
+      Prisma.sql`SELECT get_stats_overview_progression_full(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression_full`
     )
     const raw = rows[0]?.get_stats_overview_progression_full
     if (!raw) return { oldestVersion: versionOldest, champions: [] }
@@ -538,10 +596,12 @@ export async function getOverviewProgressionFullStats(
       pickrateSince: Number(e.pickrateSince),
       deltaPick: Number(e.deltaPick),
     })
-    return {
+    const result: OverviewProgressionFullStats = {
       oldestVersion: raw.oldestVersion ?? versionOldest,
       champions: Array.isArray(raw.champions) ? raw.champions.map(mapEntry) : [],
     }
+    overviewProgressionFullCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewProgressionFullStats]', err)
     return null
@@ -553,13 +613,26 @@ export async function getOverviewTeamsStats(
   rankTier?: string | null
 ): Promise<OverviewTeamsStats | null> {
   if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewTeamsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewTeamsRow>(
-      Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
-    )
-    const raw = rows[0]?.get_stats_overview_teams
+    let raw: OverviewTeamsStats | null = null
+    if (pVersion === null && pRankTier === null) {
+      const mvRows = await prisma.$queryRaw<Array<{ data: unknown }>>(
+        Prisma.sql`SELECT data FROM mv_stats_overview_teams LIMIT 1`
+      )
+      raw = (mvRows[0]?.data ?? null) as OverviewTeamsStats | null
+    }
+    if (raw === null) {
+      const rows = await prisma.$queryRaw<OverviewTeamsRow>(
+        Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+      )
+      raw = rows[0]?.get_stats_overview_teams ?? null
+    }
     if (!raw) return null
 
     const mapBan = (b: { championId: number; count: number }) => ({
@@ -613,7 +686,7 @@ export async function getOverviewTeamsStats(
       firstByLoss: Number(o?.firstByLoss ?? 0),
     })
 
-    return {
+    const result: OverviewTeamsStats = {
       matchCount: Number(raw.matchCount) ?? 0,
       bans: {
         byWin: addBanRate(byWinRaw, totalBansByWin),
@@ -630,6 +703,8 @@ export async function getOverviewTeamsStats(
         horde: objWithKills((raw.objectives?.horde ?? {}) as unknown as Record<string, unknown>),
       },
     }
+    overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewTeamsStats]', err)
     return null
@@ -731,11 +806,21 @@ export interface ObjectiveCountsBySide {
   hordeKills: number
 }
 
+function sidesCacheKey(version: string | string[] | null | undefined, rankTier: string | string[] | null | undefined): string {
+  const v = toParamArray(version).join(',')
+  const r = toParamArray(rankTier).join(',')
+  return `${v}|${r}`
+}
+
 export async function getOverviewSidesStats(
   version?: string | string[] | null,
   rankTier?: string | string[] | null
 ): Promise<OverviewSidesStats | null> {
   if (!isDatabaseConfigured()) return null
+  const now = Date.now()
+  const cacheKey = sidesCacheKey(version, rankTier)
+  const cached = overviewSidesCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
   const matchCond = buildMatchCond(version, rankTier)
 
   try {
@@ -1027,7 +1112,7 @@ export async function getOverviewSidesStats(
       .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
       .sort((a, b) => b.count - a.count)
 
-    return {
+    const result: OverviewSidesStats = {
       matchCount: totalMatchCount,
       sideWinrate: {
         blue: toSide(blueRow),
@@ -1039,6 +1124,8 @@ export async function getOverviewSidesStats(
       objectivesBySideTable,
       bansBySide: { blue: blueBans, red: redBans },
     }
+    overviewSidesCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
   } catch (err) {
     console.error('[getOverviewSidesStats]', err)
     return null

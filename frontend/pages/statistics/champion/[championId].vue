@@ -885,6 +885,129 @@
                         : t('statisticsPage.fastStatsSeeMore')
                     }}
                   </button>
+                  <!-- Sets de runes globaux (overview-detail) pour comparaison -->
+                  <div
+                    v-if="(detailData?.runeSets?.length ?? 0) > 0"
+                    class="mt-8 border-t border-primary/20 pt-6"
+                  >
+                    <h3 class="mb-3 text-base font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailRuneSets') }} ({{
+                        t('statisticsPage.allChampions')
+                      }})
+                    </h3>
+                    <div class="flex flex-wrap gap-3">
+                      <div
+                        v-for="(set, idx) in (detailData?.runeSets ?? []).slice(
+                          0,
+                          globalRunesExpand ? 20 : 6
+                        )"
+                        :key="'global-' + idx"
+                        class="rune-set"
+                      >
+                        <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
+                          <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
+                          <div class="rune-set-pickrate text-xs text-text/70">
+                            {{ Number(set.pickrate).toFixed(2) }}%
+                            {{ t('statisticsPage.overviewDetailPickRate') }}
+                          </div>
+                          <div class="rune-set-wr" :style="{ '--n': set.winrate }">
+                            {{ Number(set.winrate).toFixed(2) }}%
+                            {{ t('statisticsPage.overviewDetailWinRate') }}
+                          </div>
+                        </div>
+                        <div class="rune-set-runes">
+                          <div
+                            v-for="runeId in runeIdsFromSet(set.runes)"
+                            :key="runeId"
+                            class="rune-set-tooltip"
+                            :title="getRuneById(runeId)?.name ?? ''"
+                          >
+                            <div class="rune-set-rune">
+                              <div
+                                v-if="gameVersion && getRuneById(runeId)"
+                                class="rune-set-img"
+                                :style="{
+                                  '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                                }"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      v-if="(detailData?.runeSets?.length ?? 0) > 6"
+                      type="button"
+                      class="mt-2 text-sm font-medium text-accent hover:underline"
+                      @click="globalRunesExpand = !globalRunesExpand"
+                    >
+                      {{
+                        globalRunesExpand
+                          ? t('statisticsPage.showLess')
+                          : t('statisticsPage.fastStatsSeeMore')
+                      }}
+                    </button>
+                  </div>
+                </template>
+                <template v-else-if="(detailData?.runeSets?.length ?? 0) > 0">
+                  <p class="mb-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
+                  <h3 class="mb-3 text-base font-medium text-text">
+                    {{ t('statisticsPage.overviewDetailRuneSets') }} ({{
+                      t('statisticsPage.allChampions')
+                    }})
+                  </h3>
+                  <div class="flex flex-wrap gap-3">
+                    <div
+                      v-for="(set, idx) in (detailData?.runeSets ?? []).slice(
+                        0,
+                        globalRunesExpand ? 20 : 6
+                      )"
+                      :key="'global-only-' + idx"
+                      class="rune-set"
+                    >
+                      <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
+                        <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
+                        <div class="rune-set-pickrate text-xs text-text/70">
+                          {{ Number(set.pickrate).toFixed(2) }}%
+                          {{ t('statisticsPage.overviewDetailPickRate') }}
+                        </div>
+                        <div class="rune-set-wr" :style="{ '--n': set.winrate }">
+                          {{ Number(set.winrate).toFixed(2) }}%
+                          {{ t('statisticsPage.overviewDetailWinRate') }}
+                        </div>
+                      </div>
+                      <div class="rune-set-runes">
+                        <div
+                          v-for="runeId in runeIdsFromSet(set.runes)"
+                          :key="runeId"
+                          class="rune-set-tooltip"
+                          :title="getRuneById(runeId)?.name ?? ''"
+                        >
+                          <div class="rune-set-rune">
+                            <div
+                              v-if="gameVersion && getRuneById(runeId)"
+                              class="rune-set-img"
+                              :style="{
+                                '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                              }"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    v-if="(detailData?.runeSets?.length ?? 0) > 6"
+                    type="button"
+                    class="mt-2 text-sm font-medium text-accent hover:underline"
+                    @click="globalRunesExpand = !globalRunesExpand"
+                  >
+                    {{
+                      globalRunesExpand
+                        ? t('statisticsPage.showLess')
+                        : t('statisticsPage.fastStatsSeeMore')
+                    }}
+                  </button>
                 </template>
                 <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
               </div>
@@ -1469,8 +1592,17 @@ const runesExpand = ref(false)
 
 const detailPending = ref(false)
 const detailData = ref<{
+  runeSets?: Array<{
+    runes: unknown
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  runes?: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   summonerSpells?: Array<{ spellId: number; pickrate: number; winrate: number }>
 } | null>(null)
+const globalRunesExpand = ref(false)
 
 const championSpellsPending = ref(false)
 const championSpellsData = ref<{
@@ -1540,51 +1672,96 @@ function overviewQueryParams() {
   return p.toString() ? '?' + p.toString() : ''
 }
 
+/** Logs de perf (dev ou ?stats_perf=1) pour la page champion. */
+function isStatsPerfEnabled(): boolean {
+  if (import.meta.dev) return true
+  if (import.meta.client && typeof window !== 'undefined') {
+    return new URLSearchParams(window.location.search).get('stats_perf') === '1'
+  }
+  return false
+}
+function statsPerfStart(label: string): number {
+  if (!isStatsPerfEnabled()) return 0
+  console.log('[Stats perf]', label, 'start')
+  return performance.now()
+}
+function statsPerfEnd(label: string, start: number) {
+  if (!isStatsPerfEnabled() || start === 0) return
+  console.log('[Stats perf]', label, Math.round(performance.now() - start) + 'ms')
+}
+function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
+  const existingOnResponse = (options as { onResponse?: (ctx: { response: Response }) => void })
+    ?.onResponse
+  return $fetch(url, {
+    ...options,
+    onResponse: ctx => {
+      if (isStatsPerfEnabled() && ctx.response?.headers) {
+        const backendMs = ctx.response.headers.get('X-Backend-Time')
+        const sqlMs = ctx.response.headers.get('X-SQL-Time')
+        const path = ctx.response.headers.get('X-Stats-Path') || url
+        if (backendMs) {
+          console.log(
+            '[Stats perf] backend',
+            path,
+            backendMs + 'ms' + (sqlMs ? ' (SQL ' + sqlMs + 'ms)' : '')
+          )
+        }
+      }
+      existingOnResponse?.(ctx)
+    },
+  }) as Promise<T>
+}
+
 async function loadChampion() {
   if (!championId.value || Number.isNaN(championId.value)) {
     error.value = 'Invalid champion'
     pending.value = false
     return
   }
+  const t = statsPerfStart('loadChampion')
   pending.value = true
   error.value = null
   try {
     const url = apiUrl(`/api/stats/champions/${championId.value}${queryParams()}`)
-    const data = await $fetch(url)
+    const data = await statsFetch(url)
     championStats.value = data as typeof championStats.value
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
     championStats.value = null
   } finally {
     pending.value = false
+    statsPerfEnd('loadChampion', t)
   }
 }
 
 async function loadBuilds() {
   if (!championId.value) return
+  const t = statsPerfStart('loadBuilds')
   buildsPending.value = true
   try {
     const q = queryParams()
-    buildsData.value = await $fetch(
+    buildsData.value = await statsFetch(
       apiUrl(`/api/stats/champions/${championId.value}/builds${q ? q + '&' : '?'}minGames=10`)
     )
   } catch {
     buildsData.value = null
   } finally {
     buildsPending.value = false
+    statsPerfEnd('loadBuilds', t)
   }
 }
 
 async function loadRunes() {
   if (!championId.value) return
+  const t = statsPerfStart('loadRunes')
   runesPending.value = true
   try {
     const q = queryParams()
     const [setsRes, perRuneRes] = await Promise.all([
-      $fetch(
+      statsFetch(
         apiUrl(`/api/stats/champions/${championId.value}/runes${q ? q + '&' : '?'}minGames=10`)
       ).catch(() => null),
-      $fetch(
+      statsFetch(
         apiUrl(
           `/api/stats/champions/${championId.value}/runes-per-rune${q ? q + '&' : '?'}minGames=10`
         )
@@ -1597,21 +1774,24 @@ async function loadRunes() {
     runesPerRuneData.value = null
   } finally {
     runesPending.value = false
+    statsPerfEnd('loadRunes', t)
   }
 }
 
 async function loadMatchups() {
   if (!championId.value) return
+  const t = statsPerfStart('loadMatchups')
   matchupsPending.value = true
   try {
     const q = queryParams()
-    matchupsData.value = await $fetch(
+    matchupsData.value = await statsFetch(
       apiUrl(`/api/stats/champions/${championId.value}/matchups${q ? q + '&' : '?'}minGames=10`)
     )
   } catch {
     matchupsData.value = null
   } finally {
     matchupsPending.value = false
+    statsPerfEnd('loadMatchups', t)
   }
 }
 
@@ -1623,26 +1803,29 @@ function scrollToMatchups() {
 }
 
 async function loadDetail() {
+  const t = statsPerfStart('loadDetail')
   detailPending.value = true
   try {
     const q = overviewQueryParams() ? overviewQueryParams() + '&' : '?'
-    detailData.value = await $fetch(apiUrl('/api/stats/overview-detail' + q + 'includeSmite=1'))
+    detailData.value = await statsFetch(apiUrl('/api/stats/overview-detail' + q + 'includeSmite=1'))
   } catch {
     detailData.value = null
   } finally {
     detailPending.value = false
+    statsPerfEnd('loadDetail', t)
   }
 }
 
 async function loadChampionSpells() {
   if (!championId.value) return
+  const t = statsPerfStart('loadChampionSpells')
   championSpellsPending.value = true
   championSpellsData.value = null
   championSpellsDuosData.value = null
   try {
     const q = overviewQueryParams()
     const [spellsRes, duosRes] = await Promise.all([
-      $fetch<{
+      statsFetch<{
         totalGames: number
         spells: Array<{
           spellId: number
@@ -1652,7 +1835,7 @@ async function loadChampionSpells() {
           winrate: number
         }>
       }>(apiUrl(`/api/stats/champions/${championId.value}/summoner-spells${q || ''}`)),
-      $fetch<{
+      statsFetch<{
         totalGames: number
         duos: Array<{
           spellId1: number
@@ -1670,31 +1853,35 @@ async function loadChampionSpells() {
     championSpellsDuosData.value = null
   } finally {
     championSpellsPending.value = false
+    statsPerfEnd('loadChampionSpells', t)
   }
 }
 
 async function loadDuration() {
   if (!championId.value) return
+  const t = statsPerfStart('loadDuration')
   durationPending.value = true
   try {
     const q = overviewQueryParams()
-    durationData.value = await $fetch(
+    durationData.value = await statsFetch(
       apiUrl(`/api/stats/champions/${championId.value}/duration-winrate${q || ''}`)
     )
   } catch {
     durationData.value = null
   } finally {
     durationPending.value = false
+    statsPerfEnd('loadDuration', t)
   }
 }
 
 async function loadPlayers() {
   if (!championId.value) return
+  const t = statsPerfStart('loadPlayers')
   playersPending.value = true
   try {
     const q = queryParams()
     const highRank = filterPlayersMasterPlus.value ? '&highRankOnly=1' : ''
-    playersData.value = await $fetch(
+    playersData.value = await statsFetch(
       apiUrl(
         `/api/stats/champions/${championId.value}/players${q ? q + '&' : '?'}minGames=20${highRank}`
       )
@@ -1703,6 +1890,7 @@ async function loadPlayers() {
     playersData.value = null
   } finally {
     playersPending.value = false
+    statsPerfEnd('loadPlayers', t)
   }
 }
 
@@ -1836,8 +2024,9 @@ watch(activeChampionTab, tab => {
 })
 
 async function loadVersionsForFilter() {
+  const t = statsPerfStart('loadVersionsForFilter')
   try {
-    const data = await $fetch<Record<string, unknown>>(apiUrl('/api/stats/overview'))
+    const data = await statsFetch<Record<string, unknown>>(apiUrl('/api/stats/overview'))
     const list = (data?.matchesByVersion ?? data?.matches_by_version ?? []) as Array<{
       version?: string
       matchCount?: number
@@ -1852,10 +2041,20 @@ async function loadVersionsForFilter() {
       : []
   } catch {
     versionsFromOverview.value = []
+  } finally {
+    statsPerfEnd('loadVersionsForFilter', t)
   }
 }
 
 onMounted(async () => {
+  if (import.meta.client) {
+    // eslint-disable-next-line no-console
+    console.log(
+      isStatsPerfEnabled()
+        ? '[Stats perf] logs activés — durées dans la console'
+        : '[Stats perf] pour afficher les durées, ajoute ?stats_perf=1 à l’URL'
+    )
+  }
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()

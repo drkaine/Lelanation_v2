@@ -109,13 +109,34 @@
     "secondary-rune-selection": "Sélectionnez une rune",
     "stat-selection": "Sélectionnez une stat",
     "shards": {
-      "5008": { "name": "Force adaptative", "desc": "+5.4 Dégâts d'attaque ou +9 Puissance magique" },
-      "5005": { "name": "Vitesse d'attaque", "desc": "+10% Vitesse d'attaque" },
-      "5007": { "name": "Hâte de compétence", "desc": "+8 Hâte de compétence" },
-      "5006": { "name": "Vitesse de déplacement", "desc": "+2.5% Vitesse de déplacement" },
-      "5002": { "name": "PV par niveau", "desc": "+10-200 PV (selon niveau)" },
-      "5001": { "name": "PV", "desc": "+65 PV" },
-      "5003": { "name": "Ténacité", "desc": "+15% Ténacité et résistance aux ralentissements" }
+      "5008": {
+        "name": "Force adaptative",
+        "desc": "+5.4 Dégâts d'attaque ou +9 Puissance magique"
+      },
+      "5005": {
+        "name": "Vitesse d'attaque",
+        "desc": "+10% Vitesse d'attaque"
+      },
+      "5007": {
+        "name": "Hâte de compétence",
+        "desc": "+8 Hâte de compétence"
+      },
+      "5006": {
+        "name": "Vitesse de déplacement",
+        "desc": "+2.5% Vitesse de déplacement"
+      },
+      "5002": {
+        "name": "PV par niveau",
+        "desc": "+10-200 PV (selon niveau)"
+      },
+      "5001": {
+        "name": "PV",
+        "desc": "+65 PV"
+      },
+      "5003": {
+        "name": "Ténacité",
+        "desc": "+15% Ténacité et résistance aux ralentissements"
+      }
     }
   },
   "buildCard": {
@@ -707,9 +728,10 @@
       "builds": "Builds",
       "videos": "Vidéos",
       "apikeyRiot": "Clé API Riot",
-      "riotMatch": "Collecte matchs",
+      "riotMatch": "Collecte data",
       "seedPlayers": "Joueurs seed",
-      "cronStatus": "Statut crons"
+      "cronStatus": "Statut crons",
+      "replays": "Replays"
     },
     "cronStatus": {
       "title": "Statut des crons (data/cron/status.json)",
@@ -749,7 +771,7 @@
       "channels": "Chaînes"
     },
     "riotMatch": {
-      "title": "Collecte matchs Riot",
+      "title": "Collecte data Riot",
       "pollerStatus": "Dernière activité",
       "pollerActive": "Actif",
       "pollerStopped": "Aucune récente",
@@ -769,7 +791,38 @@
       "triggerSuccess": "Collecte lancée : {collected} nouveau(x) match(s), {errors} erreur(s).",
       "triggerBackground": "Collecte lancée en arrière-plan. Actualisez la page dans 2–5 min pour voir « Dernier succès » et « Dernière activité » à jour.",
       "triggerError": "Échec de la collecte.",
-      "description": "Une exécution manuelle du cron de collecte (matchs Ranked Solo/Duo EUW/EUNE). Si le worker (npm run riot:worker) est arrêté, le bouton lance une seule collecte en arrière-plan."
+      "description": "Une exécution manuelle du cron de collecte (matchs Ranked Solo/Duo EUW/EUNE). Si le worker (npm run riot:worker) est arrêté, le bouton lance une seule collecte en arrière-plan.",
+      "leagueExpDiscover": "Découvrir des joueurs (league-exp)",
+      "leagueExpTitle": "Appelle /lol/league-exp/v4/entries/{queue}/{tier}/{division} et ajoute des players à poller plus tard.",
+      "leagueExpBackground": "Découverte league-exp lancée en arrière-plan. Actualisez dans quelques minutes.",
+      "scripts": {
+        "label": "Scripts poller",
+        "argsLabel": "Arguments (optionnel, séparés par des espaces)",
+        "argsPlaceholder": "Ex: 200",
+        "run": "Lancer",
+        "stop": "Arrêter",
+        "logs": "Info (logs)",
+        "logsTitle": "20 derniers logs",
+        "close": "Fermer",
+        "noLogs": "Aucun log pour ce script.",
+        "backgroundLaunched": "Script lancé en arrière-plan.",
+        "stopRequested": "Demande d’arrêt envoyée.",
+        "stopError": "Impossible d’arrêter ce script.",
+        "status": {
+          "running": "En cours",
+          "stopped": "A l'arrêt",
+          "started": "Démarré",
+          "failed": "En erreur"
+        },
+        "worker": "Worker normal (boucle)",
+        "collectOnce": "Collecte one-shot",
+        "backfillRanks": "Backfill rangs participants",
+        "backfillRoles": "Backfill rôles participants",
+        "refreshMatchRanks": "Refresh Match.rank",
+        "discoverPlayers": "Discover players (matchs historiques)",
+        "discoverLeagueExp": "Discover league-exp entries",
+        "enrichPlayers": "Enrich joueurs (summoner_name)"
+      }
     },
     "riotApikey": {
       "title": "Clé API Riot",
@@ -814,7 +867,19 @@
       "colRank": "Rang",
       "colGames": "Parties / WR"
     },
-    "logout": "Déconnexion"
+    "logout": "Déconnexion",
+    "replays": {
+      "title": "Liens de replay des matchs",
+      "description": "Récupère des matchs récents depuis Riot pour un summoner et génère des liens de replay.",
+      "summonerName": "Nom du summoner",
+      "summonerPlaceholder": "Ex: Faker",
+      "region": "Région",
+      "matchCount": "Nombre de matchs",
+      "fetch": "Récupérer les liens",
+      "success": "{count} lien(s) récupéré(s).",
+      "error": "Impossible de récupérer les liens de replay.",
+      "matches": "matchs",
+      "replayLink": "Ouvrir le replay"
+    }
   }
 }
-
