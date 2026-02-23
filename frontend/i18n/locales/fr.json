@@ -164,6 +164,8 @@
     "tierListViewChart": "Graphique",
     "tierListTier": "Tier",
     "tierListRole": "Rôle",
+    "matchupScore": "Score matchup",
+    "patchDelta": "Delta patch",
     "tierListChartWorst": "Pire",
     "tierListChartBest": "Meilleur",
     "tierListLegend": "Tiers",
@@ -731,7 +733,8 @@
       "riotMatch": "Collecte data",
       "seedPlayers": "Joueurs seed",
       "cronStatus": "Statut crons",
-      "replays": "Replays"
+      "replays": "Replays",
+      "matchups": "Matchups / Tier"
     },
     "cronStatus": {
       "title": "Statut des crons (data/cron/status.json)",
@@ -821,7 +824,17 @@
         "refreshMatchRanks": "Refresh Match.rank",
         "discoverPlayers": "Discover players (matchs historiques)",
         "discoverLeagueExp": "Discover league-exp entries",
-        "enrichPlayers": "Enrich joueurs (summoner_name)"
+        "enrichPlayers": "Enrich joueurs (summoner_name)",
+        "descriptions": {
+          "worker": "Boucle continue de collecte : récupère de nouveaux matchs, ajoute les participants et met à jour les stats automatiquement.",
+          "collectOnce": "Exécute une seule passe de collecte immédiate (sans boucle) pour récupérer des matchs rapidement.",
+          "backfillRanks": "Complète les rangs manquants des participants via l'API Riot puis recalcule Match.rank.",
+          "backfillRoles": "Complète les rôles manquants des participants (TOP/JUNGLE/MID/ADC/SUPPORT) depuis les données de match Riot.",
+          "refreshMatchRanks": "Recalcule Match.rank pour les matchs déjà en base à partir des rangs des participants.",
+          "discoverPlayers": "Découvre de nouveaux joueurs à partir des matchs historiques des joueurs déjà connus, puis les ajoute à la base.",
+          "discoverLeagueExp": "Explore les ligues Riot par queue/tier/division et ajoute ces joueurs pour les collectes futures.",
+          "enrichPlayers": "Enrichit les joueurs existants en récupérant/normalisant les champs manquants (ex: summoner_name)."
+        }
       }
     },
     "riotApikey": {
@@ -880,6 +893,27 @@
       "error": "Impossible de récupérer les liens de replay.",
       "matches": "matchs",
       "replayLink": "Ouvrir le replay"
+    },
+    "matchups": {
+      "title": "Tier list matchups",
+      "description": "Score lane-vs-lane (-10 à +10) basé majoritairement sur winrate, avec ajustements KDA et niveau, plus delta patch.",
+      "patch": "Patch",
+      "lane": "Lane",
+      "allLanes": "Toutes",
+      "rank": "Rang",
+      "globalRank": "Global (tous rangs)",
+      "minGames": "Min games",
+      "championId": "Champion ID",
+      "loadTier": "Charger tier list",
+      "loadChampion": "Charger un champion",
+      "rebuild": "Rebuild patch",
+      "loaded": "{count} ligne(s) tier list chargée(s).",
+      "championLoaded": "{count} matchup(s) chargés.",
+      "rebuildSuccess": "Rebuild terminé ({rows} lignes).",
+      "loadError": "Impossible de charger les matchups.",
+      "rebuildError": "Impossible de recalculer les scores matchup.",
+      "tierTable": "Tier list (agrégée par champion)",
+      "championTable": "Détail des adversaires du champion"
     }
   }
 }

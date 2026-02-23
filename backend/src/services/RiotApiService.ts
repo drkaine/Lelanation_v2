@@ -7,10 +7,26 @@ import { getRiotApiKeyAsync } from '../utils/riotApiKey.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 
-const PLATFORM_BASE: Record<string, string> = {
+const PLATFORM_BASE = {
   euw1: 'https://euw1.api.riotgames.com',
   eun1: 'https://eun1.api.riotgames.com',
-}
+  na1: 'https://na1.api.riotgames.com',
+  br1: 'https://br1.api.riotgames.com',
+  la1: 'https://la1.api.riotgames.com',
+  la2: 'https://la2.api.riotgames.com',
+  oc1: 'https://oc1.api.riotgames.com',
+  kr: 'https://kr.api.riotgames.com',
+  jp1: 'https://jp1.api.riotgames.com',
+  tr1: 'https://tr1.api.riotgames.com',
+  ru: 'https://ru.api.riotgames.com',
+  ph2: 'https://ph2.api.riotgames.com',
+  sg2: 'https://sg2.api.riotgames.com',
+  th2: 'https://th2.api.riotgames.com',
+  tw2: 'https://tw2.api.riotgames.com',
+  vn2: 'https://vn2.api.riotgames.com',
+  me1: 'https://me1.api.riotgames.com',
+} as const
+export type PlatformRegion = keyof typeof PLATFORM_BASE
 const REGIONAL_BASE = 'https://europe.api.riotgames.com'
 const CONTINENT_BASE: Record<string, string> = {
   europe: 'https://europe.api.riotgames.com',
@@ -53,9 +69,15 @@ async function rateLimit(): Promise<void> {
   lastRequestTime = Date.now()
 }
 
-async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
+async function withRetry429<T>(
+  fn: () => Promise<T>,
+  options: { max429Retries?: number; max5xxRetries?: number; backoffMs?: number } = {}
+): Promise<T> {
+  const max429Retries = Math.max(0, options.max429Retries ?? RATE_LIMIT_MAX_RETRIES)
+  const max5xxRetries = Math.max(0, options.max5xxRetries ?? RETRY_5XX_MAX)
+  const backoffMs = Math.max(100, options.backoffMs ?? RETRY_5XX_BACKOFF_MS)
   let lastErr: unknown
-  const maxAttempts = Math.max(RATE_LIMIT_MAX_RETRIES, RETRY_5XX_MAX) + 1
+  const maxAttempts = Math.max(max429Retries, max5xxRetries) + 1
   for (let attempt = 0; attempt <= maxAttempts; attempt++) {
     try {
       return await fn()
@@ -64,7 +86,7 @@ async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
       if (!axios.isAxiosError(err)) throw err
       const status = err.response?.status ?? 0
       // 429: wait Retry-After or 60s
-      if (status === 429 && attempt <= RATE_LIMIT_MAX_RETRIES) {
+      if (status === 429 && attempt <= max429Retries) {
         const retryAfter = err.response?.headers?.['retry-after']
         const waitMs =
           typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
@@ -74,12 +96,12 @@ async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
         continue
       }
       // 5xx: retry with backoff (transient server errors from Riot). 503 may include Retry-After.
-      if (status >= 500 && status < 600 && attempt <= RETRY_5XX_MAX) {
+      if (status >= 500 && status < 600 && attempt <= max5xxRetries) {
         const retryAfter = err.response?.headers?.['retry-after']
         const waitMs =
           typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
             ? parseInt(retryAfter, 10) * 1000
-            : RETRY_5XX_BACKOFF_MS * Math.pow(2, attempt)
+            : backoffMs * Math.pow(2, attempt)
         await new Promise((r) => setTimeout(r, waitMs))
         continue
       }
@@ -89,10 +111,10 @@ async function withRetry429<T>(fn: () => Promise<T>): Promise<T> {
   throw lastErr
 }
 
-function createClient(baseURL: string, apiKey: string): AxiosInstance {
+function createClient(baseURL: string, apiKey: string, timeoutMs = 15000): AxiosInstance {
   return axios.create({
     baseURL,
-    timeout: 15000,
+    timeout: timeoutMs,
     headers: {
       'X-Riot-Token': apiKey,
       'Accept': 'application/json',
@@ -146,6 +168,11 @@ export interface MatchSummary {
       challenges?: { teamPosition?: string }
     }>
   }
+}
+
+export interface ReplayLinkEntry {
+  replayUrl: string
+  matchId?: string
 }
 
 export class RiotApiService {
@@ -363,7 +390,7 @@ export class RiotApiService {
   /**
    * Summoner v4 by encrypted summoner id (returns puuid for match list). Platform: euw1, eun1.
    */
-  async getSummonerById(platform: 'euw1' | 'eun1', summonerId: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
+  async getSummonerById(platform: PlatformRegion, summonerId: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
     await rateLimit()
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
@@ -385,7 +412,7 @@ export class RiotApiService {
   /**
    * Summoner v4 by puuid. Platform: euw1, eun1.
    */
-  async getSummonerByPuuid(platform: 'euw1' | 'eun1', puuid: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
+  async getSummonerByPuuid(platform: PlatformRegion, puuid: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
     await rateLimit()
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
@@ -446,15 +473,24 @@ export class RiotApiService {
   /**
    * Account v1: Riot ID (gameName#tagLine) → PUUID. Regional Europe.
    */
-  async getAccountByRiotId(gameName: string, tagLine: string): Promise<Result<{ puuid: string }, AppError>> {
-    await rateLimit()
+  async getAccountByRiotId(
+    gameName: string,
+    tagLine: string,
+    continent: 'europe' | 'americas' | 'asia' = 'europe',
+    options: { fast?: boolean } = {}
+  ): Promise<Result<{ puuid: string }, AppError>> {
+    if (!options.fast) await rateLimit()
     const key = await this.ensureKey()
-    const client = createClient(REGIONAL_BASE, key)
+    const base = CONTINENT_BASE[continent]
+    if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key, options.fast ? 6000 : 15000)
     try {
-      const res = await withRetry429(() =>
+      const res = await withRetry429(
+        () =>
         client.get<{ puuid: string }>(
           `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
-        )
+        ),
+        options.fast ? { max429Retries: 0, max5xxRetries: 0 } : {}
       )
       const puuid = res.data?.puuid
       if (!puuid) return Result.err(new AppError('Account API: no puuid in response', 'RIOT_API_ERROR'))
@@ -466,22 +502,73 @@ export class RiotApiService {
   }
 
   /**
+   * Match v5 replay links by puuid (API-provided replay URLs).
+   * Region cluster must match the player's shard: europe, americas, asia.
+   */
+  async getReplayLinksByPuuid(
+    continent: 'europe' | 'americas' | 'asia',
+    puuid: string,
+    options: { count?: number; start?: number; fast?: boolean } = {}
+  ): Promise<Result<ReplayLinkEntry[], AppError>> {
+    if (!options.fast) await rateLimit()
+    const key = await this.ensureKey()
+    const base = CONTINENT_BASE[continent]
+    if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
+    const client = createClient(base, key, options.fast ? 6000 : 15000)
+    const count = options.count ?? 20
+    const start = options.start ?? 0
+    try {
+      const res = await withRetry429(
+        () =>
+        client.get<unknown>(
+          `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/replays`,
+          { params: { count, start } }
+        ),
+        options.fast ? { max429Retries: 0, max5xxRetries: 0 } : {}
+      )
+      const raw = res.data
+      const list = Array.isArray(raw) ? raw : []
+      const links: ReplayLinkEntry[] = list
+        .map((entry) => {
+          if (typeof entry === 'string') return { replayUrl: entry }
+          if (!entry || typeof entry !== 'object') return null
+          const obj = entry as Record<string, unknown>
+          const replayUrlRaw = obj.replayUrl ?? obj.url ?? obj.replay_url
+          if (typeof replayUrlRaw !== 'string' || replayUrlRaw.trim().length === 0) return null
+          const matchIdRaw = obj.matchId ?? obj.match_id
+          return {
+            replayUrl: replayUrlRaw.trim(),
+            matchId: typeof matchIdRaw === 'string' && matchIdRaw.trim() ? matchIdRaw.trim() : undefined,
+          }
+        })
+        .filter((x): x is ReplayLinkEntry => x !== null)
+      return Result.ok(links)
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      return Result.err(new AppError(`Replay API: ${message}`, 'RIOT_API_ERROR', err))
+    }
+  }
+
+  /**
    * Summoner v4 by name. Platform: euw1, eun1.
    */
   async getSummonerByName(
-    platform: 'euw1' | 'eun1',
-    summonerName: string
+    platform: PlatformRegion,
+    summonerName: string,
+    options: { fast?: boolean } = {}
   ): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
-    await rateLimit()
+    if (!options.fast) await rateLimit()
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
-    const client = createClient(base, key)
+    const client = createClient(base, key, options.fast ? 6000 : 15000)
     try {
-      const res = await withRetry429(() =>
+      const res = await withRetry429(
+        () =>
         client.get<{ id: string; puuid: string; name: string }>(
           `/lol/summoner/v4/summoners/by-name/${encodeURIComponent(summonerName)}`
-        )
+        ),
+        options.fast ? { max429Retries: 0, max5xxRetries: 0 } : {}
       )
       return Result.ok(res.data)
     } catch (err: unknown) {

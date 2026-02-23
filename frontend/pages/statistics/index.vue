@@ -2039,12 +2039,14 @@
 
         <!-- Tab: Champions -->
         <div v-show="activeTab === 'champions'" class="space-y-4">
-          <div v-if="championsPending" class="text-text/70">{{ t('statisticsPage.loading') }}</div>
+          <div v-if="championsPending || matchupTierPending" class="text-text/70">
+            {{ t('statisticsPage.loading') }}
+          </div>
           <div
-            v-else-if="championsError"
+            v-else-if="championsError || matchupTierError"
             class="rounded border border-error bg-surface p-3 text-error"
           >
-            {{ championsError }}
+            {{ championsError || matchupTierError }}
           </div>
           <div
             v-else-if="championsData?.message && !championsData?.champions?.length"
@@ -2301,6 +2303,18 @@
                     </th>
                     <th
                       class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                      @click="setTierListSort('score')"
+                    >
+                      {{ t('statisticsPage.matchupScore') }}
+                      <span v-if="tierListSortOrder === 'score'" class="ml-1">{{
+                        tierListSortDir === 'desc' ? '↓' : '↑'
+                      }}</span>
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.patchDelta') }}
+                    </th>
+                    <th
+                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
                       @click="setTierListSort('winrate')"
                     >
                       {{ t('statisticsPage.winrate') }}
@@ -2372,6 +2386,15 @@
                         {{ t('statisticsPage.tier' + row.tier) }}
                       </span>
                     </td>
+                    <td class="px-4 py-2 text-text/90">{{ Number(row.score).toFixed(2) }}</td>
+                    <td class="px-4 py-2 text-text/90">
+                      {{
+                        row.deltaVsPrevPatch != null
+                          ? (row.deltaVsPrevPatch > 0 ? '+' : '') +
+                            Number(row.deltaVsPrevPatch).toFixed(2)
+                          : '—'
+                      }}
+                    </td>
                     <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
                     <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
                     <td class="px-4 py-2 text-text/90">
@@ -2441,8 +2464,7 @@
                     :title="
                       (championName(c.championId) || c.championId) +
                       ' – ' +
-                      Number(c.winrate).toFixed(2) +
-                      '%'
+                      Number(c.score).toFixed(2)
                     "
                   >
                     <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
@@ -3045,11 +3067,13 @@ function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
   activeTab.value = 'champions'
 }
 
-/** Tier list: assign S/A/B/C/F by winrate percentiles (top 10% = S, next 20% = A, 30% B, 25% C, rest F). */
+/** Tier list: assign S/A/B/C/F by matchup score percentiles (best score => top tier). */
 type Tier = 'S' | 'A' | 'B' | 'C' | 'F'
 function computeTiers(
   champions: Array<{
     championId: number
+    score: number
+    deltaVsPrevPatch: number | null
     winrate: number
     pickrate: number
     banrate?: number
@@ -3057,6 +3081,8 @@ function computeTiers(
   }>
 ): Array<{
   championId: number
+  score: number
+  deltaVsPrevPatch: number | null
   winrate: number
   pickrate: number
   banrate?: number
@@ -3064,7 +3090,7 @@ function computeTiers(
   primaryRole: string | null
 }> {
   if (!champions.length) return []
-  const sorted = [...champions].sort((a, b) => b.winrate - a.winrate)
+  const sorted = [...champions].sort((a, b) => b.score - a.score)
   const n = sorted.length
   const pct = (i: number) => Math.floor((i / n) * 100)
   const tierRanges: Array<{ tier: Tier; maxPct: number }> = [
@@ -3094,6 +3120,8 @@ function computeTiers(
     }
     return {
       championId: c.championId,
+      score: c.score,
+      deltaVsPrevPatch: c.deltaVsPrevPatch,
       winrate: c.winrate,
       pickrate: c.pickrate,
       banrate: c.banrate,
@@ -3104,15 +3132,31 @@ function computeTiers(
 }
 
 const tierListViewModel = ref<'table' | 'chart'>('table')
-const tierListSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'tier' | 'games'>('winrate')
+const tierListSortOrder = ref<'score' | 'delta' | 'winrate' | 'pickrate' | 'banrate' | 'tier'>(
+  'score'
+)
 const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
 const TIER_ORDER: Record<Tier, number> = { S: 5, A: 4, B: 3, C: 2, F: 1 }
 const championsWithTier = computed(() => {
-  const list = championsData.value?.champions ?? []
+  const championsById = new Map((championsData.value?.champions ?? []).map(c => [c.championId, c]))
+  const list = (matchupTierData.value?.rows ?? []).map(r => {
+    const champ = championsById.get(r.championId)
+    return {
+      championId: r.championId,
+      score: r.avgScore,
+      deltaVsPrevPatch: r.avgDeltaVsPrevPatch,
+      winrate: champ?.winrate ?? r.avgWinrate,
+      pickrate: champ?.pickrate ?? 0,
+      banrate: champ?.banrate,
+      byRole: (champ as { byRole?: Record<string, { games: number }> } | undefined)?.byRole,
+    }
+  })
   return computeTiers(
     list as Array<{
       championId: number
+      score: number
+      deltaVsPrevPatch: number | null
       winrate: number
       pickrate: number
       banrate?: number
@@ -3128,6 +3172,8 @@ const sortedChampionsWithTier = computed(() => {
   return [...list].sort((a, b) => {
     let diff = 0
     if (sort === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
+    else if (sort === 'score') diff = (b.score ?? 0) - (a.score ?? 0)
+    else if (sort === 'delta') diff = (b.deltaVsPrevPatch ?? 0) - (a.deltaVsPrevPatch ?? 0)
     else if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
     else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
     else if (sort === 'banrate') diff = (b.banrate ?? 0) - (a.banrate ?? 0)
@@ -3146,16 +3192,15 @@ const paginatedTierList = computed(() => {
   const start = (page - 1) * size
   return list.slice(start, start + size)
 })
-/** Tier list bar chart: champions ordered by winrate (worst to best), score = (winrate - 50) for bar height. */
+/** Tier list bar chart: champions ordered by matchup score (worst to best). */
 const tierListBarChartData = computed(() => {
-  const list = [...championsWithTier.value].sort((a, b) => a.winrate - b.winrate)
-  const minWr = Math.min(...list.map(c => c.winrate), 50)
-  const maxWr = Math.max(...list.map(c => c.winrate), 50)
-  const range = Math.max(maxWr - 50, 50 - minWr, 1)
+  const list = [...championsWithTier.value].sort((a, b) => a.score - b.score)
+  const minScore = Math.min(...list.map(c => c.score), -10)
+  const maxScore = Math.max(...list.map(c => c.score), 10)
+  const range = Math.max(Math.abs(minScore), Math.abs(maxScore), 1)
   return list.map(c => ({
     ...c,
-    score: c.winrate - 50,
-    barHeight: (Math.abs(c.winrate - 50) / range) * 100,
+    barHeight: (Math.abs(c.score) / range) * 100,
   }))
 })
 const TIER_CHART_COLORS: Record<Tier, string> = {
@@ -3165,7 +3210,7 @@ const TIER_CHART_COLORS: Record<Tier, string> = {
   C: '#fb923c',
   F: '#dc2626',
 }
-function setTierListSort(col: 'tier' | 'winrate' | 'pickrate' | 'banrate') {
+function setTierListSort(col: 'tier' | 'score' | 'delta' | 'winrate' | 'pickrate' | 'banrate') {
   if (tierListSortOrder.value === col) {
     tierListSortDir.value = tierListSortDir.value === 'desc' ? 'asc' : 'desc'
   } else {
@@ -4061,6 +4106,24 @@ const championsData = ref<{
 } | null>(null)
 const championsPending = ref(true)
 const championsError = ref<string | null>(null)
+const matchupTierPending = ref(false)
+const matchupTierError = ref<string | null>(null)
+const matchupTierData = ref<{
+  patch: string
+  rankTier: string | null
+  lane: string | null
+  rows: Array<{
+    championId: number
+    matchups: number
+    totalGames: number
+    avgScore: number
+    avgWinrate: number
+    avgKda: number
+    avgLevel: number
+    avgConfidence: number
+    avgDeltaVsPrevPatch: number | null
+  }>
+} | null>(null)
 const queryString = computed(() => {
   const params = new URLSearchParams()
   if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
@@ -4080,8 +4143,49 @@ async function loadChampions() {
     statsPerfEnd('loadChampions', t)
   }
 }
+function patchFromVersion(version: string | null | undefined): string | null {
+  const raw = (version ?? '').trim()
+  if (!raw) return null
+  const parts = raw.split('.')
+  if (parts.length < 2) return null
+  const major = Number(parts[0])
+  const minor = Number(parts[1])
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
+  return `${major}.${minor}`
+}
+const effectiveMatchupPatch = computed(() => {
+  const fromFilter = patchFromVersion(statsVersionFilter.value)
+  if (fromFilter) return fromFilter
+  return patchFromVersion(gameVersion.value)
+})
+async function loadMatchupTierList() {
+  const patch = effectiveMatchupPatch.value
+  if (!patch) {
+    matchupTierData.value = null
+    return
+  }
+  matchupTierPending.value = true
+  matchupTierError.value = null
+  try {
+    const params = new URLSearchParams()
+    params.set('patch', patch)
+    if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
+    if (statsRoleFilter.value) params.set('lane', statsRoleFilter.value)
+    params.set('minGames', '20')
+    params.set('limit', '300')
+    matchupTierData.value = await statsFetch(
+      apiUrl(`/api/stats/matchup-tier-list?${params.toString()}`)
+    )
+  } catch (err) {
+    matchupTierError.value = err instanceof Error ? err.message : String(err)
+    matchupTierData.value = null
+  } finally {
+    matchupTierPending.value = false
+  }
+}
 watch([statsDivisionFilter, statsRoleFilter], () => {
   if (activeTab.value === 'champions' || activeTab.value === 'tierlist') loadChampions()
+  if (activeTab.value === 'tierlist') loadMatchupTierList()
 })
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
@@ -4201,6 +4305,7 @@ watch(activeTab, async tab => {
   }
   if (tab === 'sides') loadOverviewSides()
   if (tab === 'tierlist' || tab === 'champions') loadChampions()
+  if (tab === 'tierlist') loadMatchupTierList()
   if (tab === 'duration') loadOverviewDurationWinrate()
   if (tab === 'items' || tab === 'spells' || tab === 'detail') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
@@ -4248,6 +4353,7 @@ onMounted(async () => {
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
   // Champions chargés à la demande à l’ouverture des onglets Champions / Tier list
+  loadMatchupTierList()
 })
 </script>
 

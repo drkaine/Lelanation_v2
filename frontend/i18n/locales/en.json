@@ -164,6 +164,8 @@
     "tierListViewChart": "Chart",
     "tierListTier": "Tier",
     "tierListRole": "Role",
+    "matchupScore": "Matchup score",
+    "patchDelta": "Patch delta",
     "tierListChartWorst": "Worst",
     "tierListChartBest": "Best",
     "tierListLegend": "Tiers",
@@ -726,7 +728,8 @@
       "riotMatch": "Data collection",
       "seedPlayers": "Seed players",
       "cronStatus": "Cron status",
-      "replays": "Replays"
+      "replays": "Replays",
+      "matchups": "Matchups / Tier"
     },
     "cronStatus": {
       "title": "Cron status (data/cron/status.json)",
@@ -816,7 +819,17 @@
         "refreshMatchRanks": "Refresh Match.rank",
         "discoverPlayers": "Discover players (historical matches)",
         "discoverLeagueExp": "Discover league-exp entries",
-        "enrichPlayers": "Enrich players (summoner_name)"
+        "enrichPlayers": "Enrich players (summoner_name)",
+        "descriptions": {
+          "worker": "Continuous collection loop: fetches new matches, stores participants, and refreshes stats automatically.",
+          "collectOnce": "Runs a single immediate collection pass (no loop) to fetch matches quickly.",
+          "backfillRanks": "Fills missing participant ranks from Riot API, then recomputes Match.rank.",
+          "backfillRoles": "Fills missing participant roles (TOP/JUNGLE/MID/ADC/SUPPORT) from Riot match data.",
+          "refreshMatchRanks": "Recomputes Match.rank for existing matches based on participant ranks.",
+          "discoverPlayers": "Discovers additional players from historical matches of known players, then stores them.",
+          "discoverLeagueExp": "Scans Riot league entries by queue/tier/division and adds those players for future polling.",
+          "enrichPlayers": "Enriches existing players by fetching/normalizing missing fields (e.g. summoner_name)."
+        }
       }
     },
     "riotApikey": {
@@ -875,6 +888,27 @@
       "error": "Failed to fetch replay links.",
       "matches": "matches",
       "replayLink": "Open replay"
+    },
+    "matchups": {
+      "title": "Matchup tier list",
+      "description": "Lane-vs-lane score (-10 to +10) driven mostly by winrate, with KDA/level adjustments and patch delta.",
+      "patch": "Patch",
+      "lane": "Lane",
+      "allLanes": "All",
+      "rank": "Rank",
+      "globalRank": "Global (all ranks)",
+      "minGames": "Min games",
+      "championId": "Champion ID",
+      "loadTier": "Load tier list",
+      "loadChampion": "Load champion",
+      "rebuild": "Rebuild patch",
+      "loaded": "{count} tier-list row(s) loaded.",
+      "championLoaded": "{count} matchup row(s) loaded.",
+      "rebuildSuccess": "Rebuild completed ({rows} rows).",
+      "loadError": "Failed to load matchup data.",
+      "rebuildError": "Failed to rebuild matchup scores.",
+      "tierTable": "Tier list (aggregated by champion)",
+      "championTable": "Champion opponent details"
     }
   }
 }

@@ -199,14 +199,17 @@
                 </span>
               </div>
 
-              <div v-if="card.fields.length" class="mb-3 grid gap-2 md:grid-cols-3">
+              <div
+                v-if="card.fields.length && riotScriptFields[card.id]"
+                class="mb-3 grid gap-2 md:grid-cols-3"
+              >
                 <div v-for="field in card.fields" :key="`${card.id}-${field.key}`">
                   <label class="mb-1 block text-xs font-medium text-text/70">{{
                     field.label
                   }}</label>
                   <select
                     v-if="field.type === 'select'"
-                    v-model="riotScriptFields[card.id]![field.key]"
+                    v-model="riotScriptFields[card.id][field.key]"
                     class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
                   >
                     <option
@@ -219,7 +222,7 @@
                   </select>
                   <input
                     v-else
-                    v-model="riotScriptFields[card.id]![field.key]"
+                    v-model="riotScriptFields[card.id][field.key]"
                     :type="field.type"
                     class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
                     :placeholder="field.placeholder"
@@ -353,6 +356,21 @@
               >
                 <option value="euw1">EUW1</option>
                 <option value="eun1">EUN1</option>
+                <option value="na1">NA1</option>
+                <option value="br1">BR1</option>
+                <option value="la1">LA1</option>
+                <option value="la2">LA2</option>
+                <option value="oc1">OC1</option>
+                <option value="kr">KR</option>
+                <option value="jp1">JP1</option>
+                <option value="tr1">TR1</option>
+                <option value="ru">RU</option>
+                <option value="me1">ME1</option>
+                <option value="ph2">PH2</option>
+                <option value="sg2">SG2</option>
+                <option value="th2">TH2</option>
+                <option value="tw2">TW2</option>
+                <option value="vn2">VN2</option>
               </select>
             </div>
             <div>
@@ -397,10 +415,10 @@
             <ul class="space-y-2">
               <li
                 v-for="m in replayResult.matches"
-                :key="m.matchId"
+                :key="m.matchId || m.replayUrl"
                 class="rounded border border-primary/20 bg-background/50 p-3"
               >
-                <p class="text-sm font-medium text-text">{{ m.matchId }}</p>
+                <p class="text-sm font-medium text-text">{{ m.matchId || 'Replay' }}</p>
                 <div class="mt-1 flex flex-wrap gap-3 text-sm">
                   <a
                     class="text-accent underline"
@@ -410,25 +428,188 @@
                   >
                     {{ t('admin.replays.replayLink') }}
                   </a>
-                  <a
-                    class="text-text/70 underline"
-                    :href="m.matchApiUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    match API
-                  </a>
-                  <a
-                    class="text-text/70 underline"
-                    :href="m.timelineApiUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    timeline API
-                  </a>
                 </div>
               </li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Matchup tier -->
+      <div v-show="activeTab === 'matchups'" class="space-y-6">
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-2 text-lg font-semibold text-text">{{ t('admin.matchups.title') }}</h2>
+          <p class="mb-4 text-sm text-text/80">{{ t('admin.matchups.description') }}</p>
+
+          <div class="grid gap-3 sm:grid-cols-5">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">{{
+                t('admin.matchups.patch')
+              }}</label>
+              <input
+                v-model.trim="matchupPatch"
+                type="text"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="16.4"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">{{
+                t('admin.matchups.lane')
+              }}</label>
+              <select
+                v-model="matchupLane"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+              >
+                <option value="">{{ t('admin.matchups.allLanes') }}</option>
+                <option value="TOP">TOP</option>
+                <option value="JUNGLE">JUNGLE</option>
+                <option value="MIDDLE">MIDDLE</option>
+                <option value="BOTTOM">BOTTOM</option>
+                <option value="UTILITY">UTILITY</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">{{
+                t('admin.matchups.rank')
+              }}</label>
+              <input
+                v-model.trim="matchupRankTier"
+                type="text"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                :placeholder="t('admin.matchups.globalRank')"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">{{
+                t('admin.matchups.minGames')
+              }}</label>
+              <input
+                v-model.number="matchupMinGames"
+                type="number"
+                min="1"
+                max="1000"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium text-text/70">{{
+                t('admin.matchups.championId')
+              }}</label>
+              <input
+                v-model.trim="matchupChampionIdInput"
+                type="text"
+                class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="266"
+              />
+            </div>
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              :disabled="matchupLoading || !matchupPatch"
+              @click="loadMatchupTierList"
+            >
+              {{ matchupLoading ? '…' : t('admin.matchups.loadTier') }}
+            </button>
+            <button
+              type="button"
+              class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80 disabled:opacity-50"
+              :disabled="matchupLoading || !matchupPatch || !matchupChampionIdInput"
+              @click="loadMatchupChampionDetails"
+            >
+              {{ t('admin.matchups.loadChampion') }}
+            </button>
+            <button
+              type="button"
+              class="rounded border border-primary/40 bg-background px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
+              :disabled="matchupRebuildLoading || !matchupPatch"
+              @click="rebuildMatchupTier"
+            >
+              {{ matchupRebuildLoading ? '…' : t('admin.matchups.rebuild') }}
+            </button>
+          </div>
+
+          <p
+            v-if="matchupMessage"
+            class="mt-3 text-sm"
+            :class="matchupError ? 'text-error' : 'text-green-600'"
+          >
+            {{ matchupMessage }}
+          </p>
+
+          <div v-if="matchupTierRows.length" class="mt-4 overflow-x-auto">
+            <h3 class="mb-2 text-sm font-semibold text-text">
+              {{ t('admin.matchups.tierTable') }}
+            </h3>
+            <table class="w-full min-w-[720px] text-left text-sm">
+              <thead class="border-b border-primary/30 bg-surface/50">
+                <tr>
+                  <th class="px-3 py-2 font-semibold text-text">ChampionId</th>
+                  <th class="px-3 py-2 font-semibold text-text">Score</th>
+                  <th class="px-3 py-2 font-semibold text-text">Δ Patch</th>
+                  <th class="px-3 py-2 font-semibold text-text">WR</th>
+                  <th class="px-3 py-2 font-semibold text-text">KDA</th>
+                  <th class="px-3 py-2 font-semibold text-text">Lvl</th>
+                  <th class="px-3 py-2 font-semibold text-text">Games</th>
+                  <th class="px-3 py-2 font-semibold text-text">Matchups</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <tr
+                  v-for="row in matchupTierRows"
+                  :key="row.championId"
+                  class="hover:bg-surface/50"
+                >
+                  <td class="px-3 py-2 text-text">{{ row.championId }}</td>
+                  <td class="px-3 py-2 font-semibold text-text">{{ row.avgScore }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgDeltaVsPrevPatch ?? '—' }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgWinrate }}%</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgKda }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgLevel }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.totalGames }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.matchups }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div v-if="matchupDetailsRows.length" class="mt-4 overflow-x-auto">
+            <h3 class="mb-2 text-sm font-semibold text-text">
+              {{ t('admin.matchups.championTable') }}
+            </h3>
+            <table class="w-full min-w-[760px] text-left text-sm">
+              <thead class="border-b border-primary/30 bg-surface/50">
+                <tr>
+                  <th class="px-3 py-2 font-semibold text-text">Lane</th>
+                  <th class="px-3 py-2 font-semibold text-text">OpponentId</th>
+                  <th class="px-3 py-2 font-semibold text-text">Score</th>
+                  <th class="px-3 py-2 font-semibold text-text">Δ Patch</th>
+                  <th class="px-3 py-2 font-semibold text-text">WR</th>
+                  <th class="px-3 py-2 font-semibold text-text">KDA</th>
+                  <th class="px-3 py-2 font-semibold text-text">Lvl</th>
+                  <th class="px-3 py-2 font-semibold text-text">Games</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-primary/20">
+                <tr
+                  v-for="row in matchupDetailsRows"
+                  :key="`${row.lane}-${row.opponentChampionId}`"
+                  class="hover:bg-surface/50"
+                >
+                  <td class="px-3 py-2 text-text">{{ row.lane }}</td>
+                  <td class="px-3 py-2 text-text">{{ row.opponentChampionId }}</td>
+                  <td class="px-3 py-2 font-semibold text-text">{{ row.score }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.deltaVsPrevPatch ?? '—' }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.winrate }}%</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgKda }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.avgLevel }}</td>
+                  <td class="px-3 py-2 text-text/80">{{ row.games }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -867,6 +1048,7 @@ const activeTab = ref<
   | 'riotmatch'
   | 'seedplayers'
   | 'replays'
+  | 'matchups'
   | 'cronstatus'
 >('contact')
 
@@ -878,6 +1060,7 @@ const adminTabs = computed(() => [
   { id: 'riotmatch' as const, label: t('admin.tabs.riotMatch') },
   { id: 'seedplayers' as const, label: t('admin.tabs.seedPlayers') },
   { id: 'replays' as const, label: t('admin.tabs.replays') },
+  { id: 'matchups' as const, label: t('admin.tabs.matchups') },
   { id: 'cronstatus' as const, label: t('admin.tabs.cronStatus') },
 ])
 
@@ -901,21 +1084,21 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
   {
     id: 'riot:worker',
     label: t('admin.riotMatch.scripts.worker'),
-    description: t('admin.riotMatch.pollerHint'),
+    description: t('admin.riotMatch.scripts.descriptions.worker'),
     runMode: 'generic',
     fields: [],
   },
   {
     id: 'riot:collect',
     label: t('admin.riotMatch.scripts.collectOnce'),
-    description: t('admin.riotMatch.triggerBackground'),
+    description: t('admin.riotMatch.scripts.descriptions.collectOnce'),
     runMode: 'collect',
     fields: [],
   },
   {
     id: 'riot:backfill-ranks',
     label: t('admin.riotMatch.scripts.backfillRanks'),
-    description: t('admin.riotMatch.backfillTitle'),
+    description: t('admin.riotMatch.scripts.descriptions.backfillRanks'),
     runMode: 'backfillRanks',
     fields: [
       { key: 'limit', label: 'Limit', type: 'number', defaultValue: '200', placeholder: '200' },
@@ -924,7 +1107,7 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
   {
     id: 'riot:backfill-roles',
     label: t('admin.riotMatch.scripts.backfillRoles'),
-    description: t('admin.riotMatch.scripts.backfillRoles'),
+    description: t('admin.riotMatch.scripts.descriptions.backfillRoles'),
     runMode: 'backfillRoles',
     fields: [
       { key: 'limit', label: 'Matches', type: 'number', defaultValue: '50', placeholder: '50' },
@@ -933,7 +1116,7 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
   {
     id: 'riot:discover-league-exp',
     label: t('admin.riotMatch.scripts.discoverLeagueExp'),
-    description: t('admin.riotMatch.leagueExpTitle'),
+    description: t('admin.riotMatch.scripts.descriptions.discoverLeagueExp'),
     runMode: 'discoverLeagueExp',
     fields: [
       {
@@ -989,21 +1172,21 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
   {
     id: 'riot:refresh-match-ranks',
     label: t('admin.riotMatch.scripts.refreshMatchRanks'),
-    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    description: t('admin.riotMatch.scripts.descriptions.refreshMatchRanks'),
     runMode: 'generic',
     fields: [],
   },
   {
     id: 'riot:discover-players',
     label: t('admin.riotMatch.scripts.discoverPlayers'),
-    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    description: t('admin.riotMatch.scripts.descriptions.discoverPlayers'),
     runMode: 'generic',
     fields: [],
   },
   {
     id: 'riot:enrich',
     label: t('admin.riotMatch.scripts.enrichPlayers'),
-    description: t('admin.riotMatch.scripts.backgroundLaunched'),
+    description: t('admin.riotMatch.scripts.descriptions.enrichPlayers'),
     runMode: 'generic',
     fields: [],
   },
@@ -1154,7 +1337,25 @@ const allPlayersLoading = ref(false)
 
 // Replay links tool (admin)
 const replaySummonerName = ref('')
-const replayRegion = ref<'euw1' | 'eun1'>('euw1')
+const replayRegion = ref<
+  | 'euw1'
+  | 'eun1'
+  | 'na1'
+  | 'br1'
+  | 'la1'
+  | 'la2'
+  | 'oc1'
+  | 'kr'
+  | 'jp1'
+  | 'tr1'
+  | 'ru'
+  | 'me1'
+  | 'ph2'
+  | 'sg2'
+  | 'th2'
+  | 'tw2'
+  | 'vn2'
+>('euw1')
 const replayCount = ref(10)
 const replayLoading = ref(false)
 const replayError = ref(false)
@@ -1166,12 +1367,49 @@ const replayResult = ref<{
   countRequested: number
   countReturned: number
   matches: Array<{
-    matchId: string
+    matchId?: string
     replayUrl: string
-    matchApiUrl: string
-    timelineApiUrl: string
   }>
 } | null>(null)
+
+// Matchup tier (admin)
+const matchupPatch = ref('')
+const matchupLane = ref<'TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'UTILITY' | ''>('')
+const matchupRankTier = ref('')
+const matchupMinGames = ref(20)
+const matchupChampionIdInput = ref('')
+const matchupLoading = ref(false)
+const matchupRebuildLoading = ref(false)
+const matchupError = ref(false)
+const matchupMessage = ref('')
+const matchupTierRows = ref<
+  Array<{
+    championId: number
+    matchups: number
+    totalGames: number
+    avgScore: number
+    avgWinrate: number
+    avgKda: number
+    avgLevel: number
+    avgConfidence: number
+    avgDeltaVsPrevPatch: number | null
+  }>
+>([])
+const matchupDetailsRows = ref<
+  Array<{
+    opponentChampionId: number
+    lane: string
+    games: number
+    wins: number
+    winrate: number
+    avgKda: number
+    avgLevel: number
+    score: number
+    confidence: number
+    prevPatchScore: number | null
+    deltaVsPrevPatch: number | null
+  }>
+>([])
 
 const allPlayersTotalPages = computed(() =>
   Math.max(1, Math.ceil(allPlayersTotal.value / ALL_PLAYERS_PAGE_SIZE))
@@ -1625,6 +1863,111 @@ async function fetchReplayLinks() {
   }
 }
 
+function matchupQueryParams(extra?: Record<string, string>): string {
+  const p = new URLSearchParams()
+  p.set('patch', matchupPatch.value.trim())
+  if (matchupLane.value) p.set('lane', matchupLane.value)
+  if (matchupRankTier.value.trim()) p.set('rankTier', matchupRankTier.value.trim().toUpperCase())
+  p.set('minGames', String(matchupMinGames.value || 20))
+  p.set('limit', '150')
+  for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v)
+  return p.toString()
+}
+
+async function loadMatchupTierList() {
+  matchupMessage.value = ''
+  matchupError.value = false
+  matchupLoading.value = true
+  matchupDetailsRows.value = []
+  try {
+    const query = matchupQueryParams()
+    const res = await fetchWithAuth(apiUrl(`/api/admin/matchup-tier-list?${query}`))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      matchupTierRows.value = Array.isArray(data?.tierList) ? data.tierList : []
+      matchupMessage.value = t('admin.matchups.loaded', { count: matchupTierRows.value.length })
+      return
+    }
+    matchupError.value = true
+    matchupMessage.value = data?.error ?? t('admin.matchups.loadError')
+  } catch {
+    matchupError.value = true
+    matchupMessage.value = t('admin.matchups.loadError')
+  } finally {
+    matchupLoading.value = false
+  }
+}
+
+async function loadMatchupChampionDetails() {
+  const championId = Number(matchupChampionIdInput.value)
+  if (!Number.isFinite(championId) || championId <= 0) return
+  matchupMessage.value = ''
+  matchupError.value = false
+  matchupLoading.value = true
+  try {
+    const query = matchupQueryParams()
+    const res = await fetchWithAuth(apiUrl(`/api/admin/matchup-tier/${championId}?${query}`))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      matchupDetailsRows.value = Array.isArray(data?.matchups) ? data.matchups : []
+      matchupMessage.value = t('admin.matchups.championLoaded', {
+        count: matchupDetailsRows.value.length,
+      })
+      return
+    }
+    matchupError.value = true
+    matchupMessage.value = data?.error ?? t('admin.matchups.loadError')
+  } catch {
+    matchupError.value = true
+    matchupMessage.value = t('admin.matchups.loadError')
+  } finally {
+    matchupLoading.value = false
+  }
+}
+
+async function rebuildMatchupTier() {
+  matchupMessage.value = ''
+  matchupError.value = false
+  matchupRebuildLoading.value = true
+  try {
+    const payload: { patch: string; rankTier?: string } = { patch: matchupPatch.value.trim() }
+    if (matchupRankTier.value.trim()) payload.rankTier = matchupRankTier.value.trim().toUpperCase()
+    const res = await fetchWithAuth(apiUrl('/api/admin/matchup-tier/rebuild'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      matchupMessage.value = t('admin.matchups.rebuildSuccess', { rows: data?.rows ?? 0 })
+      await loadMatchupTierList()
+      return
+    }
+    matchupError.value = true
+    matchupMessage.value = data?.error ?? t('admin.matchups.rebuildError')
+  } catch {
+    matchupError.value = true
+    matchupMessage.value = t('admin.matchups.rebuildError')
+  } finally {
+    matchupRebuildLoading.value = false
+  }
+}
+
 async function triggerVideosSync() {
   videosTriggerMessage.value = ''
   videosTriggerError.value = false
@@ -1722,5 +2065,11 @@ watch(activeTab, tab => {
     loadRiotApikey()
   if (tab === 'seedplayers' && seedPlayersList.value.length === 0 && !seedPlayersLoading.value)
     loadSeedPlayers()
+  if (tab === 'matchups' && matchupTierRows.value.length === 0 && !matchupLoading.value) {
+    if (!matchupPatch.value)
+      matchupPatch.value =
+        cron.value?.gameVersion?.currentVersion?.split('.')?.slice(0, 2)?.join('.') ?? ''
+    if (matchupPatch.value) loadMatchupTierList()
+  }
 })
 </script>

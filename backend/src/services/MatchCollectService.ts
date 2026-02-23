@@ -4,6 +4,7 @@
  */
 import { prisma } from '../db.js'
 import type { MatchSummary } from './RiotApiService.js'
+import { ingestMatchupTierScoresFromMatch } from './MatchupTierService.js'
 import {
   computeMatchRankLabel,
   UNRANKED_TIER,
@@ -317,6 +318,15 @@ export async function upsertMatchFromRiot(
   })
 
   await prisma.participant.createMany({ data: createMany })
+
+  // Non-blocking matchup score aggregation used by admin tier-list analytics.
+  void ingestMatchupTierScoresFromMatch({
+    gameVersion: gameVersion ?? null,
+    matchRank: matchRank,
+    participants: participants as RiotParticipant[],
+  }).catch((err) => {
+    console.warn('[matchup-tier] ingest failed for', matchId, err instanceof Error ? err.message : err)
+  })
 
   // Remplir Player.summoner_name depuis riotIdGameName#riotIdTagline (nouveau player ou summoner_name vide) — évite appel Account-V1.
   await upsertPlayersSummonerNameFromParticipants(region, participants as RiotParticipant[])

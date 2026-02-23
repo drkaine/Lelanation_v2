@@ -365,6 +365,7 @@
                             <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
                               championName(m.opponentChampionId) ?? m.opponentChampionId
                             }}</span>
+                            <span class="text-xs text-text/70">Score {{ m.score }}</span>
                             <span class="text-sm font-semibold text-green-600 dark:text-green-400"
                               >{{ Number(m.winrate).toFixed(2) }}%</span
                             >
@@ -397,6 +398,7 @@
                             <span class="min-w-0 flex-1 truncate text-sm text-text/90">{{
                               championName(m.opponentChampionId) ?? m.opponentChampionId
                             }}</span>
+                            <span class="text-xs text-text/70">Score {{ m.score }}</span>
                             <span class="text-sm font-semibold text-red-600 dark:text-red-400"
                               >{{ Number(m.winrate).toFixed(2) }}%</span
                             >
@@ -595,6 +597,8 @@
                         <th class="px-3 py-2 text-right font-medium text-text">
                           {{ t('statisticsPage.games') }}
                         </th>
+                        <th class="px-3 py-2 text-right font-medium text-text">Score</th>
+                        <th class="px-3 py-2 text-right font-medium text-text">Δ Patch</th>
                         <th class="px-3 py-2 text-right font-medium text-text">
                           {{ t('statisticsPage.winrate') }}
                         </th>
@@ -1065,6 +1069,14 @@
                           </span>
                         </td>
                         <td class="px-3 py-2 text-right text-text/90">{{ m.games }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">{{ m.score }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">
+                          {{
+                            m.deltaVsPrevPatch != null
+                              ? (m.deltaVsPrevPatch > 0 ? '+' : '') + m.deltaVsPrevPatch
+                              : '—'
+                          }}
+                        </td>
                         <td class="px-3 py-2 text-right text-text/90">
                           {{ Number(m.winrate).toFixed(2) }}%
                         </td>
@@ -1637,6 +1649,12 @@ const matchupsData = ref<{
     games: number
     wins: number
     winrate: number
+    avgKda: number
+    avgLevel: number
+    score: number
+    confidence: number
+    prevPatchScore: number | null
+    deltaVsPrevPatch: number | null
   }>
 } | null>(null)
 const matchupsSectionRef = ref<HTMLElement | null>(null)
@@ -1663,6 +1681,17 @@ function queryParams() {
   if (filterRank.value) p.set('rankTier', filterRank.value)
   if (filterRole.value) p.set('role', filterRole.value)
   return p.toString() ? '?' + p.toString() : ''
+}
+
+function patchFromVersion(version: string): string | null {
+  const raw = (version ?? '').trim()
+  if (!raw) return null
+  const parts = raw.split('.')
+  if (parts.length < 2) return null
+  const major = Number(parts[0])
+  const minor = Number(parts[1])
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
+  return `${major}.${minor}`
 }
 
 function overviewQueryParams() {
@@ -1783,9 +1812,15 @@ async function loadMatchups() {
   const t = statsPerfStart('loadMatchups')
   matchupsPending.value = true
   try {
-    const q = queryParams()
+    const params = new URLSearchParams()
+    const effectiveVersion = filterVersion.value || gameVersion.value || ''
+    const patch = patchFromVersion(effectiveVersion)
+    if (patch) params.set('patch', patch)
+    if (filterRank.value) params.set('rankTier', filterRank.value)
+    if (filterRole.value) params.set('lane', filterRole.value)
+    params.set('minGames', '10')
     matchupsData.value = await statsFetch(
-      apiUrl(`/api/stats/champions/${championId.value}/matchups${q ? q + '&' : '?'}minGames=10`)
+      apiUrl(`/api/stats/champions/${championId.value}/matchups-tier?${params.toString()}`)
     )
   } catch {
     matchupsData.value = null

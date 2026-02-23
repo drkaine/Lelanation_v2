@@ -19,7 +19,8 @@
     "riot:enrich": "tsx src/scripts/runRiotEnrich.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:matchups": "tsx --test src/services/MatchupTierService.test.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

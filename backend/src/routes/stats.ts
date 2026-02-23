@@ -8,6 +8,11 @@ import { getBuildsByChampion } from '../services/StatsBuildsService.js'
 import { getRunesByChampion, getRuneStatsByChampion } from '../services/StatsRunesService.js'
 import { getMatchupsByChampion } from '../services/StatsMatchupsService.js'
 import {
+  getTierListByLane,
+  getMatchupDetailsByChampion,
+  patchFromGameVersion,
+} from '../services/MatchupTierService.js'
+import {
   getTopPlayers,
   getTopPlayersByChampion,
   getPlayerBySummonerName,
@@ -87,6 +92,14 @@ function queryStringArray(value: unknown): string[] {
   }
   if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
   return []
+}
+
+function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): string | null {
+  const patchRaw = queryString(patchValue)
+  if (patchRaw) return patchRaw
+  const version = queryString(versionValue)
+  if (!version) return null
+  return patchFromGameVersion(version)
 }
 
 const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
@@ -468,6 +481,61 @@ router.get('/champions/:championId/matchups', async (req: Request, res: Response
     return res.status(200).json({ matchups: [], message: 'No stats yet.' })
   }
   return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/matchups-tier - matchup score/tier rows for one champion.
+ * Query: ?patch=16.4 or ?version=16.4.1&rankTier=GOLD&lane=TOP&minGames=10
+ */
+router.get('/champions/:championId/matchups-tier', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
+  if (!patch) {
+    return res.status(400).json({ error: 'Missing patch/version for matchup-tier query' })
+  }
+  const rankTier = queryString(req.query.rankTier)
+  const lane = queryString(req.query.lane) ?? queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
+  const data = await getMatchupDetailsByChampion({
+    championId,
+    patch,
+    rankTier: rankTier ?? null,
+    lane: lane ?? null,
+    minGames,
+    limit,
+  })
+  return res.json({ patch, championId, matchups: data })
+})
+
+/** GET /api/stats/matchup-tier-list - champion tier rows from matchup scores.
+ * Query: ?patch=16.4 or ?version=16.4.1&rankTier=GOLD&lane=TOP&minGames=20
+ */
+router.get('/matchup-tier-list', async (req: Request, res: Response) => {
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
+  if (!patch) {
+    return res.status(400).json({ error: 'Missing patch/version for matchup-tier-list query' })
+  }
+  const rankTier = queryString(req.query.rankTier)
+  const lane = queryString(req.query.lane) ?? queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 300
+  const rows = await getTierListByLane({
+    patch,
+    rankTier: rankTier ?? null,
+    lane: lane ?? null,
+    minGames,
+    limit,
+  })
+  return res.json({
+    patch,
+    rankTier: rankTier ?? null,
+    lane: lane ?? null,
+    rows,
+  })
 })
 
 /** GET /api/stats/champions/:championId/summoner-spells - per-spell stats for this champion. Query: ?version=16.1 &rankTier=GOLD */

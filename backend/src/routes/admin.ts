@@ -9,7 +9,12 @@ import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
-import { getRiotApiService } from '../services/RiotApiService.js'
+import { getRiotApiService, type PlatformRegion } from '../services/RiotApiService.js'
+import {
+  getTierListByLane,
+  getMatchupDetailsByChampion,
+  rebuildMatchupTierScores,
+} from '../services/MatchupTierService.js'
 import {
   backfillParticipantRanks,
   backfillParticipantRoles,
@@ -48,6 +53,7 @@ const youtubeService = new YouTubeService()
 const __dirnameAdmin = dirname(fileURLToPath(import.meta.url))
 const backendRoot = join(__dirnameAdmin, '..', '..')
 const pm2AppName = process.env.PM2_APP_NAME ?? 'lelanation-backend'
+const pm2RiotWorkerAppName = process.env.PM2_RIOT_WORKER_APP_NAME ?? 'lelanation-riot-worker'
 const POLLER_SCRIPTS = new Set([
   'riot:worker',
   'riot:collect',
@@ -60,6 +66,25 @@ const POLLER_SCRIPTS = new Set([
 ])
 const RIOT_SCRIPT_STATUS_FILE = join(process.cwd(), 'data', 'cron', 'riot-script-status.json')
 const RIOT_SCRIPT_LOG_DIR = join(process.cwd(), 'logs', 'scripts')
+const REPLAY_PLATFORM_TO_CONTINENT: Record<PlatformRegion, 'europe' | 'americas' | 'asia'> = {
+  euw1: 'europe',
+  eun1: 'europe',
+  tr1: 'europe',
+  ru: 'europe',
+  me1: 'europe',
+  na1: 'americas',
+  br1: 'americas',
+  la1: 'americas',
+  la2: 'americas',
+  oc1: 'americas',
+  kr: 'asia',
+  jp1: 'asia',
+  ph2: 'asia',
+  sg2: 'asia',
+  th2: 'asia',
+  tw2: 'asia',
+  vn2: 'asia',
+}
 
 type ScriptStatusValue = 'started' | 'running' | 'stopped' | 'failed'
 type ScriptStatusRow = {
@@ -110,6 +135,33 @@ function isPidAlive(pid: number | undefined): boolean {
     return true
   } catch {
     return false
+  }
+}
+type Pm2Proc = {
+  name?: string
+  pid?: number
+  pm2_env?: { status?: string; pm_uptime?: number }
+}
+async function getPm2ProcessInfo(name: string): Promise<{ online: boolean; pid?: number; status?: string; pmUptime?: number } | null> {
+  try {
+    const jlist = await new Promise<string>((resolve, reject) => {
+      exec('pm2 jlist', { timeout: 5000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
+        if (err) return reject(err)
+        resolve(stdout || '[]')
+      })
+    })
+    const data = JSON.parse(jlist) as Pm2Proc[]
+    const proc = Array.isArray(data) ? data.find((p) => p?.name === name) : null
+    if (!proc) return null
+    const status = proc.pm2_env?.status
+    return {
+      online: status === 'online',
+      pid: typeof proc.pid === 'number' ? proc.pid : undefined,
+      status,
+      pmUptime: typeof proc.pm2_env?.pm_uptime === 'number' ? proc.pm2_env.pm_uptime : undefined,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -182,15 +234,33 @@ router.get('/cron', async (_req, res) => {
   const ytConfig = ytConfigResult.isOk() ? ytConfigResult.unwrap() : { channels: [] }
 
   const riotWorkerHeartbeatPath = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
-  let riotWorker: { lastBeat: string | null; active: boolean } = { lastBeat: null, active: false }
+  let riotWorker: { lastBeat: string | null; active: boolean; source?: string; pm2?: { online: boolean; pid?: number; status?: string } | null } = {
+    lastBeat: null,
+    active: false,
+    source: 'none',
+    pm2: null,
+  }
+  let heartbeatActive = false
   const heartbeatResult = await FileManager.readJson<{ lastBeat?: string }>(riotWorkerHeartbeatPath)
   if (heartbeatResult.isOk()) {
     const data = heartbeatResult.unwrap()
     const lastBeat = data?.lastBeat ?? null
     if (lastBeat) {
       const beatMs = new Date(lastBeat).getTime()
-      riotWorker = { lastBeat, active: Date.now() - beatMs < 10 * 60 * 1000 } // active if beat within 10 min
+      heartbeatActive = Date.now() - beatMs < 10 * 60 * 1000
+      riotWorker = { ...riotWorker, lastBeat, active: heartbeatActive }
     }
+  }
+  const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
+  if (pm2Worker) {
+    riotWorker = {
+      ...riotWorker,
+      active: riotWorker.active || pm2Worker.online,
+      source: riotWorker.active ? 'heartbeat' : (pm2Worker.online ? 'pm2' : 'none'),
+      pm2: { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status },
+    }
+  } else if (heartbeatActive) {
+    riotWorker = { ...riotWorker, source: 'heartbeat' }
   }
 
   const ytStatus = await Promise.all(
@@ -379,7 +449,9 @@ router.post('/riot-collect-now', (_req, res) => {
 router.post('/riot-replay-links', async (req, res) => {
   try {
     const rawSummoner = typeof req.body?.summonerName === 'string' ? req.body.summonerName.trim() : ''
-    const region = req.body?.region === 'eun1' ? 'eun1' : 'euw1'
+    const rawRegion = typeof req.body?.region === 'string' ? req.body.region.trim().toLowerCase() : ''
+    const region: PlatformRegion = (rawRegion in REPLAY_PLATFORM_TO_CONTINENT ? rawRegion : 'euw1') as PlatformRegion
+    const continent = REPLAY_PLATFORM_TO_CONTINENT[region] ?? 'europe'
     const countRaw = Number(req.body?.count ?? 10)
     const count = Number.isFinite(countRaw) ? Math.max(1, Math.min(100, Math.trunc(countRaw))) : 10
     if (!rawSummoner) {
@@ -407,9 +479,37 @@ router.post('/riot-replay-links', async (req, res) => {
 
     let resolvedPuuid = ''
     let resolvedName = rawSummoner
+    const localNameForLookup = normalizedRiotId?.gameName?.trim() || rawSummoner
 
-    if (normalizedRiotId?.gameName && normalizedRiotId?.tagLine) {
-      const accountResult = await riotApi.getAccountByRiotId(normalizedRiotId.gameName, normalizedRiotId.tagLine)
+    const localPlayer = await prisma.player.findFirst({
+      where: {
+        region,
+        summonerName: {
+          equals: localNameForLookup,
+          mode: 'insensitive',
+        },
+      },
+      select: { puuid: true, summonerName: true },
+    })
+    if (localPlayer?.puuid) {
+      resolvedPuuid = localPlayer.puuid
+      resolvedName = localPlayer.summonerName || resolvedName
+    }
+
+    if (!resolvedPuuid) {
+      const maybePuuid = rawSummoner.trim()
+      if (/^[A-Za-z0-9_-]{60,90}$/.test(maybePuuid)) {
+        resolvedPuuid = maybePuuid
+      }
+    }
+
+    if (!resolvedPuuid && normalizedRiotId?.gameName && normalizedRiotId?.tagLine) {
+      const accountResult = await riotApi.getAccountByRiotId(
+        normalizedRiotId.gameName,
+        normalizedRiotId.tagLine,
+        continent,
+        { fast: true }
+      )
       if (accountResult.isErr()) {
         const err = accountResult.unwrapErr()
         const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
@@ -422,8 +522,8 @@ router.post('/riot-replay-links', async (req, res) => {
       resolvedPuuid = accountResult.unwrap().puuid
       const summonerByPuuid = await riotApi.getSummonerByPuuid(region, resolvedPuuid)
       if (summonerByPuuid.isOk()) resolvedName = summonerByPuuid.unwrap().name || rawSummoner
-    } else {
-      const summonerResult = await riotApi.getSummonerByName(region, rawSummoner)
+    } else if (!resolvedPuuid) {
+      const summonerResult = await riotApi.getSummonerByName(region, rawSummoner, { fast: true })
       if (summonerResult.isErr()) {
         const err = summonerResult.unwrapErr()
         const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
@@ -438,31 +538,27 @@ router.post('/riot-replay-links', async (req, res) => {
       resolvedName = summoner.name || rawSummoner
     }
 
-    const idsResult = await riotApi.getMatchIdsByPuuid(resolvedPuuid, { count, queue: null })
-    if (idsResult.isErr()) {
-      const err = idsResult.unwrapErr()
-      return res.status(400).json({ error: err.message || 'Failed to fetch matches for summoner' })
-    }
-
-    const platformSlug = region === 'eun1' ? 'eune' : 'euw'
-    const matchIds = idsResult.unwrap()
-    const matches = matchIds.map((matchId) => {
-      const gameId = matchId.includes('_') ? matchId.split('_').pop() ?? matchId : matchId
-      return {
-        matchId,
-        replayUrl: `https://www.leagueofgraphs.com/match/${platformSlug}/${gameId}`,
-        matchApiUrl: `https://europe.api.riotgames.com/lol/match/v5/matches/${matchId}`,
-        timelineApiUrl: `https://europe.api.riotgames.com/lol/match/v5/matches/${matchId}/timeline`,
+    const replayResult = await riotApi.getReplayLinksByPuuid(continent, resolvedPuuid, { count, fast: true })
+    if (replayResult.isErr()) {
+      const err = replayResult.unwrapErr()
+      const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
+      if (status === 404) return res.status(404).json({ error: 'No replay links found for this player' })
+      if (status === 401 || status === 403) {
+        return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
       }
-    })
+      return res.status(400).json({ error: err.message || 'Failed to fetch replay links' })
+    }
+    const matches = replayResult.unwrap().slice(0, count)
 
     return res.json({
       summonerName: resolvedName,
       puuid: resolvedPuuid,
       region,
+      continent,
       countRequested: count,
       countReturned: matches.length,
       matches,
+      source: 'riot-replays-api',
     })
   } catch (e) {
     return res.status(500).json({
@@ -646,6 +742,13 @@ router.post('/riot-script-run', async (req, res) => {
   }
 
   if (script === 'riot:worker') {
+    const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
+    if (pm2Worker?.online) {
+      return res.status(409).json({
+        success: false,
+        error: `Riot worker already active via PM2 (${pm2RiotWorkerAppName}).`,
+      })
+    }
     // Best effort guard: avoid duplicate workers if heartbeat is fresh.
     const hb = await FileManager.readJson<{ lastBeat?: string }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
     if (hb.isOk() && hb.unwrap()?.lastBeat) {
@@ -702,7 +805,9 @@ router.get('/riot-scripts-status', async (_req, res) => {
   const map = await readScriptStatusMap()
   const hb = await FileManager.readJson<{ lastBeat?: string }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
   const workerBeat = hb.isOk() ? hb.unwrap()?.lastBeat : null
-  const workerActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < 10 * 60 * 1000
+  const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < 10 * 60 * 1000
+  const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
+  const workerActive = workerHeartbeatActive || !!pm2Worker?.online
   const scripts = [...POLLER_SCRIPTS].map((script) => {
     const row = map[script] ?? { script, status: 'stopped' as ScriptStatusValue }
     const alive = isPidAlive(row.pid)
@@ -714,6 +819,8 @@ router.get('/riot-scripts-status', async (_req, res) => {
         ...safeRow,
         status: workerActive ? 'running' : safeRow.status === 'running' ? 'started' : safeRow.status,
         workerHeartbeat: workerBeat ?? null,
+        workerPm2: pm2Worker ? { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status } : null,
+        workerSource: workerHeartbeatActive ? 'heartbeat' : (pm2Worker?.online ? 'pm2' : 'none'),
       }
     }
     return safeRow
@@ -1124,6 +1231,89 @@ router.delete('/seed-players/:id', async (req, res) => {
     return res.json({ success: true })
   } catch {
     return res.status(404).json({ error: 'Player not found' })
+  }
+})
+
+router.get('/matchup-tier-list', async (req, res) => {
+  const patch = typeof req.query.patch === 'string' ? req.query.patch.trim() : ''
+  if (!patch) return res.status(400).json({ error: 'patch is required (example: 16.4)' })
+  const lane = typeof req.query.lane === 'string' ? req.query.lane.trim().toUpperCase() : null
+  const rankTier = typeof req.query.rankTier === 'string' ? req.query.rankTier.trim().toUpperCase() : null
+  const minGamesRaw = Number(req.query.minGames ?? 20)
+  const minGames = Number.isFinite(minGamesRaw) ? Math.max(1, Math.min(1000, Math.trunc(minGamesRaw))) : 20
+  const limitRaw = Number(req.query.limit ?? 100)
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.trunc(limitRaw))) : 100
+  try {
+    const tierList = await getTierListByLane({
+      patch,
+      lane,
+      rankTier,
+      minGames,
+      limit,
+    })
+    return res.json({
+      patch,
+      lane: lane || null,
+      rankTier: rankTier || null,
+      minGames,
+      count: tierList.length,
+      tierList,
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load matchup tier list' })
+  }
+})
+
+router.get('/matchup-tier/:championId', async (req, res) => {
+  const championId = Number(req.params.championId)
+  if (!Number.isFinite(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const patch = typeof req.query.patch === 'string' ? req.query.patch.trim() : ''
+  if (!patch) return res.status(400).json({ error: 'patch is required (example: 16.4)' })
+  const lane = typeof req.query.lane === 'string' ? req.query.lane.trim().toUpperCase() : null
+  const rankTier = typeof req.query.rankTier === 'string' ? req.query.rankTier.trim().toUpperCase() : null
+  const minGamesRaw = Number(req.query.minGames ?? 10)
+  const minGames = Number.isFinite(minGamesRaw) ? Math.max(1, Math.min(1000, Math.trunc(minGamesRaw))) : 10
+  const limitRaw = Number(req.query.limit ?? 100)
+  const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.trunc(limitRaw))) : 100
+  try {
+    const matchups = await getMatchupDetailsByChampion({
+      championId,
+      patch,
+      lane,
+      rankTier,
+      minGames,
+      limit,
+    })
+    return res.json({
+      championId,
+      patch,
+      lane: lane || null,
+      rankTier: rankTier || null,
+      minGames,
+      count: matchups.length,
+      matchups,
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load matchups' })
+  }
+})
+
+router.post('/matchup-tier/rebuild', async (req, res) => {
+  const patch = typeof req.body?.patch === 'string' ? req.body.patch.trim() : ''
+  if (!patch) return res.status(400).json({ error: 'patch is required (example: 16.4)' })
+  const rankTier = typeof req.body?.rankTier === 'string' ? req.body.rankTier.trim().toUpperCase() : null
+  try {
+    const result = await rebuildMatchupTierScores({ patch, rankTier })
+    return res.json({
+      ok: true,
+      patch: result.patch,
+      rankFilterKey: result.rankFilterKey,
+      rows: result.rows,
+    })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to rebuild matchup tier scores' })
   }
 })
 

@@ -150,3 +150,30 @@ model Player {
   @@map("players")
 }
 
+// Aggregated champion-vs-champion matchup score for tier-listing.
+model MatchupTierScore {
+  id                 BigInt   @id @default(autoincrement())
+  patch              String
+  lane               String
+  championId         Int      @map("champion_id")
+  opponentChampionId Int      @map("opponent_champion_id")
+  rankFilterKey      String   @default("GLOBAL") @map("rank_filter_key")
+  games              Int      @default(0)
+  wins               Int      @default(0)
+  sumKda             Float    @default(0) @map("sum_kda")
+  sumLevel           Float    @default(0) @map("sum_level")
+  avgKda             Float    @default(0) @map("avg_kda")
+  avgLevel           Float    @default(0) @map("avg_level")
+  score              Int      @default(0)
+  confidence         Float    @default(0)
+  prevPatchScore     Int?     @map("prev_patch_score")
+  deltaVsPrevPatch   Int?     @map("delta_vs_prev_patch")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([patch, lane, championId, opponentChampionId, rankFilterKey], map: "matchup_tier_scores_unique")
+  @@index([patch, lane, rankFilterKey, score], map: "matchup_tier_scores_patch_lane_rank_idx")
+  @@index([championId, patch, rankFilterKey], map: "matchup_tier_scores_champ_patch_rank_idx")
+  @@map("matchup_tier_scores")
+}
+
