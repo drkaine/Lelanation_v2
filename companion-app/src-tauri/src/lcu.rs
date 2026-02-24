@@ -1,6 +1,7 @@
 //! LCU (League Client Update) API: lockfile and authenticated HTTPS to localhost.
 
 use serde::Deserialize;
+use base64::Engine;
 use std::path::PathBuf;
 
 #[cfg(target_os = "windows")]
@@ -29,11 +30,8 @@ fn default_lockfile_path() -> PathBuf {
 /// Parsed lockfile contents: process name, PID, port, password, protocol.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LockfileData {
-    pub name: String,
-    pub pid: u32,
     pub port: u16,
     pub password: String,
-    pub protocol: String,
 }
 
 /// Read and parse the Riot Client lockfile.
@@ -52,13 +50,9 @@ pub fn read_lockfile() -> Result<LockfileData, String> {
         return Err("Invalid lockfile format".into());
     }
     let port: u16 = parts[2].parse().map_err(|_| "Invalid port in lockfile")?;
-    let pid: u32 = parts[1].parse().map_err(|_| "Invalid PID in lockfile")?;
     Ok(LockfileData {
-        name: parts[0].to_string(),
-        pid,
         port,
         password: parts[3].to_string(),
-        protocol: parts[4].to_string(),
     })
 }
 
