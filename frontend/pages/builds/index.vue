@@ -72,7 +72,7 @@
         </div>
 
         <!-- Build Grid -->
-        <BuildGrid />
+        <BuildGrid :show-favorite-toggle="true" />
       </div>
 
       <!-- Tab Content: My Builds -->
@@ -109,6 +109,15 @@
           :show-user-actions="true"
           @delete-build="confirmDelete"
         />
+      </div>
+
+      <!-- Tab Content: Mes favoris -->
+      <div v-if="activeTab === 'favoris'" class="tab-content">
+        <div class="mb-6 space-y-4">
+          <BuildSearch />
+          <BuildFilters />
+        </div>
+        <BuildGrid :custom-builds="favoriteBuilds" :show-favorite-toggle="true" />
       </div>
 
       <div v-if="activeTab === 'lelariva'" class="tab-content">
@@ -159,6 +168,7 @@ import { useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
+import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
@@ -168,6 +178,7 @@ import { useStreamerMode } from '~/composables/useStreamerMode'
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
+const favoritesStore = useFavoritesStore()
 const route = useRoute()
 const localePath = useLocalePath()
 const { isStreamerMode } = useStreamerMode()
@@ -205,6 +216,20 @@ const buildsFilteredByVisibility = computed<Build[]>(() => {
 })
 const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 
+/** Builds favoris : intersection des IDs favoris avec les builds chargés (saved + discovery). */
+const favoriteBuilds = computed(() => {
+  const ids = new Set(favoritesStore.favoriteBuildIds)
+  if (ids.size === 0) return []
+  const saved = buildStore.getSavedBuilds()
+  const fromDiscovery = discoveryStore.builds
+  const byId = new Map<string, Build>()
+  for (const b of saved) byId.set(b.id, b)
+  for (const b of fromDiscovery) if (!byId.has(b.id)) byId.set(b.id, b)
+  return favoritesStore.favoriteBuildIds
+    .map((id: string) => byId.get(id))
+    .filter((b: Build | undefined): b is Build => Boolean(b))
+})
+
 // Check if there are Lelariva builds (placeholder for now)
 const hasLelarivaBuilds = computed(() => {
   // TODO: Implement check for Lelariva builds when available
@@ -220,6 +245,10 @@ const tabs = computed(() => {
     { id: 'discover', label: t('buildsPage.discover') },
     { id: 'my-builds', label: t('buildsPage.myBuilds') },
   ]
+
+  if (favoritesStore.favoriteBuildIds.length > 0) {
+    availableTabs.push({ id: 'favoris', label: t('buildsPage.myFavorites') })
+  }
 
   if (hasLelarivaBuilds.value) {
     availableTabs.push({ id: 'lelariva', label: t('buildsPage.lelarivaBuilds') })
@@ -241,7 +270,7 @@ const getInitialTab = (): string => {
   // Priorité 2: localStorage
   try {
     const savedTab = localStorage.getItem('lelanation_active_tab')
-    if (savedTab && ['discover', 'my-builds', 'lelariva'].includes(savedTab)) {
+    if (savedTab && ['discover', 'my-builds', 'favoris', 'lelariva'].includes(savedTab)) {
       return savedTab
     }
   } catch {
@@ -333,6 +362,7 @@ watch(
 )
 
 onMounted(() => {
+  favoritesStore.init()
   voteStore.init()
   discoveryStore.loadBuilds()
 })

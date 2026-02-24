@@ -86,6 +86,15 @@
         >
           {{ t('nav.admin') }}
         </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/admin/app')"
+          :title="t('nav.appAdmin')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('nav.appAdmin') }}
+        </NuxtLink>
       </div>
 
       <div class="right-header">
@@ -121,6 +130,14 @@
           class="version"
         >
           {{ t('nav.admin') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/admin/app')"
+          :title="t('nav.appAdmin')"
+          class="version"
+        >
+          {{ t('nav.appAdmin') }}
         </NuxtLink>
         <a
           :href="patchNotesUrl"

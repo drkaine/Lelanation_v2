@@ -144,7 +144,7 @@ function itemsArray(p: RiotParticipant): number[] {
 }
 
 export async function upsertMatchFromRiot(
-  region: 'euw1' | 'eun1',
+  region: string,
   data: MatchSummary,
   rankByPuuid?: Map<string, RankEntry | null>
 ): Promise<{ matchId: string; inserted: boolean }> {

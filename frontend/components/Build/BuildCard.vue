@@ -386,7 +386,12 @@
         <div class="tooltip-body">
           <div class="tooltip-spells">
             <div
-              v-if="selectedChampion.passive && selectedChampion.passive.image"
+              v-if="
+                selectedChampion.passive &&
+                selectedChampion.passive.image &&
+                selectedChampion.passive.image.full &&
+                selectedChampion.passive.image.full !== selectedChampion.image.full
+              "
               class="tooltip-spell"
             >
               <div class="tooltip-spell-img-container">
@@ -509,6 +514,7 @@ import { useI18n } from 'vue-i18n'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import {
   getChampionImageUrl,
   getChampionSpellImageUrl,
@@ -536,6 +542,7 @@ const props = withDefaults(defineProps<Props>(), {
 const buildStore = useBuildStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
+const championsStore = useChampionsStore()
 const { locale, t } = useI18n()
 
 /** Nom d'affichage de l'item (résolu via le store pour éviter d'afficher l'id quand l'item n'a pas de nom) */
@@ -569,7 +576,10 @@ const onChampionMouseLeave = () => {
 const displayBuild = computed(() => props.build || buildStore.currentBuild)
 
 const selectedChampion = computed(() => {
-  return displayBuild.value?.champion || null
+  const champion = displayBuild.value?.champion || null
+  if (!champion) return null
+  const fullChampion = championsStore.champions.find(c => c.id === champion.id)
+  return fullChampion ?? champion
 })
 
 const { version: defaultVersion } = useGameVersion()
@@ -889,7 +899,8 @@ const formattedPassive = computed(() => {
 
 // Format spells with HTML descriptions
 const formattedSpells = computed(() => {
-  if (!selectedChampion.value?.spells) return []
+  if (!Array.isArray(selectedChampion.value?.spells) || selectedChampion.value.spells.length === 0)
+    return []
   return selectedChampion.value.spells.map(spell => ({
     ...spell,
     description: spell.description || '',
@@ -1081,6 +1092,10 @@ watch(
 
 // Charger le build sauvegardé au montage (seulement si pas de build en prop)
 onMounted(() => {
+  // Ensure we have full champion payload (spells/passive) for readonly cards and old lightweight builds.
+  if (championsStore.status === 'idle' && championsStore.champions.length === 0) {
+    championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+  }
   if (!props.build) {
     // Charger depuis localStorage
     try {
@@ -1106,6 +1121,9 @@ onMounted(() => {
 
 watch(locale, () => {
   runesStore.loadRunes(riotLocale.value)
+  if (championsStore.status !== 'loading') {
+    championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+  }
 })
 </script>
 

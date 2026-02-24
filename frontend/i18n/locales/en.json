@@ -8,6 +8,7 @@
     "videos": "Videos",
     "statistics": "Statistics",
     "admin": "Admin",
+    "appAdmin": "Lelanation App",
     "language": "Language"
   },
   "home": {
@@ -475,6 +476,7 @@
     "createBuild": "Create Build",
     "discover": "Discover",
     "myBuilds": "My Builds",
+    "myFavorites": "My favorites",
     "lelarivaBuilds": "Lelariva Builds",
     "lelarivaComingSoon": "This section will be available soon",
     "visibility": "Visibility:",
@@ -519,7 +521,9 @@
     "editBuild": "Edit build",
     "showMore": "Show more",
     "showLess": "Show less",
-    "createdOn": "Created on"
+    "createdOn": "Created on",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites"
   },
   "createBuild": {
     "form": "Form",
@@ -646,8 +650,35 @@
   "footer": {
     "legal": "Legal notice",
     "privacy": "Privacy & Cookies",
+    "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Presentation mode"
+  },
+  "lelanationApp": {
+    "metaTitle": "Lelanation App - Windows companion app",
+    "metaDescription": "Download the Lelanation companion app to import your builds into the LoL client and sync matches.",
+    "title": "Lelanation App",
+    "subtitle": "The Windows companion app connecting your LoL client experience with the Lelanation web project.",
+    "downloadButton": "Download Windows app",
+    "privacyButton": "Read GDPR policy",
+    "downloadHint": "The download link can be updated automatically to the latest available release.",
+    "featuresTitle": "What the app does",
+    "features": {
+      "importBuilds": "Import builds into the LoL client (runes, items, summoner spells based on your settings).",
+      "localFavorites": "Favorites are stored locally on your device (no server storage).",
+      "matchSync": "Sends end-of-game info (matchId + region) to enrich website stats.",
+      "settings": "Clear settings to control what gets imported."
+    },
+    "gdprTitle": "GDPR and privacy",
+    "gdprIntro": "Privacy is built-in from the MVP:",
+    "gdpr": {
+      "items": {
+        "consent": "Explicit consent before using sync features.",
+        "minData": "Data minimization: only matchId and region are sent.",
+        "localOnly": "Favorites and preferences stay local.",
+        "rights": "Access/deletion rights through local data controls and privacy policy."
+      }
+    }
   },
   "videosPage": {
     "metaTitle": "League of Legends videos - Builds and guides | Lelanation",
@@ -731,6 +762,13 @@
       "cronStatus": "Cron status",
       "replays": "Replays",
       "matchups": "Matchups / Tier"
+    },
+    "appDownload": {
+      "title": "Download companion app",
+      "description": "Windows app to import builds into the LoL client and submit matches to the site.",
+      "downloadButton": "Download Windows app",
+      "unavailable": "Installer not available.",
+      "error": "Download error."
     },
     "cronStatus": {
       "title": "Cron status (data/cron/status.json)",
@@ -910,6 +948,30 @@
       "rebuildError": "Failed to rebuild matchup scores.",
       "tierTable": "Tier list (aggregated by champion)",
       "championTable": "Champion opponent details"
+    }
+  },
+  "adminApp": {
+    "title": "Lelanation App (Admin)",
+    "backToAdmin": "Back to admin",
+    "downloadTitle": "Download",
+    "description": "This Windows companion app connects the LoL client with the Lelanation project. It imports builds (runes, items, summoner spells based on your settings), keeps favorites locally, and sends matchId + region after each game.",
+    "downloadButton": "Download Windows app",
+    "unavailable": "Installer not available. Configure COMPANION_APP_INSTALLER_PATH or COMPANION_APP_DOWNLOAD_URL on backend.",
+    "error": "Download error.",
+    "featuresTitle": "Key features",
+    "features": {
+      "importBuilds": "Build import into LoL client through LCU.",
+      "localFavorites": "Favorites and preferences are stored locally, not on server.",
+      "matchSync": "Sends matchId + region to backend for stats ingestion.",
+      "settings": "Import settings: runes, items, summoner spells."
+    },
+    "gdprTitle": "GDPR",
+    "gdprIntro": "The app follows data minimization principles:",
+    "gdpr": {
+      "consent": "Explicit consent is required before sync.",
+      "minData": "Only matchId + region are sent.",
+      "localOnly": "Favorites/settings remain on user device.",
+      "privacyPolicy": "Privacy policy is available on the website."
     }
   }
 }

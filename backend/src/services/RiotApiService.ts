@@ -6,6 +6,7 @@ import axios, { type AxiosInstance } from 'axios'
 import { getRiotApiKeyAsync } from '../utils/riotApiKey.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
+import type { EuropePlatform } from '../utils/riotRegions.js'
 
 const PLATFORM_BASE = {
   euw1: 'https://euw1.api.riotgames.com',
@@ -311,17 +312,17 @@ export class RiotApiService {
   }
 
   /**
-   * League v4: entries by puuid (ranked queues). Platform: euw1, eun1.
+   * League v4: entries by puuid (ranked queues). Platform: Europe (euw1, eun1, tr1, ru, me1).
    * Uses /lol/league/v4/entries/by-puuid/{puuid} (available on Riot Developer Portal Swagger).
    * Returns Solo/Duo entry if present (tier, rank = division, leaguePoints).
    */
   async getLeagueEntriesByPuuid(
-    platform: 'euw1' | 'eun1',
+    platform: EuropePlatform,
     puuid: string
   ): Promise<Result<{ tier: string; rank: string; leaguePoints: number } | null, AppError>> {
     await rateLimit()
     const key = await this.ensureKey()
-    const base = PLATFORM_BASE[platform]
+    const base = PLATFORM_BASE[platform as keyof typeof PLATFORM_BASE]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
     const client = createClient(base, key)
     try {

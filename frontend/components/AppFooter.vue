@@ -20,6 +20,14 @@
           {{ t('footer.privacy') }}
         </NuxtLink>
         <span class="hidden md:inline">•</span>
+        <NuxtLink
+          :to="localePath('/lelanation-app')"
+          class="transition-colors hover:text-accent"
+          :title="t('footer.app')"
+        >
+          {{ t('footer.app') }}
+        </NuxtLink>
+        <span class="hidden md:inline">•</span>
         <button
           type="button"
           class="transition-colors hover:text-accent"

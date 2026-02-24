@@ -5,6 +5,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { isEuropePlatform, type EuropePlatform } from '../utils/riotRegions.js'
 import { getRiotApiService } from './RiotApiService.js'
 
 const TIER_ORDER = ['IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
@@ -47,10 +48,11 @@ export async function refreshPlayersAndChampionStats(): Promise<{
   return { playersUpserted: 0, championStatsUpserted: 0 }
 }
 
-/** Continent for Account-V1 (euw1, eun1 → europe). */
+/** Continent for Account-V1. Europe: euw1, eun1, tr1, ru, me1. */
 function regionToContinent(region: string): 'europe' | 'americas' | 'asia' {
-  if (region === 'eun1' || region === 'euw1') return 'europe'
-  if (region === 'na1' || region === 'br1' || region === 'la1' || region === 'la2') return 'americas'
+  const r = region.toLowerCase()
+  if (['euw1', 'eun1', 'tr1', 'ru', 'me1'].includes(r)) return 'europe'
+  if (['na1', 'br1', 'la1', 'la2'].includes(r)) return 'americas'
   return 'asia'
 }
 
@@ -139,7 +141,7 @@ export type RankEntry = { tier: string; rank: string; leaguePoints: number }
  * Utilisé avant d'insérer un match pour avoir match + participants avec rangs en une seule persistance.
  */
 export async function fetchRanksForPuuids(
-  platform: 'euw1' | 'eun1',
+  platform: EuropePlatform,
   puuids: string[]
 ): Promise<Map<string, RankEntry | null>> {
   const distinct = [...new Set(puuids.filter((p) => p && p.trim() !== ''))]
@@ -181,13 +183,13 @@ export function computeMatchRankLabel(
  */
 export async function backfillRanksForNewMatch(
   matchId: string,
-  region: 'euw1' | 'eun1',
+  region: EuropePlatform,
   puuids: string[]
 ): Promise<{ updated: number }> {
   if (!isDatabaseConfigured() || puuids.length === 0) return { updated: 0 }
   const match = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
   if (!match) return { updated: 0 }
-  const rankByPuuid = await fetchRanksForPuuids(region === 'eun1' ? 'eun1' : 'euw1', puuids)
+  const rankByPuuid = await fetchRanksForPuuids(region, puuids)
   let updated = 0
   for (const [puuid, entry] of rankByPuuid) {
     const data = entry
@@ -222,9 +224,9 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
     ORDER BY p.puuid
     LIMIT ${limit}
   `
-  const puuidToRegion = new Map<string, string>()
+  const puuidToRegion = new Map<string, EuropePlatform>()
   for (const r of rows) {
-    const platform = r.region === 'eun1' ? 'eun1' : 'euw1'
+    const platform: EuropePlatform = isEuropePlatform(r.region) ? (r.region as EuropePlatform) : 'euw1'
     puuidToRegion.set(r.puuid, platform)
   }
   const puuids = rows.map((r) => r.puuid)
@@ -232,7 +234,7 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
   let updated = 0
   let errors = 0
   for (const puuid of puuids) {
-    const platform = puuidToRegion.get(puuid) === 'eun1' ? 'eun1' : 'euw1'
+    const platform = puuidToRegion.get(puuid) ?? 'euw1'
     const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
     if (leagueResult.isErr()) {
       errors++

@@ -1,10 +1,13 @@
-.PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend \
+.PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend build-companion build-companion-exe \
 	pm2-status pm2-start pm2-restart pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-frontend \
 	deploy sync-data typecheck lint-frontend format-frontend clean
 
 ROOT_DIR := $(CURDIR)
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
+COMPANION_APP_DIR := companion-app
+COMPANION_BUNDLE_DIR := $(COMPANION_APP_DIR)/src-tauri/target/release/bundle
+COMPANION_EXE_NAME := lelanation-companion-setup.exe
 LOGS_DIR := logs
 ECOSYSTEM_FILE := ecosystem.config.js
 
@@ -24,7 +27,8 @@ help:
 	@echo "  make dev-frontend     Run frontend dev server only"
 	@echo ""
 	@echo "Build"
-	@echo "  make build            Build backend + frontend"
+	@echo "  make build            Build backend + frontend + companion app"
+	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
 	@echo ""
 	@echo "PM2"
 	@echo "  make pm2-status       Show PM2 status"
@@ -57,13 +61,27 @@ dev-backend:
 dev-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run dev
 
-build: build-backend build-frontend pm2-restart
+build: build-backend build-frontend build-companion pm2-restart
 
 build-backend:
 	$(NPM) --prefix "$(BACKEND_DIR)" run build
 
 build-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run build
+
+build-companion:
+	$(NPM) --prefix "$(COMPANION_APP_DIR)" run build
+
+build-companion-exe:
+	$(NPM) --prefix "$(COMPANION_APP_DIR)" run tauri build
+	@set -e; \
+	EXE_PATH="$$(ls -1 "$(COMPANION_BUNDLE_DIR)"/*/*.exe 2>/dev/null | head -n 1)"; \
+	if [ -z "$$EXE_PATH" ]; then \
+	  echo "No .exe produced by Tauri build. Build on Windows or configure cross-compilation."; \
+	  exit 1; \
+	fi; \
+	cp "$$EXE_PATH" "$(ROOT_DIR)/$(COMPANION_EXE_NAME)"; \
+	echo "Copied companion installer to $(ROOT_DIR)/$(COMPANION_EXE_NAME)"
 
 pm2-status:
 	$(PM2) status

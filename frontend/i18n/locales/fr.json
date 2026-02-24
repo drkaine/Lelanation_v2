@@ -8,6 +8,7 @@
     "videos": "Vidéos",
     "statistics": "Statistiques",
     "admin": "Admin",
+    "appAdmin": "Lelanation App",
     "language": "Langue"
   },
   "home": {
@@ -474,8 +475,9 @@
     "metaTitle": "Builds League of Legends - Créer et découvrir des builds | Lelanation",
     "metaDescription": "Créez et découvrez des builds League of Legends par la communauté. Runes, objets, ordre des compétences. Builds de Lelariva et de la communauté.",
     "createBuild": "Créer un Build",
-    "discover": "Découvrir",
-    "myBuilds": "Mes Builds",
+"discover": "Découvrir",
+      "myBuilds": "Mes Builds",
+      "myFavorites": "Mes favoris",
     "lelarivaBuilds": "Builds de Lelariva",
     "lelarivaComingSoon": "Cette section sera disponible prochainement",
     "visibility": "Visibilité :",
@@ -520,7 +522,9 @@
     "editBuild": "Modifier le build",
     "showMore": "Voir plus",
     "showLess": "Voir moins",
-    "createdOn": "Créé le"
+    "createdOn": "Créé le",
+    "addFavorite": "Ajouter aux favoris",
+    "removeFavorite": "Retirer des favoris"
   },
   "createBuild": {
     "form": "Formulaire",
@@ -651,8 +655,35 @@
   "footer": {
     "legal": "Mentions légales",
     "privacy": "Confidentialité & Cookies",
+    "app": "Lelanation App",
     "contact": "Contact",
     "presentationMode": "Mode présentation"
+  },
+  "lelanationApp": {
+    "metaTitle": "Lelanation App - Application compagnon Windows",
+    "metaDescription": "Téléchargez l'app compagnon Lelanation pour importer vos builds dans le client LoL et synchroniser vos matchs.",
+    "title": "Lelanation App",
+    "subtitle": "L'app compagnon Windows pour relier votre expérience LoL au projet web Lelanation.",
+    "downloadButton": "Télécharger l'app Windows",
+    "privacyButton": "Lire la politique RGPD",
+    "downloadHint": "Le lien peut être mis à jour automatiquement via la dernière release disponible.",
+    "featuresTitle": "Ce que fait l'app",
+    "features": {
+      "importBuilds": "Import de builds dans le client LoL (runes, items, sorts selon vos réglages).",
+      "localFavorites": "Favoris stockés localement sur votre appareil (pas de stockage serveur).",
+      "matchSync": "Envoi des infos de fin de partie (matchId + région) pour enrichir les stats du site.",
+      "settings": "Paramètres clairs pour contrôler ce qui est importé."
+    },
+    "gdprTitle": "RGPD et confidentialité",
+    "gdprIntro": "La confidentialité est intégrée dès le MVP :",
+    "gdpr": {
+      "items": {
+        "consent": "Consentement explicite avant l'utilisation des fonctionnalités de synchronisation.",
+        "minData": "Minimisation des données transmises : matchId et région uniquement.",
+        "localOnly": "Favoris et préférences conservés en local.",
+        "rights": "Droits d'accès/suppression via vos données locales et la politique de confidentialité."
+      }
+    }
   },
   "videosPage": {
     "metaTitle": "Vidéos League of Legends - Builds et guides | Lelanation",
@@ -736,6 +767,13 @@
       "cronStatus": "Statut crons",
       "replays": "Replays",
       "matchups": "Matchups / Tier"
+    },
+    "appDownload": {
+      "title": "Télécharger l'app compagnon",
+      "description": "Application Windows pour importer les builds dans le client LoL et envoyer les matchs au site.",
+      "downloadButton": "Télécharger l'app Windows",
+      "unavailable": "Installer non disponible.",
+      "error": "Erreur lors du téléchargement."
     },
     "cronStatus": {
       "title": "Statut des crons (data/cron/status.json)",
@@ -915,6 +953,30 @@
       "rebuildError": "Impossible de recalculer les scores matchup.",
       "tierTable": "Tier list (agrégée par champion)",
       "championTable": "Détail des adversaires du champion"
+    }
+  },
+  "adminApp": {
+    "title": "Lelanation App (Admin)",
+    "backToAdmin": "Retour admin",
+    "downloadTitle": "Téléchargement",
+    "description": "Cette application compagnon Windows connecte le client LoL au projet Lelanation. Elle permet d'importer vos builds (runes, items, sorts selon vos réglages), de conserver les favoris en local et de remonter le matchId + région après la partie.",
+    "downloadButton": "Télécharger l'app Windows",
+    "unavailable": "Installer non disponible. Configurez COMPANION_APP_INSTALLER_PATH ou COMPANION_APP_DOWNLOAD_URL côté backend.",
+    "error": "Erreur lors du téléchargement.",
+    "featuresTitle": "Fonctionnalités clés",
+    "features": {
+      "importBuilds": "Import des builds dans le client LoL via LCU.",
+      "localFavorites": "Favoris et préférences stockés localement, pas sur le serveur.",
+      "matchSync": "Envoi du matchId + région au backend pour ingestion stats.",
+      "settings": "Réglages d'import : runes, items, sorts d'invocateur."
+    },
+    "gdprTitle": "RGPD",
+    "gdprIntro": "L'application applique une logique de minimisation des données :",
+    "gdpr": {
+      "consent": "Consentement explicite requis avant la synchro.",
+      "minData": "Données envoyées : matchId + région uniquement.",
+      "localOnly": "Favoris/settings restent sur la machine de l'utilisateur.",
+      "privacyPolicy": "Politique de confidentialité accessible depuis le site."
     }
   }
 }

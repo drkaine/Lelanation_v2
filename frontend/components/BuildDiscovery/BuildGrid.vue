@@ -74,6 +74,51 @@
               <span>{{ t('theorycraft.testBuild') }}</span>
             </button> -->
             <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
+            <!-- Bouton Favori -->
+            <button
+              v-if="props.showFavoriteToggle"
+              class="flex h-7 w-7 items-center justify-center rounded border text-xs transition-colors"
+              :class="
+                favoritesStore.isFavorite(build.id)
+                  ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
+                  : 'border-amber-500/70 bg-surface text-amber-500/70 hover:bg-amber-500/15 hover:text-amber-500'
+              "
+              :title="
+                favoritesStore.isFavorite(build.id)
+                  ? t('buildDiscovery.removeFavorite')
+                  : t('buildDiscovery.addFavorite')
+              "
+              @click.stop="favoritesStore.toggleFavorite(build.id)"
+            >
+              <svg
+                v-if="favoritesStore.isFavorite(build.id)"
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z"
+                />
+              </svg>
+              <svg
+                v-else
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="h-3.5 w-3.5"
+                aria-hidden="true"
+              >
+                <path
+                  d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z"
+                />
+              </svg>
+            </button>
             <div v-if="!isUserBuild(build.id)" class="flex items-center gap-1">
               <!-- Bouton Upvote -->
               <button
@@ -194,6 +239,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
+import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import type { Build } from '~/types/build'
 
@@ -207,12 +253,14 @@ interface Props {
   showComparisonButtons?: boolean
   customBuilds?: Build[]
   showUserActions?: boolean
+  showFavoriteToggle?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   showComparisonButtons: true,
   customBuilds: undefined,
   showUserActions: false,
+  showFavoriteToggle: false,
 })
 
 defineEmits<{
@@ -221,6 +269,7 @@ defineEmits<{
 
 const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
+const favoritesStore = useFavoritesStore()
 const router = useRouter()
 
 // Filtrer les customBuilds avec les mêmes critères que discoveryStore

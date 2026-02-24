@@ -2,7 +2,7 @@ import axios from 'axios'
 import { exec, spawn } from 'child_process'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
-import { dirname, join } from 'path'
+import { dirname, join, isAbsolute } from 'path'
 import { createWriteStream } from 'fs'
 import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
@@ -1315,6 +1315,29 @@ router.post('/matchup-tier/rebuild', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to rebuild matchup tier scores' })
   }
+})
+
+/**
+ * GET /api/admin/app-download
+ * Serves the companion app installer (Windows). Protected by admin auth.
+ * Set COMPANION_APP_INSTALLER_PATH to the full path of the .exe or .msi; default: data/releases/lelanation-companion-setup.exe
+ */
+router.get('/app-download', async (_req, res) => {
+  const externalDownloadUrl = process.env.COMPANION_APP_DOWNLOAD_URL?.trim()
+  if (externalDownloadUrl) {
+    return res.redirect(externalDownloadUrl)
+  }
+  const defaultPath = join(process.cwd(), 'data', 'releases', 'lelanation-companion-setup.exe')
+  const raw = process.env.COMPANION_APP_INSTALLER_PATH
+  const absolutePath = raw ? (isAbsolute(raw) ? raw : join(process.cwd(), raw)) : defaultPath
+  try {
+    await fs.access(absolutePath)
+  } catch {
+    return res.status(404).json({ error: 'Installer not available', hint: 'Set COMPANION_APP_INSTALLER_PATH or place the installer in data/releases/' })
+  }
+  const filename = absolutePath.split(/[/\\]/).pop() ?? 'lelanation-companion-setup.exe'
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  return res.sendFile(absolutePath)
 })
 
 export default router
