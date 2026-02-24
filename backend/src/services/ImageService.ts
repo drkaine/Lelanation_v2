@@ -15,6 +15,7 @@ export class ImageService {
   private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
   private readonly imagesDir: string
+  private readonly latestDirName = 'latest'
 
   constructor(imagesDir: string = join(process.cwd(), 'data', 'images')) {
     this.imagesDir = imagesDir
@@ -94,7 +95,7 @@ export class ImageService {
     champions: Record<string, { id: string; image: { full: string } }>
   ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
     const tasks: ImageDownloadTask[] = []
-    const versionDir = join(this.imagesDir, version, 'champion')
+    const versionDir = join(this.imagesDir, this.latestDirName, 'champion')
 
     for (const champion of Object.values(champions)) {
       if (!champion.image?.full) continue
@@ -121,7 +122,7 @@ export class ImageService {
     items: Record<string, { id?: string; image?: { full: string } }>
   ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
     const tasks: ImageDownloadTask[] = []
-    const versionDir = join(this.imagesDir, version, 'item')
+    const versionDir = join(this.imagesDir, this.latestDirName, 'item')
 
     for (const item of Object.values(items)) {
       if (!item.image?.full) continue
@@ -153,8 +154,10 @@ export class ImageService {
       }>
     }>
   ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
+    // Rune icon URLs are not versioned in Data Dragon (cdn/img/perk-images/...).
+    void version
     const tasks: ImageDownloadTask[] = []
-    const versionDir = join(this.imagesDir, version, 'rune')
+    const versionDir = join(this.imagesDir, this.latestDirName, 'rune')
 
     // Download path icons
     for (const path of runePaths) {
@@ -187,7 +190,7 @@ export class ImageService {
     spells: Record<string, { id: string; image: { full: string } }>
   ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
     const tasks: ImageDownloadTask[] = []
-    const versionDir = join(this.imagesDir, version, 'spell')
+    const versionDir = join(this.imagesDir, this.latestDirName, 'spell')
 
     for (const spell of Object.values(spells)) {
       if (!spell.image?.full) continue
@@ -221,7 +224,7 @@ export class ImageService {
     >
   ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
     const tasks: ImageDownloadTask[] = []
-    const versionDir = join(this.imagesDir, version, 'champion-spell')
+    const versionDir = join(this.imagesDir, this.latestDirName, 'champion-spell')
 
     for (const champion of Object.values(champions)) {
       // Download passive image
@@ -317,19 +320,19 @@ export class ImageService {
    */
   async deleteVersionImages(version: string): Promise<Result<void, AppError>> {
     try {
-      const versionDir = join(this.imagesDir, version)
-
-      // Check if version directory exists
-      const exists = await FileManager.exists(versionDir)
-      if (!exists) {
-        // No images for this version, nothing to delete
-        return Result.ok(undefined)
+      // Current structure: data/images/latest/...
+      const latestDir = join(this.imagesDir, this.latestDirName)
+      if (await FileManager.exists(latestDir)) {
+        await fs.rm(latestDir, { recursive: true, force: true })
       }
 
-      // Recursively delete the entire version directory
-      await fs.rm(versionDir, { recursive: true, force: true })
+      // Cleanup legacy versioned directory if it exists.
+      const legacyVersionDir = join(this.imagesDir, version)
+      if (await FileManager.exists(legacyVersionDir)) {
+        await fs.rm(legacyVersionDir, { recursive: true, force: true })
+      }
 
-      console.log(`[ImageService] Deleted images for version ${version}`)
+      console.log(`[ImageService] Deleted previous latest images (requested version: ${version})`)
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(
@@ -347,7 +350,7 @@ export class ImageService {
    * Keeps only the current version to save disk space
    */
   async deleteOldVersionImages(
-    keepVersion: string
+    _keepVersion: string
   ): Promise<Result<{ deleted: number }, AppError>> {
     try {
       let deleted = 0
@@ -358,16 +361,14 @@ export class ImageService {
       for (const entry of entries) {
         if (!entry.isDirectory()) continue
 
-        const version = entry.name
+        const dirName = entry.name
+        // Keep only latest in the new storage model.
+        if (dirName === this.latestDirName) continue
 
-        // Skip if it's the version we want to keep
-        if (version === keepVersion) continue
-
-        // Delete the version directory
-        const versionDir = join(this.imagesDir, version)
-        await fs.rm(versionDir, { recursive: true, force: true })
+        const dirPath = join(this.imagesDir, dirName)
+        await fs.rm(dirPath, { recursive: true, force: true })
         deleted++
-        console.log(`[ImageService] Deleted old version images: ${version}`)
+        console.log(`[ImageService] Deleted legacy image directory: ${dirName}`)
       }
 
       return Result.ok({ deleted })

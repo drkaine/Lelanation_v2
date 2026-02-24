@@ -126,19 +126,17 @@ export class StaticAssetsService {
    */
   async deleteBackendImages(version: string): Promise<Result<void, AppError>> {
     try {
-      const versionDir = join(this.backendImagesDir, version)
-
-      // Check if version directory exists
-      const exists = await FileManager.exists(versionDir)
-      if (!exists) {
-        // No images for this version, nothing to delete
-        return Result.ok(undefined)
+      const latestDir = join(this.backendImagesDir, 'latest')
+      if (await FileManager.exists(latestDir)) {
+        await fs.rm(latestDir, { recursive: true, force: true })
+      }
+      // Legacy cleanup if older versioned folder still exists.
+      const legacyVersionDir = join(this.backendImagesDir, version)
+      if (await FileManager.exists(legacyVersionDir)) {
+        await fs.rm(legacyVersionDir, { recursive: true, force: true })
       }
 
-      // Recursively delete the entire version directory
-      await fs.rm(versionDir, { recursive: true, force: true })
-
-      console.log(`[StaticAssets] Deleted backend images for version ${version}`)
+      console.log(`[StaticAssets] Deleted backend latest images (requested version: ${version})`)
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(
@@ -347,7 +345,7 @@ export class StaticAssetsService {
    * Keeps only the specified version to save disk space
    */
   async deleteOldVersionImagesFromFrontend(
-    keepVersion: string
+    _keepVersion: string
   ): Promise<Result<{ deleted: number }, AppError>> {
     try {
       let deleted = 0
@@ -367,8 +365,8 @@ export class StaticAssetsService {
 
         const version = entry.name
 
-        // Skip if it's the version we want to keep
-        if (version === keepVersion) continue
+        // New structure keeps only /images/game/latest
+        if (version === 'latest') continue
 
         // Delete the version directory
         const versionDir = join(frontendImagesDir, version)
@@ -394,14 +392,15 @@ export class StaticAssetsService {
    * Always overwrites existing images to ensure we have the latest version
    */
   async copyImagesToFrontend(
-    version: string
+    _version: string
   ): Promise<Result<{ copied: number; skipped: number }, AppError>> {
     let copied = 0
     let skipped = 0
 
     try {
-      const sourceImagesDir = join(this.backendImagesDir, version)
-      const targetImagesDir = join(this.frontendPublicDir, 'images', 'game', version)
+      // Images are now always synchronized to latest-only path.
+      const sourceImagesDir = join(this.backendImagesDir, 'latest')
+      const targetImagesDir = join(this.frontendPublicDir, 'images', 'game', 'latest')
 
       // Check if source directory exists
       const sourceExists = await FileManager.exists(sourceImagesDir)
@@ -587,7 +586,7 @@ export class StaticAssetsService {
       // Continue anyway - not critical
     }
 
-    const deleteOldResult = await this.deleteOldVersionImagesFromFrontend(version)
+    const deleteOldResult = await this.deleteOldVersionImagesFromFrontend('latest')
     if (deleteOldResult.isOk()) {
       const deleted = deleteOldResult.unwrap()
       if (deleted.deleted > 0) {

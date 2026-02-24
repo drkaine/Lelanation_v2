@@ -4,12 +4,16 @@ export interface ImportSettings {
   importRunes: boolean;
   importItems: boolean;
   importSummonerSpells: boolean;
+  disableMatchSubmission: boolean;
+  language: "fr" | "en";
 }
 
 const defaults: ImportSettings = {
   importRunes: true,
   importItems: true,
   importSummonerSpells: true,
+  disableMatchSubmission: false,
+  language: "fr",
 };
 
 export function getSettings(): ImportSettings {

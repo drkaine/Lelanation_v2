@@ -29,7 +29,7 @@ export function getVersionUrl(): string {
  * Example: /images/game/16.1.1/champion/Aatrox.png
  */
 export function getStaticImageUrl(
-  version: string,
+  _version: string,
   type: 'champion' | 'item' | 'spell' | 'rune' | 'champion-spell',
   filename: string,
   subPath?: string
@@ -37,10 +37,11 @@ export function getStaticImageUrl(
   // Use static files from frontend public directory
   // Images should be copied from backend to frontend/public/images/game/ during sync
   // If images are not available, they will fail to load and can be handled by onerror handlers
+  // latest-only images path (version argument kept for API compatibility in callers)
   if (subPath) {
-    return `/images/game/${version}/${type}/${subPath}/${filename}`
+    return `/images/game/latest/${type}/${subPath}/${filename}`
   }
-  return `/images/game/${version}/${type}/${filename}`
+  return `/images/game/latest/${type}/${filename}`
 }
 
 /**

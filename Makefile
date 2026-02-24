@@ -1,4 +1,4 @@
-.PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend build-companion build-companion-exe \
+.PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend build-companion build-companion-exe exe-windows \
 	pm2-status pm2-start pm2-restart pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-frontend \
 	deploy sync-data typecheck lint-frontend format-frontend clean
 
@@ -7,7 +7,10 @@ BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 COMPANION_APP_DIR := companion-app
 COMPANION_BUNDLE_DIR := $(COMPANION_APP_DIR)/src-tauri/target/release/bundle
-COMPANION_EXE_NAME := lelanation-companion-setup.exe
+COMPANION_EXE_NAME := installer/Lelanation.exe
+WINDOWS_VCVARS64 := C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
+WINDOWS_MSVC_LINKER := C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\link.exe
+WINDOWS_EXE_OUTPUT := installer/Lelanation.exe
 LOGS_DIR := logs
 ECOSYSTEM_FILE := ecosystem.config.js
 
@@ -28,7 +31,8 @@ help:
 	@echo ""
 	@echo "Build"
 	@echo "  make build            Build backend + frontend + companion app"
-	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
+	@echo "  make build-companion-exe  Build companion Windows .exe in ./installer/Lelanation.exe"
+	@echo "  make exe-windows      Build Tauri app and copy it to ./installer/Lelanation.exe"
 	@echo ""
 	@echo "PM2"
 	@echo "  make pm2-status       Show PM2 status"
@@ -80,8 +84,12 @@ build-companion-exe:
 	  echo "No .exe produced by Tauri build. Build on Windows or configure cross-compilation."; \
 	  exit 1; \
 	fi; \
+	mkdir -p "$(ROOT_DIR)/installer"; \
 	cp "$$EXE_PATH" "$(ROOT_DIR)/$(COMPANION_EXE_NAME)"; \
 	echo "Copied companion installer to $(ROOT_DIR)/$(COMPANION_EXE_NAME)"
+
+exe-windows:
+	powershell -NoProfile -ExecutionPolicy Bypass -File "$(ROOT_DIR)/scripts/exe-windows.ps1"
 
 pm2-status:
 	$(PM2) status

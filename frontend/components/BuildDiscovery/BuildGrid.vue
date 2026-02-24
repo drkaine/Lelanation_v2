@@ -77,7 +77,7 @@
             <!-- Bouton Favori -->
             <button
               v-if="props.showFavoriteToggle"
-              class="flex h-7 w-7 items-center justify-center rounded border text-xs transition-colors"
+              class="flex h-6 w-6 items-center justify-center rounded border text-xs transition-colors"
               :class="
                 favoritesStore.isFavorite(build.id)
                   ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
@@ -95,7 +95,7 @@
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                class="h-3.5 w-3.5"
+                class="h-3 w-3"
                 aria-hidden="true"
               >
                 <path
@@ -111,7 +111,7 @@
                 stroke-width="1.8"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                class="h-3.5 w-3.5"
+                class="h-3 w-3"
                 aria-hidden="true"
               >
                 <path
