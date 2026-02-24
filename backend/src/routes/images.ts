@@ -10,12 +10,15 @@ const imagesDir = join(process.cwd(), 'data', 'images')
  * Serve images from local storage
  * GET /api/images/:version/:type/{*filename} (reste du chemin = filename)
  * Examples:
- *   /api/images/16.1.1/champion/Aatrox.png
- *   /api/images/16.1.1/item/1001.png
- *   /api/images/16.1.1/spell/SummonerFlash.png
- *   /api/images/16.1.1/rune/paths/8000.png
- *   /api/images/16.1.1/rune/runes/8005.png
- *   /api/images/16.1.1/champion-spell/Aatrox/AatroxQ.png
+ *   /api/images/latest/champion/Aatrox.png
+ *   /api/images/latest/item/1001.png
+ *   /api/images/latest/spell/SummonerFlash.png
+ *   /api/images/latest/rune/paths/8000.png
+ *   /api/images/latest/rune/runes/8005.png
+ *   /api/images/latest/champion-spell/Aatrox/AatroxQ.png
+ *
+ * Note: :version is accepted for backward compatibility, but files are always
+ * served from data/images/latest.
  *
  * Avec Express 5 / path-to-regexp v8, les wildcards anonymes (`*`) ne sont
  * plus supportés. Il faut utiliser un paramètre nommé avec la syntaxe
@@ -23,7 +26,7 @@ const imagesDir = join(process.cwd(), 'data', 'images')
  */
 router.get('/:version/:type/{*filename}', async (req, res) => {
   try {
-    const { version, type } = req.params
+    const { type } = req.params
     // Avec la syntaxe `{*filename}`, Express expose `req.params.filename`
     // qui peut être un string ou un tableau de segments.
     const rawFilename = (req.params as any).filename as string | string[] | undefined
@@ -43,10 +46,11 @@ router.get('/:version/:type/{*filename}', async (req, res) => {
     }
 
     // Construct file path (filename can include subdirectories like 'paths/' or 'runes/')
-    const filePath = join(imagesDir, version, type, filename)
+    // Images are stored in latest-only structure. `:version` is kept for backward compatibility.
+    const filePath = join(imagesDir, 'latest', type, filename)
 
     // Security: ensure path is within imagesDir
-    const normalizedPath = join(imagesDir, version, type, filename)
+    const normalizedPath = join(imagesDir, 'latest', type, filename)
     if (!normalizedPath.startsWith(imagesDir)) {
       return res.status(403).json({ error: 'Invalid path' })
     }
@@ -74,7 +78,8 @@ router.get('/:version/:type/{*filename}', async (req, res) => {
               : 'application/octet-stream'
 
     res.setHeader('Content-Type', contentType)
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    // latest path changes over time: avoid immutable cache.
+    res.setHeader('Cache-Control', 'public, max-age=3600')
     res.send(fileBuffer)
     return
   } catch (error) {

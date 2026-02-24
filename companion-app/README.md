@@ -29,6 +29,29 @@ npm run tauri dev    # Développement
 npm run tauri build  # Build (Windows : .msi/.exe dans src-tauri/target/release/bundle/)
 ```
 
+## Déclencher la CI installer (tag de version)
+
+La workflow GitHub installer Windows se déclenche sur :
+
+- tags `v*` (ex: `v1.3.0`)
+- tags `companion-v*` (ex: `companion-v1.3.0`)
+
+Exemple pour taguer le commit courant et déclencher la CI :
+
+```bash
+git add .
+git commit -m "release: companion 1.3.0"
+git tag -a companion-v1.3.0 -m "Companion installer 1.3.0"
+git push origin main --tags
+```
+
+Si tu veux taguer un commit précis (pas forcément le HEAD) :
+
+```bash
+git tag -a companion-v1.3.0 <sha_du_commit> -m "Companion installer 1.3.0"
+git push origin companion-v1.3.0
+```
+
 ## Structure
 
 - `src/` : frontend Vue (consent, builds, favoris, paramètres, envoi match).

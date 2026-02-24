@@ -168,7 +168,13 @@ export default defineNuxtConfig({
           'Cache-Control': 'public, max-age=86400',
         },
       },
-      // Game images (long cache, versioned by path)
+      // latest images are mutable by design
+      '/images/game/latest/**': {
+        headers: {
+          'Cache-Control': 'public, max-age=3600',
+        },
+      },
+      // Game images (long cache for versioned paths)
       '/images/game/**': {
         headers: {
           'Cache-Control': 'public, max-age=31536000, immutable',

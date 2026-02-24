@@ -23,11 +23,13 @@ function onConsentAccepted() {
 <style>
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 1.45;
   font-weight: 400;
-  color: #0f0f0f;
-  background-color: #f6f6f6;
+  color: #f0e6d2;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(3, 151, 171, 0.22), transparent 38%),
+    linear-gradient(135deg, #0a1428 0%, #091428 45%, #0a323c 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -35,6 +37,8 @@ function onConsentAccepted() {
 }
 body {
   margin: 0;
+  color: #f0e6d2;
+  background: transparent;
 }
 #app {
   min-height: 100vh;
