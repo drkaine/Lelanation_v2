@@ -475,18 +475,105 @@
         {{ t('buildCard.noItems') }}
       </div>
       <div v-else>
-        <div class="items-manager-inline">
-          <template v-for="(item, index) in buildItems" :key="`${item.id}-${index}`">
-            <img
-              :src="getItemImageUrl(versionForImages, item.image.full)"
-              :alt="item.name"
-              class="items-manager-inline-icon"
-              :title="getItemDisplayName(item)"
-            />
-            <span v-if="index < buildItems.length - 1" class="items-manager-inline-separator"
-              >→</span
-            >
-          </template>
+        <div class="items-manager-groups">
+          <div class="items-manager-group">
+            <span class="items-manager-group-label">Starters</span>
+            <div class="items-manager-inline">
+              <template
+                v-for="(entry, rowIndex) in managerStarterItems"
+                :key="`starter-${entry.index}-${entry.item.id}`"
+              >
+                <img
+                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                  :alt="entry.item.name"
+                  class="items-manager-inline-icon"
+                  :class="{
+                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                    'items-manager-inline-icon--drag-over':
+                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                  }"
+                  :title="getItemDisplayName(entry.item)"
+                  :draggable="!props.build"
+                  @dragstart="onItemDragStart(entry.index, $event)"
+                  @dragover="onItemDragOver(entry.index, $event)"
+                  @drop="onItemDrop(entry.index, $event)"
+                  @dragend="onItemDragEnd"
+                />
+                <span
+                  v-if="rowIndex < managerStarterItems.length - 1"
+                  class="items-manager-inline-separator"
+                  >→</span
+                >
+              </template>
+              <span v-if="managerStarterItems.length === 0" class="items-manager-empty">-</span>
+            </div>
+          </div>
+
+          <div class="items-manager-group">
+            <span class="items-manager-group-label">Bottes</span>
+            <div class="items-manager-inline">
+              <template
+                v-for="(entry, rowIndex) in managerBootsItems"
+                :key="`boots-${entry.index}-${entry.item.id}`"
+              >
+                <img
+                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                  :alt="entry.item.name"
+                  class="items-manager-inline-icon"
+                  :class="{
+                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                    'items-manager-inline-icon--drag-over':
+                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                  }"
+                  :title="getItemDisplayName(entry.item)"
+                  :draggable="!props.build"
+                  @dragstart="onItemDragStart(entry.index, $event)"
+                  @dragover="onItemDragOver(entry.index, $event)"
+                  @drop="onItemDrop(entry.index, $event)"
+                  @dragend="onItemDragEnd"
+                />
+                <span
+                  v-if="rowIndex < managerBootsItems.length - 1"
+                  class="items-manager-inline-separator"
+                  >→</span
+                >
+              </template>
+              <span v-if="managerBootsItems.length === 0" class="items-manager-empty">-</span>
+            </div>
+          </div>
+
+          <div class="items-manager-group">
+            <span class="items-manager-group-label">Reste</span>
+            <div class="items-manager-inline">
+              <template
+                v-for="(entry, rowIndex) in managerOtherItems"
+                :key="`other-${entry.index}-${entry.item.id}`"
+              >
+                <img
+                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                  :alt="entry.item.name"
+                  class="items-manager-inline-icon"
+                  :class="{
+                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                    'items-manager-inline-icon--drag-over':
+                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                  }"
+                  :title="getItemDisplayName(entry.item)"
+                  :draggable="!props.build"
+                  @dragstart="onItemDragStart(entry.index, $event)"
+                  @dragover="onItemDragOver(entry.index, $event)"
+                  @drop="onItemDrop(entry.index, $event)"
+                  @dragend="onItemDragEnd"
+                />
+                <span
+                  v-if="rowIndex < managerOtherItems.length - 1"
+                  class="items-manager-inline-separator"
+                  >→</span
+                >
+              </template>
+              <span v-if="managerOtherItems.length === 0" class="items-manager-empty">-</span>
+            </div>
+          </div>
         </div>
 
         <div v-if="showItemStats" class="items-manager-stats">
@@ -625,6 +712,56 @@ const filteredSummonerSpells = computed(() => {
 const selectedShards = computed(() => displayBuild.value?.shards)
 const buildItems = computed(() => displayBuild.value?.items || [])
 const showItemStats = ref(false)
+const draggingItemIndex = ref<number | null>(null)
+const dragOverItemIndex = ref<number | null>(null)
+
+const clearDragState = () => {
+  draggingItemIndex.value = null
+  dragOverItemIndex.value = null
+}
+
+const onItemDragStart = (index: number, event: DragEvent) => {
+  if (props.readonly || props.build) return
+  draggingItemIndex.value = index
+  dragOverItemIndex.value = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', String(index))
+  }
+}
+
+const onItemDragOver = (index: number, event: DragEvent) => {
+  if (props.readonly || props.build || draggingItemIndex.value === null) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dragOverItemIndex.value = index
+}
+
+const onItemDrop = (index: number, event: DragEvent) => {
+  if (props.readonly || props.build) return
+  event.preventDefault()
+
+  const from = draggingItemIndex.value
+  const to = index
+  if (from === null || from === to) {
+    clearDragState()
+    return
+  }
+
+  const nextItems = [...buildItems.value]
+  const [moved] = nextItems.splice(from, 1)
+  if (!moved) {
+    clearDragState()
+    return
+  }
+  nextItems.splice(to, 0, moved)
+  buildStore.setItems(nextItems)
+  clearDragState()
+}
+
+const onItemDragEnd = () => {
+  clearDragState()
+}
 
 // Helper to check if item is boots
 const isBootsItem = (item: Item): boolean => {
@@ -1071,6 +1208,22 @@ const itemStatsRows = computed(() => {
   add('magicPenPercent', 'Pénétration magique', s.magicPenPercent, '%', 1)
   add('abilityHaste', 'Hâte', s.abilityHaste)
   return rows
+})
+
+const buildItemsWithIndex = computed(() => {
+  return buildItems.value.map((item, index) => ({ item, index }))
+})
+
+const managerStarterItems = computed(() => {
+  return buildItemsWithIndex.value.filter(({ item }) => isStarterItem(item))
+})
+
+const managerBootsItems = computed(() => {
+  return buildItemsWithIndex.value.filter(({ item }) => isBootsItem(item) && !isStarterItem(item))
+})
+
+const managerOtherItems = computed(() => {
+  return buildItemsWithIndex.value.filter(({ item }) => !isStarterItem(item) && !isBootsItem(item))
 })
 
 // Persistance automatique - sauvegarder à chaque modification (seulement si pas de build en prop)
@@ -1610,12 +1763,48 @@ watch(locale, () => {
   padding-bottom: 4px;
 }
 
+.items-manager-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.items-manager-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.items-manager-group-label {
+  width: 56px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
 .items-manager-inline-icon {
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
+  margin-top: 5px;
   border-radius: 4px;
   border: 1px solid var(--color-gold-300);
   flex: 0 0 auto;
+  cursor: grab;
+  transition:
+    transform 0.12s ease,
+    opacity 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.items-manager-inline-icon--dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.items-manager-inline-icon--drag-over {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px var(--color-gold-300);
 }
 
 .items-manager-inline-separator {
