@@ -6,7 +6,18 @@
 const ADMIN_AUTH_KEY = 'adminAuth'
 
 export function useAdminAuth() {
-  const isLoggedIn = useState('adminLoggedIn', () => ref(false))
+  // useState<boolean> sans double-ref (ne pas passer ref() comme valeur initiale)
+  const isLoggedIn = useState<boolean>('adminLoggedIn', () => {
+    if (import.meta.client) {
+      return !!sessionStorage.getItem(ADMIN_AUTH_KEY)
+    }
+    return false
+  })
+
+  // Sync immédiate côté client à chaque appel du composable (navigation SPA)
+  if (import.meta.client) {
+    isLoggedIn.value = !!sessionStorage.getItem(ADMIN_AUTH_KEY)
+  }
 
   function getAuthHeader(): { Authorization: string } | null {
     if (import.meta.client) {
@@ -36,16 +47,12 @@ export function useAdminAuth() {
     isLoggedIn.value = false
   }
 
-  function checkLoggedIn() {
+  function checkLoggedIn(): boolean {
     if (import.meta.client) {
       isLoggedIn.value = !!sessionStorage.getItem(ADMIN_AUTH_KEY)
     }
     return isLoggedIn.value
   }
-
-  onMounted(() => {
-    checkLoggedIn()
-  })
 
   return { getAuthHeader, fetchWithAuth, setAuth, clearAuth, checkLoggedIn, isLoggedIn }
 }

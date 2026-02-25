@@ -375,17 +375,20 @@ const toggleSkillUpOrder = (index: number, ability: string) => {
   }
 }
 
-// Vérifier si une compétence est déjà sélectionnée dans les 3 premiers up (hors l'index actuel)
+// Vérifier si une compétence est déjà sélectionnée dans les 3 premiers up.
+// Règle : un même spell ne peut pas être monté deux niveaux consécutifs (1==2 ou 2==3 interdit),
+// mais peut réapparaître en 1 et 3 (ex: Q → W → Q est valide).
 const isFirstThreeUpSelected = (spellId: string, currentIndex: number): boolean => {
   initializeSkillOrder()
   const skillOrder = buildStore.currentBuild?.skillOrder
   if (!skillOrder || !skillOrder.firstThreeUps) return false
-  return skillOrder.firstThreeUps.some(
-    (selected, idx) => idx !== currentIndex && selected === spellId
-  )
+  const ups = skillOrder.firstThreeUps
+  const adjacentIndices = currentIndex === 0 ? [1] : currentIndex === 1 ? [0, 2] : [1]
+  return adjacentIndices.some(idx => ups[idx] === spellId)
 }
 
-// Vérifier si une compétence est déjà sélectionnée dans l'ordre de montée (hors l'index actuel)
+// Vérifier si une compétence est déjà sélectionnée dans l'ordre de montée.
+// Règle stricte : les 3 compétences doivent toutes être différentes.
 const isSkillUpOrderSelected = (spellId: string, currentIndex: number): boolean => {
   initializeSkillOrder()
   const skillOrder = buildStore.currentBuild?.skillOrder
