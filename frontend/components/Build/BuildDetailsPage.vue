@@ -30,8 +30,8 @@
             <!-- Nom du build -->
             <h3 class="text-lg font-semibold text-text">{{ build.name || 'Sans nom' }}</h3>
             <!-- Auteur -->
-            <div class="text-sm text-text/70" :class="{ invisible: !build.author }">
-              <span class="ml-1">{{ build.author || 'Placeholder' }}</span>
+            <div class="text-sm text-text/70">
+              <span class="ml-1">{{ build.author || t('buildDiscovery.anonymous') }}</span>
             </div>
           </div>
         </div>
@@ -159,15 +159,18 @@
               <!-- Description -->
               <div class="text-sm text-text/80">
                 <template v-if="build.description">
+                  <!-- eslint-disable vue/no-v-html -->
                   <p
                     v-if="build.description.length <= 150 || isDescriptionExpanded"
                     class="whitespace-pre-wrap"
-                  >
-                    {{ build.description }}
-                  </p>
-                  <p v-else class="line-clamp-3 whitespace-pre-wrap">
-                    {{ build.description }}
-                  </p>
+                    v-html="linkifyDescription(build.description)"
+                  />
+                  <p
+                    v-else
+                    class="line-clamp-3 whitespace-pre-wrap"
+                    v-html="linkifyDescription(build.description)"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
                   <button
                     v-if="build.description.length > 150"
                     class="mt-1 text-xs text-accent hover:text-accent/80"
@@ -248,6 +251,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import { apiUrl } from '~/utils/apiUrl'
+import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 
 const props = defineProps<{ buildId: string }>()

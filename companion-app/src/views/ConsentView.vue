@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { setConsent } from "../consent";
-import { apiBase } from "../config";
 import { getSettings, setSettings } from "../settings";
 
 const emit = defineEmits<{ (e: "accepted"): void }>();
@@ -73,7 +72,7 @@ const t = computed(() => {
   return d[locale.value];
 });
 
-const avatarUrl = computed(() => `${apiBase}/images/lelariva-quality.png`);
+const avatarUrl = "/images/lelariva-quality.png";
 
 function accept() {
   if (!consentChecked.value) return;

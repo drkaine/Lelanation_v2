@@ -4,6 +4,7 @@ import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { ImageService } from './ImageService.js'
+import { CommunityDragonOrnnService } from './CommunityDragonOrnnService.js'
 
 interface ChampionData {
   [key: string]: {
@@ -456,6 +457,69 @@ export class DataDragonService {
 
       if (saveResult.isErr()) {
         return Result.err(saveResult.unwrapErr())
+      }
+    }
+
+    // Enrich items with Ornn Masterwork items from Community Dragon
+    const ornnService = new CommunityDragonOrnnService(
+      join(process.cwd(), 'data', 'images')
+    )
+    const localeMap: Record<string, string> = {
+      fr_FR: 'fr_fr',
+      en_US: 'default',
+    }
+    let allIconUrls: Array<{ url: string; filename: string }> = []
+    for (const language of languages) {
+      const versionDir = join(this.dataDir, gameVersion, language)
+      const itemsPath = join(versionDir, 'item.json')
+      const readResult = await FileManager.readJson<{ data: Record<string, unknown> }>(
+        itemsPath
+      )
+      if (readResult.isErr()) continue
+
+      const itemJson = readResult.unwrap()
+      if (!itemJson?.data || typeof itemJson.data !== 'object') continue
+
+      const cdLocale = localeMap[language] ?? 'default'
+      const fetchResult = await ornnService.fetchCommunityDragonItems(cdLocale)
+      if (fetchResult.isErr()) {
+        console.warn(
+          `[DataDragon] Ornn masterwork fetch failed for ${language}:`,
+          fetchResult.unwrapErr().message
+        )
+        continue
+      }
+
+      const { items: masterworkItems, iconUrls } = ornnService.extractMasterworkItems(
+        fetchResult.unwrap()
+      )
+      if (allIconUrls.length === 0 && iconUrls.length > 0) {
+        allIconUrls = iconUrls
+      }
+
+      let added = 0
+      for (const mw of masterworkItems) {
+        const baseExists = !mw.baseItemId || mw.baseItemId in itemJson.data
+        if (baseExists && !(mw.id in itemJson.data)) {
+          ;(itemJson.data as Record<string, unknown>)[mw.id] = mw
+          added++
+        }
+      }
+
+      if (added > 0) {
+        await FileManager.writeJson(itemsPath, itemJson)
+        console.log(
+          `[DataDragon] Added ${added} Ornn masterwork items to ${language}`
+        )
+      }
+    }
+    if (allIconUrls.length > 0) {
+      const dlResult = await ornnService.downloadOrnnIcons(allIconUrls)
+      if (dlResult.isOk()) {
+        const stats = dlResult.unwrap()
+        console.log(
+          `[DataDragon] Ornn icons: ${stats.downloaded} downloaded, ${stats.skipped} skipped`
+        )
       }
     }
 

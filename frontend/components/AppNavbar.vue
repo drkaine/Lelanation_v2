@@ -88,12 +88,12 @@
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
-          :to="localePath('/admin/app')"
-          :title="t('nav.appAdmin')"
+          :to="localePath('/app')"
+          :title="t('nav.download')"
           class="version"
           @click="toggleMenu"
         >
-          {{ t('nav.appAdmin') }}
+          {{ t('nav.download') }}
         </NuxtLink>
       </div>
 
@@ -133,11 +133,11 @@
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
-          :to="localePath('/admin/app')"
-          :title="t('nav.appAdmin')"
+          :to="localePath('/app')"
+          :title="t('nav.download')"
           class="version"
         >
-          {{ t('nav.appAdmin') }}
+          {{ t('nav.download') }}
         </NuxtLink>
         <a
           :href="patchNotesUrl"

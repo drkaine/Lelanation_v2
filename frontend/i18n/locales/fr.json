@@ -86,6 +86,7 @@
     "life-steal": "Life Steal",
     "spell-vamp": "Spell Vamp",
     "omnivamp": "Omnivamp",
+    "ornn-upgrade": "Chef-d'œuvre d'Ornn",
     "spell-block": "Spell Block",
     "magic-lifesteal": "Magic Lifesteal",
     "magic-pen": "Magic Pen",
@@ -534,7 +535,8 @@
     "showLess": "Voir moins",
     "createdOn": "Créé le",
     "addFavorite": "Ajouter aux favoris",
-    "removeFavorite": "Retirer des favoris"
+    "removeFavorite": "Retirer des favoris",
+    "anonymous": "Anonyme"
   },
   "createBuild": {
     "form": "Formulaire",

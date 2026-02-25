@@ -176,6 +176,9 @@ export interface Item {
   into?: string[]
   from?: string[]
   maps?: Record<string, boolean>
+  /** Ornn Masterwork upgrade - only shown in theorycraft, not in build item list */
+  isMasterwork?: boolean
+  baseItemId?: string
 }
 
 export interface RunePath {

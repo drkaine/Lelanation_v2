@@ -6,6 +6,7 @@ import { FileManager } from '../utils/fileManager.js'
 
 const router = Router()
 const sharedDir = join(process.cwd(), 'data', 'shared')
+const buildsDir = join(process.cwd(), 'data', 'builds')
 
 const CODE_LENGTH = 6
 const TTL_MS = 24 * 60 * 60 * 1000
@@ -130,6 +131,20 @@ router.get('/:code', async (req, res) => {
     // One-time use: delete after retrieval
     fs.unlink(filePath).catch(() => {})
     console.log(`[Share] Code ${code} consumed and deleted`)
+
+    // Delete private build files from server (they were synced there, now consumed via import)
+    const builds = data.builds as Array<{ id?: string; visibility?: string }>
+    for (const b of builds) {
+      if (b?.id && b.visibility === 'private') {
+        const privFile = join(buildsDir, `${b.id}_priv.json`)
+        try {
+          await fs.unlink(privFile)
+          console.log(`[Share] Deleted private build file: ${b.id}_priv.json`)
+        } catch {
+          // File may not exist (e.g. never synced)
+        }
+      }
+    }
 
     // Lazy cleanup of other expired codes
     cleanupExpired()

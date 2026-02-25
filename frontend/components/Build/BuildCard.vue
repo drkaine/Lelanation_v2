@@ -917,6 +917,7 @@ const shardInfo: Record<
 > = {
   5008: { icon: '/icons/shards/adaptative.png', name: 'Force adaptative' },
   5005: { icon: '/icons/shards/speed.png', name: 'Vitesse d’attaque' },
+  5006: { icon: '/icons/shards/move.png', name: 'Vitesse de déplacement' },
   5007: { icon: '/icons/shards/cdr.png', name: 'Hâte de compétence' },
   5001: { icon: '/icons/shards/hp.png', name: 'PV' },
   5002: { icon: '/icons/shards/growth.png', name: 'Armure' },

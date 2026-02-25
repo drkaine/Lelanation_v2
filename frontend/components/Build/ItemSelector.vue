@@ -148,6 +148,10 @@ import type { Item } from '~/types/build'
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 
+const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
+  includeMasterwork: false,
+})
+
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
 const { locale, t } = useI18n()
@@ -174,6 +178,7 @@ const translateTag = (tag: string): string => {
     NonbootsMovement: 'movement', // Movement
     LifeSteal: 'life-steal',
     Omnivamp: 'omnivamp',
+    OrnnUpgrade: 'ornn-upgrade',
   }
 
   const tagKey = tagMap[tag]
@@ -217,6 +222,7 @@ const allowedTags = [
   'NonbootsMovement', // Movement
   'LifeSteal',
   'Omnivamp',
+  'OrnnUpgrade',
 ]
 
 const availableTags = computed(() => {
@@ -232,6 +238,11 @@ const filteredItems = computed<Item[]>(() => {
   }
 
   let filtered = [...itemsStore.items]
+
+  // Exclude Ornn Masterwork items unless in theorycraft (includeMasterwork)
+  if (!props.includeMasterwork) {
+    filtered = filtered.filter(item => !(item as Item & { isMasterwork?: boolean }).isMasterwork)
+  }
 
   // Filter by tags (if any selected)
   if (selectedTags.value.length > 0) {
@@ -367,6 +378,11 @@ const getItemCategory = (item: Item): ItemCategory => {
     return 'basic'
   }
 
+  // Ornn Masterwork upgrades - legendary tier
+  if ((item as Item & { isMasterwork?: boolean }).isMasterwork) {
+    return 'legendary'
+  }
+
   // Manual overrides for items dont classification (design choice, non Data-Dragon)
   const forcedLegendaryIds = new Set([
     '2526', // Diadème des murmures (doit être légendaire)
@@ -401,7 +417,10 @@ const categoryOrder: Record<ItemCategory, number> = {
 // All items for display (filtered ones in color, others in grayscale)
 // Sorted by category, then by price within each category
 const allItems = computed(() => {
-  const items = [...itemsStore.items]
+  let items = [...itemsStore.items]
+  if (!props.includeMasterwork) {
+    items = items.filter(item => !(item as Item & { isMasterwork?: boolean }).isMasterwork)
+  }
 
   return items.sort((a, b) => {
     const categoryA = getItemCategory(a)

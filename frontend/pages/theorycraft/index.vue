@@ -51,7 +51,7 @@
           <div v-show="activeTheorycraftTab === 'items'" class="space-y-6">
             <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
               <h2 class="mb-4 text-lg font-semibold text-text">{{ t('theorycraft.tabItems') }}</h2>
-              <ItemSelector />
+              <ItemSelector :include-masterwork="true" />
             </div>
           </div>
 

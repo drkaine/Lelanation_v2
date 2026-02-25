@@ -24,11 +24,11 @@
         <div
           class="flex min-h-[60px] w-full max-w-[300px] flex-col justify-center space-y-1 text-center"
         >
-          <!-- Auteur -->
-          <h3 class="text-lg font-semibold text-text">{{ build.author }}</h3>
           <!-- Nom du build + badge visibilité -->
-          <div class="flex items-center justify-center gap-1.5 text-sm text-text/70" :class="{ invisible: !build.author }">
-            <span>{{ build.name }}</span>
+          <h3 class="text-lg font-semibold text-text">{{ build.name || build.id }}</h3>
+          <!-- Auteur -->
+          <div class="flex items-center justify-center gap-1.5 text-sm text-text/70">
+            <span>{{ build.author || t('buildDiscovery.anonymous') }}</span>
             <span
               v-if="props.showUserActions"
               class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide"
@@ -38,7 +38,11 @@
                   : 'border border-emerald-500/50 bg-emerald-500/15 text-emerald-400'
               "
             >
-              {{ (build.visibility ?? 'public') === 'private' ? t('buildsPage.private') : t('buildsPage.public') }}
+              {{
+                (build.visibility ?? 'public') === 'private'
+                  ? t('buildsPage.private')
+                  : t('buildsPage.public')
+              }}
             </span>
           </div>
         </div>
@@ -88,7 +92,7 @@
             <!-- Bouton Favori -->
             <button
               v-if="props.showFavoriteToggle"
-              class="flex items-center justify-center rounded border px-1 py-1 text-xs transition-colors"
+              class="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded border px-1 py-1 text-xs transition-colors"
               :class="
                 favoritesStore.isFavorite(build.id)
                   ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
@@ -211,9 +215,13 @@
           <!-- Description -->
           <div class="min-h-[60px] text-sm text-text/80">
             <template v-if="build.description">
-              <p :class="expandedDescriptions[build.id] ? '' : 'line-clamp-3'">
-                {{ build.description }}
-              </p>
+              <!-- eslint-disable vue/no-v-html -->
+              <p
+                :class="expandedDescriptions[build.id] ? '' : 'line-clamp-3'"
+                class="whitespace-pre-wrap"
+                v-html="linkifyDescription(build.description)"
+              />
+              <!-- eslint-enable vue/no-v-html -->
               <button
                 v-if="build.description.length > 150"
                 class="mt-1 text-xs text-accent hover:text-accent/80"
@@ -253,6 +261,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import type { Build } from '~/types/build'
+import { linkifyDescription } from '~/utils/linkifyDescription'
 
 const { t, locale } = useI18n()
 const buildStore = useBuildStore()

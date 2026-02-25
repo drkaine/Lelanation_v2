@@ -95,6 +95,8 @@ const shardIconSrc = (id: number): string => {
       return '/icons/shards/adaptative.png'
     case 5005:
       return '/icons/shards/speed.png'
+    case 5006:
+      return '/icons/shards/move.png'
     case 5007:
       return '/icons/shards/cdr.png'
     case 5001:

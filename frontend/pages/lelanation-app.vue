@@ -73,7 +73,11 @@ const downloadUrl = computed(() => {
 })
 
 function trackDownload() {
-  $fetch(apiUrl('/api/app/track-download'), { method: 'POST' }).catch(() => {})
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(apiUrl('/api/app/track-download'))
+  } else {
+    $fetch(apiUrl('/api/app/track-download'), { method: 'POST' }).catch(() => {})
+  }
 }
 
 useHead({

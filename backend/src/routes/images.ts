@@ -78,8 +78,7 @@ router.get('/:version/:type/{*filename}', async (req, res) => {
               : 'application/octet-stream'
 
     res.setHeader('Content-Type', contentType)
-    // latest path changes over time: avoid immutable cache.
-    res.setHeader('Cache-Control', 'public, max-age=3600')
+    res.setHeader('Cache-Control', 'public, max-age=604800')
     res.send(fileBuffer)
     return
   } catch (error) {

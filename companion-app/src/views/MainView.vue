@@ -136,7 +136,8 @@ const myImportedBuilds = computed(() => {
 const displayedBuilds = computed(() => {
   if (activeTab.value === "favoris") return favoriteBuilds.value;
   if (activeTab.value === "mes-builds") return myImportedBuilds.value;
-  return sortedBuilds.value;
+  const ids = importedBuildIds.value;
+  return sortedBuilds.value.filter((b) => !ids.has(b.id));
 });
 
 const importedBuildIds = computed(() => new Set(importedBuilds.value.map(b => b.id)));
@@ -162,6 +163,7 @@ function makeImageResolvers(): ImageResolvers {
       const map: Record<number, string> = {
         5008: "adaptative.png",
         5005: "speed.png",
+        5006: "move.png",
         5007: "cdr.png",
         5001: "hp.png",
         5002: "growth.png",
@@ -193,6 +195,7 @@ function makeRuneLookup(): RuneLookup {
       const map: Record<number, string> = {
         5008: "adaptative.png",
         5005: "speed.png",
+        5006: "move.png",
         5007: "cdr.png",
         5001: "hp.png",
         5002: "growth.png",
@@ -203,6 +206,7 @@ function makeRuneLookup(): RuneLookup {
     },
   };
 }
+
 
 const imageResolvers = computed(() => makeImageResolvers());
 const runeLookup = computed(() => makeRuneLookup());
