@@ -10,6 +10,7 @@
         <a
           :href="downloadUrl"
           class="inline-flex items-center rounded bg-accent px-5 py-2.5 font-semibold text-background transition hover:bg-accent-dark"
+          @click="trackDownload"
         >
           {{ t('lelanationApp.downloadButton') }}
         </a>
@@ -24,6 +25,16 @@
       <p class="mt-3 text-xs text-text/60">
         {{ t('lelanationApp.downloadHint') }}
       </p>
+
+      <div class="mt-5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+        <h3 class="text-sm font-semibold text-amber-400">
+          ⚠ {{ t('lelanationApp.smartScreenTitle') }}
+        </h3>
+        <p class="mt-2 text-sm text-text/80">{{ t('lelanationApp.smartScreenText') }}</p>
+        <p class="mt-2 text-sm font-medium text-text/90">
+          {{ t('lelanationApp.smartScreenSteps') }}
+        </p>
+      </div>
     </section>
 
     <section class="mt-8 rounded-xl border border-primary/30 bg-surface/40 p-6 md:p-8">
@@ -60,6 +71,10 @@ const downloadUrl = computed(() => {
   const configured = config.public.companionAppDownloadUrl as string | undefined
   return configured && configured.trim() ? configured : apiUrl('/api/admin/app-download')
 })
+
+function trackDownload() {
+  $fetch(apiUrl('/api/app/track-download'), { method: 'POST' }).catch(() => {})
+}
 
 useHead({
   title: () => t('lelanationApp.metaTitle'),

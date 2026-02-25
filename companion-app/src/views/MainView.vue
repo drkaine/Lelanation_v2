@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { apiBase } from "../config";
 import { getFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
 import { getSettings, setSettings } from "../settings";
@@ -44,9 +45,10 @@ const updateAvailable = ref(false);
 const updateDismissed = ref(false);
 const latestVersion = ref("");
 const currentAppVersion = ref("0.3.0");
-const updateDownloadUrl = ref("");
-
-const GITHUB_REPO = "drkaine/Lelanation_v2";
+const pendingUpdate = shallowRef<Update | null>(null);
+const updateInstalling = ref(false);
+const updateProgress = ref(0);
+const updateError = ref("");
 
 const settings = ref(getSettings());
 
@@ -548,55 +550,44 @@ function stopAutoSubmitLoop() {
   autoSubmitTimer = null;
 }
 
-function isNewerVersion(latest: string, current: string): boolean {
-  const lp = latest.replace(/^v/, "").split(".").map(Number);
-  const cp = current.replace(/^v/, "").split(".").map(Number);
-  for (let i = 0; i < Math.max(lp.length, cp.length); i++) {
-    const l = lp[i] || 0;
-    const c = cp[i] || 0;
-    if (l > c) return true;
-    if (l < c) return false;
-  }
-  return false;
-}
-
 async function checkForUpdates() {
   if (!settings.value.autoUpdate) return;
   try {
     currentAppVersion.value = await getVersion().catch(() => currentAppVersion.value);
-
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
-      headers: { Accept: "application/vnd.github.v3+json" },
-    });
-    if (!res.ok) return;
-    const releases = (await res.json()) as Array<{
-      tag_name: string;
-      html_url: string;
-      draft: boolean;
-      prerelease: boolean;
-      assets?: Array<{ name: string; browser_download_url: string }>;
-    }>;
-
-    const companionRelease = releases.find(
-      (r) => !r.draft && !r.prerelease && (r.tag_name.startsWith("companion-v") || r.tag_name.startsWith("v"))
-    );
-    if (!companionRelease) return;
-
-    const version = companionRelease.tag_name.replace(/^companion-v|^v/, "");
-    if (!isNewerVersion(version, currentAppVersion.value)) return;
-
-    latestVersion.value = version;
-    const exeAsset = companionRelease.assets?.find((a) => a.name.toLowerCase().endsWith(".exe"));
-    updateDownloadUrl.value = exeAsset?.browser_download_url || companionRelease.html_url;
-    updateAvailable.value = true;
+    const update = await check();
+    if (update) {
+      latestVersion.value = update.version;
+      pendingUpdate.value = update;
+      updateAvailable.value = true;
+    }
   } catch {
     // Silent: network errors shouldn't block the app
   }
 }
 
-async function downloadUpdate() {
-  if (updateDownloadUrl.value) {
-    await openUrl(updateDownloadUrl.value);
+async function installUpdate() {
+  const update = pendingUpdate.value;
+  if (!update) return;
+  updateInstalling.value = true;
+  updateError.value = "";
+  updateProgress.value = 0;
+  let downloaded = 0;
+  try {
+    await update.downloadAndInstall((event) => {
+      if (event.event === "Started" && event.data.contentLength) {
+        downloaded = 0;
+      } else if (event.event === "Progress") {
+        downloaded += event.data.chunkLength;
+        const total = (update as unknown as { contentLength?: number }).contentLength;
+        if (total && total > 0) {
+          updateProgress.value = Math.round((downloaded / total) * 100);
+        }
+      }
+    });
+    await relaunch();
+  } catch (e) {
+    updateInstalling.value = false;
+    updateError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -679,15 +670,27 @@ watch(
     </header>
 
     <div v-if="updateAvailable && !updateDismissed" class="update-banner">
-      <span>{{ t('update.available', { version: latestVersion }) }}</span>
+      <span v-if="updateInstalling">{{ t('update.installing', { progress: updateProgress }) }}</span>
+      <span v-else>{{ t('update.available', { version: latestVersion }) }}</span>
       <div class="update-actions">
-        <button type="button" class="update-download-btn" @click="downloadUpdate">
-          {{ t('update.download') }}
+        <button
+          v-if="!updateInstalling"
+          type="button"
+          class="update-download-btn"
+          @click="installUpdate"
+        >
+          {{ t('update.install') }}
         </button>
-        <button type="button" class="update-dismiss-btn" @click="updateDismissed = true">
+        <button
+          v-if="!updateInstalling"
+          type="button"
+          class="update-dismiss-btn"
+          @click="updateDismissed = true"
+        >
           {{ t('update.dismiss') }}
         </button>
       </div>
+      <p v-if="updateError" class="update-error">{{ t('update.installError', { error: updateError }) }}</p>
     </div>
 
     <nav class="tabs">
@@ -1102,6 +1105,7 @@ watch(
   cursor: pointer; font-size: 0.78rem; text-decoration: underline; padding: 0.3rem 0.3rem;
 }
 .update-dismiss-btn:hover { color: #f0e6d2; }
+.update-error { margin: 0.3rem 0 0; font-size: 0.78rem; color: #fecaca; }
 
 @media (max-width: 660px) {
   .header-card { flex-direction: column; align-items: flex-start; }

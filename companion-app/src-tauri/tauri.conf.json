@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Lelanation",
   "version": "0.3.0",
-  "identifier": "com.ubuntu.companion-app",
+  "identifier": "fr.lelanation.companion",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -21,15 +21,31 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/drkaine/Lelanation_v2/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzRTU0OEVBNzgyNkE1MEYKUldRUHBTWjQ2a2psZytYTTAyNWhvdVRSRjVlemQxT0c4YzhwaWFxb2toazhTVVh5M0lSbVoxd1QK"
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Darkaine",
+    "copyright": "© 2025 Lelanation",
+    "category": "Utility",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
