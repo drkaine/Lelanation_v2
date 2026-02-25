@@ -43,7 +43,7 @@ const importedBuilds = ref<Build[]>([]);
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
 const latestVersion = ref("");
-const currentAppVersion = ref("0.1.0");
+const currentAppVersion = ref("0.3.0");
 const updateDownloadUrl = ref("");
 
 const GITHUB_REPO = "drkaine/Lelanation_v2";
@@ -600,6 +600,17 @@ async function downloadUpdate() {
   }
 }
 
+const uninstallError = ref("");
+
+async function uninstallApp() {
+  uninstallError.value = "";
+  try {
+    await invoke("uninstall_app");
+  } catch (e) {
+    uninstallError.value = e instanceof Error ? e.message : t("settings.uninstallError");
+  }
+}
+
 async function createDesktopShortcut() {
   shortcutMessage.value = "";
   shortcutError.value = false;
@@ -889,6 +900,13 @@ watch(
         {{ t('settings.createShortcut') }}
       </button>
       <p v-if="shortcutMessage" :class="{ error: shortcutError }" class="msg">{{ shortcutMessage }}</p>
+
+      <h3 class="mt">{{ t('settings.uninstallTitle') }}</h3>
+      <p class="hint-line">{{ t('settings.uninstallHint') }}</p>
+      <button type="button" class="uninstall-btn" @click="uninstallApp">
+        {{ t('settings.uninstallBtn') }}
+      </button>
+      <p v-if="uninstallError" class="msg error">{{ uninstallError }}</p>
     </section>
   </div>
 </template>
@@ -1056,6 +1074,14 @@ watch(
   text-decoration: underline; padding: 0;
 }
 .clear-link-btn:hover { color: #fecaca; }
+
+.uninstall-btn {
+  margin-top: 0.5rem; border: 1px solid rgba(239, 68, 68, 0.5); border-radius: 7px;
+  background: rgba(239, 68, 68, 0.1); color: #fca5a5; cursor: pointer;
+  padding: 0.38rem 0.7rem; font-size: 0.8rem;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.uninstall-btn:hover { background: rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.7); }
 
 .update-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;

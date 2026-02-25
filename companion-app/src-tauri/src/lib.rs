@@ -106,6 +106,32 @@ fn create_desktop_shortcut() -> Result<ShortcutResult, String> {
     Err("Desktop shortcut creation is only supported on Windows.".to_string())
 }
 
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn uninstall_app() -> Result<(), String> {
+    let exe_path = std::env::current_exe().map_err(|e| format!("Cannot resolve executable path: {e}"))?;
+    let install_dir = exe_path
+        .parent()
+        .ok_or_else(|| "Cannot resolve install directory".to_string())?;
+
+    let uninstaller = install_dir.join("uninstall.exe");
+    if !uninstaller.exists() {
+        return Err("Uninstaller not found. The app may have been installed manually.".to_string());
+    }
+
+    Command::new(&uninstaller)
+        .spawn()
+        .map_err(|e| format!("Failed to launch uninstaller: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn uninstall_app() -> Result<(), String> {
+    Err("Uninstall is only supported on Windows.".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -113,7 +139,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_lcu_connection,
             lcu_request,
-            create_desktop_shortcut
+            create_desktop_shortcut,
+            uninstall_app
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

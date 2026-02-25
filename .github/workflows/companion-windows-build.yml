@@ -3,6 +3,10 @@ name: Companion Windows Signed Build
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Version to release (e.g. 0.4.0). Leave empty for dev build without release."
+        required: false
+        type: string
       sign:
         description: "Sign installer with code-signing certificate"
         required: false
@@ -30,6 +34,46 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        working-directory: .
+        run: |
+          $ver = ""
+          if ("${{ inputs.version }}".Trim()) {
+            $ver = "${{ inputs.version }}".Trim()
+          } elseif ("${{ github.ref }}".StartsWith("refs/tags/")) {
+            $ver = "${{ github.ref_name }}" -replace '^(companion-)?v', ''
+          }
+          if ($ver) {
+            Write-Host "Release version: $ver"
+            echo "value=$ver" >> $env:GITHUB_OUTPUT
+            echo "is_release=true" >> $env:GITHUB_OUTPUT
+          } else {
+            $fallback = (Get-Content "companion-app\src-tauri\tauri.conf.json" | ConvertFrom-Json).version
+            Write-Host "Dev build, using version from config: $fallback"
+            echo "value=$fallback" >> $env:GITHUB_OUTPUT
+            echo "is_release=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Inject version into config files
+        if: steps.version.outputs.is_release == 'true'
+        working-directory: .
+        run: |
+          $version = "${{ steps.version.outputs.value }}"
+          # tauri.conf.json
+          $tauriConf = "companion-app\src-tauri\tauri.conf.json"
+          (Get-Content $tauriConf -Raw) -replace '"version":\s*"[^"]+"', "`"version`": `"$version`"" |
+            Set-Content $tauriConf -NoNewline
+          # Cargo.toml
+          $cargo = "companion-app\src-tauri\Cargo.toml"
+          (Get-Content $cargo -Raw) -replace 'version\s*=\s*"[^"]+"', "version = `"$version`"" |
+            Set-Content $cargo -NoNewline
+          # package.json
+          $pkg = "companion-app\package.json"
+          (Get-Content $pkg -Raw) -replace '"version":\s*"[^"]+"', "`"version`": `"$version`"" |
+            Set-Content $pkg -NoNewline
+          Write-Host "All version files set to $version"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -157,8 +201,28 @@ jobs:
           path: installer/Lelanation.exe
           if-no-files-found: error
 
-      - name: Publish installer on GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: installer/Lelanation.exe
+      - name: Create tag and publish GitHub Release
+        if: steps.version.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: .
+        run: |
+          $version = "${{ steps.version.outputs.value }}"
+          $tag = "companion-v$version"
+
+          # Create tag if it doesn't exist yet (workflow_dispatch case)
+          $existingTag = git tag -l $tag 2>$null
+          if (-not $existingTag) {
+            git tag $tag
+            git push origin $tag
+            Write-Host "Created and pushed tag $tag"
+          } else {
+            Write-Host "Tag $tag already exists"
+          }
+
+          # Create GitHub release with the installer
+          gh release create $tag `
+            "installer/Lelanation.exe" `
+            --title "Lelanation Companion v$version" `
+            --generate-notes
+          Write-Host "Published release $tag"

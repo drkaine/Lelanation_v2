@@ -95,13 +95,21 @@ async function downloadCompanionApp() {
       message.value = data?.error ?? t('adminApp.error')
       return
     }
+    const contentType = res.headers.get('Content-Type') || ''
+    if (contentType.includes('application/json')) {
+      const data = (await res.json()) as { redirect?: string }
+      if (data.redirect) {
+        window.location.href = data.redirect
+        return
+      }
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download =
       res.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/^"|"$/g, '') ??
-      'lelanation-companion-setup.exe'
+      'Lelanation.exe'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)

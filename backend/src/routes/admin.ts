@@ -1325,7 +1325,7 @@ router.post('/matchup-tier/rebuild', async (req, res) => {
 router.get('/app-download', async (_req, res) => {
   const externalDownloadUrl = process.env.COMPANION_APP_DOWNLOAD_URL?.trim()
   if (externalDownloadUrl) {
-    return res.redirect(externalDownloadUrl)
+    return res.json({ redirect: externalDownloadUrl })
   }
   const defaultPath = join(process.cwd(), 'data', 'releases', 'lelanation-companion-setup.exe')
   const raw = process.env.COMPANION_APP_INSTALLER_PATH
