@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { apiBase } from "../config";
 import { getFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
 import { getSettings, setSettings } from "../settings";
@@ -37,6 +39,14 @@ const linkLoading = ref(false);
 const linkMessage = ref("");
 const linkError = ref(false);
 const importedBuilds = ref<Build[]>([]);
+
+const updateAvailable = ref(false);
+const updateDismissed = ref(false);
+const latestVersion = ref("");
+const currentAppVersion = ref("0.1.0");
+const updateDownloadUrl = ref("");
+
+const GITHUB_REPO = "drkaine/Lelanation_v2";
 
 const settings = ref(getSettings());
 
@@ -316,6 +326,141 @@ async function loadRuneCatalog() {
   }
 }
 
+async function importBuild(build: Build) {
+  if (!lcuConnected.value) return;
+
+  const errors: string[] = [];
+
+  if (settings.value.importRunes && build.runes) {
+    try {
+      const selectedPerkIds = [
+        build.runes.primary.keystone,
+        build.runes.primary.slot1,
+        build.runes.primary.slot2,
+        build.runes.primary.slot3,
+        build.runes.secondary.slot1,
+        build.runes.secondary.slot2,
+      ];
+      const shards = build.shards;
+      if (shards) {
+        selectedPerkIds.push(shards.slot1, shards.slot2, shards.slot3);
+      }
+
+      const runePage = {
+        name: build.name || "Lelanation",
+        primaryStyleId: build.runes.primary.pathId,
+        subStyleId: build.runes.secondary.pathId,
+        selectedPerkIds,
+        current: true,
+      };
+
+      const pagesJson = await invoke<string>("lcu_request", {
+        method: "GET",
+        path: "/lol-perks/v1/pages",
+        body: null,
+      });
+      const pages = JSON.parse(pagesJson) as Array<{ id: number; isDeletable: boolean }>;
+      const editable = pages.find(p => p.isDeletable);
+      if (editable) {
+        await invoke<string>("lcu_request", {
+          method: "DELETE",
+          path: `/lol-perks/v1/pages/${editable.id}`,
+          body: null,
+        });
+      }
+      await invoke<string>("lcu_request", {
+        method: "POST",
+        path: "/lol-perks/v1/pages",
+        body: JSON.stringify(runePage),
+      });
+    } catch (e) {
+      errors.push(t("import") + " runes: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  if (settings.value.importSummonerSpells && build.summonerSpells) {
+    try {
+      const spell1 = build.summonerSpells[0];
+      const spell2 = build.summonerSpells[1];
+      if (spell1 && spell2) {
+        const body = {
+          spell1Id: Number(spell1.key ?? spell1.id),
+          spell2Id: Number(spell2.key ?? spell2.id),
+        };
+        await invoke<string>("lcu_request", {
+          method: "PATCH",
+          path: "/lol-champ-select/v1/session/my-selection",
+          body: JSON.stringify(body),
+        });
+      }
+    } catch {
+      // Summoner spell import requires active champ select
+    }
+  }
+
+  if (settings.value.importItems && build.items?.length) {
+    try {
+      const summonerJson = await invoke<string>("lcu_request", {
+        method: "GET",
+        path: "/lol-summoner/v1/current-summoner",
+        body: null,
+      });
+      const summoner = JSON.parse(summonerJson) as { summonerId: number };
+
+      const itemBlock = {
+        hideIfSummonerSpell: "",
+        items: build.items.map(item => ({
+          id: String(item.id),
+          count: 1,
+        })),
+        type: build.name || "Lelanation",
+      };
+
+      const champId = build.champion?.key ?? build.champion?.id ?? "0";
+      const itemSet = {
+        title: build.name || "Lelanation",
+        associatedChampions: [Number(champId)],
+        associatedMaps: [],
+        blocks: [itemBlock],
+        map: "any",
+        mode: "any",
+        preferredItemSlots: [],
+        sortrank: 0,
+        startedFrom: "custom",
+        type: "custom",
+      };
+
+      const setsJson = await invoke<string>("lcu_request", {
+        method: "GET",
+        path: `/lol-item-sets/v1/item-sets/${summoner.summonerId}/sets`,
+        body: null,
+      });
+      const setsData = JSON.parse(setsJson) as { accountId: number; itemSets: unknown[]; timestamp: number };
+
+      const updatedSets = {
+        ...setsData,
+        itemSets: [...setsData.itemSets, itemSet],
+      };
+
+      await invoke<string>("lcu_request", {
+        method: "PUT",
+        path: `/lol-item-sets/v1/item-sets/${summoner.summonerId}/sets`,
+        body: JSON.stringify(updatedSets),
+      });
+    } catch {
+      // Item import requires active client
+    }
+  }
+
+  if (errors.length > 0) {
+    submitMessage.value = errors.join("; ");
+    submitError.value = true;
+  } else {
+    submitMessage.value = t("importSuccess");
+    submitError.value = false;
+  }
+}
+
 function refreshFavorites() {
   favoriteIds.value = getFavoriteIds();
 }
@@ -403,6 +548,58 @@ function stopAutoSubmitLoop() {
   autoSubmitTimer = null;
 }
 
+function isNewerVersion(latest: string, current: string): boolean {
+  const lp = latest.replace(/^v/, "").split(".").map(Number);
+  const cp = current.replace(/^v/, "").split(".").map(Number);
+  for (let i = 0; i < Math.max(lp.length, cp.length); i++) {
+    const l = lp[i] || 0;
+    const c = cp[i] || 0;
+    if (l > c) return true;
+    if (l < c) return false;
+  }
+  return false;
+}
+
+async function checkForUpdates() {
+  if (!settings.value.autoUpdate) return;
+  try {
+    currentAppVersion.value = await getVersion().catch(() => currentAppVersion.value);
+
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`, {
+      headers: { Accept: "application/vnd.github.v3+json" },
+    });
+    if (!res.ok) return;
+    const releases = (await res.json()) as Array<{
+      tag_name: string;
+      html_url: string;
+      draft: boolean;
+      prerelease: boolean;
+      assets?: Array<{ name: string; browser_download_url: string }>;
+    }>;
+
+    const companionRelease = releases.find(
+      (r) => !r.draft && !r.prerelease && (r.tag_name.startsWith("companion-v") || r.tag_name.startsWith("v"))
+    );
+    if (!companionRelease) return;
+
+    const version = companionRelease.tag_name.replace(/^companion-v|^v/, "");
+    if (!isNewerVersion(version, currentAppVersion.value)) return;
+
+    latestVersion.value = version;
+    const exeAsset = companionRelease.assets?.find((a) => a.name.toLowerCase().endsWith(".exe"));
+    updateDownloadUrl.value = exeAsset?.browser_download_url || companionRelease.html_url;
+    updateAvailable.value = true;
+  } catch {
+    // Silent: network errors shouldn't block the app
+  }
+}
+
+async function downloadUpdate() {
+  if (updateDownloadUrl.value) {
+    await openUrl(updateDownloadUrl.value);
+  }
+}
+
 async function createDesktopShortcut() {
   shortcutMessage.value = "";
   shortcutError.value = false;
@@ -420,6 +617,7 @@ onMounted(async () => {
   loadCurrentGameVersion();
   loadRuneCatalog();
   loadImportedBuilds();
+  checkForUpdates();
   await loadChampionCatalog();
   loadBuilds();
   refreshFavorites();
@@ -468,6 +666,18 @@ watch(
         {{ lcuConnected ? t('status.connected') : t('status.disconnected') }}
       </span>
     </header>
+
+    <div v-if="updateAvailable && !updateDismissed" class="update-banner">
+      <span>{{ t('update.available', { version: latestVersion }) }}</span>
+      <div class="update-actions">
+        <button type="button" class="update-download-btn" @click="downloadUpdate">
+          {{ t('update.download') }}
+        </button>
+        <button type="button" class="update-dismiss-btn" @click="updateDismissed = true">
+          {{ t('update.dismiss') }}
+        </button>
+      </div>
+    </div>
 
     <nav class="tabs">
       <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="activeTab = 'builds'">
@@ -569,7 +779,7 @@ watch(
                 <path d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z" />
               </svg>
             </button>
-            <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')">
+            <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')" @click="importBuild(b)">
               {{ t('import') }}
             </button>
           </div>
@@ -660,6 +870,19 @@ watch(
       >
         {{ t('settings.clearImported', { count: importedBuilds.length }) }}
       </button>
+
+      <h3 class="mt">{{ t('settings.updateTitle') }}</h3>
+      <label class="row">
+        <input
+          type="checkbox"
+          :checked="settings.autoUpdate"
+          @change="saveSetting('autoUpdate', ($event.target as HTMLInputElement).checked)"
+        />
+        {{ t('settings.autoUpdate') }}
+      </label>
+      <p class="hint-line">
+        {{ t('update.upToDate', { version: currentAppVersion }) }}
+      </p>
 
       <h3 class="mt">{{ t('settings.shortcut') }}</h3>
       <button type="button" class="submit-btn" @click="createDesktopShortcut">
@@ -833,6 +1056,26 @@ watch(
   text-decoration: underline; padding: 0;
 }
 .clear-link-btn:hover { color: #fecaca; }
+
+.update-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.6rem 1rem; margin-bottom: 0.9rem; border-radius: 10px;
+  background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.5);
+  color: #93f2ce; font-size: 0.86rem; font-weight: 500;
+}
+.update-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+.update-download-btn {
+  border: 1px solid rgba(16, 185, 129, 0.7); border-radius: 7px;
+  background: rgba(16, 185, 129, 0.2); color: #93f2ce; cursor: pointer;
+  padding: 0.3rem 0.7rem; font-size: 0.8rem; font-weight: 600;
+  transition: background-color 0.15s;
+}
+.update-download-btn:hover { background: rgba(16, 185, 129, 0.35); }
+.update-dismiss-btn {
+  border: none; background: transparent; color: rgba(240, 230, 210, 0.6);
+  cursor: pointer; font-size: 0.78rem; text-decoration: underline; padding: 0.3rem 0.3rem;
+}
+.update-dismiss-btn:hover { color: #f0e6d2; }
 
 @media (max-width: 660px) {
   .header-card { flex-direction: column; align-items: flex-start; }

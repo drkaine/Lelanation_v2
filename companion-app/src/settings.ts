@@ -5,6 +5,7 @@ export interface ImportSettings {
   importItems: boolean;
   importSummonerSpells: boolean;
   disableMatchSubmission: boolean;
+  autoUpdate: boolean;
   language: "fr" | "en";
 }
 
@@ -13,6 +14,7 @@ const defaults: ImportSettings = {
   importItems: true,
   importSummonerSpells: true,
   disableMatchSubmission: false,
+  autoUpdate: true,
   language: "fr",
 };
 
