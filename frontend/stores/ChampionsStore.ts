@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
+import type { Champion } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
-import type { Champion } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl, getVersionUrl } from '~/utils/staticDataUrl'
 

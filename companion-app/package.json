@@ -10,6 +10,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@lelanation/shared-types": "*",
+    "@lelanation/shared-theme": "*",
+    "@lelanation/builds-ui": "*",
     "vue": "^3.5.13",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2"

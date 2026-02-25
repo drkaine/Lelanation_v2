@@ -5,28 +5,20 @@ import { apiBase } from "../config";
 import { getFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
 import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
+import type { StoredBuild, ItemRef, SummonerSpellRef } from "@lelanation/shared-types";
 
-type Build = {
+/** Extended refs that may carry a `name` when the API returns full objects */
+type ItemRefExt = ItemRef & { name?: string };
+type SpellRefExt = (SummonerSpellRef & { name?: string }) | null;
+
+/**
+ * Companion-app Build: a relaxed superset of StoredBuild for API responses
+ * where some fields might be absent on older builds.
+ */
+type Build = Omit<Partial<StoredBuild>, "items" | "summonerSpells"> & {
   id: string;
-  name?: string;
-  author?: string;
-  description?: string;
-  createdAt?: string;
-  gameVersion?: string;
-  champion?: {
-    id?: string;
-    name?: string;
-    image?: { full?: string };
-  } | null;
-  roles?: string[];
-  items?: Array<{ id?: string; name?: string; image?: { full?: string } }>;
-  summonerSpells?: Array<{ id?: string; name?: string; image?: { full?: string } } | null>;
-  runes?: {
-    primary?: { pathId?: number; keystone?: number; slot1?: number; slot2?: number; slot3?: number };
-    secondary?: { pathId?: number; slot1?: number; slot2?: number };
-  } | null;
-  shards?: { slot1?: number; slot2?: number; slot3?: number } | null;
-  skillOrder?: { firstThreeUps?: string[]; skillUpOrder?: string[] } | null;
+  items?: ItemRefExt[];
+  summonerSpells?: [SpellRefExt, SpellRefExt];
 };
 
 const builds = ref<Build[]>([]);

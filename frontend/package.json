@@ -14,6 +14,9 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@lelanation/shared-types": "*",
+    "@lelanation/shared-theme": "*",
+    "@lelanation/builds-ui": "*",
     "@iconify-json/mdi": "^1.2.3",
     "@nuxt/icon": "^2.2.1",
     "@nuxtjs/i18n": "^10.2.1",

@@ -598,6 +598,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
+import type { Build, Item, Role } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -612,7 +614,6 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import type { Build, Item, Role } from '~/types/build'
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
@@ -763,87 +764,7 @@ const onItemDragEnd = () => {
   clearDragState()
 }
 
-// Helper to check if item is boots
-const isBootsItem = (item: Item): boolean => {
-  // Signal principal : tag "Boots"
-  if (item.tags && item.tags.includes('Boots')) return true
-
-  // Ensemble des IDs de bottes (cohérent avec ItemSelector)
-  const bootIds = new Set([
-    '1001', // Bottes
-    '3005', // Bottes du vigilant
-    '3006', // Jambières du berzerker
-    '3009', // Bottes de célérité
-    '3010', // Bottes de lucidité spéciales
-    '3020', // Chaussures du sorcier
-    '3047', // Coques en acier renforcé
-    '3111', // Sandales de mercure
-    '3117', // Bottes de mobilité
-    '3158', // Bottes de lucidité
-  ])
-
-  if (bootIds.has(item.id)) return true
-
-  // Les upgrades comme "Jambières de métal" héritent d'une botte dans `from`
-  if (item.from && item.from.some(parentId => bootIds.has(parentId))) {
-    return true
-  }
-
-  return false
-}
-
-const starterItemIds = new Set([
-  '1036',
-  '1054',
-  '1055',
-  '1056',
-  '1082',
-  '1083',
-  '3070',
-  '3865',
-  '3866',
-  '3867',
-  '2003',
-  '2009',
-  '2010',
-  '2031',
-  '2032',
-  '2033',
-  '2055',
-  '1101',
-  '1102',
-  '1103',
-])
-const starterNamePatterns = [
-  'seau',
-  'anneau de doran',
-  'lame de doran',
-  'bouclier de doran',
-  'larme de la déesse',
-  'cull',
-  'abatteur',
-  'atlas',
-  'épée de voleur',
-  'épée longue',
-  'long sword',
-  'faucheuse',
-  'fragment',
-  'potion',
-  'ward',
-  'elixir',
-  'biscuit',
-]
-const atlasUpgradeIds = new Set(['3869', '3870', '3871', '3876', '3877'])
-
-const isStarterItem = (item: Item): boolean => {
-  if (atlasUpgradeIds.has(item.id)) return false
-  const itemNameLower = item.name.toLowerCase()
-  return (
-    starterItemIds.has(item.id) ||
-    starterNamePatterns.some(pattern => itemNameLower.includes(pattern)) ||
-    Boolean(item.tags && item.tags.includes('Consumable'))
-  )
-}
+// isBootsItem and isStarterItem imported from @lelanation/builds-ui
 
 // Starting items (2 premiers - starter items only)
 const startingItems = computed(() => {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
+import type { Item } from '@lelanation/shared-types'
 import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
-import type { Item } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
 

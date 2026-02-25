@@ -9,7 +9,7 @@ import type {
   SkillOrder,
   CalculatedStats,
   Role,
-} from '~/types/build'
+} from '@lelanation/shared-types'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'

@@ -1,11 +1,14 @@
 .PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend build-companion build-companion-exe exe-windows \
 	pm2-status pm2-start pm2-restart pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-frontend \
-	deploy sync-data typecheck lint-frontend format-frontend clean
+	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
+	test test-packages clean
 
 ROOT_DIR := $(CURDIR)
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 COMPANION_APP_DIR := companion-app
+PACKAGES_DIR := packages
+BUILDS_UI_DIR := $(PACKAGES_DIR)/builds-ui
 COMPANION_BUNDLE_DIR := $(COMPANION_APP_DIR)/src-tauri/target/release/bundle
 COMPANION_EXE_NAME := lelanation-companion-setup.exe
 WINDOWS_VCVARS64 := C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat
@@ -22,40 +25,50 @@ help:
 	@echo "Lelanation v2 - Make targets"
 	@echo ""
 	@echo "Setup"
-	@echo "  make setup            Install deps (root/backend/frontend) via npm ci"
+	@echo "  make setup              Install all deps (workspaces: root/backend/frontend/companion/packages)"
 	@echo ""
 	@echo "Dev"
-	@echo "  make dev              Run backend + frontend dev servers (parallel)"
-	@echo "  make dev-backend      Run backend dev server only"
-	@echo "  make dev-frontend     Run frontend dev server only"
+	@echo "  make dev                Run backend + frontend dev servers (parallel)"
+	@echo "  make dev-backend        Run backend dev server only"
+	@echo "  make dev-frontend       Run frontend dev server only"
 	@echo ""
 	@echo "Build"
-	@echo "  make build            Build backend + frontend + companion app"
+	@echo "  make build              Build backend + frontend + companion app"
+	@echo "  make build-backend      Build backend only"
+	@echo "  make build-frontend     Build frontend only"
+	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
-	@echo "  make exe-windows      Build Tauri app and copy it to ./Lelanation.exe"
+	@echo "  make exe-windows        Build Tauri app and copy it to ./Lelanation.exe"
 	@echo ""
 	@echo "PM2"
-	@echo "  make pm2-status       Show PM2 status"
-	@echo "  make pm2-start        Start apps from ecosystem config"
-	@echo "  make pm2-restart      Restart apps from ecosystem config"
-	@echo "  make deploy           Build then pm2 startOrRestart"
-	@echo "  make pm2-logs         Tail all PM2 logs"
-	@echo "  make pm2-logs-backend Tail backend logs"
-	@echo "  make pm2-logs-frontend Tail frontend logs"
+	@echo "  make pm2-status         Show PM2 status"
+	@echo "  make pm2-start          Start apps from ecosystem config"
+	@echo "  make pm2-restart        Restart apps from ecosystem config"
+	@echo "  make deploy             Build then pm2 startOrRestart"
+	@echo "  make pm2-logs           Tail all PM2 logs"
+	@echo "  make pm2-logs-backend   Tail backend logs"
+	@echo "  make pm2-logs-frontend  Tail frontend logs"
+	@echo ""
+	@echo "Quality"
+	@echo "  make typecheck          Typecheck backend + frontend + companion"
+	@echo "  make typecheck-frontend Typecheck frontend only"
+	@echo "  make typecheck-companion Typecheck companion only"
+	@echo "  make lint               Lint frontend"
+	@echo "  make lint-frontend      Lint frontend only"
+	@echo "  make format             Format frontend"
+	@echo "  make test               Run all tests (packages)"
+	@echo "  make test-packages      Run builds-ui unit tests"
 	@echo ""
 	@echo "Utilities"
-	@echo "  make sync-data        Run backend data sync script"
-	@echo "  make typecheck        Typecheck backend + frontend"
-	@echo "  make lint-frontend    Lint frontend"
-	@echo "  make format-frontend  Format frontend (prettier)"
-	@echo "  make clean            Remove build artifacts"
+	@echo "  make sync-data          Run backend data sync script"
+	@echo "  make clean              Remove build artifacts"
 	@echo ""
 
+# ─── Setup ───────────────────────────────────────────────────────────────────────
 setup:
 	$(NPM) ci
-	$(NPM) --prefix "$(BACKEND_DIR)" ci
-	$(NPM) --prefix "$(FRONTEND_DIR)" ci
 
+# ─── Dev ─────────────────────────────────────────────────────────────────────────
 dev:
 	@$(MAKE) -j2 dev-backend dev-frontend
 
@@ -65,7 +78,8 @@ dev-backend:
 dev-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run dev
 
-build: build-backend build-frontend build-companion pm2-restart
+# ─── Build ───────────────────────────────────────────────────────────────────────
+build: test-packages build-backend build-frontend build-companion pm2-restart
 
 build-backend:
 	$(NPM) --prefix "$(BACKEND_DIR)" run build
@@ -90,6 +104,7 @@ build-companion-exe:
 exe-windows:
 	powershell -NoProfile -ExecutionPolicy Bypass -File "$(ROOT_DIR)/scripts/exe-windows.ps1"
 
+# ─── PM2 ─────────────────────────────────────────────────────────────────────────
 pm2-status:
 	$(PM2) status
 
@@ -119,18 +134,38 @@ deploy: build
 	mkdir -p "$(LOGS_DIR)"
 	$(PM2) startOrRestart "$(ECOSYSTEM_FILE)" --update-env
 
-sync-data:
-	$(NPM) --prefix "$(BACKEND_DIR)" run sync:data
-
-typecheck:
+# ─── Quality ─────────────────────────────────────────────────────────────────────
+typecheck: typecheck-frontend typecheck-companion
 	$(NPM) --prefix "$(BACKEND_DIR)" run typecheck
+
+typecheck-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run typecheck
+
+typecheck-companion:
+	cd "$(COMPANION_APP_DIR)" && npx vue-tsc --noEmit
+
+lint: lint-frontend
 
 lint-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run lint
 
+format: format-frontend
+
 format-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run format
 
+test: test-packages
+
+test-packages:
+	$(NPM) --prefix "$(BUILDS_UI_DIR)" test
+
+# ─── Utilities ───────────────────────────────────────────────────────────────────
+sync-data:
+	$(NPM) --prefix "$(BACKEND_DIR)" run sync:data
+
 clean:
-	rm -rf "$(BACKEND_DIR)/dist" "$(FRONTEND_DIR)/.output" "$(FRONTEND_DIR)/.nuxt" "$(FRONTEND_DIR)/node_modules/.cache/nuxt"
+	rm -rf "$(BACKEND_DIR)/dist" \
+	       "$(FRONTEND_DIR)/.output" \
+	       "$(FRONTEND_DIR)/.nuxt" \
+	       "$(FRONTEND_DIR)/node_modules/.cache/nuxt" \
+	       "$(COMPANION_APP_DIR)/src-tauri/target"

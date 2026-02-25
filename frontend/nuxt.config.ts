@@ -241,6 +241,9 @@ export default defineNuxtConfig({
       },
     },
   },
+  build: {
+    transpile: ['@lelanation/shared-types', '@lelanation/shared-theme', '@lelanation/builds-ui'],
+  },
   vite: {
     server: {
       allowedHosts: ['www.lelanation.fr', 'lelanation.fr', 'localhost', '127.0.0.1'],

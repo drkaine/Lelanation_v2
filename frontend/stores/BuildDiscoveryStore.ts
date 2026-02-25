@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
+import type { Build, StoredBuild } from '@lelanation/shared-types'
 import { useBuildStore } from './BuildStore'
 import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
-import type { Build, StoredBuild } from '~/types/build'
 import { apiUrl } from '~/utils/apiUrl'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 
