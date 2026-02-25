@@ -5,25 +5,15 @@ import { apiBase } from "../config";
 import { getFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
 import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
-import type { StoredBuild, ItemRef, SummonerSpellRef } from "@lelanation/shared-types";
-
-/** Extended refs that may carry a `name` when the API returns full objects */
-type ItemRefExt = ItemRef & { name?: string };
-type SpellRefExt = (SummonerSpellRef & { name?: string }) | null;
-
-/**
- * Companion-app Build: a relaxed superset of StoredBuild for API responses
- * where some fields might be absent on older builds.
- */
-type Build = Omit<Partial<StoredBuild>, "items" | "summonerSpells"> & {
-  id: string;
-  items?: ItemRefExt[];
-  summonerSpells?: [SpellRefExt, SpellRefExt];
-};
+import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
+import { translate } from "../i18n";
+import type { Build, Role, Champion, StoredBuild } from "@lelanation/shared-types";
+import { BuildSheet } from "@lelanation/builds-ui";
+import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
 
 const builds = ref<Build[]>([]);
 const loading = ref(true);
-const activeTab = ref<"builds" | "favoris" | "settings">("builds");
+const activeTab = ref<"builds" | "mes-builds" | "favoris" | "settings">("builds");
 const lcuConnected = ref(false);
 const submitMessage = ref("");
 const submitError = ref(false);
@@ -31,13 +21,29 @@ const favoriteIds = ref<string[]>([]);
 const shortcutMessage = ref("");
 const shortcutError = ref(false);
 const currentGameVersion = ref("");
-const championImageFallbackIndex = ref<Record<string, number>>({});
 const runeMap = ref<Record<number, { name: string; icon: string }>>({});
 const runePathMap = ref<Record<number, { name: string; icon: string }>>({});
+const championMap = ref<Record<string, Champion>>({});
 const lastSubmittedMatchId = ref("");
 let autoSubmitTimer: ReturnType<typeof setInterval> | null = null;
 
+const searchQuery = ref("");
+const selectedRole = ref<Role | null>(null);
+const sortBy = ref<"recent" | "name">("recent");
+const onlyUpToDate = ref(false);
+
+const linkCode = ref("");
+const linkLoading = ref(false);
+const linkMessage = ref("");
+const linkError = ref(false);
+const importedBuilds = ref<Build[]>([]);
+
 const settings = ref(getSettings());
+
+function t(key: string, params?: Record<string, string | number>): string {
+  return translate(settings.value.language, key, params);
+}
+
 function saveSetting<K extends keyof typeof settings.value>(key: K, value: (typeof settings.value)[K]) {
   settings.value = { ...settings.value, [key]: value };
   setSettings({ [key]: value });
@@ -47,30 +53,165 @@ const canAutoSubmitMatch = computed(
   () => hasConsent() && settings.value.disableMatchSubmission !== true
 );
 
-const sortedBuilds = computed(() =>
-  [...builds.value].sort((a, b) => {
-    const aDate = new Date(a.createdAt ?? 0).getTime();
-    const bDate = new Date(b.createdAt ?? 0).getTime();
-    return bDate - aDate;
-  })
-);
+const allRoles: Role[] = ["top", "jungle", "mid", "adc", "support"];
+
+const currentMajorMinor = computed(() => {
+  const v = currentGameVersion.value;
+  if (!v) return "";
+  const parts = v.split(".");
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v;
+});
+
+const sortedBuilds = computed(() => {
+  let list = [...builds.value];
+  if (onlyUpToDate.value && currentMajorMinor.value) {
+    const prefix = currentMajorMinor.value;
+    list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    list = list.filter(
+      (b) =>
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q) ||
+        (b.champion?.name || "").toLowerCase().includes(q)
+    );
+  }
+  if (selectedRole.value) {
+    const r = selectedRole.value;
+    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
+  }
+  if (sortBy.value === "name") {
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } else {
+    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  }
+  return list;
+});
 
 const favoriteBuilds = computed(() => {
   const ids = new Set(favoriteIds.value);
   return sortedBuilds.value.filter((b) => ids.has(b.id));
 });
 
-const displayedBuilds = computed(() =>
-  activeTab.value === "favoris" ? favoriteBuilds.value : sortedBuilds.value
-);
+const myImportedBuilds = computed(() => {
+  let list = [...importedBuilds.value] as Build[];
+  if (onlyUpToDate.value && currentMajorMinor.value) {
+    const prefix = currentMajorMinor.value;
+    list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    list = list.filter(
+      (b) =>
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q) ||
+        (b.champion?.name || "").toLowerCase().includes(q)
+    );
+  }
+  if (selectedRole.value) {
+    const r = selectedRole.value;
+    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
+  }
+  if (sortBy.value === "name") {
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } else {
+    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  }
+  return list;
+});
+
+const displayedBuilds = computed(() => {
+  if (activeTab.value === "favoris") return favoriteBuilds.value;
+  if (activeTab.value === "mes-builds") return myImportedBuilds.value;
+  return sortedBuilds.value;
+});
+
+const importedBuildIds = computed(() => new Set(importedBuilds.value.map(b => b.id)));
+
+const latestImageBase = computed(() => `${apiBase}/images/game/latest`);
+
+function makeImageResolvers(): ImageResolvers {
+  return {
+    champion: (imageFull: string) => `${latestImageBase.value}/champion/${imageFull}`,
+    item: (imageFull: string) => `${latestImageBase.value}/item/${imageFull}`,
+    spell: (imageFull: string) => `${latestImageBase.value}/spell/${imageFull}`,
+    championSpell: (championId: string, imageFull: string) =>
+      `${latestImageBase.value}/champion-spell/${championId}/${imageFull}`,
+    runePath: (icon: string) => {
+      const filename = icon.split("/").pop() || icon;
+      return `${latestImageBase.value}/rune/paths/${filename}`;
+    },
+    rune: (icon: string) => {
+      const filename = icon.split("/").pop() || icon;
+      return `${latestImageBase.value}/rune/runes/${filename}`;
+    },
+    shard: (shardId: number) => {
+      const map: Record<number, string> = {
+        5008: "adaptative.png",
+        5005: "speed.png",
+        5007: "cdr.png",
+        5001: "hp.png",
+        5002: "growth.png",
+        5003: "tenacity.png",
+      };
+      const file = map[shardId];
+      return file ? `/icons/shards/${file}` : "";
+    },
+    role: (role: string) => `/icons/roles/${role === "adc" ? "bot" : role}.png`,
+  };
+}
+
+function makeRuneLookup(): RuneLookup {
+  return {
+    getRuneIcon: (runeId: number) => {
+      const rune = runeMap.value[runeId];
+      if (!rune?.icon) return "";
+      const filename = rune.icon.split("/").pop() || rune.icon;
+      return `${latestImageBase.value}/rune/runes/${filename}`;
+    },
+    getRuneName: (runeId: number) => runeMap.value[runeId]?.name || "",
+    getPathIcon: (pathId: number) => {
+      const path = runePathMap.value[pathId];
+      if (!path?.icon) return "";
+      const filename = path.icon.split("/").pop() || path.icon;
+      return `${latestImageBase.value}/rune/paths/${filename}`;
+    },
+    getShardIcon: (shardId: number) => {
+      const map: Record<number, string> = {
+        5008: "adaptative.png",
+        5005: "speed.png",
+        5007: "cdr.png",
+        5001: "hp.png",
+        5002: "growth.png",
+        5003: "tenacity.png",
+      };
+      const file = map[shardId];
+      return file ? `/icons/shards/${file}` : "";
+    },
+  };
+}
+
+const imageResolvers = computed(() => makeImageResolvers());
+const runeLookup = computed(() => makeRuneLookup());
+
+function enrichBuilds(rawBuilds: Build[]): Build[] {
+  const champs = championMap.value;
+  if (Object.keys(champs).length === 0) return rawBuilds;
+  return rawBuilds.map((b) => {
+    if (!b.champion?.id || b.champion.spells?.length) return b;
+    const full = champs[b.champion.id];
+    if (!full) return b;
+    return { ...b, champion: full };
+  });
+}
 
 async function loadBuilds() {
   loading.value = true;
   try {
     const r = await fetch(`${apiBase}/api/builds`);
     if (r.ok) {
-      builds.value = (await r.json()) as Build[];
-      championImageFallbackIndex.value = {};
+      builds.value = enrichBuilds((await r.json()) as Build[]);
       return;
     }
     builds.value = [];
@@ -78,6 +219,60 @@ async function loadBuilds() {
     builds.value = [];
   } finally {
     loading.value = false;
+  }
+}
+
+function loadImportedBuilds() {
+  const stored = getImportedBuilds();
+  importedBuilds.value = stored.map(s => s as unknown as Build);
+}
+
+async function linkBuildsFromCode() {
+  const code = linkCode.value.trim().toUpperCase();
+  if (!code) return;
+  linkLoading.value = true;
+  linkMessage.value = "";
+  linkError.value = false;
+  try {
+    const r = await fetch(`${apiBase}/api/share-builds/${encodeURIComponent(code)}`);
+    if (!r.ok) {
+      linkMessage.value = r.status === 404 ? t('settings.linkNotFound') : t('settings.linkServerError');
+      linkError.value = true;
+      return;
+    }
+    const payload = (await r.json()) as { builds: StoredBuild[] };
+    const count = mergeImportedBuilds(payload.builds);
+    loadImportedBuilds();
+    linkCode.value = "";
+    linkMessage.value = count > 0
+      ? t(count > 1 ? 'settings.linkSuccessPlural' : 'settings.linkSuccess', { count })
+      : t('settings.linkUpToDate');
+    linkError.value = false;
+  } catch {
+    linkMessage.value = t('settings.linkNetworkError');
+    linkError.value = true;
+  } finally {
+    linkLoading.value = false;
+  }
+}
+
+async function loadChampionCatalog() {
+  try {
+    const gameDataLang = settings.value.language === "en" ? "en_US" : "fr_FR";
+    const r = await fetch(`${apiBase}/api/game-data/champions?lang=${gameDataLang}&full=true`);
+    if (!r.ok) return;
+    const payload = (await r.json()) as { data?: Record<string, Champion> };
+    const data = payload.data ?? payload;
+    const map: Record<string, Champion> = {};
+    for (const [, champ] of Object.entries(data as Record<string, Champion>)) {
+      if (champ?.id) map[champ.id] = champ;
+    }
+    championMap.value = map;
+    if (builds.value.length > 0) {
+      builds.value = enrichBuilds(builds.value);
+    }
+  } catch {
+    championMap.value = {};
   }
 }
 
@@ -130,139 +325,27 @@ function toggleFav(id: string) {
   refreshFavorites();
 }
 
-function roleLabel(role: string): string {
-  const map: Record<string, string> = {
-    top: "Top",
-    jungle: "Jungle",
-    mid: "Mid",
-    adc: "ADC",
-    support: "Support",
-  };
-  return map[role] ?? role;
+function toggleRole(role: Role) {
+  selectedRole.value = selectedRole.value === role ? null : role;
 }
 
-function formatDate(date?: string): string {
-  if (!date) return "-";
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  const locale = settings.value.language === "en" ? "en-US" : "fr-FR";
-  return parsed.toLocaleDateString(locale, { year: "numeric", month: "long", day: "numeric" });
+function clearFilters() {
+  searchQuery.value = "";
+  selectedRole.value = null;
+  sortBy.value = "recent";
+  onlyUpToDate.value = false;
+}
+
+const hasActiveFilters = computed(
+  () => searchQuery.value.trim() !== "" || selectedRole.value !== null || sortBy.value !== "recent" || onlyUpToDate.value
+);
+
+function buildVersion(build: Build): string {
+  return build.gameVersion?.trim() || currentGameVersion.value;
 }
 
 function saveLanguage(lang: string) {
-  const normalized = lang === "en" ? "en" : "fr";
-  saveSetting("language", normalized);
-}
-
-function buildVersion(build: Build): string {
-  const own = build.gameVersion?.trim();
-  if (own) return own;
-  return currentGameVersion.value;
-}
-
-const latestImageBase = computed(() => `${apiBase}/images/game/latest`);
-
-function championImageCandidates(build: Build): string[] {
-  const candidates: string[] = [];
-  const imageFull = build.champion?.image?.full?.trim();
-  const championId = build.champion?.id?.trim();
-  if (imageFull) candidates.push(`${latestImageBase.value}/champion/${imageFull}`);
-  if (championId) candidates.push(`${latestImageBase.value}/champion/${championId}.png`);
-  return [...new Set(candidates)];
-}
-
-function championImageUrl(build: Build): string | null {
-  const candidates = championImageCandidates(build);
-  if (candidates.length === 0) return null;
-  const fallbackIndex = championImageFallbackIndex.value[build.id] ?? 0;
-  return candidates[Math.min(fallbackIndex, candidates.length - 1)] ?? null;
-}
-
-function onChampionImageError(build: Build) {
-  const candidates = championImageCandidates(build);
-  if (candidates.length <= 1) return;
-  const currentIdx = championImageFallbackIndex.value[build.id] ?? 0;
-  if (currentIdx < candidates.length - 1) {
-    championImageFallbackIndex.value = {
-      ...championImageFallbackIndex.value,
-      [build.id]: currentIdx + 1,
-    };
-  }
-}
-
-function championFallback(build: Build): string {
-  const name = (build.champion?.name ?? "").trim();
-  return name ? name.slice(0, 2).toUpperCase() : "?";
-}
-
-function spellImageUrl(build: Build, imageFull?: string): string {
-  void build
-  if (!imageFull) return "";
-  return `${latestImageBase.value}/spell/${imageFull}`;
-}
-
-function itemImageUrl(build: Build, imageFull?: string, itemId?: string): string {
-  void build
-  const full = imageFull?.trim() || (itemId ? `${itemId}.png` : "");
-  if (!full) return "";
-  return `${latestImageBase.value}/item/${full}`;
-}
-
-function runeImageUrl(build: Build, runeId?: number): string {
-  if (!runeId) return "";
-  void build
-  const rune = runeMap.value[runeId];
-  if (!rune?.icon) return "";
-  const filename = rune.icon.split("/").pop() || rune.icon;
-  return `${latestImageBase.value}/rune/runes/${filename}`;
-}
-
-function runePathImageUrl(build: Build, pathId?: number): string {
-  if (!pathId) return "";
-  void build
-  const path = runePathMap.value[pathId];
-  if (!path?.icon) return "";
-  const filename = path.icon.split("/").pop() || path.icon;
-  return `${latestImageBase.value}/rune/paths/${filename}`;
-}
-
-function shardIconUrl(shardId?: number): string {
-  const map: Record<number, string> = {
-    5008: "adaptative.png",
-    5005: "speed.png",
-    5007: "cdr.png",
-    5001: "hp.png",
-    5002: "growth.png",
-    5003: "tenacity.png",
-  };
-  const file = shardId ? map[shardId] : null;
-  return file ? `${apiBase}/icons/shards/${file}` : "";
-}
-
-function normalizedSummonerSpells(build: Build) {
-  const spells = Array.isArray(build.summonerSpells) ? build.summonerSpells : [];
-  return spells.filter(Boolean).slice(0, 2) as Array<{ id?: string; name?: string; image?: { full?: string } }>;
-}
-
-function normalizedItems(build: Build) {
-  return Array.isArray(build.items) ? build.items : [];
-}
-
-function primaryRuneIds(build: Build): number[] {
-  const p = build.runes?.primary;
-  const ids = [p?.keystone, p?.slot1, p?.slot2, p?.slot3].map((x) => Number(x || 0)).filter((x) => x > 0);
-  return ids;
-}
-
-function secondaryRuneIds(build: Build): number[] {
-  const s = build.runes?.secondary;
-  const ids = [s?.slot1, s?.slot2].map((x) => Number(x || 0)).filter((x) => x > 0);
-  return ids;
-}
-
-function shardIds(build: Build): number[] {
-  const s = build.shards;
-  return [s?.slot1, s?.slot2, s?.slot3].map((x) => Number(x || 0)).filter((x) => x > 0);
+  saveSetting("language", lang === "en" ? "en" : "fr");
 }
 
 async function checkLcu() {
@@ -303,17 +386,15 @@ async function autoSubmitMatchIfAllowed() {
     const data = (await r.json()) as { inserted?: boolean };
     lastSubmittedMatchId.value = matchId;
     submitError.value = false;
-    submitMessage.value = data.inserted ? "Match envoye automatiquement." : "Match deja connu.";
+    submitMessage.value = data.inserted ? t('match.autoSent') : t('match.alreadyKnown');
   } catch {
-    // Silent auto mode: keep UI usable even if LCU/server unavailable.
+    /* silent */
   }
 }
 
 function startAutoSubmitLoop() {
   if (autoSubmitTimer) return;
-  autoSubmitTimer = setInterval(() => {
-    autoSubmitMatchIfAllowed();
-  }, 60000);
+  autoSubmitTimer = setInterval(() => autoSubmitMatchIfAllowed(), 60000);
 }
 
 function stopAutoSubmitLoop() {
@@ -327,18 +408,20 @@ async function createDesktopShortcut() {
   shortcutError.value = false;
   try {
     const res = await invoke<{ ok: boolean; message: string }>("create_desktop_shortcut");
-    shortcutMessage.value = res?.message || "Raccourci cree.";
+    shortcutMessage.value = res?.message || t('shortcut.created');
     shortcutError.value = !res?.ok;
   } catch (e) {
-    shortcutMessage.value = e instanceof Error ? e.message : "Impossible de creer le raccourci.";
+    shortcutMessage.value = e instanceof Error ? e.message : t('shortcut.error');
     shortcutError.value = true;
   }
 }
 
-onMounted(() => {
-  loadBuilds();
+onMounted(async () => {
   loadCurrentGameVersion();
   loadRuneCatalog();
+  loadImportedBuilds();
+  await loadChampionCatalog();
+  loadBuilds();
   refreshFavorites();
   checkLcu();
   autoSubmitMatchIfAllowed();
@@ -353,12 +436,12 @@ watch(
   () => settings.value.disableMatchSubmission,
   (disabled) => {
     if (disabled) {
-      submitMessage.value = "Envoi auto desactive.";
+      submitMessage.value = t('settings.autoOff');
       submitError.value = false;
       return;
     }
     if (hasConsent()) {
-      submitMessage.value = "Envoi auto active.";
+      submitMessage.value = t('settings.autoOn');
       submitError.value = false;
       autoSubmitMatchIfAllowed();
     }
@@ -367,8 +450,9 @@ watch(
 
 watch(
   () => settings.value.language,
-  () => {
+  async () => {
     loadRuneCatalog();
+    await loadChampionCatalog();
   }
 );
 </script>
@@ -378,16 +462,24 @@ watch(
     <header class="header-card">
       <div>
         <h1 class="title">Lelanation Companion</h1>
-        <p class="subtitle">Les memes builds que sur la page Builds, avec import local et favoris.</p>
+        <p class="subtitle">{{ t('subtitle') }}</p>
       </div>
       <span class="status-pill" :class="{ on: lcuConnected, off: !lcuConnected }">
-        {{ lcuConnected ? "Client LoL connecte" : "Client LoL non detecte" }}
+        {{ lcuConnected ? t('status.connected') : t('status.disconnected') }}
       </span>
     </header>
 
     <nav class="tabs">
       <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="activeTab = 'builds'">
-        Decouvrir
+        {{ t('tabs.discover') }}
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'mes-builds' }"
+        :disabled="importedBuilds.length === 0"
+        @click="activeTab = 'mes-builds'"
+      >
+        {{ t('tabs.myBuilds') }} ({{ importedBuilds.length }})
       </button>
       <button
         class="tab-btn"
@@ -395,31 +487,72 @@ watch(
         :disabled="favoriteIds.length === 0"
         @click="activeTab = 'favoris'"
       >
-        Favoris ({{ favoriteIds.length }})
+        {{ t('tabs.favorites') }} ({{ favoriteIds.length }})
       </button>
       <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
-        Parametres
+        {{ t('tabs.settings') }}
       </button>
     </nav>
 
+    <!-- Filters -->
+    <div v-if="activeTab !== 'settings'" class="filters-bar">
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="search-input"
+        :placeholder="t('search')"
+      />
+      <div class="role-filters">
+        <button
+          v-for="role in allRoles"
+          :key="role"
+          type="button"
+          :class="['role-chip', { active: selectedRole === role }]"
+          @click="toggleRole(role)"
+        >
+          <img :src="`/icons/roles/${role === 'adc' ? 'bot' : role}.png`" :alt="role" class="role-chip-img" />
+          <span>{{ role === 'adc' ? 'ADC' : role.charAt(0).toUpperCase() + role.slice(1) }}</span>
+        </button>
+      </div>
+      <label class="uptodate-label">
+        <input v-model="onlyUpToDate" type="checkbox" class="uptodate-check" />
+        <span>{{ t('upToDate') }}</span>
+      </label>
+      <div class="sort-row">
+        <label class="sort-label">{{ t('sort.label') }}</label>
+        <select v-model="sortBy" class="sort-select">
+          <option value="recent">{{ t('sort.recent') }}</option>
+          <option value="name">{{ t('sort.name') }}</option>
+        </select>
+        <button v-if="hasActiveFilters" class="clear-btn" @click="clearFilters">{{ t('clearFilters') }}</button>
+      </div>
+    </div>
+
     <section v-if="activeTab !== 'settings'" class="panel">
-      <p v-if="loading" class="empty">Chargement des builds...</p>
+      <p v-if="activeTab === 'builds' && loading" class="empty">{{ t('loading') }}</p>
+      <p v-else-if="activeTab === 'mes-builds' && importedBuilds.length === 0" class="empty">
+        {{ t('noImported') }}
+      </p>
       <p v-else-if="displayedBuilds.length === 0" class="empty">
-        {{ activeTab === "favoris" ? "Aucun favori pour le moment." : "Aucun build disponible." }}
+        {{ activeTab === "favoris" ? t('noFavorites') : t('noBuilds') }}
       </p>
 
       <div v-else class="build-grid">
-        <article v-for="b in displayedBuilds" :key="b.id" class="build-card">
-          <header class="build-head">
-            <div class="head-text">
-              <h3 class="author">{{ b.author || "Auteur inconnu" }}</h3>
-              <p class="name">{{ b.name || b.id }}</p>
-            </div>
+        <div v-for="b in displayedBuilds" :key="b.id" class="build-entry">
+          <div class="build-meta">
+            <h3 class="author">
+              {{ b.author || t('authorUnknown') }}
+              <span v-if="importedBuildIds.has(b.id)" class="perso-badge">{{ t('badge.personal') }}</span>
+            </h3>
+            <span class="build-name">{{ b.name || b.id }}</span>
+          </div>
+          <BuildSheet :build="b" :images="imageResolvers" :rune-lookup="runeLookup" :version="buildVersion(b)" />
+          <div class="card-actions">
             <button
               type="button"
               class="bookmark-btn"
               :class="{ on: isFavorite(b.id) }"
-              :title="isFavorite(b.id) ? 'Retirer des favoris' : 'Ajouter aux favoris'"
+              :title="isFavorite(b.id) ? t('favorite.remove') : t('favorite.add')"
               @click="toggleFav(b.id)"
             >
               <svg
@@ -436,134 +569,36 @@ watch(
                 <path d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z" />
               </svg>
             </button>
-          </header>
-
-          <div class="champion-row">
-            <div class="champion-avatar">
-              <img
-                v-if="championImageUrl(b)"
-                :src="championImageUrl(b) || undefined"
-                :alt="b.champion?.name || 'Champion'"
-                @error="onChampionImageError(b)"
-              />
-              <span v-else>{{ championFallback(b) }}</span>
-            </div>
-            <div>
-              <p class="champion-name">{{ b.champion?.name || "Champion inconnu" }}</p>
-              <p class="meta">{{ formatDate(b.createdAt) }} · {{ buildVersion(b) || "Version inconnue" }}</p>
-            </div>
-          </div>
-
-          <div v-if="Array.isArray(b.roles) && b.roles.length > 0" class="roles">
-            <span v-for="role in b.roles" :key="`${b.id}-${role}`" class="role-chip">{{ roleLabel(role) }}</span>
-          </div>
-
-          <p class="desc">{{ b.description || "Aucune description pour ce build." }}</p>
-
-          <div class="sheet-full">
-            <div class="sheet-row">
-              <p class="sheet-label">Sorts d'invocateur</p>
-              <div class="icon-row">
-                <img
-                  v-for="spell in normalizedSummonerSpells(b)"
-                  :key="`${b.id}-${spell.id || spell.name}`"
-                  class="sheet-icon"
-                  :src="spellImageUrl(b, spell.image?.full)"
-                  :alt="spell.name || 'Spell'"
-                />
-              </div>
-            </div>
-
-            <div class="sheet-row">
-              <p class="sheet-label">Runes principales</p>
-              <div class="icon-row">
-                <img
-                  v-if="b.runes?.primary?.pathId"
-                  class="sheet-icon sheet-path"
-                  :src="runePathImageUrl(b, b.runes?.primary?.pathId)"
-                  alt="Primary path"
-                />
-                <img
-                  v-for="runeId in primaryRuneIds(b)"
-                  :key="`${b.id}-primary-${runeId}`"
-                  class="sheet-icon"
-                  :src="runeImageUrl(b, runeId)"
-                  :alt="`Rune ${runeId}`"
-                />
-              </div>
-            </div>
-
-            <div class="sheet-row">
-              <p class="sheet-label">Runes secondaires / shards</p>
-              <div class="icon-row">
-                <img
-                  v-if="b.runes?.secondary?.pathId"
-                  class="sheet-icon sheet-path"
-                  :src="runePathImageUrl(b, b.runes?.secondary?.pathId)"
-                  alt="Secondary path"
-                />
-                <img
-                  v-for="runeId in secondaryRuneIds(b)"
-                  :key="`${b.id}-secondary-${runeId}`"
-                  class="sheet-icon"
-                  :src="runeImageUrl(b, runeId)"
-                  :alt="`Rune ${runeId}`"
-                />
-                <img
-                  v-for="shardId in shardIds(b)"
-                  :key="`${b.id}-shard-${shardId}`"
-                  class="sheet-icon sheet-shard"
-                  :src="shardIconUrl(shardId)"
-                  :alt="`Shard ${shardId}`"
-                />
-              </div>
-            </div>
-
-            <div class="sheet-row">
-              <p class="sheet-label">Items</p>
-              <div class="items-grid">
-                <img
-                  v-for="item in normalizedItems(b)"
-                  :key="`${b.id}-${item.id || item.name}`"
-                  class="item-icon"
-                  :src="itemImageUrl(b, item.image?.full, item.id)"
-                  :alt="item.name || item.id || 'Item'"
-                />
-              </div>
-            </div>
-          </div>
-
-          <footer class="card-actions">
-            <button type="button" class="import-btn" :disabled="!lcuConnected" title="Importer runes, items et sorts">
-              Importer
+            <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')">
+              {{ t('import') }}
             </button>
-          </footer>
-        </article>
+          </div>
+        </div>
       </div>
     </section>
 
     <section v-else class="panel settings-panel">
-      <h3>Langue</h3>
+      <h3>{{ t('settings.language') }}</h3>
       <label class="row row-inline">
-        <span>Choix de la langue</span>
+        <span>{{ t('settings.language') }}</span>
         <select
           class="language-select"
           :value="settings.language"
           @change="saveLanguage(($event.target as HTMLSelectElement).value)"
         >
-          <option value="fr">Francais</option>
+          <option value="fr">Français</option>
           <option value="en">English</option>
         </select>
       </label>
 
-      <h3>Import dans le client</h3>
+      <h3>{{ t('settings.clientImport') }}</h3>
       <label class="row">
         <input
           type="checkbox"
           :checked="settings.importRunes"
           @change="saveSetting('importRunes', ($event.target as HTMLInputElement).checked)"
         />
-        Importer les runes
+        {{ t('settings.importRunes') }}
       </label>
       <label class="row">
         <input
@@ -571,7 +606,7 @@ watch(
           :checked="settings.importItems"
           @change="saveSetting('importItems', ($event.target as HTMLInputElement).checked)"
         />
-        Importer les items
+        {{ t('settings.importItems') }}
       </label>
       <label class="row">
         <input
@@ -579,26 +614,56 @@ watch(
           :checked="settings.importSummonerSpells"
           @change="saveSetting('importSummonerSpells', ($event.target as HTMLInputElement).checked)"
         />
-        Importer les sorts d'invocateur
+        {{ t('settings.importSpells') }}
       </label>
 
-      <h3 class="mt">Envoi du match</h3>
+      <h3 class="mt">{{ t('settings.matchSubmit') }}</h3>
       <label class="row">
         <input
           type="checkbox"
           :checked="settings.disableMatchSubmission"
           @change="saveSetting('disableMatchSubmission', ($event.target as HTMLInputElement).checked)"
         />
-        Ne pas envoyer automatiquement mes matchs au site
+        {{ t('settings.disableMatch') }}
       </label>
       <p class="hint-line">
-        {{ canAutoSubmitMatch ? "Envoi auto actif si un nouveau match est detecte." : "Envoi auto inactif." }}
+        {{ canAutoSubmitMatch ? t('settings.autoOn') : t('settings.autoOff') }}
       </p>
       <p v-if="submitMessage" :class="{ error: submitError }" class="msg">{{ submitMessage }}</p>
 
-      <h3 class="mt">Raccourci bureau</h3>
+      <h3 class="mt">{{ t('settings.linkTitle') }}</h3>
+      <p class="hint-line">{{ t('settings.linkHint') }}</p>
+      <div class="link-row">
+        <input
+          v-model="linkCode"
+          type="text"
+          class="link-input"
+          :placeholder="t('settings.linkPlaceholder')"
+          maxlength="10"
+          @keyup.enter="linkBuildsFromCode"
+        />
+        <button
+          type="button"
+          class="submit-btn"
+          :disabled="linkLoading || !linkCode.trim()"
+          @click="linkBuildsFromCode"
+        >
+          {{ linkLoading ? t('settings.linkLoading') : t('settings.linkImport') }}
+        </button>
+      </div>
+      <p v-if="linkMessage" :class="{ error: linkError }" class="msg">{{ linkMessage }}</p>
+      <button
+        v-if="importedBuilds.length > 0"
+        type="button"
+        class="clear-link-btn"
+        @click="clearImportedBuilds(); loadImportedBuilds();"
+      >
+        {{ t('settings.clearImported', { count: importedBuilds.length }) }}
+      </button>
+
+      <h3 class="mt">{{ t('settings.shortcut') }}</h3>
       <button type="button" class="submit-btn" @click="createDesktopShortcut">
-        Creer un raccourci sur le bureau
+        {{ t('settings.createShortcut') }}
       </button>
       <p v-if="shortcutMessage" :class="{ error: shortcutError }" class="msg">{{ shortcutMessage }}</p>
     </section>
@@ -607,7 +672,7 @@ watch(
 
 <style scoped>
 .main-shell {
-  max-width: 1040px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 1rem;
   color: #f0e6d2;
@@ -625,351 +690,152 @@ watch(
   margin-bottom: 0.9rem;
 }
 
-.title {
-  margin: 0;
-  font-size: 1.15rem;
-  line-height: 1.35;
-}
+.title { margin: 0; font-size: 1.15rem; line-height: 1.35; }
+.subtitle { margin: 0.2rem 0 0; color: rgba(240, 230, 210, 0.8); font-size: 0.88rem; }
 
-.subtitle {
-  margin: 0.2rem 0 0;
-  color: rgba(240, 230, 210, 0.8);
-  font-size: 0.88rem;
-}
+.status-pill { border-radius: 999px; padding: 0.35rem 0.65rem; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
+.status-pill.on { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.6); color: #93f2ce; }
+.status-pill.off { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.6); color: #fecaca; }
 
-.status-pill {
-  border-radius: 999px;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.76rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.status-pill.on {
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.6);
-  color: #93f2ce;
-}
-
-.status-pill.off {
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.6);
-  color: #fecaca;
-}
-
-.tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.9rem;
-}
-
+.tabs { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; }
 .tab-btn {
-  border: 1px solid rgba(200, 155, 60, 0.5);
-  border-radius: 8px;
-  background: rgba(30, 40, 45, 0.75);
-  color: #f0e6d2;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.84rem;
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  border: 1px solid rgba(200, 155, 60, 0.5); border-radius: 8px;
+  background: rgba(30, 40, 45, 0.75); color: #f0e6d2; padding: 0.45rem 0.75rem;
+  font-size: 0.84rem; cursor: pointer; transition: background-color 0.15s ease;
 }
+.tab-btn:hover:not(:disabled) { background: rgba(0, 90, 130, 0.55); }
+.tab-btn.active { background: rgba(200, 155, 60, 0.18); border-color: #c89b3c; }
+.tab-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.tab-btn:hover:not(:disabled) {
-  background: rgba(0, 90, 130, 0.55);
+/* Filters */
+.filters-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+  margin-bottom: 1rem; padding: 0.75rem; border-radius: 10px;
+  border: 1px solid rgba(200, 155, 60, 0.2); background: rgba(10, 20, 40, 0.35);
 }
+.search-input {
+  flex: 1 1 200px; min-width: 180px; background: rgba(9, 20, 40, 0.95);
+  color: #f0e6d2; border: 1px solid rgba(200, 155, 60, 0.45); border-radius: 8px;
+  padding: 0.4rem 0.65rem; font-size: 0.82rem;
+}
+.search-input::placeholder { color: rgba(240, 230, 210, 0.45); }
+.role-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.role-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  border: 1px solid rgba(200, 155, 60, 0.4); border-radius: 999px;
+  padding: 0.2rem 0.55rem; font-size: 0.72rem; cursor: pointer;
+  background: rgba(30, 40, 45, 0.6); color: #c8aa6e; transition: all 0.15s;
+}
+.role-chip.active { border-color: #c89b3c; background: rgba(200, 155, 60, 0.2); color: #f0e6d2; }
+.role-chip:hover { border-color: #c89b3c; background: rgba(200, 155, 60, 0.1); }
+.role-chip-img { width: 14px; height: 14px; object-fit: contain; }
+.uptodate-label {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.78rem; color: #f0e6d2; cursor: pointer; white-space: nowrap;
+}
+.uptodate-check {
+  accent-color: #c89b3c; width: 14px; height: 14px; cursor: pointer;
+}
+.sort-row { display: flex; align-items: center; gap: 0.5rem; }
+.sort-label { font-size: 0.78rem; color: rgba(240, 230, 210, 0.7); }
+.sort-select {
+  background: rgba(9, 20, 40, 0.95); color: #f0e6d2;
+  border: 1px solid rgba(200, 155, 60, 0.45); border-radius: 6px;
+  padding: 0.25rem 0.4rem; font-size: 0.78rem;
+}
+.clear-btn {
+  font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.35); background: rgba(30, 40, 45, 0.5);
+  color: #c8aa6e; cursor: pointer;
+}
+.clear-btn:hover { background: rgba(200, 155, 60, 0.15); }
 
-.tab-btn.active {
-  background: rgba(200, 155, 60, 0.18);
-  border-color: #c89b3c;
-  color: #f0e6d2;
-}
-
-.tab-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.panel {
-  min-height: 260px;
-}
-
-.empty {
-  color: rgba(240, 230, 210, 0.85);
-}
+.panel { min-height: 260px; }
+.empty { color: rgba(240, 230, 210, 0.85); }
 
 .build-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  justify-items: center;
 }
 
-.build-card {
-  border: 1px solid rgba(120, 90, 40, 0.62);
-  border-radius: 10px;
-  padding: 0.75rem;
-  background: linear-gradient(160deg, rgba(30, 40, 45, 0.82), rgba(10, 20, 40, 0.92));
+.build-entry {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
 }
 
-.build-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+.build-meta {
+  width: 300px; text-align: center;
 }
 
-.head-text {
-  min-width: 0;
+.author { margin: 0; color: #f0e6d2; font-size: 0.94rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
+.perso-badge {
+  font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+  background: rgba(200, 155, 60, 0.25); color: #c89b3c;
+  border: 1px solid rgba(200, 155, 60, 0.5); border-radius: 4px;
+  padding: 0.05rem 0.35rem; letter-spacing: 0.04em;
 }
-
-.author {
-  margin: 0;
-  color: #f0e6d2;
-  font-size: 0.94rem;
-}
-
-.name {
-  margin: 0.1rem 0 0;
-  color: rgba(200, 170, 110, 0.95);
-  font-size: 0.8rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.build-name { color: rgba(200, 170, 110, 0.95); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .bookmark-btn {
-  width: 1.6rem;
-  height: 1.6rem;
-  flex: 0 0 1.6rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #fffdf5;
-  border: 1px solid #e6b800;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #b38b00;
-  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  width: 1.5rem; height: 1.5rem; flex: 0 0 1.5rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 4px; cursor: pointer; transition: all 0.15s;
+  border: 1px solid rgba(200, 155, 60, 0.5); background: transparent; color: #b38b00;
 }
-
-.bookmark-btn.on {
-  color: #e6b800;
-  background: #fff6cc;
-}
-
-.bookmark-btn:hover {
-  background: #fff2b3;
-}
-
-.bookmark-icon {
-  width: 0.78rem;
-  height: 0.78rem;
-}
-
-.champion-row {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 0.65rem;
-}
-
-.champion-avatar {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 6px;
-  border: 1px solid rgba(200, 155, 60, 0.7);
-  overflow: hidden;
-  background: rgba(9, 20, 40, 0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #c8aa6e;
-  font-weight: 700;
-  font-size: 0.75rem;
-}
-
-.champion-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.champion-name {
-  margin: 0;
-  font-size: 0.87rem;
-  color: #f0e6d2;
-}
-
-.meta {
-  margin: 0.1rem 0 0;
-  font-size: 0.72rem;
-  color: rgba(200, 170, 110, 0.85);
-}
-
-.roles {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-  margin-top: 0.58rem;
-}
-
-.role-chip {
-  border-radius: 999px;
-  border: 1px solid rgba(200, 155, 60, 0.45);
-  padding: 0.12rem 0.5rem;
-  font-size: 0.68rem;
-  color: #f0e6d2;
-  background: rgba(0, 90, 130, 0.36);
-}
-
-.desc {
-  margin: 0.6rem 0 0;
-  color: rgba(240, 230, 210, 0.9);
-  font-size: 0.78rem;
-  line-height: 1.32;
-  min-height: 3.2em;
-  line-clamp: 3;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.sheet-full {
-  margin-top: 0.65rem;
-  border-top: 1px solid rgba(200, 155, 60, 0.25);
-  padding-top: 0.55rem;
-}
-
-.sheet-row {
-  margin-bottom: 0.45rem;
-}
-
-.sheet-label {
-  margin: 0 0 0.24rem;
-  color: rgba(200, 170, 110, 0.95);
-  font-size: 0.7rem;
-}
-
-.icon-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.32rem;
-  align-items: center;
-}
-
-.sheet-icon {
-  width: 1.2rem;
-  height: 1.2rem;
-  border-radius: 4px;
-  border: 1px solid rgba(200, 155, 60, 0.4);
-  background: rgba(9, 20, 40, 0.9);
-  object-fit: cover;
-}
-
-.sheet-path {
-  border-color: rgba(3, 151, 171, 0.65);
-}
-
-.sheet-shard {
-  border-color: rgba(200, 170, 110, 0.65);
-}
-
-.items-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.28rem;
-}
-
-.item-icon {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: 4px;
-  border: 1px solid rgba(200, 155, 60, 0.42);
-  background: rgba(9, 20, 40, 0.9);
-  object-fit: cover;
-}
+.bookmark-btn.on { color: #e6b800; background: rgba(200, 155, 60, 0.15); border-color: #e6b800; }
+.bookmark-btn:hover { background: rgba(200, 155, 60, 0.1); }
+.bookmark-icon { width: 0.75rem; height: 0.75rem; }
 
 .card-actions {
-  margin-top: 0.7rem;
-  display: flex;
-  justify-content: flex-end;
+  display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; width: 300px;
 }
 
-.import-btn,
-.submit-btn {
-  border: 1px solid rgba(3, 151, 171, 0.8);
-  border-radius: 7px;
-  background: rgba(10, 50, 60, 0.8);
-  color: #cdfafa;
-  cursor: pointer;
-  padding: 0.38rem 0.7rem;
-  font-size: 0.8rem;
+.import-btn, .submit-btn {
+  border: 1px solid rgba(3, 151, 171, 0.8); border-radius: 7px;
+  background: rgba(10, 50, 60, 0.8); color: #cdfafa; cursor: pointer;
+  padding: 0.38rem 0.7rem; font-size: 0.8rem;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
-
-.import-btn:hover:not(:disabled),
-.submit-btn:hover {
-  background: rgba(3, 151, 171, 0.35);
-  border-color: rgba(10, 200, 185, 0.9);
+.import-btn:hover:not(:disabled), .submit-btn:hover {
+  background: rgba(3, 151, 171, 0.35); border-color: rgba(10, 200, 185, 0.9);
 }
+.import-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.import-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
+/* Settings */
 .settings-panel {
-  border: 1px solid rgba(200, 155, 60, 0.35);
-  border-radius: 10px;
-  padding: 1rem;
-  background: rgba(10, 20, 40, 0.58);
+  border: 1px solid rgba(200, 155, 60, 0.35); border-radius: 10px;
+  padding: 1rem; background: rgba(10, 20, 40, 0.58);
 }
+.settings-panel h3 { margin: 0; font-size: 0.98rem; color: #f0e6d2; }
+.row { display: flex; align-items: center; gap: 0.5rem; margin: 0.6rem 0; cursor: pointer; color: rgba(240, 230, 210, 0.92); font-size: 0.86rem; }
+.row-inline { justify-content: space-between; }
+.language-select { background: rgba(9, 20, 40, 0.95); color: #f0e6d2; border: 1px solid rgba(200, 155, 60, 0.55); border-radius: 6px; padding: 0.2rem 0.45rem; }
+.mt { margin-top: 1.3rem; }
+.msg { margin-top: 0.5rem; font-size: 0.85rem; color: #93f2ce; }
+.msg.error { color: #fecaca; }
+.hint-line { margin-top: 0.3rem; font-size: 0.78rem; color: rgba(240, 230, 210, 0.6); }
 
-.settings-panel h3 {
-  margin: 0;
-  font-size: 0.98rem;
-  color: #f0e6d2;
+.link-row {
+  display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem;
 }
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.6rem 0;
-  cursor: pointer;
-  color: rgba(240, 230, 210, 0.92);
-  font-size: 0.86rem;
+.link-input {
+  flex: 1; max-width: 180px;
+  background: rgba(9, 20, 40, 0.95); color: #f0e6d2;
+  border: 1px solid rgba(200, 155, 60, 0.55); border-radius: 6px;
+  padding: 0.35rem 0.55rem; font-size: 0.86rem;
+  font-family: monospace; letter-spacing: 0.12em; text-transform: uppercase;
 }
-
-.row-inline {
-  justify-content: space-between;
+.link-input::placeholder { text-transform: none; letter-spacing: normal; color: rgba(240, 230, 210, 0.35); }
+.clear-link-btn {
+  margin-top: 0.5rem; border: none; background: transparent;
+  color: rgba(254, 202, 202, 0.8); cursor: pointer; font-size: 0.78rem;
+  text-decoration: underline; padding: 0;
 }
-
-.language-select {
-  background: rgba(9, 20, 40, 0.95);
-  color: #f0e6d2;
-  border: 1px solid rgba(200, 155, 60, 0.55);
-  border-radius: 6px;
-  padding: 0.2rem 0.45rem;
-}
-
-.mt {
-  margin-top: 1.3rem;
-}
-
-.msg {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: #93f2ce;
-}
-
-.msg.error {
-  color: #fecaca;
-}
+.clear-link-btn:hover { color: #fecaca; }
 
 @media (max-width: 660px) {
-  .header-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+  .header-card { flex-direction: column; align-items: flex-start; }
+  .build-grid { grid-template-columns: 1fr; }
 }
 </style>

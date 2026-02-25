@@ -11,6 +11,7 @@ import imageRoutes from './routes/images.js'
 import contactRoutes from './routes/contact.js'
 import statsRoutes from './routes/stats.js'
 import appRoutes from './routes/app.js'
+import shareBuildsRoutes from './routes/shareBuilds.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupRiotMatchCollect } from './cron/riotMatchCollect.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
@@ -52,6 +53,7 @@ app.use('/api/images', imageRoutes)
 app.use('/api/contact', contactRoutes)
 app.use('/api/stats', statsRoutes)
 app.use('/api/app', appRoutes)
+app.use('/api/share-builds', shareBuildsRoutes)
 
 // Initialize cron jobs
 console.log('[Server] Initializing cron jobs...')

@@ -110,7 +110,6 @@ watch(locale, (next) => {
       <div class="hero">
         <div class="avatar-wrap">
           <img :src="avatarUrl" alt="Lelariva" class="avatar" />
-          <span class="gold-ring" aria-hidden="true" />
         </div>
         <div class="hero-text">
           <h1>{{ t.title }}</h1>
@@ -201,7 +200,6 @@ watch(locale, (next) => {
 }
 
 .avatar-wrap {
-  position: relative;
   width: 68px;
   height: 68px;
   flex: 0 0 68px;
@@ -213,18 +211,6 @@ watch(locale, (next) => {
   border-radius: 999px;
   object-fit: cover;
   border: 2px solid rgba(200, 155, 60, 0.75);
-}
-
-.gold-ring {
-  position: absolute;
-  left: -9px;
-  top: -9px;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  border: 3px solid #c89b3c;
-  box-shadow: 0 0 10px rgba(200, 155, 60, 0.35);
-  background: rgba(10, 20, 40, 0.96);
 }
 
 .hero-text h1 {

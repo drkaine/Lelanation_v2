@@ -29,3 +29,7 @@ export { isBootsItem, isStarterItem } from './utils/itemClassification'
 export { useBuildsCore } from './composables/useBuildsCore'
 export { useBuildsFilter } from './composables/useBuildsFilter'
 export type { SortOption, FilterRole, VoteProvider } from './composables/useBuildsFilter'
+
+// Components
+export { default as BuildSheet } from './components/BuildSheet.vue'
+export type { ImageResolvers, RuneLookup } from './components/BuildSheet.vue'

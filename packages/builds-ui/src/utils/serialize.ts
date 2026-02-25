@@ -68,10 +68,10 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
         key: stored.champion.id,
         name: stored.champion.name,
         title: '',
-        image: stored.champion.image,
+        image: { full: stored.champion.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
         stats: {} as Champion['stats'],
         spells: [],
-        passive: { name: '', description: '', image: stored.champion.image },
+        passive: { name: '', description: '', image: { full: stored.champion.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 } },
         tags: [],
       } as Champion)
     : null

@@ -1,5 +1,5 @@
 import { computed, type Ref } from 'vue'
-import type { Build, Item, Champion } from '@lelanation/shared-types'
+import type { Build } from '@lelanation/shared-types'
 import { isBootsItem, isStarterItem } from '../utils/itemClassification'
 
 export { isBootsItem, isStarterItem }
@@ -32,12 +32,12 @@ export function useBuildsCore(build: Ref<Build | null>) {
   const firstThreeUpsAbilities = computed(() => {
     const champ = selectedChampion.value
     const so = build.value?.skillOrder
-    if (!champ || !so?.firstThreeUps) return []
+    if (!champ || !so?.firstThreeUps || !champ.spells?.length) return []
     return so.firstThreeUps
       .filter((a): a is 'Q' | 'W' | 'E' | 'R' => a !== null)
       .map(key => {
         const idx = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
-        const spell = champ.spells[idx]
+        const spell = champ.spells?.[idx]
         return spell ? { ...spell, key } : null
       })
       .filter(Boolean) as Array<{ key: string; image: { full: string }; name: string }>
@@ -46,12 +46,12 @@ export function useBuildsCore(build: Ref<Build | null>) {
   const skillOrderAbilities = computed(() => {
     const champ = selectedChampion.value
     const so = build.value?.skillOrder
-    if (!champ || !so?.skillUpOrder) return []
+    if (!champ || !so?.skillUpOrder || !champ.spells?.length) return []
     return so.skillUpOrder
       .filter((a): a is 'Q' | 'W' | 'E' | 'R' => a !== null)
       .map(key => {
         const idx = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
-        const spell = champ.spells[idx]
+        const spell = champ.spells?.[idx]
         return spell ? { ...spell, key } : null
       })
       .filter(Boolean) as Array<{ key: string; image: { full: string }; name: string }>

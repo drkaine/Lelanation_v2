@@ -6,6 +6,7 @@
   "main": "./src/tokens.css",
   "exports": {
     ".": "./src/tokens.css",
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./icons/*": "./icons/*"
   }
 }

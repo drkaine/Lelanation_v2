@@ -94,6 +94,14 @@
               {{ opt.label }}
             </button>
           </div>
+          <button
+            class="ml-auto flex items-center gap-1.5 rounded-lg border border-accent/60 bg-surface px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/15"
+            :disabled="shareLoading"
+            @click="shareBuilds"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
+          </button>
         </div>
         <!-- Search and Filters -->
         <div class="mb-6 space-y-4">
@@ -159,6 +167,52 @@
         </div>
       </div>
     </div>
+
+    <!-- Share Code Modal -->
+    <div
+      v-if="shareCode"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      @click="shareCode = null"
+    >
+      <div
+        class="mx-4 w-full max-w-sm rounded-lg bg-surface p-6 text-center"
+        style="background-color: var(--color-surface); opacity: 1"
+        @click.stop
+      >
+        <h3 class="mb-2 text-lg font-bold text-text">{{ t('buildsPage.shareCodeTitle') }}</h3>
+        <p class="mb-4 text-sm text-text-secondary">
+          {{ t('buildsPage.shareCodeDescription') }}
+        </p>
+        <div
+          class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-3xl font-bold tracking-[0.3em] text-accent"
+        >
+          {{ shareCode }}
+          <button
+            class="rounded p-1 text-text-secondary transition-colors hover:text-accent"
+            :title="t('buildsPage.shareCodeCopy')"
+            @click="copyShareCode"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+        <p v-if="shareCopied" class="mb-2 text-sm text-green-400">{{ t('buildsPage.shareCodeCopied') }}</p>
+        <p class="mb-4 text-xs text-text-secondary">{{ t('buildsPage.shareCodeExpiry') }}</p>
+        <button
+          class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
+          @click="shareCode = null"
+        >
+          {{ t('buildsPage.shareCodeClose') }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Share Error Toast -->
+    <div
+      v-if="shareError"
+      class="fixed bottom-4 right-4 z-50 rounded-lg bg-error px-4 py-3 text-sm text-white shadow-lg"
+    >
+      {{ shareError }}
+    </div>
   </div>
 </template>
 
@@ -173,6 +227,7 @@ import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
+import { serializeBuild } from '~/utils/buildSerialize'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 
 const buildStore = useBuildStore()
@@ -184,6 +239,10 @@ const localePath = useLocalePath()
 const { isStreamerMode } = useStreamerMode()
 
 const buildToDelete = ref<string | null>(null)
+const shareCode = ref<string | null>(null)
+const shareLoading = ref(false)
+const shareError = ref<string | null>(null)
+const shareCopied = ref(false)
 
 /** Filtre visibilité pour l'onglet Mes Builds */
 type VisibilityFilterValue = 'all' | 'private' | 'public'
@@ -331,6 +390,43 @@ watch(
     }
   }
 )
+
+const shareBuilds = async () => {
+  const allBuilds = buildStore.getSavedBuilds()
+  if (allBuilds.length === 0) {
+    shareError.value = t('buildsPage.shareNoBuilds')
+    setTimeout(() => { shareError.value = null }, 3000)
+    return
+  }
+
+  shareLoading.value = true
+  shareError.value = null
+  try {
+    const stored = allBuilds.map(b => serializeBuild(b))
+    const res = await $fetch<{ code: string; expiresAt: string }>('/api/share-builds', {
+      method: 'POST',
+      body: { builds: stored },
+    })
+    shareCode.value = res.code
+    shareCopied.value = false
+  } catch {
+    shareError.value = t('buildsPage.shareError')
+    setTimeout(() => { shareError.value = null }, 4000)
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+const copyShareCode = async () => {
+  if (!shareCode.value) return
+  try {
+    await navigator.clipboard.writeText(shareCode.value)
+    shareCopied.value = true
+    setTimeout(() => { shareCopied.value = false }, 2000)
+  } catch {
+    // Fallback: select text for manual copy
+  }
+}
 
 const confirmDelete = (buildId: string) => {
   buildToDelete.value = buildId

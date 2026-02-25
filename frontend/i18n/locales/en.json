@@ -490,7 +490,17 @@
     "deleteBuildTitle": "Delete build?",
     "deleteBuildConfirm": "Are you sure you want to delete this build? This action cannot be undone.",
     "delete": "Delete",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "shareToApp": "Share to app",
+    "shareLoading": "Sending...",
+    "shareNoBuilds": "No builds to share.",
+    "shareError": "Sharing failed. Try again.",
+    "shareCodeTitle": "Share code",
+    "shareCodeDescription": "Enter this code in the Lelanation Companion app to import your builds.",
+    "shareCodeCopy": "Copy code",
+    "shareCodeCopied": "Code copied!",
+    "shareCodeExpiry": "This code expires in 24h. One-time use.",
+    "shareCodeClose": "Close"
   },
   "buildDiscovery": {
     "searchPlaceholder": "Search builds by champion or author...",

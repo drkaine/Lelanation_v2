@@ -29,9 +29,9 @@ const ATLAS_UPGRADE_IDS = new Set(['3869', '3870', '3871', '3876', '3877'])
 
 export function isStarterItem(item: Item): boolean {
   if (ATLAS_UPGRADE_IDS.has(item.id)) return false
-  const lower = item.name.toLowerCase()
+  if (STARTER_IDS.has(item.id)) return true
+  const lower = (item.name ?? '').toLowerCase()
   return (
-    STARTER_IDS.has(item.id) ||
     STARTER_NAME_PATTERNS.some(p => lower.includes(p)) ||
     Boolean(item.tags?.includes('Consumable'))
   )

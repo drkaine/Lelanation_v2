@@ -26,9 +26,20 @@
         >
           <!-- Auteur -->
           <h3 class="text-lg font-semibold text-text">{{ build.author }}</h3>
-          <!-- Nom du build -->
-          <div class="text-sm text-text/70" :class="{ invisible: !build.author }">
-            <span class="ml-1">{{ build.name }}</span>
+          <!-- Nom du build + badge visibilité -->
+          <div class="flex items-center justify-center gap-1.5 text-sm text-text/70" :class="{ invisible: !build.author }">
+            <span>{{ build.name }}</span>
+            <span
+              v-if="props.showUserActions"
+              class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide"
+              :class="
+                (build.visibility ?? 'public') === 'private'
+                  ? 'border border-rose-500/50 bg-rose-500/15 text-rose-400'
+                  : 'border border-emerald-500/50 bg-emerald-500/15 text-emerald-400'
+              "
+            >
+              {{ (build.visibility ?? 'public') === 'private' ? t('buildsPage.private') : t('buildsPage.public') }}
+            </span>
           </div>
         </div>
 
@@ -77,7 +88,7 @@
             <!-- Bouton Favori -->
             <button
               v-if="props.showFavoriteToggle"
-              class="flex h-6 w-6 items-center justify-center rounded border text-xs transition-colors"
+              class="flex items-center justify-center rounded border px-1 py-1 text-xs transition-colors"
               :class="
                 favoritesStore.isFavorite(build.id)
                   ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'

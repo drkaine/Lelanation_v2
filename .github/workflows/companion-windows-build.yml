@@ -36,13 +36,22 @@ jobs:
         with:
           node-version: "20"
           cache: "npm"
-          cache-dependency-path: companion-app/package-lock.json
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install frontend dependencies
+      - name: Install workspace dependencies
+        working-directory: .
         run: npm ci
+
+      - name: Copy shared icons to companion-app public
+        working-directory: .
+        run: |
+          $src = Join-Path $PWD "packages\shared-theme\icons"
+          $dst = Join-Path $PWD "companion-app\public\icons"
+          if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+          Copy-Item -Path $src -Destination $dst -Recurse -Force
+          Write-Host "Copied shared icons to $dst"
 
       - name: Build Tauri Windows bundle
         run: npm run tauri build
@@ -63,6 +72,20 @@ jobs:
           $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
           [System.IO.File]::WriteAllBytes($pfxPath, [System.Convert]::FromBase64String("${{ secrets.WINDOWS_CODESIGN_PFX_B64 }}"))
           echo "PFX_PATH=$pfxPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Locate signtool.exe
+        if: env.SHOULD_SIGN == 'true'
+        shell: pwsh
+        run: |
+          $sdkRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
+          $signtool = Get-ChildItem -Path $sdkRoot -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "x64" } |
+            Sort-Object { $_.Directory.Name } -Descending |
+            Select-Object -First 1
+          if (!$signtool) { throw "signtool.exe not found under $sdkRoot" }
+          $dir = $signtool.DirectoryName
+          Write-Host "Found signtool at $dir"
+          echo "$dir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sign all Windows bundles (.exe/.msi)
         if: env.SHOULD_SIGN == 'true'
