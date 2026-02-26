@@ -48,6 +48,12 @@ fn lcu_request(method: String, path: String, body: Option<String>) -> Result<Str
     lcu::lcu_request(data.port, &data.password, &method, &path, body.as_deref())
 }
 
+/// Returns debug info for LCU connection (paths tried, process result).
+#[tauri::command]
+fn lcu_debug() -> Result<String, String> {
+    lcu::debug_info()
+}
+
 #[cfg(target_os = "windows")]
 fn ps_escape_single_quoted(input: &str) -> String {
     input.replace('\'', "''")
@@ -205,6 +211,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_lcu_connection,
             lcu_request,
+            lcu_debug,
             create_desktop_shortcut,
             uninstall_app,
             set_image_api_base,

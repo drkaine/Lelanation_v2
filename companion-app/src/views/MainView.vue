@@ -49,6 +49,7 @@ const importedBuilds = ref<Build[]>([]);
 const clientTestLoading = ref(false);
 const clientTestMessage = ref("");
 const clientTestError = ref(false);
+const connectionDebugInfo = ref("");
 
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
@@ -554,17 +555,21 @@ async function checkConnection(silent = false) {
       body: null,
     });
     lcuConnected.value = true;
-    connectionTested.value = true;
     if (!silent) {
+      connectionTested.value = true;
       clientTestMessage.value = t("settings.testConnectionSuccess");
       clientTestError.value = false;
     }
-  } catch {
+  } catch (e) {
     lcuConnected.value = false;
-    connectionTested.value = true;
     if (!silent) {
+      connectionTested.value = true;
       clientTestError.value = true;
-      clientTestMessage.value = t("settings.testConnectionFail");
+      const errMsg = e instanceof Error ? e.message : String(e);
+      clientTestMessage.value =
+        errMsg && !errMsg.includes("League Client not found")
+          ? `${t("settings.testConnectionFail")} (${errMsg})`
+          : t("settings.testConnectionFail");
     }
   }
 }
@@ -572,11 +577,20 @@ async function checkConnection(silent = false) {
 async function testClientConnection() {
   clientTestMessage.value = "";
   clientTestError.value = false;
+  connectionDebugInfo.value = "";
   clientTestLoading.value = true;
   try {
     await checkConnection(false);
   } finally {
     clientTestLoading.value = false;
+  }
+}
+
+async function showConnectionDebug() {
+  try {
+    connectionDebugInfo.value = await invoke<string>("lcu_debug");
+  } catch (e) {
+    connectionDebugInfo.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -954,6 +968,10 @@ watch(
       <p v-if="clientTestMessage" :class="{ error: clientTestError }" class="msg">
         {{ clientTestMessage }}
       </p>
+      <button type="button" class="submit-btn secondary" @click="showConnectionDebug">
+        {{ t('settings.connectionDebug') }}
+      </button>
+      <pre v-if="connectionDebugInfo" class="debug-output">{{ connectionDebugInfo }}</pre>
       <label class="row">
         <input
           type="checkbox"
@@ -1201,6 +1219,8 @@ watch(
 .mt { margin-top: 1.3rem; }
 .msg { margin-top: 0.5rem; font-size: 0.85rem; color: #93f2ce; }
 .msg.error { color: #fecaca; }
+.submit-btn.secondary { margin-left: 0.5rem; opacity: 0.9; }
+.debug-output { margin-top: 0.5rem; padding: 0.5rem; font-size: 0.72rem; background: rgba(0,0,0,0.4); border-radius: 6px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
 .version-line { margin: 0 0 0.5rem; font-size: 0.88rem; color: #c8aa6e; }
 .hint-line { margin-top: 0.3rem; font-size: 0.78rem; color: rgba(240, 230, 210, 0.6); }
 

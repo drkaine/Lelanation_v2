@@ -63,6 +63,11 @@ fn parse_lockfile_contents(contents: &str) -> Result<LockfileData, String> {
     if parts.len() < 5 {
         return Err("Invalid lockfile format".into());
     }
+    // Only accept League Client lockfile - Riot Client has different APIs (no /lol-summoner etc.)
+    let process = parts[0].to_lowercase();
+    if process.contains("riotclient") && !process.contains("league") {
+        return Err("Riot Client lockfile (not League Client)".into());
+    }
     let port: u16 = parts[2].parse().map_err(|_| "Invalid port in lockfile")?;
     Ok(LockfileData {
         port,
@@ -109,6 +114,36 @@ fn read_from_process() -> Option<LockfileData> {
 #[cfg(not(target_os = "windows"))]
 fn read_from_process() -> Option<LockfileData> {
     None
+}
+
+/// Debug info for troubleshooting connection issues.
+pub fn debug_info() -> Result<String, String> {
+    let mut lines = Vec::new();
+    for path in lockfile_candidates() {
+        let exists = path.exists();
+        let mut info = format!("{}: {}", path.display(), if exists { "exists" } else { "absent" });
+        if exists {
+            if let Ok(contents) = std::fs::read_to_string(&path) {
+                let preview = contents.trim();
+                let first = preview.split(':').next().unwrap_or("");
+                info.push_str(&format!(" process={}", first));
+                match parse_lockfile_contents(preview) {
+                    Ok(d) => info.push_str(&format!(" port={} (League Client)", d.port)),
+                    Err(e) => info.push_str(&format!(" parse_err={}", e)),
+                }
+            }
+        }
+        lines.push(info);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(data) = read_from_process() {
+            lines.push(format!("Process LeagueClientUx: port={} (use this)", data.port));
+        } else {
+            lines.push("Process LeagueClientUx.exe: not found".into());
+        }
+    }
+    Ok(lines.join("\n"))
 }
 
 /// Read and parse the LCU lockfile. Tries lockfile paths first, then process method on Windows.
