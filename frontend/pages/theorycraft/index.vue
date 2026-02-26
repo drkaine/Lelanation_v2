@@ -280,9 +280,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { calculateStats, filterItemsForStats } from '@lelanation/builds-stats'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useTheorycraftStore } from '~/stores/TheorycraftStore'
-import { calculateStats } from '~/utils/statsCalculator'
+import { calculateItemStackStats, isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
+import { calculatePassiveStackStats, getChampionPassiveStacks } from '~/utils/passiveStacks'
 import { getSpellDamageByRank } from '~/utils/spellDamage'
 import { getCommunityDragonSpellDamage } from '~/utils/communityDragonSpellDamage'
 import {
@@ -290,8 +292,6 @@ import {
   getSpellDamageByRankFromEngine,
 } from '~/utils/theorycraftEngine'
 import type { SpellDefinition } from '~/types/theorycraft'
-import { isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
-import { getChampionPassiveStacks } from '~/utils/passiveStacks'
 import { calculateMagicDamage, type EnemyTarget } from '~/utils/realDamage'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import StatsTable from '~/components/Build/StatsTable.vue'
@@ -414,15 +414,13 @@ const normalizedPassiveStacks = computed(() => {
 const buildStats = computed(() => {
   const b = theorycraftBuild.value
   if (!b?.champion || !b.items || !b.runes || !b.shards) return null
-  return calculateStats(
-    b.champion,
-    b.items,
-    b.runes,
-    b.shards,
-    theorycraftLevel.value,
-    itemStacks.value,
-    normalizedPassiveStacks.value
-  )
+  const filteredItems = filterItemsForStats(b.items)
+  return calculateStats(b.champion, filteredItems, b.runes, b.shards, theorycraftLevel.value, {
+    itemStacks: itemStacks.value,
+    passiveStacks: normalizedPassiveStacks.value,
+    getItemStackStats: calculateItemStackStats,
+    getPassiveStackStats: (cid, type, s) => calculatePassiveStackStats(cid, type, s),
+  })
 })
 
 const championBaseAdAtLevel = computed(() => {

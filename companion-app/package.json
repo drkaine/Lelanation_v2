@@ -10,6 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@lelanation/builds-stats": "*",
     "@lelanation/shared-types": "*",
     "@lelanation/shared-theme": "*",
     "@lelanation/builds-ui": "*",

@@ -10,9 +10,10 @@ import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
 import { translate } from "../i18n";
-import type { Build, Role, Champion, StoredBuild } from "@lelanation/shared-types";
+import type { Build, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
 import { BuildSheet } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
+import BuildDetailView from "./BuildDetailView.vue";
 
 const builds = ref<Build[]>([]);
 const loading = ref(true);
@@ -27,6 +28,7 @@ const currentGameVersion = ref("");
 const runeMap = ref<Record<number, { name: string; icon: string }>>({});
 const runePathMap = ref<Record<number, { name: string; icon: string }>>({});
 const championMap = ref<Record<string, Champion>>({});
+const itemMap = ref<Record<string, Item>>({});
 const lastSubmittedMatchId = ref("");
 let autoSubmitTimer: ReturnType<typeof setInterval> | null = null;
 let buildsRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -44,6 +46,7 @@ const importedBuilds = ref<Build[]>([]);
 
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
+const detailBuild = ref<Build | null>(null);
 const latestVersion = ref("");
 const currentAppVersion = ref("0.3.0");
 const pendingUpdate = shallowRef<Update | null>(null);
@@ -212,15 +215,30 @@ function makeRuneLookup(): RuneLookup {
 const imageResolvers = computed(() => makeImageResolvers());
 const runeLookup = computed(() => makeRuneLookup());
 
-function enrichBuilds(rawBuilds: Build[]): Build[] {
+function enrichBuild(build: Build): Build {
   const champs = championMap.value;
-  if (Object.keys(champs).length === 0) return rawBuilds;
-  return rawBuilds.map((b) => {
-    if (!b.champion?.id || b.champion.spells?.length) return b;
-    const full = champs[b.champion.id];
-    if (!full) return b;
-    return { ...b, champion: full };
-  });
+  const items = itemMap.value;
+  let champion = build.champion;
+  let buildItems = build.items ?? [];
+
+  if (champion?.id && Object.keys(champs).length > 0) {
+    const full = champs[champion.id];
+    if (full) champion = full;
+  }
+
+  if (buildItems.length > 0 && Object.keys(items).length > 0) {
+    buildItems = buildItems.map((item) => {
+      const full = items[item.id];
+      if (full && full.stats != null && full.gold?.total != null) return full;
+      return item;
+    });
+  }
+
+  return { ...build, champion: champion ?? build.champion, items: buildItems };
+}
+
+function enrichBuilds(rawBuilds: Build[]): Build[] {
+  return rawBuilds.map(enrichBuild);
 }
 
 async function loadBuilds(options?: { silent?: boolean }) {
@@ -241,7 +259,7 @@ async function loadBuilds(options?: { silent?: boolean }) {
 
 function loadImportedBuilds() {
   const stored = getImportedBuilds();
-  importedBuilds.value = stored.map(s => s as unknown as Build);
+  importedBuilds.value = stored.map((s) => enrichBuild(s as unknown as Build));
 }
 
 async function linkBuildsFromCode() {
@@ -301,6 +319,27 @@ async function loadCurrentGameVersion() {
     currentGameVersion.value = typeof payload.version === "string" ? payload.version : "";
   } catch {
     currentGameVersion.value = "";
+  }
+}
+
+async function loadItemCatalog() {
+  try {
+    const gameDataLang = settings.value.language === "en" ? "en_US" : "fr_FR";
+    const r = await fetch(`${apiBase}/api/game-data/items?lang=${gameDataLang}`);
+    if (!r.ok) return;
+    const payload = (await r.json()) as { data?: Record<string, Item & { id?: string }> };
+    const data = payload.data ?? payload;
+    const map: Record<string, Item> = {};
+    for (const [id, item] of Object.entries(data as Record<string, Item & { id?: string }>)) {
+      if (item && id) map[id] = { ...item, id };
+    }
+    itemMap.value = map;
+    if (builds.value.length > 0) builds.value = enrichBuilds(builds.value);
+    if (importedBuilds.value.length > 0) {
+      importedBuilds.value = importedBuilds.value.map(enrichBuild);
+    }
+  } catch {
+    itemMap.value = {};
   }
 }
 
@@ -636,6 +675,7 @@ async function createDesktopShortcut() {
 onMounted(async () => {
   loadCurrentGameVersion();
   loadRuneCatalog();
+  loadItemCatalog();
   loadImportedBuilds();
   checkForUpdates();
   await loadChampionCatalog();
@@ -672,6 +712,7 @@ watch(
   () => settings.value.language,
   async () => {
     loadRuneCatalog();
+    loadItemCatalog();
     await loadChampionCatalog();
   }
 );
@@ -679,6 +720,18 @@ watch(
 
 <template>
   <div class="main-shell">
+    <!-- Build detail full page -->
+    <BuildDetailView
+      v-if="detailBuild"
+      :build="detailBuild"
+      :image-resolvers="imageResolvers"
+      :rune-lookup="runeLookup"
+      :build-version="buildVersion"
+      :t="t"
+      @back="detailBuild = null"
+    />
+
+    <template v-else>
     <header class="header-card">
       <div>
         <h1 class="title">Lelanation Companion</h1>
@@ -813,6 +866,9 @@ watch(
                 <path d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z" />
               </svg>
             </button>
+            <button type="button" class="detail-btn" :title="t('detail')" @click="detailBuild = b">
+              {{ t('detail') }}
+            </button>
             <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')" @click="importBuild(b)">
               {{ t('import') }}
             </button>
@@ -931,6 +987,7 @@ watch(
       </button>
       <p v-if="uninstallError" class="msg error">{{ uninstallError }}</p>
     </section>
+    </template>
   </div>
 </template>
 
@@ -1126,6 +1183,22 @@ watch(
 }
 .update-dismiss-btn:hover { color: #f0e6d2; }
 .update-error { margin: 0.3rem 0 0; font-size: 0.78rem; color: #fecaca; }
+
+.detail-btn {
+  border: 1px solid rgba(200, 155, 60, 0.5);
+  border-radius: 7px;
+  background: rgba(30, 40, 45, 0.75);
+  color: #c8aa6e;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.detail-btn:hover {
+  background: rgba(200, 155, 60, 0.15);
+  border-color: #c89b3c;
+  color: #f0e6d2;
+}
 
 @media (max-width: 660px) {
   .header-card { flex-direction: column; align-items: flex-start; }

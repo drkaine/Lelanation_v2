@@ -338,10 +338,11 @@ export const useBuildStore = defineStore('build', {
       }
 
       // Import and use stats calculator
-      import('~/utils/statsCalculator').then(({ calculateStats }) => {
+      import('@lelanation/builds-stats').then(({ calculateStats, filterItemsForStats }) => {
+        const filteredItems = filterItemsForStats(this.currentBuild!.items)
         const stats = calculateStats(
           this.currentBuild!.champion,
-          this.currentBuild!.items,
+          filteredItems,
           this.currentBuild!.runes,
           this.currentBuild!.shards,
           18 // Level 18 for now

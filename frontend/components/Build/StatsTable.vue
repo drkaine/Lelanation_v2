@@ -237,10 +237,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import {
+  calculateStats,
+  filterItemsForStats,
+  calculateBuildGoldEfficiency,
+} from '@lelanation/builds-stats'
 import { useBuildStore } from '~/stores/BuildStore'
-import { calculateStats } from '~/utils/statsCalculator'
-import { calculateBuildGoldEfficiency } from '~/utils/goldEfficiency'
-import type { Build, Item } from '~/types/build'
+import type { Build } from '~/types/build'
 
 const props = defineProps<{
   build?: Build | null
@@ -400,88 +403,23 @@ const itemStats = computed(() => {
   return totals
 })
 
-// Calculate gold efficiency for the build
+// Calculate gold efficiency for the build (use filtered items)
 const buildGoldEfficiency = computed(() => {
-  return calculateBuildGoldEfficiency(items.value)
+  return calculateBuildGoldEfficiency(filteredItemsForStats.value)
 })
 
 const goldValue = computed(() => buildGoldEfficiency.value.totalGoldValue)
 const goldCost = computed(() => buildGoldEfficiency.value.totalGoldCost)
 const goldEfficiency = computed(() => buildGoldEfficiency.value.goldEfficiency)
 
-// Helper functions to filter items for stats calculation
-const isStarterItem = (item: Item): boolean => {
-  const starterItemIds = new Set([
-    '1036', // Long Sword
-    '1054', // Doran's Shield
-    '1055', // Doran's Blade
-    '1056', // Doran's Ring
-    '1082', // Relic Shield
-    '1083', // Cull
-    '3070', // Tear of the Goddess
-    '3865', // World Atlas
-    '3866', // Spectral Sickle
-    '3867', // Spellthief's Edge
-    '1101', // Scorchclaw Pup
-    '1102', // Gustwalker Hatchling
-    '1103', // Mosstomper Seedling
-  ])
-  const starterNamePatterns = [
-    'seau',
-    'dark seal',
-    'anneau de doran',
-    'lame de doran',
-    'bouclier de doran',
-    'larme de la déesse',
-    'cull',
-    'abatteur',
-    'atlas',
-    'épée de voleur',
-    'épée longue',
-    'long sword',
-    'faucheuse',
-    'fragment',
-  ]
-  if (starterItemIds.has(item.id)) return true
-  const itemNameLower = item.name.toLowerCase()
-  return starterNamePatterns.some(pattern => itemNameLower.includes(pattern))
-}
-
-const isBootsItem = (item: Item): boolean => {
-  if (item.tags && item.tags.includes('Boots')) return true
-  const bootIds = new Set([
-    '1001',
-    '3005',
-    '3006',
-    '3009',
-    '3010',
-    '3020',
-    '3047',
-    '3111',
-    '3117',
-    '3158',
-  ])
-  if (bootIds.has(item.id)) return true
-  if (item.from && item.from.some((parentId: string) => bootIds.has(parentId))) return true
-  return false
-}
-
 // Filter items for stats calculation: exclude starter items and keep only first boots if 2
-const filteredItemsForStats = computed(() => {
-  const bootsItems = items.value.filter(item => isBootsItem(item))
-  const nonStarterNonBootsItems = items.value.filter(
-    item => !isStarterItem(item) && !isBootsItem(item)
-  )
-  // Keep only the first boots item if there are 2 (only count one pair of boots)
-  const bootsForStats: Item[] = bootsItems.length > 0 ? [bootsItems[0]!] : []
-  return [...nonStarterNonBootsItems, ...bootsForStats]
-})
+const filteredItemsForStats = computed(() => filterItemsForStats(items.value))
 
 // Calculate total stats
 const totalStats = computed(() => {
   if (!champion.value) return null
   return calculateStats(
-    champion.value as any,
+    champion.value,
     filteredItemsForStats.value,
     runes.value,
     shards.value,
