@@ -44,6 +44,10 @@ const linkMessage = ref("");
 const linkError = ref(false);
 const importedBuilds = ref<Build[]>([]);
 
+const clientTestLoading = ref(false);
+const clientTestMessage = ref("");
+const clientTestError = ref(false);
+
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
 const detailBuild = ref<Build | null>(null);
@@ -548,6 +552,28 @@ async function checkLcu() {
   }
 }
 
+async function testClientConnection() {
+  clientTestMessage.value = "";
+  clientTestError.value = false;
+  clientTestLoading.value = true;
+  try {
+    // Real LCU request to verify the client API responds (not just lockfile)
+    await invoke<string>("lcu_request", {
+      method: "GET",
+      path: "/lol-summoner/v1/current-summoner",
+      body: null,
+    });
+    lcuConnected.value = true;
+    clientTestMessage.value = t("settings.testConnectionSuccess");
+  } catch {
+    lcuConnected.value = false;
+    clientTestError.value = true;
+    clientTestMessage.value = t("settings.testConnectionFail");
+  } finally {
+    clientTestLoading.value = false;
+  }
+}
+
 async function autoSubmitMatchIfAllowed() {
   if (!canAutoSubmitMatch.value) return;
   try {
@@ -892,6 +918,18 @@ watch(
       </label>
 
       <h3>{{ t('settings.clientImport') }}</h3>
+      <p class="hint-line">{{ t("settings.importBeforeLobby") }}</p>
+      <button
+        type="button"
+        class="submit-btn"
+        :disabled="clientTestLoading"
+        @click="testClientConnection"
+      >
+        {{ clientTestLoading ? "…" : t("settings.testConnection") }}
+      </button>
+      <p v-if="clientTestMessage" :class="{ error: clientTestError }" class="msg">
+        {{ clientTestMessage }}
+      </p>
       <label class="row">
         <input
           type="checkbox"
