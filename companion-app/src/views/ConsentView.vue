@@ -2,12 +2,14 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { setConsent } from "../consent";
 import { getSettings, setSettings } from "../settings";
-import avatarImg from "../assets/lelariva-quality.png";
 
 const emit = defineEmits<{ (e: "accepted"): void }>();
 
 const locale = ref<"fr" | "en">("fr");
 const consentChecked = ref(false);
+
+// Image from web via cachedimg protocol (downloads once, stores in app cache)
+const avatarUrl = "cachedimg://localhost/static/lelariva-quality.png";
 
 const t = computed(() => {
   const d = {
@@ -72,8 +74,6 @@ const t = computed(() => {
   } as const;
   return d[locale.value];
 });
-
-const avatarUrl = avatarImg;
 
 function accept() {
   if (!consentChecked.value) return;

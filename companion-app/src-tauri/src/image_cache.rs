@@ -26,7 +26,11 @@ impl ImageCacheState {
         }
 
         let base = self.api_base.read().ok()?.clone();
-        let url = format!("{}/images/game/{}", base, relative);
+        let url = if relative.starts_with("static/") {
+            format!("{}/images/{}", base, relative.trim_start_matches("static/"))
+        } else {
+            format!("{}/images/game/{}", base, relative)
+        };
         let resp = reqwest::blocking::get(&url).ok()?;
         if !resp.status().is_success() {
             return None;
