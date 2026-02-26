@@ -17,10 +17,10 @@ import {
 } from '../services/MatchupTierService.js'
 import {
   backfillParticipantRanks,
-  backfillParticipantRoles,
   refreshMatchRanks,
   countParticipantsMissingRank,
   countParticipantsMissingRole,
+  countPlayersMissingSummonerName,
 } from '../services/StatsPlayersRefreshService.js'
 import { discoverPlayersFromLeagueExp } from '../services/RiotLeagueExpDiscoveryService.js'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
@@ -33,6 +33,7 @@ import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
 import { getRiotApiStats } from '../services/RiotApiStatsService.js'
+import { readAllProgress, writeStopRequest, writeProgress } from '../utils/ProcessProgressWriter.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -60,12 +61,9 @@ const pm2RiotWorkerAppName = process.env.PM2_RIOT_WORKER_APP_NAME ?? 'lelanation
 const POLLER_SCRIPTS = new Set([
   'riot:worker',
   'riot:collect',
-  'riot:backfill-ranks',
-  'riot:backfill-roles',
-  'riot:refresh-match-ranks',
+  'riot:backfill-until-done',
   'riot:discover-players',
   'riot:discover-league-exp',
-  'riot:enrich',
 ])
 const RIOT_SCRIPT_STATUS_FILE = join(process.cwd(), 'data', 'cron', 'riot-script-status.json')
 const RIOT_SCRIPT_LOG_DIR = join(process.cwd(), 'logs', 'scripts')
@@ -463,13 +461,21 @@ router.post('/riot-collect-now', (_req, res) => {
     lastStartAt: new Date().toISOString(),
     args: [],
   })
+  void writeProgress('riot:collect', { phase: 'collect', pid: process.pid, metrics: {} })
   void appendScriptLog('riot:collect', 'START manual collect')
   res.status(202).json({
     success: true,
     message: 'Collecte lancée en arrière-plan. Actualisez la page dans quelques minutes pour voir le résultat.',
   })
   runRiotMatchCollectOnce()
-    .then(() => {
+    .then((result) => {
+      void writeProgress('riot:collect', {
+        phase: 'done',
+        metrics: {
+          matchesCollected: result?.collected ?? 0,
+          errors: result?.errors ?? 0,
+        },
+      })
       void appendScriptLog('riot:collect', 'END manual collect exit=0')
       return updateScriptStatus('riot:collect', {
         status: 'stopped',
@@ -610,6 +616,93 @@ router.post('/riot-replay-links', async (req, res) => {
   }
 })
 
+// --- Discover players (historical matches). Optional: Riot ID → puuid seed + region + replay count. ---
+router.post('/riot-discover-players', async (req, res) => {
+  const script = 'riot:discover-players'
+  const statusMap = await readScriptStatusMap()
+  const existing = statusMap[script]
+  if (existing && (existing.status === 'running' || existing.status === 'started') && isPidAlive(existing.pid)) {
+    return res.status(409).json({
+      success: false,
+      error: 'Discover players déjà en cours.',
+    })
+  }
+
+  const rawRegion = typeof req.body?.region === 'string' ? req.body.region.trim() : 'euw1'
+  const region = rawRegion in REPLAY_PLATFORM_TO_CONTINENT ? (rawRegion as PlatformRegion) : 'euw1'
+  const riotIdRaw = typeof req.body?.riotId === 'string' ? req.body.riotId.trim() : ''
+  const replayCountRaw = Number(req.body?.replayCount ?? 100)
+  const replayCount = Number.isFinite(replayCountRaw) ? Math.max(1, Math.min(500, Math.trunc(replayCountRaw))) : 100
+
+  const envOverlay: Record<string, string> = {
+    RIOT_PLAYER_DISCOVERY_MATCHES_PER_PLAYER: String(replayCount),
+  }
+
+  if (riotIdRaw) {
+    const parts = riotIdRaw.split('#').map((s: string) => s.trim())
+    const gameName = parts[0] ?? ''
+    const tagLine = parts[1] ?? ''
+    if (!gameName || !tagLine) {
+      return res.status(400).json({
+        success: false,
+        error: 'Riot ID doit être au format GameName#TagLine',
+      })
+    }
+    const continent = REPLAY_PLATFORM_TO_CONTINENT[region]
+    const riotApi = getRiotApiService()
+    const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine, continent)
+    if (accountResult.isErr()) {
+      return res.status(400).json({
+        success: false,
+        error: accountResult.unwrapErr().message ?? 'Riot ID introuvable',
+      })
+    }
+    const puuid = accountResult.unwrap().puuid
+    envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID = puuid
+    envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_REGION = region
+  }
+
+  const env = { ...process.env, ...envOverlay }
+  void fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true }).then(() => {
+    const logPath = scriptLogFile(script)
+    const logStream = createWriteStream(logPath, { flags: 'a' })
+    const argsLog = envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID
+      ? `riotId→puuid region=${region} replayCount=${replayCount}`
+      : `replayCount=${replayCount}`
+    logStream.write(`\n[${new Date().toISOString()}] START ${script} ${argsLog}\n`)
+
+    const child = spawn('npm', ['run', script], {
+      cwd: backendRoot,
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    })
+    if (child.stdout) child.stdout.on('data', (d) => logStream.write(String(d)))
+    if (child.stderr) child.stderr.on('data', (d) => logStream.write(String(d)))
+    void updateScriptStatus(script, {
+      status: 'running',
+      pid: child.pid ?? undefined,
+      args: [region, String(replayCount), ...(envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID ? ['riotId'] : [])],
+      lastStartAt: new Date().toISOString(),
+    })
+    child.on('close', (code) => {
+      logStream.write(`[${new Date().toISOString()}] END ${script} exit=${code ?? 'null'}\n`)
+      logStream.end()
+      void updateScriptStatus(script, {
+        status: code === 0 ? 'stopped' : 'failed',
+        lastEndAt: new Date().toISOString(),
+        lastExitCode: code ?? undefined,
+        pid: undefined,
+      })
+    })
+  })
+
+  const message = envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID
+    ? `Discover players lancé (Riot ID → ${region}, ${replayCount} replays). Suivi par PID et logs.`
+    : `Discover players lancé (seeds en base, ${replayCount} replays/joueur). Suivi par PID et logs.`
+  return res.status(202).json({ success: true, message })
+})
+
 // --- Discover players from league-exp entries (for later poll by worker) ---
 router.post('/riot-discover-league-exp', (req, res) => {
   const platform = req.body?.platform === 'eun1' ? 'eun1' : 'euw1'
@@ -654,6 +747,21 @@ router.post('/riot-discover-league-exp', (req, res) => {
     })
 })
 
+// --- Sync data (DDragon + Community Dragon + YouTube) — script optionnel ---
+router.post('/sync-data', (_req, res) => {
+  res.status(202).json({
+    success: true,
+    message: 'Sync données (Data Dragon, Community Dragon, YouTube) lancé en arrière-plan. Consultez les logs si besoin.',
+  })
+  const child = spawn('npm', ['run', 'sync:data'], {
+    cwd: backendRoot,
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  })
+  child.unref()
+})
+
 // --- Rafraîchir les tables stats pré-calculées (job horaire; déclenchement manuel possible) ---
 router.post('/refresh-precomputed-stats', (_req, res) => {
   res.status(202).json({
@@ -668,104 +776,58 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
     .catch((e) => console.error('[admin] refresh-precomputed-stats error:', e))
 })
 
-// --- Trigger backfill participant ranks in background (like riot-collect-now, avoids 504) ---
-// Worker = long-running process (npm run riot:worker). Backfill = one-shot fill of missing ranks.
-router.post('/riot-backfill-ranks', (req, res) => {
-  const limit = Math.min(parseInt(String(req.query?.limit || '200'), 10) || 200, 5000)
-  void appendScriptLog('riot:backfill-ranks', `START limit=${limit}`)
-  void updateScriptStatus('riot:backfill-ranks', {
-    status: 'started',
-    lastStartAt: new Date().toISOString(),
-    args: [String(limit)],
-  })
-  res.status(202).json({
+// --- Backfill until no null data left (ranks + roles, loop until done). One process, one PID. ---
+router.post('/riot-backfill-until-done', async (_req, res) => {
+  const script = 'riot:backfill-until-done'
+  const statusMap = await readScriptStatusMap()
+  const existing = statusMap[script]
+  if (existing && (existing.status === 'running' || existing.status === 'started') && isPidAlive(existing.pid)) {
+    return res.status(409).json({
+      success: false,
+      error: 'Backfill jusqu’à completion déjà en cours.',
+    })
+  }
+  spawnRiotScriptAndTrack(script, [])
+  return res.status(202).json({
     success: true,
-    message: `Backfill rangs lancé en arrière-plan (limit=${limit}). Actualisez dans quelques minutes.`,
+    message: 'Backfill jusqu’à completion lancé (ranks + rôles en boucle jusqu’à 0 null). Suivi par PID et logs.',
   })
-  ;(async () => {
-    try {
-      const missingCount = await countParticipantsMissingRank()
-      if (missingCount === 0) {
-        const { matchesUpdated } = await refreshMatchRanks()
-        console.log('[admin] riot-backfill-ranks: 0 participants sans rank, Match.rank refresh:', matchesUpdated)
-        void appendScriptLog('riot:backfill-ranks', `END exit=0 missing=0 matchesUpdated=${matchesUpdated}`)
-        void updateScriptStatus('riot:backfill-ranks', {
-          status: 'stopped',
-          lastEndAt: new Date().toISOString(),
-          lastExitCode: 0,
-        })
-        return
-      }
-      const { updated, errors } = await backfillParticipantRanks(limit)
-      console.log('[admin] riot-backfill-ranks: updated=', updated, 'errors=', errors)
-      const { matchesUpdated } = await refreshMatchRanks()
-      console.log('[admin] riot-backfill-ranks: matchesUpdated=', matchesUpdated)
-      void appendScriptLog(
-        'riot:backfill-ranks',
-        `END exit=0 updated=${updated} errors=${errors} matchesUpdated=${matchesUpdated}`
-      )
-      void updateScriptStatus('riot:backfill-ranks', {
-        status: 'stopped',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 0,
-      })
-    } catch (e) {
-      console.error('[admin] riot-backfill-ranks failed:', e)
-      void appendScriptLog('riot:backfill-ranks', `END exit=1 error=${e instanceof Error ? e.message : 'unknown'}`)
-      void updateScriptStatus('riot:backfill-ranks', {
-        status: 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 1,
-      })
-    }
-  })()
 })
 
-// --- Trigger backfill participant roles in background (fills participants.role when null) ---
-router.post('/riot-backfill-roles', (req, res) => {
-  const limit = Math.min(parseInt(String(req.query?.limit || '50'), 10) || 50, 500)
-  void appendScriptLog('riot:backfill-roles', `START matches=${limit}`)
-  void updateScriptStatus('riot:backfill-roles', {
-    status: 'started',
-    lastStartAt: new Date().toISOString(),
-    args: [String(limit)],
-  })
-  res.status(202).json({
-    success: true,
-    message: `Backfill rôles lancé en arrière-plan (matches=${limit}). Actualisez dans quelques minutes.`,
-  })
-  ;(async () => {
-    try {
-      const missingCount = await countParticipantsMissingRole()
-      if (missingCount === 0) {
-        console.log('[admin] riot-backfill-roles: 0 participants sans role, skip')
-        void appendScriptLog('riot:backfill-roles', 'END exit=0 missing=0')
-        void updateScriptStatus('riot:backfill-roles', {
-          status: 'stopped',
-          lastEndAt: new Date().toISOString(),
-          lastExitCode: 0,
-        })
-        return
-      }
-      const { updated, errors, matches } = await backfillParticipantRoles(limit)
-      console.log('[admin] riot-backfill-roles:', { matches, updated, errors })
-      void appendScriptLog('riot:backfill-roles', `END exit=0 matches=${matches} updated=${updated} errors=${errors}`)
-      void updateScriptStatus('riot:backfill-roles', {
-        status: 'stopped',
+// --- Spawn a riot script in a child process and track status (pid, logs, exit). Used by riot-script-run and backfill routes. ---
+function spawnRiotScriptAndTrack(script: string, args: string[]): void {
+  void fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true }).then(() => {
+    const logPath = scriptLogFile(script)
+    const logStream = createWriteStream(logPath, { flags: 'a' })
+    logStream.write(`\n[${new Date().toISOString()}] START ${script} ${args.join(' ')}\n`)
+
+    const childArgs = ['run', script, ...(args.length ? ['--', ...args] : [])]
+    const child = spawn('npm', childArgs, {
+      cwd: backendRoot,
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    })
+    if (child.stdout) child.stdout.on('data', (d) => logStream.write(String(d)))
+    if (child.stderr) child.stderr.on('data', (d) => logStream.write(String(d)))
+    void updateScriptStatus(script, {
+      status: 'running',
+      pid: child.pid ?? undefined,
+      args,
+      lastStartAt: new Date().toISOString(),
+    })
+    child.on('close', (code) => {
+      logStream.write(`[${new Date().toISOString()}] END ${script} exit=${code ?? 'null'}\n`)
+      logStream.end()
+      void updateScriptStatus(script, {
+        status: code === 0 ? 'stopped' : 'failed',
         lastEndAt: new Date().toISOString(),
-        lastExitCode: 0,
+        lastExitCode: code ?? undefined,
+        pid: undefined,
       })
-    } catch (e) {
-      console.error('[admin] riot-backfill-roles failed:', e)
-      void appendScriptLog('riot:backfill-roles', `END exit=1 error=${e instanceof Error ? e.message : 'unknown'}`)
-      void updateScriptStatus('riot:backfill-roles', {
-        status: 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 1,
-      })
-    }
-  })()
-})
+    })
+  })
+}
 
 // --- Generic poller scripts launcher (whitelisted npm scripts, background) ---
 router.post('/riot-script-run', async (req, res) => {
@@ -805,37 +867,7 @@ router.post('/riot-script-run', async (req, res) => {
     }
   }
 
-  await fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true })
-  const logPath = scriptLogFile(script)
-  const logStream = createWriteStream(logPath, { flags: 'a' })
-  logStream.write(`\n[${new Date().toISOString()}] START ${script} ${args.join(' ')}\n`)
-
-  const childArgs = ['run', script, ...(args.length ? ['--', ...args] : [])]
-  const child = spawn('npm', childArgs, {
-    cwd: backendRoot,
-    detached: false,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: process.env,
-  })
-  if (child.stdout) child.stdout.on('data', (d) => logStream.write(String(d)))
-  if (child.stderr) child.stderr.on('data', (d) => logStream.write(String(d)))
-  void updateScriptStatus(script, {
-    status: 'running',
-    pid: child.pid ?? undefined,
-    args,
-    lastStartAt: new Date().toISOString(),
-  })
-  child.on('close', (code) => {
-    logStream.write(`[${new Date().toISOString()}] END ${script} exit=${code ?? 'null'}\n`)
-    logStream.end()
-    void updateScriptStatus(script, {
-      status: code === 0 ? 'stopped' : 'failed',
-      lastEndAt: new Date().toISOString(),
-      lastExitCode: code ?? undefined,
-      pid: undefined,
-    })
-  })
-
+  spawnRiotScriptAndTrack(script, args)
   return res.status(202).json({
     success: true,
     message: `Script ${script} lancé en arrière-plan.`,
@@ -860,7 +892,9 @@ router.get('/riot-scripts-status', async (_req, res) => {
   }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
   const heartbeat = hb.isOk() ? hb.unwrap() : null
   const workerBeat = heartbeat?.lastBeat ?? null
-  const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < 10 * 60 * 1000
+  // Worker considered active only if heartbeat < 3 min (so after stop, status flips to stopped within 3 min)
+  const WORKER_HEARTBEAT_MAX_AGE_MS = 3 * 60 * 1000
+  const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < WORKER_HEARTBEAT_MAX_AGE_MS
   const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
   const workerActive = workerHeartbeatActive || !!pm2Worker?.online
   const cronResult = await cronStatus.getStatus()
@@ -878,24 +912,30 @@ router.get('/riot-scripts-status', async (_req, res) => {
   }))
   const lastOutputMap = Object.fromEntries(lastOutputs)
 
+  const progressMap = await readAllProgress()
+
   const scripts = [...POLLER_SCRIPTS].map((script) => {
     const row = map[script] ?? { script, status: 'stopped' as ScriptStatusValue }
     const alive = isPidAlive(row.pid)
-    const safeRow = (row.status === 'running' || row.status === 'started') && !alive
-      ? { ...row, status: 'stopped' as ScriptStatusValue, pid: undefined }
-      : row
+    // Only force stopped when we had a pid and it is now dead (crash). In-process runs have no pid and update status themselves.
+    const safeRow =
+      (row.status === 'running' || row.status === 'started') && row.pid !== undefined && !alive
+        ? { ...row, status: 'failed' as ScriptStatusValue, pid: undefined }
+        : row
     const lastOutput = lastOutputMap[script] ?? null
+    const progress = progressMap[script] ?? null
     if (script === 'riot:worker') {
       return {
         ...safeRow,
         lastOutput,
+        progress: progress ? { phase: progress.phase, startedAt: progress.startedAt, lastUpdatedAt: progress.lastUpdatedAt, metrics: progress.metrics } : null,
         status: workerActive ? 'running' : safeRow.status === 'running' ? 'started' : safeRow.status,
         workerHeartbeat: heartbeat ?? (workerBeat ? { lastBeat: workerBeat } : null),
         workerPm2: pm2Worker ? { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status } : null,
         workerSource: workerHeartbeatActive ? 'heartbeat' : (pm2Worker?.online ? 'pm2' : 'none'),
       }
     }
-    return { ...safeRow, lastOutput }
+    return { ...safeRow, lastOutput, progress: progress ? { phase: progress.phase, startedAt: progress.startedAt, lastUpdatedAt: progress.lastUpdatedAt, metrics: progress.metrics } : null }
   })
 
   const crons = CRON_JOBS.map(({ key, label }) => {
@@ -910,7 +950,39 @@ router.get('/riot-scripts-status', async (_req, res) => {
     }
   })
 
-  return res.json({ scripts, crons })
+  let dataStats: { participantsWithoutRank: number; participantsWithoutRole: number; matchesWithoutRank: number; lastNewPlayerAt: string | null; playersMissingSummonerName?: number } = {
+    participantsWithoutRank: 0,
+    participantsWithoutRole: 0,
+    matchesWithoutRank: 0,
+    lastNewPlayerAt: null,
+  }
+  try {
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] = await Promise.all([
+      countParticipantsMissingRank(),
+      countParticipantsMissingRole(),
+      prisma.match.count({ where: { rank: null } }),
+      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      countPlayersMissingSummonerName(),
+    ])
+    dataStats = {
+      participantsWithoutRank,
+      participantsWithoutRole,
+      matchesWithoutRank,
+      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
+      playersMissingSummonerName,
+    }
+  } catch {
+    // ignore
+  }
+
+  let riotApiStats: Awaited<ReturnType<typeof getRiotApiStats>> | null = null
+  try {
+    riotApiStats = await getRiotApiStats()
+  } catch {
+    // ignore
+  }
+
+  return res.json({ scripts, crons, dataStats, riotApiStats })
 })
 
 /** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */
@@ -1060,13 +1132,12 @@ router.post('/riot-script-stop', async (req, res) => {
     if (!alive || !pid) {
       return res.status(409).json({ success: false, error: `Script ${script} is not active.` })
     }
-    process.kill(pid, 'SIGTERM')
-    void appendScriptLog(script, `STOP sent SIGTERM pid=${pid}`)
-    void updateScriptStatus(script, {
-      status: 'started',
-      lastEndAt: new Date().toISOString(),
+    await writeStopRequest(script)
+    void appendScriptLog(script, `STOP requested (graceful), pid=${pid}`)
+    return res.json({
+      success: true,
+      message: 'Arrêt demandé. Le script s’arrêtera à la fin du traitement en cours.',
     })
-    return res.json({ success: true, message: `Arrêt demandé pour ${script}.` })
   } catch (e) {
     return res.status(500).json({
       success: false,
@@ -1539,6 +1610,38 @@ router.get('/app-download', async (_req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
   return res.sendFile(absolutePath)
 })
+
+// --- Watchdog: if no worker active for 3 min, start it (after restart, script end, etc.) ---
+const WATCHDOG_INTERVAL_MS = 60 * 1000
+const WORKER_INACTIVE_THRESHOLD_MS = 3 * 60 * 1000
+let workerWatchdogStarted = false
+function startWorkerWatchdog(): void {
+  if (workerWatchdogStarted) return
+  workerWatchdogStarted = true
+  setInterval(async () => {
+    try {
+      const hb = await FileManager.readJson<{ lastBeat?: string }>(
+        join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
+      )
+      const lastBeat = hb.isOk() ? hb.unwrap()?.lastBeat : null
+      const ageMs = lastBeat ? Date.now() - new Date(lastBeat).getTime() : Infinity
+      if (ageMs < WORKER_INACTIVE_THRESHOLD_MS) return
+      const pm2 = await getPm2ProcessInfo(pm2RiotWorkerAppName)
+      if (pm2?.online) return
+      const child = spawn('npm', ['run', 'riot:worker'], {
+        cwd: backendRoot,
+        detached: true,
+        stdio: 'ignore',
+        env: process.env,
+      })
+      child.unref()
+      console.log('[admin] Watchdog: worker inactive > 3 min, started npm run riot:worker')
+    } catch {
+      // ignore
+    }
+  }, WATCHDOG_INTERVAL_MS)
+}
+startWorkerWatchdog()
 
 export default router
 

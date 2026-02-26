@@ -92,13 +92,20 @@ function normalizeRole(teamPosition?: string, individualPosition?: string): stri
   return null
 }
 
+export type EnrichPlayersOptions = {
+  shouldStop?: () => Promise<boolean>
+}
+
 /**
  * Enrich players missing summoner_name (Riot ID via Account-V1 by-puuid).
  * Run with a higher limit to fill summoner_name for many players (e.g. 100).
  */
 const ENRICH_LOG = '[enrich]'
 
-export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> {
+export async function enrichPlayers(
+  limit = 150,
+  options?: EnrichPlayersOptions
+): Promise<{ enriched: number }> {
   if (!isDatabaseConfigured()) {
     console.warn(`${ENRICH_LOG} Skipped: database not configured`)
     return { enriched: 0 }
@@ -114,6 +121,7 @@ export async function enrichPlayers(limit = 150): Promise<{ enriched: number }> 
 
   let enriched = 0
   for (const p of players) {
+    if (options?.shouldStop && (await options.shouldStop())) break
     const continent = regionToContinent(p.region)
     const accountResult = await riotApi.getAccountByPuuid(continent, p.puuid)
     if (accountResult.isErr()) {
@@ -204,12 +212,20 @@ export async function backfillRanksForNewMatch(
   return { updated }
 }
 
+export type BackfillRanksOptions = {
+  /** When provided, checked before each puuid; if true, backfill stops gracefully. */
+  shouldStop?: () => Promise<boolean>
+}
+
 /**
  * Backfill participant rank (rankTier, rankDivision, rankLp) for participants missing it.
  * Uses Riot League API by puuid (Solo/Duo). One API call per distinct puuid; updates all participant rows for that puuid.
  * Used for legacy backlog; new participants get rank via backfillRanksForNewMatch right after match insert.
  */
-export async function backfillParticipantRanks(limit = 200): Promise<{ updated: number; errors: number }> {
+export async function backfillParticipantRanks(
+  limit = 200,
+  options?: BackfillRanksOptions
+): Promise<{ updated: number; errors: number }> {
   if (!isDatabaseConfigured()) {
     console.warn(`${BACKFILL_RANK_LOG} Skipped: database not configured`)
     return { updated: 0, errors: 0 }
@@ -234,6 +250,7 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
   let updated = 0
   let errors = 0
   for (const puuid of puuids) {
+    if (options?.shouldStop && (await options.shouldStop())) break
     const platform = puuidToRegion.get(puuid) ?? 'euw1'
     const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
     if (leagueResult.isErr()) {
@@ -261,11 +278,18 @@ export async function backfillParticipantRanks(limit = 200): Promise<{ updated: 
   return { updated, errors }
 }
 
+export type BackfillRolesOptions = {
+  shouldStop?: () => Promise<boolean>
+}
+
 /**
  * Backfill participant role for rows where role is null, by refetching recent matches from Riot.
  * limitMatches = max number of matches to inspect in one run.
  */
-export async function backfillParticipantRoles(limitMatches = 50): Promise<{ updated: number; errors: number; matches: number }> {
+export async function backfillParticipantRoles(
+  limitMatches = 50,
+  options?: BackfillRolesOptions
+): Promise<{ updated: number; errors: number; matches: number }> {
   if (!isDatabaseConfigured()) {
     console.warn('[backfill-role] Skipped: database not configured')
     return { updated: 0, errors: 0, matches: 0 }
@@ -288,6 +312,7 @@ export async function backfillParticipantRoles(limitMatches = 50): Promise<{ upd
   let updated = 0
   let errors = 0
   for (const row of rows) {
+    if (options?.shouldStop && (await options.shouldStop())) break
     const matchRes = await riotApi.getMatch(row.matchId)
     if (matchRes.isErr()) {
       errors++

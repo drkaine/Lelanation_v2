@@ -17,7 +17,13 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { discoverPlayersFromLeagueExp } from '../services/RiotLeagueExpDiscoveryService.js'
+import {
+  writeProgress,
+  isStopRequested,
+  clearProgressAndStopRequest,
+} from '../utils/ProcessProgressWriter.js'
 
+const SCRIPT_ID = 'riot:discover-league-exp'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
@@ -34,21 +40,60 @@ async function main(): Promise<void> {
   const division = process.env.RIOT_LEAGUE_EXP_DIVISION ?? 'I'
   const pages = Number(process.env.RIOT_LEAGUE_EXP_PAGES ?? '3')
 
+  await writeProgress(SCRIPT_ID, {
+    pid: process.pid,
+    phase: 'starting',
+    metrics: {},
+  })
+  if (await isStopRequested(SCRIPT_ID)) {
+    await clearProgressAndStopRequest(SCRIPT_ID)
+    return
+  }
+
   riotApi.setKeyPreference(false)
   try {
-    const result = await discoverPlayersFromLeagueExp({ platform, queue, tier, division, pages })
+    await writeProgress(SCRIPT_ID, {
+      phase: 'discover-pages',
+      metrics: { requestLimit: pages },
+    })
+    const result = await discoverPlayersFromLeagueExp(
+      { platform, queue, tier, division, pages },
+      { shouldStop: () => isStopRequested(SCRIPT_ID) }
+    )
+    await writeProgress(SCRIPT_ID, {
+      phase: 'done',
+      metrics: {
+        newPlayersAdded: result.playersUpserted,
+        entriesFetched: result.entriesFetched,
+        errors: result.errors,
+      },
+    })
     console.log('[riot:discover-league-exp] result:', result)
   } catch (err) {
     if (isRiotAuthError(err)) {
       console.warn('[riot:discover-league-exp] Key from .env rejected (401/403), retrying with Admin key…')
       riotApi.invalidateKeyCache()
       riotApi.setKeyPreference(true)
-      const result = await discoverPlayersFromLeagueExp({ platform, queue, tier, division, pages })
+      const result = await discoverPlayersFromLeagueExp(
+        { platform, queue, tier, division, pages },
+        { shouldStop: () => isStopRequested(SCRIPT_ID) }
+      )
+      await writeProgress(SCRIPT_ID, {
+        phase: 'done',
+        metrics: {
+          newPlayersAdded: result.playersUpserted,
+          entriesFetched: result.entriesFetched,
+          errors: result.errors,
+        },
+      })
       console.log('[riot:discover-league-exp] result:', result)
+      await clearProgressAndStopRequest(SCRIPT_ID)
       return
     }
+    await clearProgressAndStopRequest(SCRIPT_ID)
     throw err
   }
+  await clearProgressAndStopRequest(SCRIPT_ID)
 }
 
 main()

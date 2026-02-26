@@ -12,6 +12,7 @@
     "riot:worker": "tsx src/scripts/runRiotMatchCollectWorker.ts",
     "riot:backfill-ranks": "tsx src/scripts/runBackfillParticipantRanks.ts",
     "riot:backfill-roles": "tsx src/scripts/runBackfillParticipantRoles.ts",
+    "riot:backfill-until-done": "tsx src/scripts/runBackfillUntilDone.ts",
     "riot:refresh-match-ranks": "tsx src/scripts/runRefreshMatchRanks.ts",
     "riot:cleanup-matches": "tsx src/scripts/runCleanupMatches.ts",
     "riot:discover-players": "tsx src/scripts/runRiotPlayerDiscovery.ts",

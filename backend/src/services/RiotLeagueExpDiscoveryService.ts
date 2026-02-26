@@ -48,8 +48,13 @@ function isRiotAuthError(err: unknown): boolean {
   return axios.isAxiosError(cause) && (cause.response?.status === 401 || cause.response?.status === 403)
 }
 
+export type LeagueExpDiscoveryRunOptions = {
+  shouldStop?: () => Promise<boolean>
+}
+
 export async function discoverPlayersFromLeagueExp(
-  rawOptions: Partial<LeagueExpDiscoveryOptions>
+  rawOptions: Partial<LeagueExpDiscoveryOptions>,
+  runOptions?: LeagueExpDiscoveryRunOptions
 ): Promise<LeagueExpDiscoveryResult> {
   if (!isDatabaseConfigured()) throw new Error('DATABASE_URL not configured')
   const options = normalizeOptions(rawOptions)
@@ -63,6 +68,7 @@ export async function discoverPlayersFromLeagueExp(
   )
 
   for (let page = 1; page <= options.pages; page++) {
+    if (runOptions?.shouldStop && (await runOptions.shouldStop())) break
     const entriesRes = await riotApi.getLeagueExpEntries(
       options.platform,
       options.queue,
@@ -93,6 +99,7 @@ export async function discoverPlayersFromLeagueExp(
 
   let playersUpserted = 0
   for (const [summonerId, fallbackName] of bySummonerId.entries()) {
+    if (runOptions?.shouldStop && (await runOptions.shouldStop())) break
     const summonerRes = await riotApi.getSummonerById(options.platform, summonerId)
     if (summonerRes.isErr()) {
       errors++

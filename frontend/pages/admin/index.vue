@@ -260,6 +260,14 @@
               >
                 {{ t('admin.data.crons.allLogs') }}
               </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                :disabled="syncDataBusy"
+                @click.stop="triggerSyncData"
+              >
+                {{ syncDataBusy ? '…' : 'Sync données (DDragon + Community + YouTube)' }}
+              </button>
             </div>
             <span class="text-text/60">{{ dataSectionCrons ? '▼' : '▶' }}</span>
           </button>
@@ -349,176 +357,7 @@
           </div>
         </div>
 
-        <!-- Section 3: Scripts et Worker -->
-        <div class="rounded-lg border border-primary/30 bg-surface/30">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between p-4 text-left"
-            @click="dataSectionScripts = !dataSectionScripts"
-          >
-            <div class="flex items-center gap-3">
-              <h2 class="text-lg font-semibold text-text">{{ t('admin.data.scripts.title') }}</h2>
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20"
-                @click.stop="openAllLogs"
-              >
-                {{ t('admin.riotMatch.scripts.allLogs') }}
-              </button>
-            </div>
-            <span class="text-text/60">{{ dataSectionScripts ? '▼' : '▶' }}</span>
-          </button>
-          <div v-show="dataSectionScripts" class="border-t border-primary/20 px-4 pb-4 pt-2">
-            <p v-if="cronLoading" class="text-text/70">Chargement…</p>
-            <template v-else>
-              <div class="mb-4">
-                <div class="mb-1 flex flex-wrap items-center gap-3">
-                  <span class="text-sm font-medium text-text"
-                    >{{ t('admin.riotMatch.pollerStatus') }} :</span
-                  >
-                  <span
-                    :class="
-                      cron?.riotWorker?.active
-                        ? 'bg-green-600/20 text-green-700 dark:text-green-400'
-                        : 'bg-text/10 text-text/70'
-                    "
-                    class="rounded px-2 py-0.5 text-sm font-medium"
-                  >
-                    {{
-                      cron?.riotWorker?.active
-                        ? t('admin.riotMatch.pollerActive')
-                        : t('admin.riotMatch.pollerStopped')
-                    }}
-                  </span>
-                  <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
-                    ({{ t('admin.riotMatch.pollerLastBeat') }} :
-                    {{ formatRiotDate(cron.riotWorker.lastBeat) }})
-                  </span>
-                </div>
-                <p class="text-xs text-text/60">{{ t('admin.riotMatch.pollerHint') }}</p>
-                <p class="mt-1 text-xs text-text/50">{{ t('admin.riotMatch.workerStartHint') }}</p>
-              </div>
-              <div class="mt-4 space-y-3">
-                <div
-                  v-for="card in riotScriptCards"
-                  :key="card.id"
-                  class="rounded border border-primary/20 bg-background/40 p-3"
-                >
-                  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p class="text-sm font-semibold text-text">{{ card.label }}</p>
-                      <p class="text-xs text-text/60">{{ card.description }}</p>
-                    </div>
-                    <span
-                      :class="riotStatusClass(riotScriptsStatus[card.id]?.status)"
-                      class="rounded px-2 py-0.5 text-xs font-medium"
-                    >
-                      {{ riotStatusLabel(riotScriptsStatus[card.id]?.status) }}
-                    </span>
-                  </div>
-
-                  <div
-                    v-if="card.fields.length && riotScriptFields[card.id]"
-                    class="mb-3 grid gap-2 md:grid-cols-3"
-                  >
-                    <div v-for="field in card.fields" :key="`${card.id}-${field.key}`">
-                      <label class="mb-1 block text-xs font-medium text-text/70">{{
-                        field.label
-                      }}</label>
-                      <select
-                        v-if="field.type === 'select'"
-                        v-model="riotScriptFields[card.id]![field.key]"
-                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                      >
-                        <option
-                          v-for="opt in field.options ?? []"
-                          :key="`${card.id}-${field.key}-${opt.value}`"
-                          :value="opt.value"
-                        >
-                          {{ opt.label }}
-                        </option>
-                      </select>
-                      <input
-                        v-else
-                        v-model="riotScriptFields[card.id]![field.key]"
-                        :type="field.type"
-                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                        :placeholder="field.placeholder"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                      :disabled="riotScriptBusy[card.id] || isScriptActive(card.id)"
-                      @click="runRiotScript(card)"
-                    >
-                      {{ riotScriptBusy[card.id] ? '…' : t('admin.riotMatch.scripts.run') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80"
-                      @click="openRiotScriptLogs(card.id, card.label)"
-                    >
-                      {{ t('admin.riotMatch.scripts.logs') }}
-                    </button>
-                    <button
-                      v-if="isScriptActive(card.id)"
-                      type="button"
-                      class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
-                      :disabled="riotScriptStopBusy[card.id]"
-                      @click="stopRiotScript(card)"
-                    >
-                      {{ riotScriptStopBusy[card.id] ? '…' : t('admin.riotMatch.scripts.stop') }}
-                    </button>
-                  </div>
-                  <p
-                    v-if="riotScriptsStatus[card.id]?.lastStartAt"
-                    class="mt-2 text-xs text-text/60"
-                  >
-                    Start: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastStartAt) }}
-                    <span v-if="riotScriptsStatus[card.id]?.lastEndAt">
-                      · Stop: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastEndAt) }}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              <div class="flex flex-wrap items-center gap-3">
-                <p
-                  v-if="
-                    riotCollectMessage ||
-                    riotStopMessage ||
-                    riotBackfillMessage ||
-                    riotLeagueExpMessage ||
-                    riotScriptMessage
-                  "
-                  :class="
-                    riotCollectError ||
-                    riotStopError ||
-                    riotBackfillError ||
-                    riotLeagueExpError ||
-                    riotScriptError
-                      ? 'text-error'
-                      : 'text-green-600'
-                  "
-                  class="mt-2 text-sm"
-                >
-                  {{
-                    riotCollectMessage ||
-                    riotStopMessage ||
-                    riotBackfillMessage ||
-                    riotLeagueExpMessage ||
-                    riotScriptMessage
-                  }}
-                </p>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Section 4: Seed players -->
+        <!-- Section 3: Seed players -->
         <div class="rounded-lg border border-primary/30 bg-surface/30">
           <button
             type="button"
@@ -704,6 +543,266 @@
                     </div>
                   </div>
                 </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Section 4: Scripts et Worker -->
+        <div class="rounded-lg border border-primary/30 bg-surface/30">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between p-4 text-left"
+            @click="dataSectionScripts = !dataSectionScripts"
+          >
+            <div class="flex items-center gap-3">
+              <h2 class="text-lg font-semibold text-text">{{ t('admin.data.scripts.title') }}</h2>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20"
+                @click.stop="() => openAllLogs()"
+              >
+                {{ t('admin.riotMatch.scripts.allLogs') }}
+              </button>
+            </div>
+            <span class="text-text/60">{{ dataSectionScripts ? '▼' : '▶' }}</span>
+          </button>
+          <div v-show="dataSectionScripts" class="border-t border-primary/20 px-4 pb-4 pt-2">
+            <p v-if="cronLoading" class="text-text/70">Chargement…</p>
+            <template v-else>
+              <div class="mb-4">
+                <div class="mb-1 flex flex-wrap items-center gap-3">
+                  <span class="text-sm font-medium text-text"
+                    >{{ t('admin.riotMatch.pollerStatus') }} :</span
+                  >
+                  <span
+                    :class="
+                      cron?.riotWorker?.active
+                        ? 'bg-green-600/20 text-green-700 dark:text-green-400'
+                        : 'bg-text/10 text-text/70'
+                    "
+                    class="rounded px-2 py-0.5 text-sm font-medium"
+                  >
+                    {{
+                      cron?.riotWorker?.active
+                        ? t('admin.riotMatch.pollerActive')
+                        : t('admin.riotMatch.pollerStopped')
+                    }}
+                  </span>
+                  <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
+                    ({{ t('admin.riotMatch.pollerLastBeat') }} :
+                    {{ formatRiotDate(cron.riotWorker.lastBeat) }})
+                  </span>
+                </div>
+                <p class="text-xs text-text/60">{{ t('admin.riotMatch.pollerHint') }}</p>
+                <p class="mt-1 text-xs text-text/50">{{ t('admin.riotMatch.workerStartHint') }}</p>
+              </div>
+              <div
+                v-if="riotDataStats || riotApiStats"
+                class="mb-4 flex flex-wrap gap-4 rounded border border-primary/20 bg-surface/20 px-3 py-2 text-sm"
+              >
+                <template v-if="riotDataStats">
+                  <span v-if="riotDataStats.participantsWithoutRank != null" class="text-text/80">
+                    Participants sans rang:
+                    <strong>{{ riotDataStats.participantsWithoutRank }}</strong>
+                  </span>
+                  <span v-if="riotDataStats.participantsWithoutRole != null" class="text-text/80">
+                    Participants sans rôle:
+                    <strong>{{ riotDataStats.participantsWithoutRole }}</strong>
+                  </span>
+                  <span v-if="riotDataStats.matchesWithoutRank != null" class="text-text/80">
+                    Matchs sans rang: <strong>{{ riotDataStats.matchesWithoutRank }}</strong>
+                  </span>
+                  <span
+                    v-if="riotDataStats.playersMissingSummonerName != null"
+                    class="text-text/80"
+                  >
+                    Joueurs sans summoner_name:
+                    <strong>{{ riotDataStats.playersMissingSummonerName }}</strong>
+                  </span>
+                </template>
+                <template v-if="riotApiStats">
+                  <span class="text-text/80">
+                    Requêtes Riot (1h): <strong>{{ riotApiStats.requestsLastHour ?? 0 }}</strong> /
+                    {{ riotApiStats.limitPerTwoMin ?? 100 }} (2 min)
+                  </span>
+                  <span
+                    v-if="(riotApiStats.rateLimitExceededCount ?? 0) > 0"
+                    class="text-amber-600 dark:text-amber-400"
+                  >
+                    429: {{ riotApiStats.rateLimitExceededCount }}
+                  </span>
+                </template>
+              </div>
+              <div class="mt-4 space-y-3">
+                <div
+                  v-for="card in riotScriptCards"
+                  :key="card.id"
+                  class="rounded border border-primary/20 bg-background/40 p-3"
+                >
+                  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p class="text-sm font-semibold text-text">{{ card.label }}</p>
+                      <p class="text-xs text-text/60">{{ card.description }}</p>
+                    </div>
+                    <span
+                      :class="riotStatusClass(riotScriptsStatus[card.id]?.status)"
+                      class="rounded px-2 py-0.5 text-xs font-medium"
+                    >
+                      {{ riotStatusLabel(riotScriptsStatus[card.id]?.status) }}
+                    </span>
+                  </div>
+
+                  <div
+                    v-if="riotScriptsStatus[card.id]?.progress"
+                    class="mb-3 rounded border border-primary/15 bg-surface/20 px-3 py-2 text-xs"
+                  >
+                    <p class="mb-1 font-medium text-text/80">
+                      {{ riotScriptsStatus[card.id].progress.phase }}
+                      <span
+                        v-if="riotScriptsStatus[card.id].progress.lastUpdatedAt"
+                        class="text-text/50"
+                      >
+                        · {{ formatRiotDate(riotScriptsStatus[card.id].progress.lastUpdatedAt) }}
+                      </span>
+                    </p>
+                    <div
+                      v-if="Object.keys(riotScriptsStatus[card.id].progress.metrics || {}).length"
+                      class="flex flex-wrap gap-x-4 gap-y-1 text-text/70"
+                    >
+                      <span
+                        v-if="riotScriptsStatus[card.id].progress.metrics.matchesCollected != null"
+                      >
+                        Matchs: {{ riotScriptsStatus[card.id].progress.metrics.matchesCollected }}
+                      </span>
+                      <span
+                        v-if="riotScriptsStatus[card.id].progress.metrics.newPlayersAdded != null"
+                      >
+                        Nouveaux joueurs:
+                        {{ riotScriptsStatus[card.id].progress.metrics.newPlayersAdded }}
+                      </span>
+                      <span v-if="riotScriptsStatus[card.id].progress.metrics.requestsUsed != null">
+                        Requêtes: {{ riotScriptsStatus[card.id].progress.metrics.requestsUsed }}
+                        <template
+                          v-if="riotScriptsStatus[card.id].progress.metrics.requestLimit != null"
+                        >
+                          / {{ riotScriptsStatus[card.id].progress.metrics.requestLimit }}
+                        </template>
+                      </span>
+                      <span v-if="riotScriptsStatus[card.id].progress.metrics.errors != null">
+                        Erreurs: {{ riotScriptsStatus[card.id].progress.metrics.errors }}
+                      </span>
+                      <span v-if="riotScriptsStatus[card.id].progress.metrics.updated != null">
+                        Mis à jour: {{ riotScriptsStatus[card.id].progress.metrics.updated }}
+                      </span>
+                      <span
+                        v-if="
+                          riotScriptsStatus[card.id].progress.metrics.participantsMissingData !=
+                          null
+                        "
+                      >
+                        Données manquantes:
+                        {{ riotScriptsStatus[card.id].progress.metrics.participantsMissingData }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="card.fields.length && riotScriptFields[card.id]"
+                    class="mb-3 grid gap-2 md:grid-cols-3"
+                  >
+                    <div v-for="field in card.fields" :key="`${card.id}-${field.key}`">
+                      <label class="mb-1 block text-xs font-medium text-text/70">{{
+                        field.label
+                      }}</label>
+                      <select
+                        v-if="field.type === 'select'"
+                        v-model="riotScriptFields[card.id]![field.key]"
+                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                      >
+                        <option
+                          v-for="opt in field.options ?? []"
+                          :key="`${card.id}-${field.key}-${opt.value}`"
+                          :value="opt.value"
+                        >
+                          {{ opt.label }}
+                        </option>
+                      </select>
+                      <input
+                        v-else
+                        v-model="riotScriptFields[card.id]![field.key]"
+                        :type="field.type"
+                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                        :placeholder="field.placeholder"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      :disabled="riotScriptBusy[card.id] || isScriptActive(card.id)"
+                      @click="runRiotScript(card)"
+                    >
+                      {{ riotScriptBusy[card.id] ? '…' : t('admin.riotMatch.scripts.run') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80"
+                      @click="openRiotScriptLogs(card.id, card.label)"
+                    >
+                      {{ t('admin.riotMatch.scripts.logs') }}
+                    </button>
+                    <button
+                      v-if="isScriptActive(card.id)"
+                      type="button"
+                      class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                      :disabled="riotScriptStopBusy[card.id]"
+                      @click="stopRiotScript(card)"
+                    >
+                      {{ riotScriptStopBusy[card.id] ? '…' : t('admin.riotMatch.scripts.stop') }}
+                    </button>
+                  </div>
+                  <p
+                    v-if="riotScriptsStatus[card.id]?.lastStartAt"
+                    class="mt-2 text-xs text-text/60"
+                  >
+                    Start: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastStartAt) }}
+                    <span v-if="riotScriptsStatus[card.id]?.lastEndAt">
+                      · Stop: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastEndAt) }}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <p
+                  v-if="
+                    riotCollectMessage ||
+                    riotStopMessage ||
+                    riotBackfillMessage ||
+                    riotLeagueExpMessage ||
+                    riotScriptMessage
+                  "
+                  :class="
+                    riotCollectError ||
+                    riotStopError ||
+                    riotBackfillError ||
+                    riotLeagueExpError ||
+                    riotScriptError
+                      ? 'text-error'
+                      : 'text-green-600'
+                  "
+                  class="mt-2 text-sm"
+                >
+                  {{
+                    riotCollectMessage ||
+                    riotStopMessage ||
+                    riotBackfillMessage ||
+                    riotLeagueExpMessage ||
+                    riotScriptMessage
+                  }}
+                </p>
               </div>
             </template>
           </div>
@@ -1449,7 +1548,7 @@ type RiotScriptCard = {
   id: string
   label: string
   description: string
-  runMode: 'generic' | 'collect' | 'backfillRanks' | 'backfillRoles' | 'discoverLeagueExp'
+  runMode: 'generic' | 'collect' | 'backfillUntilDone' | 'discoverPlayers' | 'discoverLeagueExp'
   fields: RiotScriptField[]
 }
 
@@ -1469,22 +1568,11 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
     fields: [],
   },
   {
-    id: 'riot:backfill-ranks',
-    label: t('admin.riotMatch.scripts.backfillRanks'),
-    description: t('admin.riotMatch.scripts.descriptions.backfillRanks'),
-    runMode: 'backfillRanks',
-    fields: [
-      { key: 'limit', label: 'Limit', type: 'number', defaultValue: '200', placeholder: '200' },
-    ],
-  },
-  {
-    id: 'riot:backfill-roles',
-    label: t('admin.riotMatch.scripts.backfillRoles'),
-    description: t('admin.riotMatch.scripts.descriptions.backfillRoles'),
-    runMode: 'backfillRoles',
-    fields: [
-      { key: 'limit', label: 'Matches', type: 'number', defaultValue: '50', placeholder: '50' },
-    ],
+    id: 'riot:backfill-until-done',
+    label: t('admin.riotMatch.scripts.backfillUntilDone'),
+    description: t('admin.riotMatch.scripts.descriptions.backfillUntilDone'),
+    runMode: 'backfillUntilDone',
+    fields: [],
   },
   {
     id: 'riot:discover-league-exp',
@@ -1543,25 +1631,51 @@ const riotScriptCards = computed<RiotScriptCard[]>(() => [
     ],
   },
   {
-    id: 'riot:refresh-match-ranks',
-    label: t('admin.riotMatch.scripts.refreshMatchRanks'),
-    description: t('admin.riotMatch.scripts.descriptions.refreshMatchRanks'),
-    runMode: 'generic',
-    fields: [],
-  },
-  {
     id: 'riot:discover-players',
     label: t('admin.riotMatch.scripts.discoverPlayers'),
     description: t('admin.riotMatch.scripts.descriptions.discoverPlayers'),
-    runMode: 'generic',
-    fields: [],
-  },
-  {
-    id: 'riot:enrich',
-    label: t('admin.riotMatch.scripts.enrichPlayers'),
-    description: t('admin.riotMatch.scripts.descriptions.enrichPlayers'),
-    runMode: 'generic',
-    fields: [],
+    runMode: 'discoverPlayers',
+    fields: [
+      {
+        key: 'region',
+        label: t('admin.riotMatch.scripts.discoverPlayersRegion'),
+        type: 'select',
+        defaultValue: 'euw1',
+        options: [
+          { value: 'euw1', label: 'EUW' },
+          { value: 'eun1', label: 'EUNE' },
+          { value: 'tr1', label: 'TR' },
+          { value: 'ru', label: 'RU' },
+          { value: 'me1', label: 'ME' },
+          { value: 'na1', label: 'NA' },
+          { value: 'br1', label: 'BR' },
+          { value: 'la1', label: 'LA1' },
+          { value: 'la2', label: 'LA2' },
+          { value: 'oc1', label: 'OC1' },
+          { value: 'kr', label: 'KR' },
+          { value: 'jp1', label: 'JP' },
+          { value: 'ph2', label: 'PH' },
+          { value: 'sg2', label: 'SG' },
+          { value: 'th2', label: 'TH' },
+          { value: 'tw2', label: 'TW' },
+          { value: 'vn2', label: 'VN' },
+        ],
+      },
+      {
+        key: 'riotId',
+        label: t('admin.riotMatch.scripts.discoverPlayersRiotId'),
+        type: 'text',
+        defaultValue: '',
+        placeholder: 'GameName#TagLine',
+      },
+      {
+        key: 'replayCount',
+        label: t('admin.riotMatch.scripts.discoverPlayersReplayCount'),
+        type: 'number',
+        defaultValue: '100',
+        placeholder: '100',
+      },
+    ],
   },
 ])
 
@@ -1702,6 +1816,13 @@ const riotScriptFields = ref<Record<string, Record<string, string>>>({})
 const riotScriptBusy = ref<Record<string, boolean>>({})
 const riotScriptStopBusy = ref<Record<string, boolean>>({})
 const riotScriptsStatus = ref<Record<string, any>>({})
+const riotDataStats = ref<{
+  participantsWithoutRank?: number
+  participantsWithoutRole?: number
+  matchesWithoutRank?: number
+  lastNewPlayerAt?: string | null
+  playersMissingSummonerName?: number
+} | null>(null)
 const riotScriptLogsOpen = ref(false)
 const riotScriptLogsLoading = ref(false)
 const riotScriptLogsTitle = ref('')
@@ -1713,6 +1834,7 @@ const allLogsFilter = ref('all')
 const cronTriggering = ref<Record<string, boolean>>({})
 const cronTriggerMessage = ref('')
 const cronTriggerError = ref(false)
+const syncDataBusy = ref(false)
 const allLogsSort = ref<'asc' | 'desc'>('desc')
 const allLogsLines = ref(200)
 const allLogsList = ref<string[]>([])
@@ -2120,6 +2242,31 @@ function isScriptActive(scriptId: string) {
   return status === 'running' || status === 'started'
 }
 
+async function triggerSyncData() {
+  syncDataBusy.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/sync-data'), { method: 'POST' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (data?.success) {
+      cronTriggerError.value = false
+      cronTriggerMessage.value = data?.message ?? 'Sync lancé.'
+    } else {
+      cronTriggerError.value = true
+      cronTriggerMessage.value = data?.error ?? 'Erreur'
+    }
+  } catch {
+    cronTriggerError.value = true
+    cronTriggerMessage.value = 'Erreur réseau'
+  } finally {
+    syncDataBusy.value = false
+  }
+}
+
 async function loadRiotScriptsStatus() {
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-scripts-status'))
@@ -2133,6 +2280,8 @@ async function loadRiotScriptsStatus() {
     for (const row of data?.scripts ?? []) next[row.script] = row
     riotScriptsStatus.value = next
     riotScriptsStatusCrons.value = Array.isArray(data?.crons) ? data.crons : []
+    riotDataStats.value = data?.dataStats ?? null
+    riotApiStats.value = data?.riotApiStats ?? null
   } catch {
     // Keep page functional even if status endpoint fails.
   }
@@ -2250,15 +2399,19 @@ async function runRiotScript(card: RiotScriptCard) {
     const f = riotScriptFields.value[card.id] ?? {}
     if (card.runMode === 'collect') {
       res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
-    } else if (card.runMode === 'backfillRanks') {
-      const limit = encodeURIComponent(f.limit || '200')
-      res = await fetchWithAuth(apiUrl(`/api/admin/riot-backfill-ranks?limit=${limit}`), {
+    } else if (card.runMode === 'backfillUntilDone') {
+      res = await fetchWithAuth(apiUrl('/api/admin/riot-backfill-until-done'), { method: 'POST' })
+    } else if (card.runMode === 'discoverPlayers') {
+      const region = (f.region ?? 'euw1').trim() || 'euw1'
+      const riotId = (f.riotId ?? '').trim()
+      const replayCount = Math.min(
+        500,
+        Math.max(1, parseInt(String(f.replayCount || '100'), 10) || 100)
+      )
+      res = await fetchWithAuth(apiUrl('/api/admin/riot-discover-players'), {
         method: 'POST',
-      })
-    } else if (card.runMode === 'backfillRoles') {
-      const limit = encodeURIComponent(f.limit || '50')
-      res = await fetchWithAuth(apiUrl(`/api/admin/riot-backfill-roles?limit=${limit}`), {
-        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region, riotId: riotId || undefined, replayCount }),
       })
     } else if (card.runMode === 'discoverLeagueExp') {
       res = await fetchWithAuth(apiUrl('/api/admin/riot-discover-league-exp'), {

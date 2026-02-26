@@ -582,7 +582,7 @@ export class RiotApiService {
   }
 
   /**
-   * Match v5: match IDs by puuid. Region = europe (covers EUW+EUNE). queue=420 only.
+   * Match v5: match IDs by puuid. Continent = europe | americas | asia (default europe). queue=420 only.
    * startTime/endTime: epoch seconds; only match IDs in (startTime, endTime] are returned (avoids duplicates across runs).
    */
   async getMatchIdsByPuuid(
@@ -593,11 +593,15 @@ export class RiotApiService {
       queue?: number | null
       startTime?: number
       endTime?: number
+      continent?: 'europe' | 'americas' | 'asia'
     } = {}
   ): Promise<Result<string[], AppError>> {
     await rateLimit()
     const key = await this.ensureKey()
-    const client = createClient(REGIONAL_BASE, key)
+    const base = options.continent && CONTINENT_BASE[options.continent]
+      ? CONTINENT_BASE[options.continent]
+      : REGIONAL_BASE
+    const client = createClient(base, key)
     const count = options.count ?? 20
     const start = options.start ?? 0
     const queue = options.queue === null ? null : (options.queue ?? QUEUE_ID_420)

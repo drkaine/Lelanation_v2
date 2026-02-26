@@ -15,52 +15,82 @@ import axios from 'axios'
 import { config } from 'dotenv'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import {
+  writeProgress,
+  isStopRequested,
+  clearProgressAndStopRequest,
+} from '../utils/ProcessProgressWriter.js'
 
+const SCRIPT_ID = 'riot:discover-players'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
 const DAY_SEC = 24 * 60 * 60
+
+/** Platform (e.g. euw1, na1) → continent for Match v5 API */
+function platformToContinent(region: string): 'europe' | 'americas' | 'asia' {
+  const r = region?.toLowerCase() ?? ''
+  if (['na1', 'br1', 'la1', 'la2', 'oc1'].includes(r)) return 'americas'
+  if (['kr', 'jp1', 'ph2', 'sg2', 'th2', 'tw2', 'vn2'].includes(r)) return 'asia'
+  return 'europe'
+}
 
 function isRiotAuthError(err: unknown): boolean {
   const cause = err && typeof err === 'object' && 'cause' in err ? (err as { cause: unknown }).cause : err
   return axios.isAxiosError(cause) && (cause.response?.status === 401 || cause.response?.status === 403)
 }
 
-async function runDiscovery(riotApi: ReturnType<typeof import('../services/RiotApiService.js').getRiotApiService>): Promise<void> {
+type DiscoveryRunOptions = { shouldStop?: () => Promise<boolean>; onProgress?: (metrics: Record<string, number>) => Promise<void> }
+
+async function runDiscovery(
+  riotApi: ReturnType<typeof import('../services/RiotApiService.js').getRiotApiService>,
+  options?: DiscoveryRunOptions
+): Promise<{ totalPlayersUpserted: number; matchIdsFetched: number; matchIdsSkipped: number; errors: number }> {
   const { prisma, isDatabaseConfigured } = await import('../db.js')
   const { hasMatch } = await import('../services/MatchCollectService.js')
 
   if (!isDatabaseConfigured()) {
     console.warn('[riot:discover-players] Skipped: DATABASE_URL not set')
-    return
+    return { totalPlayersUpserted: 0, matchIdsFetched: 0, matchIdsSkipped: 0, errors: 0 }
   }
 
   const daysBack = Math.max(1, parseInt(process.env.RIOT_PLAYER_DISCOVERY_DAYS_BACK ?? '90', 10) || 90)
   const endDaysAgo = Math.max(0, parseInt(process.env.RIOT_PLAYER_DISCOVERY_END_DAYS_AGO ?? '1', 10) || 1)
-  const matchesPerPlayer = Math.min(100, Math.max(20, parseInt(process.env.RIOT_PLAYER_DISCOVERY_MATCHES_PER_PLAYER ?? '100', 10) || 100))
+  const matchesPerPlayer = Math.min(500, Math.max(1, parseInt(process.env.RIOT_PLAYER_DISCOVERY_MATCHES_PER_PLAYER ?? '100', 10) || 100))
   const maxSeeds = Math.max(10, parseInt(process.env.RIOT_PLAYER_DISCOVERY_MAX_SEEDS ?? '50', 10) || 50)
+
+  const singlePuuid = process.env.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID?.trim()
+  const singleRegion = process.env.RIOT_PLAYER_DISCOVERY_SINGLE_REGION?.trim()
 
   const nowSec = Math.floor(Date.now() / 1000)
   const endTime = nowSec - endDaysAgo * DAY_SEC
   const startTime = nowSec - daysBack * DAY_SEC
 
-  const startedAt = Date.now()
-  console.log(
-    `[riot:discover-players] Window: ${daysBack}d back, end ${endDaysAgo}d ago | ${matchesPerPlayer} matches/player, ${maxSeeds} seed players`
-  )
-  console.log(
-    `[riot:discover-players] Time window: ${new Date(startTime * 1000).toISOString()} → ${new Date(endTime * 1000).toISOString()}`
-  )
+  let seedRows: { puuid: string; region: string }[]
+  if (singlePuuid && singleRegion) {
+    seedRows = [{ puuid: singlePuuid, region: singleRegion }]
+    console.log(`[riot:discover-players] Single seed from admin: puuid=${singlePuuid.slice(0, 8)}… region=${singleRegion} matches=${matchesPerPlayer}`)
+  } else {
+    seedRows = await prisma.$queryRaw<{ puuid: string; region: string }[]>`
+      SELECT puuid, region FROM players
+      ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
+      LIMIT ${maxSeeds}
+    `
+  }
 
-  const seedRows = await prisma.$queryRaw<{ puuid: string; region: string }[]>`
-    SELECT puuid, region FROM players
-    ORDER BY (last_seen IS NULL) DESC, last_seen ASC NULLS LAST
-    LIMIT ${maxSeeds}
-  `
+  const startedAt = Date.now()
+  if (!singlePuuid) {
+    console.log(
+      `[riot:discover-players] Window: ${daysBack}d back, end ${endDaysAgo}d ago | ${matchesPerPlayer} matches/player, ${maxSeeds} seed players`
+    )
+    console.log(
+      `[riot:discover-players] Time window: ${new Date(startTime * 1000).toISOString()} → ${new Date(endTime * 1000).toISOString()}`
+    )
+  }
 
   if (seedRows.length === 0) {
     console.warn('[riot:discover-players] No players in DB. Add seed players (Admin or League-v4) first.')
-    return
+    return { totalPlayersUpserted: 0, matchIdsFetched: 0, matchIdsSkipped: 0, errors: 0 }
   }
 
   console.log(`[riot:discover-players] Loaded ${seedRows.length} seed players. Starting…`)
@@ -72,12 +102,21 @@ async function runDiscovery(riotApi: ReturnType<typeof import('../services/RiotA
   const totalSeeds = seedRows.length
 
   for (let seedIndex = 0; seedIndex < seedRows.length; seedIndex++) {
+    if (options?.shouldStop && (await options.shouldStop())) break
+    if (options?.onProgress) await options.onProgress({
+      newPlayersAdded: totalPlayersUpserted,
+      matchesCollected: matchIdsFetched,
+      matchesFromDb: matchIdsSkipped,
+      errors,
+    })
     const row = seedRows[seedIndex]
+    const continent = platformToContinent(row.region)
     const matchIdsResult = await riotApi.getMatchIdsByPuuid(row.puuid, {
       count: matchesPerPlayer,
       queue: 420,
       startTime,
       endTime,
+      continent,
     })
 
     if (matchIdsResult.isErr()) {
@@ -165,24 +204,67 @@ async function runDiscovery(riotApi: ReturnType<typeof import('../services/RiotA
   console.log(
     `[riot:discover-players] Done in ${durationSec}s: ${totalPlayersUpserted} player upserts, ${matchIdsFetched} matches from API, ${matchIdsSkipped} from DB, ${errors} errors`
   )
+  return {
+    totalPlayersUpserted,
+    matchIdsFetched,
+    matchIdsSkipped,
+    errors,
+  }
 }
 
 async function main(): Promise<void> {
+  await writeProgress(SCRIPT_ID, {
+    pid: process.pid,
+    phase: 'starting',
+    metrics: {},
+  })
+  if (await isStopRequested(SCRIPT_ID)) {
+    await clearProgressAndStopRequest(SCRIPT_ID)
+    return
+  }
+
   const { getRiotApiService } = await import('../services/RiotApiService.js')
   const riotApi = getRiotApiService()
   riotApi.setKeyPreference(false)
 
+  const progressAndStop = {
+    shouldStop: () => isStopRequested(SCRIPT_ID),
+    onProgress: (metrics: Record<string, number>) =>
+      writeProgress(SCRIPT_ID, { phase: 'discover-players', metrics }),
+  }
+
   try {
-    await runDiscovery(riotApi)
+    await writeProgress(SCRIPT_ID, { phase: 'discover-players' })
+    const result = await runDiscovery(riotApi, progressAndStop)
+    await writeProgress(SCRIPT_ID, {
+      phase: 'done',
+      metrics: {
+        newPlayersAdded: result.totalPlayersUpserted,
+        matchesCollected: result.matchIdsFetched,
+        matchesFromDb: result.matchIdsSkipped,
+        errors: result.errors,
+      },
+    })
   } catch (err) {
     if (isRiotAuthError(err)) {
       console.warn('[riot:discover-players] Key from .env rejected (401/403), retrying with Admin key…')
       riotApi.invalidateKeyCache()
       riotApi.setKeyPreference(true)
-      await runDiscovery(riotApi)
+      const result = await runDiscovery(riotApi, progressAndStop)
+      await writeProgress(SCRIPT_ID, {
+        phase: 'done',
+        metrics: {
+          newPlayersAdded: result.totalPlayersUpserted,
+          matchesCollected: result.matchIdsFetched,
+          matchesFromDb: result.matchIdsSkipped,
+          errors: result.errors,
+        },
+      })
     } else {
       throw err
     }
+  } finally {
+    await clearProgressAndStopRequest(SCRIPT_ID)
   }
 }
 

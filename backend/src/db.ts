@@ -8,12 +8,18 @@ import { PrismaPg } from '@prisma/adapter-pg'
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined }
 
+/** Max connections per process. Default 5 so backend + worker + child scripts stay under PostgreSQL max_connections. Override with PRISMA_POOL_MAX. */
+const PRISMA_POOL_MAX = Math.max(1, Math.min(20, parseInt(process.env.PRISMA_POOL_MAX ?? '5', 10) || 5))
+
 function createPrisma(): PrismaClient {
   const url = process.env.DATABASE_URL?.trim()
   if (!url) {
     throw new Error('DATABASE_URL is not set. Set it in .env to use stats and match collection.')
   }
-  const adapter = new PrismaPg({ connectionString: url })
+  const adapter = new PrismaPg({
+    connectionString: url,
+    max: PRISMA_POOL_MAX,
+  })
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
