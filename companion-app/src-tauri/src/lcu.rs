@@ -13,14 +13,28 @@ use std::path::PathBuf;
 fn lockfile_candidates() -> Vec<PathBuf> {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "".into());
     let mut candidates = Vec::new();
-    // 1. League of Legends Config - LCU lockfile (when at LoL home screen)
+    // 1. League of Legends Config (AppData)
     let mut lol = PathBuf::from(&local_app_data);
     lol.push("Riot Games");
     lol.push("League of Legends");
     lol.push("Config");
     lol.push("lockfile");
     candidates.push(lol);
-    // 2. Riot Client Config - used when Riot Client hosts the League UI
+    // 2. Installation directory (default C:\Riot Games\League of Legends)
+    for drive in ["C:", "D:", "E:"] {
+        let mut root = PathBuf::from(drive);
+        root.push("Riot Games");
+        root.push("League of Legends");
+        root.push("lockfile");
+        candidates.push(root);
+        let mut config = PathBuf::from(drive);
+        config.push("Riot Games");
+        config.push("League of Legends");
+        config.push("Config");
+        config.push("lockfile");
+        candidates.push(config);
+    }
+    // 3. Riot Client last (we reject it, but list for debug)
     let mut riot = PathBuf::from(&local_app_data);
     riot.push("Riot Games");
     riot.push("Riot Client");
@@ -65,7 +79,7 @@ fn parse_lockfile_contents(contents: &str) -> Result<LockfileData, String> {
     }
     // Only accept League Client lockfile - Riot Client has different APIs (no /lol-summoner etc.)
     let process = parts[0].to_lowercase();
-    if process.contains("riotclient") && !process.contains("league") {
+    if (process.contains("riot") || process.contains("riotclient")) && !process.contains("league") {
         return Err("Riot Client lockfile (not League Client)".into());
     }
     let port: u16 = parts[2].parse().map_err(|_| "Invalid port in lockfile")?;
@@ -75,28 +89,7 @@ fn parse_lockfile_contents(contents: &str) -> Result<LockfileData, String> {
     })
 }
 
-#[cfg(target_os = "windows")]
-fn read_from_process() -> Option<LockfileData> {
-    use std::process::Command;
-    // Get LeagueClientUx.exe command line (contains --app-port and --remoting-auth-token)
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-CimInstance Win32_Process -Filter \"Name='LeagueClientUx.exe'\" | Select-Object -ExpandProperty CommandLine",
-        ])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let line = stdout.lines().next()?.trim();
-    if line.is_empty() {
-        return None;
-    }
-    // Parse --app-port=12345 and --remoting-auth-token=xxxx
+fn parse_process_commandline(line: &str) -> Option<LockfileData> {
     let port = line
         .split_whitespace()
         .find(|s| s.starts_with("--app-port="))?
@@ -109,6 +102,56 @@ fn read_from_process() -> Option<LockfileData> {
         .strip_prefix("--remoting-auth-token=")?
         .to_string();
     Some(LockfileData { port, password })
+}
+
+#[cfg(target_os = "windows")]
+fn read_from_process() -> Option<LockfileData> {
+    use std::process::Command;
+    let processes = ["LeagueClientUx.exe", "LeagueClient.exe"];
+    for proc_name in processes {
+        let filter = format!("Name='{}'", proc_name);
+        let cmd = format!(
+            "Get-CimInstance Win32_Process -Filter \"{}\" | Select-Object -ExpandProperty CommandLine",
+            filter
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &cmd])
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let line = line.trim();
+                if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
+                    if let Some(data) = parse_process_commandline(line) {
+                        return Some(data);
+                    }
+                }
+            }
+        }
+    }
+    // Fallback: WMIC
+    for proc_name in processes {
+        let output = Command::new("cmd")
+            .args([
+                "/C",
+                &format!("wmic process where name=\"{}\" get commandline 2>nul", proc_name),
+            ])
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines().skip(1) {
+                let line = line.trim();
+                if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
+                    if let Some(data) = parse_process_commandline(line) {
+                        return Some(data);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -138,9 +181,9 @@ pub fn debug_info() -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
         if let Some(data) = read_from_process() {
-            lines.push(format!("Process LeagueClientUx: port={} (use this)", data.port));
+            lines.push(format!("Process LeagueClient/Ux: port={} (use this)", data.port));
         } else {
-            lines.push("Process LeagueClientUx.exe: not found".into());
+            lines.push("Process LeagueClientUx.exe / LeagueClient.exe: not found".into());
         }
     }
     Ok(lines.join("\n"))

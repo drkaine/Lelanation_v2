@@ -2,14 +2,15 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { setConsent } from "../consent";
 import { getSettings, setSettings } from "../settings";
+import { apiBase } from "../config";
 
 const emit = defineEmits<{ (e: "accepted"): void }>();
 
 const locale = ref<"fr" | "en">("fr");
 const consentChecked = ref(false);
 
-// Image from web via cachedimg protocol (downloads once, stores in app cache)
-const avatarUrl = "cachedimg://localhost/static/lelariva-quality.png";
+// Image from web (browser caches it)
+const avatarUrl = `${apiBase}/images/lelariva-quality.png`;
 
 const t = computed(() => {
   const d = {
