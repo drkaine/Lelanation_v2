@@ -19,6 +19,7 @@ const builds = ref<Build[]>([]);
 const loading = ref(true);
 const activeTab = ref<"builds" | "mes-builds" | "favoris" | "settings">("builds");
 const lcuConnected = ref(false);
+const connectionTested = ref(false);
 const submitMessage = ref("");
 const submitError = ref(false);
 const favoriteIds = ref<string[]>([]);
@@ -32,6 +33,7 @@ const itemMap = ref<Record<string, Item>>({});
 const lastSubmittedMatchId = ref("");
 let autoSubmitTimer: ReturnType<typeof setInterval> | null = null;
 let buildsRefreshTimer: ReturnType<typeof setInterval> | null = null;
+let connectionCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 const searchQuery = ref("");
 const selectedRole = ref<Role | null>(null);
@@ -55,6 +57,7 @@ const latestVersion = ref("");
 const currentAppVersion = ref("0.3.0");
 const pendingUpdate = shallowRef<Update | null>(null);
 const updateInstalling = ref(false);
+const updateRestarting = ref(false);
 const updateProgress = ref(0);
 const updateError = ref("");
 
@@ -543,12 +546,26 @@ function saveLanguage(lang: string) {
   saveSetting("language", lang === "en" ? "en" : "fr");
 }
 
-async function checkLcu() {
+async function checkConnection(silent = false) {
   try {
-    const res = await invoke<{ ok: boolean }>("get_lcu_connection");
-    lcuConnected.value = res.ok;
+    await invoke<string>("lcu_request", {
+      method: "GET",
+      path: "/lol-summoner/v1/current-summoner",
+      body: null,
+    });
+    lcuConnected.value = true;
+    connectionTested.value = true;
+    if (!silent) {
+      clientTestMessage.value = t("settings.testConnectionSuccess");
+      clientTestError.value = false;
+    }
   } catch {
     lcuConnected.value = false;
+    connectionTested.value = true;
+    if (!silent) {
+      clientTestError.value = true;
+      clientTestMessage.value = t("settings.testConnectionFail");
+    }
   }
 }
 
@@ -557,21 +574,23 @@ async function testClientConnection() {
   clientTestError.value = false;
   clientTestLoading.value = true;
   try {
-    // Real LCU request to verify the client API responds (not just lockfile)
-    await invoke<string>("lcu_request", {
-      method: "GET",
-      path: "/lol-summoner/v1/current-summoner",
-      body: null,
-    });
-    lcuConnected.value = true;
-    clientTestMessage.value = t("settings.testConnectionSuccess");
-  } catch {
-    lcuConnected.value = false;
-    clientTestError.value = true;
-    clientTestMessage.value = t("settings.testConnectionFail");
+    await checkConnection(false);
   } finally {
     clientTestLoading.value = false;
   }
+}
+
+const CONNECTION_CHECK_INTERVAL_MS = 30 * 1000; // 30 s
+
+function startConnectionCheckLoop() {
+  if (connectionCheckTimer) return;
+  connectionCheckTimer = setInterval(() => checkConnection(true), CONNECTION_CHECK_INTERVAL_MS);
+}
+
+function stopConnectionCheckLoop() {
+  if (!connectionCheckTimer) return;
+  clearInterval(connectionCheckTimer);
+  connectionCheckTimer = null;
 }
 
 async function autoSubmitMatchIfAllowed() {
@@ -634,7 +653,6 @@ function stopBuildsRefreshLoop() {
 }
 
 async function checkForUpdates() {
-  if (!settings.value.autoUpdate) return;
   try {
     currentAppVersion.value = await getVersion().catch(() => currentAppVersion.value);
     const update = await check();
@@ -667,9 +685,12 @@ async function installUpdate() {
         }
       }
     });
+    updateProgress.value = 100;
+    updateRestarting.value = true;
     await relaunch();
   } catch (e) {
     updateInstalling.value = false;
+    updateRestarting.value = false;
     updateError.value = e instanceof Error ? e.message : String(e);
   }
 }
@@ -704,10 +725,11 @@ onMounted(async () => {
   loadItemCatalog();
   loadImportedBuilds();
   checkForUpdates();
+  checkConnection(true);
+  startConnectionCheckLoop();
   await loadChampionCatalog();
   loadBuilds();
   refreshFavorites();
-  checkLcu();
   autoSubmitMatchIfAllowed();
   startAutoSubmitLoop();
   startBuildsRefreshLoop();
@@ -716,6 +738,7 @@ onMounted(async () => {
 onUnmounted(() => {
   stopAutoSubmitLoop();
   stopBuildsRefreshLoop();
+  stopConnectionCheckLoop();
 });
 
 watch(
@@ -763,13 +786,14 @@ watch(
         <h1 class="title">Lelanation Companion</h1>
         <p class="subtitle">{{ t('subtitle') }}</p>
       </div>
-      <span class="status-pill" :class="{ on: lcuConnected, off: !lcuConnected }">
-        {{ lcuConnected ? t('status.connected') : t('status.disconnected') }}
+      <span class="status-pill" :class="{ on: lcuConnected && connectionTested, off: connectionTested && !lcuConnected, untested: !connectionTested }">
+        {{ !connectionTested ? t('status.untested') : (lcuConnected ? t('status.connected') : t('status.disconnected')) }}
       </span>
     </header>
 
     <div v-if="updateAvailable && !updateDismissed" class="update-banner">
-      <span v-if="updateInstalling">{{ t('update.installing', { progress: updateProgress }) }}</span>
+      <span v-if="updateRestarting">{{ t('update.restarting') }}</span>
+      <span v-else-if="updateInstalling">{{ t('update.installing', { progress: updateProgress }) }}</span>
       <span v-else>{{ t('update.available', { version: latestVersion }) }}</span>
       <div class="update-actions">
         <button
@@ -1000,6 +1024,9 @@ watch(
       </button>
 
       <h3 class="mt">{{ t('settings.updateTitle') }}</h3>
+      <p class="version-line">
+        {{ t('settings.version') }} : v{{ currentAppVersion }}
+      </p>
       <label class="row">
         <input
           type="checkbox"
@@ -1055,6 +1082,7 @@ watch(
 .status-pill { border-radius: 999px; padding: 0.35rem 0.65rem; font-size: 0.76rem; font-weight: 600; white-space: nowrap; }
 .status-pill.on { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.6); color: #93f2ce; }
 .status-pill.off { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.6); color: #fecaca; }
+.status-pill.untested { background: rgba(200, 155, 60, 0.12); border: 1px solid rgba(200, 155, 60, 0.4); color: rgba(240, 230, 210, 0.75); }
 
 .tabs { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; }
 .tab-btn {
@@ -1173,6 +1201,7 @@ watch(
 .mt { margin-top: 1.3rem; }
 .msg { margin-top: 0.5rem; font-size: 0.85rem; color: #93f2ce; }
 .msg.error { color: #fecaca; }
+.version-line { margin: 0 0 0.5rem; font-size: 0.88rem; color: #c8aa6e; }
 .hint-line { margin-top: 0.3rem; font-size: 0.78rem; color: rgba(240, 230, 210, 0.6); }
 
 .link-row {

@@ -10,7 +10,7 @@
         <a
           :href="downloadUrl"
           class="inline-flex items-center rounded bg-accent px-5 py-2.5 font-semibold text-background transition hover:bg-accent-dark"
-          @click="trackDownload"
+          @click.prevent="trackDownload"
         >
           {{ t('lelanationApp.downloadButton') }}
         </a>
@@ -72,12 +72,13 @@ const downloadUrl = computed(() => {
   return configured && configured.trim() ? configured : apiUrl('/api/admin/app-download')
 })
 
-function trackDownload() {
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon(apiUrl('/api/app/track-download'))
-  } else {
-    $fetch(apiUrl('/api/app/track-download'), { method: 'POST' }).catch(() => {})
+async function trackDownload() {
+  try {
+    await $fetch(apiUrl('/api/app/track-download'), { method: 'POST' })
+  } catch {
+    // Non-blocking: proceed with download even if track fails
   }
+  window.location.href = downloadUrl.value
 }
 
 useHead({

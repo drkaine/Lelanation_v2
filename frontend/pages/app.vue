@@ -104,6 +104,25 @@ async function downloadCompanionApp() {
   isError.value = false
   downloading.value = true
   try {
+    // Track download on click (+1 in file)
+    try {
+      await $fetch(apiUrl('/api/app/track-download'), { method: 'POST' })
+      // Update stats reactively
+      if (downloadStats.value) {
+        const today = new Date().toISOString().slice(0, 10)
+        downloadStats.value = {
+          total: downloadStats.value.total + 1,
+          daily: {
+            ...downloadStats.value.daily,
+            [today]: (downloadStats.value.daily[today] || 0) + 1,
+          },
+        }
+      } else {
+        await loadDownloadStats()
+      }
+    } catch {
+      // Non-blocking: continue with download even if track fails
+    }
     const configuredUrl = String(config.public.companionAppDownloadUrl || '').trim()
     if (configuredUrl) {
       window.location.href = configuredUrl

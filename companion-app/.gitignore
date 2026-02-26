@@ -22,4 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+/src/assets/lelariva-quality.png
 /public/images/lelariva-quality.png

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { setConsent } from "../consent";
 import { getSettings, setSettings } from "../settings";
+import avatarImg from "../assets/lelariva-quality.png";
 
 const emit = defineEmits<{ (e: "accepted"): void }>();
 
@@ -72,7 +73,7 @@ const t = computed(() => {
   return d[locale.value];
 });
 
-const avatarUrl = "/images/lelariva-quality.png";
+const avatarUrl = avatarImg;
 
 function accept() {
   if (!consentChecked.value) return;
