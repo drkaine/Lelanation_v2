@@ -127,14 +127,16 @@ router.get('/:id', async (req, res) => {
 })
 
 /**
- * Get all builds
+ * Get all builds (public only — private builds are never exposed here)
  * GET /api/builds
  */
 router.get('/', async (_req, res) => {
   try {
     const { promises: fs } = await import('fs')
     const files = await fs.readdir(buildsDir)
-    const buildFiles = files.filter(file => file.endsWith('.json'))
+    const buildFiles = files.filter(
+      file => file.endsWith('.json') && !file.endsWith('_priv.json')
+    )
     
     const builds = await Promise.all(
       buildFiles.map(async (file) => {

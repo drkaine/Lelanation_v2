@@ -6,7 +6,7 @@ import { dirname, join, isAbsolute } from 'path'
 import { createWriteStream } from 'fs'
 import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
-import { CronStatusService } from '../services/CronStatusService.js'
+import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { getRiotApiService, type PlatformRegion } from '../services/RiotApiService.js'
@@ -25,11 +25,14 @@ import {
 import { discoverPlayersFromLeagueExp } from '../services/RiotLeagueExpDiscoveryService.js'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { runStatsPrecomputedRefreshOnce } from '../cron/statsPrecomputedRefresh.js'
+import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
+import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
+import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
-import { retryWithBackoff } from '../utils/retry.js'
+import { getRiotApiStats } from '../services/RiotApiStatsService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -101,7 +104,17 @@ type ScriptStatusMap = Record<string, ScriptStatusRow>
 async function readScriptStatusMap(): Promise<ScriptStatusMap> {
   const r = await FileManager.readJson<ScriptStatusMap>(RIOT_SCRIPT_STATUS_FILE)
   if (r.isErr()) return {}
-  return r.unwrap() ?? {}
+  const map = r.unwrap() ?? {}
+  // Reconcile: if status=running but pid is dead → crash/brutal shutdown, persist failed
+  let changed = false
+  for (const [script, row] of Object.entries(map)) {
+    if ((row.status === 'running' || row.status === 'started') && row.pid && !isPidAlive(row.pid)) {
+      map[script] = { ...row, status: 'failed' as ScriptStatusValue, pid: undefined }
+      changed = true
+    }
+  }
+  if (changed) await writeScriptStatusMap(map)
+  return map
 }
 async function writeScriptStatusMap(data: ScriptStatusMap): Promise<void> {
   await FileManager.ensureDir(dirname(RIOT_SCRIPT_STATUS_FILE))
@@ -117,6 +130,16 @@ function scriptLogFile(script: string): string {
   const safe = script.replace(/[^a-zA-Z0-9_-]/g, '_')
   return join(RIOT_SCRIPT_LOG_DIR, `${safe}.log`)
 }
+const MAX_LOG_LINES = 10_000
+const TRUNCATE_TO_LINES = 8_000
+
+const ALL_LOGGABLE_SCRIPTS = new Set([
+  ...POLLER_SCRIPTS,
+  'dataDragonSync',
+  'youtubeSync',
+  'communityDragonSync',
+])
+
 async function tailScriptLog(script: string, lines = 20): Promise<string[]> {
   const file = scriptLogFile(script)
   const content = await fs.readFile(file, 'utf-8').catch(() => '')
@@ -124,9 +147,29 @@ async function tailScriptLog(script: string, lines = 20): Promise<string[]> {
   const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
   return arr.slice(-Math.max(1, lines))
 }
-async function appendScriptLog(script: string, message: string): Promise<void> {
+
+async function rotateLogIfNeeded(script: string): Promise<void> {
+  try {
+    const file = scriptLogFile(script)
+    const content = await fs.readFile(file, 'utf-8').catch(() => '')
+    const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    if (arr.length > MAX_LOG_LINES) {
+      const kept = arr.slice(-TRUNCATE_TO_LINES).join('\n') + '\n'
+      await fs.writeFile(file, kept, 'utf-8')
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function appendScriptLog(script: string, message: string, level = 'INFO'): Promise<void> {
   await fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true })
-  await fs.appendFile(scriptLogFile(script), `[${new Date().toISOString()}] ${message}\n`, 'utf-8')
+  await fs.appendFile(
+    scriptLogFile(script),
+    `[${new Date().toISOString()}] [${level}] ${message}\n`,
+    'utf-8'
+  )
+  void rotateLogIfNeeded(script)
 }
 function isPidAlive(pid: number | undefined): boolean {
   if (!pid || !Number.isFinite(pid) || pid <= 0) return false
@@ -801,33 +844,170 @@ router.post('/riot-script-run', async (req, res) => {
   })
 })
 
+const CRON_JOBS: Array<{ key: string; label: string }> = [
+  { key: 'dataDragonSync', label: 'dataDragonSync' },
+  { key: 'youtubeSync', label: 'youtubeSync' },
+  { key: 'communityDragonSync', label: 'communityDragonSync' },
+]
+
 router.get('/riot-scripts-status', async (_req, res) => {
   const map = await readScriptStatusMap()
-  const hb = await FileManager.readJson<{ lastBeat?: string }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
-  const workerBeat = hb.isOk() ? hb.unwrap()?.lastBeat : null
+  const hb = await FileManager.readJson<{
+    lastBeat?: string
+    cyclePhase?: string
+    matchesCollectedThisCycle?: number
+    requestsThisCycle?: number
+  }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
+  const heartbeat = hb.isOk() ? hb.unwrap() : null
+  const workerBeat = heartbeat?.lastBeat ?? null
   const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < 10 * 60 * 1000
   const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
   const workerActive = workerHeartbeatActive || !!pm2Worker?.online
+  const cronResult = await cronStatus.getStatus()
+  const cronJobs: Record<CronJobKey, CronJobStatus> = cronResult.isOk()
+    ? cronResult.unwrap().jobs
+    : ({
+        dataDragonSync: { job: 'dataDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
+        youtubeSync: { job: 'youtubeSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
+        communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
+      } as Record<CronJobKey, CronJobStatus>)
+
+  const lastOutputs = await Promise.all([...POLLER_SCRIPTS].map(async (s) => {
+    const lines = await tailScriptLog(s, 1)
+    return [s, lines[lines.length - 1] ?? null] as const
+  }))
+  const lastOutputMap = Object.fromEntries(lastOutputs)
+
   const scripts = [...POLLER_SCRIPTS].map((script) => {
     const row = map[script] ?? { script, status: 'stopped' as ScriptStatusValue }
     const alive = isPidAlive(row.pid)
     const safeRow = (row.status === 'running' || row.status === 'started') && !alive
       ? { ...row, status: 'stopped' as ScriptStatusValue, pid: undefined }
       : row
+    const lastOutput = lastOutputMap[script] ?? null
     if (script === 'riot:worker') {
       return {
         ...safeRow,
+        lastOutput,
         status: workerActive ? 'running' : safeRow.status === 'running' ? 'started' : safeRow.status,
-        workerHeartbeat: workerBeat ?? null,
+        workerHeartbeat: heartbeat ?? (workerBeat ? { lastBeat: workerBeat } : null),
         workerPm2: pm2Worker ? { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status } : null,
         workerSource: workerHeartbeatActive ? 'heartbeat' : (pm2Worker?.online ? 'pm2' : 'none'),
       }
     }
-    return safeRow
+    return { ...safeRow, lastOutput }
   })
-  return res.json({ scripts })
+
+  const crons = CRON_JOBS.map(({ key, label }) => {
+    const job = cronJobs[key as CronJobKey]
+    return {
+      script: label,
+      type: 'cron' as const,
+      lastStartAt: job?.lastStartAt ?? null,
+      lastSuccessAt: job?.lastSuccessAt ?? null,
+      lastFailureAt: job?.lastFailureAt ?? null,
+      lastFailureMessage: job?.lastFailureMessage ?? null,
+    }
+  })
+
+  return res.json({ scripts, crons })
 })
 
+/** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */
+const CRON_TRIGGER_JOBS = new Set(['dataDragonSync', 'youtubeSync', 'communityDragonSync'])
+router.post('/cron/trigger/:job', async (req, res) => {
+  const job = typeof req.params?.job === 'string' ? req.params.job.trim() : ''
+  if (!CRON_TRIGGER_JOBS.has(job)) {
+    return res.status(400).json({ error: `Invalid cron job: ${job}. Allowed: ${[...CRON_TRIGGER_JOBS].join(', ')}` })
+  }
+  try {
+    if (job === 'dataDragonSync') {
+      const result = await runDataDragonSyncOnce()
+      if (result.ok) {
+        return res.json({ success: true, version: result.version })
+      }
+      return res.status(500).json({ success: false, error: result.error })
+    }
+    if (job === 'youtubeSync') {
+      const result = await runYouTubeSyncOnce()
+      if (result.ok) {
+        return res.json({ success: true, syncedChannels: result.syncedChannels, totalVideos: result.totalVideos })
+      }
+      return res.status(500).json({ success: false, error: result.error })
+    }
+    if (job === 'communityDragonSync') {
+      const result = await runCommunityDragonSyncOnce()
+      if (result.ok) {
+        return res.json({ success: true, synced: result.synced, failed: result.failed, skipped: result.skipped })
+      }
+      return res.status(500).json({ success: false, error: result.error })
+    }
+    return res.status(400).json({ error: `Invalid cron job: ${job}` })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ success: false, error: msg })
+  }
+})
+
+/** Logs for scripts. Supports single script or all scripts with filter/sort/line count. */
+router.get('/script-logs', async (req, res) => {
+  const scriptParam = typeof req.query?.script === 'string' ? req.query.script.trim() : ''
+  const allScripts = scriptParam === '' || scriptParam === 'all'
+  const scriptFilter = allScripts ? null : scriptParam
+  if (scriptFilter && !ALL_LOGGABLE_SCRIPTS.has(scriptFilter)) {
+    return res.status(400).json({ error: `Unsupported script "${scriptFilter}"` })
+  }
+  const linesRaw = Number(req.query?.lines ?? 100)
+  const maxLines = allScripts ? 500 : 2000
+  const lines = Number.isFinite(linesRaw) ? Math.max(1, Math.min(maxLines, Math.trunc(linesRaw))) : 100
+  const sortParam = (req.query?.sort as string)?.toLowerCase()
+  const sortAsc = sortParam === 'asc'
+
+  if (allScripts) {
+    const scriptsToRead = [...ALL_LOGGABLE_SCRIPTS]
+    const allEntries: Array<{ script: string; timestamp: string; level: string; message: string; raw: string }> = []
+    for (const s of scriptsToRead) {
+      const content = await fs.readFile(scriptLogFile(s), 'utf-8').catch(() => '')
+      const logLines = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+      for (const line of logLines) {
+        const m = line.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/)
+        if (m) {
+          allEntries.push({ script: s, timestamp: m[1], level: m[2], message: m[3], raw: line })
+        } else {
+          allEntries.push({ script: s, timestamp: '', level: 'INFO', message: line, raw: line })
+        }
+      }
+    }
+    allEntries.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
+    const sliced = sortAsc ? allEntries.slice(0, lines) : allEntries.slice(-lines).reverse()
+    return res.json({
+      scripts: scriptsToRead,
+      script: null,
+      linesRequested: lines,
+      linesReturned: sliced.length,
+      sort: sortAsc ? 'asc' : 'desc',
+      log: sliced.map((e) => e.raw),
+      entries: sliced,
+    })
+  }
+
+  const logLines = await tailScriptLog(scriptFilter!, lines)
+  if (!sortAsc) logLines.reverse()
+  return res.json({
+    script: scriptFilter,
+    linesRequested: lines,
+    linesReturned: logLines.length,
+    sort: sortAsc ? 'asc' : 'desc',
+    log: logLines,
+  })
+})
+
+/** List all script names that have logs (for filter dropdown) */
+router.get('/script-logs/scripts', (_req, res) => {
+  return res.json({ scripts: [...ALL_LOGGABLE_SCRIPTS].sort() })
+})
+
+/** @deprecated Use GET /script-logs instead */
 router.get('/riot-script-logs', async (req, res) => {
   const script = typeof req.query?.script === 'string' ? req.query.script.trim() : ''
   if (!POLLER_SCRIPTS.has(script)) return res.status(400).json({ error: `Unsupported script "${script}"` })
@@ -944,21 +1124,11 @@ async function readYoutubeChannelsConfig(): Promise<
 }
 
 router.post('/youtube/trigger', async (_req, res) => {
-  const config = await readYoutubeChannelsConfig()
-  if (!config.ok) return res.status(config.status).json({ error: config.error })
-  const channels = config.value.channels ?? []
-  if (channels.length === 0) {
-    return res.status(400).json({ error: 'No YouTube channels configured' })
+  const result = await runYouTubeSyncOnce()
+  if (result.ok) {
+    return res.json({ success: true, syncedChannels: result.syncedChannels, totalVideos: result.totalVideos })
   }
-  const syncResult = await retryWithBackoff(
-    () => youtubeService.syncChannels(channels),
-    { maxRetries: 10, initialDelay: 1000, maxDelay: 30000, multiplier: 2 }
-  )
-  if (syncResult.isErr()) {
-    return res.status(500).json({ error: syncResult.unwrapErr().message })
-  }
-  const data = syncResult.unwrap()
-  return res.json({ success: true, ...data })
+  return res.status(500).json({ error: result.error })
 })
 
 // --- YouTube: add channel by @handle (admin-protected) ---
@@ -1066,6 +1236,36 @@ router.put('/riot-apikey', async (req, res) => {
     hasKey: value.length > 0,
     maskedKey: value.length > 0 ? maskRiotApiKey(value) : undefined
   })
+})
+
+/** Riot API consumption stats: requests/hour, 429 count, limits. */
+router.get('/riot-api-stats', async (_req, res) => {
+  try {
+    const stats = await getRiotApiStats()
+    return res.json(stats)
+  } catch (err) {
+    return res.status(500).json({ error: String(err) })
+  }
+})
+
+/** Data collection stats: participants/matchs sans rang, dernier joueur. */
+router.get('/data-stats', async (_req, res) => {
+  try {
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] = await Promise.all([
+      countParticipantsMissingRank(),
+      countParticipantsMissingRole(),
+      prisma.match.count({ where: { rank: null } }),
+      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    ])
+    return res.json({
+      participantsWithoutRank,
+      participantsWithoutRole,
+      matchesWithoutRank,
+      lastNewPlayerAt: lastPlayer?.createdAt ?? null,
+    })
+  } catch (err) {
+    return res.status(500).json({ error: String(err) })
+  }
 })
 
 // --- All players (DB, for admin visibility) ---

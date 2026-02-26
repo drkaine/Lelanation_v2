@@ -19,14 +19,18 @@ import { config } from 'dotenv'
 import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { createScriptLogger } from '../utils/ScriptLogger.js'
 import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { enrichPlayers, countPlayersMissingSummonerName } from '../services/StatsPlayersRefreshService.js'
 import { prisma } from '../db.js'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { DiscordService } from '../services/DiscordService.js'
+import { getRiotApiRequestsSince } from '../services/RiotApiStatsService.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
+
+const log = createScriptLogger('riot:worker')
 
 /** Normal mode: 2 min between cycles to refill rate limit (100 req/2 min). */
 const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '120000', 10) || 120000)
@@ -41,20 +45,21 @@ const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_
 const CRAWL_RETRIES = Math.max(1, parseInt(process.env.RIOT_MATCH_CRAWL_RETRIES ?? '3', 10) || 3)
 const CRAWL_BACKOFF_MS = Math.max(5000, parseInt(process.env.RIOT_MATCH_CRAWL_BACKOFF_MS ?? '30000', 10) || 30000)
 
-const LOG = '[riot:worker]'
-
 const HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
 const STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
 
-async function writeHeartbeat(): Promise<void> {
+type HeartbeatPayload = {
+  lastBeat: string
+  cyclePhase: 'crawl' | 'enrich' | 'sleep'
+  matchesCollectedThisCycle: number
+  requestsThisCycle: number
+}
+
+async function writeHeartbeat(payload: HeartbeatPayload): Promise<void> {
   try {
     const dir = join(process.cwd(), 'data', 'cron')
     await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(
-      HEARTBEAT_FILE,
-      JSON.stringify({ lastBeat: new Date().toISOString() }, null, 0),
-      'utf-8'
-    )
+    await fs.writeFile(HEARTBEAT_FILE, JSON.stringify(payload, null, 0), 'utf-8')
   } catch {
     // ignore
   }
@@ -86,7 +91,7 @@ async function runCrawlWithRetry(
       const result = await runRiotMatchCollectOnce()
       if (result.authError) {
         const backoff = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
-        console.warn(`${LOG} Clé API rejetée (401/403), pause ${backoff / 1000}s (attempt ${attempt}/${CRAWL_RETRIES})…`)
+        await log.warn(`Clé API rejetée (401/403), pause ${backoff / 1000}s (attempt ${attempt}/${CRAWL_RETRIES})…`)
         await discordService.sendAlert(
           '⏸️ Poller Riot – Clé API rejetée (401/403)',
           `Riot a renvoyé 401/403. Pause exponentielle de ${backoff / 1000}s (attempt ${attempt}/${CRAWL_RETRIES}) avant retry.`,
@@ -106,22 +111,22 @@ async function runCrawlWithRetry(
       lastErr = err
       if (isRiotAuthError(err)) {
         const backoff = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
-        console.warn(`${LOG} Key rejected (401/403), retrying with Admin key after ${backoff / 1000}s…`)
+        await log.warn(`Key rejected (401/403), retrying with Admin key after ${backoff / 1000}s…`)
         await sleep(backoff)
         riotApi.invalidateKeyCache()
         riotApi.setKeyPreference(true)
         if (attempt < CRAWL_RETRIES) {
           continue
         }
-        console.error(`${LOG} Riot API key invalid or expired. Set RIOT_API_KEY or Admin key.`)
+        await log.error('Riot API key invalid or expired. Set RIOT_API_KEY or Admin key.')
         throw err
       }
       if (attempt < CRAWL_RETRIES) {
         const backoff = CRAWL_BACKOFF_MS * Math.pow(2, attempt - 1)
-        console.warn(`${LOG} Crawl failed (attempt ${attempt}/${CRAWL_RETRIES}), retry in ${backoff / 1000}s:`, err)
+        await log.warn(`Crawl failed (attempt ${attempt}/${CRAWL_RETRIES}), retry in ${backoff / 1000}s:`, err)
         await sleep(backoff)
       } else {
-        console.error(`${LOG} Crawl failed after ${CRAWL_RETRIES} attempts:`, lastErr)
+        await log.error('Crawl failed after retries:', lastErr)
         throw lastErr
       }
     }
@@ -136,14 +141,15 @@ async function main(): Promise<void> {
 
   let running = true
   const onStop = () => {
-    console.log(`${LOG} Stop requested, finishing current cycle then exit.`)
+    void log.info('Stop requested, finishing current cycle then exit.')
     running = false
   }
   process.on('SIGINT', onStop)
   process.on('SIGTERM', onStop)
 
-  console.log(
-    `${LOG} Starting worker (cycle delay=${CYCLE_DELAY_MS}ms, enrich passes=${ENRICH_PASSES_AFTER_CYCLE}, per pass=${ENRICH_PER_PASS}, crawl retries=${CRAWL_RETRIES}). Stop with Ctrl+C or admin "Stopper le poller".`
+  await log.start()
+  await log.info(
+    `Starting worker (cycle delay=${CYCLE_DELAY_MS}ms, enrich passes=${ENRICH_PASSES_AFTER_CYCLE}, per pass=${ENRICH_PER_PASS}, crawl retries=${CRAWL_RETRIES}). Stop with Ctrl+C or admin "Stopper le poller".`
   )
 
   let cycle = 0
@@ -153,7 +159,7 @@ async function main(): Promise<void> {
     try {
       await fs.access(STOP_REQUEST_FILE)
       await fs.unlink(STOP_REQUEST_FILE)
-      console.log(`${LOG} Stop requested from admin, exiting after this cycle.`)
+      await log.info('Stop requested from admin, exiting after this cycle.')
       running = false
       break
     } catch {
@@ -162,10 +168,13 @@ async function main(): Promise<void> {
 
     cycle++
     const cycleStart = Date.now()
+    let collected = 0
     try {
-      const { collected, errors, rateLimitHit, serverError5xx } = await runCrawlWithRetry(riotApi, discordService)
+      const result = await runCrawlWithRetry(riotApi, discordService)
+      collected = result.collected
+      const { errors, rateLimitHit, serverError5xx } = result
       if (rateLimitHit) {
-        console.warn(`${LOG} Rate limit (429) détecté, pause ${RATE_LIMIT_PAUSE_MS / 1000}s avant prochain cycle`)
+        await log.warn(`Rate limit (429) détecté, pause ${RATE_LIMIT_PAUSE_MS / 1000}s avant prochain cycle`)
         await discordService.sendAlert(
           '⏸️ Poller Riot – Rate limit (429)',
           `Riot a renvoyé Rate Limit Exceeded. Pause de ${RATE_LIMIT_PAUSE_MS / 1000}s avant le prochain cycle.`,
@@ -179,7 +188,7 @@ async function main(): Promise<void> {
       if (serverError5xx) {
         consecutive5xxCycles++
         const pauseMs = EXPONENTIAL_BACKOFF_BASE_MS * Math.pow(2, Math.min(consecutive5xxCycles - 1, 5))
-        console.warn(`${LOG} Many 5xx errors from Riot, pause ${pauseMs / 1000}s (attempt ${consecutive5xxCycles}) before next cycle`)
+        await log.warn(`Many 5xx errors from Riot, pause ${pauseMs / 1000}s (attempt ${consecutive5xxCycles}) before next cycle`)
         await discordService.sendAlert(
           '⏸️ Poller Riot – Erreurs serveur (5xx)',
           `Riot renvoie beaucoup d'erreurs 500/503. Pause de ${pauseMs / 1000}s (attempt ${consecutive5xxCycles}) avant le prochain cycle.`,
@@ -207,7 +216,7 @@ async function main(): Promise<void> {
       }
     } catch (err) {
       if (isRiotAuthError(err)) {
-        console.error(`${LOG} Riot API key invalid or expired. Exiting.`)
+        await log.error('Riot API key invalid or expired. Exiting.')
         await discordService.sendAlert(
           '❌ Poller Riot – Arrêt (clé API invalide)',
           'La clé API Riot a été rejetée (401/403). Le worker s’arrête. Définissez une clé valide (RIOT_API_KEY ou Admin).',
@@ -216,7 +225,7 @@ async function main(): Promise<void> {
         )
         process.exit(1)
       }
-      console.error(`${LOG} Crawl error (will retry next cycle):`, err)
+      await log.error('Crawl error (will retry next cycle):', err)
       await discordService.sendAlert(
         '❌ Poller Riot – Échec après tentatives',
         `La collecte a échoué après ${CRAWL_RETRIES} tentative(s). Prochain cycle dans ${CYCLE_DELAY_MS / 1000}s.`,
@@ -229,14 +238,14 @@ async function main(): Promise<void> {
 
     const missingSummonerName = await countPlayersMissingSummonerName()
     if (missingSummonerName === 0) {
-      console.log(`${LOG} Enrich skip (0 players sans summoner_name), quota réservé à la collecte matchs`)
+      await log.info('Enrich skip (0 players sans summoner_name), quota réservé à la collecte matchs')
     } else {
       for (let p = 0; p < ENRICH_PASSES_AFTER_CYCLE && running; p++) {
         try {
           const { enriched } = await enrichPlayers(ENRICH_PER_PASS)
           if (enriched === 0) break
         } catch (e) {
-          console.warn(`${LOG} Enrich pass failed:`, e)
+          await log.warn('Enrich pass failed:', e)
         }
       }
     }
@@ -246,12 +255,26 @@ async function main(): Promise<void> {
     const unpoledCount = await prisma.player.count({ where: { lastSeen: null } }).catch(() => 0)
     const cycleDelayMs = unpoledCount >= FAST_BACKLOG_THRESHOLD ? FAST_CYCLE_DELAY_MS : CYCLE_DELAY_MS
     const elapsed = Math.round((Date.now() - cycleStart) / 1000)
-    console.log(`${LOG} Cycle ${cycle} done in ${elapsed}s, sleeping ${cycleDelayMs / 1000}s…`)
-    await writeHeartbeat()
+    const requestsThisCycle = await getRiotApiRequestsSince(cycleStart)
+    await log.jobResult('cycle', {
+      success: true,
+      cycle,
+      elapsedSec: elapsed,
+      collected,
+      requestsThisCycle,
+      sleepSec: cycleDelayMs / 1000,
+    })
+    await writeHeartbeat({
+      lastBeat: new Date().toISOString(),
+      cyclePhase: 'sleep',
+      matchesCollectedThisCycle: collected,
+      requestsThisCycle,
+    })
     await sleep(cycleDelayMs)
   }
 
-  console.log(`${LOG} Stopped after ${cycle} cycle(s).`)
+  await log.info(`Stopped after ${cycle} cycle(s).`)
+  await log.end(0)
   await discordService.sendAlert(
     '🛑 Poller Riot – Arrêt',
     `Le worker de collecte Riot a été arrêté après ${cycle} cycle(s) (SIGINT/SIGTERM). Relancez-le manuellement ou via l’admin.`,
@@ -260,7 +283,8 @@ async function main(): Promise<void> {
   )
 }
 
-main().catch((err) => {
-  console.error(`${LOG}`, err)
+main().catch(async (err) => {
+  await log.error('Fatal:', err)
+  await log.end(1)
   process.exit(1)
 })

@@ -13,7 +13,7 @@ export default defineNuxtRouteMiddleware(to => {
 
   if (!isAdminRoute || isLoginRoute) return
 
-  const token = sessionStorage.getItem('adminAuth')
+  const token = localStorage.getItem('adminAuth')
   if (!token) {
     const localePath = useLocalePath()
     return navigateTo(localePath('/admin/login'))

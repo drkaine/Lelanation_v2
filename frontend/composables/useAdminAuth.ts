@@ -1,27 +1,39 @@
 /**
- * Admin auth: credentials stored in sessionStorage after login.
+ * Admin auth: credentials stored in localStorage after login (persists across tabs and refreshes).
  * API calls to /api/admin/* must send Authorization: Basic <base64>.
  */
 
 const ADMIN_AUTH_KEY = 'adminAuth'
 
+function getStoredToken(): string | null {
+  if (!import.meta.client) return null
+  let token = localStorage.getItem(ADMIN_AUTH_KEY)
+  if (!token) {
+    token = sessionStorage.getItem(ADMIN_AUTH_KEY)
+    if (token) {
+      localStorage.setItem(ADMIN_AUTH_KEY, token)
+      sessionStorage.removeItem(ADMIN_AUTH_KEY)
+    }
+  }
+  return token
+}
+
 export function useAdminAuth() {
-  // useState<boolean> sans double-ref (ne pas passer ref() comme valeur initiale)
   const isLoggedIn = useState<boolean>('adminLoggedIn', () => {
     if (import.meta.client) {
-      return !!sessionStorage.getItem(ADMIN_AUTH_KEY)
+      return !!getStoredToken()
     }
     return false
   })
 
-  // Sync immédiate côté client à chaque appel du composable (navigation SPA)
+  // Sync côté client à chaque appel (navigation SPA, nouvel onglet)
   if (import.meta.client) {
-    isLoggedIn.value = !!sessionStorage.getItem(ADMIN_AUTH_KEY)
+    isLoggedIn.value = !!getStoredToken()
   }
 
   function getAuthHeader(): { Authorization: string } | null {
     if (import.meta.client) {
-      const token = sessionStorage.getItem(ADMIN_AUTH_KEY)
+      const token = getStoredToken()
       if (token) return { Authorization: `Basic ${token}` }
     }
     return null
@@ -38,18 +50,18 @@ export function useAdminAuth() {
 
   function setAuth(username: string, password: string) {
     const token = btoa(`${username}:${password}`)
-    sessionStorage.setItem(ADMIN_AUTH_KEY, token)
+    localStorage.setItem(ADMIN_AUTH_KEY, token)
     isLoggedIn.value = true
   }
 
   function clearAuth() {
-    sessionStorage.removeItem(ADMIN_AUTH_KEY)
+    localStorage.removeItem(ADMIN_AUTH_KEY)
     isLoggedIn.value = false
   }
 
   function checkLoggedIn(): boolean {
     if (import.meta.client) {
-      isLoggedIn.value = !!sessionStorage.getItem(ADMIN_AUTH_KEY)
+      isLoggedIn.value = !!getStoredToken()
     }
     return isLoggedIn.value
   }

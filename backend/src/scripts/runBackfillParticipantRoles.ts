@@ -6,6 +6,7 @@
 import { config } from 'dotenv'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { createScriptLogger } from '../utils/ScriptLogger.js'
 import {
   backfillParticipantRoles,
   countParticipantsMissingRole,
@@ -14,10 +15,16 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
+const log = createScriptLogger('riot:backfill-roles')
+
 async function main(): Promise<void> {
+  const args = process.argv.slice(2)
+  await log.start(args)
+
   const missingCount = await countParticipantsMissingRole()
   if (missingCount === 0) {
-    console.log('[riot:backfill-roles] Rien à faire : 0 participant sans role.')
+    await log.info('Rien à faire : 0 participant sans role.')
+    await log.end(0)
     return
   }
   const limitArg = process.argv[2]
@@ -25,13 +32,21 @@ async function main(): Promise<void> {
   const limit = limitArg ? parseInt(limitArg, 10) : (limitEnv ? parseInt(limitEnv, 10) : 50)
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50
 
-  console.log('[riot:backfill-roles] Backfilling participant roles (matches=%d, %d participants manquants)...', safeLimit, missingCount)
+  await log.info(`Backfilling participant roles (matches=${safeLimit}, ${missingCount} participants manquants)...`)
   const { updated, errors, matches } = await backfillParticipantRoles(safeLimit)
-  console.log('[riot:backfill-roles] Matches processed: %d, participants updated: %d, errors: %d', matches, updated, errors)
-  console.log('[riot:backfill-roles] Done.')
+  await log.jobResult('backfill-roles', {
+    success: errors === 0,
+    matches,
+    updated,
+    errors,
+    allFetched: errors === 0,
+  })
+  await log.info('Done.')
+  await log.end(0)
 }
 
-main().catch((err) => {
-  console.error('[riot:backfill-roles]', err)
+main().catch(async (err) => {
+  await log.error('Fatal:', err)
+  await log.end(1)
   process.exit(1)
 })

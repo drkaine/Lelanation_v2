@@ -29,6 +29,7 @@ const runePathMap = ref<Record<number, { name: string; icon: string }>>({});
 const championMap = ref<Record<string, Champion>>({});
 const lastSubmittedMatchId = ref("");
 let autoSubmitTimer: ReturnType<typeof setInterval> | null = null;
+let buildsRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const searchQuery = ref("");
 const selectedRole = ref<Role | null>(null);
@@ -222,8 +223,8 @@ function enrichBuilds(rawBuilds: Build[]): Build[] {
   });
 }
 
-async function loadBuilds() {
-  loading.value = true;
+async function loadBuilds(options?: { silent?: boolean }) {
+  if (!options?.silent) loading.value = true;
   try {
     const r = await fetch(`${apiBase}/api/builds`);
     if (r.ok) {
@@ -234,7 +235,7 @@ async function loadBuilds() {
   } catch {
     builds.value = [];
   } finally {
-    loading.value = false;
+    if (!options?.silent) loading.value = false;
   }
 }
 
@@ -554,6 +555,19 @@ function stopAutoSubmitLoop() {
   autoSubmitTimer = null;
 }
 
+const BUILDS_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+
+function startBuildsRefreshLoop() {
+  if (buildsRefreshTimer) return;
+  buildsRefreshTimer = setInterval(() => loadBuilds({ silent: true }), BUILDS_REFRESH_INTERVAL_MS);
+}
+
+function stopBuildsRefreshLoop() {
+  if (!buildsRefreshTimer) return;
+  clearInterval(buildsRefreshTimer);
+  buildsRefreshTimer = null;
+}
+
 async function checkForUpdates() {
   if (!settings.value.autoUpdate) return;
   try {
@@ -630,10 +644,12 @@ onMounted(async () => {
   checkLcu();
   autoSubmitMatchIfAllowed();
   startAutoSubmitLoop();
+  startBuildsRefreshLoop();
 });
 
 onUnmounted(() => {
   stopAutoSubmitLoop();
+  stopBuildsRefreshLoop();
 });
 
 watch(

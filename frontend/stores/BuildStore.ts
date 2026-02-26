@@ -553,10 +553,12 @@ export const useBuildStore = defineStore('build', {
     },
 
     /**
-     * Vérifie si un build existe sur le serveur et le resauvegarde si nécessaire
+     * Vérifie si un build existe sur le serveur et le resauvegarde si nécessaire.
+     * Les builds privés ne sont jamais synchronisés (ils restent locaux / partagés via code uniquement).
      */
     async syncBuildToServer(build: Build): Promise<boolean> {
       if (!build || !build.id) return false
+      if (build.visibility === 'private') return true // Pas de sync pour les privés
 
       try {
         // Vérifier si le build existe sur le serveur

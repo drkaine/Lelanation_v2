@@ -9,6 +9,7 @@
     "statistics": "Statistiques",
     "admin": "Admin",
     "appAdmin": "Lelanation App",
+    "download": "Télécharger",
     "language": "Langue"
   },
   "home": {
@@ -774,14 +775,43 @@
     },
     "tabs": {
       "contact": "Contact",
-      "builds": "Builds",
       "videos": "Vidéos",
-      "apikeyRiot": "Clé API Riot",
-      "riotMatch": "Collecte data",
-      "seedPlayers": "Joueurs seed",
-      "cronStatus": "Statut crons",
-      "replays": "Replays",
-      "matchups": "Matchups / Tier"
+      "data": "Data"
+    },
+    "data": {
+      "title": "Data",
+      "apiRiot": {
+        "title": "API Riot",
+        "consumption": "Consommation",
+        "requestsPerHour": "Requêtes/heure",
+        "rateLimitExceeded": "Dépassements 429",
+        "limit": "Limite Riot : 100 req/2 min, 20 req/s",
+        "limitPerHour": "Limite/heure : 3000 req"
+      },
+      "scripts": {
+        "title": "Scripts et Worker",
+        "crons": "Crons"
+      },
+      "crons": {
+        "title": "Statut des crons",
+        "status": "Statut",
+        "actions": "Actions",
+        "allLogs": "Tous les logs",
+        "runNow": "Lancer maintenant",
+        "logs": "Logs",
+        "statusSuccess": "Succès",
+        "statusFailed": "Échec",
+        "statusUnknown": "Jamais exécuté",
+        "runSuccess": "Cron terminé.",
+        "runError": "Échec du cron."
+      },
+      "stats": {
+        "title": "Statistiques de collecte",
+        "participantsWithoutRank": "Participants sans rang",
+        "participantsWithoutRole": "Participants sans rôle",
+        "matchesWithoutRank": "Matchs sans rang",
+        "lastNewPlayerAt": "Dernier joueur trouvé"
+      }
     },
     "appDownload": {
       "title": "Télécharger l'app compagnon",
@@ -859,9 +889,18 @@
         "run": "Lancer",
         "stop": "Arrêter",
         "logs": "Info (logs)",
+        "allLogs": "Tous les logs",
+        "allLogsTitle": "Logs de tous les scripts",
         "logsTitle": "20 derniers logs",
         "close": "Fermer",
         "noLogs": "Aucun log pour ce script.",
+        "filterScript": "Script",
+        "allScripts": "Tous",
+        "sort": "Tri",
+        "sortNewest": "Plus récents",
+        "sortOldest": "Plus anciens",
+        "lines": "Lignes",
+        "refresh": "Actualiser",
         "backgroundLaunched": "Script lancé en arrière-plan.",
         "stopRequested": "Demande d’arrêt envoyée.",
         "stopError": "Impossible d’arrêter ce script.",

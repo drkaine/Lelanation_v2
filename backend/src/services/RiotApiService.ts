@@ -7,6 +7,7 @@ import { getRiotApiKeyAsync } from '../utils/riotApiKey.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 import type { EuropePlatform } from '../utils/riotRegions.js'
+import { recordRiotApiRequest, recordRiotApi429 } from './RiotApiStatsService.js'
 
 const PLATFORM_BASE = {
   euw1: 'https://euw1.api.riotgames.com',
@@ -68,6 +69,7 @@ async function rateLimit(): Promise<void> {
   }
   requestTimestamps.push(Date.now())
   lastRequestTime = Date.now()
+  void recordRiotApiRequest()
 }
 
 async function withRetry429<T>(
@@ -88,6 +90,7 @@ async function withRetry429<T>(
       const status = err.response?.status ?? 0
       // 429: wait Retry-After or 60s
       if (status === 429 && attempt <= max429Retries) {
+        void recordRiotApi429()
         const retryAfter = err.response?.headers?.['retry-after']
         const waitMs =
           typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)

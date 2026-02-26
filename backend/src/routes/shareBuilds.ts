@@ -6,6 +6,7 @@ import { FileManager } from '../utils/fileManager.js'
 
 const router = Router()
 const sharedDir = join(process.cwd(), 'data', 'shared')
+const privateTempDir = join(process.cwd(), 'data', 'private-temp')
 const buildsDir = join(process.cwd(), 'data', 'builds')
 
 const CODE_LENGTH = 6
@@ -34,6 +35,13 @@ async function cleanupExpired(): Promise<void> {
             const data = result.unwrap()
             if (new Date(data.expiresAt).getTime() < now) {
               await fs.unlink(filePath)
+              const code = file.replace(/\.json$/, '')
+              const privDir = join(privateTempDir, code)
+              const privFiles = await fs.readdir(privDir).catch(() => [] as string[])
+              for (const f of privFiles) {
+                await fs.unlink(join(privDir, f)).catch(() => {})
+              }
+              await fs.rmdir(privDir).catch(() => {})
             }
           }
         })
@@ -88,6 +96,18 @@ router.post('/', async (req, res) => {
       return res.status(500).json({ error: 'Failed to save shared builds' })
     }
 
+    // Store private builds in private-temp for this code (isolated from public builds)
+    const privateBuilds = builds.filter(
+      (b): b is { id?: string; visibility?: string } & object =>
+        Boolean(b && typeof b === 'object' && (b as { visibility?: string }).visibility === 'private')
+    )
+    for (const b of privateBuilds) {
+      if (b?.id) {
+        const privPath = join(privateTempDir, code, `${b.id}.json`)
+        await FileManager.writeJson(privPath, b).catch(() => {})
+      }
+    }
+
     console.log(`[Share] Created share code ${code} with ${builds.length} builds (expires ${expiresAt})`)
 
     // Lazy cleanup in background
@@ -124,29 +144,38 @@ router.get('/:code', async (req, res) => {
 
     const data = readResult.unwrap()
     if (new Date(data.expiresAt).getTime() < Date.now()) {
-      fs.unlink(filePath).catch(() => {})
+      await fs.unlink(filePath).catch(() => {})
       return res.status(404).json({ error: 'Code not found or expired' })
     }
 
-    // One-time use: delete after retrieval
-    fs.unlink(filePath).catch(() => {})
+    const builds = data.builds as Array<{ id?: string; visibility?: string }>
+
+    // One-time use: delete shared file first (source of truth for this code)
+    await fs.unlink(filePath)
     console.log(`[Share] Code ${code} consumed and deleted`)
 
-    // Delete private build files from server (they were synced there, now consumed via import)
-    const builds = data.builds as Array<{ id?: string; visibility?: string }>
+    // Delete private builds from private-temp (if any were stored there)
+    try {
+      const privDir = join(privateTempDir, code)
+      const privFiles = await fs.readdir(privDir).catch(() => [] as string[])
+      for (const f of privFiles) {
+        if (f.endsWith('.json')) {
+          await fs.unlink(join(privDir, f)).catch(() => {})
+        }
+      }
+      await fs.rmdir(privDir).catch(() => {})
+    } catch {
+      // private-temp/{code} may not exist
+    }
+
+    // Cleanup legacy: delete any _priv.json from builds dir (old sync may have left them)
     for (const b of builds) {
       if (b?.id && b.visibility === 'private') {
         const privFile = join(buildsDir, `${b.id}_priv.json`)
-        try {
-          await fs.unlink(privFile)
-          console.log(`[Share] Deleted private build file: ${b.id}_priv.json`)
-        } catch {
-          // File may not exist (e.g. never synced)
-        }
+        await fs.unlink(privFile).catch(() => {})
       }
     }
 
-    // Lazy cleanup of other expired codes
     cleanupExpired()
 
     return res.json({ builds: data.builds, expiresAt: data.expiresAt })

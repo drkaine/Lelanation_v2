@@ -9,6 +9,7 @@
     "statistics": "Statistics",
     "admin": "Admin",
     "appAdmin": "Lelanation App",
+    "download": "Download",
     "language": "Language"
   },
   "home": {
@@ -769,14 +770,43 @@
     },
     "tabs": {
       "contact": "Contact",
-      "builds": "Builds",
       "videos": "Videos",
-      "apikeyRiot": "Riot API key",
-      "riotMatch": "Data collection",
-      "seedPlayers": "Seed players",
-      "cronStatus": "Cron status",
-      "replays": "Replays",
-      "matchups": "Matchups / Tier"
+      "data": "Data"
+    },
+    "data": {
+      "title": "Data",
+      "apiRiot": {
+        "title": "Riot API",
+        "consumption": "Consumption",
+        "requestsPerHour": "Requests/hour",
+        "rateLimitExceeded": "429 exceedances",
+        "limit": "Riot limit: 100 req/2 min, 20 req/s",
+        "limitPerHour": "Limit/hour: 3000 req"
+      },
+      "scripts": {
+        "title": "Scripts and Worker",
+        "crons": "Crons"
+      },
+      "crons": {
+        "title": "Cron status",
+        "status": "Status",
+        "actions": "Actions",
+        "allLogs": "All logs",
+        "runNow": "Run now",
+        "logs": "Logs",
+        "statusSuccess": "Success",
+        "statusFailed": "Failed",
+        "statusUnknown": "Never run",
+        "runSuccess": "Cron completed.",
+        "runError": "Cron failed."
+      },
+      "stats": {
+        "title": "Collection stats",
+        "participantsWithoutRank": "Participants without rank",
+        "participantsWithoutRole": "Participants without role",
+        "matchesWithoutRank": "Matches without rank",
+        "lastNewPlayerAt": "Last new player found"
+      }
     },
     "appDownload": {
       "title": "Download companion app",
@@ -854,9 +884,18 @@
         "run": "Run",
         "stop": "Stop",
         "logs": "Info (logs)",
+        "allLogs": "All logs",
+        "allLogsTitle": "Logs from all scripts",
         "logsTitle": "Last 20 logs",
         "close": "Close",
         "noLogs": "No logs available for this script.",
+        "filterScript": "Script",
+        "allScripts": "All",
+        "sort": "Sort",
+        "sortNewest": "Newest first",
+        "sortOldest": "Oldest first",
+        "lines": "Lines",
+        "refresh": "Refresh",
         "backgroundLaunched": "Script started in background.",
         "stopRequested": "Stop request sent.",
         "stopError": "Failed to stop this script.",
