@@ -346,13 +346,15 @@ export async function runRiotMatchCollectOnce(options?: RiotMatchCollectOptions)
           const { inserted } = await upsertMatchFromRiot(PLATFORM_EUW1, matchData, rankByPuuid)
           if (inserted) {
             collected++
+            const { getPuuidKeyVersion } = await import('../utils/riotApiKey.js')
+            const puuidKeyVersion = getPuuidKeyVersion()
             for (const p of participants) {
               const participantPuuid = typeof p.puuid === 'string' ? p.puuid.trim() : ''
               if (!participantPuuid) continue
               await prisma.player.upsert({
                 where: { puuid: participantPuuid },
-                create: { puuid: participantPuuid, region: PLATFORM_EUW1, lastSeen: null },
-                update: {},
+                create: { puuid: participantPuuid, region: PLATFORM_EUW1, lastSeen: null, puuidKeyVersion },
+                update: { puuidKeyVersion },
               })
             }
           }

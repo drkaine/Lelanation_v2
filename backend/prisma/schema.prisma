@@ -22,6 +22,7 @@ model Match {
   endOfGameResult  String?  @map("end_of_game_result") // GameComplete, Remake, etc. — filtre matchs valides
   rank             String?  // average rank of players in the match, e.g. "GOLD_II"
   teams            Json?    // [{ bans: [{ championId }], objectives: { baron, dragon, tower, ... } }, ...]
+  puuidKeyVersion  String?  @map("puuid_key_version") // dev|perso|prod — clé Riot associée aux PUUIDs (évite re-fetch si déjà migré)
   createdAt        DateTime @default(now()) @map("created_at")
 
   participants Participant[]
@@ -139,13 +140,15 @@ model Participant {
 }
 
 model Player {
-  puuid        String    @id
-  summonerName String?   @map("summoner_name")
-  region       String
-  lastSeen     DateTime? @map("last_seen")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  puuid           String    @id
+  summonerName    String?   @map("summoner_name")
+  region          String
+  puuidKeyVersion String?   @map("puuid_key_version") // dev|perso|prod — clé Riot utilisée pour ce PUUID
+  lastSeen        DateTime? @map("last_seen")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   @@index([region])
+  @@index([puuidKeyVersion])
   @@index([lastSeen])
   @@map("players")
 }

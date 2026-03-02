@@ -31,6 +31,19 @@ export async function getRiotApiKeyAsync(preferEnv?: boolean): Promise<string | 
 
 export type RiotApiKeySource = 'file' | 'env'
 
+/** Key version for PUUID tracking (dev|perso|prod). Set via RIOT_PUUID_KEY_VERSION env. */
+export const PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
+
+/**
+ * Get the current PUUID key version (dev, perso, prod or custom).
+ * Used to track which Riot API key the PUUIDs in DB are associated with.
+ * Default: 'prod' if unset.
+ */
+export function getPuuidKeyVersion(): string {
+  const v = process.env[PUUID_KEY_VERSION_ENV]?.trim()
+  return v && v.length > 0 ? v : 'prod'
+}
+
 async function keyFromFile(): Promise<{ key: string; source: 'file' } | null> {
   const fileResult = await FileManager.readJson<RiotApikeyConfig>(RIOT_API_KEY_FILE)
   if (fileResult.isOk()) {

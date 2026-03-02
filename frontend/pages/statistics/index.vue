@@ -3426,10 +3426,16 @@ async function loadOverview() {
     // eslint-disable-next-line no-console
     console.error('[stats/overview] fetch failed', url, err)
     overviewData.value = null
+    const errData =
+      err && typeof err === 'object' && 'data' in err ? (err as { data?: unknown }).data : null
+    const backendMsg =
+      errData && typeof errData === 'object' && errData !== null && 'message' in errData
+        ? String((errData as { message: unknown }).message)
+        : null
     overviewError.value =
-      err instanceof Error
-        ? err.message
-        : 'Impossible de charger les statistiques (vérifiez que le backend est démarré).'
+      backendMsg ||
+      (err instanceof Error ? err.message : null) ||
+      'Impossible de charger les statistiques (vérifiez que le backend est démarré).'
   } finally {
     overviewPending.value = false
     statsPerfEnd('loadOverview', t)

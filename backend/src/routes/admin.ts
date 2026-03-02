@@ -138,12 +138,33 @@ const ALL_LOGGABLE_SCRIPTS = new Set([
   'communityDragonSync',
 ])
 
+const TAIL_MAX_BYTES = 64 * 1024 // 64KB max read for large logs (avoids loading huge files)
+
 async function tailScriptLog(script: string, lines = 20): Promise<string[]> {
   const file = scriptLogFile(script)
-  const content = await fs.readFile(file, 'utf-8').catch(() => '')
-  if (!content) return []
-  const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  return arr.slice(-Math.max(1, lines))
+  try {
+    const stat = await fs.stat(file)
+    const size = stat.size
+    if (size === 0) return []
+    const toRead = Math.min(size, TAIL_MAX_BYTES)
+    const start = Math.max(0, size - toRead)
+    const buf = Buffer.alloc(toRead)
+    const fd = await fs.open(file, 'r')
+    try {
+      await fd.read(buf, 0, toRead, start)
+    } finally {
+      await fd.close()
+    }
+    let content = buf.toString('utf-8')
+    if (start > 0) {
+      const firstNl = content.indexOf('\n')
+      if (firstNl >= 0) content = content.slice(firstNl + 1)
+    }
+    const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    return arr.slice(-Math.max(1, lines))
+  } catch {
+    return []
+  }
 }
 
 async function rotateLogIfNeeded(script: string): Promise<void> {
@@ -183,14 +204,21 @@ type Pm2Proc = {
   pid?: number
   pm2_env?: { status?: string; pm_uptime?: number }
 }
+const PM2_JLIST_TIMEOUT_MS = 2000
+
 async function getPm2ProcessInfo(name: string): Promise<{ online: boolean; pid?: number; status?: string; pmUptime?: number } | null> {
   try {
-    const jlist = await new Promise<string>((resolve, reject) => {
-      exec('pm2 jlist', { timeout: 5000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout) => {
-        if (err) return reject(err)
-        resolve(stdout || '[]')
-      })
-    })
+    const jlist = await Promise.race([
+      new Promise<string>((resolve, reject) => {
+        exec('pm2 jlist', { timeout: PM2_JLIST_TIMEOUT_MS, maxBuffer: 512 * 1024 }, (err, stdout) => {
+          if (err) return reject(err)
+          resolve(stdout || '[]')
+        })
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('pm2 jlist timeout')), PM2_JLIST_TIMEOUT_MS)
+      ),
+    ])
     const data = JSON.parse(jlist) as Pm2Proc[]
     const proc = Array.isArray(data) ? data.find((p) => p?.name === name) : null
     if (!proc) return null
@@ -882,6 +910,13 @@ const CRON_JOBS: Array<{ key: string; label: string }> = [
   { key: 'communityDragonSync', label: 'communityDragonSync' },
 ]
 
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ])
+}
+
 router.get('/riot-scripts-status', async (_req, res) => {
   const map = await readScriptStatusMap()
   const hb = await FileManager.readJson<{
@@ -895,7 +930,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
   // Worker considered active only if heartbeat < 3 min (so after stop, status flips to stopped within 3 min)
   const WORKER_HEARTBEAT_MAX_AGE_MS = 3 * 60 * 1000
   const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < WORKER_HEARTBEAT_MAX_AGE_MS
-  const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
+  const pm2Worker = await withTimeout(getPm2ProcessInfo(pm2RiotWorkerAppName), 3000, null)
   const workerActive = workerHeartbeatActive || !!pm2Worker?.online
   const cronResult = await cronStatus.getStatus()
   const cronJobs: Record<CronJobKey, CronJobStatus> = cronResult.isOk()
@@ -906,10 +941,14 @@ router.get('/riot-scripts-status', async (_req, res) => {
         communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
       } as Record<CronJobKey, CronJobStatus>)
 
-  const lastOutputs = await Promise.all([...POLLER_SCRIPTS].map(async (s) => {
-    const lines = await tailScriptLog(s, 1)
-    return [s, lines[lines.length - 1] ?? null] as const
-  }))
+  const lastOutputs = await withTimeout(
+    Promise.all([...POLLER_SCRIPTS].map(async (s) => {
+      const lines = await tailScriptLog(s, 1)
+      return [s, lines[lines.length - 1] ?? null] as const
+    })),
+    5000,
+    [...POLLER_SCRIPTS].map((s) => [s, null as string | null] as const)
+  )
   const lastOutputMap = Object.fromEntries(lastOutputs)
 
   const progressMap = await readAllProgress()
@@ -957,13 +996,15 @@ router.get('/riot-scripts-status', async (_req, res) => {
     lastNewPlayerAt: null,
   }
   try {
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] = await Promise.all([
+    const statsPromise = Promise.all([
       countParticipantsMissingRank(),
       countParticipantsMissingRole(),
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       countPlayersMissingSummonerName(),
     ])
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] =
+      await withTimeout(statsPromise, 15_000, [0, 0, 0, null, 0] as const)
     dataStats = {
       participantsWithoutRank,
       participantsWithoutRole,
@@ -1322,12 +1363,14 @@ router.get('/riot-api-stats', async (_req, res) => {
 /** Data collection stats: participants/matchs sans rang, dernier joueur. */
 router.get('/data-stats', async (_req, res) => {
   try {
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] = await Promise.all([
+    const statsPromise = Promise.all([
       countParticipantsMissingRank(),
       countParticipantsMissingRole(),
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
     ])
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] =
+      await withTimeout(statsPromise, 15_000, [0, 0, 0, null] as const)
     return res.json({
       participantsWithoutRank,
       participantsWithoutRole,

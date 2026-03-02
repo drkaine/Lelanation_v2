@@ -32,6 +32,7 @@ const log = createScriptLogger(SCRIPT_ID)
 const RIOT_WORKER_STOP_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
 const RIOT_WORKER_HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
 const PUUID_MIGRATION_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'puuid-migration-requested.json')
+const PUUID_MIGRATION_LOCK_FILE = join(process.cwd(), 'data', 'cron', 'puuid-migration-in-progress.lock')
 
 const RANK_LIMIT_PER_ROUND = Math.min(500, parseInt(process.env.RIOT_BACKFILL_RANK_LIMIT ?? '100', 10) || 100)
 const ROLE_LIMIT_PER_ROUND = Math.min(500, parseInt(process.env.RIOT_BACKFILL_ROLE_MATCH_LIMIT ?? '200', 10) || 200)
@@ -72,6 +73,17 @@ async function checkAndRunPuuidMigration(): Promise<boolean> {
   } catch {
     return false
   }
+  // Lock: évite que le watchdog (qui spawn des workers) ne lance des dizaines de migrate-puuid en parallèle.
+  try {
+    await fs.access(PUUID_MIGRATION_LOCK_FILE)
+    await log.info('PUUID migration already in progress (lock exists), skipping spawn.')
+    return false
+  } catch {
+    // Pas de lock, on peut lancer
+  }
+  await fs.unlink(PUUID_MIGRATION_REQUEST_FILE).catch(() => {})
+  await fs.mkdir(dirname(PUUID_MIGRATION_LOCK_FILE), { recursive: true }).catch(() => {})
+  await fs.writeFile(PUUID_MIGRATION_LOCK_FILE, String(process.pid), 'utf-8').catch(() => {})
   await log.info('PUUID migration requested (Exception decrypting detected), running riot:migrate-puuid...')
   await writeProgress(SCRIPT_ID, {
     phase: 'migrate-puuid',
@@ -92,12 +104,13 @@ async function checkAndRunPuuidMigration(): Promise<boolean> {
         else reject(new Error(`migrate-puuid exited ${code}`))
       })
     })
-    await fs.unlink(PUUID_MIGRATION_REQUEST_FILE).catch(() => {})
     await log.info('PUUID migration completed.')
     return true
   } catch (e) {
     await log.error('PUUID migration failed:', e)
     return false
+  } finally {
+    await fs.unlink(PUUID_MIGRATION_LOCK_FILE).catch(() => {})
   }
 }
 
@@ -175,6 +188,17 @@ async function main(): Promise<void> {
       await clearProgressAndStopRequest(SCRIPT_ID)
       await log.end(0)
       return
+    }
+
+    // Si migrate-puuid tourne (lock), ne pas lancer la collecte pour éviter 429 (même quota API).
+    try {
+      await fs.access(PUUID_MIGRATION_LOCK_FILE)
+      await log.info('PUUID migration in progress (lock), waiting 10 min before retry...')
+      await writeHeartbeat({ waitingForMigration: true })
+      await new Promise((r) => setTimeout(r, 10 * 60 * 1000))
+      continue
+    } catch {
+      // Pas de lock, on continue
     }
 
     const missingRanks = await countParticipantsMissingRank()

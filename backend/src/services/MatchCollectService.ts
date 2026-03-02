@@ -173,6 +173,7 @@ export async function upsertMatchFromRiot(
   const matchRank =
     rankByPuuid != null && rankByPuuid.size > 0 ? computeMatchRankLabel(rankByPuuid) : null
 
+  const puuidKeyVersion = (await import('../utils/riotApiKey.js')).getPuuidKeyVersion()
   let match: { id: bigint }
   try {
     match = await prisma.match.create({
@@ -186,6 +187,7 @@ export async function upsertMatchFromRiot(
         endOfGameResult: endOfGameResult ?? null,
         teams: teams ?? undefined,
         rank: matchRank,
+        puuidKeyVersion,
       },
     })
   } catch (e) {
@@ -352,6 +354,9 @@ async function upsertPlayersSummonerNameFromParticipants(
   const puuids = [...new Set(participants.map((p) => p.puuid).filter(Boolean))]
   if (puuids.length === 0) return
 
+  const { getPuuidKeyVersion } = await import('../utils/riotApiKey.js')
+  const puuidKeyVersion = getPuuidKeyVersion()
+
   const existing = await prisma.player.findMany({
     where: { puuid: { in: puuids } },
     select: { puuid: true, summonerName: true },
@@ -373,9 +378,11 @@ async function upsertPlayersSummonerNameFromParticipants(
         region,
         summonerName: summonerName ?? undefined,
         lastSeen: new Date(),
+        puuidKeyVersion,
       },
       update: {
         lastSeen: new Date(),
+        puuidKeyVersion,
         ...(fillName != null ? { summonerName: fillName } : {}),
       },
     })

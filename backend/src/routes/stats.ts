@@ -103,6 +103,16 @@ function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): stri
 }
 
 const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
+const OVERVIEW_TIMEOUT_MS = 85_000 // fail fast before nginx 90s to return 503 instead of 504
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: true; data: T } | { ok: false; timeout: true }> {
+  return Promise.race([
+    p.then((data) => ({ ok: true as const, data })),
+    new Promise<{ ok: false; timeout: true }>((resolve) =>
+      setTimeout(() => resolve({ ok: false, timeout: true }), ms)
+    ),
+  ])
+}
 
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview', async (req: Request, res: Response) => {
@@ -110,15 +120,27 @@ router.get('/overview', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = queryString(req.query.rankTier)
   const sqlStart = Date.now()
-  if (version == null) {
-    const pre = await getPrecomputedOverview(rankTier ?? null)
-    if (pre?.data) {
-      ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
-      return res.json(pre.data)
+
+  const runOverview = async () => {
+    if (version == null) {
+      const pre = await getPrecomputedOverview(rankTier ?? null)
+      if (pre?.data) return pre.data
     }
+    return getOverviewStats(version, rankTier)
   }
-  const data = await getOverviewStats(version, rankTier)
+
+  const result = await withTimeout(runOverview(), OVERVIEW_TIMEOUT_MS)
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+
+  if (result.ok === false && result.timeout) {
+    console.warn('[GET /overview] timeout after', OVERVIEW_TIMEOUT_MS, 'ms (version=%s rankTier=%s)', version, rankTier)
+    return res.status(503).json({
+      error: 'Stats overview calculation timeout',
+      message: 'Les statistiques prennent trop de temps. Essayez sans filtre version/division, ou réessayez plus tard.',
+    })
+  }
+
+  const data = result.ok ? result.data : null
   if (!data) {
     const reason = !isDatabaseConfigured()
       ? 'DATABASE_URL not configured'
