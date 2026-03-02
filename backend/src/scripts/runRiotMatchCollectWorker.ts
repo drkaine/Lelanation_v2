@@ -1,202 +1,265 @@
 /**
- * Long-running worker: crawl Riot match data + enrich summoner_name in a loop, respecting rate limits.
- * Retries: (1) 401/403 → retry once with Admin key; (2) other errors → retry with backoff then next cycle.
- * Run under PM2/systemd with autorestart so that process crash = restart.
+ * PM2 Riot Worker: orchestration des scripts de collecte de données Riot.
+ * - Vérifie les manques (ranks, rôles) → backfill si besoin
+ * - Puis collecte normale (matchs)
+ * - Arrêt gracieux: attend la fin de la tâche en cours (pas le cycle complet)
+ * - Logs détaillés, heartbeat, stats API
  *
- * Usage: npm run riot:worker (from backend/) or cd backend && npx tsx src/scripts/runRiotMatchCollectWorker.ts
- * Stop: Ctrl+C (SIGINT) or kill (SIGTERM).
- *
- * Env:
- *   RIOT_MATCH_CYCLE_DELAY_MS     - Pause between cycles (default 60_000 = 1 min).
- *   RIOT_MATCH_RATE_LIMIT_PAUSE_MS - Pause when 429 rate limit (default 300_000 = 5 min).
- *   RIOT_MATCH_ENRICH_PASSES      - Enrich passes per cycle (default 1). Réduire le blocage avant le prochain crawl.
- *   RIOT_MATCH_ENRICH_PER_PASS    - Players to enrich per pass (default 50). 150 = ~1 min d’API en série.
- *   RIOT_MATCH_CRAWL_RETRIES      - Retries for crawl on transient error (default 3).
- *   RIOT_MATCH_CRAWL_BACKOFF_MS   - Initial backoff between retries (default 30_000).
+ * Usage: PM2 lelanation-riot-worker ou npm run riot:worker
  */
-import { spawn } from 'child_process'
 import { config } from 'dotenv'
-import { promises as fs } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
+import { promises as fs } from 'fs'
 import { createScriptLogger } from '../utils/ScriptLogger.js'
-import { enrichPlayers, countPlayersMissingSummonerName, countParticipantsMissingRank, countParticipantsMissingRole } from '../services/StatsPlayersRefreshService.js'
-import { prisma } from '../db.js'
-import { getRiotApiService } from '../services/RiotApiService.js'
-import { DiscordService } from '../services/DiscordService.js'
-import { getRiotApiRequestsSince } from '../services/RiotApiStatsService.js'
-import { writeProgress } from '../utils/ProcessProgressWriter.js'
-import { updateScriptStatusFromWorker } from '../utils/riotScriptStatus.js'
+import { writeProgress, clearProgressAndStopRequest } from '../utils/ProcessProgressWriter.js'
+import {
+  countParticipantsMissingRank,
+  countParticipantsMissingRole,
+  backfillParticipantRanks,
+  backfillParticipantRoles,
+  refreshMatchRanks,
+} from '../services/StatsPlayersRefreshService.js'
+import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
+import { getRiotApiStats } from '../services/RiotApiStatsService.js'
 
+const SCRIPT_ID = 'riot:worker'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 config({ path: join(__dirname, '..', '..', '.env') })
 
-const backendRoot = join(__dirname, '..', '..')
-const SCRIPT_ID = 'riot:worker'
 const log = createScriptLogger(SCRIPT_ID)
 
-/** Run a riot script as child process; update status file (running → stopped/failed). Returns exit code. */
-function runChildScript(script: string, args: string[]): Promise<number> {
-  return new Promise((resolve) => {
-    void updateScriptStatusFromWorker(script, {
-      status: 'running',
-      lastStartAt: new Date().toISOString(),
-      args: args.length ? args : undefined,
-    })
-    const childArgs = ['run', script, ...(args.length ? ['--', ...args] : [])]
-    const child = spawn('npm', childArgs, {
-      cwd: backendRoot,
-      stdio: 'inherit',
-      env: process.env,
-    })
-    void updateScriptStatusFromWorker(script, {
-      status: 'running',
-      pid: child.pid ?? undefined,
-      lastStartAt: new Date().toISOString(),
-      args: args.length ? args : undefined,
-    })
-    child.on('close', (code, signal) => {
-      const exitCode = code ?? (signal === 'SIGTERM' ? 143 : 1)
-      void updateScriptStatusFromWorker(script, {
-        status: exitCode === 0 ? 'stopped' : 'failed',
-        pid: undefined,
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: exitCode,
-      })
-      resolve(exitCode)
-    })
-  })
-}
+const RIOT_WORKER_STOP_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
+const RIOT_WORKER_HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
+const PUUID_MIGRATION_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'puuid-migration-requested.json')
 
-/** Normal mode: 2 min between cycles to refill rate limit (100 req/2 min). */
-const CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '120000', 10) || 120000)
-/** In fast mode (high backlog): shorter delay between cycles. Default 30s. */
-const FAST_CYCLE_DELAY_MS = Math.max(0, parseInt(process.env.RIOT_MATCH_FAST_CYCLE_DELAY_MS ?? '30000', 10) || 30000)
-const FAST_BACKLOG_THRESHOLD = Math.max(5000, parseInt(process.env.RIOT_MATCH_FAST_BACKLOG_THRESHOLD ?? '20000', 10) || 20000)
-const ENRICH_PASSES_AFTER_CYCLE = Math.max(0, parseInt(process.env.RIOT_MATCH_ENRICH_PASSES ?? '1', 10) || 1)
-const ENRICH_PER_PASS = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_PASS ?? '50', 10) || 50)
+const RANK_LIMIT_PER_ROUND = Math.min(500, parseInt(process.env.RIOT_BACKFILL_RANK_LIMIT ?? '100', 10) || 100)
+const ROLE_LIMIT_PER_ROUND = Math.min(500, parseInt(process.env.RIOT_BACKFILL_ROLE_MATCH_LIMIT ?? '200', 10) || 200)
 
-const HEARTBEAT_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
-const STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
-
-type HeartbeatPayload = {
-  lastBeat: string
-  cyclePhase: 'crawl' | 'enrich' | 'sleep'
-  matchesCollectedThisCycle: number
-  requestsThisCycle: number
-}
-
-async function writeHeartbeat(payload: HeartbeatPayload): Promise<void> {
+async function isWorkerStopRequested(): Promise<boolean> {
   try {
-    const dir = join(process.cwd(), 'data', 'cron')
-    await fs.mkdir(dir, { recursive: true })
-    await fs.writeFile(HEARTBEAT_FILE, JSON.stringify(payload, null, 0), 'utf-8')
+    await fs.access(RIOT_WORKER_STOP_FILE)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function clearWorkerStopRequest(): Promise<void> {
+  try {
+    await fs.unlink(RIOT_WORKER_STOP_FILE)
   } catch {
     // ignore
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+async function writeHeartbeat(extra?: Record<string, unknown>): Promise<void> {
+  try {
+    await fs.mkdir(dirname(RIOT_WORKER_HEARTBEAT_FILE), { recursive: true })
+    await fs.writeFile(
+      RIOT_WORKER_HEARTBEAT_FILE,
+      JSON.stringify({ lastBeat: new Date().toISOString(), ...extra }, null, 0),
+      'utf-8'
+    )
+  } catch {
+    // ignore
+  }
+}
+
+async function checkAndRunPuuidMigration(): Promise<boolean> {
+  try {
+    await fs.access(PUUID_MIGRATION_REQUEST_FILE)
+  } catch {
+    return false
+  }
+  await log.info('PUUID migration requested (Exception decrypting detected), running riot:migrate-puuid...')
+  await writeProgress(SCRIPT_ID, {
+    phase: 'migrate-puuid',
+    metrics: { requested: true },
+  })
+  try {
+    const { spawn } = await import('child_process')
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('npm', ['run', 'riot:migrate-puuid'], {
+        cwd: process.cwd(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      })
+      if (child.stdout) child.stdout.on('data', (d) => process.stdout.write(String(d)))
+      if (child.stderr) child.stderr.on('data', (d) => process.stderr.write(String(d)))
+      child.on('close', (code) => {
+        if (code === 0) resolve()
+        else reject(new Error(`migrate-puuid exited ${code}`))
+      })
+    })
+    await fs.unlink(PUUID_MIGRATION_REQUEST_FILE).catch(() => {})
+    await log.info('PUUID migration completed.')
+    return true
+  } catch (e) {
+    await log.error('PUUID migration failed:', e)
+    return false
+  }
+}
+
+async function runBackfillPhase(): Promise<{ ranksUpdated: number; rolesUpdated: number }> {
+  let ranksUpdated = 0
+  let rolesUpdated = 0
+
+  const missingRanks = await countParticipantsMissingRank()
+  const missingRoles = await countParticipantsMissingRole()
+
+  if (missingRanks > 0) {
+    await log.info(`Backfill ranks: ${missingRanks} participants sans rank`)
+    await writeProgress(SCRIPT_ID, {
+      phase: 'backfill-ranks',
+      metrics: { participantsMissingData: missingRanks },
+    })
+    const { updated } = await backfillParticipantRanks(RANK_LIMIT_PER_ROUND, {
+      shouldStop: () => isWorkerStopRequested(),
+    })
+    ranksUpdated = updated
+    await log.info(`Backfill ranks: ${updated} mis à jour`)
+  }
+
+  if (await isWorkerStopRequested()) return { ranksUpdated, rolesUpdated }
+
+  if (missingRoles > 0) {
+    await log.info(`Backfill rôles: ${missingRoles} participants sans rôle`)
+    await writeProgress(SCRIPT_ID, {
+      phase: 'backfill-roles',
+      metrics: { participantsMissingData: missingRoles },
+    })
+    const { updated } = await backfillParticipantRoles(ROLE_LIMIT_PER_ROUND, {
+      shouldStop: () => isWorkerStopRequested(),
+    })
+    rolesUpdated = updated
+    await log.info(`Backfill rôles: ${updated} mis à jour`)
+  }
+
+  if (ranksUpdated > 0 || rolesUpdated > 0) {
+    await refreshMatchRanks()
+  }
+
+  return { ranksUpdated, rolesUpdated }
 }
 
 async function main(): Promise<void> {
-  getRiotApiService().setKeyPreference(false)
-  const discordService = new DiscordService()
+  await log.start([])
+  await writeProgress(SCRIPT_ID, {
+    pid: process.pid,
+    phase: 'starting',
+    metrics: {},
+  })
 
-  let running = true
-  const onStop = () => {
-    void log.info('Stop requested, finishing current cycle then exit.')
-    running = false
+  if (await isWorkerStopRequested()) {
+    await log.info('Stop requested before start, exiting.')
+    await clearWorkerStopRequest()
+    await clearProgressAndStopRequest(SCRIPT_ID)
+    await log.end(0)
+    return
   }
-  process.on('SIGINT', onStop)
-  process.on('SIGTERM', onStop)
 
-  await log.start()
-  await log.info(
-    `Starting worker: backfill (if data null) or collect (with PID). Cycle delay=${CYCLE_DELAY_MS}ms, enrich after collect. Stop with Ctrl+C or admin "Stopper le poller".`
-  )
+  // Check for PUUID migration request (e.g. after "Exception decrypting" from Riot)
+  const migrationRan = await checkAndRunPuuidMigration()
+  if (migrationRan && (await isWorkerStopRequested())) {
+    await clearWorkerStopRequest()
+    await clearProgressAndStopRequest(SCRIPT_ID)
+    await log.end(0)
+    return
+  }
 
-  let cycle = 0
-  while (running) {
-    try {
-      await fs.access(STOP_REQUEST_FILE)
-      await fs.unlink(STOP_REQUEST_FILE)
-      await log.info('Stop requested from admin, exiting after this cycle.')
-      running = false
-      break
-    } catch {
-      // no stop file, continue
+  while (true) {
+    if (await isWorkerStopRequested()) {
+      await log.info('Stop requested, exiting gracefully.')
+      await clearWorkerStopRequest()
+      await clearProgressAndStopRequest(SCRIPT_ID)
+      await log.end(0)
+      return
     }
 
-    cycle++
-    const cycleStart = Date.now()
-    let collected = 0
     const missingRanks = await countParticipantsMissingRank()
     const missingRoles = await countParticipantsMissingRole()
-    const needsBackfill = missingRanks > 0 || missingRoles > 0
 
-    if (needsBackfill) {
-      await log.info(`Cycle ${cycle}: backfill prioritaire (missingRanks=${missingRanks} missingRoles=${missingRoles}), lancement riot:backfill-until-done`)
-      await runChildScript('riot:backfill-until-done', [])
-    } else {
-      await log.info(`Cycle ${cycle}: pas de backfill à faire, lancement riot:collect`)
-      await runChildScript('riot:collect', [])
-      if (!running) break
-      const missingSummonerName = await countPlayersMissingSummonerName()
-      if (missingSummonerName > 0) {
-        for (let p = 0; p < ENRICH_PASSES_AFTER_CYCLE && running; p++) {
-          try {
-            const { enriched } = await enrichPlayers(ENRICH_PER_PASS)
-            if (enriched === 0) break
-          } catch (e) {
-            await log.warn('Enrich pass failed:', e)
-          }
-        }
+    if (missingRanks > 0 || missingRoles > 0) {
+      await runBackfillPhase()
+      if (await isWorkerStopRequested()) {
+        await clearWorkerStopRequest()
+        await clearProgressAndStopRequest(SCRIPT_ID)
+        await log.end(0)
+        return
       }
+      continue
     }
 
-    const unpoledCount = await prisma.player.count({ where: { lastSeen: null } }).catch(() => 0)
-    const cycleDelayMs = unpoledCount >= FAST_BACKLOG_THRESHOLD ? FAST_CYCLE_DELAY_MS : CYCLE_DELAY_MS
-    const elapsed = Math.round((Date.now() - cycleStart) / 1000)
-    const requestsThisCycle = await getRiotApiRequestsSince(cycleStart)
-    await log.jobResult('cycle', {
-      success: true,
-      cycle,
-      elapsedSec: elapsed,
-      collected,
-      requestsThisCycle,
-      sleepSec: cycleDelayMs / 1000,
-    })
-    await writeHeartbeat({
-      lastBeat: new Date().toISOString(),
-      cyclePhase: 'sleep',
-      matchesCollectedThisCycle: collected,
-      requestsThisCycle,
-    })
+    // Normal collect
     await writeProgress(SCRIPT_ID, {
-      pid: process.pid,
-      phase: 'sleep',
-      metrics: {
-        matchesCollected: collected,
-        requestsUsed: requestsThisCycle,
-      },
+      phase: 'collect',
+      metrics: {},
     })
-    await sleep(cycleDelayMs)
+    await log.info('Starting match collection...')
+    const statsBefore = await getRiotApiStats()
+
+    try {
+      const result = await runRiotMatchCollectOnce({
+        shouldStop: () => isWorkerStopRequested(),
+      })
+      const statsAfter = await getRiotApiStats()
+
+      await writeHeartbeat({
+        cyclePhase: 'collect',
+        matchesCollectedThisCycle: result.collected,
+        requestsThisCycle: statsAfter.requestsLastHour - statsBefore.requestsLastHour,
+      })
+      await writeProgress(SCRIPT_ID, {
+        phase: 'done',
+        metrics: {
+          matchesCollected: result.collected,
+          errors: result.errors,
+          requestsLastMinute: statsAfter.requestsLastMinute,
+          count429: statsAfter.count429Total,
+        },
+      })
+
+      await log.info(
+        `Collect done: ${result.collected} matchs, ${result.errors} erreurs. ` +
+          `API: ${statsAfter.requestsLastMinute} req/min, ${statsAfter.count429Total}×429`
+      )
+
+      if (result.authError) {
+        await log.warn('Auth error (401/403) - check API key')
+        break
+      }
+
+      if (result.rateLimitHit) {
+        await log.warn('Rate limit (429) hit - sleeping 60s before next cycle')
+        await new Promise((r) => setTimeout(r, 60_000))
+      }
+
+      if (result.serverError5xx) {
+        await log.warn('Too many 5xx - sleeping 120s before next cycle')
+        await new Promise((r) => setTimeout(r, 120_000))
+      }
+    } catch (e) {
+      await log.error('Collect failed:', e)
+      await writeProgress(SCRIPT_ID, {
+        phase: 'error',
+        metrics: { error: String(e) },
+      })
+      await new Promise((r) => setTimeout(r, 30_000))
+    }
+
+    const delayMs = parseInt(process.env.RIOT_WORKER_CYCLE_DELAY_MS ?? '60000', 10) || 60_000
+    await log.info(`Next cycle in ${delayMs / 1000}s`)
+    await new Promise((r) => setTimeout(r, delayMs))
   }
 
-  await log.info(`Stopped after ${cycle} cycle(s).`)
+  await clearProgressAndStopRequest(SCRIPT_ID)
   await log.end(0)
-  await discordService.sendAlert(
-    '🛑 Poller Riot – Arrêt',
-    `Le worker de collecte Riot a été arrêté après ${cycle} cycle(s) (SIGINT/SIGTERM). Relancez-le manuellement ou via l’admin.`,
-    undefined,
-    { cycles: cycle, timestamp: new Date().toISOString() }
-  )
 }
 
 main().catch(async (err) => {
   await log.error('Fatal:', err)
+  await clearProgressAndStopRequest(SCRIPT_ID)
   await log.end(1)
   process.exit(1)
 })

@@ -76,11 +76,16 @@ function isRateLimitError(err: unknown): boolean {
 
 const LOG_PREFIX = '[Riot match collect]'
 
+export type RiotMatchCollectOptions = {
+  /** Si fourni, vérifié avant chaque match; si true, arrêt gracieux après le match en cours. */
+  shouldStop?: () => Promise<boolean>
+}
+
 /**
  * Run one full Riot match collection pass (EUW1 only).
  * Returns { collected, errors, rateLimitHit, serverError5xx, authError?: boolean }.
  */
-export async function runRiotMatchCollectOnce(): Promise<{
+export async function runRiotMatchCollectOnce(options?: RiotMatchCollectOptions): Promise<{
   collected: number
   errors: number
   rateLimitHit?: boolean
@@ -196,6 +201,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
       patchWindows.length > 0 ? Math.max(1, Math.floor(MATCH_IDS_PER_SUMMONER / patchWindows.length)) : MATCH_IDS_PER_SUMMONER
 
     for (const row of playersToCrawl) {
+      if (options?.shouldStop && (await options.shouldStop())) break
       const processedIdx = playersToCrawl.indexOf(row) + 1
       if (processedIdx % 20 === 1 || processedIdx === playersToCrawl.length) {
         console.log(`${LOG_PREFIX} Crawling player ${processedIdx}/${playersToCrawl.length}…`)
@@ -280,6 +286,7 @@ export async function runRiotMatchCollectOnce(): Promise<{
 
       let consecutive5xx = 0
       for (const matchId of toFetch) {
+        if (options?.shouldStop && (await options.shouldStop())) break
         try {
           const matchResult = await riotApi.getMatch(matchId)
           if (matchResult.isErr()) {

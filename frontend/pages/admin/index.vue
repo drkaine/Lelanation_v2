@@ -1507,7 +1507,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { apiUrl } from '~/utils/apiUrl'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 
@@ -2722,9 +2722,16 @@ onMounted(async () => {
 })
 
 // Sync URL when tab changes (refresh will restore the tab)
+const DATA_TAB_POLL_INTERVAL_MS = 10 * 1000
+let dataTabPollTimer: ReturnType<typeof setInterval> | null = null
+
 watch(activeTab, (tab, prevTab) => {
   if (tab !== prevTab && route.query.tab !== tab) {
     navigateTo({ path: route.path, query: { ...route.query, tab } }, { replace: true })
+  }
+  if (dataTabPollTimer) {
+    clearInterval(dataTabPollTimer)
+    dataTabPollTimer = null
   }
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if ((tab === 'videos' || tab === 'data') && !cron.value && !cronLoading.value) loadCron()
@@ -2734,8 +2741,19 @@ watch(activeTab, (tab, prevTab) => {
     loadRiotApiStats()
     loadDataStats()
     if (seedPlayersList.value.length === 0 && !seedPlayersLoading.value) loadSeedPlayers()
+    dataTabPollTimer = setInterval(() => {
+      loadRiotScriptsStatus()
+      loadRiotApiStats()
+    }, DATA_TAB_POLL_INTERVAL_MS)
   }
   if (tab === 'videos' && cron.value && !cronLoading.value) loadCron()
+})
+
+onUnmounted(() => {
+  if (dataTabPollTimer) {
+    clearInterval(dataTabPollTimer)
+    dataTabPollTimer = null
+  }
 })
 
 // Sync activeTab when URL changes (browser back/forward)

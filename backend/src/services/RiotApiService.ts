@@ -1,13 +1,18 @@
 /**
  * Riot API client: League v4, Match v5. EUW/EUNE only.
- * Rate limits: 20 requests/s, 100 requests/2 min. Queue 420 = Ranked Solo/Duo.
+ * Rate limits: per-route (see RiotRateLimiter). Queue 420 = Ranked Solo/Duo.
  */
 import axios, { type AxiosInstance } from 'axios'
+import { rateLimitByRoute } from '../utils/RiotRateLimiter.js'
 import { getRiotApiKeyAsync } from '../utils/riotApiKey.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 import type { EuropePlatform } from '../utils/riotRegions.js'
-import { recordRiotApiRequest, recordRiotApi429 } from './RiotApiStatsService.js'
+import {
+  recordRiotApi429,
+  requestPuuidMigration,
+  getRiotApiStats,
+} from './RiotApiStatsService.js'
 
 const PLATFORM_BASE = {
   euw1: 'https://euw1.api.riotgames.com',
@@ -38,39 +43,11 @@ const CONTINENT_BASE: Record<string, string> = {
 const RANKED_SOLO_QUEUE = 'RANKED_SOLO_5x5'
 const QUEUE_ID_420 = 420
 
-/** 20 requests per second → 50ms between requests */
-const RATE_LIMIT_DELAY_MS = 50
-/** 100 requests per 2 minutes (sliding window) */
-const RATE_LIMIT_PER_TWO_MIN = 100
-const RATE_LIMIT_TWO_MIN_MS = 2 * 60 * 1000
 /** Max retries on 429 (rate limit). Backoff: Retry-After header or 60s. */
 const RATE_LIMIT_MAX_RETRIES = 3
 /** Max retries on 5xx (server error). Backoff: 5s, 10s, 20s, 40s, 80s. Riot often returns 500/503 during outages. Reduce via RIOT_5XX_MAX_RETRIES when API is unstable. */
 const RETRY_5XX_MAX = Math.min(5, Math.max(0, parseInt(process.env.RIOT_5XX_MAX_RETRIES ?? '5', 10) || 5))
 const RETRY_5XX_BACKOFF_MS = 5000
-
-let lastRequestTime = 0
-const requestTimestamps: number[] = []
-
-async function rateLimit(): Promise<void> {
-  let now = Date.now()
-  const elapsed = now - lastRequestTime
-  if (elapsed < RATE_LIMIT_DELAY_MS) {
-    await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY_MS - elapsed))
-  }
-  now = Date.now()
-  const cutoff = now - RATE_LIMIT_TWO_MIN_MS
-  while (requestTimestamps.length > 0 && requestTimestamps[0] <= cutoff) requestTimestamps.shift()
-  while (requestTimestamps.length >= RATE_LIMIT_PER_TWO_MIN) {
-    const waitMs = requestTimestamps[0] + RATE_LIMIT_TWO_MIN_MS - now
-    if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs))
-    now = Date.now()
-    while (requestTimestamps.length > 0 && requestTimestamps[0] <= now - RATE_LIMIT_TWO_MIN_MS) requestTimestamps.shift()
-  }
-  requestTimestamps.push(Date.now())
-  lastRequestTime = Date.now()
-  void recordRiotApiRequest()
-}
 
 async function withRetry429<T>(
   fn: () => Promise<T>,
@@ -88,15 +65,19 @@ async function withRetry429<T>(
       lastErr = err
       if (!axios.isAxiosError(err)) throw err
       const status = err.response?.status ?? 0
-      // 429: wait Retry-After or 60s
+      // 429: wait Retry-After or 60s; si plusieurs 429, sleep 3s supplémentaire
       if (status === 429 && attempt <= max429Retries) {
-        void recordRiotApi429()
+        recordRiotApi429()
         const retryAfter = err.response?.headers?.['retry-after']
         const waitMs =
           typeof retryAfter === 'string' && /^\d+$/.test(retryAfter)
             ? parseInt(retryAfter, 10) * 1000
             : 60_000
         await new Promise((r) => setTimeout(r, waitMs))
+        const stats = await getRiotApiStats()
+        if (stats.count429Total >= 2) {
+          await new Promise((r) => setTimeout(r, 3000))
+        }
         continue
       }
       // 5xx: retry with backoff (transient server errors from Riot). 503 may include Retry-After.
@@ -112,7 +93,15 @@ async function withRetry429<T>(
       throw err
     }
   }
+  checkPuuidMigration(lastErr)
   throw lastErr
+}
+
+function checkPuuidMigration(err: unknown): void {
+  const msg = axios.isAxiosError(err)
+    ? String(err.response?.data?.status?.message ?? err.response?.data?.message ?? err.message ?? '')
+    : String(err && typeof err === 'object' && 'message' in err ? (err as { message: string }).message : err)
+  if (/decrypt|exception decrypting/i.test(msg)) void requestPuuidMigration()
 }
 
 function createClient(baseURL: string, apiKey: string, timeoutMs = 15000): AxiosInstance {
@@ -213,7 +202,7 @@ export class RiotApiService {
     division: 'I' | 'II' | 'III' | 'IV',
     page: number = 1
   ): Promise<Result<LeagueEntry[], AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('league-entries')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -224,6 +213,7 @@ export class RiotApiService {
       const list = Array.isArray(res.data) ? res.data : []
       return Result.ok(list)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`League API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -240,7 +230,7 @@ export class RiotApiService {
     division: 'I' | 'II' | 'III' | 'IV',
     page: number = 1
   ): Promise<Result<LeagueEntry[], AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('league-exp')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -251,6 +241,7 @@ export class RiotApiService {
       const list = Array.isArray(res.data) ? res.data : []
       return Result.ok(list)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`League-exp API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -281,7 +272,7 @@ export class RiotApiService {
     platform: 'euw1' | 'eun1',
     listType: 'challengerleagues' | 'grandmasterleagues' | 'masterleagues'
   ): Promise<Result<LeagueEntry[], AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('league-challenger-master-grandmaster')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -309,6 +300,7 @@ export class RiotApiService {
         .filter((e): e is LeagueEntry => e !== null)
       return Result.ok(list)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`League API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -323,7 +315,7 @@ export class RiotApiService {
     platform: EuropePlatform,
     puuid: string
   ): Promise<Result<{ tier: string; rank: string; leaguePoints: number } | null, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('league-entries-by-puuid')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform as keyof typeof PLATFORM_BASE]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -343,6 +335,7 @@ export class RiotApiService {
         leaguePoints: typeof solo.leaguePoints === 'number' ? solo.leaguePoints : 0,
       })
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
       if (status === 404) {
         return Result.ok(null)
@@ -364,7 +357,7 @@ export class RiotApiService {
     platform: 'euw1' | 'eun1',
     summonerId: string
   ): Promise<Result<{ tier: string; rank: string; leaguePoints: number } | null, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('league-entries-by-summoner')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -384,6 +377,7 @@ export class RiotApiService {
         leaguePoints: typeof solo.leaguePoints === 'number' ? solo.leaguePoints : 0,
       })
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       const hint =
@@ -398,7 +392,7 @@ export class RiotApiService {
    * Summoner v4 by encrypted summoner id (returns puuid for match list). Platform: euw1, eun1.
    */
   async getSummonerById(platform: PlatformRegion, summonerId: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('summoner-by-id')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -411,6 +405,7 @@ export class RiotApiService {
       )
       return Result.ok(res.data)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -420,7 +415,7 @@ export class RiotApiService {
    * Summoner v4 by puuid. Platform: euw1, eun1.
    */
   async getSummonerByPuuid(platform: PlatformRegion, puuid: string): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('summoner-by-puuid')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -442,6 +437,7 @@ export class RiotApiService {
         name: name ?? '',
       })
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -455,7 +451,7 @@ export class RiotApiService {
     continent: 'europe' | 'americas' | 'asia',
     puuid: string
   ): Promise<Result<{ gameName: string; tagLine: string; riotId: string }, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('account')
     const key = await this.ensureKey()
     const base = CONTINENT_BASE[continent]
     if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
@@ -472,6 +468,7 @@ export class RiotApiService {
       const riotId = tagLine ? `${gameName}#${tagLine}` : gameName
       return Result.ok({ gameName, tagLine, riotId })
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Account API (by-puuid): ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -488,7 +485,7 @@ export class RiotApiService {
     continent: 'europe' | 'americas' | 'asia' = 'europe',
     options: { fast?: boolean; debugLog?: (msg: string) => void } = {}
   ): Promise<Result<{ puuid: string }, AppError>> {
-    if (!options.fast) await rateLimit()
+    if (!options.fast) await rateLimitByRoute('account')
     const key = await this.ensureKey()
     const base = CONTINENT_BASE[continent]
     if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
@@ -506,6 +503,7 @@ export class RiotApiService {
       if (!puuid) return Result.err(new AppError('Account API: no puuid in response', 'RIOT_API_ERROR'))
       return Result.ok({ puuid })
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       const body = axios.isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data).slice(0, 200) : ''
@@ -523,7 +521,7 @@ export class RiotApiService {
     puuid: string,
     options: { count?: number; start?: number; fast?: boolean } = {}
   ): Promise<Result<ReplayLinkEntry[], AppError>> {
-    if (!options.fast) await rateLimit()
+    if (!options.fast) await rateLimitByRoute('match-replays')
     const key = await this.ensureKey()
     const base = CONTINENT_BASE[continent]
     if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
@@ -557,6 +555,7 @@ export class RiotApiService {
         .filter((x): x is ReplayLinkEntry => x !== null)
       return Result.ok(links)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Replay API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -570,7 +569,7 @@ export class RiotApiService {
     summonerName: string,
     options: { fast?: boolean } = {}
   ): Promise<Result<{ id: string; puuid: string; name: string }, AppError>> {
-    if (!options.fast) await rateLimit()
+    if (!options.fast) await rateLimitByRoute('summoner-by-puuid')
     const key = await this.ensureKey()
     const base = PLATFORM_BASE[platform]
     if (!base) return Result.err(new AppError(`Unknown platform: ${platform}`, 'VALIDATION_ERROR'))
@@ -585,6 +584,7 @@ export class RiotApiService {
       )
       return Result.ok(res.data)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Summoner API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -605,7 +605,7 @@ export class RiotApiService {
       continent?: 'europe' | 'americas' | 'asia'
     } = {}
   ): Promise<Result<string[], AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('match-ids')
     const key = await this.ensureKey()
     const base = options.continent && CONTINENT_BASE[options.continent]
       ? CONTINENT_BASE[options.continent]
@@ -628,6 +628,7 @@ export class RiotApiService {
       const ids = Array.isArray(res.data) ? res.data : []
       return Result.ok(ids)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Match list API: ${message}`, 'RIOT_API_ERROR', err))
     }
@@ -637,7 +638,7 @@ export class RiotApiService {
    * Match v5: full match by id. Region = europe.
    */
   async getMatch(matchId: string): Promise<Result<MatchSummary, AppError>> {
-    await rateLimit()
+    await rateLimitByRoute('match')
     const key = await this.ensureKey()
     const client = createClient(REGIONAL_BASE, key)
     try {
@@ -646,6 +647,7 @@ export class RiotApiService {
       )
       return Result.ok(res.data)
     } catch (err: unknown) {
+      checkPuuidMigration(err)
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       return Result.err(new AppError(`Match API: ${message} (status ${status})`, 'RIOT_API_ERROR', err))

@@ -1,139 +1,107 @@
 /**
- * Process progress and graceful stop for admin-tracked scripts.
- * - Writes metrics/phase to data/cron/process-progress-{scriptId}.json
- * - Stop request: data/cron/stop-request-{scriptId}.json (scripts check this to exit gracefully)
+ * Process progress and stop-request files for admin UI and graceful script shutdown.
+ * Files: data/cron/{scriptId}-progress.json, data/cron/stop-request-{scriptId}.json
  */
-
+import { promises as fs } from 'fs'
 import { join } from 'path'
-import { FileManager } from './fileManager.js'
 
 const CRON_DIR = join(process.cwd(), 'data', 'cron')
 
-export type ProcessProgressMetrics = {
-  participantsProcessed?: number
-  participantsMissingData?: number
-  newPlayersAdded?: number
-  matchesCollected?: number
-  matchesFromDb?: number
-  requestsUsed?: number
-  requestLimit?: number
-  errors?: number
-  [key: string]: number | undefined
-}
-
-export type ProcessProgress = {
-  scriptId: string
+export interface ProgressData {
   pid?: number
   phase: string
-  startedAt: string
-  lastUpdatedAt: string
-  metrics: ProcessProgressMetrics
+  startedAt?: string
+  lastUpdatedAt?: string
+  metrics?: Record<string, number | string | boolean>
 }
 
-function scriptIdToSafeFilename(scriptId: string): string {
-  return scriptId.replace(/[^a-zA-Z0-9_-]/g, '_')
+const progressFiles = new Map<string, string>()
+function progressPath(scriptId: string): string {
+  let p = progressFiles.get(scriptId)
+  if (!p) {
+    const safe = scriptId.replace(/[^a-zA-Z0-9_-]/g, '_')
+    p = join(CRON_DIR, `${safe}-progress.json`)
+    progressFiles.set(scriptId, p)
+  }
+  return p
 }
 
-function progressFilePath(scriptId: string): string {
-  return join(CRON_DIR, `process-progress-${scriptIdToSafeFilename(scriptId)}.json`)
+function stopRequestPath(scriptId: string): string {
+  const safe = scriptId.replace(/[^a-zA-Z0-9_-]/g, '_')
+  return join(CRON_DIR, `stop-request-${safe}.json`)
 }
 
-function stopRequestFilePath(scriptId: string): string {
-  return join(CRON_DIR, `stop-request-${scriptIdToSafeFilename(scriptId)}.json`)
-}
-
-/**
- * Write or update progress for a script. Merges with existing metrics.
- */
-export async function writeProgress(
-  scriptId: string,
-  update: Partial<Pick<ProcessProgress, 'pid' | 'phase' | 'metrics'>>
-): Promise<void> {
+export async function writeProgress(scriptId: string, data: Partial<ProgressData>): Promise<void> {
+  await fs.mkdir(CRON_DIR, { recursive: true })
   const now = new Date().toISOString()
-  const existing = await readProgress(scriptId)
-  const base: ProcessProgress = existing ?? {
-    scriptId,
-    phase: 'idle',
-    startedAt: now,
+  const full: ProgressData = {
+    ...data,
+    phase: data.phase ?? 'unknown',
     lastUpdatedAt: now,
-    metrics: {},
+    startedAt: data.startedAt ?? data.lastUpdatedAt ?? now,
+    metrics: data.metrics ?? {},
   }
-  const next: ProcessProgress = {
-    ...base,
-    ...(update.pid !== undefined && { pid: update.pid }),
-    ...(update.phase !== undefined && { phase: update.phase }),
-    lastUpdatedAt: now,
-    metrics: { ...base.metrics, ...(update.metrics ?? {}) },
-  }
-  if (update.phase !== undefined) next.phase = update.phase
-  if (!existing) next.startedAt = now
-  await FileManager.ensureDir(CRON_DIR)
-  await FileManager.writeJson(progressFilePath(scriptId), next)
+  await fs.writeFile(progressPath(scriptId), JSON.stringify(full, null, 0), 'utf-8')
 }
 
-/**
- * Read current progress for a script (null if never written).
- */
-export async function readProgress(scriptId: string): Promise<ProcessProgress | null> {
-  const r = await FileManager.readJson<ProcessProgress>(progressFilePath(scriptId))
-  if (r.isErr()) return null
-  return r.unwrap()
+export async function readProgress(scriptId: string): Promise<ProgressData | null> {
+  try {
+    const raw = await fs.readFile(progressPath(scriptId), 'utf-8')
+    return JSON.parse(raw) as ProgressData
+  } catch {
+    return null
+  }
 }
 
-/**
- * Read all progress files (for admin process-status endpoint). Uses scriptId from file content.
- */
-export async function readAllProgress(): Promise<Record<string, ProcessProgress | null>> {
-  const { promises: fs } = await import('fs')
-  const out: Record<string, ProcessProgress | null> = {}
+export async function readAllProgress(): Promise<Record<string, ProgressData>> {
+  const result: Record<string, ProgressData> = {}
   try {
     const files = await fs.readdir(CRON_DIR)
-    const progressFiles = files.filter((f) => f.startsWith('process-progress-') && f.endsWith('.json'))
-    for (const f of progressFiles) {
-      const fullPath = join(CRON_DIR, f)
-      const r = await FileManager.readJson<ProcessProgress>(fullPath)
-      if (r.isOk()) {
-        const p = r.unwrap()
-        if (p.scriptId) out[p.scriptId] = p
+    for (const f of files) {
+      if (f.endsWith('-progress.json')) {
+        const base = f.replace(/-progress\.json$/, '')
+        const scriptId = base.replace(/^riot_/, 'riot:')
+        const raw = await fs.readFile(join(CRON_DIR, f), 'utf-8').catch(() => '{}')
+        try {
+          result[scriptId] = JSON.parse(raw) as ProgressData
+        } catch {
+          // ignore
+        }
       }
     }
   } catch {
-    // directory may not exist
+    // dir may not exist
   }
-  return out
+  return result
 }
 
-/**
- * Check if a stop has been requested for this script. If true, script should exit after current batch.
- */
 export async function isStopRequested(scriptId: string): Promise<boolean> {
-  const r = await FileManager.readJson<{ requestedAt?: string }>(stopRequestFilePath(scriptId))
-  return r.isOk()
+  try {
+    await fs.access(stopRequestPath(scriptId))
+    return true
+  } catch {
+    return false
+  }
 }
 
-/**
- * Write stop request (called by admin). Scripts poll isStopRequested() and exit gracefully.
- */
-export async function writeStopRequest(scriptId: string): Promise<void> {
-  await FileManager.ensureDir(CRON_DIR)
-  await FileManager.writeJson(stopRequestFilePath(scriptId), {
-    requestedAt: new Date().toISOString(),
-  })
-}
-
-/**
- * Clear stop request and progress after script exits (optional cleanup).
- */
 export async function clearProgressAndStopRequest(scriptId: string): Promise<void> {
-  const { promises: fs } = await import('fs')
   try {
-    await fs.unlink(stopRequestFilePath(scriptId))
+    await fs.unlink(progressPath(scriptId))
   } catch {
     // ignore
   }
   try {
-    await fs.unlink(progressFilePath(scriptId))
+    await fs.unlink(stopRequestPath(scriptId))
   } catch {
     // ignore
   }
+}
+
+export async function writeStopRequest(scriptId: string): Promise<void> {
+  await fs.mkdir(CRON_DIR, { recursive: true })
+  await fs.writeFile(
+    stopRequestPath(scriptId),
+    JSON.stringify({ requestedAt: new Date().toISOString() }, null, 0),
+    'utf-8'
+  )
 }
