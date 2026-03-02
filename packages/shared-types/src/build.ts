@@ -344,6 +344,7 @@ export interface CalculatedStats {
   magicPenetration: number
   tenacity: number
   lethality: number
+  percentLethality: number
   omnivamp: number
   shield: number
   attackRange: number

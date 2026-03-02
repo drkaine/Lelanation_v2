@@ -1,6 +1,6 @@
 <template>
   <div class="stat-card bg-surface-dark rounded border border-primary p-3">
-    <p class="text-text/70 mb-1 text-xs">{{ label }}</p>
+    <p class="mb-1 text-xs text-text/70">{{ label }}</p>
     <div class="flex items-center gap-2">
       <p class="text-lg font-bold text-text">{{ displayValue }}{{ suffix }}</p>
       <span
@@ -20,17 +20,29 @@ interface StatCardProps {
   label: string
   value: number
   previousValue?: number | null
-  format?: 'number' | 'decimal' | 'percent'
+  format?: 'number' | 'decimal' | 'percent' | 'lethality'
+  percentValue?: number
   suffix?: string
 }
 
 const props = withDefaults(defineProps<StatCardProps>(), {
   format: 'number',
   previousValue: null,
+  percentValue: 0,
   suffix: '',
 })
 
 const displayValue = computed(() => {
+  if (props.format === 'lethality') {
+    const flat = props.value
+    const percent = (props.percentValue ?? 0) / 100
+    const hasFlat = Number.isFinite(flat) && Math.abs(flat) >= 0.01
+    const hasPercent = Number.isFinite(percent) && Math.abs(percent) >= 0.01
+    if (hasFlat && hasPercent) return `${Math.round(flat)} - ${(percent * 100).toFixed(1)}%`
+    if (hasFlat) return String(Math.round(flat))
+    if (hasPercent) return `${(percent * 100).toFixed(1)}%`
+    return '0'
+  }
   if (props.format === 'percent') {
     return `${(props.value * 100).toFixed(1)}%`
   } else if (props.format === 'decimal') {

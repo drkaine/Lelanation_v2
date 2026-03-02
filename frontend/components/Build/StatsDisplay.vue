@@ -158,6 +158,13 @@
               :previous-value="previousStats?.magicPenetration"
               format="percent"
             />
+            <StatCard
+              :label="t('stats.labels.lethality')"
+              :value="stats.lethality"
+              :percent-value="(stats.percentLethality ?? 0) * 100"
+              :previous-value="previousStats?.lethality"
+              format="lethality"
+            />
           </div>
         </div>
 

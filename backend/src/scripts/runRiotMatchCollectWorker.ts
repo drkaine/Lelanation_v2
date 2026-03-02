@@ -82,8 +82,6 @@ async function checkAndRunPuuidMigration(): Promise<boolean> {
     // Pas de lock, on peut lancer
   }
   await fs.unlink(PUUID_MIGRATION_REQUEST_FILE).catch(() => {})
-  await fs.mkdir(dirname(PUUID_MIGRATION_LOCK_FILE), { recursive: true }).catch(() => {})
-  await fs.writeFile(PUUID_MIGRATION_LOCK_FILE, String(process.pid), 'utf-8').catch(() => {})
   await log.info('PUUID migration requested (Exception decrypting detected), running riot:migrate-puuid...')
   await writeProgress(SCRIPT_ID, {
     phase: 'migrate-puuid',
@@ -109,9 +107,8 @@ async function checkAndRunPuuidMigration(): Promise<boolean> {
   } catch (e) {
     await log.error('PUUID migration failed:', e)
     return false
-  } finally {
-    await fs.unlink(PUUID_MIGRATION_LOCK_FILE).catch(() => {})
   }
+  // migrate-puuid crée et supprime son propre lock
 }
 
 async function runBackfillPhase(): Promise<{ ranksUpdated: number; rolesUpdated: number }> {
@@ -194,8 +191,12 @@ async function main(): Promise<void> {
     try {
       await fs.access(PUUID_MIGRATION_LOCK_FILE)
       await log.info('PUUID migration in progress (lock), waiting 10 min before retry...')
-      await writeHeartbeat({ waitingForMigration: true })
-      await new Promise((r) => setTimeout(r, 10 * 60 * 1000))
+      const waitMs = 10 * 60 * 1000
+      const heartbeatIntervalMs = 2 * 60 * 1000
+      for (let elapsed = 0; elapsed < waitMs; elapsed += heartbeatIntervalMs) {
+        await writeHeartbeat({ waitingForMigration: true })
+        await new Promise((r) => setTimeout(r, Math.min(heartbeatIntervalMs, waitMs - elapsed)))
+      }
       continue
     } catch {
       // Pas de lock, on continue

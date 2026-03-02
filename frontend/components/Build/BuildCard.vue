@@ -614,6 +614,7 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { formatLethality } from '~/utils/formatItemStats'
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
@@ -1064,6 +1065,7 @@ const itemStatsTotals = computed(() => {
     healthRegen: 0,
     manaRegen: 0,
     lethality: 0,
+    percentLethality: 0,
     armorPenPercent: 0,
     magicPenPercent: 0,
     abilityHaste: 0,
@@ -1097,6 +1099,9 @@ const itemStatsTotals = computed(() => {
     totals.magicPenPercent += (item.stats.rPercentSpellPenetrationMod || 0) * 100
     totals.abilityHaste += item.stats.rFlatCooldownModPerLevel || 0
     totals.lethality += (item.stats as any).FlatLethality || 0
+    totals.percentLethality +=
+      ((item.stats as any).rPercentLethalityMod ?? 0) * 100 +
+      ((item.stats as any).PercentLethalityMod ?? 0)
     totals.omnivampPercent +=
       ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
   }
@@ -1110,6 +1115,10 @@ const itemStatsRows = computed(() => {
   const add = (key: string, label: string, value: number, suffix = '', digits = 0) => {
     if (!Number.isFinite(value) || Math.abs(value) < 0.01) return
     rows.push({ key, label, value: `+${value.toFixed(digits)}${suffix}` })
+  }
+  const addLethality = () => {
+    const lethStr = formatLethality(s.lethality, s.percentLethality / 100)
+    if (lethStr) rows.push({ key: 'lethality', label: 'Létalité', value: `+${lethStr}` })
   }
   add('health', 'PV', s.health)
   add('mana', 'Mana', s.mana)
@@ -1125,7 +1134,7 @@ const itemStatsRows = computed(() => {
   add('movementSpeedPercent', 'Vitesse déplacement', s.movementSpeedPercent, '%', 1)
   add('healthRegen', 'Régénération PV', s.healthRegen, '', 1)
   add('manaRegen', 'Régénération mana', s.manaRegen, '', 1)
-  add('lethality', 'Létalité', s.lethality)
+  addLethality()
   add('armorPenPercent', 'Pénétration armure', s.armorPenPercent, '%', 1)
   add('magicPenPercent', 'Pénétration magique', s.magicPenPercent, '%', 1)
   add('abilityHaste', 'Hâte', s.abilityHaste)

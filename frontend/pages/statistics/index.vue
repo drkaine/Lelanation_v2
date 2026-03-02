@@ -2714,6 +2714,12 @@
                   <th class="px-4 py-3 font-semibold text-text">
                     {{ t('statisticsPage.overviewDetailWinRate') }} %
                   </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.itemStats') }}
+                  </th>
+                  <th class="px-4 py-3 font-semibold text-text">
+                    {{ t('statisticsPage.itemEconomy') }}
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-primary/20">
@@ -2734,6 +2740,26 @@
                   <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
                   <td class="px-4 py-2 text-text/90">
                     {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                  </td>
+                  <td class="max-w-[200px] px-4 py-2 text-text/80">
+                    <span
+                      v-if="itemStatsForItem(row.itemId).length"
+                      :title="itemStatsForItem(row.itemId).join(', ')"
+                      class="line-clamp-2 text-xs"
+                    >
+                      {{ itemStatsForItem(row.itemId).join(', ') }}
+                    </span>
+                    <span v-else class="text-text/50">—</span>
+                  </td>
+                  <td class="max-w-[160px] px-4 py-2 text-text/80">
+                    <span
+                      v-if="itemEconomicForItem(row.itemId).length"
+                      :title="itemEconomicForItem(row.itemId).join(', ')"
+                      class="line-clamp-2 text-xs"
+                    >
+                      {{ itemEconomicForItem(row.itemId).join(', ') }}
+                    </span>
+                    <span v-else class="text-text/50">—</span>
                   </td>
                 </tr>
               </tbody>
@@ -2912,6 +2938,7 @@ import {
   getRuneImageUrl,
   getSpellImageUrl,
 } from '~/utils/imageUrl'
+import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 
 definePageMeta({
   layout: 'default',
@@ -4209,9 +4236,19 @@ function itemName(itemId: number): string | null {
   return item?.name ?? null
 }
 
+function itemStatsForItem(itemId: number): string[] {
+  const item = itemsStore.items.find(i => i.id === String(itemId))
+  return formatItemStatsForDisplay(item?.stats)
+}
+
 function itemImageName(itemId: number): string | null {
   const item = itemsStore.items.find(i => i.id === String(itemId))
   return item?.image?.full ?? null
+}
+
+function itemEconomicForItem(itemId: number): string[] {
+  const item = itemsStore.items.find(i => i.id === String(itemId))
+  return formatItemEconomicForDisplay(item)
 }
 
 /** Find rune by perk id across all paths/slots. */

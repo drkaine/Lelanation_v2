@@ -110,6 +110,7 @@ export function calculateStats(
     magicPenetration: (itemStats.magicPenetration || 0) / 100,
     tenacity: (itemStats.tenacity || 0) / 100 + (shardStats.tenacity || 0),
     lethality: itemStats.lethality || 0,
+    percentLethality: (itemStats.percentLethality || 0) / 100,
     omnivamp: (itemStats.omnivamp || 0) / 100,
     shield: itemStats.shield || 0,
     attackRange:
@@ -182,6 +183,7 @@ type ItemStatsTotals = {
   magicPenetration: number;
   tenacity: number;
   lethality: number;
+  percentLethality: number;
   omnivamp: number;
   shield: number;
   attackRange: number;
@@ -212,6 +214,7 @@ function calculateItemStats(
     magicPenetration: 0,
     tenacity: 0,
     lethality: 0,
+    percentLethality: 0,
     omnivamp: 0,
     shield: 0,
     attackRange: 0,
@@ -239,6 +242,9 @@ function calculateItemStats(
     totals.armorPenetration += s.rPercentArmorPenetrationMod || 0;
     totals.magicPenetration += s.rPercentSpellPenetrationMod || 0;
     totals.lethality += (s as Record<string, number>).FlatLethality || 0;
+    totals.percentLethality +=
+      ((s as Record<string, number>).rPercentLethalityMod ?? 0) * 100 +
+      ((s as Record<string, number>).PercentLethalityMod ?? 0);
     totals.omnivamp +=
       ((s as Record<string, number>).FlatOmnivamp || 0) +
       ((s as Record<string, number>).PercentOmnivamp || 0);

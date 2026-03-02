@@ -106,13 +106,25 @@
                     {{ formatValue(stat.baseValue, stat.format) }}
                   </td>
                   <td class="px-4 py-2 text-center text-sm text-text/80">
-                    {{ formatValue(stat.itemValue, stat.format) }}
+                    {{
+                      formatValue(
+                        stat.itemValue,
+                        stat.format,
+                        (stat as { itemPercentLethality?: number }).itemPercentLethality
+                      )
+                    }}
                   </td>
                   <td class="px-4 py-2 text-center text-sm text-text/80">
                     {{ formatValue(stat.shardValue, stat.format) }}
                   </td>
                   <td class="px-4 py-2 text-center text-sm font-semibold text-text">
-                    {{ formatValue(stat.totalValue, stat.format) }}
+                    {{
+                      formatValue(
+                        stat.totalValue,
+                        stat.format,
+                        (stat as { totalPercentLethality?: number }).totalPercentLethality
+                      )
+                    }}
                   </td>
                 </tr>
                 <!-- Derived stats dropdown -->
@@ -171,13 +183,25 @@
                   {{ formatValue(stat.baseValue, stat.format) }}
                 </td>
                 <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.itemValue, stat.format) }}
+                  {{
+                    formatValue(
+                      stat.itemValue,
+                      stat.format,
+                      (stat as { itemPercentLethality?: number }).itemPercentLethality
+                    )
+                  }}
                 </td>
                 <td class="px-4 py-2 text-center text-sm text-text/80">
                   {{ formatValue(stat.shardValue, stat.format) }}
                 </td>
                 <td class="px-4 py-2 text-center text-sm font-semibold text-text">
-                  {{ formatValue(stat.totalValue, stat.format) }}
+                  {{
+                    formatValue(
+                      stat.totalValue,
+                      stat.format,
+                      (stat as { totalPercentLethality?: number }).totalPercentLethality
+                    )
+                  }}
                 </td>
               </tr>
             </template>
@@ -242,6 +266,7 @@ import {
   filterItemsForStats,
   calculateBuildGoldEfficiency,
 } from '@lelanation/builds-stats'
+import { formatLethality } from '~/utils/formatItemStats'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { Build } from '~/types/build'
 
@@ -365,6 +390,7 @@ const itemStats = computed(() => {
     magicPenetration: 0,
     tenacity: 0,
     lethality: 0,
+    percentLethality: 0,
     omnivamp: 0,
     shield: 0,
     attackRange: 0,
@@ -393,6 +419,9 @@ const itemStats = computed(() => {
     totals.armorPenetration += item.stats.rPercentArmorPenetrationMod || 0
     totals.magicPenetration += item.stats.rPercentSpellPenetrationMod || 0
     totals.lethality += (item.stats as any).FlatLethality || 0
+    totals.percentLethality +=
+      ((item.stats as any).rPercentLethalityMod ?? 0) * 100 +
+      ((item.stats as any).PercentLethalityMod ?? 0)
     totals.omnivamp +=
       ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
     totals.shield +=
@@ -632,9 +661,11 @@ const advancedStats = computed(() => {
       label: t('stats.labels.lethality'),
       baseValue: 0,
       itemValue: items.lethality || 0,
+      itemPercentLethality: (items.percentLethality || 0) * 100,
       shardValue: 0,
       totalValue: total.lethality,
-      format: 'number' as const,
+      totalPercentLethality: (total.percentLethality ?? 0) * 100,
+      format: 'lethality' as const,
     },
     {
       key: 'tenacity',
@@ -851,9 +882,16 @@ const economicStats = computed(() => {
   ]
 })
 
-const formatValue = (value: number | string, format: 'number' | 'decimal' | 'percent'): string => {
+const formatValue = (
+  value: number | string,
+  format: 'number' | 'decimal' | 'percent' | 'lethality',
+  percentLethality?: number
+): string => {
   if (typeof value === 'string') {
     return value
+  }
+  if (format === 'lethality') {
+    return formatLethality(value, (percentLethality ?? 0) / 100) || '0'
   }
   if (format === 'percent') {
     return `${value.toFixed(1)}%`

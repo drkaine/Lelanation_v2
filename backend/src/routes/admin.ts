@@ -1657,12 +1657,19 @@ router.get('/app-download', async (_req, res) => {
 // --- Watchdog: if no worker active for 3 min, start it (after restart, script end, etc.) ---
 const WATCHDOG_INTERVAL_MS = 60 * 1000
 const WORKER_INACTIVE_THRESHOLD_MS = 3 * 60 * 1000
+const PUUID_MIGRATION_LOCK_FILE = join(process.cwd(), 'data', 'cron', 'puuid-migration-in-progress.lock')
 let workerWatchdogStarted = false
 function startWorkerWatchdog(): void {
   if (workerWatchdogStarted) return
   workerWatchdogStarted = true
   setInterval(async () => {
     try {
+      try {
+        await fs.access(PUUID_MIGRATION_LOCK_FILE)
+        return
+      } catch {
+        // Pas de lock, on continue
+      }
       const hb = await FileManager.readJson<{ lastBeat?: string }>(
         join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
       )

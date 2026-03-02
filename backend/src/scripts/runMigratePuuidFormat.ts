@@ -57,7 +57,15 @@ async function main(): Promise<void> {
   await log.start([])
 
   await fs.mkdir(dirname(MIGRATION_LOCK_FILE), { recursive: true }).catch(() => {})
-  await fs.writeFile(MIGRATION_LOCK_FILE, String(process.pid), 'utf-8').catch(() => {})
+  try {
+    const fd = await fs.open(MIGRATION_LOCK_FILE, 'wx')
+    await fd.write(String(process.pid), 0, 'utf-8')
+    await fd.close()
+  } catch (e) {
+    await log.info('Lock already held (another migrate-puuid running), exiting.')
+    await log.end(0)
+    return
+  }
   const removeLock = () => fs.unlink(MIGRATION_LOCK_FILE).catch(() => {})
 
   if (!isDatabaseConfigured()) {
