@@ -27,7 +27,7 @@ config({ path: join(__dirname, '..', '..', '.env') })
 
 const log = createScriptLogger(SCRIPT_ID)
 
-const RANK_LIMIT_PER_ROUND = Math.min(5000, parseInt(process.env.RIOT_BACKFILL_RANK_LIMIT ?? '2000', 10) || 2000)
+const RANK_LIMIT_PER_ROUND = Math.min(5000, parseInt(process.env.RIOT_BACKFILL_RANK_LIMIT ?? '100', 10) || 100)
 const ROLE_LIMIT_PER_ROUND = Math.min(500, parseInt(process.env.RIOT_BACKFILL_ROLE_MATCH_LIMIT ?? '200', 10) || 200)
 
 async function main(): Promise<void> {

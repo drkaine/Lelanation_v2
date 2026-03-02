@@ -18,6 +18,7 @@
     "riot:discover-players": "tsx src/scripts/runRiotPlayerDiscovery.ts",
     "riot:discover-league-exp": "tsx src/scripts/runRiotLeagueExpDiscovery.ts",
     "riot:enrich": "tsx src/scripts/runRiotEnrich.ts",
+    "riot:migrate-puuid": "tsx src/scripts/runMigratePuuidFormat.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit",

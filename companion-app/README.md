@@ -9,7 +9,7 @@ Application Windows (Tauri 2 + Vue 3) pour importer les builds du site dans le c
 - **Favoris** : stockage local uniquement (même clé que le web).
 - **Paramètres** : options d’import (runes, items, sorts d’invocateur).
 - **Envoi du dernier match** : récupération via LCU puis `POST /api/app/match`.
-- **LCU** : lecture du lockfile et requêtes authentifiées (Rust).
+- **LCU** : lecture du lockfile (chemins multiples + process Windows/macOS) et requêtes authentifiées (Rust). Match history : `/lol-match-history/v1/games` ou fallback `/lol-match-history/v1/products/lol/{puuid}/matches`.
 
 ## Prérequis
 
@@ -20,6 +20,7 @@ Application Windows (Tauri 2 + Vue 3) pour importer les builds du site dans le c
 ## Configuration
 
 - `VITE_API_BASE` : URL de l’API (défaut : `https://www.lelanation.fr`). À définir dans `.env` ou en build.
+- `LELANATION_LCU_LOCKFILE` : chemin manuel du lockfile LCU si l'app ne le trouve pas (ex. installation personnalisée, GOG, Steam). Ex. Windows : `C:\Games\LoL\lockfile` ; macOS : `~/Library/Application Support/Riot Games/League of Legends/Config/lockfile`.
 
 ## Commandes
 

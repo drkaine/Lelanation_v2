@@ -344,6 +344,9 @@ export class RiotApiService {
       })
     } catch (err: unknown) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined
+      if (status === 404) {
+        return Result.ok(null)
+      }
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
       const hint =
         status === 403
@@ -475,32 +478,38 @@ export class RiotApiService {
   }
 
   /**
-   * Account v1: Riot ID (gameName#tagLine) → PUUID. Regional Europe.
+   * Account v1: Riot ID (gameName#tagLine) → PUUID.
+   * GET /riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine} (pas l'API esport/tournament).
+   * Base: europe.api.riotgames.com | americas | asia.
    */
   async getAccountByRiotId(
     gameName: string,
     tagLine: string,
     continent: 'europe' | 'americas' | 'asia' = 'europe',
-    options: { fast?: boolean } = {}
+    options: { fast?: boolean; debugLog?: (msg: string) => void } = {}
   ): Promise<Result<{ puuid: string }, AppError>> {
     if (!options.fast) await rateLimit()
     const key = await this.ensureKey()
     const base = CONTINENT_BASE[continent]
     if (!base) return Result.err(new AppError(`Unknown continent: ${continent}`, 'VALIDATION_ERROR'))
+    const path = `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
+    const url = `${base}${path}`
+    options.debugLog?.(`Account by-riot-id: gameName="${gameName}" tagLine="${tagLine}" → ${url}`)
     const client = createClient(base, key, options.fast ? 6000 : 15000)
     try {
       const res = await withRetry429(
         () =>
-        client.get<{ puuid: string }>(
-          `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`
-        ),
+        client.get<{ puuid: string }>(path),
         options.fast ? { max429Retries: 0, max5xxRetries: 0 } : {}
       )
       const puuid = res.data?.puuid
       if (!puuid) return Result.err(new AppError('Account API: no puuid in response', 'RIOT_API_ERROR'))
       return Result.ok({ puuid })
     } catch (err: unknown) {
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined
       const message = axios.isAxiosError(err) ? err.response?.data?.status?.message ?? err.message : String(err)
+      const body = axios.isAxiosError(err) && err.response?.data ? JSON.stringify(err.response.data).slice(0, 200) : ''
+      options.debugLog?.(`Account by-riot-id FAILED: status=${status} message="${message}" body=${body}`)
       return Result.err(new AppError(`Account API: ${message}`, 'RIOT_API_ERROR', err))
     }
   }

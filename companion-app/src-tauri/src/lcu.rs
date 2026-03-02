@@ -1,9 +1,11 @@
 //! LCU (League Client Update) API: lockfile and authenticated HTTPS to localhost.
 //!
 //! The League Client (LCU) creates a lockfile when running. We try multiple locations:
-//! 1. League of Legends Config (AppData) - LCU lockfile when at LoL home screen
-//! 2. Riot Client Config (AppData) - used when Riot Client embeds League
-//! 3. Process method (Windows): parse LeagueClientUx.exe command line for --app-port and --remoting-auth-token
+//! 1. League of Legends Config (AppData / Library / .config) - LCU lockfile when at LoL home screen
+//! 2. Riot Client Config - used when Riot Client embeds League
+//! 3. Process method (Windows/macOS): parse LeagueClientUx command line for --app-port and --remoting-auth-token
+//!
+//! LCU API ref: https://swagger.dysolix.dev/lcu/ (e.g. match history: /lol-match-history/v1/products/lol/{puuid}/matches)
 
 use base64::Engine;
 use serde::Deserialize;
@@ -13,15 +15,22 @@ use std::path::PathBuf;
 fn lockfile_candidates() -> Vec<PathBuf> {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "".into());
     let mut candidates = Vec::new();
-    // 1. League of Legends Config (AppData)
+    // 0. Manual override (e.g. LELANATION_LCU_LOCKFILE=C:\Games\LoL\lockfile)
+    if let Ok(custom) = std::env::var("LELANATION_LCU_LOCKFILE") {
+        let p = PathBuf::from(custom.trim());
+        if !p.as_os_str().is_empty() {
+            candidates.push(p);
+        }
+    }
+    // 1. League of Legends Config (AppData) - primary
     let mut lol = PathBuf::from(&local_app_data);
     lol.push("Riot Games");
     lol.push("League of Legends");
     lol.push("Config");
     lol.push("lockfile");
     candidates.push(lol);
-    // 2. Installation directory (default C:\Riot Games\League of Legends)
-    for drive in ["C:", "D:", "E:"] {
+    // 2. Installation directory (C/D/E + root + Config)
+    for drive in ["C:", "D:", "E:", "F:"] {
         let mut root = PathBuf::from(drive);
         root.push("Riot Games");
         root.push("League of Legends");
@@ -34,7 +43,7 @@ fn lockfile_candidates() -> Vec<PathBuf> {
         config.push("lockfile");
         candidates.push(config);
     }
-    // 3. Riot Client last (we reject it, but list for debug)
+    // 3. Riot Client (rejected if League, but listed for debug)
     let mut riot = PathBuf::from(&local_app_data);
     riot.push("Riot Games");
     riot.push("Riot Client");
@@ -48,13 +57,39 @@ fn lockfile_candidates() -> Vec<PathBuf> {
 fn lockfile_candidates() -> Vec<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "".into());
     let mut candidates = Vec::new();
-    let mut lol = PathBuf::from(&home);
-    lol.push(".config");
-    lol.push("Riot Games");
-    lol.push("League of Legends");
-    lol.push("Config");
-    lol.push("lockfile");
-    candidates.push(lol);
+    // 0. Manual override (e.g. LELANATION_LCU_LOCKFILE=~/.lol/lockfile)
+    if let Ok(custom) = std::env::var("LELANATION_LCU_LOCKFILE") {
+        let s = custom.trim();
+        if !s.is_empty() {
+            let expanded = if s.starts_with("~/") {
+                format!("{}/{}", home, &s[2..])
+            } else {
+                s.to_string()
+            };
+            candidates.push(PathBuf::from(expanded));
+        }
+    }
+    // Linux: ~/.config/Riot Games/League of Legends/Config/lockfile
+    let mut lol_config = PathBuf::from(&home);
+    lol_config.push(".config");
+    lol_config.push("Riot Games");
+    lol_config.push("League of Legends");
+    lol_config.push("Config");
+    lol_config.push("lockfile");
+    candidates.push(lol_config);
+    // macOS: ~/Library/Application Support/Riot Games/League of Legends/Config/lockfile
+    #[cfg(target_os = "macos")]
+    {
+        let mut lol_macos = PathBuf::from(&home);
+        lol_macos.push("Library");
+        lol_macos.push("Application Support");
+        lol_macos.push("Riot Games");
+        lol_macos.push("League of Legends");
+        lol_macos.push("Config");
+        lol_macos.push("lockfile");
+        candidates.insert(0, lol_macos); // Prefer macOS path when on macOS
+    }
+    // Riot Client (rejected if League, but listed for debug)
     let mut riot = PathBuf::from(&home);
     riot.push(".config");
     riot.push("Riot Games");
@@ -62,6 +97,17 @@ fn lockfile_candidates() -> Vec<PathBuf> {
     riot.push("Config");
     riot.push("lockfile");
     candidates.push(riot);
+    #[cfg(target_os = "macos")]
+    {
+        let mut riot_macos = PathBuf::from(&home);
+        riot_macos.push("Library");
+        riot_macos.push("Application Support");
+        riot_macos.push("Riot Games");
+        riot_macos.push("Riot Client");
+        riot_macos.push("Config");
+        riot_macos.push("lockfile");
+        candidates.push(riot_macos);
+    }
     candidates
 }
 
@@ -89,6 +135,7 @@ fn parse_lockfile_contents(contents: &str) -> Result<LockfileData, String> {
     })
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn parse_process_commandline(line: &str) -> Option<LockfileData> {
     let port = line
         .split_whitespace()
@@ -154,7 +201,31 @@ fn read_from_process() -> Option<LockfileData> {
     None
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+fn read_from_process() -> Option<LockfileData> {
+    use std::process::Command;
+    // pgrep -x LeagueClientUx returns PID; ps -p PID -o args= gives full command line
+    let pgrep = Command::new("pgrep").args(["-x", "LeagueClientUx"]).output().ok()?;
+    let pid = String::from_utf8_lossy(&pgrep.stdout).trim().to_string();
+    if pid.is_empty() {
+        return None;
+    }
+    let ps = Command::new("ps")
+        .args(["-p", &pid, "-o", "args="])
+        .output()
+        .ok()?;
+    if !ps.status.success() {
+        return None;
+    }
+    let line = String::from_utf8_lossy(&ps.stdout);
+    if line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
+        parse_process_commandline(&line)
+    } else {
+        None
+    }
+}
+
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn read_from_process() -> Option<LockfileData> {
     None
 }
@@ -178,12 +249,15 @@ pub fn debug_info() -> Result<String, String> {
         }
         lines.push(info);
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         if let Some(data) = read_from_process() {
-            lines.push(format!("Process LeagueClient/Ux: port={} (use this)", data.port));
+            lines.push(format!("Process LeagueClientUx: port={} (use this)", data.port));
         } else {
+            #[cfg(target_os = "windows")]
             lines.push("Process LeagueClientUx.exe / LeagueClient.exe: not found".into());
+            #[cfg(target_os = "macos")]
+            lines.push("Process LeagueClientUx: not found".into());
         }
     }
     Ok(lines.join("\n"))

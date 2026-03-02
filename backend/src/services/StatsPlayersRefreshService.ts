@@ -249,12 +249,17 @@ export async function backfillParticipantRanks(
 
   let updated = 0
   let errors = 0
+  let firstErrorLogged = false
   for (const puuid of puuids) {
     if (options?.shouldStop && (await options.shouldStop())) break
     const platform = puuidToRegion.get(puuid) ?? 'euw1'
     const leagueResult = await riotApi.getLeagueEntriesByPuuid(platform, puuid)
     if (leagueResult.isErr()) {
       errors++
+      if (!firstErrorLogged) {
+        console.warn(`${BACKFILL_RANK_LOG} First error sample: ${leagueResult.unwrapErr().message}`)
+        firstErrorLogged = true
+      }
       continue
     }
     const entryData = leagueResult.unwrap()

@@ -607,23 +607,62 @@ function stopConnectionCheckLoop() {
   connectionCheckTimer = null;
 }
 
-async function autoSubmitMatchIfAllowed() {
-  if (!canAutoSubmitMatch.value) return;
+/** Last match from LCU - supports both /games and /products/lol/{puuid}/matches formats */
+type LcuGame = { gameId?: number; platformId?: string; gameId64?: string };
+
+async function getLastMatchFromLcu(): Promise<LcuGame | null> {
   try {
+    // Primary: /lol-match-history/v1/games
     const gamesJson = await invoke<string>("lcu_request", {
       method: "GET",
       path: "/lol-match-history/v1/games",
       body: null,
     });
     const list = JSON.parse(gamesJson) as
-      | { games?: Array<{ gameId?: number; platformId?: string }> }
-      | Array<{ gameId?: number; platformId?: string }>;
+      | { games?: LcuGame[] }
+      | LcuGame[];
     const games = Array.isArray(list) ? list : list?.games ?? [];
     const last = games[0];
-    if (!last?.gameId) return;
+    if (last?.gameId || last?.gameId64) return last;
+  } catch {
+    /* fallback below */
+  }
+  try {
+    // Fallback: /lol-match-history/v1/products/lol/{puuid}/matches (LCU API ref: swagger.dysolix.dev)
+    const summonerJson = await invoke<string>("lcu_request", {
+      method: "GET",
+      path: "/lol-summoner/v1/current-summoner",
+      body: null,
+    });
+    const summoner = JSON.parse(summonerJson) as { puuid?: string };
+    if (!summoner?.puuid) return null;
+    const matchesJson = await invoke<string>("lcu_request", {
+      method: "GET",
+      path: `/lol-match-history/v1/products/lol/${summoner.puuid}/matches`,
+      body: null,
+    });
+    const matchesData = JSON.parse(matchesJson) as
+      | { games?: LcuGame[]; matchHistory?: LcuGame[] }
+      | LcuGame[];
+    const matches = Array.isArray(matchesData)
+      ? matchesData
+      : matchesData?.games ?? matchesData?.matchHistory ?? [];
+    return matches[0] ?? null;
+  } catch {
+    return null;
+  }
+}
 
+async function autoSubmitMatchIfAllowed() {
+  if (!canAutoSubmitMatch.value) return;
+  try {
+    const last = await getLastMatchFromLcu();
+    if (!last?.gameId && !last?.gameId64) return;
+
+    const gameId = last.gameId ?? (last.gameId64 ? parseInt(last.gameId64, 10) : 0);
+    if (!gameId) return;
     const region = (last.platformId || "euw1").toLowerCase();
-    const matchId = last.platformId ? `${last.platformId}_${last.gameId}` : String(last.gameId);
+    const matchId = last.platformId ? `${last.platformId}_${gameId}` : String(gameId);
     if (lastSubmittedMatchId.value === matchId) return;
 
     const r = await fetch(`${apiBase}/api/app/match`, {
