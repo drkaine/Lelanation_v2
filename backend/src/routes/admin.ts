@@ -1,39 +1,23 @@
-import axios from 'axios'
-import { exec, spawn } from 'child_process'
+import { spawn } from 'child_process'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join, isAbsolute } from 'path'
-import { createWriteStream } from 'fs'
 import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
-import { getRiotApiService, type PlatformRegion } from '../services/RiotApiService.js'
 import {
   getTierListByLane,
   getMatchupDetailsByChampion,
   rebuildMatchupTierScores,
 } from '../services/MatchupTierService.js'
-import {
-  backfillParticipantRanks,
-  refreshMatchRanks,
-  countParticipantsMissingRank,
-  countParticipantsMissingRole,
-  countPlayersMissingSummonerName,
-} from '../services/StatsPlayersRefreshService.js'
-import { discoverPlayersFromLeagueExp } from '../services/RiotLeagueExpDiscoveryService.js'
-import { runRiotMatchCollectOnce } from '../cron/riotMatchCollect.js'
 import { runStatsPrecomputedRefreshOnce } from '../cron/statsPrecomputedRefresh.js'
 import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
-import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
-import { RIOT_API_KEY_FILE } from '../utils/riotApiKey.js'
-import { getRiotApiStats } from '../services/RiotApiStatsService.js'
-import { readAllProgress, writeStopRequest, writeProgress } from '../utils/ProcessProgressWriter.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -56,142 +40,11 @@ const youtubeService = new YouTubeService()
 
 const __dirnameAdmin = dirname(fileURLToPath(import.meta.url))
 const backendRoot = join(__dirnameAdmin, '..', '..')
-const pm2AppName = process.env.PM2_APP_NAME ?? 'lelanation-backend'
-const POLLER_SCRIPTS = new Set([
-  'riot:collect',
-  'riot:backfill-until-done',
-  'riot:discover-league-exp',
-])
-const RIOT_SCRIPT_STATUS_FILE = join(process.cwd(), 'data', 'cron', 'riot-script-status.json')
-const RIOT_SCRIPT_LOG_DIR = join(process.cwd(), 'logs', 'scripts')
-const REPLAY_PLATFORM_TO_CONTINENT: Record<PlatformRegion, 'europe' | 'americas' | 'asia'> = {
-  euw1: 'europe',
-  eun1: 'europe',
-  tr1: 'europe',
-  ru: 'europe',
-  me1: 'europe',
-  na1: 'americas',
-  br1: 'americas',
-  la1: 'americas',
-  la2: 'americas',
-  oc1: 'americas',
-  kr: 'asia',
-  jp1: 'asia',
-  ph2: 'asia',
-  sg2: 'asia',
-  th2: 'asia',
-  tw2: 'asia',
-  vn2: 'asia',
-}
-
-type ScriptStatusValue = 'started' | 'running' | 'stopped' | 'failed'
-type ScriptStatusRow = {
-  script: string
-  status: ScriptStatusValue
-  pid?: number
-  args?: string[]
-  lastStartAt?: string
-  lastEndAt?: string
-  lastExitCode?: number
-}
-type ScriptStatusMap = Record<string, ScriptStatusRow>
-
-async function readScriptStatusMap(): Promise<ScriptStatusMap> {
-  const r = await FileManager.readJson<ScriptStatusMap>(RIOT_SCRIPT_STATUS_FILE)
-  if (r.isErr()) return {}
-  const map = r.unwrap() ?? {}
-  // Reconcile: if status=running but pid is dead → crash/brutal shutdown, persist failed
-  let changed = false
-  for (const [script, row] of Object.entries(map)) {
-    if ((row.status === 'running' || row.status === 'started') && row.pid && !isPidAlive(row.pid)) {
-      map[script] = { ...row, status: 'failed' as ScriptStatusValue, pid: undefined }
-      changed = true
-    }
-  }
-  if (changed) await writeScriptStatusMap(map)
-  return map
-}
-async function writeScriptStatusMap(data: ScriptStatusMap): Promise<void> {
-  await FileManager.ensureDir(dirname(RIOT_SCRIPT_STATUS_FILE))
-  await FileManager.writeJson(RIOT_SCRIPT_STATUS_FILE, data)
-}
-async function updateScriptStatus(script: string, patch: Partial<ScriptStatusRow>): Promise<void> {
-  const map = await readScriptStatusMap()
-  const current = map[script] ?? { script, status: 'stopped' as ScriptStatusValue }
-  map[script] = { ...current, ...patch, script }
-  await writeScriptStatusMap(map)
-}
-function scriptLogFile(script: string): string {
-  const safe = script.replace(/[^a-zA-Z0-9_-]/g, '_')
-  return join(RIOT_SCRIPT_LOG_DIR, `${safe}.log`)
-}
-const MAX_LOG_LINES = 10_000
-const TRUNCATE_TO_LINES = 8_000
-
-const ALL_LOGGABLE_SCRIPTS = new Set([
-  ...POLLER_SCRIPTS,
-  'dataDragonSync',
-  'youtubeSync',
-  'communityDragonSync',
-])
-
-async function tailScriptLog(script: string, lines = 20): Promise<string[]> {
-  const file = scriptLogFile(script)
-  const content = await fs.readFile(file, 'utf-8').catch(() => '')
-  if (!content) return []
-  const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  return arr.slice(-Math.max(1, lines))
-}
-
-async function rotateLogIfNeeded(script: string): Promise<void> {
-  try {
-    const file = scriptLogFile(script)
-    const content = await fs.readFile(file, 'utf-8').catch(() => '')
-    const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    if (arr.length > MAX_LOG_LINES) {
-      const kept = arr.slice(-TRUNCATE_TO_LINES).join('\n') + '\n'
-      await fs.writeFile(file, kept, 'utf-8')
-    }
-  } catch {
-    // ignore
-  }
-}
-
-async function appendScriptLog(script: string, message: string, level = 'INFO'): Promise<void> {
-  await fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true })
-  await fs.appendFile(
-    scriptLogFile(script),
-    `[${new Date().toISOString()}] [${level}] ${message}\n`,
-    'utf-8'
-  )
-  void rotateLogIfNeeded(script)
-}
-function isPidAlive(pid: number | undefined): boolean {
-  if (!pid || !Number.isFinite(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
 const youtubeConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
-const riotApikeyFile = RIOT_API_KEY_FILE
-
-interface RiotApikeyConfig {
-  riotApiKey?: string
-}
-
-type SeedPlayerPlatform = 'euw1' | 'eun1'
-
-function maskRiotApiKey(key: string): string {
-  if (!key || key.length < 12) return '****'
-  return `${key.slice(0, 6)}****...${key.slice(-4)}`
-}
 
 function parseBasicAuth(authHeader: string): { username: string; password: string } | null {
   const [scheme, token] = authHeader.split(' ')
@@ -244,40 +97,6 @@ router.get('/cron', async (_req, res) => {
   const ytConfigResult = await FileManager.readJson<YouTubeChannelsConfig>(youtubeConfigFile)
   const ytConfig = ytConfigResult.isOk() ? ytConfigResult.unwrap() : { channels: [] }
 
-  const riotWorkerHeartbeatPath = join(process.cwd(), 'data', 'cron', 'riot-poller-heartbeat.json')
-  let riotWorker: {
-    lastBeat: string | null
-    active: boolean
-    source?: string
-    poller?: unknown
-  } = {
-    lastBeat: null,
-    active: false,
-    source: 'none',
-  }
-  let heartbeatActive = false
-  const heartbeatResult = await FileManager.readJson<{ lastBeat?: string }>(riotWorkerHeartbeatPath)
-  if (heartbeatResult.isOk()) {
-    const data = heartbeatResult.unwrap()
-    const lastBeat = data?.lastBeat ?? null
-    if (lastBeat) {
-      const beatMs = new Date(lastBeat).getTime()
-      heartbeatActive = Date.now() - beatMs < 10 * 60 * 1000
-      riotWorker = { ...riotWorker, lastBeat, active: heartbeatActive }
-    }
-  }
-  const pollerStatus = cronRaw?.poller ?? null
-  if (pollerStatus) {
-    riotWorker = {
-      ...riotWorker,
-      active: pollerStatus.status === 'running' || heartbeatActive,
-      source: 'poller',
-      poller: pollerStatus,
-    }
-  } else if (heartbeatActive) {
-    riotWorker = { ...riotWorker, source: 'heartbeat' }
-  }
-
   const ytStatus = await Promise.all(
     (ytConfig.channels ?? []).map(async (entry) => {
       const channelId = typeof entry === 'string' ? entry : entry.channelId
@@ -311,7 +130,6 @@ router.get('/cron', async (_req, res) => {
 
   return res.json({
     cronJobs,
-    riotWorker,
     dataDragon: {
       currentVersion: gameVersion?.currentVersion || null,
       lastSyncDate: gameVersion?.lastSyncDate || null,
@@ -370,357 +188,6 @@ router.delete('/contact/:type/:index', async (req, res) => {
   return res.json({ ok: true })
 })
 
-// --- Players with empty summoner_name (for enrichment / verification) ---
-router.get('/players-missing-summoner-name', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500)
-    const players = await prisma.player.findMany({
-      where: { summonerName: null },
-      take: limit,
-      select: { puuid: true, summonerName: true, region: true, lastSeen: true },
-      orderBy: { lastSeen: 'desc' },
-    })
-    const total = await prisma.player.count({ where: { summonerName: null } })
-    return res.json({
-      total,
-      returned: players.length,
-      players: players.map((p) => ({
-        puuid: p.puuid,
-        summonerName: p.summonerName,
-        region: p.region,
-        lastSeen: p.lastSeen?.toISOString() ?? null,
-      })),
-    })
-  } catch (e) {
-    return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Failed to list players with missing summoner name',
-    })
-  }
-})
-
-// --- Backfill participant rank (rankTier, rankDivision, rankLp) from Riot League API ---
-router.post('/backfill-participant-ranks', async (req, res) => {
-  try {
-    const missingCount = await countParticipantsMissingRank()
-    if (missingCount === 0) {
-      return res.json({ updated: 0, errors: 0, skipped: true, reason: 'Aucun participant sans rank' })
-    }
-    const limit = Math.min(parseInt(String(req.query.limit || '200'), 10) || 200, 500)
-    const result = await backfillParticipantRanks(limit)
-    return res.json(result)
-  } catch (e) {
-    return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Backfill participant ranks failed',
-    })
-  }
-})
-
-// --- Recompute Match.rank from participants (average rank of players in the match) ---
-router.post('/refresh-match-ranks', async (_req, res) => {
-  try {
-    const result = await refreshMatchRanks()
-    return res.json(result)
-  } catch (e) {
-    return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Refresh match ranks failed',
-    })
-  }
-})
-
-// --- Trigger Riot match collection (one run, used by admin "Relancer la collecte") ---
-// Runs in background to avoid 504 (collect can take several minutes). Returns 202 immediately.
-router.post('/riot-collect-now', (_req, res) => {
-  void updateScriptStatus('riot:collect', {
-    status: 'started',
-    lastStartAt: new Date().toISOString(),
-    args: [],
-  })
-  void writeProgress('riot:collect', { phase: 'collect', pid: process.pid, metrics: {} })
-  void appendScriptLog('riot:collect', 'START manual collect')
-  res.status(202).json({
-    success: true,
-    message: 'Collecte lancée en arrière-plan. Actualisez la page dans quelques minutes pour voir le résultat.',
-  })
-  runRiotMatchCollectOnce()
-    .then((result) => {
-      void writeProgress('riot:collect', {
-        phase: 'done',
-        metrics: {
-          matchesCollected: result?.collected ?? 0,
-          errors: result?.errors ?? 0,
-        },
-      })
-      void appendScriptLog('riot:collect', 'END manual collect exit=0')
-      return updateScriptStatus('riot:collect', {
-        status: 'stopped',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 0,
-      })
-    })
-    .catch((e) => {
-      console.error('[admin] riot-collect-now background run failed:', e)
-      void appendScriptLog('riot:collect', `END manual collect exit=1 error=${e instanceof Error ? e.message : 'unknown'}`)
-      void updateScriptStatus('riot:collect', {
-        status: 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 1,
-      })
-    })
-})
-
-// --- Build replay links from recent matches of a summoner (admin tool) ---
-router.post('/riot-replay-links', async (req, res) => {
-  try {
-    const rawSummoner = typeof req.body?.summonerName === 'string' ? req.body.summonerName.trim() : ''
-    const rawRegion = typeof req.body?.region === 'string' ? req.body.region.trim().toLowerCase() : ''
-    const region: PlatformRegion = (rawRegion in REPLAY_PLATFORM_TO_CONTINENT ? rawRegion : 'euw1') as PlatformRegion
-    const continent = REPLAY_PLATFORM_TO_CONTINENT[region] ?? 'europe'
-    const countRaw = Number(req.body?.count ?? 10)
-    const count = Number.isFinite(countRaw) ? Math.max(1, Math.min(100, Math.trunc(countRaw))) : 10
-    if (!rawSummoner) {
-      return res.status(400).json({ error: 'summonerName is required' })
-    }
-
-    const riotApi = getRiotApiService()
-    const rawHashtag = rawSummoner.lastIndexOf('#')
-    const rawDash = rawSummoner.lastIndexOf('-')
-    const normalizedRiotId =
-      rawHashtag > 0 && rawHashtag < rawSummoner.length - 1
-        ? {
-            gameName: rawSummoner.slice(0, rawHashtag).trim(),
-            tagLine: rawSummoner.slice(rawHashtag + 1).trim(),
-          }
-        : rawDash > 0 &&
-            rawDash < rawSummoner.length - 1 &&
-            !rawSummoner.includes(' ') &&
-            /^[A-Za-z0-9]{2,5}$/.test(rawSummoner.slice(rawDash + 1).trim())
-          ? {
-              gameName: rawSummoner.slice(0, rawDash).trim(),
-              tagLine: rawSummoner.slice(rawDash + 1).trim(),
-            }
-          : null
-
-    let resolvedPuuid = ''
-    let resolvedName = rawSummoner
-    const localNameForLookup = normalizedRiotId?.gameName?.trim() || rawSummoner
-
-    const localPlayer = await prisma.player.findFirst({
-      where: {
-        region,
-        summonerName: {
-          equals: localNameForLookup,
-          mode: 'insensitive',
-        },
-      },
-      select: { puuid: true, summonerName: true },
-    })
-    if (localPlayer?.puuid) {
-      resolvedPuuid = localPlayer.puuid
-      resolvedName = localPlayer.summonerName || resolvedName
-    }
-
-    if (!resolvedPuuid) {
-      const maybePuuid = rawSummoner.trim()
-      if (/^[A-Za-z0-9_-]{60,90}$/.test(maybePuuid)) {
-        resolvedPuuid = maybePuuid
-      }
-    }
-
-    if (!resolvedPuuid && normalizedRiotId?.gameName && normalizedRiotId?.tagLine) {
-      const accountResult = await riotApi.getAccountByRiotId(
-        normalizedRiotId.gameName,
-        normalizedRiotId.tagLine,
-        continent,
-        { fast: true }
-      )
-      if (accountResult.isErr()) {
-        const err = accountResult.unwrapErr()
-        const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
-        if (status === 404) return res.status(404).json({ error: 'Riot ID not found' })
-        if (status === 401 || status === 403) {
-          return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
-        }
-        return res.status(400).json({ error: err.message || 'Failed to resolve Riot ID' })
-      }
-      resolvedPuuid = accountResult.unwrap().puuid
-      const summonerByPuuid = await riotApi.getSummonerByPuuid(region, resolvedPuuid)
-      if (summonerByPuuid.isOk()) resolvedName = summonerByPuuid.unwrap().name || rawSummoner
-    } else if (!resolvedPuuid) {
-      const summonerResult = await riotApi.getSummonerByName(region, rawSummoner, { fast: true })
-      if (summonerResult.isErr()) {
-        const err = summonerResult.unwrapErr()
-        const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
-        if (status === 404) return res.status(404).json({ error: 'Summoner not found' })
-        if (status === 401 || status === 403) {
-          return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
-        }
-        return res.status(400).json({ error: err.message || 'Failed to resolve summoner' })
-      }
-      const summoner = summonerResult.unwrap()
-      resolvedPuuid = summoner.puuid
-      resolvedName = summoner.name || rawSummoner
-    }
-
-    const replayResult = await riotApi.getReplayLinksByPuuid(continent, resolvedPuuid, { count, fast: true })
-    if (replayResult.isErr()) {
-      const err = replayResult.unwrapErr()
-      const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
-      if (status === 404) return res.status(404).json({ error: 'No replay links found for this player' })
-      if (status === 401 || status === 403) {
-        return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
-      }
-      return res.status(400).json({ error: err.message || 'Failed to fetch replay links' })
-    }
-    const matches = replayResult.unwrap().slice(0, count)
-
-    return res.json({
-      summonerName: resolvedName,
-      puuid: resolvedPuuid,
-      region,
-      continent,
-      countRequested: count,
-      countReturned: matches.length,
-      matches,
-      source: 'riot-replays-api',
-    })
-  } catch (e) {
-    return res.status(500).json({
-      error: e instanceof Error ? e.message : 'Failed to build replay links',
-    })
-  }
-})
-
-// --- Discover players (historical matches). Optional: Riot ID → puuid seed + region + replay count. ---
-router.post('/riot-discover-players', async (req, res) => {
-  const script = 'riot:discover-players'
-  const statusMap = await readScriptStatusMap()
-  const existing = statusMap[script]
-  if (existing && (existing.status === 'running' || existing.status === 'started') && isPidAlive(existing.pid)) {
-    return res.status(409).json({
-      success: false,
-      error: 'Discover players déjà en cours.',
-    })
-  }
-
-  const rawRegion = typeof req.body?.region === 'string' ? req.body.region.trim() : 'euw1'
-  const region = rawRegion in REPLAY_PLATFORM_TO_CONTINENT ? (rawRegion as PlatformRegion) : 'euw1'
-  const riotIdRaw = typeof req.body?.riotId === 'string' ? req.body.riotId.trim() : ''
-  const replayCountRaw = Number(req.body?.replayCount ?? 100)
-  const replayCount = Number.isFinite(replayCountRaw) ? Math.max(1, Math.min(500, Math.trunc(replayCountRaw))) : 100
-
-  const envOverlay: Record<string, string> = {
-    RIOT_PLAYER_DISCOVERY_MATCHES_PER_PLAYER: String(replayCount),
-  }
-
-  if (riotIdRaw) {
-    const parts = riotIdRaw.split('#').map((s: string) => s.trim())
-    const gameName = parts[0] ?? ''
-    const tagLine = parts[1] ?? ''
-    if (!gameName || !tagLine) {
-      return res.status(400).json({
-        success: false,
-        error: 'Riot ID doit être au format GameName#TagLine',
-      })
-    }
-    const continent = REPLAY_PLATFORM_TO_CONTINENT[region]
-    const riotApi = getRiotApiService()
-    const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine, continent)
-    if (accountResult.isErr()) {
-      return res.status(400).json({
-        success: false,
-        error: accountResult.unwrapErr().message ?? 'Riot ID introuvable',
-      })
-    }
-    const puuid = accountResult.unwrap().puuid
-    envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID = puuid
-    envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_REGION = region
-  }
-
-  const env = { ...process.env, ...envOverlay }
-  void fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true }).then(() => {
-    const logPath = scriptLogFile(script)
-    const logStream = createWriteStream(logPath, { flags: 'a' })
-    const argsLog = envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID
-      ? `riotId→puuid region=${region} replayCount=${replayCount}`
-      : `replayCount=${replayCount}`
-    logStream.write(`\n[${new Date().toISOString()}] START ${script} ${argsLog}\n`)
-
-    const child = spawn('npm', ['run', script], {
-      cwd: backendRoot,
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env,
-    })
-    if (child.stdout) child.stdout.on('data', (d) => logStream.write(String(d)))
-    if (child.stderr) child.stderr.on('data', (d) => logStream.write(String(d)))
-    void updateScriptStatus(script, {
-      status: 'running',
-      pid: child.pid ?? undefined,
-      args: [region, String(replayCount), ...(envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID ? ['riotId'] : [])],
-      lastStartAt: new Date().toISOString(),
-    })
-    child.on('close', (code) => {
-      logStream.write(`[${new Date().toISOString()}] END ${script} exit=${code ?? 'null'}\n`)
-      logStream.end()
-      void updateScriptStatus(script, {
-        status: code === 0 ? 'stopped' : 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: code ?? undefined,
-        pid: undefined,
-      })
-    })
-  })
-
-  const message = envOverlay.RIOT_PLAYER_DISCOVERY_SINGLE_PUUID
-    ? `Discover players lancé (Riot ID → ${region}, ${replayCount} replays). Suivi par PID et logs.`
-    : `Discover players lancé (seeds en base, ${replayCount} replays/joueur). Suivi par PID et logs.`
-  return res.status(202).json({ success: true, message })
-})
-
-// --- Discover players from league-exp entries (for later poll by worker) ---
-router.post('/riot-discover-league-exp', (req, res) => {
-  const platform = req.body?.platform === 'eun1' ? 'eun1' : 'euw1'
-  const queue = typeof req.body?.queue === 'string' && req.body.queue.trim() ? req.body.queue.trim() : 'RANKED_SOLO_5x5'
-  const tier = typeof req.body?.tier === 'string' ? req.body.tier.toUpperCase() : 'GOLD'
-  const division = typeof req.body?.division === 'string' ? req.body.division.toUpperCase() : 'I'
-  const pagesRaw = Number(req.body?.pages ?? req.query?.pages ?? 3)
-  const pages = Number.isFinite(pagesRaw) ? Math.max(1, Math.min(50, Math.trunc(pagesRaw))) : 3
-
-  void updateScriptStatus('riot:discover-league-exp', {
-    status: 'started',
-    lastStartAt: new Date().toISOString(),
-    args: [platform, queue, tier, division, String(pages)],
-  })
-  void appendScriptLog(
-    'riot:discover-league-exp',
-    `START platform=${platform} queue=${queue} tier=${tier} division=${division} pages=${pages}`
-  )
-  res.status(202).json({
-    success: true,
-    message: `Découverte league-exp lancée en arrière-plan (${platform} ${queue} ${tier} ${division}, pages=${pages}).`,
-  })
-
-  discoverPlayersFromLeagueExp({ platform, queue, tier, division, pages })
-    .then((result) => {
-      console.log('[admin] riot-discover-league-exp done:', result)
-      void appendScriptLog('riot:discover-league-exp', `END exit=0 playersUpserted=${result?.playersUpserted ?? 'n/a'}`)
-      return updateScriptStatus('riot:discover-league-exp', {
-        status: 'stopped',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 0,
-      })
-    })
-    .catch((e) => {
-      console.error('[admin] riot-discover-league-exp failed:', e)
-      void appendScriptLog('riot:discover-league-exp', `END exit=1 error=${e instanceof Error ? e.message : 'unknown'}`)
-      void updateScriptStatus('riot:discover-league-exp', {
-        status: 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: 1,
-      })
-    })
-})
-
 // --- Sync data (DDragon + Community Dragon + YouTube) — script optionnel ---
 router.post('/sync-data', (_req, res) => {
   res.status(202).json({
@@ -750,84 +217,6 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
     .catch((e) => console.error('[admin] refresh-precomputed-stats error:', e))
 })
 
-// --- Backfill until no null data left (ranks + roles, loop until done). One process, one PID. ---
-router.post('/riot-backfill-until-done', async (_req, res) => {
-  const script = 'riot:backfill-until-done'
-  const statusMap = await readScriptStatusMap()
-  const existing = statusMap[script]
-  if (existing && (existing.status === 'running' || existing.status === 'started') && isPidAlive(existing.pid)) {
-    return res.status(409).json({
-      success: false,
-      error: 'Backfill jusqu’à completion déjà en cours.',
-    })
-  }
-  spawnRiotScriptAndTrack(script, [])
-  return res.status(202).json({
-    success: true,
-    message: 'Backfill jusqu’à completion lancé (ranks + rôles en boucle jusqu’à 0 null). Suivi par PID et logs.',
-  })
-})
-
-// --- Spawn a riot script in a child process and track status (pid, logs, exit). Used by riot-script-run and backfill routes. ---
-function spawnRiotScriptAndTrack(script: string, args: string[]): void {
-  void fs.mkdir(RIOT_SCRIPT_LOG_DIR, { recursive: true }).then(() => {
-    const logPath = scriptLogFile(script)
-    const logStream = createWriteStream(logPath, { flags: 'a' })
-    logStream.write(`\n[${new Date().toISOString()}] START ${script} ${args.join(' ')}\n`)
-
-    const childArgs = ['run', script, ...(args.length ? ['--', ...args] : [])]
-    const child = spawn('npm', childArgs, {
-      cwd: backendRoot,
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
-    })
-    if (child.stdout) child.stdout.on('data', (d) => logStream.write(String(d)))
-    if (child.stderr) child.stderr.on('data', (d) => logStream.write(String(d)))
-    void updateScriptStatus(script, {
-      status: 'running',
-      pid: child.pid ?? undefined,
-      args,
-      lastStartAt: new Date().toISOString(),
-    })
-    child.on('close', (code) => {
-      logStream.write(`[${new Date().toISOString()}] END ${script} exit=${code ?? 'null'}\n`)
-      logStream.end()
-      void updateScriptStatus(script, {
-        status: code === 0 ? 'stopped' : 'failed',
-        lastEndAt: new Date().toISOString(),
-        lastExitCode: code ?? undefined,
-        pid: undefined,
-      })
-    })
-  })
-}
-
-// --- Generic poller scripts launcher (whitelisted npm scripts, background) ---
-router.post('/riot-script-run', async (req, res) => {
-  const script = typeof req.body?.script === 'string' ? req.body.script.trim() : ''
-  const rawArgs = Array.isArray(req.body?.args) ? req.body.args : []
-  const args = rawArgs.filter((a: unknown): a is string => typeof a === 'string' && a.trim().length > 0).slice(0, 10)
-  if (!POLLER_SCRIPTS.has(script)) {
-    return res.status(400).json({ error: `Unsupported script "${script}"` })
-  }
-  const statusMap = await readScriptStatusMap()
-  const existing = statusMap[script]
-  if (existing && (existing.status === 'running' || existing.status === 'started') && isPidAlive(existing.pid)) {
-    return res.status(409).json({
-      success: false,
-      error: `Script ${script} is already active.`,
-    })
-  }
-
-  spawnRiotScriptAndTrack(script, args)
-  return res.status(202).json({
-    success: true,
-    message: `Script ${script} lancé en arrière-plan.`,
-    script,
-    args,
-  })
-})
 
 const CRON_JOBS: Array<{ key: string; label: string }> = [
   { key: 'dataDragonSync', label: 'dataDragonSync' },
@@ -836,7 +225,6 @@ const CRON_JOBS: Array<{ key: string; label: string }> = [
 ]
 
 router.get('/riot-scripts-status', async (_req, res) => {
-  const map = await readScriptStatusMap()
   const cronResult = await cronStatus.getStatus()
   const cronJobs: Record<CronJobKey, CronJobStatus> = cronResult.isOk()
     ? cronResult.unwrap().jobs
@@ -845,27 +233,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
         youtubeSync: { job: 'youtubeSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
         communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
       } as Record<CronJobKey, CronJobStatus>)
-
-  const lastOutputs = await Promise.all([...POLLER_SCRIPTS].map(async (s) => {
-    const lines = await tailScriptLog(s, 1)
-    return [s, lines[lines.length - 1] ?? null] as const
-  }))
-  const lastOutputMap = Object.fromEntries(lastOutputs)
-
-  const progressMap = await readAllProgress()
-
-  const scripts = [...POLLER_SCRIPTS].map((script) => {
-    const row = map[script] ?? { script, status: 'stopped' as ScriptStatusValue }
-    const alive = isPidAlive(row.pid)
-    // Only force stopped when we had a pid and it is now dead (crash). In-process runs have no pid and update status themselves.
-    const safeRow =
-      (row.status === 'running' || row.status === 'started') && row.pid !== undefined && !alive
-        ? { ...row, status: 'failed' as ScriptStatusValue, pid: undefined }
-        : row
-    const lastOutput = lastOutputMap[script] ?? null
-    const progress = progressMap[script] ?? null
-    return { ...safeRow, lastOutput, progress: progress ? { phase: progress.phase, startedAt: progress.startedAt, lastUpdatedAt: progress.lastUpdatedAt, metrics: progress.metrics } : null }
-  })
 
   const crons = CRON_JOBS.map(({ key, label }) => {
     const job = cronJobs[key as CronJobKey]
@@ -879,39 +246,21 @@ router.get('/riot-scripts-status', async (_req, res) => {
     }
   })
 
-  let dataStats: { participantsWithoutRank: number; participantsWithoutRole: number; matchesWithoutRank: number; lastNewPlayerAt: string | null; playersMissingSummonerName?: number } = {
-    participantsWithoutRank: 0,
-    participantsWithoutRole: 0,
-    matchesWithoutRank: 0,
-    lastNewPlayerAt: null,
-  }
+  let dataStats = { matchesWithoutRank: 0, lastNewPlayerAt: null as string | null }
   try {
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] = await Promise.all([
-      countParticipantsMissingRank(),
-      countParticipantsMissingRole(),
+    const [matchesWithoutRank, lastPlayer] = await Promise.all([
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      countPlayersMissingSummonerName(),
     ])
     dataStats = {
-      participantsWithoutRank,
-      participantsWithoutRole,
       matchesWithoutRank,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      playersMissingSummonerName,
     }
   } catch {
     // ignore
   }
 
-  let riotApiStats: Awaited<ReturnType<typeof getRiotApiStats>> | null = null
-  try {
-    riotApiStats = await getRiotApiStats()
-  } catch {
-    // ignore
-  }
-
-  return res.json({ scripts, crons, dataStats, riotApiStats })
+  return res.json({ scripts: [], crons, dataStats })
 })
 
 /** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */
@@ -950,103 +299,6 @@ router.post('/cron/trigger/:job', async (req, res) => {
   }
 })
 
-/** Logs for scripts. Supports single script or all scripts with filter/sort/line count. */
-router.get('/script-logs', async (req, res) => {
-  const scriptParam = typeof req.query?.script === 'string' ? req.query.script.trim() : ''
-  const allScripts = scriptParam === '' || scriptParam === 'all'
-  const scriptFilter = allScripts ? null : scriptParam
-  if (scriptFilter && !ALL_LOGGABLE_SCRIPTS.has(scriptFilter)) {
-    return res.status(400).json({ error: `Unsupported script "${scriptFilter}"` })
-  }
-  const linesRaw = Number(req.query?.lines ?? 100)
-  const maxLines = allScripts ? 500 : 2000
-  const lines = Number.isFinite(linesRaw) ? Math.max(1, Math.min(maxLines, Math.trunc(linesRaw))) : 100
-  const sortParam = (req.query?.sort as string)?.toLowerCase()
-  const sortAsc = sortParam === 'asc'
-
-  if (allScripts) {
-    const scriptsToRead = [...ALL_LOGGABLE_SCRIPTS]
-    const allEntries: Array<{ script: string; timestamp: string; level: string; message: string; raw: string }> = []
-    for (const s of scriptsToRead) {
-      const content = await fs.readFile(scriptLogFile(s), 'utf-8').catch(() => '')
-      const logLines = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-      for (const line of logLines) {
-        const m = line.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*(.*)$/)
-        if (m) {
-          allEntries.push({ script: s, timestamp: m[1], level: m[2], message: m[3], raw: line })
-        } else {
-          allEntries.push({ script: s, timestamp: '', level: 'INFO', message: line, raw: line })
-        }
-      }
-    }
-    allEntries.sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''))
-    const sliced = sortAsc ? allEntries.slice(0, lines) : allEntries.slice(-lines).reverse()
-    return res.json({
-      scripts: scriptsToRead,
-      script: null,
-      linesRequested: lines,
-      linesReturned: sliced.length,
-      sort: sortAsc ? 'asc' : 'desc',
-      log: sliced.map((e) => e.raw),
-      entries: sliced,
-    })
-  }
-
-  const logLines = await tailScriptLog(scriptFilter!, lines)
-  if (!sortAsc) logLines.reverse()
-  return res.json({
-    script: scriptFilter,
-    linesRequested: lines,
-    linesReturned: logLines.length,
-    sort: sortAsc ? 'asc' : 'desc',
-    log: logLines,
-  })
-})
-
-/** List all script names that have logs (for filter dropdown) */
-router.get('/script-logs/scripts', (_req, res) => {
-  return res.json({ scripts: [...ALL_LOGGABLE_SCRIPTS].sort() })
-})
-
-/** @deprecated Use GET /script-logs instead */
-router.get('/riot-script-logs', async (req, res) => {
-  const script = typeof req.query?.script === 'string' ? req.query.script.trim() : ''
-  if (!POLLER_SCRIPTS.has(script)) return res.status(400).json({ error: `Unsupported script "${script}"` })
-  const linesRaw = Number(req.query?.lines ?? 20)
-  const lines = Number.isFinite(linesRaw) ? Math.max(1, Math.min(200, Math.trunc(linesRaw))) : 20
-  const logLines = await tailScriptLog(script, lines)
-  return res.json({
-    script,
-    linesRequested: lines,
-    linesReturned: logLines.length,
-    log: logLines,
-  })
-})
-
-router.post('/riot-script-stop', async (req, res) => {
-  const script = typeof req.body?.script === 'string' ? req.body.script.trim() : ''
-  if (!POLLER_SCRIPTS.has(script)) return res.status(400).json({ success: false, error: `Unsupported script "${script}"` })
-  const map = await readScriptStatusMap()
-  const row = map[script]
-  const pid = row?.pid
-  const alive = isPidAlive(pid)
-  try {
-    if (!alive || !pid) {
-      return res.status(409).json({ success: false, error: `Script ${script} is not active.` })
-    }
-    await writeStopRequest(script)
-    void appendScriptLog(script, `STOP requested (graceful), pid=${pid}`)
-    return res.json({
-      success: true,
-      message: 'Arrêt demandé. Le script s’arrêtera à la fin du traitement en cours.',
-    })
-  } catch (e) {
-    return res.status(500).json({
-      success: false,
-      error: e instanceof Error ? e.message : 'Failed to stop script',
-    })
-  }
-})
 
 // --- Builds stats ---
 router.get('/builds/stats', async (_req, res) => {
@@ -1118,277 +370,6 @@ router.post('/youtube/channels', async (req, res) => {
     return res.status(500).json({ error: writeResult.unwrapErr().message })
   }
   return res.json({ success: true, channels: next.channels })
-})
-
-// --- Riot API key (admin) ---
-router.get('/riot-apikey', async (_req, res) => {
-  const fileResult = await FileManager.readJson<RiotApikeyConfig>(riotApikeyFile)
-  const fromFile = fileResult.isOk() ? fileResult.unwrap().riotApiKey : undefined
-  const fromEnv = process.env.RIOT_API_KEY
-  const key = (typeof fromFile === 'string' && fromFile.trim() !== '') ? fromFile : fromEnv
-  const hasKey = typeof key === 'string' && key.trim() !== ''
-  return res.json({
-    hasKey: !!hasKey,
-    maskedKey: hasKey ? maskRiotApiKey(key!) : undefined
-  })
-})
-
-/** Test current Riot API key against Riot (EUW). Returns valid + diagnostics on failure. */
-router.get('/riot-apikey/test', async (_req, res) => {
-  const { getRiotApiKeyWithSourceAsync } = await import('../utils/riotApiKey.js')
-  const { getRiotApiService } = await import('../services/RiotApiService.js')
-  const riotApi = getRiotApiService()
-  riotApi.invalidateKeyCache()
-  const { key, source } = await getRiotApiKeyWithSourceAsync()
-  if (!key) {
-    return res.json({
-      valid: false,
-      error: 'Aucune clé configurée (fichier admin ou RIOT_API_KEY).',
-      keySource: null,
-      keyLength: 0,
-    })
-  }
-  const result = await riotApi.getChallengerLeague('euw1')
-  if (result.isOk()) {
-    return res.json({ valid: true })
-  }
-  const err = result.unwrapErr()
-  const message = err && typeof err === 'object' && 'message' in err ? String((err as { message: string }).message) : String(err)
-  return res.json({
-    valid: false,
-    error: message,
-    keySource: source,
-    keyLength: key.length,
-  })
-})
-
-router.put('/riot-apikey', async (req, res) => {
-  const raw = req.body?.riotApiKey ?? req.body?.apiKey ?? req.body?.key
-  const value = typeof raw === 'string' ? raw.trim() : ''
-  const dirResult = await FileManager.ensureDir(dirname(RIOT_API_KEY_FILE))
-  if (dirResult.isErr()) {
-    return res.status(500).json({ error: dirResult.unwrapErr().message })
-  }
-  const writeResult = await FileManager.writeJson<RiotApikeyConfig>(riotApikeyFile, {
-    riotApiKey: value || undefined
-  })
-  if (writeResult.isErr()) {
-    return res.status(500).json({ error: writeResult.unwrapErr().message })
-  }
-  getRiotApiService().invalidateKeyCache()
-  exec(
-    `npm run build && pm2 restart ${pm2AppName}`,
-    { cwd: backendRoot, timeout: 120_000 },
-    (err, stdout, stderr) => {
-      if (err) {
-        console.warn('[admin] Riot API key saved but build/PM2 restart failed:', err.message)
-        if (stderr) console.warn('[admin] stderr:', stderr)
-      } else if (stdout) {
-        console.log('[admin] Build and PM2 restart done:', stdout.trim())
-      }
-    }
-  )
-  return res.json({
-    success: true,
-    hasKey: value.length > 0,
-    maskedKey: value.length > 0 ? maskRiotApiKey(value) : undefined
-  })
-})
-
-/** Riot API consumption stats: requests/hour, 429 count, limits. */
-router.get('/riot-api-stats', async (_req, res) => {
-  try {
-    const stats = await getRiotApiStats()
-    return res.json(stats)
-  } catch (err) {
-    return res.status(500).json({ error: String(err) })
-  }
-})
-
-/** Data collection stats: participants/matchs sans rang, dernier joueur. */
-router.get('/data-stats', async (_req, res) => {
-  try {
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] = await Promise.all([
-      countParticipantsMissingRank(),
-      countParticipantsMissingRole(),
-      prisma.match.count({ where: { rank: null } }),
-      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-    ])
-    return res.json({
-      participantsWithoutRank,
-      participantsWithoutRole,
-      matchesWithoutRank,
-      lastNewPlayerAt: lastPlayer?.createdAt ?? null,
-    })
-  } catch (err) {
-    return res.status(500).json({ error: String(err) })
-  }
-})
-
-// --- All players (DB, for admin visibility) ---
-router.get('/players', async (req, res) => {
-  const limit = Math.min(Math.max(1, parseInt(String(req.query?.limit || 15), 10) || 15), 2000)
-  const offset = Math.max(0, parseInt(String(req.query?.offset || 0), 10) || 0)
-  const search = typeof req.query?.search === 'string' ? req.query.search.trim() : ''
-
-  const likePattern = search ? `%${search}%` : ''
-  const whereFragment = search
-    ? Prisma.sql`WHERE (summoner_name ILIKE ${likePattern} OR puuid::text ILIKE ${likePattern})`
-    : Prisma.sql``
-
-  const [rows, total] = await Promise.all([
-    prisma.$queryRaw<
-      Array<{ puuid: string; summonerName: string | null; region: string; totalGames: number; totalWins: number }>
-    >(Prisma.sql`
-      SELECT puuid, summoner_name AS "summonerName", region, total_games AS "totalGames", total_wins AS "totalWins"
-      FROM players_with_stats
-      ${whereFragment}
-      ORDER BY total_games DESC
-      LIMIT ${limit}
-      OFFSET ${offset}
-    `),
-    search
-      ? prisma
-          .$queryRaw<[{ count: bigint }]>(Prisma.sql`
-            SELECT COUNT(*)::bigint AS count FROM players_with_stats
-            WHERE (summoner_name ILIKE ${likePattern} OR puuid::text ILIKE ${likePattern})
-          `)
-          .then((r) => Number(r[0]?.count ?? 0))
-      : prisma.player.count(),
-  ])
-
-  const players = rows.map((p) => ({
-    puuid: p.puuid,
-    summonerName: p.summonerName,
-    region: p.region,
-    totalGames: p.totalGames,
-    totalWins: p.totalWins,
-    winrate: p.totalGames > 0 ? Math.round((p.totalWins / p.totalGames) * 10000) / 100 : 0,
-  }))
-  return res.json({ players, total })
-})
-
-// --- Seed players (players table = single source for match crawl) ---
-router.get('/seed-players', async (_req, res) => {
-  const rows = await prisma.player.findMany({
-    orderBy: { createdAt: 'asc' },
-    select: { puuid: true, summonerName: true, region: true },
-  })
-  const players = rows.map((p) => ({
-    id: p.puuid,
-    label: p.summonerName ?? '—',
-    platform: p.region as SeedPlayerPlatform,
-  }))
-  return res.json({ players })
-})
-
-/** Tag line used when user enters only game name (no #, no -): try Riot ID with platform as tag. */
-const PLATFORM_TAG: Record<string, string> = { euw1: 'EUW', eun1: 'EUN1' }
-
-/** Parse label into gameName + tagLine. Supports: Name#Tag, Name-Tag (op.gg style), or Name (use platform tag). */
-function parseRiotIdLabel(label: string, platform: string): { gameName: string; tagLine: string; labelToStore: string } {
-  if (label.includes('#')) {
-    const parts = label.split('#').map((s: string) => s.trim())
-    const gameName = parts[0] ?? ''
-    const tagLine = parts[1] ?? ''
-    return { gameName, tagLine, labelToStore: label }
-  }
-  const lastDash = label.lastIndexOf('-')
-  if (lastDash > 0 && lastDash < label.length - 1) {
-    const gameName = label.slice(0, lastDash).trim()
-    const tagLine = label.slice(lastDash + 1).trim()
-    if (gameName && tagLine) {
-      return { gameName, tagLine, labelToStore: `${gameName}#${tagLine}` }
-    }
-  }
-  const tagLine = PLATFORM_TAG[platform] ?? 'EUW'
-  return { gameName: label, tagLine, labelToStore: `${label}#${tagLine}` }
-}
-
-router.post('/seed-players', async (req, res) => {
-  const rawLabel = req.body?.label ?? req.body?.name ?? req.body?.pseudo ?? ''
-  const label = typeof rawLabel === 'string' ? rawLabel.trim() : ''
-  const rawPlatform = req.body?.platform ?? req.body?.region ?? 'euw1'
-  const platform = rawPlatform === 'eun1' ? 'eun1' : 'euw1'
-
-  if (!label) {
-    return res.status(400).json({ error: 'label is required (Riot ID: Name#Tag or summoner name)' })
-  }
-
-  const { gameName, tagLine, labelToStore } = parseRiotIdLabel(label, platform)
-  if (!gameName || !tagLine) {
-    return res.status(400).json({ error: 'Invalid Riot ID format (use Name#Tag or Name-Tag)' })
-  }
-
-  // Resolve Riot ID via API and get puuid + summoner info
-  const riotApi = getRiotApiService()
-  let puuid: string
-  let summonerName: string | null = labelToStore
-  try {
-    const accountResult = await riotApi.getAccountByRiotId(gameName, tagLine)
-    if (accountResult.isErr()) {
-      const err = accountResult.unwrapErr()
-      const status = err.cause && axios.isAxiosError(err.cause) ? err.cause.response?.status : undefined
-      if (status === 404) {
-        if (label.includes('#') || label.includes('-')) {
-          return res.status(400).json({ error: 'Player not found (Riot ID does not exist)' })
-        }
-        return res.status(400).json({
-          error: `No player "${label}" with tag ${tagLine}. This player may use another tag (e.g. Urpog#URGOT). Copy the Riot ID from op.gg: in the URL it appears as Name-Tag (e.g. Urpog-URGOT). Paste that in the field.`,
-        })
-      }
-      if (status === 401 || status === 403) {
-        return res.status(400).json({ error: 'Riot API key invalid or expired. Update it in Admin.' })
-      }
-      return res.status(400).json({ error: err.message || 'Riot API error' })
-    }
-    puuid = accountResult.unwrap().puuid
-    const summonerResult = await riotApi.getSummonerByPuuid(platform === 'eun1' ? 'eun1' : 'euw1', puuid)
-    if (summonerResult.isOk()) {
-      const s = summonerResult.unwrap()
-      if (s.name) summonerName = s.name
-    }
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (message.includes('RIOT_API_KEY') || message.includes('not configured')) {
-      return res.status(400).json({ error: 'Riot API key not configured. Set it in Admin > Riot API key.' })
-    }
-    return res.status(400).json({ error: message || 'Validation failed' })
-  }
-
-  const region = platform === 'eun1' ? 'eun1' : 'euw1'
-  const existingPlayer = await prisma.player.findUnique({ where: { puuid } })
-  if (existingPlayer) {
-    return res.status(409).json({
-      error: 'Player already in list',
-      code: 'ALREADY_PLAYER',
-      summonerName: existingPlayer.summonerName ?? undefined,
-    })
-  }
-
-  await prisma.player.create({
-    data: {
-      puuid,
-      summonerName,
-      region,
-      lastSeen: null,
-    },
-  })
-  return res.status(201).json({
-    player: { id: puuid, label: summonerName ?? '—', platform: region },
-  })
-})
-
-router.delete('/seed-players/:id', async (req, res) => {
-  const puuid = req.params?.id
-  if (!puuid) return res.status(400).json({ error: 'id is required' })
-
-  try {
-    await prisma.player.delete({ where: { puuid } })
-    return res.json({ success: true })
-  } catch {
-    return res.status(404).json({ error: 'Player not found' })
-  }
 })
 
 router.get('/matchup-tier-list', async (req, res) => {

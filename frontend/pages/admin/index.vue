@@ -100,147 +100,29 @@
         </div>
       </div>
 
-      <!-- Tab: Data (API Riot + Crons + Scripts + Seed players) -->
+      <!-- Tab: Data (Crons + stats) -->
       <div v-show="activeTab === 'data'" class="space-y-6">
-        <!-- Section 1: API Riot (clé + consommation + stats) -->
-        <div class="rounded-lg border border-primary/30 bg-surface/30">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between p-4 text-left"
-            @click="dataSectionApiRiot = !dataSectionApiRiot"
-          >
-            <h2 class="text-lg font-semibold text-text">{{ t('admin.data.apiRiot.title') }}</h2>
-            <span class="text-text/60">{{ dataSectionApiRiot ? '▼' : '▶' }}</span>
-          </button>
-          <div v-show="dataSectionApiRiot" class="border-t border-primary/20 px-4 pb-4 pt-2">
-            <p v-if="riotApikeyLoading" class="text-text/70">Chargement…</p>
-            <template v-else>
-              <div class="mb-4">
-                <h3 class="mb-1 text-sm font-medium text-text">
-                  {{ t('admin.riotApikey.currentKey') }}
-                </h3>
-                <p class="text-sm text-text/80">
-                  {{ riotApikeyMasked ?? t('admin.riotApikey.notSet') }}
-                </p>
+        <!-- Section 1: Stats -->
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.data.stats.title') }}</h2>
+          <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
+          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">
+                {{ dataStats?.matchesWithoutRank ?? '—' }}
               </div>
-              <form class="mb-4 flex flex-wrap items-end gap-2" @submit.prevent="saveRiotApikey">
-                <div class="min-w-[200px]">
-                  <label for="riot-apikey-input" class="sr-only">{{
-                    t('admin.riotApikey.placeholder')
-                  }}</label>
-                  <input
-                    id="riot-apikey-input"
-                    v-model="riotApikeyValue"
-                    type="password"
-                    autocomplete="off"
-                    :placeholder="t('admin.riotApikey.placeholder')"
-                    class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                  :disabled="riotApikeySaving"
-                >
-                  {{ riotApikeySaving ? '…' : t('admin.riotApikey.save') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border border-primary/50 bg-background px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
-                  :disabled="riotApikeyTesting"
-                  @click="testRiotApikey"
-                >
-                  {{
-                    riotApikeyTesting
-                      ? t('admin.riotApikey.testing')
-                      : t('admin.riotApikey.testKey')
-                  }}
-                </button>
-              </form>
-              <p
-                v-if="riotApikeyMessage"
-                :class="riotApikeyError ? 'text-error' : 'text-green-600'"
-                class="mb-4 text-sm"
-              >
-                {{ riotApikeyMessage }}
-              </p>
-              <div
-                v-if="riotApiStats"
-                class="mb-4 rounded border border-primary/20 bg-background/50 p-3"
-              >
-                <h3 class="mb-2 text-sm font-medium text-text">
-                  {{ t('admin.data.apiRiot.consumption') }}
-                </h3>
-                <div class="grid gap-2 sm:grid-cols-4">
-                  <div>
-                    <span class="text-xs text-text/70">{{
-                      t('admin.data.apiRiot.requestsPerHour')
-                    }}</span>
-                    <p class="font-semibold text-text">
-                      {{ riotApiStats.requestsLastHour ?? '—' }} /
-                      {{ riotApiStats.limitPerHour ?? 3000 }}
-                    </p>
-                  </div>
-                  <div>
-                    <span class="text-xs text-text/70">{{
-                      t('admin.data.apiRiot.rateLimitExceeded')
-                    }}</span>
-                    <p class="font-semibold text-text">
-                      {{ riotApiStats.rateLimitExceededCount ?? '—' }}
-                    </p>
-                  </div>
-                  <div class="sm:col-span-2">
-                    <span class="text-xs text-text/70"
-                      >{{ t('admin.data.apiRiot.limit') }} ·
-                      {{ t('admin.data.apiRiot.limitPerHour') }}</span
-                    >
-                  </div>
-                </div>
+              <div class="text-xs text-text/70">
+                {{ t('admin.data.stats.matchesWithoutRank') }}
               </div>
-              <!-- Stats (participants sans rang, etc.) sous la clé -->
-              <div class="rounded border border-primary/20 bg-background/50 p-3">
-                <h3 class="mb-2 text-sm font-medium text-text">
-                  {{ t('admin.data.stats.title') }}
-                </h3>
-                <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
-                <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div class="rounded border border-primary/20 bg-background/30 p-3">
-                    <div class="text-xl font-bold text-text">
-                      {{ dataStats?.participantsWithoutRank ?? '—' }}
-                    </div>
-                    <div class="text-xs text-text/70">
-                      {{ t('admin.data.stats.participantsWithoutRank') }}
-                    </div>
-                  </div>
-                  <div class="rounded border border-primary/20 bg-background/30 p-3">
-                    <div class="text-xl font-bold text-text">
-                      {{ dataStats?.participantsWithoutRole ?? '—' }}
-                    </div>
-                    <div class="text-xs text-text/70">
-                      {{ t('admin.data.stats.participantsWithoutRole') }}
-                    </div>
-                  </div>
-                  <div class="rounded border border-primary/20 bg-background/30 p-3">
-                    <div class="text-xl font-bold text-text">
-                      {{ dataStats?.matchesWithoutRank ?? '—' }}
-                    </div>
-                    <div class="text-xs text-text/70">
-                      {{ t('admin.data.stats.matchesWithoutRank') }}
-                    </div>
-                  </div>
-                  <div class="rounded border border-primary/20 bg-background/30 p-3">
-                    <div class="text-base font-semibold text-text">
-                      {{
-                        dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—'
-                      }}
-                    </div>
-                    <div class="text-xs text-text/70">
-                      {{ t('admin.data.stats.lastNewPlayerAt') }}
-                    </div>
-                  </div>
-                </div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-base font-semibold text-text">
+                {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
               </div>
-            </template>
+              <div class="text-xs text-text/70">
+                {{ t('admin.data.stats.lastNewPlayerAt') }}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -253,13 +135,6 @@
           >
             <div class="flex items-center gap-3">
               <h2 class="text-lg font-semibold text-text">{{ t('admin.data.crons.title') }}</h2>
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20"
-                @click.stop="() => openAllLogs()"
-              >
-                {{ t('admin.data.crons.allLogs') }}
-              </button>
               <button
                 type="button"
                 class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
@@ -320,23 +195,14 @@
                         </span>
                       </td>
                       <td class="px-3 py-2">
-                        <div class="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            class="rounded border border-primary/40 bg-surface/60 px-2 py-1 text-xs font-medium text-text transition-colors hover:bg-primary/20"
-                            @click="() => openAllLogs(c.script)"
-                          >
-                            {{ t('admin.data.crons.logs') }}
-                          </button>
-                          <button
-                            type="button"
-                            class="rounded border border-primary/40 bg-surface/60 px-2 py-1 text-xs font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
-                            :disabled="cronTriggering[c.script]"
-                            @click="triggerCron(c.script)"
-                          >
-                            {{ cronTriggering[c.script] ? '…' : t('admin.data.crons.runNow') }}
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          class="rounded border border-primary/40 bg-surface/60 px-2 py-1 text-xs font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                          :disabled="cronTriggering[c.script]"
+                          @click="triggerCron(c.script)"
+                        >
+                          {{ cronTriggering[c.script] ? '…' : t('admin.data.crons.runNow') }}
+                        </button>
                       </td>
                     </tr>
                   </tbody>
@@ -354,563 +220,6 @@
               </div>
               <p v-else class="text-text/70">{{ t('admin.cronStatus.noData') }}</p>
             </template>
-          </div>
-        </div>
-
-        <!-- Section 3: Seed players -->
-        <div class="rounded-lg border border-primary/30 bg-surface/30">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between p-4 text-left"
-            @click="dataSectionSeedPlayers = !dataSectionSeedPlayers"
-          >
-            <h2 class="text-lg font-semibold text-text">{{ t('admin.seedPlayers.title') }}</h2>
-            <span class="text-text/60">{{ dataSectionSeedPlayers ? '▼' : '▶' }}</span>
-          </button>
-          <div v-show="dataSectionSeedPlayers" class="border-t border-primary/20 px-4 pb-4 pt-2">
-            <p class="mb-4 text-sm text-text/80">{{ t('admin.seedPlayers.description') }}</p>
-            <p v-if="seedPlayersLoading" class="text-text/70">Chargement…</p>
-            <template v-else>
-              <form class="mb-4 flex flex-wrap items-end gap-2" @submit.prevent="addSeedPlayer">
-                <div class="min-w-[200px]">
-                  <label for="seed-player-label" class="mb-1 block text-sm text-text/80">{{
-                    t('admin.seedPlayers.labelPlaceholder')
-                  }}</label>
-                  <input
-                    id="seed-player-label"
-                    v-model="seedPlayerLabel"
-                    type="text"
-                    :placeholder="t('admin.seedPlayers.labelPlaceholder')"
-                    class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                  />
-                </div>
-                <div>
-                  <label for="seed-player-platform" class="mb-1 block text-sm text-text/80">{{
-                    t('admin.seedPlayers.platform')
-                  }}</label>
-                  <select
-                    id="seed-player-platform"
-                    v-model="seedPlayerPlatform"
-                    class="rounded border border-primary/50 bg-background px-3 py-2 text-text"
-                  >
-                    <option value="euw1">EUW</option>
-                    <option value="eun1">EUNE</option>
-                  </select>
-                </div>
-                <button
-                  type="submit"
-                  class="rounded bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                  :disabled="seedPlayersAdding || !(seedPlayerLabel ?? '').trim()"
-                >
-                  {{ seedPlayersAdding ? '…' : t('admin.seedPlayers.add') }}
-                </button>
-              </form>
-              <p
-                v-if="seedPlayersMessage"
-                :class="seedPlayersError ? 'text-error' : 'text-green-600'"
-                class="mb-4 text-sm"
-              >
-                {{ seedPlayersMessage }}
-              </p>
-              <div class="mt-6 border-t border-primary/20 pt-4">
-                <h3 class="mb-2 text-sm font-medium text-text">
-                  {{ t('admin.seedPlayers.allPlayersTitle') }}
-                </h3>
-                <p class="mb-2 text-xs text-text/70">
-                  {{ t('admin.seedPlayers.allPlayersDescription') }}
-                </p>
-                <button
-                  type="button"
-                  class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
-                  :disabled="allPlayersLoading"
-                  @click="toggleAllPlayers"
-                >
-                  {{
-                    allPlayersLoading
-                      ? t('admin.loading')
-                      : allPlayersVisible
-                        ? t('admin.seedPlayers.hideAllPlayers')
-                        : t('admin.seedPlayers.viewAllPlayers')
-                  }}
-                </button>
-                <div v-if="allPlayersVisible" class="mt-3 space-y-2">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <label for="all-players-search" class="sr-only">{{
-                      t('admin.seedPlayers.searchPlayers')
-                    }}</label>
-                    <input
-                      id="all-players-search"
-                      v-model.trim="allPlayersSearchQuery"
-                      type="text"
-                      :placeholder="t('admin.seedPlayers.searchPlayersPlaceholder')"
-                      class="min-w-0 flex-1 rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text placeholder:text-text/50"
-                      @keyup.enter="onAllPlayersSearch"
-                    />
-                    <button
-                      type="button"
-                      class="rounded border border-primary/50 bg-background px-3 py-2 text-sm text-text transition-colors hover:bg-primary/10"
-                      @click="onAllPlayersSearch"
-                    >
-                      {{ t('admin.seedPlayers.searchPlayers') }}
-                    </button>
-                  </div>
-                  <div
-                    class="max-h-[400px] overflow-auto rounded border border-primary/20 bg-background/50"
-                  >
-                    <p v-if="allPlayersLoading" class="p-4 text-text/70">
-                      {{ t('admin.loading') }}
-                    </p>
-                    <p v-else-if="allPlayersList.length === 0" class="p-4 text-text/70">
-                      {{
-                        allPlayersSearchQuery.trim()
-                          ? t('admin.seedPlayers.noSearchResults')
-                          : t('admin.seedPlayers.allPlayersEmpty')
-                      }}
-                    </p>
-                    <div v-else class="overflow-x-auto">
-                      <table class="w-full min-w-[500px] text-left text-sm">
-                        <thead class="sticky top-0 border-b border-primary/30 bg-surface/80">
-                          <tr>
-                            <th class="px-3 py-2 font-semibold text-text">
-                              {{ t('admin.seedPlayers.colName') }}
-                            </th>
-                            <th class="px-3 py-2 font-semibold text-text">
-                              {{ t('admin.seedPlayers.colPuuid') }}
-                            </th>
-                            <th class="px-3 py-2 font-semibold text-text">
-                              {{ t('admin.seedPlayers.colRegion') }}
-                            </th>
-                            <th class="px-3 py-2 font-semibold text-text">
-                              {{ t('admin.seedPlayers.colRank') }}
-                            </th>
-                            <th class="px-3 py-2 font-semibold text-text">
-                              {{ t('admin.seedPlayers.colGames') }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-primary/20">
-                          <tr
-                            v-for="p in allPlayersList"
-                            :key="p.puuid"
-                            class="hover:bg-surface/30"
-                          >
-                            <td
-                              class="min-w-[120px] px-3 py-2 font-medium text-text"
-                              :title="p.puuid"
-                            >
-                              {{ p.summonerName || t('admin.seedPlayers.noName') }}
-                            </td>
-                            <td class="px-3 py-2 font-mono text-xs text-text/60" :title="p.puuid">
-                              {{ p.puuid.slice(0, 16) }}…
-                            </td>
-                            <td class="px-3 py-2 text-text/80">{{ p.region }}</td>
-                            <td class="px-3 py-2 text-text/80">{{ p.rankTier || '—' }}</td>
-                            <td class="px-3 py-2 text-text/80">
-                              {{ p.totalGames }} {{ t('admin.seedPlayers.games') }},
-                              {{ p.winrate }}% WR
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div
-                    v-if="allPlayersTotalPages > 1 || allPlayersTotal > 0"
-                    class="flex flex-wrap items-center justify-between gap-2 rounded border border-primary/20 bg-background/30 px-3 py-2 text-sm text-text/80"
-                  >
-                    <span>{{ allPlayersRangeText }}</span>
-                    <div class="flex items-center gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
-                        :disabled="allPlayersPage <= 1 || allPlayersLoading"
-                        @click="goToAllPlayersPage(allPlayersPage - 1)"
-                      >
-                        {{ t('admin.pagination.prev') }}
-                      </button>
-                      <span class="px-2"
-                        >{{ t('admin.pagination.page') }} {{ allPlayersPage }} /
-                        {{ allPlayersTotalPages }}</span
-                      >
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text transition-colors hover:bg-primary/10 disabled:opacity-50"
-                        :disabled="allPlayersPage >= allPlayersTotalPages || allPlayersLoading"
-                        @click="goToAllPlayersPage(allPlayersPage + 1)"
-                      >
-                        {{ t('admin.pagination.next') }}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Section 4: Scripts et Worker -->
-        <div class="rounded-lg border border-primary/30 bg-surface/30">
-          <button
-            type="button"
-            class="flex w-full items-center justify-between p-4 text-left"
-            @click="dataSectionScripts = !dataSectionScripts"
-          >
-            <div class="flex items-center gap-3">
-              <h2 class="text-lg font-semibold text-text">{{ t('admin.data.scripts.title') }}</h2>
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20"
-                @click.stop="() => openAllLogs()"
-              >
-                {{ t('admin.riotMatch.scripts.allLogs') }}
-              </button>
-            </div>
-            <span class="text-text/60">{{ dataSectionScripts ? '▼' : '▶' }}</span>
-          </button>
-          <div v-show="dataSectionScripts" class="border-t border-primary/20 px-4 pb-4 pt-2">
-            <p v-if="cronLoading" class="text-text/70">Chargement…</p>
-            <template v-else>
-              <div class="mb-4">
-                <div class="mb-1 flex flex-wrap items-center gap-3">
-                  <span class="text-sm font-medium text-text"
-                    >{{ t('admin.riotMatch.pollerStatus') }} :</span
-                  >
-                  <span
-                    :class="
-                      cron?.riotWorker?.active
-                        ? 'bg-green-600/20 text-green-700 dark:text-green-400'
-                        : 'bg-text/10 text-text/70'
-                    "
-                    class="rounded px-2 py-0.5 text-sm font-medium"
-                  >
-                    {{
-                      cron?.riotWorker?.active
-                        ? t('admin.riotMatch.pollerActive')
-                        : t('admin.riotMatch.pollerStopped')
-                    }}
-                  </span>
-                  <span v-if="cron?.riotWorker?.lastBeat" class="text-sm text-text/60">
-                    ({{ t('admin.riotMatch.pollerLastBeat') }} :
-                    {{ formatRiotDate(cron.riotWorker.lastBeat) }})
-                  </span>
-                </div>
-                <p class="text-xs text-text/60">{{ t('admin.riotMatch.pollerHint') }}</p>
-                <p class="mt-1 text-xs text-text/50">{{ t('admin.riotMatch.workerStartHint') }}</p>
-              </div>
-              <div
-                v-if="riotDataStats || riotApiStats"
-                class="mb-4 flex flex-wrap gap-4 rounded border border-primary/20 bg-surface/20 px-3 py-2 text-sm"
-              >
-                <template v-if="riotDataStats">
-                  <span v-if="riotDataStats.participantsWithoutRank != null" class="text-text/80">
-                    Participants sans rang:
-                    <strong>{{ riotDataStats.participantsWithoutRank }}</strong>
-                  </span>
-                  <span v-if="riotDataStats.participantsWithoutRole != null" class="text-text/80">
-                    Participants sans rôle:
-                    <strong>{{ riotDataStats.participantsWithoutRole }}</strong>
-                  </span>
-                  <span v-if="riotDataStats.matchesWithoutRank != null" class="text-text/80">
-                    Matchs sans rang: <strong>{{ riotDataStats.matchesWithoutRank }}</strong>
-                  </span>
-                  <span
-                    v-if="riotDataStats.playersMissingSummonerName != null"
-                    class="text-text/80"
-                  >
-                    Joueurs sans summoner_name:
-                    <strong>{{ riotDataStats.playersMissingSummonerName }}</strong>
-                  </span>
-                </template>
-                <template v-if="riotApiStats">
-                  <span class="text-text/80">
-                    Requêtes Riot (1h): <strong>{{ riotApiStats.requestsLastHour ?? 0 }}</strong> /
-                    {{ riotApiStats.limitPerTwoMin ?? 100 }} (2 min)
-                  </span>
-                  <span
-                    v-if="(riotApiStats.rateLimitExceededCount ?? 0) > 0"
-                    class="text-amber-600 dark:text-amber-400"
-                  >
-                    429: {{ riotApiStats.rateLimitExceededCount }}
-                  </span>
-                </template>
-              </div>
-              <div class="mt-4 space-y-3">
-                <div
-                  v-for="card in riotScriptCards"
-                  :key="card.id"
-                  class="rounded border border-primary/20 bg-background/40 p-3"
-                >
-                  <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p class="text-sm font-semibold text-text">{{ card.label }}</p>
-                      <p class="text-xs text-text/60">{{ card.description }}</p>
-                    </div>
-                    <span
-                      :class="riotStatusClass(riotScriptsStatus[card.id]?.status)"
-                      class="rounded px-2 py-0.5 text-xs font-medium"
-                    >
-                      {{ riotStatusLabel(riotScriptsStatus[card.id]?.status) }}
-                    </span>
-                  </div>
-
-                  <div
-                    v-if="riotScriptsStatus[card.id]?.progress"
-                    class="mb-3 rounded border border-primary/15 bg-surface/20 px-3 py-2 text-xs"
-                  >
-                    <p class="mb-1 font-medium text-text/80">
-                      {{ riotScriptsStatus[card.id].progress.phase }}
-                      <span
-                        v-if="riotScriptsStatus[card.id].progress.lastUpdatedAt"
-                        class="text-text/50"
-                      >
-                        · {{ formatRiotDate(riotScriptsStatus[card.id].progress.lastUpdatedAt) }}
-                      </span>
-                    </p>
-                    <div
-                      v-if="Object.keys(riotScriptsStatus[card.id].progress.metrics || {}).length"
-                      class="flex flex-wrap gap-x-4 gap-y-1 text-text/70"
-                    >
-                      <span
-                        v-if="riotScriptsStatus[card.id].progress.metrics.matchesCollected != null"
-                      >
-                        Matchs: {{ riotScriptsStatus[card.id].progress.metrics.matchesCollected }}
-                      </span>
-                      <span
-                        v-if="riotScriptsStatus[card.id].progress.metrics.newPlayersAdded != null"
-                      >
-                        Nouveaux joueurs:
-                        {{ riotScriptsStatus[card.id].progress.metrics.newPlayersAdded }}
-                      </span>
-                      <span v-if="riotScriptsStatus[card.id].progress.metrics.requestsUsed != null">
-                        Requêtes: {{ riotScriptsStatus[card.id].progress.metrics.requestsUsed }}
-                        <template
-                          v-if="riotScriptsStatus[card.id].progress.metrics.requestLimit != null"
-                        >
-                          / {{ riotScriptsStatus[card.id].progress.metrics.requestLimit }}
-                        </template>
-                      </span>
-                      <span v-if="riotScriptsStatus[card.id].progress.metrics.errors != null">
-                        Erreurs: {{ riotScriptsStatus[card.id].progress.metrics.errors }}
-                      </span>
-                      <span v-if="riotScriptsStatus[card.id].progress.metrics.updated != null">
-                        Mis à jour: {{ riotScriptsStatus[card.id].progress.metrics.updated }}
-                      </span>
-                      <span
-                        v-if="
-                          riotScriptsStatus[card.id].progress.metrics.participantsMissingData !=
-                          null
-                        "
-                      >
-                        Données manquantes:
-                        {{ riotScriptsStatus[card.id].progress.metrics.participantsMissingData }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    v-if="card.fields.length && riotScriptFields[card.id]"
-                    class="mb-3 grid gap-2 md:grid-cols-3"
-                  >
-                    <div v-for="field in card.fields" :key="`${card.id}-${field.key}`">
-                      <label class="mb-1 block text-xs font-medium text-text/70">{{
-                        field.label
-                      }}</label>
-                      <select
-                        v-if="field.type === 'select'"
-                        v-model="riotScriptFields[card.id]![field.key]"
-                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                      >
-                        <option
-                          v-for="opt in field.options ?? []"
-                          :key="`${card.id}-${field.key}-${opt.value}`"
-                          :value="opt.value"
-                        >
-                          {{ opt.label }}
-                        </option>
-                      </select>
-                      <input
-                        v-else
-                        v-model="riotScriptFields[card.id]![field.key]"
-                        :type="field.type"
-                        class="w-full rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                        :placeholder="field.placeholder"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="rounded bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                      :disabled="riotScriptBusy[card.id] || isScriptActive(card.id)"
-                      @click="runRiotScript(card)"
-                    >
-                      {{ riotScriptBusy[card.id] ? '…' : t('admin.riotMatch.scripts.run') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/60 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-surface/80"
-                      @click="openRiotScriptLogs(card.id, card.label)"
-                    >
-                      {{ t('admin.riotMatch.scripts.logs') }}
-                    </button>
-                    <button
-                      v-if="isScriptActive(card.id)"
-                      type="button"
-                      class="rounded border border-red-500/70 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
-                      :disabled="riotScriptStopBusy[card.id]"
-                      @click="stopRiotScript(card)"
-                    >
-                      {{ riotScriptStopBusy[card.id] ? '…' : t('admin.riotMatch.scripts.stop') }}
-                    </button>
-                  </div>
-                  <p
-                    v-if="riotScriptsStatus[card.id]?.lastStartAt"
-                    class="mt-2 text-xs text-text/60"
-                  >
-                    Start: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastStartAt) }}
-                    <span v-if="riotScriptsStatus[card.id]?.lastEndAt">
-                      · Stop: {{ formatRiotDate(riotScriptsStatus[card.id]?.lastEndAt) }}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              <div class="flex flex-wrap items-center gap-3">
-                <p
-                  v-if="
-                    riotCollectMessage ||
-                    riotStopMessage ||
-                    riotBackfillMessage ||
-                    riotLeagueExpMessage ||
-                    riotScriptMessage
-                  "
-                  :class="
-                    riotCollectError ||
-                    riotStopError ||
-                    riotBackfillError ||
-                    riotLeagueExpError ||
-                    riotScriptError
-                      ? 'text-error'
-                      : 'text-green-600'
-                  "
-                  class="mt-2 text-sm"
-                >
-                  {{
-                    riotCollectMessage ||
-                    riotStopMessage ||
-                    riotBackfillMessage ||
-                    riotLeagueExpMessage ||
-                    riotScriptMessage
-                  }}
-                </p>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <div
-          v-if="riotScriptLogsOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-          @click.self="riotScriptLogsOpen = false"
-        >
-          <div
-            class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
-          >
-            <div class="flex items-center justify-between border-b border-primary/20 px-4 py-3">
-              <h3 class="text-sm font-semibold text-text">
-                {{ t('admin.riotMatch.scripts.logsTitle') }} - {{ riotScriptLogsTitle }}
-              </h3>
-              <button
-                type="button"
-                class="rounded border border-primary/30 px-2 py-1 text-xs text-text"
-                @click="riotScriptLogsOpen = false"
-              >
-                {{ t('admin.riotMatch.scripts.close') }}
-              </button>
-            </div>
-            <div class="max-h-[65vh] overflow-auto p-4">
-              <p v-if="riotScriptLogsLoading" class="text-sm text-text/70">Chargement…</p>
-              <p v-else-if="riotScriptLogs.length === 0" class="text-sm text-text/70">
-                {{ t('admin.riotMatch.scripts.noLogs') }}
-              </p>
-              <pre v-else class="whitespace-pre-wrap text-xs text-text">{{
-                riotScriptLogs.join('\n')
-              }}</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- Global logs modal (all scripts, filter, sort, lines) -->
-        <div
-          v-if="allLogsOpen"
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-          @click.self="allLogsOpen = false"
-        >
-          <div
-            class="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-lg border border-primary/30 bg-background shadow-xl"
-          >
-            <div
-              class="flex flex-wrap items-center justify-between gap-2 border-b border-primary/20 px-4 py-3"
-            >
-              <h3 class="text-sm font-semibold text-text">
-                {{ t('admin.riotMatch.scripts.allLogsTitle') }}
-              </h3>
-              <div class="flex flex-wrap items-center gap-2">
-                <label class="text-xs text-text/70">{{
-                  t('admin.riotMatch.scripts.filterScript')
-                }}</label>
-                <select
-                  id="all-logs-script"
-                  v-model="allLogsFilter"
-                  class="rounded border border-primary/30 bg-background px-2 py-1 text-sm text-text"
-                  @change="loadAllLogs"
-                >
-                  <option value="all">{{ t('admin.riotMatch.scripts.allScripts') }}</option>
-                  <option v-for="s in allLogsScripts" :key="s" :value="s">{{ s }}</option>
-                </select>
-                <label class="text-xs text-text/70">{{ t('admin.riotMatch.scripts.sort') }}</label>
-                <select
-                  v-model="allLogsSort"
-                  class="rounded border border-primary/30 bg-background px-2 py-1 text-sm text-text"
-                  @change="loadAllLogs"
-                >
-                  <option value="desc">{{ t('admin.riotMatch.scripts.sortNewest') }}</option>
-                  <option value="asc">{{ t('admin.riotMatch.scripts.sortOldest') }}</option>
-                </select>
-                <label class="text-xs text-text/70">{{ t('admin.riotMatch.scripts.lines') }}</label>
-                <input
-                  v-model.number="allLogsLines"
-                  type="number"
-                  min="1"
-                  max="2000"
-                  class="w-20 rounded border border-primary/30 bg-background px-2 py-1 text-sm text-text"
-                  @change="loadAllLogs"
-                />
-                <button
-                  type="button"
-                  class="rounded border border-primary/40 bg-surface/60 px-3 py-1 text-sm text-text hover:bg-primary/10"
-                  @click="loadAllLogs"
-                >
-                  {{ t('admin.riotMatch.scripts.refresh') }}
-                </button>
-              </div>
-              <button
-                type="button"
-                class="rounded border border-primary/30 px-2 py-1 text-xs text-text"
-                @click="allLogsOpen = false"
-              >
-                {{ t('admin.riotMatch.scripts.close') }}
-              </button>
-            </div>
-            <div class="max-h-[75vh] overflow-auto p-4">
-              <p v-if="allLogsLoading" class="text-sm text-text/70">Chargement…</p>
-              <p v-else-if="allLogsList.length === 0" class="text-sm text-text/70">
-                {{ t('admin.riotMatch.scripts.noLogs') }}
-              </p>
-              <pre v-else class="whitespace-pre-wrap font-mono text-xs text-text">{{
-                allLogsList.join('\n')
-              }}</pre>
-            </div>
           </div>
         </div>
       </div>
@@ -1102,28 +411,6 @@
           </h2>
           <p v-if="cronLoading" class="text-text/70">{{ t('admin.loading') }}</p>
           <template v-else-if="cron?.cronJobs">
-            <div class="mb-4 rounded border border-primary/20 bg-background/50 p-3">
-              <h3 class="mb-2 text-sm font-medium text-text">
-                {{ t('admin.cronStatus.riotWorker') }}
-              </h3>
-              <p class="text-sm text-text/80">
-                <span
-                  :class="
-                    cron?.riotWorker?.active ? 'text-green-600 dark:text-green-400' : 'text-text/70'
-                  "
-                >
-                  {{
-                    cron?.riotWorker?.active
-                      ? t('admin.riotMatch.pollerActive')
-                      : t('admin.riotMatch.pollerStopped')
-                  }}
-                </span>
-                <span v-if="cron?.riotWorker?.lastBeat" class="text-text/60">
-                  — {{ t('admin.riotMatch.pollerLastBeat') }}:
-                  {{ formatRiotDate(cron.riotWorker.lastBeat) }}
-                </span>
-              </p>
-            </div>
             <div class="overflow-x-auto">
               <table class="w-full min-w-[520px] text-left text-sm">
                 <thead class="border-b border-primary/30 bg-surface/50">
@@ -1739,13 +1026,11 @@ const riotApiStats = ref<{
 } | null>(null)
 
 // Data tab: collapsible sections
-const dataSectionApiRiot = ref(true)
+const _dataSectionApiRiot = ref(true)
 const dataSectionCrons = ref(true)
-const dataSectionScripts = ref(true)
-const dataSectionSeedPlayers = ref(true)
+const _dataSectionScripts = ref(true)
+const _dataSectionSeedPlayers = ref(true)
 const dataStats = ref<{
-  participantsWithoutRank: number
-  participantsWithoutRole: number
   matchesWithoutRank: number
   lastNewPlayerAt: string | null
 } | null>(null)
@@ -1795,14 +1080,14 @@ async function loadDataStats() {
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
-const riotCollectMessage = ref('')
-const riotCollectError = ref(false)
-const riotStopMessage = ref('')
-const riotStopError = ref(false)
-const riotBackfillMessage = ref('')
-const riotBackfillError = ref(false)
-const riotLeagueExpMessage = ref('')
-const riotLeagueExpError = ref(false)
+const _riotCollectMessage = ref('')
+const _riotCollectError = ref(false)
+const _riotStopMessage = ref('')
+const _riotStopError = ref(false)
+const _riotBackfillMessage = ref('')
+const _riotBackfillError = ref(false)
+const _riotLeagueExpMessage = ref('')
+const _riotLeagueExpError = ref(false)
 const riotScriptMessage = ref('')
 const riotScriptError = ref(false)
 const riotScriptFields = ref<Record<string, Record<string, string>>>({})
@@ -2216,14 +1501,14 @@ function initRiotScriptFields() {
   riotScriptFields.value = next
 }
 
-function riotStatusLabel(status: string | undefined) {
+function _riotStatusLabel(status: string | undefined) {
   if (status === 'running') return t('admin.riotMatch.scripts.status.running')
   if (status === 'started') return t('admin.riotMatch.scripts.status.started')
   if (status === 'failed') return t('admin.riotMatch.scripts.status.failed')
   return t('admin.riotMatch.scripts.status.stopped')
 }
 
-function riotStatusClass(status: string | undefined) {
+function _riotStatusClass(status: string | undefined) {
   if (status === 'running') return 'bg-green-600/20 text-green-700 dark:text-green-400'
   if (status === 'started') return 'bg-blue-600/20 text-blue-700 dark:text-blue-300'
   if (status === 'failed') return 'bg-red-500/20 text-red-700 dark:text-red-300'
@@ -2280,7 +1565,7 @@ async function loadRiotScriptsStatus() {
   }
 }
 
-async function openRiotScriptLogs(scriptId: string, label: string) {
+async function _openRiotScriptLogs(scriptId: string, label: string) {
   riotScriptLogsOpen.value = true
   riotScriptLogsLoading.value = true
   riotScriptLogsTitle.value = label
@@ -2301,7 +1586,7 @@ async function openRiotScriptLogs(scriptId: string, label: string) {
   }
 }
 
-async function openAllLogs(scriptFilter?: string) {
+async function _openAllLogs(scriptFilter?: string) {
   allLogsOpen.value = true
   allLogsFilter.value = scriptFilter ?? 'all'
   allLogsSort.value = 'desc'
@@ -2382,7 +1667,7 @@ async function loadAllLogs() {
   }
 }
 
-async function runRiotScript(card: RiotScriptCard) {
+async function _runRiotScript(card: RiotScriptCard) {
   if (isScriptActive(card.id)) return
   riotScriptMessage.value = ''
   riotScriptError.value = false
@@ -2451,7 +1736,7 @@ async function runRiotScript(card: RiotScriptCard) {
   }
 }
 
-async function stopRiotScript(card: RiotScriptCard) {
+async function _stopRiotScript(card: RiotScriptCard) {
   riotScriptMessage.value = ''
   riotScriptError.value = false
   riotScriptStopBusy.value[card.id] = true
@@ -2730,10 +2015,10 @@ watch(activeTab, (tab, prevTab) => {
   if ((tab === 'videos' || tab === 'data') && !cron.value && !cronLoading.value) loadCron()
   if (tab === 'data') {
     loadRiotScriptsStatus()
-    if (riotApikeyMasked.value === null && !riotApikeyLoading.value) loadRiotApikey()
+    // Riot API key UI removed
     loadRiotApiStats()
     loadDataStats()
-    if (seedPlayersList.value.length === 0 && !seedPlayersLoading.value) loadSeedPlayers()
+    // Seed players UI removed
     dataTabPollTimer = setInterval(() => {
       loadRiotScriptsStatus()
       loadRiotApiStats()

@@ -5,6 +5,9 @@ module.exports = {
     'prettier'
   ],
   rules: {
-    // Add custom rules if needed
-  }
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
+  },
 }

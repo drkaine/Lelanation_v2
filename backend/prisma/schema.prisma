@@ -32,13 +32,11 @@ model Match {
 }
 
 // Participant: colonnes indexées pour agrégations; bans/objectives dans Match.teams.
-// riotIdGameName/riotIdTagline du payload → remplissent Player.summoner_name à la collecte (pas stockés ici).
 model Participant {
   id                          BigInt   @id @default(autoincrement())
-  matchId                     BigInt   @map("match_id")
   playerId                    BigInt   @map("player_id")
+  matchId                     BigInt   @map("match_id")
   teamId                      Int?     @map("team_id") // 100 = blue, 200 = red (Riot convention)
-  puuid                       String
   championId                  Int      @map("champion_id")
   win                         Boolean
   role                        String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY (dérivé teamPosition/individualPosition)
@@ -132,7 +130,6 @@ model Participant {
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([matchId])
-  @@index([puuid])
   @@index([playerId])
   @@index([championId])
   @@index([rankTier])
@@ -143,11 +140,10 @@ model Participant {
 }
 
 model Player {
-  id              BigInt   @id @default(autoincrement())
-  puuid           String   @unique
-  summonerName    String?   @map("summoner_name")
+  id              BigInt    @id @default(autoincrement())
   gameName        String?   @map("game_name")
   tagName         String?   @map("tag_name")
+  puuid           String    @unique
   region          String
   puuidKeyVersion String?   @map("puuid_key_version") // dev|perso|prod — clé Riot utilisée pour ce PUUID
   lastSeen        DateTime? @map("last_seen")
@@ -160,31 +156,3 @@ model Player {
   @@index([lastSeen])
   @@map("players")
 }
-
-// Aggregated champion-vs-champion matchup score for tier-listing.
-model MatchupTierScore {
-  id                 BigInt   @id @default(autoincrement())
-  patch              String
-  lane               String
-  championId         Int      @map("champion_id")
-  opponentChampionId Int      @map("opponent_champion_id")
-  rankFilterKey      String   @default("GLOBAL") @map("rank_filter_key")
-  games              Int      @default(0)
-  wins               Int      @default(0)
-  sumKda             Float    @default(0) @map("sum_kda")
-  sumLevel           Float    @default(0) @map("sum_level")
-  avgKda             Float    @default(0) @map("avg_kda")
-  avgLevel           Float    @default(0) @map("avg_level")
-  score              Int      @default(0)
-  confidence         Float    @default(0)
-  prevPatchScore     Int?     @map("prev_patch_score")
-  deltaVsPrevPatch   Int?     @map("delta_vs_prev_patch")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  @@unique([patch, lane, championId, opponentChampionId, rankFilterKey], map: "matchup_tier_scores_unique")
-  @@index([patch, lane, rankFilterKey, score], map: "matchup_tier_scores_patch_lane_rank_idx")
-  @@index([championId, patch, rankFilterKey], map: "matchup_tier_scores_champ_patch_rank_idx")
-  @@map("matchup_tier_scores")
-}
-

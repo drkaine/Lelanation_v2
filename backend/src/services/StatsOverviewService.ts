@@ -1,6 +1,6 @@
 /**
  * Overview stats for the statistics page: total matches, last update, top winrate champions,
- * matches per division, distinct participant count (unique puuids in participants).
+ * matches per division, distinct participant count (unique player_id in participants).
  * Uses PostgreSQL views and get_stats_overview() for a single round-trip.
  */
 import { Prisma } from '../generated/prisma/index.js'
@@ -34,7 +34,7 @@ export interface OverviewStats {
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
   /** Match count per game version (16.x only, e.g. 16.1, 16.2, 16.3). */
   matchesByVersion: Array<{ version: string; matchCount: number }>
-  /** Distinct puuids in participants (joueurs récupérés = participants uniques). */
+  /** Distinct player_id in participants (joueurs récupérés = participants uniques). */
   playerCount: number
 }
 
