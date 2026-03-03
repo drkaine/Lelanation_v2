@@ -82,6 +82,7 @@ dev-frontend:
 build: test-packages build-backend build-frontend build-companion pm2-restart
 
 build-backend:
+	cd "$(BACKEND_DIR)" && npx prisma migrate deploy
 	$(NPM) --prefix "$(BACKEND_DIR)" run build
 
 build-frontend:

@@ -1554,13 +1554,6 @@ type RiotScriptCard = {
 
 const riotScriptCards = computed<RiotScriptCard[]>(() => [
   {
-    id: 'riot:worker',
-    label: t('admin.riotMatch.scripts.worker'),
-    description: t('admin.riotMatch.scripts.descriptions.worker'),
-    runMode: 'generic',
-    fields: [],
-  },
-  {
     id: 'riot:collect',
     label: t('admin.riotMatch.scripts.collectOnce'),
     description: t('admin.riotMatch.scripts.descriptions.collectOnce'),

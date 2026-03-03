@@ -132,7 +132,11 @@ export async function enrichPlayers(
     if (!account.riotId) continue
     await prisma.player.update({
       where: { puuid: p.puuid },
-      data: { summonerName: account.riotId },
+      data: {
+        summonerName: account.riotId,
+        gameName: account.gameName || null,
+        tagName: account.tagLine || null,
+      },
     })
     enriched++
   }

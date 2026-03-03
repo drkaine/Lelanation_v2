@@ -13,13 +13,13 @@ import statsRoutes from './routes/stats.js'
 import appRoutes from './routes/app.js'
 import shareBuildsRoutes from './routes/shareBuilds.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
-import { setupRiotMatchCollect } from './cron/riotMatchCollect.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { setupStatsPrecomputedRefresh, runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
 import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
+import { startRiotPoller } from './worker/riotPoller.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -61,7 +61,6 @@ try {
   setupDataDragonSync()
   setupYouTubeSync()
   setupCommunityDragonSync()
-  setupRiotMatchCollect()
   setupStatsPrecomputedRefresh()
   console.log('[Server] ✅ All cron jobs initialized successfully')
 } catch (error) {
@@ -91,6 +90,8 @@ app.listen(PORT, () => {
     (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
     (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   )
+  // Lancer le poller Riot (boucle in-process, sans PM2)
+  startRiotPoller()
 })
 
 export default app

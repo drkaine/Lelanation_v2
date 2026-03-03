@@ -57,12 +57,9 @@ const youtubeService = new YouTubeService()
 const __dirnameAdmin = dirname(fileURLToPath(import.meta.url))
 const backendRoot = join(__dirnameAdmin, '..', '..')
 const pm2AppName = process.env.PM2_APP_NAME ?? 'lelanation-backend'
-const pm2RiotWorkerAppName = process.env.PM2_RIOT_WORKER_APP_NAME ?? 'lelanation-riot-worker'
 const POLLER_SCRIPTS = new Set([
-  'riot:worker',
   'riot:collect',
   'riot:backfill-until-done',
-  'riot:discover-players',
   'riot:discover-league-exp',
 ])
 const RIOT_SCRIPT_STATUS_FILE = join(process.cwd(), 'data', 'cron', 'riot-script-status.json')
@@ -138,33 +135,12 @@ const ALL_LOGGABLE_SCRIPTS = new Set([
   'communityDragonSync',
 ])
 
-const TAIL_MAX_BYTES = 64 * 1024 // 64KB max read for large logs (avoids loading huge files)
-
 async function tailScriptLog(script: string, lines = 20): Promise<string[]> {
   const file = scriptLogFile(script)
-  try {
-    const stat = await fs.stat(file)
-    const size = stat.size
-    if (size === 0) return []
-    const toRead = Math.min(size, TAIL_MAX_BYTES)
-    const start = Math.max(0, size - toRead)
-    const buf = Buffer.alloc(toRead)
-    const fd = await fs.open(file, 'r')
-    try {
-      await fd.read(buf, 0, toRead, start)
-    } finally {
-      await fd.close()
-    }
-    let content = buf.toString('utf-8')
-    if (start > 0) {
-      const firstNl = content.indexOf('\n')
-      if (firstNl >= 0) content = content.slice(firstNl + 1)
-    }
-    const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    return arr.slice(-Math.max(1, lines))
-  } catch {
-    return []
-  }
+  const content = await fs.readFile(file, 'utf-8').catch(() => '')
+  if (!content) return []
+  const arr = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+  return arr.slice(-Math.max(1, lines))
 }
 
 async function rotateLogIfNeeded(script: string): Promise<void> {
@@ -199,41 +175,6 @@ function isPidAlive(pid: number | undefined): boolean {
     return false
   }
 }
-type Pm2Proc = {
-  name?: string
-  pid?: number
-  pm2_env?: { status?: string; pm_uptime?: number }
-}
-const PM2_JLIST_TIMEOUT_MS = 2000
-
-async function getPm2ProcessInfo(name: string): Promise<{ online: boolean; pid?: number; status?: string; pmUptime?: number } | null> {
-  try {
-    const jlist = await Promise.race([
-      new Promise<string>((resolve, reject) => {
-        exec('pm2 jlist', { timeout: PM2_JLIST_TIMEOUT_MS, maxBuffer: 512 * 1024 }, (err, stdout) => {
-          if (err) return reject(err)
-          resolve(stdout || '[]')
-        })
-      }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('pm2 jlist timeout')), PM2_JLIST_TIMEOUT_MS)
-      ),
-    ])
-    const data = JSON.parse(jlist) as Pm2Proc[]
-    const proc = Array.isArray(data) ? data.find((p) => p?.name === name) : null
-    if (!proc) return null
-    const status = proc.pm2_env?.status
-    return {
-      online: status === 'online',
-      pid: typeof proc.pid === 'number' ? proc.pid : undefined,
-      status,
-      pmUptime: typeof proc.pm2_env?.pm_uptime === 'number' ? proc.pm2_env.pm_uptime : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
 const youtubeConfigFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
 const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
@@ -294,7 +235,8 @@ router.get('/metrics', async (_req, res) => {
 
 router.get('/cron', async (_req, res) => {
   const cronFile = await cronStatus.getStatus()
-  const cronJobs = cronFile.isOk() ? cronFile.unwrap().jobs : null
+  const cronRaw = cronFile.isOk() ? (cronFile.unwrap() as any) : null
+  const cronJobs = cronRaw?.jobs ?? null
 
   const versionResult = await versionService.getCurrentVersion()
   const gameVersion = versionResult.isOk() ? versionResult.unwrap() : null
@@ -302,12 +244,16 @@ router.get('/cron', async (_req, res) => {
   const ytConfigResult = await FileManager.readJson<YouTubeChannelsConfig>(youtubeConfigFile)
   const ytConfig = ytConfigResult.isOk() ? ytConfigResult.unwrap() : { channels: [] }
 
-  const riotWorkerHeartbeatPath = join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
-  let riotWorker: { lastBeat: string | null; active: boolean; source?: string; pm2?: { online: boolean; pid?: number; status?: string } | null } = {
+  const riotWorkerHeartbeatPath = join(process.cwd(), 'data', 'cron', 'riot-poller-heartbeat.json')
+  let riotWorker: {
+    lastBeat: string | null
+    active: boolean
+    source?: string
+    poller?: unknown
+  } = {
     lastBeat: null,
     active: false,
     source: 'none',
-    pm2: null,
   }
   let heartbeatActive = false
   const heartbeatResult = await FileManager.readJson<{ lastBeat?: string }>(riotWorkerHeartbeatPath)
@@ -320,13 +266,13 @@ router.get('/cron', async (_req, res) => {
       riotWorker = { ...riotWorker, lastBeat, active: heartbeatActive }
     }
   }
-  const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
-  if (pm2Worker) {
+  const pollerStatus = cronRaw?.poller ?? null
+  if (pollerStatus) {
     riotWorker = {
       ...riotWorker,
-      active: riotWorker.active || pm2Worker.online,
-      source: riotWorker.active ? 'heartbeat' : (pm2Worker.online ? 'pm2' : 'none'),
-      pm2: { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status },
+      active: pollerStatus.status === 'running' || heartbeatActive,
+      source: 'poller',
+      poller: pollerStatus,
     }
   } else if (heartbeatActive) {
     riotWorker = { ...riotWorker, source: 'heartbeat' }
@@ -874,27 +820,6 @@ router.post('/riot-script-run', async (req, res) => {
     })
   }
 
-  if (script === 'riot:worker') {
-    const pm2Worker = await getPm2ProcessInfo(pm2RiotWorkerAppName)
-    if (pm2Worker?.online) {
-      return res.status(409).json({
-        success: false,
-        error: `Riot worker already active via PM2 (${pm2RiotWorkerAppName}).`,
-      })
-    }
-    // Best effort guard: avoid duplicate workers if heartbeat is fresh.
-    const hb = await FileManager.readJson<{ lastBeat?: string }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
-    if (hb.isOk() && hb.unwrap()?.lastBeat) {
-      const ageMs = Date.now() - new Date(hb.unwrap().lastBeat!).getTime()
-      if (ageMs < 10 * 60 * 1000) {
-        return res.status(409).json({
-          success: false,
-          error: 'Riot worker already appears active (heartbeat < 10 min).',
-        })
-      }
-    }
-  }
-
   spawnRiotScriptAndTrack(script, args)
   return res.status(202).json({
     success: true,
@@ -910,28 +835,8 @@ const CRON_JOBS: Array<{ key: string; label: string }> = [
   { key: 'communityDragonSync', label: 'communityDragonSync' },
 ]
 
-function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ])
-}
-
 router.get('/riot-scripts-status', async (_req, res) => {
   const map = await readScriptStatusMap()
-  const hb = await FileManager.readJson<{
-    lastBeat?: string
-    cyclePhase?: string
-    matchesCollectedThisCycle?: number
-    requestsThisCycle?: number
-  }>(join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json'))
-  const heartbeat = hb.isOk() ? hb.unwrap() : null
-  const workerBeat = heartbeat?.lastBeat ?? null
-  // Worker considered active only if heartbeat < 3 min (so after stop, status flips to stopped within 3 min)
-  const WORKER_HEARTBEAT_MAX_AGE_MS = 3 * 60 * 1000
-  const workerHeartbeatActive = !!workerBeat && (Date.now() - new Date(workerBeat).getTime()) < WORKER_HEARTBEAT_MAX_AGE_MS
-  const pm2Worker = await withTimeout(getPm2ProcessInfo(pm2RiotWorkerAppName), 3000, null)
-  const workerActive = workerHeartbeatActive || !!pm2Worker?.online
   const cronResult = await cronStatus.getStatus()
   const cronJobs: Record<CronJobKey, CronJobStatus> = cronResult.isOk()
     ? cronResult.unwrap().jobs
@@ -941,14 +846,10 @@ router.get('/riot-scripts-status', async (_req, res) => {
         communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
       } as Record<CronJobKey, CronJobStatus>)
 
-  const lastOutputs = await withTimeout(
-    Promise.all([...POLLER_SCRIPTS].map(async (s) => {
-      const lines = await tailScriptLog(s, 1)
-      return [s, lines[lines.length - 1] ?? null] as const
-    })),
-    5000,
-    [...POLLER_SCRIPTS].map((s) => [s, null as string | null] as const)
-  )
+  const lastOutputs = await Promise.all([...POLLER_SCRIPTS].map(async (s) => {
+    const lines = await tailScriptLog(s, 1)
+    return [s, lines[lines.length - 1] ?? null] as const
+  }))
   const lastOutputMap = Object.fromEntries(lastOutputs)
 
   const progressMap = await readAllProgress()
@@ -963,17 +864,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
         : row
     const lastOutput = lastOutputMap[script] ?? null
     const progress = progressMap[script] ?? null
-    if (script === 'riot:worker') {
-      return {
-        ...safeRow,
-        lastOutput,
-        progress: progress ? { phase: progress.phase, startedAt: progress.startedAt, lastUpdatedAt: progress.lastUpdatedAt, metrics: progress.metrics } : null,
-        status: workerActive ? 'running' : safeRow.status === 'running' ? 'started' : safeRow.status,
-        workerHeartbeat: heartbeat ?? (workerBeat ? { lastBeat: workerBeat } : null),
-        workerPm2: pm2Worker ? { online: pm2Worker.online, pid: pm2Worker.pid, status: pm2Worker.status } : null,
-        workerSource: workerHeartbeatActive ? 'heartbeat' : (pm2Worker?.online ? 'pm2' : 'none'),
-      }
-    }
     return { ...safeRow, lastOutput, progress: progress ? { phase: progress.phase, startedAt: progress.startedAt, lastUpdatedAt: progress.lastUpdatedAt, metrics: progress.metrics } : null }
   })
 
@@ -996,15 +886,13 @@ router.get('/riot-scripts-status', async (_req, res) => {
     lastNewPlayerAt: null,
   }
   try {
-    const statsPromise = Promise.all([
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] = await Promise.all([
       countParticipantsMissingRank(),
       countParticipantsMissingRole(),
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       countPlayersMissingSummonerName(),
     ])
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer, playersMissingSummonerName] =
-      await withTimeout(statsPromise, 15_000, [0, 0, 0, null, 0] as const)
     dataStats = {
       participantsWithoutRank,
       participantsWithoutRole,
@@ -1135,19 +1023,6 @@ router.get('/riot-script-logs', async (req, res) => {
   })
 })
 
-// --- Request Riot worker to stop (used by admin "Stopper le poller") ---
-// Writes a stop-request file; the worker (npm run riot:worker) checks it at the start of each cycle and exits.
-const RIOT_WORKER_STOP_REQUEST_FILE = join(process.cwd(), 'data', 'cron', 'riot-worker-stop-request.json')
-async function writeRiotWorkerStopRequest(): Promise<void> {
-  const dir = join(process.cwd(), 'data', 'cron')
-  await fs.mkdir(dir, { recursive: true })
-  await fs.writeFile(
-    RIOT_WORKER_STOP_REQUEST_FILE,
-    JSON.stringify({ requestedAt: new Date().toISOString() }, null, 0),
-    'utf-8'
-  )
-}
-
 router.post('/riot-script-stop', async (req, res) => {
   const script = typeof req.body?.script === 'string' ? req.body.script.trim() : ''
   if (!POLLER_SCRIPTS.has(script)) return res.status(400).json({ success: false, error: `Unsupported script "${script}"` })
@@ -1156,20 +1031,6 @@ router.post('/riot-script-stop', async (req, res) => {
   const pid = row?.pid
   const alive = isPidAlive(pid)
   try {
-    if (script === 'riot:worker') {
-      await writeRiotWorkerStopRequest()
-      if (alive && pid) process.kill(pid, 'SIGTERM')
-      void appendScriptLog('riot:worker', 'STOP requested from admin')
-      void updateScriptStatus('riot:worker', {
-        status: 'started',
-        lastEndAt: new Date().toISOString(),
-        pid: alive ? pid : undefined,
-      })
-      return res.json({
-        success: true,
-        message: 'Demande d’arrêt envoyée. Le worker s’arrête à la fin du cycle (ou immédiatement si piloté ici).',
-      })
-    }
     if (!alive || !pid) {
       return res.status(409).json({ success: false, error: `Script ${script} is not active.` })
     }
@@ -1183,22 +1044,6 @@ router.post('/riot-script-stop', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: e instanceof Error ? e.message : 'Failed to stop script',
-    })
-  }
-})
-
-router.post('/riot-worker-stop', async (_req, res) => {
-  try {
-    await writeRiotWorkerStopRequest()
-    void appendScriptLog('riot:worker', 'STOP requested from legacy endpoint')
-    return res.json({
-      success: true,
-      message: 'Demande d’arrêt envoyée. Le worker s’arrêtera à la fin du cycle en cours (sous 1–2 min).',
-    })
-  } catch (e) {
-    return res.status(500).json({
-      success: false,
-      error: e instanceof Error ? e.message : 'Failed to write stop request',
     })
   }
 })
@@ -1363,14 +1208,12 @@ router.get('/riot-api-stats', async (_req, res) => {
 /** Data collection stats: participants/matchs sans rang, dernier joueur. */
 router.get('/data-stats', async (_req, res) => {
   try {
-    const statsPromise = Promise.all([
+    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] = await Promise.all([
       countParticipantsMissingRank(),
       countParticipantsMissingRole(),
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
     ])
-    const [participantsWithoutRank, participantsWithoutRole, matchesWithoutRank, lastPlayer] =
-      await withTimeout(statsPromise, 15_000, [0, 0, 0, null] as const)
     return res.json({
       participantsWithoutRank,
       participantsWithoutRole,
@@ -1653,45 +1496,6 @@ router.get('/app-download', async (_req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
   return res.sendFile(absolutePath)
 })
-
-// --- Watchdog: if no worker active for 3 min, start it (after restart, script end, etc.) ---
-const WATCHDOG_INTERVAL_MS = 60 * 1000
-const WORKER_INACTIVE_THRESHOLD_MS = 3 * 60 * 1000
-const PUUID_MIGRATION_LOCK_FILE = join(process.cwd(), 'data', 'cron', 'puuid-migration-in-progress.lock')
-let workerWatchdogStarted = false
-function startWorkerWatchdog(): void {
-  if (workerWatchdogStarted) return
-  workerWatchdogStarted = true
-  setInterval(async () => {
-    try {
-      try {
-        await fs.access(PUUID_MIGRATION_LOCK_FILE)
-        return
-      } catch {
-        // Pas de lock, on continue
-      }
-      const hb = await FileManager.readJson<{ lastBeat?: string }>(
-        join(process.cwd(), 'data', 'cron', 'riot-worker-heartbeat.json')
-      )
-      const lastBeat = hb.isOk() ? hb.unwrap()?.lastBeat : null
-      const ageMs = lastBeat ? Date.now() - new Date(lastBeat).getTime() : Infinity
-      if (ageMs < WORKER_INACTIVE_THRESHOLD_MS) return
-      const pm2 = await getPm2ProcessInfo(pm2RiotWorkerAppName)
-      if (pm2?.online) return
-      const child = spawn('npm', ['run', 'riot:worker'], {
-        cwd: backendRoot,
-        detached: true,
-        stdio: 'ignore',
-        env: process.env,
-      })
-      child.unref()
-      console.log('[admin] Watchdog: worker inactive > 3 min, started npm run riot:worker')
-    } catch {
-      // ignore
-    }
-  }, WATCHDOG_INTERVAL_MS)
-}
-startWorkerWatchdog()
 
 export default router
 

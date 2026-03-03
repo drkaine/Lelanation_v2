@@ -263,11 +263,10 @@ Si le poller signale « aucun nouveau match » en boucle alors que vous avez des
 - **Erreurs nombreuses (ex. 130/cycle)** : Souvent liées aux rate limits Riot (100 req/2 min) ou aux erreurs 500/503 de l’API Riot. Vérifier [Riot Status](https://status.riotgames.com/). En cas de backlog élevé (> 20k joueurs non pollés), le **mode rapide** s’active automatiquement : 1 fenêtre de patch, pas de fetch des rangs (backfill plus tard), 100 joueurs/run, délai 30 s entre cycles.
 - **Mode rapide** : Quand `players where last_seen IS NULL` ≥ `RIOT_MATCH_FAST_BACKLOG_THRESHOLD` (défaut 20k), on réduit les appels API (1 fenêtre, skip rank) pour vider la file plus vite. Les rangs sont rattrapés par le backfill.
 
-### Worker continu (recommandé) vs cron
+### Poller in-process (recommandé) vs one-shot
 
-- **Worker** : `npm run riot:worker` (depuis `backend/`). Boucle infinie : un cycle = crawl (avec retry + backoff en cas d’erreur transitoire), refresh + enrichissement, puis N passes d’enrichissement, puis pause. En cas d’erreur (réseau, 429, 5xx) : jusqu’à 3 tentatives avec backoff (30s, 60s, 120s) avant de passer au cycle suivant. 401/403 : retry une fois avec la clé Admin puis exit si échec. **Redémarrage** : en production, lancer le worker sous PM2 (ou systemd) avec `autorestart: true` pour que tout crash du process relance le worker.
-- **Cron** : exécution périodique via `setupRiotMatchCollect()`. Une seule exécution par créneau.
-- **One-shot** : `npm run riot:collect` pour un seul cycle.
+- **Poller** : au démarrage du backend (`lelanation-backend`), une boucle de collecte tourne dans le même process (pas de worker PM2 séparé). Test de la clé API (env puis fichier admin), puis boucle infinie : data manquantes → migration PUUID si besoin → crawl players (match IDs + matchs Europe), avec heartbeat et statut dans `data/cron/status.json` (section `poller`). Redémarrer le backend pour redémarrer le poller.
+- **One-shot** : `npm run riot:collect` (depuis `backend/`) pour un seul cycle manuel.
 
 ### Statut cron et « dernier récupéré »
 

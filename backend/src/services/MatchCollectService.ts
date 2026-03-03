@@ -143,6 +143,44 @@ function itemsArray(p: RiotParticipant): number[] {
   return arr
 }
 
+async function ensurePlayersForPuuids(
+  region: string,
+  puuids: string[]
+): Promise<Map<string, bigint>> {
+  const distinct = [...new Set(puuids.filter((p) => typeof p === 'string' && p.trim() !== ''))]
+  const map = new Map<string, bigint>()
+  if (distinct.length === 0) return map
+
+  const existing = await prisma.player.findMany({
+    where: { puuid: { in: distinct } },
+    select: { id: true, puuid: true },
+  })
+  for (const p of existing) {
+    map.set(p.puuid, p.id)
+  }
+
+  const missing = distinct.filter((p) => !map.has(p))
+  if (missing.length === 0) return map
+
+  const { getPuuidKeyVersion } = await import('../utils/riotApiKey.js')
+  const puuidKeyVersion = getPuuidKeyVersion()
+
+  for (const puuid of missing) {
+    const created = await prisma.player.create({
+      data: {
+        puuid,
+        region,
+        lastSeen: null,
+        puuidKeyVersion,
+      },
+      select: { id: true, puuid: true },
+    })
+    map.set(created.puuid, created.id)
+  }
+
+  return map
+}
+
 export async function upsertMatchFromRiot(
   region: string,
   data: MatchSummary,
@@ -198,9 +236,16 @@ export async function upsertMatchFromRiot(
     throw e
   }
 
+  const puuidList = [...new Set(participants.map((p: RiotParticipant) => p.puuid).filter(Boolean))]
+  const playerIdsByPuuid = await ensurePlayersForPuuids(region, puuidList)
+
   // POST /admin/backfill-participant-ranks; the cron can also run a limited backfill after collect.
   const createMany = participants.map((p: RiotParticipant) => {
     const puuid = p.puuid ?? ''
+    const playerId = playerIdsByPuuid.get(puuid)
+    if (!playerId) {
+      throw new Error(`Missing playerId for puuid=${puuid}`)
+    }
     const entry = rankByPuuid?.get(puuid)
     const rankTier = entry ? entry.tier : entry === null ? UNRANKED_TIER : null
     const rankDivision = entry ? entry.rank : undefined
@@ -218,6 +263,7 @@ export async function upsertMatchFromRiot(
     const teamId = p.teamId === 100 || p.teamId === 200 ? p.teamId : null
     return {
       matchId: match.id,
+      playerId,
       teamId,
       puuid,
       championId: p.championId ?? 0,
@@ -336,11 +382,16 @@ export async function upsertMatchFromRiot(
   return { matchId, inserted: true }
 }
 
-/** Format Riot ID pour affichage (gameName#tagline). */
-function formatRiotId(gameName?: string, tagline?: string): string | null {
-  if (typeof gameName !== 'string' || gameName === '') return null
-  const tag = typeof tagline === 'string' && tagline !== '' ? tagline : ''
-  return tag ? `${gameName}#${tag}` : gameName
+/** Construit les différentes variantes de Riot ID (affichage + champs DB). */
+function buildRiotIdParts(
+  gameName?: string,
+  tagLine?: string
+): { summonerName: string | null; gameName: string | null; tagLine: string | null } {
+  const g = typeof gameName === 'string' && gameName.trim() !== '' ? gameName.trim() : null
+  const t = typeof tagLine === 'string' && tagLine.trim() !== '' ? tagLine.trim() : null
+  if (!g) return { summonerName: null, gameName: null, tagLine: null }
+  const summonerName = t ? `${g}#${t}` : g
+  return { summonerName, gameName: g, tagLine: t }
 }
 
 /**
@@ -369,7 +420,7 @@ async function upsertPlayersSummonerNameFromParticipants(
   for (const p of participants) {
     if (!p.puuid || seen.has(p.puuid)) continue
     seen.add(p.puuid)
-    const summonerName = formatRiotId(p.riotIdGameName, p.riotIdTagline)
+    const { summonerName, gameName, tagLine } = buildRiotIdParts(p.riotIdGameName, p.riotIdTagline)
     const fillName = emptySummonerName.has(p.puuid) && summonerName != null ? summonerName : undefined
     await prisma.player.upsert({
       where: { puuid: p.puuid },
@@ -377,6 +428,8 @@ async function upsertPlayersSummonerNameFromParticipants(
         puuid: p.puuid,
         region,
         summonerName: summonerName ?? undefined,
+        gameName: gameName ?? undefined,
+        tagName: tagLine ?? undefined,
         lastSeen: new Date(),
         puuidKeyVersion,
       },
@@ -384,6 +437,8 @@ async function upsertPlayersSummonerNameFromParticipants(
         lastSeen: new Date(),
         puuidKeyVersion,
         ...(fillName != null ? { summonerName: fillName } : {}),
+        ...(gameName != null ? { gameName } : {}),
+        ...(tagLine != null ? { tagName: tagLine } : {}),
       },
     })
   }

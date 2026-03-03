@@ -12,9 +12,6 @@
  * 6. On 401/403 or 5xx: pause with exponential backoff, notify Discord
  */
 import axios from 'axios'
-import { promises as fs } from 'fs'
-import cron from 'node-cron'
-import { join } from 'path'
 import { getRiotApiService } from '../services/RiotApiService.js'
 import { upsertMatchFromRiot, hasMatch } from '../services/MatchCollectService.js'
 import {
@@ -50,7 +47,6 @@ const ENRICH_PER_RUN = Math.max(10, parseInt(process.env.RIOT_MATCH_ENRICH_PER_P
 /** Participant ranks to backfill per cron run. 0 = disabled. */
 const BACKFILL_RANKS_PER_RUN = Math.max(0, parseInt(process.env.RIOT_BACKFILL_RANKS_PER_RUN ?? '200', 10) || 0)
 const BACKFILL_RANKS_MAX_BATCHES = Math.max(1, parseInt(process.env.RIOT_BACKFILL_RANKS_MAX_BATCHES ?? '3', 10) || 1)
-const CRON_SCHEDULE = process.env.RIOT_MATCH_CRON_SCHEDULE ?? '0 * * * *'
 /** If lastSuccessAt is older than this (ms), use fallback window. */
 const LAST_SUCCESS_MAX_AGE_MS = 12 * 60 * 60 * 1000
 const FALLBACK_WINDOW_SEC = 24 * 60 * 60
@@ -448,17 +444,6 @@ export async function runRiotMatchCollectOnce(options?: RiotMatchCollectOptions)
       }
     }
     await cronStatus.markSuccess('riotMatchCollect')
-    try {
-      const dir = join(process.cwd(), 'data', 'cron')
-      await fs.mkdir(dir, { recursive: true })
-      await fs.writeFile(
-        join(dir, 'riot-worker-heartbeat.json'),
-        JSON.stringify({ lastBeat: new Date().toISOString() }, null, 0),
-        'utf-8'
-      )
-    } catch {
-      // ignore
-    }
     const total5xx = [...errorStatusCounts.entries()].reduce(
       (sum, [status, count]) => (status >= 500 && status < 600 ? sum + count : sum),
       0
@@ -482,13 +467,3 @@ export async function runRiotMatchCollectOnce(options?: RiotMatchCollectOptions)
   }
 }
 
-export function setupRiotMatchCollect(): void {
-  cron.schedule(CRON_SCHEDULE, async () => {
-    try {
-      await runRiotMatchCollectOnce()
-    } catch (err) {
-      console.error('[Cron] Riot match collect error:', err)
-    }
-  })
-  console.log('[Cron] Riot match collection scheduled:', CRON_SCHEDULE)
-}
