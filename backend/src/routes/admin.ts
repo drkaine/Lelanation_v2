@@ -218,6 +218,24 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
 })
 
 
+/** GET /api/admin/data-stats - stats for Data tab (matches without rank, last new player, etc.). No summonerName. */
+router.get('/data-stats', async (_req, res) => {
+  let dataStats = { matchesWithoutRank: 0, lastNewPlayerAt: null as string | null }
+  try {
+    const [matchesWithoutRank, lastPlayer] = await Promise.all([
+      prisma.match.count({ where: { rank: null } }),
+      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    ])
+    dataStats = {
+      matchesWithoutRank,
+      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
+    }
+  } catch {
+    // ignore
+  }
+  return res.json(dataStats)
+})
+
 const CRON_JOBS: Array<{ key: string; label: string }> = [
   { key: 'dataDragonSync', label: 'dataDragonSync' },
   { key: 'youtubeSync', label: 'youtubeSync' },
