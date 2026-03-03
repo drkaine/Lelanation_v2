@@ -11,7 +11,8 @@
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit",
-    "test:matchups": "tsx --test src/services/MatchupTierService.test.ts"
+    "test:matchups": "tsx --test src/services/MatchupTierService.test.ts",
+    "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

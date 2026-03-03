@@ -8,7 +8,7 @@ import { isDatabaseConfigured } from '../db.js'
 
 const RANK_TIERS = ['', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER'] as const
 /** Rôles pour pré-calcul champions (évite 504 sur /champions?role=JUNGLE etc.) */
-const CHAMPION_ROLES = ['', 'TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'] as const
+const CHAMPION_ROLES = ['', 'TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
 let precomputedTablesAvailable: boolean | null = null
 
 function toKey(v: string | null | undefined): string {

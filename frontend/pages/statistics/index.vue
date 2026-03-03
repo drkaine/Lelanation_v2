@@ -4120,7 +4120,7 @@ const roles = [
   { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },
   { value: 'MIDDLE', label: 'Mid', icon: '/icons/roles/mid.png' },
   { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
-  { value: 'UTILITY', label: 'Support', icon: '/icons/roles/support.png' },
+  { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
 ]
 
 // Champions

@@ -19,6 +19,7 @@ import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.j
 import { MetricsService } from './services/MetricsService.js'
 import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
+import { startRiotPoller } from './worker/riotPoller.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -88,6 +89,7 @@ app.listen(PORT, () => {
     (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
     (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   )
+  startRiotPoller()
 })
 
 export default app

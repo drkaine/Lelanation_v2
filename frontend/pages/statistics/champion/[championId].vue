@@ -1558,21 +1558,21 @@ const ROLE_LABELS: Record<string, string> = {
   JUNGLE: 'Jungle',
   MIDDLE: 'Mid',
   BOTTOM: 'ADC',
-  UTILITY: 'Support',
+  SUPPORT: 'Support',
 }
 const ROLE_ICON_MAP: Record<string, string> = {
   TOP: '/icons/roles/top.png',
   JUNGLE: '/icons/roles/jungle.png',
   MIDDLE: '/icons/roles/mid.png',
   BOTTOM: '/icons/roles/bot.png',
-  UTILITY: '/icons/roles/support.png',
+  SUPPORT: '/icons/roles/support.png',
 }
 const roleOptions = [
   { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
   { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },
   { value: 'MIDDLE', label: 'Mid', icon: '/icons/roles/mid.png' },
   { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
-  { value: 'UTILITY', label: 'Support', icon: '/icons/roles/support.png' },
+  { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
 ]
 function roleLabel(role: string) {
   return ROLE_LABELS[role] ?? role

@@ -39,7 +39,7 @@ model Participant {
   teamId                      Int?     @map("team_id") // 100 = blue, 200 = red (Riot convention)
   championId                  Int      @map("champion_id")
   win                         Boolean
-  role                        String?  // TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY (dérivé teamPosition/individualPosition)
+  role                        String?  // TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT (dérivé teamPosition/individualPosition)
   rankTier                    String?  @map("rank_tier")
   rankDivision                String?  @map("rank_division")
   rankLp                      Int?     @map("rank_lp")

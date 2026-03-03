@@ -222,6 +222,137 @@
             </template>
           </div>
         </div>
+
+        <!-- Section 3: Riot Poller -->
+        <div class="rounded-lg border border-primary/30 bg-surface/30">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between p-4 text-left"
+            @click="dataSectionPoller = !dataSectionPoller"
+          >
+            <h2 class="text-lg font-semibold text-text">Riot Poller</h2>
+            <span class="text-text/60">{{ dataSectionPoller ? '▼' : '▶' }}</span>
+          </button>
+          <div v-show="dataSectionPoller" class="border-t border-primary/20 px-4 pb-4 pt-2">
+            <div class="mb-3 flex flex-wrap items-center gap-2">
+              <span
+                :class="riotPollerStatusClass(riotPollerStatus?.status)"
+                class="rounded px-2 py-0.5 text-xs font-medium"
+              >
+                {{ riotPollerStatusLabel(riotPollerStatus?.status) }}
+              </span>
+              <span
+                v-if="riotPollerStatus?.lastError"
+                class="max-w-md truncate text-xs text-error"
+                :title="riotPollerStatus.lastError"
+              >
+                {{ riotPollerStatus.lastError }}
+              </span>
+            </div>
+            <div class="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Requêtes</span>
+                <div class="font-medium text-text">{{ riotPollerStatus?.requestCount ?? '—' }}</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">429</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.error429Count ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Matchs</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.matchesFetched ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Players</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.playersFetched ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Participants</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.participantsFetched ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Dernière boucle</span>
+                <div class="font-medium text-text">
+                  {{ formatRiotDate(riotPollerStatus?.lastLoopFinishedAt ?? null) }}
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                :disabled="riotPollerLogsLoading"
+                @click="openRiotPollerLogs"
+              >
+                {{ riotPollerLogsLoading ? '…' : 'Voir les logs' }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                :disabled="!riotPollerStatus?.isRunning || riotPollerStopBusy"
+                @click="stopRiotPoller"
+              >
+                {{ riotPollerStopBusy ? '…' : 'Arrêter proprement' }}
+              </button>
+              <button
+                type="button"
+                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                :disabled="riotPollerStatus?.isRunning || riotPollerStartBusy"
+                @click="startRiotPoller"
+              >
+                {{ riotPollerStartBusy ? '…' : 'Relancer' }}
+              </button>
+            </div>
+            <p
+              v-if="riotPollerActionMessage"
+              :class="
+                riotPollerActionError
+                  ? 'mt-2 text-sm text-error'
+                  : 'mt-2 text-sm text-green-600 dark:text-green-400'
+              "
+            >
+              {{ riotPollerActionMessage }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Modal: Riot Poller logs -->
+        <div
+          v-show="riotPollerLogsOpen"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          @click.self="riotPollerLogsOpen = false"
+        >
+          <div
+            class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-surface shadow-xl"
+          >
+            <div class="flex items-center justify-between border-b border-primary/20 px-4 py-2">
+              <h3 class="font-semibold text-text">Logs Riot Poller</h3>
+              <button
+                type="button"
+                class="rounded border border-primary/40 px-2 py-1 text-sm text-text hover:bg-primary/20"
+                @click="riotPollerLogsOpen = false"
+              >
+                Fermer
+              </button>
+            </div>
+            <div
+              class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-xs text-text/90"
+            >
+              <template v-if="riotPollerLogs.length === 0">Aucun log.</template>
+              <template v-else>
+                <div v-for="(line, i) in riotPollerLogs" :key="i">{{ line }}</div>
+              </template>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Removed: matchups, cronstatus, apikey, seedplayers (merged into Data tab) -->
@@ -255,7 +386,7 @@
                 <option value="JUNGLE">JUNGLE</option>
                 <option value="MIDDLE">MIDDLE</option>
                 <option value="BOTTOM">BOTTOM</option>
-                <option value="UTILITY">UTILITY</option>
+                <option value="SUPPORT">SUPPORT</option>
               </select>
             </div>
             <div>
@@ -1026,10 +1157,8 @@ const riotApiStats = ref<{
 } | null>(null)
 
 // Data tab: collapsible sections
-const _dataSectionApiRiot = ref(true)
 const dataSectionCrons = ref(true)
-const _dataSectionScripts = ref(true)
-const _dataSectionSeedPlayers = ref(true)
+const dataSectionPoller = ref(true)
 const dataStats = ref<{
   matchesWithoutRank: number
   lastNewPlayerAt: string | null
@@ -1045,6 +1174,29 @@ const riotScriptsStatusCrons = ref<
     lastFailureMessage: string | null
   }>
 >([])
+const riotPollerStatus = ref<{
+  isRunning?: boolean
+  status: string
+  lastError: string | null
+  lastLoopStartedAt: string | null
+  lastLoopFinishedAt: string | null
+  requestCount: number
+  error429Count: number
+  error400Count: number
+  matchesFetched: number
+  playersFetched: number
+  participantsFetched: number
+  matchesRankFixed: number
+  participantsRankFixed: number
+  participantsRoleFixed: number
+} | null>(null)
+const riotPollerLogsOpen = ref(false)
+const riotPollerLogs = ref<string[]>([])
+const riotPollerLogsLoading = ref(false)
+const riotPollerStartBusy = ref(false)
+const riotPollerStopBusy = ref(false)
+const riotPollerActionMessage = ref('')
+const riotPollerActionError = ref(false)
 
 async function loadRiotApiStats() {
   try {
@@ -1080,14 +1232,6 @@ async function loadDataStats() {
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
-const _riotCollectMessage = ref('')
-const _riotCollectError = ref(false)
-const _riotStopMessage = ref('')
-const _riotStopError = ref(false)
-const _riotBackfillMessage = ref('')
-const _riotBackfillError = ref(false)
-const _riotLeagueExpMessage = ref('')
-const _riotLeagueExpError = ref(false)
 const riotScriptMessage = ref('')
 const riotScriptError = ref(false)
 const riotScriptFields = ref<Record<string, Record<string, string>>>({})
@@ -1201,7 +1345,7 @@ const replayResult = ref<{
 
 // Matchup tier (admin)
 const matchupPatch = ref('')
-const matchupLane = ref<'TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'UTILITY' | ''>('')
+const matchupLane = ref<'TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'SUPPORT' | ''>('')
 const matchupRankTier = ref('')
 const matchupMinGames = ref(20)
 const matchupChampionIdInput = ref('')
@@ -1560,8 +1704,83 @@ async function loadRiotScriptsStatus() {
     riotScriptsStatusCrons.value = Array.isArray(data?.crons) ? data.crons : []
     riotDataStats.value = data?.dataStats ?? null
     riotApiStats.value = data?.riotApiStats ?? null
+    riotPollerStatus.value = data?.riotPoller ?? null
   } catch {
     // Keep page functional even if status endpoint fails.
+  }
+}
+
+function riotPollerStatusLabel(status: string | undefined): string {
+  if (status === 'running') return 'En cours'
+  if (status === 'error') return 'Erreur'
+  return 'Arrêté'
+}
+
+function riotPollerStatusClass(status: string | undefined): string {
+  if (status === 'running') return 'bg-green-600/20 text-green-700 dark:text-green-400'
+  if (status === 'error') return 'bg-red-500/20 text-red-700 dark:text-red-300'
+  return 'bg-text/10 text-text/70'
+}
+
+async function openRiotPollerLogs() {
+  riotPollerLogsOpen.value = true
+  riotPollerLogsLoading.value = true
+  riotPollerLogs.value = []
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/logs?lines=300'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    riotPollerLogs.value = Array.isArray(data?.log) ? data.log : []
+  } finally {
+    riotPollerLogsLoading.value = false
+  }
+}
+
+async function stopRiotPoller() {
+  riotPollerActionMessage.value = ''
+  riotPollerActionError.value = false
+  riotPollerStopBusy.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/stop'), { method: 'POST' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    riotPollerActionMessage.value = data?.message ?? 'Arrêt demandé.'
+    await loadRiotScriptsStatus()
+  } catch {
+    riotPollerActionError.value = true
+    riotPollerActionMessage.value = 'Erreur réseau'
+  } finally {
+    riotPollerStopBusy.value = false
+  }
+}
+
+async function startRiotPoller() {
+  riotPollerActionMessage.value = ''
+  riotPollerActionError.value = false
+  riotPollerStartBusy.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/start'), { method: 'POST' })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    riotPollerActionMessage.value = data?.message ?? 'Poller démarré.'
+    await loadRiotScriptsStatus()
+  } catch {
+    riotPollerActionError.value = true
+    riotPollerActionMessage.value = 'Erreur réseau'
+  } finally {
+    riotPollerStartBusy.value = false
   }
 }
 

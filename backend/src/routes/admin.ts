@@ -18,6 +18,12 @@ import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
+import {
+  getRiotPollerStatus,
+  requestStopRiotPoller,
+  startRiotPoller,
+  isRiotPollerRunning,
+} from '../worker/riotPoller.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -278,7 +284,66 @@ router.get('/riot-scripts-status', async (_req, res) => {
     // ignore
   }
 
-  return res.json({ scripts: [], crons, dataStats })
+  const pollerStatus = getRiotPollerStatus()
+  const riotPoller = {
+    isRunning: pollerStatus.isRunning,
+    status: pollerStatus.isRunning ? 'running' : (pollerStatus.lastError ? 'error' : 'stopped'),
+    lastError: pollerStatus.lastError,
+    lastLoopStartedAt: pollerStatus.lastLoopStartedAt,
+    lastLoopFinishedAt: pollerStatus.lastLoopFinishedAt,
+    requestCount: pollerStatus.requestCount,
+    error429Count: pollerStatus.error429Count,
+    error400Count: pollerStatus.error400Count,
+    matchesFetched: pollerStatus.matchesFetched,
+    playersFetched: pollerStatus.playersFetched,
+    participantsFetched: pollerStatus.participantsFetched,
+    matchesRankFixed: pollerStatus.matchesRankFixed,
+    participantsRankFixed: pollerStatus.participantsRankFixed,
+    participantsRoleFixed: pollerStatus.participantsRoleFixed,
+  }
+
+  return res.json({ scripts: [], crons, dataStats, riotPoller })
+})
+
+const RIOT_POLLER_LOG_PATH = join(process.cwd(), 'logs', 'riot-poller.log')
+const RIOT_POLLER_LOGS_MAX_LINES = 1000
+
+router.get('/riot-poller/status', (_req, res) => {
+  return res.json(getRiotPollerStatus())
+})
+
+router.post('/riot-poller/stop', (_req, res) => {
+  if (!isRiotPollerRunning()) {
+    return res.json({ success: true, message: 'Poller already stopped.' })
+  }
+  requestStopRiotPoller()
+  return res.status(202).json({ success: true, message: 'Stop requested. The current loop will finish then stop.' })
+})
+
+router.post('/riot-poller/start', (_req, res) => {
+  if (isRiotPollerRunning()) {
+    return res.json({ success: true, message: 'Poller already running.' })
+  }
+  startRiotPoller()
+  return res.status(202).json({ success: true, message: 'Poller started.' })
+})
+
+router.get('/riot-poller/logs', async (req, res) => {
+  const linesParam = Number(req.query.lines)
+  const lines = Number.isFinite(linesParam) && linesParam > 0
+    ? Math.min(linesParam, RIOT_POLLER_LOGS_MAX_LINES)
+    : 200
+  try {
+    const content = await fs.readFile(RIOT_POLLER_LOG_PATH, 'utf-8')
+    const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    const log = all.slice(-lines)
+    return res.json({ log })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return res.json({ log: [] })
+    }
+    return res.status(500).json({ error: (err as Error).message })
+  }
 })
 
 /** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */

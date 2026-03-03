@@ -1,7 +1,7 @@
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 
-const VALID_LANES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'] as const)
+const VALID_LANES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const)
 const GLOBAL_RANK_KEY = 'GLOBAL'
 const SCORE_MIN = -10
 const SCORE_MAX = 10
