@@ -140,7 +140,9 @@ async function runPhase2(
 ): Promise<void> {
   if (!clefType) return
   await logger.step('Phase 2 start: sync players to current key', { clefType })
-  let totalProcessed = 0
+  let totalSynced = 0
+  let totalErreur = 0
+  let totalPerdu = 0
   while (!state.shouldStop) {
     const batch = await prisma.player.findMany({
       where: {
@@ -168,12 +170,11 @@ async function runPhase2(
             where: { id: p.id },
             data: { puuid: res.data.puuid, puuidKeyVersion: clefType },
           })
-          await logger.info('DB: player updated (puuid sync)', { gameName, tagLine })
+          totalSynced++
         } catch (e) {
           if (e instanceof Prisma.PrismaClientKnownRequestError && (e as Prisma.PrismaClientKnownRequestError).code === 'P2002') {
-            // Another player already owns this PUUID — this is a duplicate, mark as perdu
             await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'perdu' } })
-            await logger.alerte('Phase 2: PUUID conflict (duplicate) → perdu', { gameName, tagLine })
+            totalPerdu++
           } else throw e
         }
         continue
@@ -186,22 +187,20 @@ async function runPhase2(
             where: { id: p.id },
             data: { puuid: resEuw.data.puuid, puuidKeyVersion: clefType, tagName: 'EUW' },
           })
-          await logger.info('DB: player updated (puuid sync, tag EUW)', { gameName, tagLine })
+          totalSynced++
         } catch (e) {
           if (e instanceof Prisma.PrismaClientKnownRequestError && (e as Prisma.PrismaClientKnownRequestError).code === 'P2002') {
             await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'perdu' } })
-            await logger.alerte('Phase 2: PUUID conflict (duplicate) → perdu', { gameName, tagLine })
+            totalPerdu++
           } else throw e
         }
         continue
       }
       await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'erreur' } })
-      await logger.alerte('Phase 2: cannot resolve account → erreur', { gameName, tagLine })
+      totalErreur++
     }
-    totalProcessed += batch.length
-    await logger.step('Phase 2 batch', { batchSize: batch.length, totalProcessed })
   }
-  await logger.step('Phase 2 end', { totalProcessed })
+  await logger.step('Phase 2 end', { totalSynced, totalErreur, totalPerdu })
 }
 
 /**
@@ -232,22 +231,14 @@ async function runPhase2b(
         if (matchIdsRes.status === 429) {
           setState({ error429Count: state.error429Count + 1 })
         } else {
-          // API failure (404, etc.) → PUUID is invalid, mark as perdu
           await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-          await logger.alerte('Phase 2b: PUUID invalid (match-ids failed) → perdu', {
-            gameName: player.gameName,
-            tagLine: player.tagName,
-            status: matchIdsRes.status,
-          })
           totalLost++
         }
         continue
       }
       const matchIds = Array.isArray(matchIdsRes.data) ? matchIdsRes.data : []
       if (!matchIds[0]) {
-        // No match history → mark as perdu
         await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-        await logger.info('Phase 2b: no match history → perdu', { gameName: player.gameName, tagLine: player.tagName })
         totalLost++
         continue
       }
@@ -277,7 +268,6 @@ async function runPhase2b(
             where: { id: player.id },
             data: { puuid, puuidKeyVersion: clefType },
           })
-          await logger.info('Phase 2b: player recovered', { gameName: player.gameName, tagLine: player.tagName })
           totalRecovered++
           found = true
           break
@@ -285,7 +275,6 @@ async function runPhase2b(
       }
       if (!found) {
         await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-        await logger.alerte('Phase 2b: no match in participants → perdu', { gameName: player.gameName, tagLine: player.tagName })
         totalLost++
       }
     }
