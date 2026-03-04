@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import { Router } from 'express'
 import { promises as fs } from 'fs'
-import { dirname, join, isAbsolute } from 'path'
+import { dirname, join, resolve, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
@@ -24,6 +24,7 @@ import {
   startRiotPoller,
   isRiotPollerRunning,
 } from '../worker/riotPoller.js'
+import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -51,6 +52,12 @@ const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
+const RIOT_APIKEY_FILE = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
+
+function maskKey(key: string): string {
+  if (key.length <= 8) return '••••••••'
+  return key.slice(0, 4) + '…' + key.slice(-4)
+}
 
 function parseBasicAuth(authHeader: string): { username: string; password: string } | null {
   const [scheme, token] = authHeader.split(' ')
@@ -224,17 +231,68 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
 })
 
 
-/** GET /api/admin/data-stats - stats for Data tab (matches without rank, last new player, etc.). No summonerName. */
+/** GET /api/admin/data-stats - stats for Data tab (collecte: players, matches, participants, migration, etc.). */
 router.get('/data-stats', async (_req, res) => {
-  let dataStats = { matchesWithoutRank: 0, lastNewPlayerAt: null as string | null }
+  let dataStats: {
+    matchesWithoutRank: number
+    lastNewPlayerAt: string | null
+    playersNotMigrated: number
+    playersErreur: number
+    playersPerdu: number
+    participantsWithoutRole: number
+    participantsWithoutRank: number
+    totalPlayers: number
+    totalMatches: number
+  } = {
+    matchesWithoutRank: 0,
+    lastNewPlayerAt: null,
+    playersNotMigrated: 0,
+    playersErreur: 0,
+    playersPerdu: 0,
+    participantsWithoutRole: 0,
+    participantsWithoutRank: 0,
+    totalPlayers: 0,
+    totalMatches: 0,
+  }
   try {
-    const [matchesWithoutRank, lastPlayer] = await Promise.all([
+    const [
+      matchesWithoutRank,
+      lastPlayer,
+      playersNotMigrated,
+      playersErreur,
+      playersPerdu,
+      participantsWithoutRole,
+      participantsWithoutRank,
+      totalPlayers,
+      totalMatches,
+    ] = await Promise.all([
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.player.count({
+        where: {
+          OR: [
+            { puuidKeyVersion: null },
+            { puuidKeyVersion: { notIn: ['perso', 'erreur', 'perdu'] } },
+          ],
+        },
+      }),
+      prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
+      prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
+      prisma.participant.count({ where: { role: null } }),
+      prisma.participant.count({ where: { rankTier: null } }),
+      prisma.player.count(),
+      prisma.match.count(),
     ])
     dataStats = {
       matchesWithoutRank,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
+      playersNotMigrated,
+      playersErreur,
+      playersPerdu,
+      participantsWithoutRole,
+      participantsWithoutRank,
+      totalPlayers,
+      totalMatches,
     }
   } catch {
     // ignore
@@ -270,21 +328,77 @@ router.get('/riot-scripts-status', async (_req, res) => {
     }
   })
 
-  let dataStats = { matchesWithoutRank: 0, lastNewPlayerAt: null as string | null }
+  let dataStats: {
+    matchesWithoutRank: number
+    lastNewPlayerAt: string | null
+    playersNotMigrated: number
+    playersErreur: number
+    playersPerdu: number
+    participantsWithoutRole: number
+    participantsWithoutRank: number
+    totalPlayers: number
+    totalMatches: number
+  } = {
+    matchesWithoutRank: 0,
+    lastNewPlayerAt: null,
+    playersNotMigrated: 0,
+    playersErreur: 0,
+    playersPerdu: 0,
+    participantsWithoutRole: 0,
+    participantsWithoutRank: 0,
+    totalPlayers: 0,
+    totalMatches: 0,
+  }
   try {
-    const [matchesWithoutRank, lastPlayer] = await Promise.all([
+    const [
+      matchesWithoutRank,
+      lastPlayer,
+      playersNotMigrated,
+      playersErreur,
+      playersPerdu,
+      participantsWithoutRole,
+      participantsWithoutRank,
+      totalPlayers,
+      totalMatches,
+    ] = await Promise.all([
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.player.count({
+        where: {
+          OR: [
+            { puuidKeyVersion: null },
+            { puuidKeyVersion: { notIn: ['perso', 'erreur', 'perdu'] } },
+          ],
+        },
+      }),
+      prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
+      prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
+      prisma.participant.count({ where: { role: null } }),
+      prisma.participant.count({ where: { rankTier: null } }),
+      prisma.player.count(),
+      prisma.match.count(),
     ])
     dataStats = {
       matchesWithoutRank,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
+      playersNotMigrated,
+      playersErreur,
+      playersPerdu,
+      participantsWithoutRole,
+      participantsWithoutRank,
+      totalPlayers,
+      totalMatches,
     }
   } catch {
     // ignore
   }
 
   const pollerStatus = getRiotPollerStatus()
+  const startedAt = pollerStatus.lastLoopStartedAt ? new Date(pollerStatus.lastLoopStartedAt).getTime() : 0
+  const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
+  const requestsPerMinute =
+    elapsedMin >= 1 / 60 ? Math.round((pollerStatus.requestCount / elapsedMin) * 10) / 10 : null
+
   const riotPoller = {
     isRunning: pollerStatus.isRunning,
     status: pollerStatus.isRunning ? 'running' : (pollerStatus.lastError ? 'error' : 'stopped'),
@@ -293,6 +407,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     lastLoopFinishedAt: pollerStatus.lastLoopFinishedAt,
     requestCount: pollerStatus.requestCount,
     error429Count: pollerStatus.error429Count,
+    requestsPerMinute,
     error400Count: pollerStatus.error400Count,
     matchesFetched: pollerStatus.matchesFetched,
     playersFetched: pollerStatus.playersFetched,
@@ -305,13 +420,89 @@ router.get('/riot-scripts-status', async (_req, res) => {
   return res.json({ scripts: [], crons, dataStats, riotPoller })
 })
 
-const ROOT_LOGS_DIR = join(backendRoot, '..', 'logs')
+const ROOT_LOGS_DIR = resolve(backendRoot, '..', 'logs')
 const SCRIPT_LOGS_DIR = join(ROOT_LOGS_DIR, 'scripts')
 const RIOT_POLLER_LOG_PATH = join(ROOT_LOGS_DIR, 'riot-poller.log')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
 
 router.get('/riot-poller/status', (_req, res) => {
+  const s = getRiotPollerStatus()
+  const startedAt = s.lastLoopStartedAt ? new Date(s.lastLoopStartedAt).getTime() : 0
+  const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
+  const requestsPerMinute = elapsedMin >= 1 / 60 ? Math.round((s.requestCount / elapsedMin) * 10) / 10 : null
+  return res.json({ ...s, requestsPerMinute })
+})
+
+/** GET /api/admin/riot-apikey - current key status (masked) */
+router.get('/riot-apikey', async (_req, res) => {
+  const resolved = await resolveRiotApiKey()
+  if (!resolved.ok) {
+    return res.json({ maskedKey: null })
+  }
+  return res.json({ maskedKey: maskKey(resolved.key), source: resolved.source })
+})
+
+/** PUT /api/admin/riot-apikey - save key to file (data/admin/riot-apikey.json) */
+router.put('/riot-apikey', async (req, res) => {
+  const key = typeof req.body?.riotApiKey === 'string' ? req.body.riotApiKey.trim() : ''
+  if (!key) {
+    return res.status(400).json({ error: 'riotApiKey is required' })
+  }
+  const { FileManager: FM } = await import('../utils/fileManager.js')
+  const read = await FM.readJson<{ clefType?: string }>(RIOT_APIKEY_FILE)
+  const clefType = read.isOk() ? read.unwrap()?.clefType ?? 'perso' : 'perso'
+  const write = await FM.writeJson(RIOT_APIKEY_FILE, { riotApiKey: key, clefType })
+  if (write.isErr()) {
+    return res.status(500).json({ error: write.unwrapErr().message })
+  }
+  return res.json({ maskedKey: maskKey(key) })
+})
+
+/** POST /api/admin/riot-apikey/test - test current key with Riot API */
+router.post('/riot-apikey/test', async (_req, res) => {
+  const resolved = await resolveRiotApiKey()
+  if (!resolved.ok) {
+    return res.json({
+      valid: false,
+      error: resolved.error,
+      keySource: null,
+      keyLength: null,
+    })
+  }
+  try {
+    const r = await fetch('https://euw1.api.riotgames.com/lol/status/v4/platform-data', {
+      headers: { 'X-Riot-Token': resolved.key, Accept: 'application/json' },
+    })
+    if (r.ok) {
+      return res.json({ valid: true })
+    }
+    const text = await r.text()
+    let msg = `HTTP ${r.status}`
+    try {
+      const data = JSON.parse(text) as { status?: { message?: string } }
+      if (data?.status?.message) msg = data.status.message
+    } catch {
+      // use msg
+    }
+    return res.json({
+      valid: false,
+      error: msg,
+      keySource: resolved.source,
+      keyLength: resolved.key.length,
+    })
+  } catch (err) {
+    return res.json({
+      valid: false,
+      error: err instanceof Error ? err.message : String(err),
+      keySource: resolved.source,
+      keyLength: resolved.key.length,
+    })
+  }
+})
+
+/** GET /api/admin/riot-api-stats - poller stats for admin UI */
+router.get('/riot-api-stats', (_req, res) => {
   return res.json(getRiotPollerStatus())
 })
 
@@ -336,17 +527,23 @@ router.get('/riot-poller/logs', async (req, res) => {
   const lines = Number.isFinite(linesParam) && linesParam > 0
     ? Math.min(linesParam, RIOT_POLLER_LOGS_MAX_LINES)
     : 200
-  try {
-    const content = await fs.readFile(RIOT_POLLER_LOG_PATH, 'utf-8')
-    const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    const log = all.slice(-lines)
-    return res.json({ log, logDir: 'logs' })
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return res.json({ log: [], logDir: 'logs' })
+  const pathsToTry = [
+    RIOT_POLLER_LOG_PATH,
+    resolve(process.cwd(), 'logs', 'riot-poller.log'),
+  ]
+  for (const logPath of pathsToTry) {
+    try {
+      const content = await fs.readFile(logPath, 'utf-8')
+      const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+      const log = all.slice(-lines)
+      return res.json({ log, logDir: 'logs' })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        return res.status(500).json({ error: (err as Error).message })
+      }
     }
-    return res.status(500).json({ error: (err as Error).message })
   }
+  return res.json({ log: [], logDir: 'logs' })
 })
 
 /** GET /api/admin/script-logs/scripts - list script log filenames (without .log) for "all logs" UI */

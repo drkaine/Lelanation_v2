@@ -26,10 +26,10 @@
     <main id="main" tabindex="-1">
       <NuxtPage />
     </main>
-    <template v-if="!isStreamerMode">
+    <template v-if="!isStreamerMode && !isAdminRoute">
       <AppFooter />
     </template>
-    <template v-else>
+    <template v-else-if="isStreamerMode">
       <div class="streamer-panel streamer-panel-bottom" :class="{ 'is-open': streamerFooterOpen }">
         <AppFooter />
       </div>
@@ -53,10 +53,13 @@ import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 
+const route = useRoute()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
 const { isStreamerMode } = useStreamerMode()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
+
+const isAdminRoute = computed(() => String(route.path).includes('/admin'))
 
 useHead(() => ({
   htmlAttrs: localeHead.value.htmlAttrs,

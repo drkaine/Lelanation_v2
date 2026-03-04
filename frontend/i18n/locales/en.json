@@ -804,9 +804,14 @@
       },
       "stats": {
         "title": "Collection stats",
-        "participantsWithoutRank": "Participants without rank",
-        "participantsWithoutRole": "Participants without role",
+        "playersNotMigrated": "Players not migrated",
+        "playersErreur": "Players (error)",
+        "playersPerdu": "Players (lost)",
         "matchesWithoutRank": "Matches without rank",
+        "participantsWithoutRole": "Participants without role",
+        "participantsWithoutRank": "Participants without rank",
+        "totalPlayers": "Players (total)",
+        "totalMatches": "Matches (total)",
         "lastNewPlayerAt": "Last new player found"
       }
     },

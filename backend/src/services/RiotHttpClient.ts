@@ -149,6 +149,11 @@ export class RiotHttpClient {
       if (res.status === 429) {
         // Honor Riot's Retry-After header: block ALL future requests for that duration.
         const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
+        void this._log.info('Riot API 429 rate limit', {
+          bucket,
+          retryAfterSec,
+          url,
+        })
         this.rateLimiter.penalize((retryAfterSec + 1) * 1000)
         // Auto-retry up to 2 times — rate limiter will wait out the penalty before proceeding.
         const retryCount = options?.retryCount ?? 0

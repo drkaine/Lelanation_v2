@@ -102,26 +102,60 @@
 
       <!-- Tab: Data (Crons + stats) -->
       <div v-show="activeTab === 'data'" class="space-y-6">
-        <!-- Section 1: Stats -->
+        <!-- Section 1: Stats collecte -->
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.data.stats.title') }}</h2>
           <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
-          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">
+                {{ dataStats?.playersNotMigrated ?? '—' }}
+              </div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersNotMigrated') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">{{ dataStats?.playersErreur ?? '—' }}</div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersErreur') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">{{ dataStats?.playersPerdu ?? '—' }}</div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersPerdu') }}</div>
+            </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-xl font-bold text-text">
                 {{ dataStats?.matchesWithoutRank ?? '—' }}
               </div>
-              <div class="text-xs text-text/70">
-                {{ t('admin.data.stats.matchesWithoutRank') }}
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.matchesWithoutRank') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">
+                {{ dataStats?.participantsWithoutRole ?? '—' }}
               </div>
+              <div class="text-xs text-text/70">
+                {{ t('admin.data.stats.participantsWithoutRole') }}
+              </div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">
+                {{ dataStats?.participantsWithoutRank ?? '—' }}
+              </div>
+              <div class="text-xs text-text/70">
+                {{ t('admin.data.stats.participantsWithoutRank') }}
+              </div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">{{ dataStats?.totalPlayers ?? '—' }}</div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.totalPlayers') }}</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">{{ dataStats?.totalMatches ?? '—' }}</div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.totalMatches') }}</div>
             </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-base font-semibold text-text">
                 {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
               </div>
-              <div class="text-xs text-text/70">
-                {{ t('admin.data.stats.lastNewPlayerAt') }}
-              </div>
+              <div class="text-xs text-text/70">{{ t('admin.data.stats.lastNewPlayerAt') }}</div>
             </div>
           </div>
         </div>
@@ -255,6 +289,16 @@
                 <div class="font-medium text-text">{{ riotPollerStatus?.requestCount ?? '—' }}</div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Requêtes / min</span>
+                <div class="font-medium text-text">
+                  {{
+                    riotPollerStatus?.requestsPerMinute != null
+                      ? riotPollerStatus.requestsPerMinute
+                      : '—'
+                  }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
                 <span class="text-text/70">429</span>
                 <div class="font-medium text-text">
                   {{ riotPollerStatus?.error429Count ?? '—' }}
@@ -349,7 +393,9 @@
             <div
               class="max-h-[60vh] overflow-auto whitespace-pre-wrap break-all p-4 font-mono text-xs text-text/90"
             >
-              <template v-if="riotPollerLogs.length === 0">Aucun log.</template>
+              <p v-if="riotPollerLogsLoading" class="text-text/70">Chargement…</p>
+              <p v-else-if="riotPollerLogsError" class="text-error">{{ riotPollerLogsError }}</p>
+              <template v-else-if="riotPollerLogs.length === 0">Aucun log.</template>
               <template v-else>
                 <div v-for="(line, i) in riotPollerLogs" :key="i">{{ line }}</div>
               </template>
@@ -1165,6 +1211,13 @@ const dataSectionPoller = ref(true)
 const dataStats = ref<{
   matchesWithoutRank: number
   lastNewPlayerAt: string | null
+  playersNotMigrated: number
+  playersErreur: number
+  playersPerdu: number
+  participantsWithoutRole: number
+  participantsWithoutRank: number
+  totalPlayers: number
+  totalMatches: number
 } | null>(null)
 const dataStatsLoading = ref(false)
 const riotScriptsStatusCrons = ref<
@@ -1185,6 +1238,7 @@ const riotPollerStatus = ref<{
   lastLoopFinishedAt: string | null
   requestCount: number
   error429Count: number
+  requestsPerMinute: number | null
   error400Count: number
   matchesFetched: number
   playersFetched: number
@@ -1196,6 +1250,7 @@ const riotPollerStatus = ref<{
 const riotPollerLogsOpen = ref(false)
 const riotPollerLogs = ref<string[]>([])
 const riotPollerLogsLoading = ref(false)
+const riotPollerLogsError = ref<string | null>(null)
 const riotPollerStartBusy = ref(false)
 const riotPollerStopBusy = ref(false)
 const riotPollerActionMessage = ref('')
@@ -1246,6 +1301,13 @@ const riotDataStats = ref<{
   participantsWithoutRole?: number
   matchesWithoutRank?: number
   lastNewPlayerAt?: string | null
+  playersNotMigrated?: number
+  playersErreur?: number
+  playersPerdu?: number
+  participantsWithoutRole?: number
+  participantsWithoutRank?: number
+  totalPlayers?: number
+  totalMatches?: number
   playersMissingSummonerName?: number
 } | null>(null)
 const riotScriptLogsOpen = ref(false)
@@ -1693,6 +1755,17 @@ async function triggerSyncData() {
   }
 }
 
+async function loadRiotPollerStatus() {
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/status'))
+    if (res.status === 401) return
+    const data = await res.json()
+    riotPollerStatus.value = data ?? null
+  } catch {
+    // Keep previous value on failure.
+  }
+}
+
 async function loadRiotScriptsStatus() {
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-scripts-status'))
@@ -1709,8 +1782,11 @@ async function loadRiotScriptsStatus() {
     riotDataStats.value = data?.dataStats ?? null
     riotApiStats.value = data?.riotApiStats ?? null
     riotPollerStatus.value = data?.riotPoller ?? null
+    // Refresh poller from dedicated endpoint so we always have up-to-date counts and requestsPerMinute
+    await loadRiotPollerStatus()
   } catch {
-    // Keep page functional even if status endpoint fails.
+    // If combined endpoint fails, still try to load poller status alone
+    await loadRiotPollerStatus()
   }
 }
 
@@ -1729,6 +1805,7 @@ function riotPollerStatusClass(status: string | undefined): string {
 async function openRiotPollerLogs() {
   riotPollerLogsOpen.value = true
   riotPollerLogsLoading.value = true
+  riotPollerLogsError.value = null
   riotPollerLogs.value = []
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/logs?lines=300'))
@@ -1737,8 +1814,14 @@ async function openRiotPollerLogs() {
       await navigateTo(localePath('/admin/login'))
       return
     }
-    const data = await res.json()
-    riotPollerLogs.value = Array.isArray(data?.log) ? data.log : []
+    const data = await res.json().catch(() => ({}))
+    if (Array.isArray(data?.log)) {
+      riotPollerLogs.value = data.log
+    } else {
+      riotPollerLogsError.value = res.ok ? 'Format de réponse inattendu' : `Erreur ${res.status}`
+    }
+  } catch (e) {
+    riotPollerLogsError.value = e instanceof Error ? e.message : 'Impossible de charger les logs'
   } finally {
     riotPollerLogsLoading.value = false
   }

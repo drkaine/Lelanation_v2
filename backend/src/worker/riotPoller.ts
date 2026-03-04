@@ -164,6 +164,7 @@ async function runPhase2(
       const tagLine = (p.tagName ?? '').trim()
       if (!gameName || !tagLine) continue
       const res = await client.getAccountByRiotId(gameName, tagLine)
+      setState({ requestCount: state.requestCount + 1 })
       if (res.ok) {
         try {
           await prisma.player.update({
@@ -181,6 +182,7 @@ async function runPhase2(
       }
       if (res.status === 429) setState({ error429Count: state.error429Count + 1 })
       const resEuw = await client.getAccountByRiotId(gameName, 'EUW')
+      setState({ requestCount: state.requestCount + 1 })
       if (resEuw.ok) {
         try {
           await prisma.player.update({
@@ -264,12 +266,19 @@ async function runPhase2b(
         const gn = (accRes.data.gameName ?? '').trim().toLowerCase()
         const tl = (accRes.data.tagLine ?? '').trim().toLowerCase()
         if (gn === gameNameNorm && tl === tagLineNorm) {
-          await prisma.player.update({
-            where: { id: player.id },
-            data: { puuid, puuidKeyVersion: clefType },
-          })
-          totalRecovered++
-          found = true
+          try {
+            await prisma.player.update({
+              where: { id: player.id },
+              data: { puuid, puuidKeyVersion: clefType },
+            })
+            totalRecovered++
+            found = true
+          } catch (e) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && (e as Prisma.PrismaClientKnownRequestError).code === 'P2002') {
+              await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
+              totalLost++
+            } else throw e
+          }
           break
         }
       }
@@ -313,6 +322,7 @@ async function runStep3FixNulls(
     const platform = p.match.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
     client.setPlatform(platform)
     const matchRes = await client.getMatch(p.match.matchId)
+    setState({ requestCount: state.requestCount + 1 })
     if (!matchRes.ok) continue
     const part = matchRes.data.info?.participants?.find((x) => x.puuid === p.player.puuid)
     if (part) {
@@ -333,8 +343,10 @@ async function runStep3FixNulls(
   for (const p of participantsNullRank) {
     client.setPlatform(p.player.region)
     const summonerRes = await client.getSummonerByPuuid(p.player.puuid)
+    setState({ requestCount: state.requestCount + 1 })
     if (!summonerRes.ok) continue
     const leagueRes = await client.getLeagueEntriesBySummonerId(summonerRes.data.id)
+    setState({ requestCount: state.requestCount + 1 })
     if (!leagueRes.ok) continue
     const solo = leagueRes.data.find((e) => e.queueType === 'RANKED_SOLO_5x5')
     if (solo) {
@@ -407,9 +419,9 @@ export async function upsertMatchAndParticipants(
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
   const existingPlayers = await prisma.player.findMany({
     where: { puuid: { in: puuids } },
-    select: { id: true, puuid: true },
+    select: { id: true, puuid: true, puuidKeyVersion: true },
   })
-  const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p.id]))
+  const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
   const rankScores: number[] = []
   for (const p of participantDtos) {
@@ -442,8 +454,9 @@ export async function upsertMatchAndParticipants(
   for (const p of participantDtos) {
     const puuid = p.puuid
     if (!puuid) continue
-    let playerId = existingByPuuid.get(puuid)
-    if (playerId == null) {
+    const existing = existingByPuuid.get(puuid)
+    let playerId: bigint
+    if (existing == null) {
       const newPlayer = await prisma.player.create({
         data: {
           puuid,
@@ -455,9 +468,15 @@ export async function upsertMatchAndParticipants(
         },
       })
       playerId = newPlayer.id
-      existingByPuuid.set(puuid, playerId)
+      existingByPuuid.set(puuid, { id: playerId, puuid, puuidKeyVersion })
       counters.playersFetched++
-      if (logger) await logger.info('DB: player created', { puuid: puuid.slice(0, 12), region })
+    } else {
+      playerId = existing.id
+      // Player was 'perdu' but reappears in a live match → their PUUID is valid, restore key version
+      if (existing.puuidKeyVersion === 'perdu' && puuidKeyVersion) {
+        await prisma.player.update({ where: { id: existing.id }, data: { puuidKeyVersion } })
+        existing.puuidKeyVersion = puuidKeyVersion
+      }
     }
     const role = roleFromPosition(p.individualPosition, p.teamPosition)
     const rankTier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? null

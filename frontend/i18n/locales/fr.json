@@ -809,9 +809,14 @@
       },
       "stats": {
         "title": "Statistiques de collecte",
-        "participantsWithoutRank": "Participants sans rang",
-        "participantsWithoutRole": "Participants sans rôle",
+        "playersNotMigrated": "Joueurs non migrés",
+        "playersErreur": "Joueurs en erreur",
+        "playersPerdu": "Joueurs perdu",
         "matchesWithoutRank": "Matchs sans rang",
+        "participantsWithoutRole": "Participants sans rôle",
+        "participantsWithoutRank": "Participants sans rang",
+        "totalPlayers": "Joueurs (total)",
+        "totalMatches": "Matchs (total)",
         "lastNewPlayerAt": "Dernier joueur trouvé"
       }
     },
