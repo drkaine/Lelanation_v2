@@ -14,20 +14,15 @@ datasource db {
 model Match {
   id               BigInt   @id @default(autoincrement())
   matchId          String   @unique @map("match_id")
-  region           String   // euw1, eun1
-  queueId          Int      @map("queue_id") // 420 = Ranked Solo/Duo
   gameVersion      String?  @map("game_version")
   gameDuration     Int?     @map("game_duration")
   platformId       String?  @map("platform_id")
-  endOfGameResult  String?  @map("end_of_game_result") // GameComplete, Remake, etc. — filtre matchs valides
   rank             String?  // average rank of players in the match, e.g. "GOLD_II"
   teams            Json?    // [{ bans: [{ championId }], objectives: { baron, dragon, tower, ... } }, ...]
-  puuidKeyVersion  String?  @map("puuid_key_version") // dev|perso|prod — clé Riot associée aux PUUIDs (évite re-fetch si déjà migré)
   createdAt        DateTime @default(now()) @map("created_at")
 
   participants Participant[]
 
-  @@index([endOfGameResult])
   @@map("matches")
 }
 

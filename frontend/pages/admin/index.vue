@@ -334,7 +334,10 @@
             class="max-h-[80vh] w-full max-w-3xl overflow-hidden rounded-lg border border-primary/30 bg-surface shadow-xl"
           >
             <div class="flex items-center justify-between border-b border-primary/20 px-4 py-2">
-              <h3 class="font-semibold text-text">Logs Riot Poller</h3>
+              <div>
+                <h3 class="font-semibold text-text">Logs Riot Poller</h3>
+                <p class="text-xs text-text/60">Répertoire: logs (racine du projet)</p>
+              </div>
               <button
                 type="button"
                 class="rounded border border-primary/40 px-2 py-1 text-sm text-text hover:bg-primary/20"
@@ -1249,6 +1252,7 @@ const riotScriptLogsOpen = ref(false)
 const riotScriptLogsLoading = ref(false)
 const riotScriptLogsTitle = ref('')
 const riotScriptLogs = ref<string[]>([])
+const scriptLogsDir = ref('logs/scripts')
 
 const allLogsOpen = ref(false)
 const allLogsLoading = ref(false)
@@ -1800,6 +1804,7 @@ async function _openRiotScriptLogs(scriptId: string, label: string) {
     }
     const data = await res.json()
     riotScriptLogs.value = Array.isArray(data?.log) ? data.log : []
+    scriptLogsDir.value = data?.logDir ?? 'logs/scripts'
   } finally {
     riotScriptLogsLoading.value = false
   }
@@ -1881,6 +1886,7 @@ async function loadAllLogs() {
     }
     const data = await res.json()
     allLogsList.value = Array.isArray(data?.log) ? data.log : []
+    scriptLogsDir.value = data?.logDir ?? 'logs/scripts'
   } finally {
     allLogsLoading.value = false
   }

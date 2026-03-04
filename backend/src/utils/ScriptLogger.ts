@@ -1,11 +1,14 @@
 /**
- * Logging for scripts - writes to logs/scripts/{scriptId}.log
+ * Logging for scripts - writes to logs/scripts/{scriptId}.log at project root.
  * Same format as admin script-logs API: [timestamp] [LEVEL] message
  */
 import { promises as fs } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 
-const LOG_DIR = join(process.cwd(), 'logs', 'scripts')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const BACKEND_ROOT = join(__dirname, '..', '..')
+const LOG_DIR = join(BACKEND_ROOT, '..', 'logs', 'scripts')
 const MAX_LOG_LINES = 10_000
 const TRUNCATE_TO = 8_000
 

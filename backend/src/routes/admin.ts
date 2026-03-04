@@ -305,8 +305,11 @@ router.get('/riot-scripts-status', async (_req, res) => {
   return res.json({ scripts: [], crons, dataStats, riotPoller })
 })
 
-const RIOT_POLLER_LOG_PATH = join(process.cwd(), 'logs', 'riot-poller.log')
+const ROOT_LOGS_DIR = join(backendRoot, '..', 'logs')
+const SCRIPT_LOGS_DIR = join(ROOT_LOGS_DIR, 'scripts')
+const RIOT_POLLER_LOG_PATH = join(ROOT_LOGS_DIR, 'riot-poller.log')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
+const SCRIPT_LOGS_MAX_LINES = 5000
 
 router.get('/riot-poller/status', (_req, res) => {
   return res.json(getRiotPollerStatus())
@@ -337,10 +340,68 @@ router.get('/riot-poller/logs', async (req, res) => {
     const content = await fs.readFile(RIOT_POLLER_LOG_PATH, 'utf-8')
     const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
     const log = all.slice(-lines)
-    return res.json({ log })
+    return res.json({ log, logDir: 'logs' })
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return res.json({ log: [] })
+      return res.json({ log: [], logDir: 'logs' })
+    }
+    return res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+/** GET /api/admin/script-logs/scripts - list script log filenames (without .log) for "all logs" UI */
+router.get('/script-logs/scripts', async (_req, res) => {
+  try {
+    await fs.mkdir(SCRIPT_LOGS_DIR, { recursive: true })
+    const names = await fs.readdir(SCRIPT_LOGS_DIR)
+    const scripts = names
+      .filter((n) => n.endsWith('.log'))
+      .map((n) => n.slice(0, -4))
+      .sort()
+    return res.json({ scripts, logDir: 'logs/scripts' })
+  } catch (err) {
+    return res.status(500).json({ scripts: [], error: (err as Error).message })
+  }
+})
+
+/** GET /api/admin/script-logs?script=...&lines=...&sort=asc|desc - read one or all script logs */
+router.get('/script-logs', async (req, res) => {
+  const script = typeof req.query.script === 'string' ? req.query.script.trim() : ''
+  const linesParam = Number(req.query.lines)
+  const lines = Number.isFinite(linesParam) && linesParam > 0
+    ? Math.min(linesParam, SCRIPT_LOGS_MAX_LINES)
+    : 200
+  const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
+  try {
+    await fs.mkdir(SCRIPT_LOGS_DIR, { recursive: true })
+    if (!script || script === 'all') {
+      const names = await fs.readdir(SCRIPT_LOGS_DIR)
+      const logFiles = names.filter((n) => n.endsWith('.log')).sort()
+      const allLines: string[] = []
+      for (const f of logFiles) {
+        const content = await fs.readFile(join(SCRIPT_LOGS_DIR, f), 'utf-8').catch(() => '')
+        const fileLines = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+        const prefix = `[${f.slice(0, -4)}] `
+        for (const line of fileLines) allLines.push(prefix + line)
+      }
+      allLines.sort((a, b) => {
+        const tsA = a.match(/^\[[^\]]+\]\s*\[(\d{4}-\d{2}-\d{2}T[^\]]+)\]/)?.[1] ?? ''
+        const tsB = b.match(/^\[[^\]]+\]\s*\[(\d{4}-\d{2}-\d{2}T[^\]]+)\]/)?.[1] ?? ''
+        return sort === 'asc' ? tsA.localeCompare(tsB) : tsB.localeCompare(tsA)
+      })
+      const log = allLines.slice(-lines)
+      if (sort === 'desc') log.reverse()
+      return res.json({ log, logDir: 'logs/scripts' })
+    }
+    const safe = script.replace(/[^a-zA-Z0-9_-]/g, '_')
+    const filePath = join(SCRIPT_LOGS_DIR, `${safe}.log`)
+    const content = await fs.readFile(filePath, 'utf-8')
+    const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    const log = sort === 'asc' ? all.slice(-lines) : all.slice(-lines).reverse()
+    return res.json({ log, logDir: 'logs/scripts' })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return res.json({ log: [], logDir: 'logs/scripts' })
     }
     return res.status(500).json({ error: (err as Error).message })
   }

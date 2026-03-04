@@ -158,12 +158,15 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
 /**
  * Data Dragon synchronization cron job
- * Runs daily at 02:00 (2 AM)
+ * Runs every hour at :00.
+ * - Checks latest game version.
+ * - If unchanged, exits quickly (no sync).
+ * - If new version, fetches Data Dragon, updates version.json and copies assets.
  */
 export function setupDataDragonSync(): void {
-  cron.schedule('0 2 * * *', () => void runDataDragonSyncOnce(), {
+  cron.schedule('0 * * * *', () => void runDataDragonSyncOnce(), {
     timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] Data Dragon sync scheduled: Daily at 02:00 UTC')
+  console.log('[Cron] Data Dragon sync scheduled: Every hour at :00 UTC')
 }

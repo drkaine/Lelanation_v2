@@ -93,11 +93,17 @@ export class RiotHttpClient {
   private keySource: RiotKeySource = 'env'
   private clefType: string | null = null
   private platform: string = 'euw1'
+  private onInvalidKey?: () => void
 
   constructor(
     private readonly rateLimiter: RiotRateLimiter,
     private readonly _log: RiotPollerLogger
   ) {}
+
+  /** Register a callback invoked whenever the API returns 401 or 403 (key invalid/expired). */
+  setOnInvalidKey(cb: () => void): void {
+    this.onInvalidKey = cb
+  }
 
   setPlatform(platform: string): void {
     this.platform = PLATFORM_BY_REGION[platform] ?? platform
@@ -118,9 +124,14 @@ export class RiotHttpClient {
     method: 'GET',
     bucket: string,
     url: string,
-    _options?: { timeout?: number }
+    options?: { retryCount?: number }
   ): Promise<{ ok: true; data: T; status: number } | { ok: false; status: number; message?: string; body?: unknown }> {
+    // Always acquire the global app rate limit first, then the per-endpoint bucket.
+    // The 'app' bucket tracks total requests across all endpoints, matching Riot's
+    // global App Rate Limit (e.g. 20 req/s and 100 req/2min for personal keys).
+    await this.rateLimiter.acquire('app')
     await this.rateLimiter.acquire(bucket)
+
     const headers: Record<string, string> = {
       'X-Riot-Token': this.key,
       'Accept': 'application/json',
@@ -136,7 +147,19 @@ export class RiotHttpClient {
       }
 
       if (res.status === 429) {
-        return { ok: false, status: 429, message: 'Rate limit exceeded', body: data }
+        // Honor Riot's Retry-After header: block ALL future requests for that duration.
+        const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
+        this.rateLimiter.penalize((retryAfterSec + 1) * 1000)
+        // Auto-retry up to 2 times — rate limiter will wait out the penalty before proceeding.
+        const retryCount = options?.retryCount ?? 0
+        if (retryCount < 2) {
+          return this.request<T>(method, bucket, url, { retryCount: retryCount + 1 })
+        }
+        return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
+      }
+      if (res.status === 401 || res.status === 403) {
+        this.onInvalidKey?.()
+        return { ok: false, status: res.status, message: 'Invalid or expired API key', body: data }
       }
       if (res.status >= 400) {
         const msg = typeof (data as { status?: { message?: string } })?.status?.message === 'string'
@@ -173,14 +196,14 @@ export class RiotHttpClient {
     if (query.startTime != null) params.set('startTime', String(query.startTime))
     if (query.endTime != null) params.set('endTime', String(query.endTime))
     const qs = params.toString()
-    const url = `${getPlatformBase(this.platform)}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids${qs ? `?${qs}` : ''}`
+    const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids${qs ? `?${qs}` : ''}`
     return this.request<string[]>('GET', 'match-v5-ids', url)
   }
 
   async getMatch(matchId: string): Promise<
     { ok: true; data: RiotMatchDto } | { ok: false; status: number; message?: string; body?: unknown }
   > {
-    const url = `${getPlatformBase(this.platform)}/lol/match/v5/matches/${encodeURIComponent(matchId)}`
+    const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/${encodeURIComponent(matchId)}`
     return this.request<RiotMatchDto>('GET', 'match-v5-detail', url)
   }
 
@@ -203,11 +226,20 @@ export class RiotHttpClient {
     return this.request<RiotAccountDto>('GET', 'account-v1-by-puuid', url)
   }
 
-  async getLeagueEntriesByPuuid(puuid: string): Promise<
+  /** Summoner v4: get summoner by puuid (returns encrypted summoner id for League v4). */
+  async getSummonerByPuuid(puuid: string): Promise<
+    { ok: true; data: RiotSummonerDto } | { ok: false; status: number; message?: string; body?: unknown }
+  > {
+    const url = `${getPlatformBase(this.platform)}/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`
+    return this.request<RiotSummonerDto>('GET', 'summoner-v4-by-puuid', url)
+  }
+
+  /** League v4: entries by encrypted summoner id (not puuid). */
+  async getLeagueEntriesBySummonerId(encryptedSummonerId: string): Promise<
     { ok: true; data: RiotLeagueEntryDto[] } | { ok: false; status: number; message?: string; body?: unknown }
   > {
-    const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
-    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url)
+    const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-summoner/${encodeURIComponent(encryptedSummonerId)}`
+    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-summoner', url)
   }
 }
 
@@ -215,6 +247,13 @@ export interface RiotAccountDto {
   puuid: string
   gameName?: string
   tagLine?: string
+}
+
+export interface RiotSummonerDto {
+  id: string
+  puuid: string
+  accountId?: string
+  summonerLevel?: number
 }
 
 export interface RiotLeagueEntryDto {
@@ -232,6 +271,7 @@ export interface RiotMatchDto {
     gameDuration?: number
     gameVersion?: string
     queueId?: number
+    endOfGameResult?: string
     participants?: RiotParticipantDto[]
     teams?: Array<{
       teamId?: number

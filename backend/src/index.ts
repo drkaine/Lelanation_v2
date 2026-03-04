@@ -15,11 +15,11 @@ import shareBuildsRoutes from './routes/shareBuilds.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
-import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
+// import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
-import { getOverviewDetailStats } from './services/StatsOverviewService.js'
-import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
-import { startRiotPoller } from './worker/riotPoller.js'
+// import { getOverviewDetailStats } from './services/StatsOverviewService.js'
+// import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
+import { startRiotPoller, requestStopRiotPoller, isRiotPollerRunning } from './worker/riotPoller.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -67,28 +67,53 @@ try {
   // Don't exit - server can still run without cron
 }
 
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+// PM2 (and Docker) sends SIGTERM before killing the process.
+// We stop the poller loop and wait for it to finish its current operation.
+const SHUTDOWN_TIMEOUT_MS = 10_000
+
+function gracefulShutdown(signal: string): void {
+  console.log(`[Server] ${signal} received — stopping poller and shutting down…`)
+  requestStopRiotPoller()
+
+  const deadline = Date.now() + SHUTDOWN_TIMEOUT_MS
+  const wait = setInterval(() => {
+    if (!isRiotPollerRunning() || Date.now() >= deadline) {
+      clearInterval(wait)
+      if (Date.now() >= deadline) console.warn('[Server] Shutdown timeout — forcing exit')
+      else console.log('[Server] Poller stopped — exiting cleanly')
+      process.exit(0)
+    }
+  }, 300)
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
   console.log(`Cron jobs initialized`)
   console.log(`Current time: ${new Date().toISOString()}`)
   console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
   // Précharger le cache overview-detail (sans filtre) pour limiter les 504
-  setTimeout(() => {
-    Promise.all([
-      getOverviewDetailStats(null, null, false),
-      getOverviewDetailStats(null, null, true),
-    ]).then(
-      ([a, b]) => console.log('[Server] Overview-detail cache warmed (includeSmite=false:', !!a, ', includeSmite=true:', !!b, ')'),
-      (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
-    )
-  }, 15_000)
+  // setTimeout(() => {
+  //   Promise.all([
+  //     getOverviewDetailStats(null, null, false),
+  //     getOverviewDetailStats(null, null, true),
+  //   ]).then(
+  //     ([a, b]) => console.log('[Server] Overview-detail cache warmed (includeSmite=false:', !!a, ', includeSmite=true:', !!b, ')'),
+  //     (e) => console.warn('[Server] Overview-detail cache warm failed:', e)
+  //   )
+  // }, 15_000)
   // Préchargement étendu en arrière-plan (rankTiers, champions par rank, duration/abandons/sides) pour éviter 504 et premières requêtes lentes
-  scheduleStatsPrewarm()
+  // scheduleStatsPrewarm()
   // Remplir les tables pré-calculées tout de suite (champions par rôle en premier dans le refresh)
-  runStatsPrecomputedRefreshOnce().then(
-    (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
-    (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
-  )
+  // runStatsPrecomputedRefreshOnce().then(
+  //   (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
+  //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
+  // )
   startRiotPoller()
 })
 

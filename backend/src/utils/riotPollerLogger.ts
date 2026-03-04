@@ -6,7 +6,8 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
 
-const LOG_FILE = join(process.cwd(), 'logs', 'riot-poller.log')
+// Log file lives in the project root `logs` directory
+const LOG_FILE = join(process.cwd(), '..', 'logs', 'riot-poller.log')
 const MAX_LINES = 50000
 const TRUNCATE_TO = 40000
 
@@ -22,7 +23,7 @@ function formatTimestamp(): string {
 }
 
 async function append(level: string, message: string): Promise<void> {
-  const dir = join(process.cwd(), 'logs')
+  const dir = join(process.cwd(), '..', 'logs')
   await fs.mkdir(dir, { recursive: true })
   const line = `[${formatTimestamp()}] [${level}] ${message}\n`
   await fs.appendFile(LOG_FILE, line, 'utf-8')
