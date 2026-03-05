@@ -117,6 +117,7 @@ const messages: Record<string, Record<string, string>> = {
     "variants": "Variantes",
     "mainBuild": "Build principal",
     "variant": "Variante",
+    "detailDescriptionTab": "Description",
   },
   en: {
     "tabs.discover": "Discover",
@@ -236,6 +237,7 @@ const messages: Record<string, Record<string, string>> = {
     "variants": "Variants",
     "mainBuild": "Main build",
     "variant": "Variant",
+    "detailDescriptionTab": "Description",
   },
 };
 

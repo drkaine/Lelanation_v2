@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { BuildSheet } from "@lelanation/builds-ui";
+import { BuildCardFlip } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
 import type { Build, SubBuild } from "@lelanation/shared-types";
 import { linkifyDescription } from "../utils/linkifyDescription";
@@ -16,10 +16,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{ back: [] }>();
 
-const detailFlipped = ref(false);
 const detailSubIdx = ref<number | null>(null);
-const activeTab = ref<"description" | "stats">("description");
 
+const hasDescription = computed(() => {
+  if (props.build.description?.trim()) return true;
+  return (props.build.subBuilds ?? []).some(
+    (s) => (s as SubBuild).description?.trim()
+  );
+});
+
+const activeTab = ref<"description" | "stats">(
+  hasDescription.value ? "description" : "stats"
+);
+
+/** Merged build for the stats table (mirrors the merge logic inside BuildCardFlip). */
 const detailDisplayedBuild = computed<Build>(() => {
   if (detailSubIdx.value === null) return props.build;
   const sub = props.build.subBuilds?.[detailSubIdx.value] as SubBuild | undefined;
@@ -49,9 +59,8 @@ const detailDescription = computed(() =>
     : props.build.description
 );
 
-function selectVariant(idx: number | null) {
+function handleVariantChange(idx: number | null) {
   detailSubIdx.value = idx;
-  detailFlipped.value = false;
 }
 
 function formatDate(dateString: string): string {
@@ -79,82 +88,35 @@ function formatDate(dateString: string): string {
       <div class="detail-layout">
         <div class="detail-card-section">
           <div class="detail-card-wrap">
-            <!-- Flip container variantes -->
-            <div class="flip-container" :class="{ flipped: detailFlipped }">
-              <div class="flip-inner">
-                <!-- Face avant -->
-                <div class="flip-front">
-                  <BuildSheet
-                    :build="detailDisplayedBuild"
-                    :images="imageResolvers"
-                    :rune-lookup="runeLookup"
-                    :version="buildVersion(build)"
-                  />
-                  <button
-                    v-if="build.subBuilds && build.subBuilds.length > 0"
-                    type="button"
-                    class="flip-btn"
-                    :title="t('variants')"
-                    @click.stop="detailFlipped = !detailFlipped"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flip-icon">
-                      <path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/>
-                    </svg>
-                  </button>
-                </div>
-                <!-- Face arrière : liste variantes -->
-                <div class="flip-back">
-                  <div class="back-content">
-                    <p class="back-title">{{ build.name || build.id }}</p>
-                    <ul class="variant-list">
-                      <li>
-                        <button
-                          type="button"
-                          class="variant-btn"
-                          :class="{ active: detailSubIdx === null }"
-                          @click="selectVariant(null)"
-                        >
-                          {{ t('mainBuild') }}
-                        </button>
-                      </li>
-                      <li v-for="(sub, si) in build.subBuilds" :key="si">
-                        <button
-                          type="button"
-                          class="variant-btn"
-                          :class="{ active: detailSubIdx === si }"
-                          @click="selectVariant(si)"
-                        >
-                          {{ sub.title || `${t('variant')} ${si + 1}` }}
-                        </button>
-                      </li>
-                    </ul>
-                    <button type="button" class="flip-btn back-close" @click="detailFlipped = false">✕</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- Flip card : face avant = BuildSheet, face arrière = liste variantes -->
+            <BuildCardFlip
+              :build="build"
+              :images="imageResolvers"
+              :rune-lookup="runeLookup"
+              :version="buildVersion(build)"
+              :main-build-label="t('mainBuild')"
+              :variant-label-fn="i => `${t('variant')} ${i + 1}`"
+              @variant-change="handleVariantChange"
+            />
           </div>
 
           <div class="detail-meta">
             <p v-if="build.createdAt" class="detail-date">
               {{ t('detailCreated') }} {{ formatDate(build.createdAt) }}
             </p>
-
-            <div v-if="detailDescription && activeTab === 'description'" class="detail-description">
-              <p class="description-text" v-html="linkifyDescription(detailDescription)" />
-            </div>
           </div>
         </div>
 
         <div class="detail-stats-section">
           <div class="tabs-row">
             <button
+              v-if="hasDescription"
               type="button"
               class="tab-btn"
               :class="{ active: activeTab === 'description' }"
               @click="activeTab = 'description'"
             >
-              {{ t('detailDescriptionTab') || 'Description' }}
+              {{ t('detailDescriptionTab') }}
             </button>
             <button
               type="button"
@@ -166,9 +128,16 @@ function formatDate(dateString: string): string {
             </button>
           </div>
 
-          <div v-if="activeTab === 'stats'">
-            <h2 class="stats-section-title">{{ t('stats.title') }}</h2>
-            <BuildStatsTable :build="detailDisplayedBuild" :t="t" />
+          <div class="tab-content">
+            <div v-if="activeTab === 'description' && hasDescription" class="detail-description">
+              <h2 class="tab-content-title">{{ t('detailDescriptionTab') }}</h2>
+              <p class="description-text" v-html="linkifyDescription(detailDescription ?? '')" />
+            </div>
+
+            <div v-if="activeTab === 'stats'" class="detail-stats">
+              <h2 class="stats-section-title">{{ t('stats.title') }}</h2>
+              <BuildStatsTable :build="detailDisplayedBuild" :t="t" />
+            </div>
           </div>
         </div>
       </div>
@@ -296,115 +265,6 @@ function formatDate(dateString: string): string {
   color: #e6b800;
 }
 
-/* ── Flip card ─────────────────────────────────────────────────────── */
-.flip-container {
-  perspective: 1000px;
-  width: 300px;
-  height: 450px;
-  position: relative;
-}
-.flip-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.flip-container.flipped .flip-inner {
-  transform: rotateY(180deg);
-}
-.flip-front,
-.flip-back {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-.flip-back {
-  transform: rotateY(180deg);
-  background: linear-gradient(135deg, #0a1428 0%, #091428 45%, #0a323c 100%);
-  border: 2px solid #c89b3c;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.back-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 1rem;
-  width: 100%;
-}
-.back-title {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #c89b3c;
-  text-align: center;
-}
-.variant-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  width: 100%;
-}
-.variant-btn {
-  width: 100%;
-  background: rgba(30, 40, 45, 0.8);
-  border: 1px solid rgba(200, 155, 60, 0.4);
-  border-radius: 6px;
-  color: #c8aa6e;
-  padding: 0.4rem 0.75rem;
-  font-size: 0.82rem;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.15s;
-}
-.variant-btn:hover,
-.variant-btn.active {
-  background: rgba(200, 155, 60, 0.2);
-  border-color: #c89b3c;
-  color: #f0e6d2;
-}
-.flip-btn {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid rgba(200, 155, 60, 0.6);
-  background: rgba(10, 20, 40, 0.85);
-  color: #c89b3c;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s;
-  z-index: 5;
-}
-.flip-btn:hover {
-  background: rgba(200, 155, 60, 0.2);
-  border-color: #c89b3c;
-}
-.flip-icon { width: 14px; height: 14px; }
-.back-close {
-  position: static;
-  width: auto;
-  height: auto;
-  border-radius: 6px;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.82rem;
-  margin-top: 0.4rem;
-}
-
 .detail-stats-section {
   width: 100%;
   max-width: 520px;
@@ -418,6 +278,18 @@ function formatDate(dateString: string): string {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.tab-content {
+  margin-top: 0;
+  min-height: 120px;
+}
+
+.tab-content-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c8aa6e;
 }
 
 .tab-btn {

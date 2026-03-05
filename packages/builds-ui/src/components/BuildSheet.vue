@@ -26,6 +26,8 @@ const props = defineProps<{
   images: ImageResolvers
   runeLookup: RuneLookup
   version?: string
+  /** Optional title shown in place of the champion name (e.g. build title or variant title). */
+  title?: string
 }>()
 
 const buildRef = toRef(props, 'build')
@@ -75,8 +77,8 @@ const getBootBg = (item: { image: { full: string } }) =>
           />
           <div v-else class="bs-portrait-empty" />
         </div>
-        <h2 class="bs-champ-name">
-          {{ core.selectedChampion.value ? core.selectedChampion.value.name.toUpperCase() : '' }}
+        <h2 :class="['bs-champ-name', { 'bs-champ-name--titled': !!title }]">
+          {{ title || (core.selectedChampion.value ? core.selectedChampion.value.name.toUpperCase() : '') }}
         </h2>
 
         <div class="bs-summs">
@@ -260,6 +262,18 @@ const getBootBg = (item: { image: { full: string } }) =>
 .bs-champ-name {
   font-size: 18px; font-weight: 700; color: #cdfafa; text-align: center;
   margin: 0 0 8px 0; letter-spacing: 2px; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.bs-champ-name--titled {
+  font-size: 15px;
+  letter-spacing: 1px;
+  margin: 0 4px 8px 4px;
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  word-break: break-word;
 }
 
 .bs-sep { width: 100%; height: 1px; background: #c89b3c; opacity: 0.8; margin: 8px 0; }

@@ -33,3 +33,4 @@ export type { SortOption, FilterRole, VoteProvider } from './composables/useBuil
 // Components
 export { default as BuildSheet } from './components/BuildSheet.vue'
 export type { ImageResolvers, RuneLookup } from './components/BuildSheet.vue'
+export { default as BuildCardFlip } from './components/BuildCardFlip.vue'
