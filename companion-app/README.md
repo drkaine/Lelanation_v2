@@ -30,6 +30,17 @@ npm run tauri dev    # Développement
 npm run tauri build  # Build (Windows : .msi/.exe dans src-tauri/target/release/bundle/)
 ```
 
+## « Éditeur inconnu » sous Windows
+
+À l’installation, Windows peut afficher **« Éditeur inconnu »** au lieu de **« Darkaine »**. Ce n’est pas un souci de configuration : le champ `publisher: "Darkaine"` dans `tauri.conf.json` est déjà correct. Windows affiche l’éditeur à partir du **certificat de signature de code** de l’exécutable. Sans signature, il affiche toujours « Éditeur inconnu ».
+
+Pour que « Darkaine » s’affiche :
+
+1. Obtenir un **certificat de signature de code** (OV) auprès d’une autorité reconnue par Microsoft, au nom de Darkaine (ou de ton entité).
+2. Configurer la signature dans Tauri et builder avec ce certificat.
+
+Voir le guide détaillé : [CODE_SIGNING_WINDOWS.md](./CODE_SIGNING_WINDOWS.md).
+
 ## Déclencher la CI installer (tag de version)
 
 La workflow GitHub installer Windows se déclenche sur :

@@ -19,16 +19,6 @@
           <p class="text-sm font-semibold text-text-accent">
             {{ t('adminApp.downloadCount', { count: downloadStats.total }) }}
           </p>
-          <div v-if="recentDays.length" class="mt-2 space-y-1">
-            <div
-              v-for="day in recentDays"
-              :key="day.date"
-              class="flex justify-between text-xs text-text/70"
-            >
-              <span>{{ day.date }}</span>
-              <span class="font-mono">{{ day.count }}</span>
-            </div>
-          </div>
         </div>
         <p v-else-if="statsError" class="mt-3 text-sm text-error">
           {{ t('adminApp.downloadCountError') }}
@@ -90,14 +80,6 @@ const isError = ref(false)
 
 const downloadStats = ref<{ total: number; daily: Record<string, number> } | null>(null)
 const statsError = ref(false)
-
-const recentDays = computed(() => {
-  if (!downloadStats.value?.daily) return []
-  return Object.entries(downloadStats.value.daily)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .slice(0, 14)
-    .map(([date, count]) => ({ date, count }))
-})
 
 async function downloadCompanionApp() {
   message.value = ''

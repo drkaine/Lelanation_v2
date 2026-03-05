@@ -59,7 +59,8 @@ const detailBuild = ref<Build | null>(null);
 /** Variante affichée par build (null = principale, number = index dans subBuilds) */
 const selectedSubIdxMap = ref<Record<string, number | null>>({});
 
-/** Retourne le build ou la variante fusionnée à afficher pour un build donné (utilisé par importBuild) */
+/** Retourne le build ou la variante fusionnée à afficher pour un build donné (utilisé par importBuild).
+ *  Si une variante est sélectionnée, son titre remplace le nom (pour les pages de runes / sets d'items). */
 function displayedBuildFor(b: Build): Build {
   const subIdx = selectedSubIdxMap.value[b.id] ?? null;
   if (subIdx === null) return b;
@@ -67,6 +68,7 @@ function displayedBuildFor(b: Build): Build {
   if (!sub) return b;
   return {
     ...b,
+    name: sub.title || b.name,
     items: sub.items,
     runes: sub.runes,
     shards: sub.shards,
@@ -427,8 +429,9 @@ async function importBuild(rawBuild: Build) {
         selectedPerkIds.push(shards.slot1, shards.slot2, shards.slot3);
       }
 
+      const pageTitle = build.name || "Lelanation";
       const runePage = {
-        name: build.name || "Lelanation",
+        name: pageTitle,
         primaryStyleId: build.runes.primary.pathId,
         subStyleId: build.runes.secondary.pathId,
         selectedPerkIds,
@@ -440,12 +443,14 @@ async function importBuild(rawBuild: Build) {
         path: "/lol-perks/v1/pages",
         body: null,
       });
-      const pages = JSON.parse(pagesJson) as Array<{ id: number; isDeletable: boolean }>;
-      const editable = pages.find(p => p.isDeletable);
-      if (editable) {
+      const pages = JSON.parse(pagesJson) as Array<{ id: number; name: string; isDeletable: boolean }>;
+      // Priorité : page existante avec le même titre, sinon première page supprimable
+      const pageToDelete = pages.find(p => p.isDeletable && p.name === pageTitle)
+        ?? pages.find(p => p.isDeletable);
+      if (pageToDelete) {
         await invoke<string>("lcu_request", {
           method: "DELETE",
-          path: `/lol-perks/v1/pages/${editable.id}`,
+          path: `/lol-perks/v1/pages/${pageToDelete.id}`,
           body: null,
         });
       }
@@ -488,19 +493,22 @@ async function importBuild(rawBuild: Build) {
       });
       const summoner = JSON.parse(summonerJson) as { summonerId: number };
 
+      const setTitle = build.name || "Lelanation";
+      const champId = build.champion?.key ?? build.champion?.id ?? "0";
+      const champIdNum = Number(champId);
+
       const itemBlock = {
         hideIfSummonerSpell: "",
         items: build.items.map(item => ({
           id: String(item.id),
           count: 1,
         })),
-        type: build.name || "Lelanation",
+        type: setTitle,
       };
 
-      const champId = build.champion?.key ?? build.champion?.id ?? "0";
       const itemSet = {
-        title: build.name || "Lelanation",
-        associatedChampions: [Number(champId)],
+        title: setTitle,
+        associatedChampions: [champIdNum],
         associatedMaps: [],
         blocks: [itemBlock],
         map: "any",
@@ -516,17 +524,27 @@ async function importBuild(rawBuild: Build) {
         path: `/lol-item-sets/v1/item-sets/${summoner.summonerId}/sets`,
         body: null,
       });
-      const setsData = JSON.parse(setsJson) as { accountId: number; itemSets: unknown[]; timestamp: number };
-
-      const updatedSets = {
-        ...setsData,
-        itemSets: [...setsData.itemSets, itemSet],
+      const setsData = JSON.parse(setsJson) as {
+        accountId: number;
+        itemSets: Array<{ title: string; associatedChampions?: number[] }>;
+        timestamp: number;
       };
+
+      // Remplace le set existant avec le même titre (et le même champion) si trouvé
+      const existingIdx = setsData.itemSets.findIndex(
+        s => s.title === setTitle && s.associatedChampions?.includes(champIdNum)
+      );
+      const newItemSets = [...setsData.itemSets];
+      if (existingIdx >= 0) {
+        newItemSets[existingIdx] = itemSet;
+      } else {
+        newItemSets.push(itemSet);
+      }
 
       await invoke<string>("lcu_request", {
         method: "PUT",
         path: `/lol-item-sets/v1/item-sets/${summoner.summonerId}/sets`,
-        body: JSON.stringify(updatedSets),
+        body: JSON.stringify({ ...setsData, itemSets: newItemSets }),
       });
     } catch {
       // Item import requires active client

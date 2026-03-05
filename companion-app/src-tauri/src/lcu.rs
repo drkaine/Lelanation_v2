@@ -153,7 +153,11 @@ fn parse_process_commandline(line: &str) -> Option<LockfileData> {
 
 #[cfg(target_os = "windows")]
 fn read_from_process() -> Option<LockfileData> {
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
+    // Prevent a visible terminal window when spawning PowerShell/cmd
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
     let processes = ["LeagueClientUx.exe", "LeagueClient.exe"];
     for proc_name in processes {
         let filter = format!("Name='{}'", proc_name);
@@ -161,17 +165,19 @@ fn read_from_process() -> Option<LockfileData> {
             "Get-CimInstance Win32_Process -Filter \"{}\" | Select-Object -ExpandProperty CommandLine",
             filter
         );
-        let output = Command::new("powershell")
+        if let Ok(output) = Command::new("powershell")
             .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &cmd])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
-            .ok()?;
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                let line = line.trim();
-                if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
-                    if let Some(data) = parse_process_commandline(line) {
-                        return Some(data);
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let line = line.trim();
+                    if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
+                        if let Some(data) = parse_process_commandline(line) {
+                            return Some(data);
+                        }
                     }
                 }
             }
@@ -179,20 +185,22 @@ fn read_from_process() -> Option<LockfileData> {
     }
     // Fallback: WMIC
     for proc_name in processes {
-        let output = Command::new("cmd")
+        if let Ok(output) = Command::new("cmd")
             .args([
                 "/C",
                 &format!("wmic process where name=\"{}\" get commandline 2>nul", proc_name),
             ])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
-            .ok()?;
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines().skip(1) {
-                let line = line.trim();
-                if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
-                    if let Some(data) = parse_process_commandline(line) {
-                        return Some(data);
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines().skip(1) {
+                    let line = line.trim();
+                    if !line.is_empty() && line.contains("--app-port=") && line.contains("--remoting-auth-token=") {
+                        if let Some(data) = parse_process_commandline(line) {
+                            return Some(data);
+                        }
                     }
                 }
             }

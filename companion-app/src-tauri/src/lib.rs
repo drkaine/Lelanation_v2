@@ -7,9 +7,13 @@ use image_cache::ImageCacheState;
 use serde::Serialize;
 use std::sync::Arc;
 #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
 use std::path::Path;
 #[cfg(target_os = "windows")]
 use std::process::Command;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 pub struct LcuConnectionResult {
@@ -91,6 +95,7 @@ fn create_desktop_shortcut() -> Result<ShortcutResult, String> {
 
     let output = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
 
