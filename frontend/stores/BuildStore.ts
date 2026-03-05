@@ -670,29 +670,37 @@ export const useBuildStore = defineStore('build', {
       }
     },
 
-    async checkAndUpdateVisibility() {
-      if (!this.currentBuild) return
+    async checkAndUpdateVisibility(buildId?: string) {
+      const targetId = buildId ?? this.currentBuild?.id
+      if (!targetId) return
 
       const voteStore = useVoteStore()
-      const upvotes = voteStore.getUpvoteCount(this.currentBuild.id)
-      const downvotes = voteStore.getDownvoteCount(this.currentBuild.id)
+      const upvotes = voteStore.getUpvoteCount(targetId)
+      const downvotes = voteStore.getDownvoteCount(targetId)
       const totalVotes = upvotes + downvotes
 
       if (totalVotes >= 10) {
         const upvotePercentage = (upvotes / totalVotes) * 100
         if (upvotePercentage < 30) {
           // Passer le build en privé (public → privé = supprimer sur le serveur)
-          this.currentBuild.visibility = 'private'
+          if (this.currentBuild && this.currentBuild.id === targetId) {
+            this.currentBuild.visibility = 'private'
+          }
+
+          // Mettre à jour le build correspondant dans la liste sauvegardée
           const savedBuilds = this.getSavedBuilds()
-          const existingIndex = savedBuilds.findIndex(b => b.id === this.currentBuild!.id)
+          const existingIndex = savedBuilds.findIndex(b => b.id === targetId)
           if (existingIndex >= 0) {
-            savedBuilds[existingIndex] = this.currentBuild!
+            savedBuilds[existingIndex] = {
+              ...savedBuilds[existingIndex],
+              visibility: 'private',
+            }
             const toStore = savedBuilds.map(b => serializeBuild(b))
             localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
           }
 
           try {
-            await fetch(apiUrl(`/api/builds/${encodeURIComponent(this.currentBuild.id)}`), {
+            await fetch(apiUrl(`/api/builds/${encodeURIComponent(targetId)}`), {
               method: 'DELETE',
             })
           } catch {

@@ -39,6 +39,9 @@
             <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
             <path d="M8 16H3v5" />
           </svg>
+          <span v-if="buildSubBuilds.length > 0" class="flip-badge">
+            {{ 1 + buildSubBuilds.length }}
+          </span>
         </button>
 
         <!-- Bouton variantes (mode builder, à côté du reset) -->
@@ -63,6 +66,9 @@
             <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
             <path d="M8 16H3v5" />
           </svg>
+          <span v-if="buildSubBuilds.length > 0" class="variants-builder-badge">
+            {{ 1 + buildSubBuilds.length }}
+          </span>
         </button>
 
         <!-- Roles Section - Entre la version et le séparateur -->
@@ -104,9 +110,9 @@
             <div v-else class="champion-portrait-placeholder"></div>
           </div>
 
-          <!-- Nom du champion en majuscules -->
+          <!-- Titre du build / variante (fallback = nom du champion) -->
           <h2 class="champion-name">
-            {{ selectedChampion ? selectedChampion.name.toUpperCase() : '' }}
+            {{ cardTitle }}
           </h2>
 
           <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
@@ -532,7 +538,20 @@
             @click.stop="selectVariant(null)"
           >
             <span class="back-variant-dot"></span>
-            <span class="back-variant-label">{{ displayBuild?.name || 'Build principal' }}</span>
+            <template v-if="!readonly">
+              <input
+                class="back-variant-input"
+                type="text"
+                maxlength="40"
+                :value="buildStore.currentBuild?.name || ''"
+                placeholder="Titre du build principal"
+                @click.stop
+                @input="onMainTitleInput(($event.target as HTMLInputElement).value)"
+              />
+            </template>
+            <span v-else class="back-variant-label">
+              {{ displayBuild?.name || 'Build principal' }}
+            </span>
           </li>
           <li
             v-for="(sub, idx) in buildSubBuilds"
@@ -542,7 +561,17 @@
             @click.stop="selectVariant(idx)"
           >
             <span class="back-variant-dot"></span>
-            <span class="back-variant-label">{{ sub.title || `Variante ${idx + 2}` }}</span>
+            <template v-if="!readonly">
+              <input
+                class="back-variant-input"
+                type="text"
+                maxlength="40"
+                :value="sub.title || `Variante ${idx + 2}`"
+                @click.stop
+                @input="onSubTitleInput(idx, ($event.target as HTMLInputElement).value)"
+              />
+            </template>
+            <span v-else class="back-variant-label">{{ sub.title || `Variante ${idx + 2}` }}</span>
             <button
               v-if="!readonly"
               type="button"
@@ -780,6 +809,16 @@ function createVariantFromBack() {
   buildStore.createSubBuild()
 }
 
+function onMainTitleInput(title: string) {
+  if (props.readonly || props.build) return
+  buildStore.setName(title)
+}
+
+function onSubTitleInput(index: number, title: string) {
+  if (props.readonly || props.build) return
+  buildStore.setSubBuildTitle(index, title)
+}
+
 /** Nom d'affichage de l'item (résolu via le store pour éviter d'afficher l'id quand l'item n'a pas de nom) */
 function getItemDisplayName(item: Item): string {
   const full = itemsStore.items.find(i => i.id === item.id)
@@ -844,6 +883,53 @@ const selectedChampion = computed(() => {
   if (!champion) return null
   const fullChampion = championsStore.champions.find(c => c.id === champion.id)
   return fullChampion ?? champion
+})
+
+const isDefaultBuildName = (name: string | null | undefined): boolean => {
+  if (!name) return true
+  const trimmed = name.trim()
+  if (!trimmed) return true
+  return trimmed.toLowerCase() === 'new build'
+}
+
+const cardTitle = computed(() => {
+  // Mode builder (pas de build en prop) : utiliser currentBuild + displayedVariant
+  if (!props.build && buildStore.currentBuild) {
+    const b = buildStore.currentBuild
+    if (buildStore.displayedVariant === 'main') {
+      if (!isDefaultBuildName(b.name)) {
+        return b.name as string
+      }
+      return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
+    }
+    const idx = buildStore.displayedVariant as number
+    const sub = (b.subBuilds as SubBuild[] | undefined)?.[idx]
+    if (sub?.title && sub.title.trim().length > 0) {
+      return sub.title
+    }
+    if (!isDefaultBuildName(b.name)) {
+      return b.name as string
+    }
+    return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
+  }
+
+  // Mode readonly avec build en prop : utiliser sub sélectionné localement si présent
+  const b = props.build as Build | null
+  if (b) {
+    if (props.readonly && localDisplayedSubIndex.value !== null) {
+      const subs = b.subBuilds as SubBuild[] | undefined
+      const sub = subs?.[localDisplayedSubIndex.value]
+      if (sub?.title && sub.title.trim().length > 0) {
+        return sub.title
+      }
+    }
+    if (!isDefaultBuildName(b.name)) {
+      return b.name as string
+    }
+  }
+
+  // Fallback : nom du champion en majuscules
+  return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
 })
 
 const { version: defaultVersion } = useGameVersion()
@@ -1524,6 +1610,23 @@ watch(locale, () => {
   white-space: nowrap;
 }
 
+.back-variant-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 60, 0.7);
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 12px;
+}
+
+.back-variant-input:focus {
+  outline: none;
+  border-color: var(--color-gold-300);
+  box-shadow: 0 0 0 1px var(--color-gold-300);
+}
+
 .back-variant-remove {
   border: none;
   background: transparent;
@@ -1774,13 +1877,20 @@ watch(locale, () => {
 }
 
 .champion-name {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-primary-light);
   text-align: center;
-  margin: 0 0 8px 0;
-  letter-spacing: 2px;
+  margin: 0 4px 6px 4px;
+  letter-spacing: 1px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  word-break: break-word;
 }
 
 .separator-line {

@@ -172,6 +172,7 @@
             <!-- Onglets -->
             <div class="mb-4 flex gap-2 border-b border-primary/20">
               <button
+                v-if="hasDescriptionTab"
                 type="button"
                 class="px-4 py-2 text-sm font-semibold transition-colors"
                 :class="
@@ -198,7 +199,7 @@
             </div>
 
             <!-- Contenu onglet Description -->
-            <div v-if="activeTab === 'description'" class="space-y-3">
+            <div v-if="hasDescriptionTab && activeTab === 'description'" class="space-y-3">
               <div class="text-sm text-text/80">
                 <template v-if="activeDescription">
                   <!-- eslint-disable vue/no-v-html -->
@@ -289,7 +290,8 @@ const route = useRoute()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
-const build = computed(() => buildStore.currentBuild)
+const detailRootBuild = ref<Build | null>(null)
+const build = computed(() => detailRootBuild.value)
 const openShareDropdown = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
 const buildToDelete = ref<string | null>(null)
@@ -320,10 +322,10 @@ const detailDisplayedBuild = computed<Build | null>(() => {
 const activeTitle = computed(() => {
   const b = build.value
   if (!b) return ''
-  if (detailDisplayedSubIndex.value === null) return b.name || 'Sans nom'
+  if (detailDisplayedSubIndex.value === null) return b.name || b.author || 'Sans nom'
   const subs = b.subBuilds as SubBuild[] | undefined
   const sub = subs?.[detailDisplayedSubIndex.value]
-  return sub?.title || b.name || 'Sans nom'
+  return sub?.title || b.name || b.author || 'Sans nom'
 })
 
 const activeDescription = computed(() => {
@@ -338,6 +340,15 @@ const activeDescription = computed(() => {
   return sub?.description ?? b.description ?? ''
 })
 
+const hasDescriptionTab = computed(() => {
+  const b = build.value
+  if (!b) return false
+  const baseDesc = (b.description || '').trim()
+  const subDescs = (b.subBuilds as SubBuild[] | undefined) ?? []
+  const anySubDesc = subDescs.some(sub => (sub.description || '').trim().length > 0)
+  return baseDesc.length > 0 || anySubDesc
+})
+
 const upvoteCount = computed(() => (build.value ? voteStore.getUpvoteCount(build.value.id) : 0))
 const downvoteCount = computed(() => (build.value ? voteStore.getDownvoteCount(build.value.id) : 0))
 const userVote = computed(() => (build.value ? voteStore.getUserVote(build.value.id) : null))
@@ -350,13 +361,13 @@ const isUserBuild = computed(() => {
 const handleUpvote = async () => {
   if (!build.value) return
   voteStore.upvote(build.value.id)
-  await buildStore.checkAndUpdateVisibility()
+  await buildStore.checkAndUpdateVisibility(build.value.id)
 }
 
 const handleDownvote = async () => {
   if (!build.value) return
   voteStore.downvote(build.value.id)
-  await buildStore.checkAndUpdateVisibility()
+  await buildStore.checkAndUpdateVisibility(build.value.id)
 }
 
 const toggleShareDropdown = () => {
@@ -640,21 +651,18 @@ watch(
     }
 
     // Essayer d'abord de charger depuis le localStorage
-    const ok = buildStore.loadBuild(id)
-    if (ok && build.value) {
-      try {
-        const { migrated } = await migrateBuildToCurrent(build.value)
-        buildStore.setCurrentBuild(migrated)
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Migration failed for local build:', e)
+    try {
+      const savedBuilds = buildStore.getSavedBuilds()
+      const localBuild = savedBuilds.find(b => b.id === id) || null
+      if (localBuild) {
+        const { migrated } = await migrateBuildToCurrent(localBuild)
+        detailRootBuild.value = migrated
+        loading.value = false
+        return
       }
-      // Appliquer la variante demandée via le store
-      if (detailDisplayedSubIndex.value !== null) {
-        buildStore.showSubBuild(detailDisplayedSubIndex.value)
-      }
-      loading.value = false
-      return
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to load local build:', e)
     }
 
     // Si pas trouvé localement, charger depuis l'API
@@ -665,10 +673,7 @@ watch(
         const { hydrateBuild, isStoredBuild } = await import('~/utils/buildSerialize')
         const buildToMigrate = isStoredBuild(buildData) ? hydrateBuild(buildData) : buildData
         const { migrated } = await migrateBuildToCurrent(buildToMigrate)
-        buildStore.setCurrentBuild(migrated)
-        if (detailDisplayedSubIndex.value !== null) {
-          buildStore.showSubBuild(detailDisplayedSubIndex.value)
-        }
+        detailRootBuild.value = migrated
       } else {
         error.value = 'Build not found'
       }
@@ -681,15 +686,16 @@ watch(
   { immediate: true }
 )
 
-// Quand l'utilisateur change de variante via la card, synchroniser le store
-watch(detailDisplayedSubIndex, idx => {
-  if (!build.value) return
-  if (idx === null) {
-    buildStore.showMainBuild()
-  } else {
-    buildStore.showSubBuild(idx)
-  }
-})
+// Si aucune description, forcer l'onglet actif sur "stats"
+watch(
+  hasDescriptionTab,
+  hasDesc => {
+    if (!hasDesc && activeTab.value === 'description') {
+      activeTab.value = 'stats'
+    }
+  },
+  { immediate: true }
+)
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('fr-FR', {

@@ -43,20 +43,6 @@
           <div v-show="activeTab === 'form'" class="tab-content">
             <div class="space-y-6">
               <div>
-                <label for="build-name" class="mb-2 block text-sm font-semibold">
-                  {{ t('createBuild.buildName') }}
-                </label>
-                <input
-                  id="build-name"
-                  v-model="buildName"
-                  type="text"
-                  :placeholder="t('createBuild.buildNamePlaceholder')"
-                  class="w-full max-w-md rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
-                  @input="updateBuildName"
-                />
-              </div>
-
-              <div>
                 <label for="build-author" class="mb-2 block text-sm font-semibold">{{
                   t('createBuild.author')
                 }}</label>
@@ -71,7 +57,7 @@
               </div>
 
               <!-- Titres des variantes -->
-              <div v-if="(buildStore.currentBuild?.subBuilds?.length ?? 0) > 0" class="space-y-3">
+              <div class="space-y-3">
                 <div>
                   <label class="mb-1 block text-sm font-semibold text-accent">
                     Titre 1 (variante principale)
@@ -81,7 +67,6 @@
                     type="text"
                     placeholder="Ex: Build principal…"
                     class="w-full max-w-md rounded-lg border border-accent/50 bg-surface px-3 py-2 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
-                    @input="updateBuildName"
                   />
                 </div>
                 <div v-for="(sub, idx) in buildStore.currentBuild?.subBuilds ?? []" :key="idx">
@@ -89,6 +74,7 @@
                     Titre {{ idx + 2 }} (variante {{ idx + 2 }})
                   </label>
                   <input
+                    maxlength="40"
                     :value="sub.title || ''"
                     type="text"
                     placeholder="Ex: Build Assassin, Build Tank…"
@@ -434,7 +420,14 @@ const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const activeTab = ref<'form' | 'stats'>('form')
 const { isStreamerMode } = useStreamerMode()
-const buildName = ref('New Build')
+const buildName = computed({
+  get() {
+    return buildStore.currentBuild?.name ?? 'New Build'
+  },
+  set(value: string) {
+    buildStore.setName(value)
+  },
+})
 const buildAuthor = ref('')
 const buildDescription = ref('')
 const visibility = ref<'public' | 'private'>('public')
@@ -486,10 +479,6 @@ const validationDebug = computed(() => {
   }
 })
 
-const updateBuildName = () => {
-  buildStore.setName(buildName.value)
-}
-
 const updateBuildAuthor = () => {
   buildStore.setAuthor(buildAuthor.value)
 }
@@ -518,7 +507,6 @@ const saveBuild = async () => {
     buildStore.createNewBuild()
 
     // Réinitialiser les champs du formulaire
-    buildName.value = 'New Build'
     buildAuthor.value = ''
     buildDescription.value = ''
     visibility.value = 'public'
@@ -541,14 +529,7 @@ onMounted(() => {
     buildStore.createNewBuild()
   }
 
-  // Load build name if exists
   const current = buildStore.currentBuild
-  if (current?.name) {
-    buildName.value = current.name
-  } else {
-    buildStore.setName(buildName.value)
-  }
-
   if (current?.author) {
     buildAuthor.value = current.author
   }

@@ -20,26 +20,14 @@
 
     <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
       <div v-for="build in builds" :key="build.id" class="flex flex-col items-center gap-2">
-        <!-- Informations au-dessus de la sheet (nom et auteur) -->
+        <!-- Informations au-dessus de la sheet (auteur + statut) -->
         <div
           class="flex min-h-[60px] w-full max-w-[300px] flex-col justify-center space-y-1 text-center"
         >
-          <!-- Nom du build + badge visibilité -->
-          <h3 class="text-lg font-semibold text-text">
-            {{ getDisplayedTitle(build) }}
-          </h3>
-          <div
-            v-if="(build.subBuilds?.length ?? 0) > 0"
-            class="flex items-center justify-center text-xs text-text/60"
-          >
-            <span>
-              {{ 1 + (build.subBuilds?.length ?? 0) }}
-              {{ 1 + (build.subBuilds?.length ?? 0) > 1 ? 'variantes' : 'variante' }}
-            </span>
-          </div>
-          <!-- Auteur -->
           <div class="flex items-center justify-center gap-1.5 text-sm text-text/70">
-            <span>{{ build.author || t('buildDiscovery.anonymous') }}</span>
+            <span class="font-semibold">
+              {{ build.author || t('buildDiscovery.anonymous') }}
+            </span>
             <span
               v-if="props.showUserActions"
               class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide"
@@ -290,14 +278,6 @@ const expandedDescriptions = ref<Record<string, boolean>>({})
 /** Variante actuellement affichée par build (null = principale). */
 const displayedSubMap = ref<Record<string, number | null>>({})
 
-function getDisplayedTitle(build: Build): string {
-  const idx = displayedSubMap.value[build.id]
-  if (idx == null) return build.name || build.id
-  const sub = (build.subBuilds ?? [])[idx]
-  if (sub && sub.title) return sub.title
-  return build.name || build.id
-}
-
 function getDisplayedDescription(build: Build): string | undefined {
   const mode = build.descriptionMode ?? 'single'
   const idx = displayedSubMap.value[build.id]
@@ -441,20 +421,12 @@ const getUserVote = (buildId: string): 'up' | 'down' | null => {
 
 const handleUpvote = async (buildId: string) => {
   voteStore.upvote(buildId)
-  const build = discoveryStore.builds.find(b => b.id === buildId)
-  if (build) {
-    buildStore.setCurrentBuild(build)
-    await buildStore.checkAndUpdateVisibility()
-  }
+  await buildStore.checkAndUpdateVisibility(buildId)
 }
 
 const handleDownvote = async (buildId: string) => {
   voteStore.downvote(buildId)
-  const build = discoveryStore.builds.find(b => b.id === buildId)
-  if (build) {
-    buildStore.setCurrentBuild(build)
-    await buildStore.checkAndUpdateVisibility()
-  }
+  await buildStore.checkAndUpdateVisibility(buildId)
 }
 
 const isUserBuild = (buildId: string): boolean => {

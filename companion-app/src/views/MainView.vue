@@ -81,9 +81,9 @@ function displayedBuildFor(b: Build): Build {
 
 function displayedTitleFor(b: Build): string {
   const subIdx = selectedSubIdxMap.value[b.id] ?? null;
-  if (subIdx === null) return b.name || b.id;
+  if (subIdx === null) return b.name || b.author || b.id;
   const sub = b.subBuilds?.[subIdx] as SubBuild | undefined;
-  return sub?.title || b.name || b.id;
+  return sub?.title || b.name || b.author || b.id;
 }
 
 function toggleFlip(buildId: string) {
