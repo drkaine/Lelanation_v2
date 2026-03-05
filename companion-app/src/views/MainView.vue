@@ -34,6 +34,7 @@ const lastSubmittedMatchId = ref("");
 let autoSubmitTimer: ReturnType<typeof setInterval> | null = null;
 let buildsRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let connectionCheckTimer: ReturnType<typeof setInterval> | null = null;
+let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 const searchQuery = ref("");
 const selectedRole = ref<Role | null>(null);
@@ -731,6 +732,19 @@ function stopBuildsRefreshLoop() {
   buildsRefreshTimer = null;
 }
 
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 heure
+
+function startUpdateCheckLoop() {
+  if (updateCheckTimer) return;
+  updateCheckTimer = setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL_MS);
+}
+
+function stopUpdateCheckLoop() {
+  if (!updateCheckTimer) return;
+  clearInterval(updateCheckTimer);
+  updateCheckTimer = null;
+}
+
 async function checkForUpdates() {
   try {
     currentAppVersion.value = await getVersion().catch(() => currentAppVersion.value);
@@ -804,6 +818,7 @@ onMounted(async () => {
   loadItemCatalog();
   loadImportedBuilds();
   checkForUpdates();
+  startUpdateCheckLoop();
   checkConnection(true);
   startConnectionCheckLoop();
   await loadChampionCatalog();
@@ -818,6 +833,7 @@ onUnmounted(() => {
   stopAutoSubmitLoop();
   stopBuildsRefreshLoop();
   stopConnectionCheckLoop();
+  stopUpdateCheckLoop();
 });
 
 watch(

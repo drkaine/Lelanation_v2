@@ -253,36 +253,26 @@ export const useBuildStore = defineStore('build', {
     },
 
     /** Crée une nouvelle variante (sous-build) en dupliquant le build principal. */
+    /** Crée une nouvelle variante vide (items, runes, sorts, skill order vides). */
     createSubBuild(title?: string) {
       if (!this.currentBuild) return
-      const source = this.currentBuild
+      const b = this.currentBuild
       const newSub: SubBuild = {
-        title: title ?? `Variante ${(this.currentBuild.subBuilds?.length ?? 0) + 2}`,
+        title: title ?? `Variante ${(b.subBuilds?.length ?? 0) + 2}`,
         description: '',
-        champion: this.currentBuild.champion, // Toujours le champion du build principal
-        items: [...(source.items ?? [])],
-        runes: source.runes
-          ? {
-              ...source.runes,
-              primary: { ...source.runes.primary },
-              secondary: { ...source.runes.secondary },
-            }
-          : null,
-        shards: source.shards ? { ...source.shards } : null,
-        summonerSpells: [...(source.summonerSpells ?? [null, null])] as [any, any],
-        skillOrder: source.skillOrder
-          ? {
-              firstThreeUps: [...source.skillOrder.firstThreeUps] as any,
-              skillUpOrder: [...source.skillOrder.skillUpOrder] as any,
-            }
-          : null,
-        roles: [...(source.roles ?? [])],
-        gameVersion: source.gameVersion || '',
+        champion: b.champion,
+        items: [],
+        runes: null,
+        shards: null,
+        summonerSpells: [null, null],
+        skillOrder: null,
+        roles: [...(b.roles ?? [])],
+        gameVersion: b.gameVersion || '',
       }
-      if (!this.currentBuild.subBuilds) this.currentBuild.subBuilds = []
-      this.currentBuild.subBuilds.push(newSub)
-      this.displayedVariant = this.currentBuild.subBuilds.length - 1
-      this.currentBuild.updatedAt = new Date().toISOString()
+      if (!b.subBuilds) b.subBuilds = []
+      b.subBuilds.push(newSub)
+      this.displayedVariant = b.subBuilds.length - 1
+      b.updatedAt = new Date().toISOString()
       this.recalculateStats()
     },
 
@@ -504,6 +494,88 @@ export const useBuildStore = defineStore('build', {
         target.sub.skillOrder = skillOrder
       }
       this.currentBuild!.updatedAt = new Date().toISOString()
+    },
+
+    /**
+     * Données d'une source (build principal ou variante) pour la copie.
+     * Utilisé par la modale "Copier depuis...".
+     */
+    getSourceBuildData(source: 'main' | number): {
+      items: Item[]
+      runes: RuneSelection | null
+      shards: ShardSelection | null
+      summonerSpells: [SummonerSpell | null, SummonerSpell | null]
+      skillOrder: SkillOrder | null
+      description: string
+    } | null {
+      if (!this.currentBuild) return null
+      if (source === 'main') {
+        const b = this.currentBuild
+        return {
+          items: b.items ?? [],
+          runes: b.runes ?? null,
+          shards: b.shards ?? null,
+          summonerSpells: b.summonerSpells ?? [null, null],
+          skillOrder: b.skillOrder ?? null,
+          description: b.description ?? '',
+        }
+      }
+      const subs = this.currentBuild.subBuilds as SubBuild[] | undefined
+      const sub = subs?.[source]
+      if (!sub) return null
+      return {
+        items: sub.items ?? [],
+        runes: sub.runes ?? null,
+        shards: sub.shards ?? null,
+        summonerSpells: sub.summonerSpells ?? [null, null],
+        skillOrder: sub.skillOrder ?? null,
+        description: sub.description ?? '',
+      }
+    },
+
+    /**
+     * Copie les champs sélectionnés depuis une source vers une destination
+     * (build principal ou variante). Ne change pas la variante affichée.
+     */
+    copyVariantFieldsTo(
+      source: 'main' | number,
+      destination: 'main' | number,
+      fields: {
+        items?: boolean
+        runes?: boolean
+        shards?: boolean
+        summonerSpells?: boolean
+        skillOrder?: boolean
+        description?: boolean
+      }
+    ) {
+      const data = this.getSourceBuildData(source)
+      if (!data || !this.currentBuild) return
+      const b = this.currentBuild
+      const subs = (b.subBuilds as SubBuild[] | undefined) ?? []
+
+      if (destination === 'main') {
+        if (fields.items) b.items = [...data.items]
+        if (fields.runes && data.runes) b.runes = data.runes
+        if (fields.shards && data.shards) b.shards = data.shards
+        if (fields.summonerSpells)
+          b.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
+        if (fields.skillOrder && data.skillOrder) b.skillOrder = data.skillOrder
+        if (fields.description) b.description = data.description
+      } else {
+        const sub = subs[destination]
+        if (!sub) return
+        if (fields.items) sub.items = [...data.items]
+        if (fields.runes && data.runes) sub.runes = data.runes
+        if (fields.shards && data.shards) sub.shards = data.shards
+        if (fields.summonerSpells)
+          sub.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
+        if (fields.skillOrder && data.skillOrder) sub.skillOrder = data.skillOrder
+        if (fields.description) sub.description = data.description
+      }
+
+      b.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     /** Rôles partagés entre le build principal et toutes les variantes. */
