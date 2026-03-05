@@ -70,7 +70,74 @@
                 />
               </div>
 
-              <div>
+              <!-- Titres des variantes -->
+              <div v-if="(buildStore.currentBuild?.subBuilds?.length ?? 0) > 0" class="space-y-3">
+                <div>
+                  <label class="mb-1 block text-sm font-semibold text-accent">
+                    Titre 1 (variante principale)
+                  </label>
+                  <input
+                    v-model="buildName"
+                    type="text"
+                    placeholder="Ex: Build principal…"
+                    class="w-full max-w-md rounded-lg border border-accent/50 bg-surface px-3 py-2 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
+                    @input="updateBuildName"
+                  />
+                </div>
+                <div v-for="(sub, idx) in buildStore.currentBuild?.subBuilds ?? []" :key="idx">
+                  <label class="mb-1 block text-sm font-semibold text-accent">
+                    Titre {{ idx + 2 }} (variante {{ idx + 2 }})
+                  </label>
+                  <input
+                    :value="sub.title || ''"
+                    type="text"
+                    placeholder="Ex: Build Assassin, Build Tank…"
+                    class="w-full max-w-md rounded-lg border border-accent/50 bg-surface px-3 py-2 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
+                    @input="
+                      e => buildStore.setSubBuildTitle(idx, (e.target as HTMLInputElement).value)
+                    "
+                  />
+                </div>
+              </div>
+
+              <!-- Sélecteur mode description -->
+              <div v-if="(buildStore.currentBuild?.subBuilds?.length ?? 0) > 0">
+                <label class="mb-2 block text-sm font-semibold">Mode description</label>
+                <div class="flex gap-3">
+                  <button
+                    type="button"
+                    class="rounded-lg border px-4 py-2 text-sm font-medium transition"
+                    :class="
+                      descriptionMode === 'single'
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-primary/50 bg-surface text-text/70 hover:border-primary'
+                    "
+                    @click="setDescMode('single')"
+                  >
+                    Une seule description
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-lg border px-4 py-2 text-sm font-medium transition"
+                    :class="
+                      descriptionMode === 'multiple'
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-primary/50 bg-surface text-text/70 hover:border-primary'
+                    "
+                    @click="setDescMode('multiple')"
+                  >
+                    Une description par variante
+                  </button>
+                </div>
+              </div>
+
+              <!-- Description(s) -->
+              <div
+                v-if="
+                  descriptionMode === 'single' ||
+                  (buildStore.currentBuild?.subBuilds?.length ?? 0) === 0
+                "
+              >
                 <label for="build-description" class="mb-2 block text-sm font-semibold">
                   {{ t('createBuild.description') }}
                 </label>
@@ -82,6 +149,40 @@
                   class="w-full max-w-2xl rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
                   @input="updateBuildDescription"
                 ></textarea>
+              </div>
+
+              <!-- Descriptions multiples -->
+              <div v-else class="space-y-4">
+                <div>
+                  <label class="mb-2 block text-sm font-semibold"
+                    >Description 1 (variante principale)</label
+                  >
+                  <textarea
+                    v-model="buildDescription"
+                    rows="4"
+                    :placeholder="t('createBuild.descriptionPlaceholder')"
+                    class="w-full max-w-2xl rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
+                    @input="updateBuildDescription"
+                  ></textarea>
+                </div>
+                <div v-for="(sub, idx) in buildStore.currentBuild?.subBuilds ?? []" :key="idx">
+                  <label class="mb-2 block text-sm font-semibold">
+                    Description {{ idx + 2 }} — {{ sub.title || `Variante ${idx + 2}` }}
+                  </label>
+                  <textarea
+                    :value="sub.description ?? ''"
+                    rows="4"
+                    :placeholder="`Description pour la variante ${idx + 2}…`"
+                    class="w-full max-w-2xl rounded-lg border border-primary/50 bg-surface px-4 py-2.5 text-sm text-text transition focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/50"
+                    @input="
+                      e =>
+                        buildStore.setSubBuildDescription(
+                          idx,
+                          (e.target as HTMLTextAreaElement).value
+                        )
+                    "
+                  ></textarea>
+                </div>
               </div>
 
               <div class="flex flex-col gap-2">
@@ -212,8 +313,81 @@
         </div>
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
-        <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
+        <div class="build-card-column w-full flex-shrink-0 md:order-1">
           <BuildCard :sheet-tooltips="true" />
+
+          <!-- Zone variantes (sous la card) -->
+          <div class="variants-zone">
+            <button
+              class="variants-trigger"
+              :title="
+                buildStore.currentBuild?.subBuilds?.length
+                  ? 'Gérer les variantes'
+                  : 'Créer une variante'
+              "
+              @click="openVariantsPanel = !openVariantsPanel"
+            >
+              <span class="variants-count">
+                {{ (buildStore.currentBuild?.subBuilds?.length ?? 0) + 1 }}
+                variante{{ (buildStore.currentBuild?.subBuilds?.length ?? 0) > 0 ? 's' : '' }}
+              </span>
+            </button>
+
+            <!-- Panel de gestion des variantes -->
+            <div v-if="openVariantsPanel" class="variants-panel">
+              <!-- Variante principale -->
+              <button
+                class="variant-pill"
+                :class="{ 'variant-pill--active': buildStore.displayedVariant === 'main' }"
+                @click="buildStore.showMainBuild()"
+              >
+                Variante 1 (principale)
+              </button>
+              <!-- Variantes existantes -->
+              <div
+                v-for="(sub, idx) in buildStore.currentBuild?.subBuilds ?? []"
+                :key="idx"
+                class="variant-pill-row"
+              >
+                <button
+                  class="variant-pill"
+                  :class="{ 'variant-pill--active': buildStore.displayedVariant === idx }"
+                  @click="buildStore.showSubBuild(idx)"
+                >
+                  Variante {{ idx + 2 }} — {{ sub.title || '(sans titre)' }}
+                </button>
+                <button
+                  class="variant-remove-btn"
+                  title="Supprimer cette variante"
+                  @click="buildStore.removeSubBuild(idx)"
+                >
+                  ✕
+                </button>
+              </div>
+              <!-- Créer une nouvelle variante -->
+              <button class="variant-create-btn" @click="buildStore.createSubBuild()">
+                + Nouvelle variante
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Popup confirmation changement de champion -->
+    <div
+      v-if="buildStore.pendingChampionChange"
+      class="champion-confirm-overlay"
+      @click.self="buildStore.cancelChampionChange()"
+    >
+      <div class="champion-confirm-modal">
+        <p class="champion-confirm-title">Changer de champion ?</p>
+        <p class="champion-confirm-body">
+          Vous allez perdre toutes les variantes de ce build. Cette action est irréversible.
+        </p>
+        <div class="champion-confirm-actions">
+          <button class="btn-cancel" @click="buildStore.cancelChampionChange()">Annuler</button>
+          <button class="btn-confirm" @click="buildStore.confirmChampionChange()">Confirmer</button>
         </div>
       </div>
     </div>
@@ -265,6 +439,14 @@ const buildAuthor = ref('')
 const buildDescription = ref('')
 const visibility = ref<'public' | 'private'>('public')
 const showValidationErrors = ref(false)
+const openVariantsPanel = ref(false)
+
+// ── Variantes ──────────────────────────────────────────────────────────────
+const descriptionMode = computed(() => buildStore.currentBuild?.descriptionMode ?? 'single')
+
+function setDescMode(mode: 'single' | 'multiple') {
+  buildStore.setDescriptionMode(mode)
+}
 
 // Debug: computed pour afficher l'état de validation en temps réel
 const validationDebug = computed(() => {
@@ -408,16 +590,206 @@ watch(isStreamerMode, enabled => {
 </script>
 
 <style scoped>
-.build-card-wrapper {
+.build-card-column {
   width: 293.9px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .tab-content {
   min-height: 400px;
 }
 
+/* ── Zone variantes ── */
+.variants-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.variants-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--color-gold-300, #c89b3c);
+  background: rgba(200, 155, 60, 0.1);
+  color: var(--color-gold-300, #c89b3c);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s;
+  width: 100%;
+  justify-content: center;
+}
+
+.variants-trigger:hover {
+  background: rgba(200, 155, 60, 0.2);
+}
+
+.variants-count {
+  font-size: 13px;
+}
+
+.variants-panel {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(200, 155, 60, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.variant-pill-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.variant-pill {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.3);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.variant-pill:hover {
+  border-color: var(--color-gold-300, #c89b3c);
+  color: var(--color-gold-300, #c89b3c);
+}
+
+.variant-pill--active {
+  border-color: var(--color-gold-300, #c89b3c) !important;
+  background: rgba(200, 155, 60, 0.15) !important;
+  color: var(--color-gold-300, #c89b3c) !important;
+}
+
+.variant-remove-btn {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: 1px solid rgba(220, 70, 70, 0.5);
+  background: transparent;
+  color: rgba(220, 70, 70, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.variant-remove-btn:hover {
+  background: rgba(220, 70, 70, 0.15);
+  color: rgb(220, 70, 70);
+}
+
+.variant-create-btn {
+  padding: 7px 12px;
+  border-radius: 6px;
+  border: 1px dashed rgba(200, 155, 60, 0.4);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.variant-create-btn:hover {
+  border-color: var(--color-gold-300, #c89b3c);
+  color: var(--color-gold-300, #c89b3c);
+}
+
+/* ── Popup confirmation champion ── */
+.champion-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.champion-confirm-modal {
+  background: rgb(26, 26, 46);
+  border: 1px solid var(--color-gold-300, #c89b3c);
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 380px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.champion-confirm-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-gold-300, #c89b3c);
+  margin: 0;
+}
+
+.champion-confirm-body {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.champion-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.btn-cancel {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-confirm {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  background: rgb(220, 70, 70);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-confirm:hover {
+  background: rgb(200, 55, 55);
+}
+
 @media (max-width: 768px) {
-  .build-card-wrapper {
+  .build-card-column {
     width: 100%;
     max-width: 100%;
   }

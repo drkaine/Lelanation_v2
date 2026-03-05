@@ -10,7 +10,7 @@ import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
 import { translate } from "../i18n";
-import type { Build, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
+import type { Build, SubBuild, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
 import { BuildSheet } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
 import BuildDetailView from "./BuildDetailView.vue";
@@ -54,6 +54,46 @@ const connectionDebugInfo = ref("");
 const updateAvailable = ref(false);
 const updateDismissed = ref(false);
 const detailBuild = ref<Build | null>(null);
+
+/** Variante affichée par build (null = principale, number = index dans subBuilds) */
+const selectedSubIdxMap = ref<Record<string, number | null>>({});
+/** Etat flip par build */
+const buildFlippedMap = ref<Record<string, boolean>>({});
+
+/** Retourne le build ou la variante fusionnée à afficher pour un build donné */
+function displayedBuildFor(b: Build): Build {
+  const subIdx = selectedSubIdxMap.value[b.id] ?? null;
+  if (subIdx === null) return b;
+  const sub = b.subBuilds?.[subIdx] as SubBuild | undefined;
+  if (!sub) return b;
+  return {
+    ...b,
+    items: sub.items,
+    runes: sub.runes,
+    shards: sub.shards,
+    summonerSpells: sub.summonerSpells,
+    skillOrder: sub.skillOrder,
+    roles: sub.roles,
+    description: sub.description ?? b.description,
+    gameVersion: sub.gameVersion || b.gameVersion,
+  } as Build;
+}
+
+function displayedTitleFor(b: Build): string {
+  const subIdx = selectedSubIdxMap.value[b.id] ?? null;
+  if (subIdx === null) return b.name || b.id;
+  const sub = b.subBuilds?.[subIdx] as SubBuild | undefined;
+  return sub?.title || b.name || b.id;
+}
+
+function toggleFlip(buildId: string) {
+  buildFlippedMap.value[buildId] = !buildFlippedMap.value[buildId];
+}
+
+function selectSubVariant(buildId: string, idx: number | null) {
+  selectedSubIdxMap.value[buildId] = idx;
+  buildFlippedMap.value[buildId] = false;
+}
 const latestVersion = ref("");
 const currentAppVersion = ref("0.3.0");
 const pendingUpdate = shallowRef<Update | null>(null);
@@ -380,8 +420,11 @@ async function loadRuneCatalog() {
   }
 }
 
-async function importBuild(build: Build) {
+async function importBuild(rawBuild: Build) {
   if (!lcuConnected.value) return;
+
+  // Utiliser la variante affichée (sous-build sélectionné ou build principal)
+  const build = displayedBuildFor(rawBuild);
 
   const errors: string[] = [];
 
@@ -944,9 +987,59 @@ watch(
               {{ b.author || t('authorUnknown') }}
               <span v-if="importedBuildIds.has(b.id)" class="perso-badge">{{ t('badge.personal') }}</span>
             </h3>
-            <span class="build-name">{{ b.name || b.id }}</span>
+            <span class="build-name">{{ displayedTitleFor(b) }}</span>
           </div>
-          <BuildSheet :build="b" :images="imageResolvers" :rune-lookup="runeLookup" :version="buildVersion(b)" />
+
+          <!-- Flip container : face avant = BuildSheet, face arrière = liste variantes -->
+          <div class="flip-container" :class="{ flipped: buildFlippedMap[b.id] }">
+            <div class="flip-inner">
+              <!-- Face avant -->
+              <div class="flip-front">
+                <BuildSheet :build="displayedBuildFor(b)" :images="imageResolvers" :rune-lookup="runeLookup" :version="buildVersion(b)" />
+                <button
+                  v-if="b.subBuilds && b.subBuilds.length > 0"
+                  type="button"
+                  class="flip-btn"
+                  :title="t('variants')"
+                  @click.stop="toggleFlip(b.id)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flip-icon">
+                    <path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h12.8M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H4.2"/>
+                  </svg>
+                </button>
+              </div>
+              <!-- Face arrière : liste variantes -->
+              <div class="flip-back">
+                <div class="back-content">
+                  <p class="back-title">{{ b.name || b.id }}</p>
+                  <ul class="variant-list">
+                    <li>
+                      <button
+                        type="button"
+                        class="variant-btn"
+                        :class="{ active: (selectedSubIdxMap[b.id] ?? null) === null }"
+                        @click="selectSubVariant(b.id, null)"
+                      >
+                        {{ t('mainBuild') }}
+                      </button>
+                    </li>
+                    <li v-for="(sub, si) in b.subBuilds" :key="si">
+                      <button
+                        type="button"
+                        class="variant-btn"
+                        :class="{ active: selectedSubIdxMap[b.id] === si }"
+                        @click="selectSubVariant(b.id, si)"
+                      >
+                        {{ sub.title || `${t('variant')} ${si + 1}` }}
+                      </button>
+                    </li>
+                  </ul>
+                  <button type="button" class="flip-btn back-close" @click="buildFlippedMap[b.id] = false">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="card-actions">
             <button
               type="button"
@@ -1235,6 +1328,10 @@ watch(
   display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; width: 300px;
 }
 
+.build-entry > .flip-container + .card-actions {
+  margin-top: calc(0.75rem + 10px);
+}
+
 .import-btn, .submit-btn {
   border: 1px solid rgba(3, 151, 171, 0.8); border-radius: 7px;
   background: rgba(10, 50, 60, 0.8); color: #cdfafa; cursor: pointer;
@@ -1329,5 +1426,114 @@ watch(
 @media (max-width: 660px) {
   .header-card { flex-direction: column; align-items: flex-start; }
   .build-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Flip card ─────────────────────────────────────────────────────── */
+.flip-container {
+  perspective: 1000px;
+  width: 300px;
+  height: 450px;
+  position: relative;
+}
+.flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.flip-container.flipped .flip-inner {
+  transform: rotateY(180deg);
+}
+.flip-front,
+.flip-back {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(135deg, #0a1428 0%, #091428 45%, #0a323c 100%);
+  border: 2px solid #c89b3c;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.back-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem;
+  width: 100%;
+}
+.back-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c89b3c;
+  text-align: center;
+}
+.variant-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+.variant-btn {
+  width: 100%;
+  background: rgba(30, 40, 45, 0.8);
+  border: 1px solid rgba(200, 155, 60, 0.4);
+  border-radius: 6px;
+  color: #c8aa6e;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.variant-btn:hover,
+.variant-btn.active {
+  background: rgba(200, 155, 60, 0.2);
+  border-color: #c89b3c;
+  color: #f0e6d2;
+}
+.flip-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 155, 60, 0.6);
+  background: rgba(10, 20, 40, 0.85);
+  color: #c89b3c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  z-index: 5;
+}
+.flip-btn:hover {
+  background: rgba(200, 155, 60, 0.2);
+  border-color: #c89b3c;
+}
+.flip-icon { width: 14px; height: 14px; }
+.back-close {
+  position: static;
+  width: auto;
+  height: auto;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  margin-top: 0.4rem;
 }
 </style>

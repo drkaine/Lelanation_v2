@@ -288,10 +288,14 @@ const expandedDerivedStats = ref<Record<string, boolean>>({
   magicResist: false,
 })
 
-const champion = computed(() => props.build?.champion || buildStore.currentBuild?.champion)
-const items = computed(() => props.build?.items || buildStore.currentBuild?.items || [])
-const runes = computed(() => props.build?.runes || buildStore.currentBuild?.runes || null)
-const shards = computed(() => props.build?.shards || buildStore.currentBuild?.shards || null)
+// Utiliser displayedBuild pour que les stats reflètent toujours la variante affichée
+const _activeBuild = computed(
+  () => props.build || buildStore.displayedBuild || buildStore.currentBuild
+)
+const champion = computed(() => _activeBuild.value?.champion ?? null)
+const items = computed(() => _activeBuild.value?.items ?? [])
+const runes = computed(() => _activeBuild.value?.runes ?? null)
+const shards = computed(() => _activeBuild.value?.shards ?? null)
 
 // Calculate base stats at level
 const baseStatsAtLevel = computed(() => {

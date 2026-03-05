@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type {
   Build,
+  SubBuild,
   Champion,
   Item,
   RuneSelection,
@@ -23,6 +24,10 @@ interface BuildState {
   calculatedStats: CalculatedStats | null
   /** Incrémenté à chaque modification de la liste sauvegardée (save/delete/copy) pour forcer le refresh des vues. */
   savedBuildsVersion: number
+  /** Variante actuellement affichée dans le builder : 'main' = build principal, number = index dans subBuilds. */
+  displayedVariant: 'main' | number
+  /** Champion en attente de changement (si des variantes existent — confirmation requise). */
+  pendingChampionChange: Champion | null
 }
 
 export const useBuildStore = defineStore('build', {
@@ -32,9 +37,36 @@ export const useBuildStore = defineStore('build', {
     error: null,
     calculatedStats: null,
     savedBuildsVersion: 0,
+    displayedVariant: 'main',
+    pendingChampionChange: null,
   }),
 
   getters: {
+    /**
+     * Build actuellement affiché (build principal ou variante sélectionnée).
+     * Utilisé pour les stats, la card, et le partage.
+     */
+    displayedBuild(): Build | null {
+      if (!this.currentBuild) return null
+      if (this.displayedVariant === 'main') return this.currentBuild
+      const subs = this.currentBuild.subBuilds
+      if (!subs || typeof this.displayedVariant !== 'number') return this.currentBuild
+      const sub = subs[this.displayedVariant]
+      if (!sub) return this.currentBuild
+      // Merge sub-build into a Build-like object for display (uses parent champion)
+      return {
+        ...this.currentBuild,
+        items: sub.items,
+        runes: sub.runes,
+        shards: sub.shards,
+        summonerSpells: sub.summonerSpells,
+        skillOrder: sub.skillOrder,
+        roles: sub.roles,
+        description: sub.description ?? this.currentBuild.description,
+        gameVersion: sub.gameVersion || this.currentBuild.gameVersion,
+      } as Build
+    },
+
     isBuildValid(): boolean {
       if (!this.currentBuild) return false
       const build = this.currentBuild
@@ -146,7 +178,14 @@ export const useBuildStore = defineStore('build', {
 
   actions: {
     setCurrentBuild(build: Build) {
-      this.currentBuild = build
+      // Normaliser les champs ajoutés par la feature sous-builds pour les builds anciens
+      this.currentBuild = {
+        ...build,
+        subBuilds: build.subBuilds ?? [],
+        descriptionMode: build.descriptionMode ?? 'single',
+      }
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
       this.status = 'success'
       this.error = null
       this.recalculateStats()
@@ -189,118 +228,298 @@ export const useBuildStore = defineStore('build', {
         items: [],
         runes: null,
         shards: {
-          slot1: 5008, // Adaptive Force (default)
-          slot2: 5008, // Adaptive Force (default)
-          slot3: 5001, // Health (default)
+          slot1: 5008,
+          slot2: 5008,
+          slot3: 5001,
         },
         summonerSpells: [null, null],
         skillOrder: {
           firstThreeUps: [null as any, null as any, null as any],
           skillUpOrder: [null as any, null as any, null as any],
         },
-        roles: [], // Aucun rôle sélectionné par défaut
+        roles: [],
         upvote: 0,
         downvote: 0,
-        gameVersion: '', // Will be set from version service
+        gameVersion: '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        subBuilds: [],
+        descriptionMode: 'single',
       }
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
       this.status = 'idle'
       this.error = null
     },
 
-    setChampion(champion: Champion) {
+    /** Crée une nouvelle variante (sous-build) en dupliquant le build principal. */
+    createSubBuild(title?: string) {
+      if (!this.currentBuild) return
+      const source = this.currentBuild
+      const newSub: SubBuild = {
+        title: title ?? `Variante ${(this.currentBuild.subBuilds?.length ?? 0) + 2}`,
+        description: '',
+        champion: this.currentBuild.champion, // Toujours le champion du build principal
+        items: [...(source.items ?? [])],
+        runes: source.runes
+          ? {
+              ...source.runes,
+              primary: { ...source.runes.primary },
+              secondary: { ...source.runes.secondary },
+            }
+          : null,
+        shards: source.shards ? { ...source.shards } : null,
+        summonerSpells: [...(source.summonerSpells ?? [null, null])] as [any, any],
+        skillOrder: source.skillOrder
+          ? {
+              firstThreeUps: [...source.skillOrder.firstThreeUps] as any,
+              skillUpOrder: [...source.skillOrder.skillUpOrder] as any,
+            }
+          : null,
+        roles: [...(source.roles ?? [])],
+        gameVersion: source.gameVersion || '',
+      }
+      if (!this.currentBuild.subBuilds) this.currentBuild.subBuilds = []
+      this.currentBuild.subBuilds.push(newSub)
+      this.displayedVariant = this.currentBuild.subBuilds.length - 1
+      this.currentBuild.updatedAt = new Date().toISOString()
+      this.recalculateStats()
+    },
+
+    /** Affiche le build principal (variante 'main'). */
+    showMainBuild() {
+      this.displayedVariant = 'main'
+      this.recalculateStats()
+    },
+
+    /** Affiche la variante à l'index donné. */
+    showSubBuild(index: number) {
+      const subs = this.currentBuild?.subBuilds
+      if (!subs || index < 0 || index >= subs.length) return
+      this.displayedVariant = index
+      this.recalculateStats()
+    },
+
+    /** Supprime la variante à l'index donné. */
+    removeSubBuild(index: number) {
+      if (!this.currentBuild?.subBuilds) return
+      this.currentBuild.subBuilds.splice(index, 1)
+      // Réajuster displayedVariant si nécessaire
+      if (this.displayedVariant === index) {
+        this.displayedVariant = 'main'
+      } else if (typeof this.displayedVariant === 'number' && this.displayedVariant > index) {
+        this.displayedVariant = (this.displayedVariant as number) - 1
+      }
+      this.currentBuild.updatedAt = new Date().toISOString()
+      this.recalculateStats()
+    },
+
+    /** Met à jour le titre d'une variante. */
+    setSubBuildTitle(index: number, title: string) {
+      const sub = this.currentBuild?.subBuilds?.[index]
+      if (sub) {
+        sub.title = title
+        this.currentBuild!.updatedAt = new Date().toISOString()
+      }
+    },
+
+    /** Met à jour la description d'une variante. */
+    setSubBuildDescription(index: number, description: string) {
+      const sub = this.currentBuild?.subBuilds?.[index]
+      if (sub) {
+        sub.description = description
+        this.currentBuild!.updatedAt = new Date().toISOString()
+      }
+    },
+
+    /** Change le mode de description (single/multiple). */
+    setDescriptionMode(mode: 'single' | 'multiple') {
+      if (this.currentBuild) {
+        this.currentBuild.descriptionMode = mode
+        this.currentBuild.updatedAt = new Date().toISOString()
+      }
+    },
+
+    /**
+     * Tente de changer le champion du build.
+     * Si des variantes existent, stocke le champion en attente et retourne false (l'UI doit afficher un popup).
+     * Retourne true si le changement a été appliqué directement.
+     */
+    setChampion(champion: Champion): boolean {
       if (!this.currentBuild) {
         this.createNewBuild()
+      }
+      const hasVariants = (this.currentBuild?.subBuilds?.length ?? 0) > 0
+      if (hasVariants) {
+        this.pendingChampionChange = champion
+        return false
       }
       if (this.currentBuild) {
         this.currentBuild.champion = champion
         this.currentBuild.updatedAt = new Date().toISOString()
-        // Trigger stats recalculation
         this.recalculateStats()
       }
+      return true
+    },
+
+    /** Confirme le changement de champion en attente : supprime les variantes et applique. */
+    confirmChampionChange() {
+      if (!this.pendingChampionChange || !this.currentBuild) return
+      this.currentBuild.champion = this.pendingChampionChange
+      this.currentBuild.subBuilds = []
+      this.currentBuild.updatedAt = new Date().toISOString()
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
+      this.recalculateStats()
+    },
+
+    /** Annule le changement de champion en attente. */
+    cancelChampionChange() {
+      this.pendingChampionChange = null
+    },
+
+    /**
+     * Retourne la cible d'édition courante : soit le build principal, soit la variante affichée.
+     */
+    getEditableTarget():
+      | { type: 'main'; build: Build }
+      | { type: 'sub'; build: Build; sub: SubBuild; index: number }
+      | null {
+      if (!this.currentBuild) return null
+      if (this.displayedVariant === 'main') {
+        return { type: 'main', build: this.currentBuild }
+      }
+      const idx = this.displayedVariant as number
+      const subs = this.currentBuild.subBuilds as SubBuild[] | undefined
+      if (!subs || idx < 0 || idx >= subs.length) {
+        return { type: 'main', build: this.currentBuild }
+      }
+      const sub = subs[idx]
+      if (!sub) {
+        return { type: 'main', build: this.currentBuild }
+      }
+      return { type: 'sub', build: this.currentBuild, sub, index: idx }
     },
 
     addItem(item: Item) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild && this.currentBuild.items.length < 10) {
-        this.currentBuild.items.push(item)
-        this.currentBuild.updatedAt = new Date().toISOString()
-        this.recalculateStats()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        if (target.build.items.length >= 10) return
+        target.build.items.push(item)
+      } else {
+        target.sub.items = [...(target.sub.items ?? []), item]
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     removeItem(itemId: string) {
-      if (this.currentBuild) {
-        this.currentBuild.items = this.currentBuild.items.filter(item => item.id !== itemId)
-        this.currentBuild.updatedAt = new Date().toISOString()
-        this.recalculateStats()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.items = target.build.items.filter(item => item.id !== itemId)
+      } else {
+        target.sub.items = (target.sub.items ?? []).filter(item => item.id !== itemId)
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     setItems(items: Item[]) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.items = items
-        this.currentBuild.updatedAt = new Date().toISOString()
-        this.recalculateStats()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.items = items
+      } else {
+        target.sub.items = items
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     setRunes(runes: RuneSelection) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.runes = runes
-        this.currentBuild.updatedAt = new Date().toISOString()
-        this.recalculateStats()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.runes = runes
+      } else {
+        target.sub.runes = runes
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     setShards(shards: ShardSelection) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.shards = shards
-        this.currentBuild.updatedAt = new Date().toISOString()
-        this.recalculateStats()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.shards = shards
+      } else {
+        target.sub.shards = shards
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     setSummonerSpell(slot: 0 | 1, spell: SummonerSpell | null) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.summonerSpells[slot] = spell
-        this.currentBuild.updatedAt = new Date().toISOString()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.summonerSpells[slot] = spell
+      } else {
+        if (!target.sub.summonerSpells) {
+          target.sub.summonerSpells = [null, null]
+        }
+        target.sub.summonerSpells[slot] = spell
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
+      this.recalculateStats()
     },
 
     setSkillOrder(skillOrder: SkillOrder) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.skillOrder = skillOrder
-        this.currentBuild.updatedAt = new Date().toISOString()
+      const target = this.getEditableTarget()
+      if (!target) return
+      if (target.type === 'main') {
+        target.build.skillOrder = skillOrder
+      } else {
+        target.sub.skillOrder = skillOrder
       }
+      this.currentBuild!.updatedAt = new Date().toISOString()
     },
 
+    /** Rôles partagés entre le build principal et toutes les variantes. */
     setRoles(roles: Role[]) {
       if (!this.currentBuild) {
         this.createNewBuild()
       }
-      if (this.currentBuild) {
-        this.currentBuild.roles = roles
-        this.currentBuild.updatedAt = new Date().toISOString()
+      if (!this.currentBuild) return
+      this.currentBuild.roles = roles
+      if (this.currentBuild.subBuilds && this.currentBuild.subBuilds.length > 0) {
+        this.currentBuild.subBuilds = this.currentBuild.subBuilds.map(sub => ({
+          ...sub,
+          roles,
+        }))
       }
+      this.currentBuild.updatedAt = new Date().toISOString()
     },
 
     setName(name: string) {
@@ -332,21 +551,21 @@ export const useBuildStore = defineStore('build', {
     },
 
     recalculateStats() {
-      if (!this.currentBuild || !this.currentBuild.champion) {
+      const build = this.displayedBuild ?? this.currentBuild
+      if (!build || !build.champion) {
         this.calculatedStats = null
         return
       }
 
       // Import and use stats calculator
       import('@lelanation/builds-stats').then(({ calculateStats, filterItemsForStats }) => {
-        const filteredItems = filterItemsForStats(this.currentBuild!.items)
-        const stats = calculateStats(
-          this.currentBuild!.champion,
-          filteredItems,
-          this.currentBuild!.runes,
-          this.currentBuild!.shards,
-          18 // Level 18 for now
-        )
+        const b = this.displayedBuild ?? this.currentBuild
+        if (!b || !b.champion) {
+          this.calculatedStats = null
+          return
+        }
+        const filteredItems = filterItemsForStats(b.items)
+        const stats = calculateStats(b.champion, filteredItems, b.runes, b.shards, 18)
         this.calculatedStats = stats
       })
     },
@@ -499,7 +718,14 @@ export const useBuildStore = defineStore('build', {
         const savedBuilds = this.getSavedBuilds()
         const build = savedBuilds.find(b => b.id === buildId)
         if (build) {
-          this.currentBuild = build
+          // Normaliser les champs sous-builds pour les anciens builds
+          this.currentBuild = {
+            ...build,
+            subBuilds: build.subBuilds ?? [],
+            descriptionMode: build.descriptionMode ?? 'single',
+          }
+          this.displayedVariant = 'main'
+          this.pendingChampionChange = null
           this.status = 'success'
           this.error = null
           this.recalculateStats()

@@ -267,6 +267,34 @@ export interface SkillOrder {
 
 export type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 
+/** A build variant (sub-build). Same content as Build but champion is always inherited from the parent build. */
+export interface SubBuild {
+  title: string
+  description?: string
+  champion: Champion | null
+  items: Item[]
+  runes: RuneSelection | null
+  shards: ShardSelection | null
+  summonerSpells: [SummonerSpell | null, SummonerSpell | null]
+  skillOrder: SkillOrder | null
+  roles: Role[]
+  gameVersion: string
+}
+
+/** Lightweight (serialized) version of SubBuild for storage. */
+export interface StoredSubBuild {
+  title: string
+  description?: string
+  champion: ChampionRef | null
+  items: ItemRef[]
+  runes: RuneSelection | null
+  shards: ShardSelection | null
+  summonerSpells: [SummonerSpellRef | null, SummonerSpellRef | null]
+  skillOrder: SkillOrder | null
+  roles: Role[]
+  gameVersion: string
+}
+
 export interface Build {
   id: string
   name: string
@@ -285,6 +313,8 @@ export interface Build {
   gameVersion: string
   createdAt: string
   updatedAt: string
+  subBuilds?: SubBuild[]
+  descriptionMode?: 'single' | 'multiple'
 }
 
 export interface ChampionRef {
@@ -322,6 +352,8 @@ export interface StoredBuild {
   gameVersion: string
   createdAt: string
   updatedAt: string
+  subBuilds?: StoredSubBuild[]
+  descriptionMode?: 'single' | 'multiple'
 }
 
 export interface CalculatedStats {

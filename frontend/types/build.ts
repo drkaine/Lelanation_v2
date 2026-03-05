@@ -16,6 +16,8 @@ export type {
   SkillOrder,
   Role,
   Build,
+  SubBuild,
+  StoredSubBuild,
   ChampionRef,
   ItemRef,
   SummonerSpellRef,

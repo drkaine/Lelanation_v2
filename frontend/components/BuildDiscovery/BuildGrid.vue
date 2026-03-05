@@ -25,7 +25,18 @@
           class="flex min-h-[60px] w-full max-w-[300px] flex-col justify-center space-y-1 text-center"
         >
           <!-- Nom du build + badge visibilité -->
-          <h3 class="text-lg font-semibold text-text">{{ build.name || build.id }}</h3>
+          <h3 class="text-lg font-semibold text-text">
+            {{ getDisplayedTitle(build) }}
+          </h3>
+          <div
+            v-if="(build.subBuilds?.length ?? 0) > 0"
+            class="flex items-center justify-center text-xs text-text/60"
+          >
+            <span>
+              {{ 1 + (build.subBuilds?.length ?? 0) }}
+              {{ 1 + (build.subBuilds?.length ?? 0) > 1 ? 'variantes' : 'variante' }}
+            </span>
+          </div>
           <!-- Auteur -->
           <div class="flex items-center justify-center gap-1.5 text-sm text-text/70">
             <span>{{ build.author || t('buildDiscovery.anonymous') }}</span>
@@ -51,7 +62,15 @@
         <div class="relative">
           <div class="cursor-pointer" @click="navigateToBuild(build.id)">
             <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
-              <BuildCard :build="build" :readonly="true" />
+              <BuildCard
+                :build="build"
+                :readonly="true"
+                @variant-change="
+                  idx => {
+                    displayedSubMap[build.id] = idx
+                  }
+                "
+              />
             </div>
           </div>
           <!-- Boutons d'action utilisateur (supprimer/modifier) -->
@@ -214,16 +233,16 @@
 
           <!-- Description -->
           <div class="min-h-[60px] text-sm text-text/80">
-            <template v-if="build.description">
+            <template v-if="getDisplayedDescription(build)">
               <!-- eslint-disable vue/no-v-html -->
               <p
                 :class="expandedDescriptions[build.id] ? '' : 'line-clamp-3'"
                 class="whitespace-pre-wrap"
-                v-html="linkifyDescription(build.description)"
+                v-html="linkifyDescription(getDisplayedDescription(build) || '')"
               />
               <!-- eslint-enable vue/no-v-html -->
               <button
-                v-if="build.description.length > 150"
+                v-if="(getDisplayedDescription(build) || '').length > 150"
                 class="mt-1 text-xs text-accent hover:text-accent/80"
                 @click.stop="toggleDescription(build.id)"
               >
@@ -268,6 +287,26 @@ const buildStore = useBuildStore()
 const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 const expandedDescriptions = ref<Record<string, boolean>>({})
+/** Variante actuellement affichée par build (null = principale). */
+const displayedSubMap = ref<Record<string, number | null>>({})
+
+function getDisplayedTitle(build: Build): string {
+  const idx = displayedSubMap.value[build.id]
+  if (idx == null) return build.name || build.id
+  const sub = (build.subBuilds ?? [])[idx]
+  if (sub && sub.title) return sub.title
+  return build.name || build.id
+}
+
+function getDisplayedDescription(build: Build): string | undefined {
+  const mode = build.descriptionMode ?? 'single'
+  const idx = displayedSubMap.value[build.id]
+  if (mode === 'single' || idx == null) {
+    return build.description
+  }
+  const sub = (build.subBuilds ?? [])[idx]
+  return sub?.description ?? build.description
+}
 
 interface Props {
   showComparisonButtons?: boolean
@@ -439,13 +478,13 @@ const toggleShareDropdown = (buildId: string) => {
 }
 
 const copyBuildLink = async (buildId: string) => {
-  const buildUrl = `${window.location.origin}/builds/${buildId}`
+  const subIdx = displayedSubMap.value[buildId]
+  const subParam = typeof subIdx === 'number' ? `?sub=${subIdx}` : ''
+  const buildUrl = `${window.location.origin}/builds/${buildId}${subParam}`
   try {
     await navigator.clipboard.writeText(buildUrl)
     openShareDropdown.value = null
-    // Optionnel: afficher une notification
   } catch (error) {
-    // Fallback pour les navigateurs qui ne supportent pas clipboard API
     const textarea = document.createElement('textarea')
     textarea.value = buildUrl
     document.body.appendChild(textarea)
@@ -610,6 +649,15 @@ const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
         }
       })
     }
+
+    // Forcer l'affichage de la face avant (retirer l'état "flipped" sur le clone)
+    const flipContainers = clonedElement.querySelectorAll('.flip-container')
+    flipContainers.forEach(fc => fc.classList.remove('flipped'))
+    // Cacher explicitement les faces arrière pour éviter de capturer la liste des variantes
+    const backFaces = clonedElement.querySelectorAll('.build-card-back') as NodeListOf<HTMLElement>
+    backFaces.forEach(b => {
+      b.style.display = 'none'
+    })
 
     // Nettoyer les styles
     sanitizeStyles(clonedElement)

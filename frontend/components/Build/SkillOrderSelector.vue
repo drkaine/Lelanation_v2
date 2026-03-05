@@ -235,7 +235,7 @@ const initializeSkillOrder = () => {
   if (!buildStore.currentBuild) {
     buildStore.createNewBuild()
   }
-  if (!buildStore.currentBuild?.skillOrder) {
+  if (!buildStore.displayedBuild?.skillOrder) {
     const newSkillOrder: SkillOrder = {
       firstThreeUps: [null as any, null as any, null as any],
       skillUpOrder: [null as any, null as any, null as any],
@@ -247,7 +247,7 @@ const initializeSkillOrder = () => {
 // Getters pour les 3 premiers up
 const getFirstThreeUp = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
   initializeSkillOrder()
-  const skillOrder = buildStore.currentBuild?.skillOrder
+  const skillOrder = buildStore.displayedBuild?.skillOrder
   if (!skillOrder || !skillOrder.firstThreeUps) return null
   return skillOrder.firstThreeUps[index] || null
 }
@@ -255,7 +255,7 @@ const getFirstThreeUp = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
 // Getters pour l'ordre de up
 const getSkillUpOrder = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
   initializeSkillOrder()
-  const skillOrder = buildStore.currentBuild?.skillOrder
+  const skillOrder = buildStore.displayedBuild?.skillOrder
   if (!skillOrder || !skillOrder.skillUpOrder) return null
   return skillOrder.skillUpOrder[index] || null
 }
@@ -293,7 +293,7 @@ const toggleFirstThreeUp = (index: number, ability: string) => {
   const current = getFirstThreeUp(index)
   // Si on reclique sur le skill déjà sélectionné, on le désélectionne
   if (current === ability) {
-    const skillOrder = buildStore.currentBuild.skillOrder || {
+    const skillOrder = buildStore.displayedBuild?.skillOrder || {
       firstThreeUps: [null as any, null as any, null as any],
       skillUpOrder: [null as any, null as any, null as any],
     }
@@ -312,7 +312,7 @@ const toggleFirstThreeUp = (index: number, ability: string) => {
   }
 
   if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
-    const skillOrder = buildStore.currentBuild.skillOrder || {
+    const skillOrder = buildStore.displayedBuild?.skillOrder || {
       firstThreeUps: [null as any, null as any, null as any],
       skillUpOrder: [null as any, null as any, null as any],
     }
@@ -338,7 +338,7 @@ const toggleSkillUpOrder = (index: number, ability: string) => {
   const current = getSkillUpOrder(index)
   // Si on reclique sur le skill déjà sélectionné, on le désélectionne
   if (current === ability) {
-    const skillOrder = buildStore.currentBuild.skillOrder || {
+    const skillOrder = buildStore.displayedBuild?.skillOrder || {
       firstThreeUps: [null as any, null as any, null as any],
       skillUpOrder: [null as any, null as any, null as any],
     }
@@ -357,7 +357,7 @@ const toggleSkillUpOrder = (index: number, ability: string) => {
   }
 
   if (ability === 'Q' || ability === 'W' || ability === 'E' || ability === 'R') {
-    const skillOrder = buildStore.currentBuild.skillOrder || {
+    const skillOrder = buildStore.displayedBuild?.skillOrder || {
       firstThreeUps: [null as any, null as any, null as any],
       skillUpOrder: [null as any, null as any, null as any],
     }
@@ -380,7 +380,7 @@ const toggleSkillUpOrder = (index: number, ability: string) => {
 // mais peut réapparaître en 1 et 3 (ex: Q → W → Q est valide).
 const isFirstThreeUpSelected = (spellId: string, currentIndex: number): boolean => {
   initializeSkillOrder()
-  const skillOrder = buildStore.currentBuild?.skillOrder
+  const skillOrder = buildStore.displayedBuild?.skillOrder
   if (!skillOrder || !skillOrder.firstThreeUps) return false
   const ups = skillOrder.firstThreeUps
   const adjacentIndices = currentIndex === 0 ? [1] : currentIndex === 1 ? [0, 2] : [1]
@@ -391,7 +391,7 @@ const isFirstThreeUpSelected = (spellId: string, currentIndex: number): boolean 
 // Règle stricte : les 3 compétences doivent toutes être différentes.
 const isSkillUpOrderSelected = (spellId: string, currentIndex: number): boolean => {
   initializeSkillOrder()
-  const skillOrder = buildStore.currentBuild?.skillOrder
+  const skillOrder = buildStore.displayedBuild?.skillOrder
   if (!skillOrder || !skillOrder.skillUpOrder) return false
   return skillOrder.skillUpOrder.some(
     (selected, idx) => idx !== currentIndex && selected === spellId

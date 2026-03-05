@@ -185,7 +185,7 @@ const router = useRouter()
 
 const creators = computed(() => youtube.creators)
 
-type VideoCategory = 'all' | 'builds' | 'recap' | 'tierlist' | 'other'
+type VideoCategory = 'all' | 'builds' | 'lobby' | 'other'
 type VideoFormat = 'all' | 'videos' | 'shorts'
 type ChannelFilter = 'all' | string
 
@@ -196,9 +196,8 @@ const selectedFormat = ref<VideoFormat>('all')
 
 const typeOptions = [
   { id: 'all' as const, label: 'Tous' },
-  { id: 'tierlist' as const, label: 'Tierlist' },
   { id: 'builds' as const, label: 'Build' },
-  { id: 'recap' as const, label: 'Debrief' },
+  { id: 'lobby' as const, label: 'Lobby' },
 ]
 
 const formatOptions = [
@@ -224,9 +223,8 @@ const normalize = (s: string) =>
 
 const detectType = (title: string): Exclude<VideoCategory, 'all'> => {
   const t = normalize(title)
-  if (/(tier\s*list|tierlist)/.test(t)) return 'tierlist'
+  if (/lobby/.test(t)) return 'lobby'
   if (/\bbuilds?\b/.test(t)) return 'builds'
-  if (/(debrief|debriefing|d[ée]brief|recap|recapitulatif|r[ée]cap)/.test(t)) return 'recap'
   return 'other'
 }
 

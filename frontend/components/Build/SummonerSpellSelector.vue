@@ -56,7 +56,7 @@ const availableSpells = computed(() => {
 })
 
 const isSelected = (spell: SummonerSpell): boolean => {
-  const spells = buildStore.currentBuild?.summonerSpells
+  const spells = buildStore.displayedBuild?.summonerSpells
   return (
     spells?.[0]?.id === spell.id ||
     spells?.[0]?.key === spell.key ||
@@ -68,7 +68,7 @@ const isSelected = (spell: SummonerSpell): boolean => {
 
 const isDisabled = (spell: SummonerSpell): boolean => {
   // Disable if already selected in both slots
-  const spells = buildStore.currentBuild?.summonerSpells
+  const spells = buildStore.displayedBuild?.summonerSpells
   const isInSlot0 = spells?.[0]?.id === spell.id || spells?.[0]?.key === spell.key
   const isInSlot1 = spells?.[1]?.id === spell.id || spells?.[1]?.key === spell.key
 
@@ -81,7 +81,7 @@ const isDisabled = (spell: SummonerSpell): boolean => {
 }
 
 const getSpellSlot = (spell: SummonerSpell): number => {
-  const spells = buildStore.currentBuild?.summonerSpells
+  const spells = buildStore.displayedBuild?.summonerSpells
   if (spells?.[0]?.id === spell.id || spells?.[0]?.key === spell.key) {
     return 1
   }
@@ -92,7 +92,7 @@ const getSpellSlot = (spell: SummonerSpell): number => {
 }
 
 const selectSpell = (spell: SummonerSpell) => {
-  const spells = buildStore.currentBuild?.summonerSpells
+  const spells = buildStore.displayedBuild?.summonerSpells
 
   // If spell is already selected, remove it
   if (isSelected(spell)) {

@@ -6,11 +6,35 @@
 import type {
   Build,
   StoredBuild,
+  SubBuild,
+  StoredSubBuild,
   SummonerSpellRef,
+  ItemRef,
   Champion,
   Item,
   SummonerSpell,
 } from '@lelanation/shared-types'
+
+function serializeSubBuild(sub: SubBuild): StoredSubBuild {
+  return {
+    title: sub.title,
+    description: sub.description,
+    champion: sub.champion
+      ? { id: sub.champion.id, name: sub.champion.name, image: sub.champion.image }
+      : null,
+    items: sub.items.map((item: Item) => ({ id: item.id, image: item.image })),
+    runes: sub.runes,
+    shards: sub.shards,
+    summonerSpells: sub.summonerSpells.map((spell: SummonerSpell | null) =>
+      spell ? { id: spell.id, key: spell.key, image: spell.image } : null
+    ) as [SummonerSpellRef | null, SummonerSpellRef | null],
+    skillOrder: sub.skillOrder
+      ? { firstThreeUps: sub.skillOrder.firstThreeUps, skillUpOrder: sub.skillOrder.skillUpOrder }
+      : null,
+    roles: sub.roles ?? [],
+    gameVersion: sub.gameVersion,
+  }
+}
 
 /** Reduce a full build to lightweight format for storage */
 export function serializeBuild(build: Build): StoredBuild {
@@ -38,6 +62,8 @@ export function serializeBuild(build: Build): StoredBuild {
     gameVersion: build.gameVersion,
     createdAt: build.createdAt,
     updatedAt: build.updatedAt,
+    subBuilds: build.subBuilds ? build.subBuilds.map(serializeSubBuild) : undefined,
+    descriptionMode: build.descriptionMode,
   }
 }
 
@@ -60,53 +86,78 @@ export interface HydrationCatalogs {
   getSpellById: (id: string) => SummonerSpell | undefined
 }
 
-/** Reconstruct a full build from lightweight storage, using provided catalogs */
-export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): Build {
-  const champion: Champion | null = stored.champion
-    ? (catalogs.champions.find(c => c.id === stored.champion!.id) ?? {
-        id: stored.champion.id,
-        key: stored.champion.id,
-        name: stored.champion.name,
-        title: '',
-        image: { full: stored.champion.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
-        stats: {} as Champion['stats'],
-        spells: [],
-        passive: { name: '', description: '', image: { full: stored.champion.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 } },
-        tags: [],
-      } as Champion)
-    : null
+function resolveChampion(ref: { id: string; name: string; image: { full: string } } | null, catalogs: HydrationCatalogs): Champion | null {
+  if (!ref) return null
+  return catalogs.champions.find(c => c.id === ref.id) ?? {
+    id: ref.id,
+    key: ref.id,
+    name: ref.name,
+    title: '',
+    image: { full: ref.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
+    stats: {} as Champion['stats'],
+    spells: [],
+    passive: { name: '', description: '', image: { full: ref.image.full, sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 } },
+    tags: [],
+  } as Champion
+}
 
-  const items: Item[] = stored.items.map(ref => {
+function resolveItems(refs: ItemRef[], catalogs: HydrationCatalogs): Item[] {
+  return refs.map((ref: ItemRef) => {
     const full = catalogs.items.find(i => i.id === ref.id)
     if (full) return full
+    const img = ref.image as { full: string; sprite?: string; group?: string; x?: number; y?: number; w?: number; h?: number } | undefined
     return {
       id: ref.id,
       name: ref.id,
       description: '',
       colloq: '',
       plaintext: '',
-      image: ref.image ?? { full: '', sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
+      image: img
+        ? { full: img.full, sprite: img.sprite ?? '', group: img.group ?? '', x: img.x ?? 0, y: img.y ?? 0, w: img.w ?? 0, h: img.h ?? 0 }
+        : { full: '', sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
       gold: { base: 0, total: 0, sell: 0, purchasable: false },
       tags: [],
       depth: 0,
     } as Item
   })
+}
 
-  const summonerSpells: [SummonerSpell | null, SummonerSpell | null] = stored.summonerSpells.map(
-    ref => {
-      if (!ref) return null
-      const full = catalogs.getSpellById(ref.id) ?? catalogs.getSpellById(ref.key ?? '')
-      if (full) return full
-      return {
-        id: ref.id, key: ref.key ?? ref.id, name: ref.id, description: '', tooltip: '',
-        maxrank: 1, cooldown: [], cooldownBurn: '', cost: [], costBurn: '', datavalues: {},
-        effect: [], effectBurn: [], vars: [], summonerLevel: 1, modes: [], costType: '',
-        maxammo: '', range: [], rangeBurn: '',
-        image: ref.image ?? { full: '', sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
-        resource: '',
-      } as SummonerSpell
-    }
-  ) as [SummonerSpell | null, SummonerSpell | null]
+function resolveSpells(refs: [SummonerSpellRef | null, SummonerSpellRef | null], catalogs: HydrationCatalogs): [SummonerSpell | null, SummonerSpell | null] {
+  return refs.map(ref => {
+    if (!ref) return null
+    const full = catalogs.getSpellById(ref.id) ?? catalogs.getSpellById(ref.key ?? '')
+    if (full) return full
+    return {
+      id: ref.id, key: ref.key ?? ref.id, name: ref.id, description: '', tooltip: '',
+      maxrank: 1, cooldown: [], cooldownBurn: '', cost: [], costBurn: '', datavalues: {},
+      effect: [], effectBurn: [], vars: [], summonerLevel: 1, modes: [], costType: '',
+      maxammo: '', range: [], rangeBurn: '',
+      image: ref.image ?? { full: '', sprite: '', group: '', x: 0, y: 0, w: 0, h: 0 },
+      resource: '',
+    } as SummonerSpell
+  }) as [SummonerSpell | null, SummonerSpell | null]
+}
+
+function hydrateSubBuild(stored: StoredSubBuild, catalogs: HydrationCatalogs): SubBuild {
+  return {
+    title: stored.title,
+    description: stored.description,
+    champion: resolveChampion(stored.champion, catalogs),
+    items: resolveItems(stored.items, catalogs),
+    runes: stored.runes,
+    shards: stored.shards,
+    summonerSpells: resolveSpells(stored.summonerSpells, catalogs),
+    skillOrder: normalizeSkillOrder(stored.skillOrder),
+    roles: stored.roles ?? [],
+    gameVersion: stored.gameVersion,
+  }
+}
+
+/** Reconstruct a full build from lightweight storage, using provided catalogs */
+export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): Build {
+  const champion = resolveChampion(stored.champion, catalogs)
+  const items = resolveItems(stored.items, catalogs)
+  const summonerSpells = resolveSpells(stored.summonerSpells, catalogs)
 
   return {
     id: stored.id, name: stored.name, author: stored.author, description: stored.description,
@@ -114,6 +165,8 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     summonerSpells, skillOrder: normalizeSkillOrder(stored.skillOrder),
     roles: stored.roles, upvote: stored.upvote, downvote: stored.downvote,
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,
+    subBuilds: stored.subBuilds ? stored.subBuilds.map(s => hydrateSubBuild(s, catalogs)) : undefined,
+    descriptionMode: stored.descriptionMode,
   }
 }
 

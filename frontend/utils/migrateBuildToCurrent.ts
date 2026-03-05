@@ -54,6 +54,9 @@ export async function migrateBuildToCurrent(
     downvote: build.downvote ?? 0,
     gameVersion: currentVersion,
     updatedAt: new Date().toISOString(),
+    // Initialiser les champs sous-builds pour les builds anciens
+    subBuilds: build.subBuilds ?? [],
+    descriptionMode: build.descriptionMode ?? 'single',
   }
 
   // Champion: replace with current champion if available

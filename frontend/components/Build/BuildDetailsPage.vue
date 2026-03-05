@@ -27,8 +27,8 @@
           </NuxtLink>
           <!-- Nom du build centré -->
           <div class="mx-auto flex flex-col text-center">
-            <!-- Nom du build -->
-            <h3 class="text-lg font-semibold text-text">{{ build.name || 'Sans nom' }}</h3>
+            <!-- Nom du build / variante affichée -->
+            <h3 class="text-lg font-semibold text-text">{{ activeTitle }}</h3>
             <!-- Auteur -->
             <div class="text-sm text-text/70">
               <span class="ml-1">{{ build.author || t('buildDiscovery.anonymous') }}</span>
@@ -49,7 +49,16 @@
           <div class="flex-shrink-0 lg:w-auto">
             <div class="relative">
               <div ref="buildCardRef" :data-build-id="build.id">
-                <BuildCard :build="build" :readonly="true" :sheet-tooltips="true" />
+                <BuildCard
+                  :build="detailDisplayedBuild || build"
+                  :readonly="true"
+                  :sheet-tooltips="true"
+                  @variant-change="
+                    idx => {
+                      detailDisplayedSubIndex = idx
+                    }
+                  "
+                />
               </div>
               <!-- Boutons d'action utilisateur (supprimer/modifier) -->
               <div v-if="isUserBuild" class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
@@ -73,7 +82,7 @@
               </div>
             </div>
 
-            <!-- Informations en dessous de la sheet (description, date, votes, partager) -->
+            <!-- Informations en dessous de la sheet (votes, partager) -->
             <div class="mt-4 w-full max-w-[300px] space-y-2">
               <div class="flex items-center justify-end gap-2">
                 <!-- Bouton Theorycraft (visible pour tous) -->
@@ -155,48 +164,61 @@
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <!-- Description -->
+          <!-- Colonne droite: Description / Statistiques -->
+          <div class="flex-1">
+            <!-- Onglets -->
+            <div class="mb-4 flex gap-2 border-b border-primary/20">
+              <button
+                type="button"
+                class="px-4 py-2 text-sm font-semibold transition-colors"
+                :class="
+                  activeTab === 'description'
+                    ? 'border-b-2 border-accent text-accent'
+                    : 'text-text/60 hover:text-text'
+                "
+                @click="activeTab = 'description'"
+              >
+                Description
+              </button>
+              <button
+                type="button"
+                class="px-4 py-2 text-sm font-semibold transition-colors"
+                :class="
+                  activeTab === 'stats'
+                    ? 'border-b-2 border-accent text-accent'
+                    : 'text-text/60 hover:text-text'
+                "
+                @click="activeTab = 'stats'"
+              >
+                Statistiques
+              </button>
+            </div>
+
+            <!-- Contenu onglet Description -->
+            <div v-if="activeTab === 'description'" class="space-y-3">
               <div class="text-sm text-text/80">
-                <template v-if="build.description">
+                <template v-if="activeDescription">
                   <!-- eslint-disable vue/no-v-html -->
-                  <p
-                    v-if="build.description.length <= 150 || isDescriptionExpanded"
-                    class="whitespace-pre-wrap"
-                    v-html="linkifyDescription(build.description)"
-                  />
-                  <p
-                    v-else
-                    class="line-clamp-3 whitespace-pre-wrap"
-                    v-html="linkifyDescription(build.description)"
-                  />
+                  <p class="whitespace-pre-wrap" v-html="linkifyDescription(activeDescription)" />
                   <!-- eslint-enable vue/no-v-html -->
-                  <button
-                    v-if="build.description.length > 150"
-                    class="mt-1 text-xs text-accent hover:text-accent/80"
-                    @click="isDescriptionExpanded = !isDescriptionExpanded"
-                  >
-                    {{ isDescriptionExpanded ? 'Voir moins' : 'Voir plus' }}
-                  </button>
                 </template>
               </div>
 
-              <!-- Date de création -->
               <p v-if="build.createdAt" class="text-xs text-text/50">
                 Créé le : {{ formatDate(build.createdAt) }}
               </p>
             </div>
-          </div>
 
-          <!-- Colonne droite: Statistiques -->
-          <div class="flex-1">
-            <div class="mb-6">
-              <h2 class="text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
-            </div>
-
-            <!-- Statistiques -->
-            <div class="tab-content">
-              <StatsTable v-if="build && build.champion" :build="build" />
+            <!-- Contenu onglet Statistiques -->
+            <div v-else class="tab-content">
+              <h2 class="mb-3 text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
+              <StatsTable
+                v-if="detailDisplayedBuild && detailDisplayedBuild.champion"
+                :build="detailDisplayedBuild"
+              />
               <div v-else class="py-8 text-center">
                 <p class="text-text/70">
                   {{ build ? 'Chargement du build...' : 'Aucun build chargé' }}
@@ -244,6 +266,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
@@ -253,6 +276,7 @@ import StatsTable from '~/components/Build/StatsTable.vue'
 import { apiUrl } from '~/utils/apiUrl'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
+import type { Build, SubBuild } from '~/types/build'
 
 const props = defineProps<{ buildId: string }>()
 
@@ -261,6 +285,7 @@ const voteStore = useVoteStore()
 const discoveryStore = useBuildDiscoveryStore()
 const localePath = useLocalePath()
 const { t } = useI18n()
+const route = useRoute()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -268,7 +293,50 @@ const build = computed(() => buildStore.currentBuild)
 const openShareDropdown = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
 const buildToDelete = ref<string | null>(null)
-const isDescriptionExpanded = ref(false)
+
+/** Variante sélectionnée localement sur la page détail (null = principale). */
+const detailDisplayedSubIndex = ref<number | null>(null)
+const activeTab = ref<'description' | 'stats'>('description')
+
+const detailDisplayedBuild = computed<Build | null>(() => {
+  if (!build.value) return null
+  if (detailDisplayedSubIndex.value === null) return build.value
+  const subs = build.value.subBuilds as SubBuild[] | undefined
+  const sub = subs?.[detailDisplayedSubIndex.value]
+  if (!sub) return build.value
+  return {
+    ...build.value,
+    items: sub.items,
+    runes: sub.runes,
+    shards: sub.shards,
+    summonerSpells: sub.summonerSpells,
+    skillOrder: sub.skillOrder,
+    roles: sub.roles,
+    description: sub.description ?? build.value.description,
+    gameVersion: sub.gameVersion || build.value.gameVersion,
+  } as Build
+})
+
+const activeTitle = computed(() => {
+  const b = build.value
+  if (!b) return ''
+  if (detailDisplayedSubIndex.value === null) return b.name || 'Sans nom'
+  const subs = b.subBuilds as SubBuild[] | undefined
+  const sub = subs?.[detailDisplayedSubIndex.value]
+  return sub?.title || b.name || 'Sans nom'
+})
+
+const activeDescription = computed(() => {
+  const b = build.value
+  if (!b) return ''
+  const mode = b.descriptionMode ?? 'single'
+  if (mode === 'single' || detailDisplayedSubIndex.value === null) {
+    return b.description || ''
+  }
+  const subs = b.subBuilds as SubBuild[] | undefined
+  const sub = subs?.[detailDisplayedSubIndex.value]
+  return sub?.description ?? b.description ?? ''
+})
 
 const upvoteCount = computed(() => (build.value ? voteStore.getUpvoteCount(build.value.id) : 0))
 const downvoteCount = computed(() => (build.value ? voteStore.getDownvoteCount(build.value.id) : 0))
@@ -297,12 +365,13 @@ const toggleShareDropdown = () => {
 
 const copyBuildLink = async () => {
   if (!build.value) return
-  const buildUrl = `${window.location.origin}/builds/${build.value.id}`
+  const subParam =
+    typeof detailDisplayedSubIndex.value === 'number' ? `?sub=${detailDisplayedSubIndex.value}` : ''
+  const buildUrl = `${window.location.origin}/builds/${build.value.id}${subParam}`
   try {
     await navigator.clipboard.writeText(buildUrl)
     openShareDropdown.value = false
   } catch (error) {
-    // Fallback pour les navigateurs qui ne supportent pas clipboard API
     const textarea = document.createElement('textarea')
     textarea.value = buildUrl
     document.body.appendChild(textarea)
@@ -344,6 +413,15 @@ const captureBuildImage = async (): Promise<Blob | null> => {
     clonedElement.style.visibility = 'visible'
     clonedElement.style.pointerEvents = 'none'
     document.body.appendChild(clonedElement)
+
+    // Forcer l'affichage de la face avant (retirer l'état "flipped" sur le clone)
+    const flipContainers = clonedElement.querySelectorAll('.flip-container')
+    flipContainers.forEach(fc => fc.classList.remove('flipped'))
+    // Cacher explicitement les faces arrière pour éviter de capturer la liste des variantes
+    const backFaces = clonedElement.querySelectorAll('.build-card-back') as NodeListOf<HTMLElement>
+    backFaces.forEach(b => {
+      b.style.display = 'none'
+    })
 
     // Fonction pour forcer tous les backgrounds à être transparents sauf ceux explicitement définis
     const sanitizeStyles = (element: HTMLElement) => {
@@ -550,18 +628,30 @@ watch(
     if (!id) return
     loading.value = true
     error.value = null
+    detailDisplayedSubIndex.value = null
+
+    // Lire ?sub= pour afficher directement un sous-build
+    const subParam = route.query.sub
+    if (subParam !== undefined && subParam !== null) {
+      const subIdx = parseInt(String(subParam), 10)
+      if (!isNaN(subIdx) && subIdx >= 0) {
+        detailDisplayedSubIndex.value = subIdx
+      }
+    }
 
     // Essayer d'abord de charger depuis le localStorage
     const ok = buildStore.loadBuild(id)
     if (ok && build.value) {
-      // Migrer le build même s'il vient du localStorage pour s'assurer qu'il a la bonne structure
       try {
         const { migrated } = await migrateBuildToCurrent(build.value)
         buildStore.setCurrentBuild(migrated)
       } catch (e) {
-        // Si la migration échoue, on garde le build original
         // eslint-disable-next-line no-console
         console.warn('Migration failed for local build:', e)
+      }
+      // Appliquer la variante demandée via le store
+      if (detailDisplayedSubIndex.value !== null) {
+        buildStore.showSubBuild(detailDisplayedSubIndex.value)
       }
       loading.value = false
       return
@@ -576,6 +666,9 @@ watch(
         const buildToMigrate = isStoredBuild(buildData) ? hydrateBuild(buildData) : buildData
         const { migrated } = await migrateBuildToCurrent(buildToMigrate)
         buildStore.setCurrentBuild(migrated)
+        if (detailDisplayedSubIndex.value !== null) {
+          buildStore.showSubBuild(detailDisplayedSubIndex.value)
+        }
       } else {
         error.value = 'Build not found'
       }
@@ -587,6 +680,16 @@ watch(
   },
   { immediate: true }
 )
+
+// Quand l'utilisateur change de variante via la card, synchroniser le store
+watch(detailDisplayedSubIndex, idx => {
+  if (!build.value) return
+  if (idx === null) {
+    buildStore.showMainBuild()
+  } else {
+    buildStore.showSubBuild(idx)
+  }
+})
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString('fr-FR', {

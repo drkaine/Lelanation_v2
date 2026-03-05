@@ -143,9 +143,9 @@ const updateShardSelection = () => {
   buildStore.setShards(shardSelection)
 }
 
-// Load existing shard selection from build
+// Load existing shard selection from build ou variante affichée
 watch(
-  () => buildStore.currentBuild?.shards,
+  () => buildStore.displayedBuild?.shards,
   shards => {
     if (shards) {
       selectedShards.value = {

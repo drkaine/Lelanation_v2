@@ -539,7 +539,7 @@ const isItemFiltered = (item: Item): boolean => {
 }
 
 const availableSlots = computed(() => {
-  const items = buildStore.currentBuild?.items || []
+  const items = buildStore.displayedBuild?.items || []
   const starterItems = items.filter(i => isStarterItem(i))
   const bootsItems = items.filter(i => isBootsItem(i))
   const otherItems = items.filter(i => !isStarterItem(i) && !isBootsItem(i))
@@ -587,14 +587,14 @@ const canBeInCoreItems = (item: Item): boolean => {
 }
 
 const isSelected = (item: Item): boolean => {
-  if (!buildStore.currentBuild?.items || !item?.id) return false
+  if (!buildStore.displayedBuild?.items || !item?.id) return false
   // Compare by ID to ensure exact match (strict equality)
-  return buildStore.currentBuild.items.some(i => i && i.id === item.id)
+  return buildStore.displayedBuild.items.some(i => i && i.id === item.id)
 }
 
 const getItemIndex = (item: Item): number => {
-  if (!buildStore.currentBuild?.items) return 0
-  const index = buildStore.currentBuild.items.findIndex(i => i.id === item.id)
+  if (!buildStore.displayedBuild?.items) return 0
+  const index = buildStore.displayedBuild.items.findIndex(i => i.id === item.id)
   // Return index + 1 for display (1-based), or 0 if not found
   // This should only be called when isSelected(item) is true
   return index >= 0 ? index + 1 : 0
@@ -616,7 +616,7 @@ const isAtlasUpgrade = (item: Item): boolean => {
 }
 
 const hasSmite = (): boolean => {
-  const spells = buildStore.currentBuild?.summonerSpells || []
+  const spells = buildStore.displayedBuild?.summonerSpells || []
   if (!spells || spells.length === 0) return false
 
   return spells.some(spell => {
@@ -687,13 +687,13 @@ const isTier3Boots = (item: Item): boolean => {
 }
 
 const hasAtlasInStarters = (): boolean => {
-  const items = buildStore.currentBuild?.items || []
+  const items = buildStore.displayedBuild?.items || []
   const starterItems = items.filter(i => isStarterItem(i))
   return starterItems.some(i => isAtlas(i))
 }
 
 const hasAtlasUpgrade = (excludeItemId?: string): boolean => {
-  const items = buildStore.currentBuild?.items || []
+  const items = buildStore.displayedBuild?.items || []
   return items.some(i => isAtlasUpgrade(i) && i.id !== excludeItemId)
 }
 
@@ -746,7 +746,7 @@ const toggleItem = (item: Item) => {
     }
 
     // Add item with special logic
-    const currentItems = buildStore.currentBuild?.items || []
+    const currentItems = buildStore.displayedBuild?.items || []
     const starterItems = currentItems.filter(i => isStarterItem(i))
     const bootsItems = currentItems.filter(i => isBootsItem(i))
     const otherItems = currentItems.filter(i => !isStarterItem(i) && !isBootsItem(i))

@@ -114,6 +114,9 @@ const messages: Record<string, Record<string, string>> = {
     "stats.labels.armorDamageReductionPercent": "Réduction dégâts physiques (%)",
     "stats.labels.magicDamageReductionPercent": "Réduction dégâts magiques (%)",
     "stats.title": "Statistiques",
+    "variants": "Variantes",
+    "mainBuild": "Build principal",
+    "variant": "Variante",
   },
   en: {
     "tabs.discover": "Discover",
@@ -230,6 +233,9 @@ const messages: Record<string, Record<string, string>> = {
     "stats.labels.armorDamageReductionPercent": "Physical Damage Reduction (%)",
     "stats.labels.magicDamageReductionPercent": "Magic Damage Reduction (%)",
     "stats.title": "Statistics",
+    "variants": "Variants",
+    "mainBuild": "Main build",
+    "variant": "Variant",
   },
 };
 

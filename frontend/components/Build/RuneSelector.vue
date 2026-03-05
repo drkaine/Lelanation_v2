@@ -494,9 +494,9 @@ const updateRuneSelection = () => {
   buildStore.setRunes(runeSelection)
 }
 
-// Load existing rune selection from build
+// Load existing rune selection from build ou variante affichée
 watch(
-  () => buildStore.currentBuild?.runes,
+  () => buildStore.displayedBuild?.runes,
   runes => {
     if (runes) {
       selectedPrimaryPathId.value = runes.primary.pathId
@@ -520,9 +520,9 @@ watch(
   { immediate: true }
 )
 
-// Load existing summoner spells from build
+// Load existing summoner spells from build ou variante affichée
 watch(
-  () => buildStore.currentBuild?.summonerSpells,
+  () => buildStore.displayedBuild?.summonerSpells,
   spells => {
     if (spells) {
       selectedSummonerSpells.value = [spells[0] || null, spells[1] || null]
@@ -531,9 +531,9 @@ watch(
   { immediate: true }
 )
 
-// Load existing shards from build
+// Load existing shards from build ou variante affichée
 watch(
-  () => buildStore.currentBuild?.shards,
+  () => buildStore.displayedBuild?.shards,
   shards => {
     if (shards) {
       selectedShards.value = {
