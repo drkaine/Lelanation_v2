@@ -57,7 +57,7 @@
     <div class="mt-auto flex items-center justify-between border-t border-primary/30 pt-2">
       <div class="flex-1">
         <p class="text-sm font-semibold text-text">{{ build.name }}</p>
-        <p class="text-xs text-text/50">{{ formatDate(build.createdAt) }}</p>
+        <p v-if="hydrated" class="text-xs text-text/50">{{ formatDate(build.createdAt) }}</p>
       </div>
       <div class="flex items-center gap-2">
         <!-- Vote Button -->
@@ -95,6 +95,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import type { Build } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { getChampionImageUrl, getItemImageUrl, getRunePathImageUrl } from '~/utils/imageUrl'
+import { useClientHydrated } from '~/composables/useClientHydrated'
 
 interface Props {
   build: Build
@@ -110,6 +111,7 @@ const runesStore = useRunesStore()
 const voteStore = useVoteStore()
 const router = useRouter()
 const { version } = useGameVersion()
+const { hydrated } = useClientHydrated()
 
 const displayItems = computed(() => {
   const items: Array<(typeof props.build.items)[number] | null> = [...props.build.items]
@@ -131,6 +133,7 @@ const addToComparison = () => {
 }
 
 const formatDate = (dateString: string): string => {
+  if (!hydrated.value) return ''
   return new Date(dateString).toLocaleDateString()
 }
 

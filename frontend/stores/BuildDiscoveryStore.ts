@@ -119,10 +119,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       // Synchroniser les builds locaux avec le serveur (en arrière-plan)
       // Cela resauvegarde automatiquement les builds qui n'existent pas sur le serveur
-      buildStore.syncAllBuildsToServer().catch(error => {
-        // eslint-disable-next-line no-console
-        console.warn('[BuildDiscoveryStore] Error syncing builds to server:', error)
-      })
+      buildStore.syncAllBuildsToServer().catch(() => {})
 
       // Charger les builds publics depuis l'API
       let publicBuilds: Build[] = []
@@ -136,9 +133,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
           )
           publicBuilds = filtered.map(b => (isStoredBuild(b) ? hydrateBuild(b) : (b as Build)))
         }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to load public builds:', error)
+      } catch {
+        // Failed to load public builds
       }
 
       // Combiner les builds locaux publics et les builds publics du serveur

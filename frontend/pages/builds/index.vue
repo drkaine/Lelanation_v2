@@ -201,7 +201,9 @@
         >
           {{ shareCode }}
           <button
-            class="rounded p-1 text-text-secondary transition-colors hover:text-accent"
+            type="button"
+            class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-text-secondary transition-colors hover:text-accent"
+            :aria-label="t('buildsPage.shareCodeCopy')"
             :title="t('buildsPage.shareCodeCopy')"
             @click="copyShareCode"
           >
@@ -256,6 +258,7 @@ import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
 import { serializeBuild } from '~/utils/buildSerialize'
 import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useClientHydrated } from '~/composables/useClientHydrated'
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
@@ -264,6 +267,7 @@ const favoritesStore = useFavoritesStore()
 const route = useRoute()
 const localePath = useLocalePath()
 const { isStreamerMode } = useStreamerMode()
+const { hydrated } = useClientHydrated()
 
 const buildToDelete = ref<string | null>(null)
 const shareCode = ref<string | null>(null)
@@ -294,6 +298,7 @@ const visibilityFilterOptions = computed<{ value: VisibilityFilterValue; label: 
 
 /** Builds de l'onglet Mes Builds, filtrés par visibilité (dépend de savedBuildsVersion pour refresh après delete/save) */
 const buildsFilteredByVisibility = computed<Build[]>(() => {
+  if (!hydrated.value) return []
   const version = buildStore.savedBuildsVersion
   const list = buildStore.getSavedBuilds()
   const filter = myBuildsVisibilityFilter.value
@@ -304,6 +309,7 @@ const comparisonBuilds = computed(() => discoveryStore.comparisonBuilds)
 
 /** Builds favoris : intersection des IDs favoris avec les builds chargés (saved + discovery). */
 const favoriteBuilds = computed(() => {
+  if (!hydrated.value) return []
   const ids = new Set(favoritesStore.favoriteBuildIds)
   if (ids.size === 0) return []
   const saved = buildStore.getSavedBuilds()
@@ -343,30 +349,28 @@ const tabs = computed(() => {
   return availableTabs
 })
 
-// Initialiser activeTab depuis l'URL, localStorage, ou par défaut 'discover'
-const getInitialTab = (): string => {
-  if (isStreamerMode.value) {
-    return 'my-builds'
-  }
+// SSR-safe initial tab: only route query (no localStorage before hydration)
+const getInitialTabFromRoute = (): string => {
+  if (route.query.tab && typeof route.query.tab === 'string') return route.query.tab
+  return 'discover'
+}
 
-  // Priorité 1: URL query parameter
-  if (route.query.tab && typeof route.query.tab === 'string') {
-    return route.query.tab
-  }
-  // Priorité 2: localStorage
+// Client-only initial tab: route -> localStorage fallback (after hydration)
+const getInitialTabFromClient = (): string => {
+  if (isStreamerMode.value) return 'my-builds'
+  if (route.query.tab && typeof route.query.tab === 'string') return route.query.tab
   try {
     const savedTab = localStorage.getItem('lelanation_active_tab')
     if (savedTab && ['discover', 'my-builds', 'favoris', 'lelariva'].includes(savedTab)) {
       return savedTab
     }
   } catch {
-    // Ignore localStorage errors
+    // ignore
   }
-  // Priorité 3: Défaut
   return 'discover'
 }
 
-const activeTab = ref(getInitialTab())
+const activeTab = ref(getInitialTabFromRoute())
 
 // Gérer le clic sur un onglet (désélectionner si déjà actif)
 const handleTabClick = (tabId: string) => {
@@ -378,16 +382,17 @@ const handleTabClick = (tabId: string) => {
   }
 }
 
-// Sauvegarder l'onglet actif dans localStorage et mettre à jour l'URL
-watch(activeTab, async newTab => {
-  try {
-    localStorage.setItem('lelanation_active_tab', newTab)
-  } catch {
-    // Ignore localStorage errors
-  }
-  // Mettre à jour l'URL sans recharger la page
-  await navigateTo({ query: { tab: newTab } }, { replace: true })
-})
+if (import.meta.client) {
+  // Sauvegarder l'onglet actif dans localStorage et mettre à jour l'URL
+  watch(activeTab, async newTab => {
+    try {
+      localStorage.setItem('lelanation_active_tab', newTab)
+    } catch {
+      // ignore
+    }
+    await navigateTo({ query: { tab: newTab } }, { replace: true })
+  })
+}
 
 watch(
   isStreamerMode,
@@ -496,6 +501,8 @@ onMounted(() => {
   favoritesStore.init()
   voteStore.init()
   discoveryStore.loadBuilds()
+  // Apply client-side tab preference after hydration to avoid SSR/CSR mismatch
+  activeTab.value = getInitialTabFromClient()
 })
 </script>
 

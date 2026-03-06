@@ -21,6 +21,8 @@
         <button
           v-if="readonly && buildSubBuilds.length > 0"
           class="flip-button"
+          type="button"
+          :aria-label="localFlipped ? 'Voir le build' : 'Voir les variantes'"
           :title="localFlipped ? 'Voir le build' : 'Voir les variantes'"
           @click.stop="localFlipped = !localFlipped"
         >
@@ -102,8 +104,9 @@
             <img
               v-if="selectedChampion"
               :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
-              :alt="selectedChampion.name"
+              alt=""
               class="champion-portrait"
+              role="presentation"
               @mouseenter="onChampionMouseEnter"
               @mouseleave="onChampionMouseLeave"
             />
@@ -518,7 +521,12 @@
       >
         <div class="back-header">
           <span class="back-title">Variantes</span>
-          <button class="back-close-btn" @click.stop="localFlipped = false">
+          <button
+            type="button"
+            class="back-close-btn"
+            aria-label="Fermer les variantes"
+            @click.stop="localFlipped = false"
+          >
             <svg
               width="14"
               height="14"
@@ -1744,8 +1752,10 @@ watch(locale, () => {
 }
 
 .back-close-btn {
-  width: 24px;
-  height: 24px;
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2011,10 +2021,12 @@ watch(locale, () => {
 /* ── Bouton flip (readonly) ── */
 .flip-button {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 24px;
-  height: 24px;
+  top: 4px;
+  left: 4px;
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;

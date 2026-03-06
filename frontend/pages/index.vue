@@ -4,12 +4,24 @@
     <section class="profil pb-8 pt-4">
       <div class="max-w-8xl mx-auto px-2">
         <h1 class="title text-text-accent">Lelanation</h1>
-        <img
-          class="profil-image"
-          src="/images/lelariva.png"
-          alt="Lelanation - Plateforme de builds League of Legends"
-          loading="lazy"
-        />
+        <!-- LCP image: preload + fetchpriority high. WebP responsive when npm run generate:webp was run. -->
+        <picture>
+          <source
+            type="image/webp"
+            srcset="/images/lelariva-400.webp 400w, /images/lelariva-800.webp 800w"
+            sizes="(max-width: 768px) 240px, 320px"
+          />
+          <img
+            class="profil-image"
+            src="/images/lelariva.png"
+            alt="Lelanation - Plateforme de builds League of Legends"
+            width="400"
+            height="400"
+            decoding="async"
+            fetchpriority="high"
+            sizes="(max-width: 768px) 240px, 320px"
+          />
+        </picture>
         <h2 class="subtitle text-text-secondary">
           {{ t('home.subtitle') }}
         </h2>
@@ -40,10 +52,20 @@
 const { t } = useI18n()
 const config = useRuntimeConfig().public
 const siteUrl = (config.siteUrl as string) || 'https://lelanation.fr'
-
+// Preload LCP image so it's discoverable from initial HTML (Lighthouse)
 useHead({
   title: () => t('seo.homeTitle'),
   meta: [{ name: 'description', content: () => t('seo.homeDescription') }],
+  link: [
+    // LCP: preload 400w WebP (commit generated files or run npm run generate:webp). PNG fallback via <img>.
+    {
+      rel: 'preload',
+      href: '/images/lelariva-400.webp',
+      as: 'image',
+      type: 'image/webp',
+      fetchPriority: 'high',
+    },
+  ],
 })
 useSeoMeta({
   ogTitle: () => t('seo.homeTitle'),

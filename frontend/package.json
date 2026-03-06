@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
+    "generate:webp": "node scripts/generate-lelariva-webp.mjs",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@nuxtjs/eslint-config-typescript": "^12.1.0",
+    "sharp": "^0.33.5",
     "@nuxtjs/tailwindcss": "^6.14.0",
     "@types/html2canvas": "^0.5.35",
     "@types/node": "^25.1.0",

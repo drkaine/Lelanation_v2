@@ -696,11 +696,7 @@ export const useBuildStore = defineStore('build', {
                 { method: 'DELETE' }
               )
               if (!delResponse.ok && delResponse.status !== 404) {
-                // eslint-disable-next-line no-console
-                console.warn(
-                  'Build saved locally but failed to remove from server (public→private).',
-                  delResponse.status
-                )
+                // Build saved locally but failed to remove from server (public→private)
               }
             }
           } else {
@@ -717,16 +713,11 @@ export const useBuildStore = defineStore('build', {
                 this.currentBuild!.id = result.id
               }
             } else {
-              // eslint-disable-next-line no-console
-              console.warn(
-                'Build saved locally but failed to save JSON on server.',
-                response.status
-              )
+              // Build saved locally but failed to save JSON on server
             }
           }
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('Build saved locally but API /api/builds is unreachable.', e)
+        } catch {
+          // Build saved locally but API /api/builds is unreachable
         }
 
         // 3) Vérifier si le build doit passer en privé automatiquement (votes)
@@ -763,8 +754,10 @@ export const useBuildStore = defineStore('build', {
           const savedBuilds = this.getSavedBuilds()
           const existingIndex = savedBuilds.findIndex(b => b.id === targetId)
           if (existingIndex >= 0) {
+            const existing = savedBuilds[existingIndex]
+            if (!existing) return
             savedBuilds[existingIndex] = {
-              ...savedBuilds[existingIndex],
+              ...existing,
               visibility: 'private',
             }
             const toStore = savedBuilds.map(b => serializeBuild(b))
@@ -783,6 +776,7 @@ export const useBuildStore = defineStore('build', {
     },
 
     getSavedBuilds(): Build[] {
+      if (import.meta.server) return []
       try {
         const stored = localStorage.getItem('lelanation_builds')
         if (!stored) return []
@@ -841,14 +835,10 @@ export const useBuildStore = defineStore('build', {
           })
 
           if (!response.ok && response.status !== 404) {
-            // Only log error if it's not a 404 (build might not exist on server)
-            // eslint-disable-next-line no-console
-            console.warn(`[BuildStore] Failed to delete build on server: ${response.status}`)
+            // Build might not exist on server (404 is ok)
           }
-        } catch (apiError) {
+        } catch {
           // Don't fail the deletion if API call fails (build might not exist on server)
-          // eslint-disable-next-line no-console
-          console.warn('[BuildStore] Failed to delete build on server:', apiError)
         }
 
         return true
@@ -873,9 +863,6 @@ export const useBuildStore = defineStore('build', {
 
         // Si le build n'existe pas (404), retenter de le sauvegarder
         if (checkResponse.status === 404) {
-          // eslint-disable-next-line no-console
-          console.log(`[BuildStore] Build ${build.id} not found on server, attempting to save...`)
-
           try {
             const saveResponse = await fetch(apiUrl('/api/builds'), {
               method: 'POST',
@@ -886,36 +873,18 @@ export const useBuildStore = defineStore('build', {
             })
 
             if (saveResponse.ok) {
-              // eslint-disable-next-line no-console
-              console.log(`[BuildStore] Build ${build.id} successfully synced to server`)
               return true
-            } else {
-              // eslint-disable-next-line no-console
-              console.warn(
-                `[BuildStore] Failed to sync build ${build.id} to server: ${saveResponse.status}`
-              )
-              return false
             }
-          } catch (saveError) {
-            // eslint-disable-next-line no-console
-            console.warn(`[BuildStore] Failed to sync build ${build.id} to server:`, saveError)
+            return false
+          } catch {
             return false
           }
         } else if (checkResponse.ok) {
-          // Build existe déjà sur le serveur
           return true
         } else {
-          // Autre erreur (500, etc.)
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[BuildStore] Error checking build ${build.id} on server: ${checkResponse.status}`
-          )
           return false
         }
-      } catch (error) {
-        // Erreur réseau ou autre
-        // eslint-disable-next-line no-console
-        console.warn(`[BuildStore] Error syncing build ${build.id} to server:`, error)
+      } catch {
         return false
       }
     },

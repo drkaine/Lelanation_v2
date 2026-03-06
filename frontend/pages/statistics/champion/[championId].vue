@@ -1709,14 +1709,12 @@ function isStatsPerfEnabled(): boolean {
   }
   return false
 }
-function statsPerfStart(label: string): number {
+function statsPerfStart(_label: string): number {
   if (!isStatsPerfEnabled()) return 0
-  console.log('[Stats perf]', label, 'start')
   return performance.now()
 }
-function statsPerfEnd(label: string, start: number) {
-  if (!isStatsPerfEnabled() || start === 0) return
-  console.log('[Stats perf]', label, Math.round(performance.now() - start) + 'ms')
+function statsPerfEnd(_label: string, start: number) {
+  if (!isStatsPerfEnabled() || start === 0) return // eslint-disable-line no-useless-return
 }
 function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
   const existingOnResponse = (options as { onResponse?: (ctx: { response: Response }) => void })
@@ -1724,18 +1722,6 @@ function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch
   return $fetch(url, {
     ...options,
     onResponse: ctx => {
-      if (isStatsPerfEnabled() && ctx.response?.headers) {
-        const backendMs = ctx.response.headers.get('X-Backend-Time')
-        const sqlMs = ctx.response.headers.get('X-SQL-Time')
-        const path = ctx.response.headers.get('X-Stats-Path') || url
-        if (backendMs) {
-          console.log(
-            '[Stats perf] backend',
-            path,
-            backendMs + 'ms' + (sqlMs ? ' (SQL ' + sqlMs + 'ms)' : '')
-          )
-        }
-      }
       existingOnResponse?.(ctx)
     },
   }) as Promise<T>
@@ -2082,14 +2068,6 @@ async function loadVersionsForFilter() {
 }
 
 onMounted(async () => {
-  if (import.meta.client) {
-    // eslint-disable-next-line no-console
-    console.log(
-      isStatsPerfEnabled()
-        ? '[Stats perf] logs activés — durées dans la console'
-        : '[Stats perf] pour afficher les durées, ajoute ?stats_perf=1 à l’URL'
-    )
-  }
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()

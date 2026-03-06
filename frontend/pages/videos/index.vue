@@ -31,9 +31,12 @@
               class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-text shadow-sm placeholder:text-text/50 focus:border-accent focus:outline-none"
             />
 
+            <label for="videos-channel-filter" class="sr-only">Chaîne</label>
             <select
+              id="videos-channel-filter"
               v-model="selectedChannelId"
               class="w-full rounded-lg border border-accent/70 bg-black px-4 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              aria-label="Filtrer par chaîne"
             >
               <option value="all">Toutes les chaînes</option>
               <option v-for="c in creators" :key="c.channelId" :value="c.channelId">
@@ -94,9 +97,12 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
+            <label for="videos-per-page" class="sr-only">Résultats par page</label>
             <select
+              id="videos-per-page"
               :value="String(perPage)"
               class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
+              aria-label="Résultats par page"
               @change="onPerPageChange"
             >
               <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
@@ -127,7 +133,12 @@
           </div>
 
           <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            <VideoGridCard v-for="v in paginatedVideos" :key="v.id" :video="v" />
+            <VideoGridCard
+              v-for="(v, idx) in paginatedVideos"
+              :key="v.id"
+              :video="v"
+              :fetch-priority="idx === 0 ? 'high' : undefined"
+            />
           </div>
         </div>
 
@@ -172,9 +183,19 @@ const isLoadingAll = ref(false)
 const route = useRoute()
 const { t } = useI18n()
 
+// This page depends heavily on client-only YouTube/static JSON data.
+// Disable SSR for this route to avoid subtle SSR/CSR hydration mismatches.
+definePageMeta({
+  ssr: false,
+})
+
 useHead({
   title: () => t('videosPage.metaTitle'),
   meta: [{ name: 'description', content: () => t('videosPage.metaDescription') }],
+  link: [
+    { rel: 'preconnect', href: 'https://i.ytimg.com', crossorigin: '' },
+    { rel: 'preconnect', href: 'https://www.youtube.com', crossorigin: '' },
+  ],
 })
 useSeoMeta({
   ogTitle: () => t('videosPage.metaTitle'),

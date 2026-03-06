@@ -18,6 +18,11 @@ logs
 .fleet
 .idea
 
+# Generated assets
+public/images/lelariva-400.webp
+public/images/lelariva-800.webp
+public/images/lelariva.webp
+
 # Local env files
 .env
 .env.*

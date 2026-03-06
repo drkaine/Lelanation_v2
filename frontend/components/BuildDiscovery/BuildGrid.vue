@@ -48,18 +48,16 @@
 
         <!-- BuildCard Sheet -->
         <div class="relative">
-          <div class="cursor-pointer" @click="navigateToBuild(build.id)">
-            <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
-              <BuildCard
-                :build="build"
-                :readonly="true"
-                @variant-change="
-                  idx => {
-                    displayedSubMap[build.id] = idx
-                  }
-                "
-              />
-            </div>
+          <div :ref="el => setBuildCardRef(build.id, el)" :data-build-id="build.id">
+            <BuildCard
+              :build="build"
+              :readonly="true"
+              @variant-change="
+                idx => {
+                  displayedSubMap[build.id] = idx
+                }
+              "
+            />
           </div>
           <!-- Boutons d'action utilisateur (supprimer/modifier) -->
           <div
@@ -87,6 +85,17 @@
 
         <!-- Informations en dessous de la sheet (description, date, votes, partager) -->
         <div class="w-full max-w-[300px] space-y-2">
+          <!-- Bouton d'accès au détail du build (évite les cibles tactiles imbriquées dans la carte) -->
+          <div class="flex justify-center">
+            <button
+              type="button"
+              class="min-h-[44px] rounded-lg border border-accent/70 bg-surface px-4 py-2 text-xs font-semibold text-text transition-colors hover:bg-accent/10"
+              @click="navigateToBuild(build.id)"
+            >
+              {{ t('buildDiscovery.viewBuild') || 'Voir le build' }}
+            </button>
+          </div>
+
           <div class="flex items-center justify-end gap-2">
             <!-- <button
               class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
@@ -246,7 +255,7 @@
 
           <!-- Date de création -->
           <p class="min-h-[20px] text-xs text-text/50">
-            <span v-if="build.createdAt"
+            <span v-if="build.createdAt && hydrated"
               >{{ t('buildDiscovery.createdOn') }} {{ formatDate(build.createdAt) }}</span
             >
             <span v-else class="invisible">Placeholder</span>
@@ -269,9 +278,11 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import { useVersionStore } from '~/stores/VersionStore'
 import type { Build } from '~/types/build'
 import { linkifyDescription } from '~/utils/linkifyDescription'
+import { useClientHydrated } from '~/composables/useClientHydrated'
 
 const { t, locale } = useI18n()
 const buildStore = useBuildStore()
+const { hydrated } = useClientHydrated()
 const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 const expandedDescriptions = ref<Record<string, boolean>>({})
@@ -395,6 +406,7 @@ const navigateToBuild = (buildId: string) => {
 }
 
 const formatDate = (dateString: string): string => {
+  if (!hydrated.value) return ''
   const localeCode = locale.value === 'fr' ? 'fr-FR' : 'en-US'
   return new Date(dateString).toLocaleDateString(localeCode, {
     year: 'numeric',
@@ -430,6 +442,7 @@ const handleDownvote = async (buildId: string) => {
 }
 
 const isUserBuild = (buildId: string): boolean => {
+  if (!hydrated.value) return false
   const savedBuilds = buildStore.getSavedBuilds()
   return savedBuilds.some(b => b.id === buildId)
 }
@@ -469,20 +482,12 @@ const copyBuildLink = async (buildId: string) => {
 
 const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
   const cardElement = buildCardRefs.value[buildId]
-  if (!cardElement) {
-    // eslint-disable-next-line no-console
-    console.error('BuildCard element not found for build:', buildId)
-    return null
-  }
+  if (!cardElement) return null
 
   try {
     // Trouver le BuildCard à l'intérieur (élément avec classe build-card-wrapper)
     const buildCardWrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
-    if (!buildCardWrapper) {
-      // eslint-disable-next-line no-console
-      console.error('BuildCard wrapper not found in element:', cardElement)
-      return null
-    }
+    if (!buildCardWrapper) return null
 
     // Attendre un peu pour s'assurer que tout est rendu
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -637,55 +642,26 @@ const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
     // Attendre un peu pour que les styles soient appliqués et que le clone soit rendu
     await new Promise(resolve => setTimeout(resolve, 300))
 
-    // Vérifier que le clone est bien dans le DOM et visible
-    // eslint-disable-next-line no-console
-    console.log(
-      'Clone element:',
-      clonedElement,
-      'Visible:',
-      clonedElement.offsetWidth,
-      'x',
-      clonedElement.offsetHeight
-    )
-
     // Utiliser dom-to-image-more directement pour convertir en blob
     const domtoimage = await import('dom-to-image-more')
-
-    // eslint-disable-next-line no-console
-    console.log('Converting element to blob...')
-
-    // Convertir directement en blob (plus simple et plus fiable)
     const resultBlob = await domtoimage.toBlob(clonedElement, {
       bgcolor: '#0a0a14',
       quality: 1.0,
     })
 
-    // eslint-disable-next-line no-console
-    console.log('Blob created:', resultBlob ? `Size: ${resultBlob.size} bytes` : 'null')
-
     // Nettoyer : retirer le clone du DOM
     document.body.removeChild(clonedElement)
 
     return resultBlob
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to capture image:', error)
+  } catch {
     return null
   }
 }
 
 const downloadBuildImage = async (buildId: string) => {
-  // eslint-disable-next-line no-console
-  console.log('Download image clicked for build:', buildId)
   try {
     const blob = await captureBuildImage(buildId)
-    // eslint-disable-next-line no-console
-    console.log('Blob received:', blob ? `Size: ${blob.size} bytes` : 'null')
-    if (!blob) {
-      // eslint-disable-next-line no-console
-      console.error('No blob returned from captureBuildImage')
-      return
-    }
+    if (!blob) return
 
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -696,37 +672,22 @@ const downloadBuildImage = async (buildId: string) => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     openShareDropdown.value = null
-    // eslint-disable-next-line no-console
-    console.log('Image download triggered')
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to download image:', error)
+  } catch {
+    // Failed to download image
   }
 }
 
 const copyBuildImage = async (buildId: string) => {
-  // eslint-disable-next-line no-console
-  console.log('Copy image clicked for build:', buildId)
   try {
     const blob = await captureBuildImage(buildId)
-    // eslint-disable-next-line no-console
-    console.log('Blob received for copy:', blob ? `Size: ${blob.size} bytes` : 'null')
-    if (!blob) {
-      // eslint-disable-next-line no-console
-      console.error('No blob returned from captureBuildImage')
-      return
-    }
+    if (!blob) return
 
     // Utiliser l'API Clipboard pour copier l'image
     if (navigator.clipboard && navigator.clipboard.write) {
       const item = new ClipboardItem({ 'image/png': blob })
       await navigator.clipboard.write([item])
       openShareDropdown.value = null
-      // eslint-disable-next-line no-console
-      console.log('Image copied to clipboard')
     } else {
-      // eslint-disable-next-line no-console
-      console.error('Clipboard API not available')
       // Fallback: convertir en data URL et copier via un élément temporaire
       const reader = new FileReader()
       reader.onload = () => {
@@ -752,9 +713,8 @@ const copyBuildImage = async (buildId: string) => {
       reader.readAsDataURL(blob)
       openShareDropdown.value = null
     }
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to copy image:', error)
+  } catch {
+    // Failed to copy image
   }
 }
 

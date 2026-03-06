@@ -2,7 +2,11 @@
   <div class="item-selector" style="background: transparent !important">
     <!-- Search Bar -->
     <div class="mb-2">
+      <label for="item-search" class="sr-only">
+        {{ t('common.search') }}
+      </label>
       <input
+        id="item-search"
         v-model="searchQuery"
         type="text"
         :placeholder="t('common.search')"
@@ -40,7 +44,13 @@
     <div v-else class="items-list mt-2">
       <template v-for="category in categoryOrderKeys" :key="category">
         <div v-if="itemsByCategory[category]?.length > 0" class="category-section">
-          <button v-if="!isStreamerMode" class="category-header" @click="toggleCategory(category)">
+          <button
+            v-if="!isStreamerMode"
+            type="button"
+            class="category-header"
+            :aria-expanded="isCategoryVisible(category)"
+            @click="toggleCategory(category)"
+          >
             <span>{{ getCategoryLabel(category) }}</span>
             <span class="category-toggle-icon" :class="{ collapsed: !isCategoryVisible(category) }">
               ▼
@@ -738,10 +748,6 @@ const toggleItem = (item: Item) => {
     // Check validation rules
     const validationError = getItemValidationError(item)
     if (validationError) {
-      // Show error message (could use a toast/notification system)
-      // eslint-disable-next-line no-console
-      console.warn(validationError)
-      // For now, we'll just prevent adding the item
       return
     }
 
@@ -976,7 +982,7 @@ watch(locale, () => {
 }
 
 .category-items {
-  --itemSizeButton: 32px;
+  --itemSizeButton: 40px;
   display: grid;
   grid-template-columns: repeat(auto-fit, var(--itemSizeButton));
   justify-content: flex-start;
@@ -1187,7 +1193,7 @@ watch(locale, () => {
 
 @media (max-width: 700px) {
   .category-items {
-    --itemSizeButton: 28px;
+    --itemSizeButton: 36px;
   }
 }
 </style>

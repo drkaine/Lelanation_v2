@@ -12,10 +12,14 @@
       </label>
 
       <div class="flex items-center gap-2">
-        <label class="text-sm text-text">{{ t('buildDiscovery.sort') }}</label>
+        <label for="build-discovery-sort" class="text-sm text-text">{{
+          t('buildDiscovery.sort')
+        }}</label>
         <select
+          id="build-discovery-sort"
           v-model="sortBy"
           class="rounded border border-primary bg-surface px-3 py-1 text-sm text-text"
+          :aria-label="t('buildDiscovery.sort')"
           @change="handleSortChange"
         >
           <option value="recent">{{ t('buildDiscovery.mostRecent') }}</option>
@@ -41,7 +45,7 @@
           :class="roleChipClass(selectedRole === 'top')"
           @click="toggleRole('top')"
         >
-          <img src="/icons/roles/top.png" alt="Top" class="h-4 w-4" />
+          <img src="/icons/roles/top.png" alt="" class="h-4 w-4" role="presentation" />
           <span class="text-xs">Top</span>
         </button>
         <button
@@ -49,7 +53,7 @@
           :class="roleChipClass(selectedRole === 'jungle')"
           @click="toggleRole('jungle')"
         >
-          <img src="/icons/roles/jungle.png" alt="Jungle" class="h-4 w-4" />
+          <img src="/icons/roles/jungle.png" alt="" class="h-4 w-4" role="presentation" />
           <span class="text-xs">Jungle</span>
         </button>
         <button
@@ -57,7 +61,7 @@
           :class="roleChipClass(selectedRole === 'mid')"
           @click="toggleRole('mid')"
         >
-          <img src="/icons/roles/mid.png" alt="Mid" class="h-4 w-4" />
+          <img src="/icons/roles/mid.png" alt="" class="h-4 w-4" role="presentation" />
           <span class="text-xs">Mid</span>
         </button>
         <button
@@ -65,7 +69,7 @@
           :class="roleChipClass(selectedRole === 'adc')"
           @click="toggleRole('adc')"
         >
-          <img src="/icons/roles/bot.png" alt="ADC" class="h-4 w-4" />
+          <img src="/icons/roles/bot.png" alt="" class="h-4 w-4" role="presentation" />
           <span class="text-xs">ADC</span>
         </button>
         <button
@@ -73,7 +77,7 @@
           :class="roleChipClass(selectedRole === 'support')"
           @click="toggleRole('support')"
         >
-          <img src="/icons/roles/support.png" alt="Support" class="h-4 w-4" />
+          <img src="/icons/roles/support.png" alt="" class="h-4 w-4" role="presentation" />
           <span class="text-xs">Support</span>
         </button>
       </div>

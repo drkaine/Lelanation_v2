@@ -18,6 +18,8 @@
             <button
               v-for="path in runesStore.runePaths"
               :key="`primary-${path.id}`"
+              type="button"
+              :aria-label="path.name"
               :class="[
                 'rune',
                 getPathName(path.id),
@@ -48,6 +50,8 @@
               <button
                 v-for="rune in slot.runes"
                 :key="`rune-${rune.id}`"
+                type="button"
+                :aria-label="rune.name"
                 :class="[
                   'row',
                   'rune-button',
@@ -75,6 +79,8 @@
               <button
                 v-for="spell in availableSpells"
                 :key="`spell-${spell.id}`"
+                type="button"
+                :aria-label="spell.name"
                 :class="[
                   'summoner-button',
                   isSummonerSpellSelected(spell) ? 'selected' : '',
@@ -87,8 +93,9 @@
               >
                 <img
                   :src="getSpellImageUrl(version, spell.image.full)"
-                  :alt="spell.name"
+                  alt=""
                   class="summoner-icon"
+                  role="presentation"
                 />
               </button>
             </div>
@@ -102,6 +109,8 @@
             <button
               v-for="path in availableSecondaryPaths"
               :key="`secondary-${path.id}`"
+              type="button"
+              :aria-label="path.name"
               :class="[
                 'rune',
                 getPathName(path.id),
@@ -138,6 +147,8 @@
               <button
                 v-for="rune in slot.runes"
                 :key="`secondary-rune-${rune.id}`"
+                type="button"
+                :aria-label="rune.name"
                 :class="[
                   'row',
                   'rune-button',
@@ -169,37 +180,58 @@
               <button
                 v-for="shard in slot1Options"
                 :key="`shard-1-${shard.id}`"
+                type="button"
+                :aria-label="shard.name"
                 :class="['shard-button', selectedShards[1] === shard.id ? 'selected' : '']"
                 @click="selectShard(1, shard.id)"
                 @mouseenter="e => handleShardHover(shard, e)"
                 @mouseleave="handleRuneLeave"
                 @mousemove="handleMouseMove"
               >
-                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+                <img
+                  :src="shardIconSrc(shard.image)"
+                  alt=""
+                  class="shard-icon"
+                  role="presentation"
+                />
               </button>
               <!-- Slot 2: Second -->
               <button
                 v-for="shard in slot2Options"
                 :key="`shard-2-${shard.id}`"
+                type="button"
+                :aria-label="shard.name"
                 :class="['shard-button', selectedShards[2] === shard.id ? 'selected' : '']"
                 @click="selectShard(2, shard.id)"
                 @mouseenter="e => handleShardHover(shard, e)"
                 @mouseleave="handleRuneLeave"
                 @mousemove="handleMouseMove"
               >
-                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+                <img
+                  :src="shardIconSrc(shard.image)"
+                  alt=""
+                  class="shard-icon"
+                  role="presentation"
+                />
               </button>
               <!-- Slot 3: Third -->
               <button
                 v-for="shard in slot3Options"
                 :key="`shard-3-${shard.id}`"
+                type="button"
+                :aria-label="shard.name"
                 :class="['shard-button', selectedShards[3] === shard.id ? 'selected' : '']"
                 @click="selectShard(3, shard.id)"
                 @mouseenter="e => handleShardHover(shard, e)"
                 @mouseleave="handleRuneLeave"
                 @mousemove="handleMouseMove"
               >
-                <img :src="shardIconSrc(shard.image)" :alt="shard.name" class="shard-icon" />
+                <img
+                  :src="shardIconSrc(shard.image)"
+                  alt=""
+                  class="shard-icon"
+                  role="presentation"
+                />
               </button>
             </div>
           </div>
@@ -903,13 +935,15 @@ watch(locale, () => {
 
 .summoners-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(48px, 1fr));
   gap: 0.5rem;
-  max-width: 100px; /* Réduit de moitié (200px -> 100px) */
+  max-width: 160px;
   margin: 0 auto;
 }
 
 .summoner-button {
+  min-width: 48px;
+  min-height: 48px;
   width: 100%;
   aspect-ratio: 1;
   border: 2px solid var(--color-gold-300);
@@ -954,13 +988,15 @@ watch(locale, () => {
 
 .shards-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(48px, 1fr));
   gap: 0.5rem;
-  max-width: 100px; /* Réduit de moitié (200px -> 100px) */
+  max-width: 160px;
   margin: 0 auto;
 }
 
 .shard-button {
+  min-width: 48px;
+  min-height: 48px;
   width: 100%;
   aspect-ratio: 1;
   border: 2px solid var(--color-gold-300);

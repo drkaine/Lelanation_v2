@@ -208,7 +208,7 @@
                 </template>
               </div>
 
-              <p v-if="build.createdAt" class="text-xs text-text/50">
+              <p v-if="build.createdAt && hydrated" class="text-xs text-text/50">
                 Créé le : {{ formatDate(build.createdAt) }}
               </p>
             </div>
@@ -278,6 +278,7 @@ import { apiUrl } from '~/utils/apiUrl'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import type { Build, SubBuild } from '~/types/build'
+import { useClientHydrated } from '~/composables/useClientHydrated'
 
 const props = defineProps<{ buildId: string }>()
 
@@ -287,6 +288,7 @@ const discoveryStore = useBuildDiscoveryStore()
 const localePath = useLocalePath()
 const { t } = useI18n()
 const route = useRoute()
+const { hydrated } = useClientHydrated()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -353,7 +355,7 @@ const upvoteCount = computed(() => (build.value ? voteStore.getUpvoteCount(build
 const downvoteCount = computed(() => (build.value ? voteStore.getDownvoteCount(build.value.id) : 0))
 const userVote = computed(() => (build.value ? voteStore.getUserVote(build.value.id) : null))
 const isUserBuild = computed(() => {
-  if (!build.value) return false
+  if (!hydrated.value || !build.value) return false
   const savedBuilds = buildStore.getSavedBuilds()
   return savedBuilds.some(b => b.id === build.value!.id)
 })
@@ -394,20 +396,11 @@ const copyBuildLink = async () => {
 }
 
 const captureBuildImage = async (): Promise<Blob | null> => {
-  if (!buildCardRef.value || !build.value) {
-    // eslint-disable-next-line no-console
-    console.error('BuildCard element not found')
-    return null
-  }
+  if (!buildCardRef.value || !build.value) return null
 
   try {
-    // Trouver le BuildCard à l'intérieur (élément avec classe build-card-wrapper)
     const buildCardWrapper = buildCardRef.value.querySelector('.build-card-wrapper') as HTMLElement
-    if (!buildCardWrapper) {
-      // eslint-disable-next-line no-console
-      console.error('BuildCard wrapper not found')
-      return null
-    }
+    if (!buildCardWrapper) return null
 
     // Attendre un peu pour s'assurer que tout est rendu
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -545,9 +538,7 @@ const captureBuildImage = async (): Promise<Blob | null> => {
 
     document.body.removeChild(clonedElement)
     return resultBlob
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to capture image:', error)
+  } catch {
     return null
   }
 }
@@ -567,9 +558,8 @@ const downloadBuildImage = async () => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     openShareDropdown.value = false
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to download image:', error)
+  } catch {
+    // Failed to download image
   }
 }
 
@@ -585,9 +575,7 @@ const copyBuildImage = async () => {
       }),
     ])
     openShareDropdown.value = false
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to copy image:', error)
+  } catch {
     // Fallback: télécharger l'image
     downloadBuildImage()
   }
@@ -650,19 +638,20 @@ watch(
       }
     }
 
-    // Essayer d'abord de charger depuis le localStorage
-    try {
-      const savedBuilds = buildStore.getSavedBuilds()
-      const localBuild = savedBuilds.find(b => b.id === id) || null
-      if (localBuild) {
-        const { migrated } = await migrateBuildToCurrent(localBuild)
-        detailRootBuild.value = migrated
-        loading.value = false
-        return
+    // Client-only: localStorage override AFTER hydration (prevents SSR/CSR mismatch)
+    if (import.meta.client && hydrated.value) {
+      try {
+        const savedBuilds = buildStore.getSavedBuilds()
+        const localBuild = savedBuilds.find(b => b.id === id) || null
+        if (localBuild) {
+          const { migrated } = await migrateBuildToCurrent(localBuild)
+          detailRootBuild.value = migrated
+          loading.value = false
+          return
+        }
+      } catch {
+        // Failed to load local build
       }
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('Failed to load local build:', e)
     }
 
     // Si pas trouvé localement, charger depuis l'API
@@ -698,6 +687,7 @@ watch(
 )
 
 const formatDate = (dateString: string): string => {
+  if (!hydrated.value) return ''
   return new Date(dateString).toLocaleDateString('fr-FR', {
     year: 'numeric',
     month: 'long',

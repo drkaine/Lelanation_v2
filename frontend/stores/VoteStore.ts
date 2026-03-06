@@ -41,6 +41,7 @@ export const useVoteStore = defineStore('vote', {
 
   actions: {
     init() {
+      if (import.meta.server) return
       // Load votes from localStorage
       try {
         const storedUpvotes = localStorage.getItem('lelanation_upvotes')

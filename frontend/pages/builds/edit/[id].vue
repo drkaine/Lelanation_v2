@@ -233,9 +233,8 @@ onMounted(async () => {
       try {
         const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
         buildStore.setCurrentBuild(migrated)
-      } catch (e) {
-        // eslint-disable-next-line no-console
-        console.warn('Migration failed for edit build:', e)
+      } catch {
+        // Migration failed for edit build
       }
     }
   }

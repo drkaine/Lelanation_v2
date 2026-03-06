@@ -3384,16 +3384,12 @@ function isStatsPerfEnabled(): boolean {
   }
   return false
 }
-function statsPerfStart(label: string): number {
+function statsPerfStart(_label: string): number {
   if (!isStatsPerfEnabled()) return 0
-  // eslint-disable-next-line no-console
-  console.log('[Stats perf]', label, 'start')
   return performance.now()
 }
-function statsPerfEnd(label: string, start: number) {
-  if (!isStatsPerfEnabled() || start === 0) return
-  // eslint-disable-next-line no-console
-  console.log('[Stats perf]', label, Math.round(performance.now() - start) + 'ms')
+function statsPerfEnd(_label: string, start: number) {
+  if (!isStatsPerfEnabled() || start === 0) return // eslint-disable-line no-useless-return
 }
 
 /** Fetch stats API and log backend timing from X-Backend-Time / X-Stats-Path (tout au même endroit que les logs front). */
@@ -3403,19 +3399,6 @@ function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch
   return $fetch(url, {
     ...options,
     onResponse: ctx => {
-      if (isStatsPerfEnabled() && ctx.response?.headers) {
-        const backendMs = ctx.response.headers.get('X-Backend-Time')
-        const sqlMs = ctx.response.headers.get('X-SQL-Time')
-        const path = ctx.response.headers.get('X-Stats-Path') || url
-        if (backendMs) {
-          // eslint-disable-next-line no-console
-          console.log(
-            '[Stats perf] backend',
-            path,
-            backendMs + 'ms' + (sqlMs ? ' (SQL ' + sqlMs + 'ms)' : '')
-          )
-        }
-      }
       existingOnResponse?.(ctx)
     },
   }) as Promise<T>
@@ -3432,26 +3415,10 @@ async function loadOverview() {
       timeout: STATS_FETCH_TIMEOUT_MS,
     })
     overviewData.value = overviewRes as typeof overviewData.value
-    if (
-      import.meta.dev &&
-      overviewRes &&
-      typeof overviewRes === 'object' &&
-      'totalMatches' in overviewRes
-    ) {
-      // eslint-disable-next-line no-console
-      console.log(
-        '[stats/overview]',
-        (overviewRes as { totalMatches: number }).totalMatches,
-        'matches'
-      )
-    }
     loadOverviewTeams()
     loadOverviewDurationWinrate()
     loadOverviewProgression()
   } catch (err) {
-    const url = baseUrl + '/overview' + query
-    // eslint-disable-next-line no-console
-    console.error('[stats/overview] fetch failed', url, err)
     overviewData.value = null
     const errData =
       err && typeof err === 'object' && 'data' in err ? (err as { data?: unknown }).data : null
@@ -4335,10 +4302,6 @@ function sortedItemsBySlot(
 }
 
 watch(activeTab, async tab => {
-  if (isStatsPerfEnabled()) {
-    // eslint-disable-next-line no-console
-    console.log('[Stats perf] activeTab', tab)
-  }
   if (tab === 'overview') loadOverview()
   if (tab === 'progressions') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
@@ -4366,14 +4329,6 @@ onMounted(async () => {
     : versionStore.loadCurrentVersion()
   // Priorité: overview + champions (noms dans les cartes). Les stores runes/items/sorts
   // et la liste des champions (onglet) partent en arrière-plan pour ne pas saturer l’API.
-  if (import.meta.client) {
-    // eslint-disable-next-line no-console
-    console.log(
-      isStatsPerfEnabled()
-        ? '[Stats perf] logs activés — durées dans la console'
-        : '[Stats perf] pour afficher les durées, ajoute ?stats_perf=1 à l’URL'
-    )
-  }
   const tPage = statsPerfStart('page mount (version + overview + championsStore)')
   const tVersion = statsPerfStart('version')
   await versionPromise
@@ -4388,10 +4343,6 @@ onMounted(async () => {
   ])
   statsPerfEnd('page mount', tPage)
   // Chargement en arrière-plan (sans bloquer le rendu)
-  if (isStatsPerfEnabled()) {
-    // eslint-disable-next-line no-console
-    console.log('[Stats perf] background: itemsStore, runesStore, summonerSpellsStore')
-  }
   itemsStore.loadItems(riotLocale.value)
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)

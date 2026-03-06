@@ -10,7 +10,8 @@
         :src="video.thumbnailUrl"
         :alt="video.title"
         class="h-36 w-full object-cover"
-        loading="lazy"
+        :loading="fetchPriority === 'high' ? 'eager' : 'lazy'"
+        :fetchpriority="fetchPriority"
       />
       <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/5" />
     </div>
@@ -35,9 +36,14 @@
 <script setup lang="ts">
 import type { YouTubeVideo } from '~/types/youtube'
 
-defineProps<{
-  video: YouTubeVideo
-}>()
+withDefaults(
+  defineProps<{
+    video: YouTubeVideo
+    /** Set 'high' for the first card (LCP) to improve Lighthouse. */
+    fetchPriority?: 'high' | 'low' | undefined
+  }>(),
+  { fetchPriority: undefined }
+)
 
 const formatDate = (iso: string) => {
   const d = new Date(iso)

@@ -232,11 +232,11 @@ export default defineNuxtConfig({
       '/api/**': {
         proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3500') + '/api/**',
       },
-      // Pages/HTML should not be cached aggressively. Prevents "new HTML + old _nuxt"
-      // or "old HTML + new _nuxt" mismatches during deployments.
+      // Pages/HTML: no-store would block back/forward cache (bfcache). Use no-cache
+      // so the doc can be bfcached while still revalidating on return.
       '/**': {
         headers: {
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'no-cache',
         },
       },
     },
