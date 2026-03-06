@@ -32,7 +32,7 @@
         filtersOpen ? 'translate-x-0' : '-translate-x-full',
       ]"
     >
-      <div class="flex items-center justify-between border-b border-primary/30 p-4 lg:border-0">
+      <div class="flex items-center justify-between border-b border-primary/30 p-2 lg:border-0">
         <h2 class="text-lg font-semibold text-text-accent">
           {{ t('statisticsPage.filtersTitle') }}
         </h2>
@@ -52,7 +52,7 @@
           </svg>
         </button>
       </div>
-      <div class="flex flex-1 flex-col gap-6 overflow-y-auto p-4">
+      <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-2">
         <div>
           <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
             {{ t('statisticsPage.overviewFilterByVersion') }}
@@ -74,29 +74,44 @@
           </select>
         </div>
         <div>
-          <label for="stats-filter-division" class="mb-1 block text-sm font-medium text-text">
+          <div class="mb-1 text-sm font-medium text-text">
             {{ t('statisticsPage.overviewMatchesByDivision') }}
-          </label>
-          <select
-            id="stats-filter-division"
-            v-model="statsDivisionFilter"
-            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            @change="onStatsFilterChange"
-          >
-            <option value="">{{ t('statisticsPage.overviewDivisionAll') }}</option>
-            <option v-for="r in rankTiers" :key="r" :value="r">{{ r }}</option>
-          </select>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="tier in rankTiers"
+              :key="tier"
+              type="button"
+              class="stats-division-btn rounded border p-0.5 transition-colors"
+              :class="
+                statsDivisionFilter.includes(tier)
+                  ? 'border-accent bg-accent/20'
+                  : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+              "
+              :title="tier"
+              @click="toggleDivisionFilter(tier)"
+            >
+              <img
+                v-if="getRankedEmblemUrl(tier)"
+                :src="getRankedEmblemUrl(tier)!"
+                :alt="tier"
+                class="h-3 w-3 object-contain"
+                width="12"
+                height="12"
+              />
+            </button>
+          </div>
         </div>
         <div>
-          <div class="mb-2 text-sm font-medium text-text">
+          <div class="mb-1 text-sm font-medium text-text">
             {{ t('statisticsPage.filterRole') }}
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="flex flex-wrap gap-1">
             <button
               v-for="r in roles"
               :key="r.value"
               type="button"
-              class="stats-role-btn rounded border p-1 transition-colors"
+              class="stats-role-btn rounded border p-0.5 transition-colors"
               :class="
                 statsRoleFilter === r.value
                   ? 'border-accent bg-accent/20'
@@ -177,8 +192,15 @@
             <span class="text-text/80">{{ t('statisticsPage.overviewMatchesByDivision') }} :</span>
             <template v-for="(d, idx) in overviewDivisionsForDescription" :key="d.rankTier">
               <span v-if="idx > 0" class="text-text/40" aria-hidden="true">·</span>
-              <span class="text-sky-400">
-                {{ d.rankTier }} ({{ d.matchCount }}, {{ divisionPercent(d) }}%)
+              <span class="inline-flex items-center gap-1.5 text-sky-400">
+                <img
+                  v-if="getRankedEmblemUrl(d.rankTier)"
+                  :src="getRankedEmblemUrl(d.rankTier)!"
+                  :alt="d.rankTier"
+                  class="inline-block h-[1.5em] w-[1.5em] shrink-0 object-contain align-middle"
+                />
+                <span v-else>{{ d.rankTier }}</span>
+                <span>({{ d.matchCount }}, {{ divisionPercent(d) }}%)</span>
               </span>
             </template>
           </p>
@@ -2926,6 +2948,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
+import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
@@ -3292,12 +3315,14 @@ const overviewPending = ref(true)
 /** Selected version filter for overview (null = all versions). */
 /** Filtres communs à tous les onglets (version, division, rôle). */
 const statsVersionFilter = ref('')
-const statsDivisionFilter = ref('')
+const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const filtersOpen = ref(false)
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const overviewVersionFilter = computed(() => statsVersionFilter.value || null)
-const overviewDivisionFilter = computed(() => statsDivisionFilter.value || null)
+const overviewDivisionFilter = computed<string[] | null>(() =>
+  statsDivisionFilter.value.length > 0 ? statsDivisionFilter.value : null
+)
 /** Résumé versions (version + nb parties) pour la description en haut de page. */
 const overviewDescriptionVersionsSummary = computed(() => {
   const list = overviewData.value?.matchesByVersion ?? []
@@ -3318,6 +3343,16 @@ function divisionPercent(d: { matchCount: number }): string {
 }
 function toggleRoleFilter(r: (typeof roles)[number]) {
   statsRoleFilter.value = statsRoleFilter.value === r.value ? '' : r.value
+  onStatsFilterChange()
+}
+function toggleDivisionFilter(tier: string) {
+  const arr = statsDivisionFilter.value
+  const idx = arr.indexOf(tier)
+  if (idx >= 0) {
+    statsDivisionFilter.value = arr.filter((_, i) => i !== idx)
+  } else {
+    statsDivisionFilter.value = [...arr, tier]
+  }
   onStatsFilterChange()
 }
 function onStatsFilterChange() {
@@ -3370,7 +3405,7 @@ const overviewDetailPending = ref(false)
 function overviewQueryParams(): string {
   const params = new URLSearchParams()
   if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
-  if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const q = params.toString()
   return q ? '?' + q : ''
 }
@@ -3496,7 +3531,9 @@ async function loadOverviewProgression() {
   const t = statsPerfStart('loadOverviewProgression')
   const params = new URLSearchParams()
   params.set('version', oldest)
-  if (overviewDivisionFilter.value) params.set('rankTier', overviewDivisionFilter.value)
+  if (overviewDivisionFilter.value) {
+    for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
+  }
   const q = params.toString() ? '?' + params.toString() : ''
   try {
     overviewProgressionData.value = await statsFetch(apiUrl('/api/stats/overview-progression' + q))
@@ -3549,7 +3586,9 @@ async function loadProgressionsFull() {
   progressionFullPending.value = true
   const params = new URLSearchParams()
   params.set('version', oldest)
-  if (overviewDivisionFilter.value) params.set('rankTier', overviewDivisionFilter.value)
+  if (overviewDivisionFilter.value) {
+    for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
+  }
   const q = params.toString() ? '?' + params.toString() : ''
   try {
     progressionFullData.value = await statsFetch(apiUrl('/api/stats/overview-progression-full' + q))
@@ -3897,7 +3936,7 @@ function percentForCountSides(key: string, count: number, byBlue: boolean): stri
 function sidesQueryParams(): string {
   const params = new URLSearchParams()
   if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
-  if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const s = params.toString()
   return s ? '?' + s : ''
 }
@@ -4126,7 +4165,7 @@ const matchupTierData = ref<{
 } | null>(null)
 const queryString = computed(() => {
   const params = new URLSearchParams()
-  if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   return params.toString() ? `?${params.toString()}` : ''
 })
@@ -4169,7 +4208,7 @@ async function loadMatchupTierList() {
   try {
     const params = new URLSearchParams()
     params.set('patch', patch)
-    if (statsDivisionFilter.value) params.set('rankTier', statsDivisionFilter.value)
+    for (const t of statsDivisionFilter.value) params.append('rankTier', t)
     if (statsRoleFilter.value) params.set('lane', statsRoleFilter.value)
     params.set('minGames', '20')
     params.set('limit', '300')

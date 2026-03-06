@@ -58,6 +58,15 @@ export async function runCommunityDragonSyncOnce(): Promise<
 
   await log.info('Community Dragon sync completed. Synced:', syncData.synced, 'Failed:', syncData.failed, 'Skipped:', syncData.skipped)
 
+  await log.step('Syncing ranked emblems')
+  const emblemResult = await communityDragonService.syncRankedEmblems()
+  if (emblemResult.isErr()) {
+    await log.warn('Ranked emblems sync failed:', emblemResult.unwrapErr())
+  } else {
+    const emblemData = emblemResult.unwrap()
+    await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
+  }
+
   // Copy to frontend and delete from backend
   const copyResult = await staticAssetsService.copyCommunityDragonDataToFrontend()
   if (copyResult.isErr()) {

@@ -1,5 +1,7 @@
 import axios, { AxiosInstance } from 'axios'
+import { promises as fs } from 'fs'
 import { join } from 'path'
+import sharp from 'sharp'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
@@ -11,6 +13,23 @@ interface ChampionFullData {
 
 const CD_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global'
+
+/** Base URL for ranked emblems (static assets). */
+const CD_RANKED_EMBLEM_BASE =
+  'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem'
+
+const RANKED_EMBLEM_FILES = [
+  'emblem-iron.png',
+  'emblem-bronze.png',
+  'emblem-silver.png',
+  'emblem-gold.png',
+  'emblem-platinum.png',
+  'emblem-emerald.png',
+  'emblem-diamond.png',
+  'emblem-master.png',
+  'emblem-grandmaster.png',
+  'emblem-challenger.png',
+]
 
 /**
  * Locale for Community Dragon (default = en_US, use fr_fr for French).
@@ -254,5 +273,64 @@ export class CommunityDragonService {
         new AppError('Failed to sync Community Dragon data', 'SYNC_ERROR', error)
       )
     }
+  }
+
+  /**
+   * Sync ranked division emblems (images) from Community Dragon static assets.
+   * Saves to {dataDir}/ranked-emblem/*.png for later copy to frontend.
+   */
+  async syncRankedEmblems(): Promise<
+    Result<
+      { synced: number; failed: number; errors: Array<{ file: string; error: string }> },
+      AppError
+    >
+  > {
+    const emblemDir = join(this.dataDir, 'ranked-emblem')
+    const dirResult = await FileManager.ensureDir(emblemDir)
+    if (dirResult.isErr()) {
+      return Result.err(dirResult.unwrapErr())
+    }
+
+    let synced = 0
+    let failed = 0
+    const errors: Array<{ file: string; error: string }> = []
+
+    const axiosEmblem = axios.create({
+      baseURL: CD_RANKED_EMBLEM_BASE,
+      timeout: 30000,
+      responseType: 'arraybuffer',
+      headers: { 'User-Agent': 'Lelanation/1.0' },
+    })
+
+    for (const file of RANKED_EMBLEM_FILES) {
+      try {
+        const response = await axiosEmblem.get<ArrayBuffer | Buffer>(`/${file}`)
+        const data = response.data
+        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+          failed++
+          errors.push({ file, error: 'No data returned' })
+          continue
+        }
+        const targetPath = join(emblemDir, file)
+        const buffer = Buffer.from(data as ArrayBuffer)
+        const trimmed = await sharp(buffer)
+          .trim({ threshold: 0 })
+          .png()
+          .toBuffer()
+        await fs.writeFile(targetPath, trimmed)
+        synced++
+        console.log(`[CommunityDragon] Ranked emblem synced (trimmed): ${file}`)
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync ranked emblem ${file}: ${errorMessage}`)
+      }
+    }
+
+    console.log(
+      `[CommunityDragon] Ranked emblems: ${synced} synced, ${failed} failed`
+    )
+    return Result.ok({ synced, failed, errors })
   }
 }

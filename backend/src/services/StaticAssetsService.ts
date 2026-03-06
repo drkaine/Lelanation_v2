@@ -835,16 +835,37 @@ export class StaticAssetsService {
       const entries = await fs.readdir(this.backendCommunityDragonDir, { withFileTypes: true })
 
       for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+        if (entry.isFile() && entry.name.endsWith('.json')) {
+          const sourcePath = join(this.backendCommunityDragonDir, entry.name)
+          const targetPath = join(targetCommunityDragonDir, entry.name)
+          const content = await fs.readFile(sourcePath, 'utf-8')
+          await fs.writeFile(targetPath, content, 'utf-8')
+          copied++
+          await fs.unlink(sourcePath).catch(() => {})
+          deleted++
+          continue
+        }
 
-        const sourcePath = join(this.backendCommunityDragonDir, entry.name)
-        const targetPath = join(targetCommunityDragonDir, entry.name)
-
-        const content = await fs.readFile(sourcePath, 'utf-8')
-        await fs.writeFile(targetPath, content, 'utf-8')
-        copied++
-        await fs.unlink(sourcePath).catch(() => {})
-        deleted++
+        if (entry.isDirectory() && entry.name === 'ranked-emblem') {
+          const sourceEmblemDir = join(this.backendCommunityDragonDir, 'ranked-emblem')
+          const targetEmblemDir = join(targetCommunityDragonDir, 'ranked-emblem')
+          const emblemDirResult = await FileManager.ensureDir(targetEmblemDir)
+          if (emblemDirResult.isErr()) {
+            continue
+          }
+          const emblemFiles = await fs.readdir(sourceEmblemDir, { withFileTypes: true })
+          for (const f of emblemFiles) {
+            if (!f.isFile()) continue
+            const src = join(sourceEmblemDir, f.name)
+            const tgt = join(targetEmblemDir, f.name)
+            const buf = await fs.readFile(src)
+            await fs.writeFile(tgt, buf)
+            copied++
+            await fs.unlink(src).catch(() => {})
+            deleted++
+          }
+          await fs.rm(sourceEmblemDir, { recursive: true, force: true }).catch(() => {})
+        }
       }
 
       if (deleted > 0) {

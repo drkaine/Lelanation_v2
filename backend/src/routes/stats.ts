@@ -94,6 +94,13 @@ function queryStringArray(value: unknown): string[] {
   return []
 }
 
+/** rankTier: single string or multiple (rankTier=GOLD&rankTier=PLAT) → comma-separated for SQL, or null. */
+function rankTierParam(value: unknown): string | null {
+  const arr = queryStringArray(value)
+  if (arr.length === 0) return null
+  return arr.map((s) => s.trim().toUpperCase()).filter(Boolean).join(',')
+}
+
 function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): string | null {
   const patchRaw = queryString(patchValue)
   if (patchRaw) return patchRaw
@@ -114,11 +121,11 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: true; data: T 
   ])
 }
 
-/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD */
+/** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD or &rankTier=GOLD&rankTier=PLATINUM */
 router.get('/overview', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const sqlStart = Date.now()
 
   const runOverview = async () => {
@@ -165,7 +172,7 @@ router.get('/overview', async (req: Request, res: Response) => {
 router.get('/overview-detail', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
   const sqlStart = Date.now()
   if (version == null) {
@@ -196,7 +203,7 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
 router.get('/overview-duration-winrate', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   if (version == null) {
     const pre = await getPrecomputedDurationWinrate(rankTier ?? null)
     if (pre?.data) return res.json(pre.data)
@@ -212,7 +219,7 @@ router.get('/overview-duration-winrate', async (req: Request, res: Response) => 
 router.get('/overview-abandons', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   if (version == null) {
     const pre = await getPrecomputedAbandons(rankTier ?? null)
     if (pre?.data) return res.json(pre.data)
@@ -235,7 +242,7 @@ router.get('/overview-abandons', async (req: Request, res: Response) => {
 /** GET /api/stats/overview-progression - WR delta from oldest version to all since. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-progression', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const data = await getOverviewProgressionStats(version, rankTier)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, gainers: [], losers: [] })
@@ -246,7 +253,7 @@ router.get('/overview-progression', async (req: Request, res: Response) => {
 /** GET /api/stats/overview-progression-full - All champions with WR and pickrate progression. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-progression-full', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const data = await getOverviewProgressionFullStats(version, rankTier)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, champions: [] })
@@ -257,7 +264,7 @@ router.get('/overview-progression-full', async (req: Request, res: Response) => 
 /** GET /api/stats/overview-teams - bans and objectives (first + kills) by win/loss. Query: ?version=16.1 &rankTier=GOLD. Lit précalculé si version null. */
 router.get('/overview-teams', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   if (version == null) {
     const pre = await getPrecomputedOverviewTeams(rankTier ?? null)
     if (pre?.data) return res.json(pre.data)
@@ -330,7 +337,7 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
 /** GET /api/stats/champions - lit précalculé si disponible (version implicite null), sinon calcul live. */
 router.get('/champions', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const role = (req.query.role as string) || undefined
   const sqlStart = Date.now()
   const pre = await getPrecomputedChampions(rankTier ?? null, role ?? null)
@@ -372,7 +379,7 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const role = (req.query.role as string) || undefined
   const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
   if (!data) {
@@ -403,7 +410,7 @@ router.get('/champions/:championId/duration-winrate', async (req: Request, res: 
     return res.status(400).json({ error: 'Invalid championId' })
   }
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const data = await getDurationWinrateByChampion(championId, version, rankTier)
   if (!data) {
     return res.status(200).json({ buckets: [] })
@@ -418,7 +425,7 @@ router.get('/champions/:championId/builds', async (req: Request, res: Response) 
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const role = (req.query.role as string) || undefined
   const patch = (req.query.patch as string) || undefined
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
@@ -444,7 +451,7 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const patch = (req.query.patch as string) || undefined
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20
@@ -469,7 +476,7 @@ router.get('/champions/:championId/runes-per-rune', async (req: Request, res: Re
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const data = await getRuneStatsByChampion({
     championId,
@@ -491,7 +498,7 @@ router.get('/champions/:championId/matchups', async (req: Request, res: Response
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const data = await getMatchupsByChampion({
     championId,
@@ -518,7 +525,7 @@ router.get('/champions/:championId/matchups-tier', async (req: Request, res: Res
   if (!patch) {
     return res.status(400).json({ error: 'Missing patch/version for matchup-tier query' })
   }
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const lane = queryString(req.query.lane) ?? queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
@@ -541,7 +548,7 @@ router.get('/matchup-tier-list', async (req: Request, res: Response) => {
   if (!patch) {
     return res.status(400).json({ error: 'Missing patch/version for matchup-tier-list query' })
   }
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const lane = queryString(req.query.lane) ?? queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 300
@@ -568,7 +575,7 @@ router.get('/champions/:championId/summoner-spells', async (req: Request, res: R
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const data = await getSummonerSpellsByChampion(championId, version, rankTier)
   if (!data) {
     return res.status(200).json({ totalGames: 0, spells: [], message: 'No stats yet.' })
@@ -584,7 +591,7 @@ router.get('/champions/:championId/summoner-spells-duos', async (req: Request, r
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
   const version = queryString(req.query.version)
-  const rankTier = queryString(req.query.rankTier)
+  const rankTier = rankTierParam(req.query.rankTier)
   const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
   if (!data) {
     return res.status(200).json({ totalGames: 0, duos: [], message: 'No stats yet.' })
@@ -608,7 +615,7 @@ router.get('/players/search', async (req: Request, res: Response) => {
 
 /** GET /api/stats/players - meilleurs joueurs (classement général). Par défaut Master → Challenger uniquement (stats globale). */
 router.get('/players', async (req: Request, res: Response) => {
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const highRankOnly = req.query.highRankOnly !== '0' && req.query.highRankOnly !== 'false'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 50
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
@@ -628,7 +635,7 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = (req.query.rankTier as string) || undefined
+  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
   const highRankOnly = req.query.highRankOnly === '1' || req.query.highRankOnly === 'true'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50

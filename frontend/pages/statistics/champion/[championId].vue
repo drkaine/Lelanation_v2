@@ -79,19 +79,33 @@
             </select>
           </div>
           <div>
-            <label for="champion-stat-rank" class="mb-1 block text-sm font-medium text-text">
+            <div class="mb-2 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRank') }}
-            </label>
-            <select
-              id="champion-stat-rank"
-              v-model="filterRank"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            >
-              <option value="">{{ t('statisticsPage.allRanks') }}</option>
-              <option v-for="d in divisions" :key="d" :value="d">
-                {{ d }}
-              </option>
-            </select>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="tier in divisions"
+                :key="tier"
+                type="button"
+                class="champion-division-btn rounded border p-1 transition-colors"
+                :class="
+                  filterRank.includes(tier)
+                    ? 'border-accent bg-accent/20'
+                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                "
+                :title="tier"
+                @click="toggleRankFilter(tier)"
+              >
+                <img
+                  v-if="getRankedEmblemUrl(tier)"
+                  :src="getRankedEmblemUrl(tier)!"
+                  :alt="tier"
+                  class="h-3 w-3 object-contain"
+                  width="12"
+                  height="12"
+                />
+              </button>
+            </div>
           </div>
           <div>
             <div class="mb-2 text-sm font-medium text-text">
@@ -1327,7 +1341,15 @@
                         <td class="px-3 py-2 text-right text-text/90">
                           {{ Number(p.winrate).toFixed(2) }}%
                         </td>
-                        <td class="px-3 py-2 text-text/80">{{ p.rankTier ?? '—' }}</td>
+                        <td class="px-3 py-2 text-text/80">
+                          <img
+                            v-if="getRankedEmblemUrl(p.rankTier)"
+                            :src="getRankedEmblemUrl(p.rankTier)!"
+                            :alt="p.rankTier ?? ''"
+                            class="inline-block h-[1.5em] w-[1.5em] shrink-0 object-contain align-middle"
+                          />
+                          <span v-else>{{ p.rankTier ?? '—' }}</span>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
@@ -1358,6 +1380,7 @@ import {
   getRuneImageUrl,
   getSpellImageUrl,
 } from '~/utils/imageUrl'
+import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 
 definePageMeta({
   layout: 'default',
@@ -1496,7 +1519,7 @@ function spellImageName(spellId: number) {
 
 const championFiltersOpen = ref(false)
 const filterVersion = ref('')
-const filterRank = ref('')
+const filterRank = ref<string[]>([])
 const filterRole = ref('')
 const filterPlayersMasterPlus = ref(false)
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
@@ -1678,9 +1701,18 @@ function queryParams() {
     p.set('version', filterVersion.value)
     p.set('patch', filterVersion.value) // builds/runes API attendent "patch"
   }
-  if (filterRank.value) p.set('rankTier', filterRank.value)
+  for (const t of filterRank.value) p.append('rankTier', t)
   if (filterRole.value) p.set('role', filterRole.value)
   return p.toString() ? '?' + p.toString() : ''
+}
+function toggleRankFilter(tier: string) {
+  const arr = filterRank.value
+  const idx = arr.indexOf(tier)
+  if (idx >= 0) {
+    filterRank.value = arr.filter((_, i) => i !== idx)
+  } else {
+    filterRank.value = [...arr, tier]
+  }
 }
 
 function patchFromVersion(version: string): string | null {
@@ -1697,7 +1729,7 @@ function patchFromVersion(version: string): string | null {
 function overviewQueryParams() {
   const p = new URLSearchParams()
   if (filterVersion.value) p.set('version', filterVersion.value)
-  if (filterRank.value) p.set('rankTier', filterRank.value)
+  for (const t of filterRank.value) p.append('rankTier', t)
   return p.toString() ? '?' + p.toString() : ''
 }
 
@@ -1802,7 +1834,7 @@ async function loadMatchups() {
     const effectiveVersion = filterVersion.value || gameVersion.value || ''
     const patch = patchFromVersion(effectiveVersion)
     if (patch) params.set('patch', patch)
-    if (filterRank.value) params.set('rankTier', filterRank.value)
+    for (const t of filterRank.value) params.append('rankTier', t)
     if (filterRole.value) params.set('lane', filterRole.value)
     params.set('minGames', '10')
     matchupsData.value = await statsFetch(
