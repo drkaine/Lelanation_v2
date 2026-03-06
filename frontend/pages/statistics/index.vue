@@ -1,5 +1,5 @@
 <template>
-  <div class="statistics flex min-h-screen text-text">
+  <div class="statistics flex min-h-screen flex-col text-text">
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
       type="button"
@@ -25,593 +25,260 @@
       @click="filtersOpen = false"
     />
 
-    <!-- Sidebar filtres : même charte que le reste (border-primary/30, bg-surface/30) -->
-    <aside
-      :class="[
-        'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200 lg:static lg:z-0 lg:translate-x-0 lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
-        filtersOpen ? 'translate-x-0' : '-translate-x-full',
-      ]"
-    >
-      <div class="flex items-center justify-between border-b border-primary/30 p-2 lg:border-0">
-        <h2 class="text-lg font-semibold text-text-accent">
-          {{ t('statisticsPage.filtersTitle') }}
-        </h2>
+    <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
+    <div class="w-full flex-shrink-0 border-b border-primary/30 bg-surface/30 px-4 pb-2 pt-4">
+      <div class="flex flex-wrap gap-2">
         <button
+          v-for="tab in tabs"
+          :key="tab.id"
           type="button"
-          class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
-          :aria-label="t('statisticsPage.closeFilters')"
-          @click="filtersOpen = false"
+          :class="[
+            'rounded px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === tab.id
+              ? 'bg-accent text-background'
+              : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
+          ]"
+          @click="activeTab = tab.id"
         >
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          {{ tab.label }}
         </button>
       </div>
-      <div class="flex flex-1 flex-col gap-3 overflow-y-auto p-2">
-        <div>
-          <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
-            {{ t('statisticsPage.overviewFilterByVersion') }}
-          </label>
-          <select
-            id="stats-filter-version"
-            v-model="statsVersionFilter"
-            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-            @change="onStatsFilterChange"
-          >
-            <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
-            <option
-              v-for="v in overviewData?.matchesByVersion ?? []"
-              :key="v.version"
-              :value="v.version"
-            >
-              {{ v.version }}
-            </option>
-          </select>
-        </div>
-        <div>
-          <div class="mb-1 text-sm font-medium text-text">
-            {{ t('statisticsPage.overviewMatchesByDivision') }}
-          </div>
-          <div class="flex flex-wrap gap-1">
-            <button
-              v-for="tier in rankTiers"
-              :key="tier"
-              type="button"
-              class="stats-division-btn rounded border p-0.5 transition-colors"
-              :class="
-                statsDivisionFilter.includes(tier)
-                  ? 'border-accent bg-accent/20'
-                  : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
-              "
-              :title="tier"
-              @click="toggleDivisionFilter(tier)"
-            >
-              <img
-                v-if="getRankedEmblemUrl(tier)"
-                :src="getRankedEmblemUrl(tier)!"
-                :alt="tier"
-                class="h-3 w-3 object-contain"
-                width="12"
-                height="12"
-              />
-            </button>
-          </div>
-        </div>
-        <div>
-          <div class="mb-1 text-sm font-medium text-text">
-            {{ t('statisticsPage.filterRole') }}
-          </div>
-          <div class="flex flex-wrap gap-1">
-            <button
-              v-for="r in roles"
-              :key="r.value"
-              type="button"
-              class="stats-role-btn rounded border p-0.5 transition-colors"
-              :class="
-                statsRoleFilter === r.value
-                  ? 'border-accent bg-accent/20'
-                  : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
-              "
-              :title="r.label"
-              @click="toggleRoleFilter(r)"
-            >
-              <img
-                :src="r.icon"
-                :alt="r.label"
-                class="h-3 w-3 object-contain"
-                width="12"
-                height="12"
-              />
-            </button>
-          </div>
-        </div>
-        <div>
-          <label for="champion-sort" class="mb-1 block text-sm font-medium text-text">{{
-            t('statisticsPage.championsSortBy')
-          }}</label>
-          <select
-            id="champion-sort"
-            v-model="championsSortOrder"
-            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
-          >
-            <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
-            <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
-            <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
-            <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
-            <option value="wins">{{ t('statisticsPage.wins') }}</option>
-          </select>
-        </div>
-        <div>
-          <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
-            t('statisticsPage.searchChampion')
-          }}</label>
-          <input
-            id="champion-search"
-            v-model.trim="championSearchQuery"
-            type="text"
-            :placeholder="t('statisticsPage.searchChampionPlaceholder')"
-            class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
-          />
-        </div>
-      </div>
-    </aside>
+    </div>
 
-    <!-- Contenu principal : pleine largeur à côté des filtres -->
-    <div class="min-w-0 flex-1 p-4 pt-14 lg:pl-4 lg:pt-4">
-      <div class="w-full">
-        <div class="mb-6 text-text/80">
-          <p>
-            <template v-if="overviewData">
-              {{
-                t('statisticsPage.overviewDescriptionSummary', {
-                  lastUpdate: overviewData.lastUpdate
-                    ? formatGeneratedAt(overviewData.lastUpdate)
-                    : '—',
-                  total: overviewEffectiveTotalMatches,
-                  count: overviewData.playerCount ?? 0,
-                })
-              }}
-            </template>
-            <template v-else>
-              {{ t('statisticsPage.description') }}
-            </template>
-          </p>
-          <p v-if="overviewData && overviewDescriptionVersionsSummary" class="mt-1 text-sm">
-            {{ t('statisticsPage.overviewFilterByVersion') }} :
-            {{ overviewDescriptionVersionsSummary }}
-          </p>
-          <p
-            v-if="overviewData && overviewDivisionsForDescription.length"
-            class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm"
-          >
-            <span class="text-text/80">{{ t('statisticsPage.overviewMatchesByDivision') }} :</span>
-            <template v-for="(d, idx) in overviewDivisionsForDescription" :key="d.rankTier">
-              <span v-if="idx > 0" class="text-text/40" aria-hidden="true">·</span>
-              <span class="inline-flex items-center gap-1.5 text-sky-400">
-                <img
-                  v-if="getRankedEmblemUrl(d.rankTier)"
-                  :src="getRankedEmblemUrl(d.rankTier)!"
-                  :alt="d.rankTier"
-                  class="inline-block h-[1.5em] w-[1.5em] shrink-0 object-contain align-middle"
-                />
-                <span v-else>{{ d.rankTier }}</span>
-                <span>({{ d.matchCount }}, {{ divisionPercent(d) }}%)</span>
-              </span>
-            </template>
-          </p>
-        </div>
-
-        <!-- Tabs -->
-        <div class="mb-4 flex flex-wrap gap-2 border-b border-primary/30 pb-2">
+    <!-- Filtres + contenu : même hauteur, bord aligné -->
+    <div class="flex min-h-0 flex-1 pt-4">
+      <aside
+        :class="[
+          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200',
+          'lg:static lg:sticky lg:top-4 lg:z-0 lg:ml-3 lg:max-h-[calc(100vh-2rem)] lg:translate-x-0 lg:self-start lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
+          filtersOpen ? 'translate-x-0' : '-translate-x-full',
+        ]"
+      >
+        <div class="flex items-center justify-between border-b border-primary/30 p-2 lg:border-0">
+          <h2 class="text-lg font-semibold text-text-accent">
+            {{ t('statisticsPage.filtersTitle') }}
+          </h2>
           <button
-            v-for="tab in tabs"
-            :key="tab.id"
             type="button"
-            :class="[
-              'rounded px-4 py-2 text-sm font-medium transition-colors',
-              activeTab === tab.id
-                ? 'bg-accent text-background'
-                : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
-            ]"
-            @click="activeTab = tab.id"
+            class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="filtersOpen = false"
           >
-            {{ tab.label }}
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </div>
-
-        <!-- Tab: Overview (default) -->
-        <div v-show="activeTab === 'overview'" class="space-y-6">
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-            <h2 class="mb-4 text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.overviewTitle') }}
-            </h2>
-            <div v-if="overviewPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="overviewError"
-              class="rounded border border-error/50 bg-error/10 p-4 text-error"
+        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
+          <div>
+            <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
+              {{ t('statisticsPage.overviewFilterByVersion') }}
+            </label>
+            <select
+              id="stats-filter-version"
+              v-model="statsVersionFilter"
+              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+              @change="onStatsFilterChange"
             >
-              <p class="mb-2">{{ overviewError }}</p>
-              <button
-                type="button"
-                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-background hover:opacity-90"
-                @click="loadOverview()"
+              <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
+              <option
+                v-for="v in overviewData?.matchesByVersion ?? []"
+                :key="v.version"
+                :value="v.version"
               >
-                {{ t('statisticsPage.retry') }}
+                {{ v.version }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <div class="mb-1 text-sm font-medium text-text">
+              {{ t('statisticsPage.overviewMatchesByDivision') }}
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="tier in rankTiers"
+                :key="tier"
+                type="button"
+                class="stats-division-btn rounded border p-0.5 transition-colors"
+                :class="
+                  statsDivisionFilter.includes(tier)
+                    ? 'border-accent bg-accent/20'
+                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                "
+                :title="formatDivisionLabel(tier)"
+                @click="toggleDivisionFilter(tier)"
+              >
+                <img
+                  v-if="getRankedEmblemUrl(tier)"
+                  :src="getRankedEmblemUrl(tier)!"
+                  :alt="tier"
+                  class="h-3 w-3 object-contain"
+                  width="12"
+                  height="12"
+                />
               </button>
             </div>
-            <div v-else-if="overviewData" class="space-y-6">
-              <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
-              <div class="grid gap-4 sm:grid-cols-2">
-                <!-- Champions les plus choisis -->
-                <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{ t('statisticsPage.fastStatsMostPicked') }}
-                    <span
-                      class="relative ml-1 inline-flex cursor-help text-text/50"
-                      aria-hidden="true"
-                    >
-                      ⓘ
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                      >
-                        {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
-                      </span>
-                    </span>
-                  </h3>
-                  <table
-                    v-if="(overviewData.topPickrateChampions ?? []).length"
-                    class="fast-stat-table w-full text-sm"
-                  >
-                    <tbody>
-                      <tr
-                        v-for="(row, idx) in (overviewData.topPickrateChampions ?? []).slice(0, 5)"
-                        :key="row.championId"
-                        class="fast-stat-row"
-                      >
-                        <td class="py-1">
-                          <div class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                            <img
-                              v-if="gameVersion && championByKey(row.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(row.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(row.championId) || ''"
-                              class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              width="20"
-                              height="20"
-                            />
-                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                              championName(row.championId) || row.championId
-                            }}</span>
-                          </div>
-                        </td>
-                        <td class="w-[140px] py-1 pl-2">
-                          <div class="flex items-center justify-end gap-2">
-                            <div
-                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
-                            >
-                              <div
-                                class="h-full rounded bg-accent transition-[width]"
-                                :style="{
-                                  width:
-                                    Math.min(
-                                      100,
-                                      (row.pickrate /
-                                        Math.max(
-                                          ...(overviewData.topPickrateChampions ?? []).map(
-                                            (c: { pickrate: number }) => c.pickrate
-                                          ),
-                                          1
-                                        )) *
-                                        100
-                                    ) + '%',
-                                }"
-                              />
-                            </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ Number(row.pickrate).toFixed(2) }}%</span
-                            >
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-else class="py-6 text-center text-text/60">
-                    {{ t('statisticsPage.fastStatsNoData') }}
-                  </div>
+          </div>
+          <div>
+            <div class="mb-1 text-sm font-medium text-text">
+              {{ t('statisticsPage.filterRole') }}
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="r in roles"
+                :key="r.value"
+                type="button"
+                class="stats-role-btn rounded border p-0.5 transition-colors"
+                :class="
+                  statsRoleFilter === r.value
+                    ? 'border-accent bg-accent/20'
+                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                "
+                :title="r.label"
+                @click="toggleRoleFilter(r)"
+              >
+                <img
+                  :src="r.icon"
+                  :alt="r.label"
+                  class="h-3 w-3 object-contain"
+                  width="12"
+                  height="12"
+                />
+              </button>
+            </div>
+          </div>
+          <div>
+            <label for="champion-sort" class="mb-1 block text-sm font-medium text-text">{{
+              t('statisticsPage.championsSortBy')
+            }}</label>
+            <select
+              id="champion-sort"
+              v-model="championsSortOrder"
+              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+            >
+              <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
+              <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
+              <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
+              <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
+              <option value="wins">{{ t('statisticsPage.wins') }}</option>
+            </select>
+          </div>
+          <div>
+            <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
+              t('statisticsPage.searchChampion')
+            }}</label>
+            <input
+              id="champion-search"
+              v-model.trim="championSearchQuery"
+              type="text"
+              :placeholder="t('statisticsPage.searchChampionPlaceholder')"
+              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+            />
+          </div>
+        </div>
+      </aside>
+
+      <!-- Contenu principal : à côté des filtres, même hauteur -->
+      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-4 lg:pb-4 lg:pt-0">
+        <div class="w-full">
+          <div v-if="!overviewData" class="mb-6 text-text/80">
+            <p>{{ t('statisticsPage.description') }}</p>
+          </div>
+
+          <!-- Tab: Overview (default) -->
+          <div v-show="activeTab === 'overview'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+              <h2 class="mb-4 text-xl font-semibold text-text-accent">
+                {{ t('statisticsPage.overviewTitle') }}
+              </h2>
+              <div v-if="overviewPending" class="text-text/70">
+                {{ t('statisticsPage.loading') }}
+              </div>
+              <div
+                v-else-if="overviewError"
+                class="rounded border border-error/50 bg-error/10 p-4 text-error"
+              >
+                <p class="mb-2">{{ overviewError }}</p>
+                <button
+                  type="button"
+                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-background hover:opacity-90"
+                  @click="loadOverview()"
+                >
+                  {{ t('statisticsPage.retry') }}
+                </button>
+              </div>
+              <div v-else-if="overviewData" class="space-y-3">
+                <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
+                <div class="flex flex-wrap gap-6">
+                  <!-- Champions les plus choisis -->
                   <div
-                    v-if="(overviewData.topPickrateChampions ?? []).length"
-                    class="mt-2 text-center"
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <button
-                      type="button"
-                      class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
-                      @click="goToChampionsWithSort('pickrate')"
-                    >
-                      {{ t('statisticsPage.fastStatsSeeMore') }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Meilleurs champions -->
-                <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{ t('statisticsPage.fastStatsBestWinrate') }}
-                    <span
-                      class="relative ml-1 inline-flex cursor-help text-text/50"
-                      aria-hidden="true"
-                    >
-                      ⓘ
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.fastStatsMostPicked') }}
                       <span
-                        role="tooltip"
-                        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        class="relative ml-1 inline-flex cursor-help text-text/50"
+                        aria-hidden="true"
                       >
-                        {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
+                        ⓘ
+                        <span
+                          role="tooltip"
+                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        >
+                          {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
+                        </span>
                       </span>
-                    </span>
-                  </h3>
-                  <table
-                    v-if="(overviewData.topWinrateChampions ?? []).length"
-                    class="fast-stat-table w-full text-sm"
-                  >
-                    <tbody>
-                      <tr
-                        v-for="(row, idx) in (overviewData.topWinrateChampions ?? []).slice(0, 5)"
-                        :key="row.championId"
-                        class="fast-stat-row"
-                      >
-                        <td class="py-1">
-                          <div class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                            <img
-                              v-if="gameVersion && championByKey(row.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(row.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(row.championId) || ''"
-                              class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              width="20"
-                              height="20"
-                            />
-                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                              championName(row.championId) || row.championId
-                            }}</span>
-                          </div>
-                        </td>
-                        <td class="w-[140px] py-1 pl-2">
-                          <div class="flex items-center justify-end gap-2">
-                            <div
-                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
-                            >
-                              <div
-                                class="h-full rounded bg-success transition-[width]"
-                                :style="{
-                                  width: (() => {
-                                    const list = overviewData.topWinrateChampions ?? []
-                                    const minWr = Math.min(...list.map(c => c.winrate), 50)
-                                    const maxWr = Math.max(...list.map(c => c.winrate), 52)
-                                    const range = maxWr - minWr || 1
-                                    return (
-                                      Math.min(
-                                        100,
-                                        Math.max(0, ((row.winrate - minWr) / range) * 100)
-                                      ) + '%'
-                                    )
-                                  })(),
-                                }"
-                              />
-                            </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ Number(row.winrate).toFixed(2) }}%</span
-                            >
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-else class="py-6 text-center text-text/60">
-                    {{ t('statisticsPage.fastStatsNoData') }}
-                  </div>
-                  <div
-                    v-if="(overviewData.topWinrateChampions ?? []).length"
-                    class="mt-2 text-center"
-                  >
-                    <button
-                      type="button"
-                      class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
-                      @click="goToChampionsWithSort('winrate')"
+                    </h3>
+                    <table
+                      v-if="(overviewData.topPickrateChampions ?? []).length"
+                      class="fast-stat-table w-full text-xs"
                     >
-                      {{ t('statisticsPage.fastStatsSeeMore') }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Champions les plus bannis -->
-                <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{ t('statisticsPage.fastStatsMostBanned') }}
-                    <span
-                      class="relative ml-1 inline-flex cursor-help text-text/50"
-                      aria-hidden="true"
-                    >
-                      ⓘ
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                      >
-                        {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
-                      </span>
-                    </span>
-                  </h3>
-                  <table
-                    v-if="overviewEffectiveTopBanrateChampions.length"
-                    class="fast-stat-table w-full text-sm"
-                  >
-                    <tbody>
-                      <tr
-                        v-for="(row, idx) in overviewEffectiveTopBanrateChampions.slice(0, 5)"
-                        :key="row.championId"
-                        class="fast-stat-row"
-                      >
-                        <td class="py-1">
-                          <div class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                            <img
-                              v-if="gameVersion && championByKey(row.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(row.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(row.championId) || ''"
-                              class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              width="20"
-                              height="20"
-                            />
-                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                              championName(row.championId) || row.championId
-                            }}</span>
-                          </div>
-                        </td>
-                        <td class="w-[140px] py-1 pl-2">
-                          <div class="flex items-center justify-end gap-2">
-                            <div
-                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
-                            >
-                              <div
-                                class="h-full rounded bg-error transition-[width]"
-                                :style="{
-                                  width:
-                                    Math.min(
-                                      100,
-                                      (row.banrate /
-                                        Math.max(
-                                          ...overviewEffectiveTopBanrateChampions.map(
-                                            (c: { banrate: number }) => c.banrate
-                                          ),
-                                          1
-                                        )) *
-                                        100
-                                    ) + '%',
-                                }"
-                              />
-                            </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text"
-                              >{{ Number(row.banrate).toFixed(2) }}%</span
-                            >
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-else class="py-6 text-center text-text/60">
-                    {{ t('statisticsPage.fastStatsNoData') }}
-                  </div>
-                  <div v-if="overviewEffectiveTopBanrateChampions.length" class="mt-2 text-center">
-                    <button
-                      type="button"
-                      class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
-                      @click="goToChampionsWithSort('banrate')"
-                    >
-                      {{ t('statisticsPage.fastStatsSeeMore') }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Winrates depuis X -->
-                <div class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{
-                      oldestVersionForProgression
-                        ? t('statisticsPage.fastStatsWinrateSince', {
-                            version: oldestVersionForProgression,
-                          })
-                        : t('statisticsPage.fastStatsWinrateProgression')
-                    }}
-                    <span
-                      class="relative ml-1 inline-flex cursor-help text-text/50"
-                      aria-hidden="true"
-                    >
-                      ⓘ
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                      >
-                        {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
-                      </span>
-                    </span>
-                  </h3>
-                  <table
-                    v-if="
-                      (overviewProgressionData?.gainers?.length ?? 0) +
-                        (overviewProgressionData?.losers?.length ?? 0) >
-                      0
-                    "
-                    class="fast-stat-table w-full text-sm"
-                  >
-                    <tbody>
-                      <template
-                        v-for="g in (overviewProgressionData?.gainers ?? []).slice(0, 3)"
-                        :key="'g-' + g.championId"
-                      >
-                        <tr class="fast-stat-row">
-                          <td class="py-1">
-                            <div class="flex items-center gap-2">
+                      <tbody>
+                        <tr
+                          v-for="(row, idx) in (overviewData.topPickrateChampions ?? []).slice(
+                            0,
+                            5
+                          )"
+                          :key="row.championId"
+                          class="fast-stat-row"
+                        >
+                          <td class="py-0.5 align-middle">
+                            <div class="flex items-center gap-0.5">
+                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                               <img
-                                v-if="gameVersion && championByKey(g.championId)"
+                                v-if="gameVersion && championByKey(row.championId)"
                                 :src="
                                   getChampionImageUrl(
                                     gameVersion,
-                                    championByKey(g.championId)!.image.full
+                                    championByKey(row.championId)!.image.full
                                   )
                                 "
-                                :alt="championName(g.championId) || ''"
+                                :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
-                                width="20"
-                                height="20"
                               />
-                              <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                                championName(g.championId) || g.championId
-                              }}</span>
-                            </div>
-                          </td>
-                          <td class="w-[140px] py-1 pl-2">
-                            <div class="flex items-center justify-end gap-2">
+                              <span
+                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                >{{ championName(row.championId) || row.championId }}</span
+                              >
                               <div
-                                class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
                                 <div
-                                  class="h-full rounded bg-success transition-[width]"
+                                  class="h-full rounded bg-accent transition-[width]"
                                   :style="{
                                     width:
                                       Math.min(
                                         100,
-                                        (Math.abs(g.delta) /
+                                        (row.pickrate /
                                           Math.max(
-                                            ...[
-                                              ...(overviewProgressionData?.gainers ?? []).map(g2 =>
-                                                Math.abs(g2.delta)
-                                              ),
-                                              ...(overviewProgressionData?.losers ?? []).map(l =>
-                                                Math.abs(l.delta)
-                                              ),
-                                            ],
+                                            ...(overviewData.topPickrateChampions ?? []).map(
+                                              (c: { pickrate: number }) => c.pickrate
+                                            ),
                                             1
                                           )) *
                                           100
@@ -619,53 +286,173 @@
                                   }"
                                 />
                               </div>
-                              <span
-                                class="min-w-[2.5rem] text-right text-sm font-medium text-success"
-                                >+{{ Number(g.delta).toFixed(2) }}%</span
+                              <span class="w-9 shrink-0 text-right font-medium text-text"
+                                >{{ Number(row.pickrate).toFixed(2) }}%</span
                               >
                             </div>
                           </td>
                         </tr>
-                      </template>
-                      <tr
-                        v-if="
-                          (overviewProgressionData?.gainers?.length ?? 0) +
-                            (overviewProgressionData?.losers?.length ?? 0) >
-                          0
-                        "
-                        class="border-b border-primary/20"
+                      </tbody>
+                    </table>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.fastStatsNoData') }}
+                    </div>
+                    <div
+                      v-if="(overviewData.topPickrateChampions ?? []).length"
+                      class="mt-1 text-center"
+                    >
+                      <button
+                        type="button"
+                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                        @click="goToChampionsWithSort('pickrate')"
                       >
-                        <td colspan="2" class="py-1"><div class="h-px bg-primary/20" /></td>
-                      </tr>
-                      <template
-                        v-for="l in (overviewProgressionData?.losers ?? []).slice(0, 3)"
-                        :key="'l-' + l.championId"
+                        {{ t('statisticsPage.fastStatsSeeMore') }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Meilleurs champions -->
+                  <div
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.fastStatsBestWinrate') }}
+                      <span
+                        class="relative ml-1 inline-flex cursor-help text-text/50"
+                        aria-hidden="true"
                       >
-                        <tr class="fast-stat-row">
-                          <td class="py-1">
-                            <div class="flex items-center gap-2">
+                        ⓘ
+                        <span
+                          role="tooltip"
+                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        >
+                          {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
+                        </span>
+                      </span>
+                    </h3>
+                    <table
+                      v-if="(overviewData.topWinrateChampions ?? []).length"
+                      class="fast-stat-table w-full text-xs"
+                    >
+                      <tbody>
+                        <tr
+                          v-for="(row, idx) in (overviewData.topWinrateChampions ?? []).slice(0, 5)"
+                          :key="row.championId"
+                          class="fast-stat-row"
+                        >
+                          <td class="py-0.5 align-middle">
+                            <div class="flex items-center gap-0.5">
+                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
                               <img
-                                v-if="gameVersion && championByKey(l.championId)"
+                                v-if="gameVersion && championByKey(row.championId)"
                                 :src="
                                   getChampionImageUrl(
                                     gameVersion,
-                                    championByKey(l.championId)!.image.full
+                                    championByKey(row.championId)!.image.full
                                   )
                                 "
-                                :alt="championName(l.championId) || ''"
+                                :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
-                                width="20"
-                                height="20"
                               />
-                              <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                                championName(l.championId) || l.championId
-                              }}</span>
+                              <span
+                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                >{{ championName(row.championId) || row.championId }}</span
+                              >
+                              <div
+                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+                              >
+                                <div
+                                  class="h-full rounded bg-success transition-[width]"
+                                  :style="{
+                                    width: (() => {
+                                      const list = overviewData.topWinrateChampions ?? []
+                                      const minWr = Math.min(...list.map(c => c.winrate), 50)
+                                      const maxWr = Math.max(...list.map(c => c.winrate), 52)
+                                      const range = maxWr - minWr || 1
+                                      return (
+                                        Math.min(
+                                          100,
+                                          Math.max(0, ((row.winrate - minWr) / range) * 100)
+                                        ) + '%'
+                                      )
+                                    })(),
+                                  }"
+                                />
+                              </div>
+                              <span class="w-9 shrink-0 text-right font-medium text-text"
+                                >{{ Number(row.winrate).toFixed(2) }}%</span
+                              >
                             </div>
                           </td>
-                          <td class="w-[140px] py-1 pl-2">
-                            <div class="flex items-center justify-end gap-2">
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.fastStatsNoData') }}
+                    </div>
+                    <div
+                      v-if="(overviewData.topWinrateChampions ?? []).length"
+                      class="mt-1 text-center"
+                    >
+                      <button
+                        type="button"
+                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                        @click="goToChampionsWithSort('winrate')"
+                      >
+                        {{ t('statisticsPage.fastStatsSeeMore') }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Champions les plus bannis -->
+                  <div
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.fastStatsMostBanned') }}
+                      <span
+                        class="relative ml-1 inline-flex cursor-help text-text/50"
+                        aria-hidden="true"
+                      >
+                        ⓘ
+                        <span
+                          role="tooltip"
+                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        >
+                          {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
+                        </span>
+                      </span>
+                    </h3>
+                    <table
+                      v-if="overviewEffectiveTopBanrateChampions.length"
+                      class="fast-stat-table w-full text-xs"
+                    >
+                      <tbody>
+                        <tr
+                          v-for="(row, idx) in overviewEffectiveTopBanrateChampions.slice(0, 5)"
+                          :key="row.championId"
+                          class="fast-stat-row"
+                        >
+                          <td class="py-0.5 align-middle">
+                            <div class="flex items-center gap-0.5">
+                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                              <img
+                                v-if="gameVersion && championByKey(row.championId)"
+                                :src="
+                                  getChampionImageUrl(
+                                    gameVersion,
+                                    championByKey(row.championId)!.image.full
+                                  )
+                                "
+                                :alt="championName(row.championId) || ''"
+                                class="h-5 w-5 shrink-0 rounded-full object-cover"
+                              />
+                              <span
+                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                >{{ championName(row.championId) || row.championId }}</span
+                              >
                               <div
-                                class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
+                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
                                 <div
                                   class="h-full rounded bg-error transition-[width]"
@@ -673,16 +460,11 @@
                                     width:
                                       Math.min(
                                         100,
-                                        (Math.abs(l.delta) /
+                                        (row.banrate /
                                           Math.max(
-                                            ...[
-                                              ...(overviewProgressionData?.gainers ?? []).map(g2 =>
-                                                Math.abs(g2.delta)
-                                              ),
-                                              ...(overviewProgressionData?.losers ?? []).map(l2 =>
-                                                Math.abs(l2.delta)
-                                              ),
-                                            ],
+                                            ...overviewEffectiveTopBanrateChampions.map(
+                                              (c: { banrate: number }) => c.banrate
+                                            ),
                                             1
                                           )) *
                                           100
@@ -690,224 +472,417 @@
                                   }"
                                 />
                               </div>
-                              <span class="min-w-[2.5rem] text-right text-sm font-medium text-error"
-                                >{{ Number(l.delta).toFixed(2) }}%</span
+                              <span class="w-9 shrink-0 text-right font-medium text-text"
+                                >{{ Number(row.banrate).toFixed(2) }}%</span
                               >
                             </div>
                           </td>
                         </tr>
-                      </template>
-                      <tr
-                        v-if="
-                          !overviewProgressionData?.gainers?.length &&
-                          !overviewProgressionData?.losers?.length
+                      </tbody>
+                    </table>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.fastStatsNoData') }}
+                    </div>
+                    <div
+                      v-if="overviewEffectiveTopBanrateChampions.length"
+                      class="mt-1 text-center"
+                    >
+                      <button
+                        type="button"
+                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+                        @click="goToChampionsWithSort('banrate')"
+                      >
+                        {{ t('statisticsPage.fastStatsSeeMore') }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Winrates depuis X -->
+                  <div
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{
+                        oldestVersionForProgression
+                          ? t('statisticsPage.fastStatsWinrateSince', {
+                              version: oldestVersionForProgression,
+                            })
+                          : t('statisticsPage.fastStatsWinrateProgression')
+                      }}
+                      <span
+                        class="relative ml-1 inline-flex cursor-help text-text/50"
+                        aria-hidden="true"
+                      >
+                        ⓘ
+                        <span
+                          role="tooltip"
+                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        >
+                          {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
+                        </span>
+                      </span>
+                    </h3>
+                    <table
+                      v-if="
+                        (overviewProgressionData?.gainers?.length ?? 0) +
+                          (overviewProgressionData?.losers?.length ?? 0) >
+                        0
+                      "
+                      class="fast-stat-table w-full text-xs"
+                    >
+                      <tbody>
+                        <template
+                          v-for="g in (overviewProgressionData?.gainers ?? []).slice(0, 3)"
+                          :key="'g-' + g.championId"
+                        >
+                          <tr class="fast-stat-row">
+                            <td class="py-0.5 align-middle">
+                              <div class="flex items-center gap-0.5 text-xs">
+                                <img
+                                  v-if="gameVersion && championByKey(g.championId)"
+                                  :src="
+                                    getChampionImageUrl(
+                                      gameVersion,
+                                      championByKey(g.championId)!.image.full
+                                    )
+                                  "
+                                  :alt="championName(g.championId) || ''"
+                                  class="h-5 w-5 shrink-0 rounded-full object-cover"
+                                />
+                                <span
+                                  class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                  >{{ championName(g.championId) || g.championId }}</span
+                                >
+                                <div
+                                  class="fast-stat-bar-container ml-[5px] h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+                                >
+                                  <div
+                                    class="h-full rounded bg-success transition-[width]"
+                                    :style="{
+                                      width:
+                                        Math.min(
+                                          100,
+                                          (Math.abs(g.delta) /
+                                            Math.max(
+                                              ...[
+                                                ...(overviewProgressionData?.gainers ?? []).map(
+                                                  g2 => Math.abs(g2.delta)
+                                                ),
+                                                ...(overviewProgressionData?.losers ?? []).map(l =>
+                                                  Math.abs(l.delta)
+                                                ),
+                                              ],
+                                              1
+                                            )) *
+                                            100
+                                        ) + '%',
+                                    }"
+                                  />
+                                </div>
+                                <span class="w-9 shrink-0 text-right font-medium text-success"
+                                  >+{{ Number(g.delta).toFixed(2) }}%</span
+                                >
+                              </div>
+                            </td>
+                          </tr>
+                        </template>
+                        <tr
+                          v-if="
+                            (overviewProgressionData?.gainers?.length ?? 0) +
+                              (overviewProgressionData?.losers?.length ?? 0) >
+                            0
+                          "
+                          class="border-b border-primary/20"
+                        >
+                          <td class="py-0.5"><div class="h-px bg-primary/20" /></td>
+                        </tr>
+                        <template
+                          v-for="l in (overviewProgressionData?.losers ?? []).slice(0, 3)"
+                          :key="'l-' + l.championId"
+                        >
+                          <tr class="fast-stat-row">
+                            <td class="py-0.5 align-middle">
+                              <div class="flex items-center gap-0.5 text-xs">
+                                <img
+                                  v-if="gameVersion && championByKey(l.championId)"
+                                  :src="
+                                    getChampionImageUrl(
+                                      gameVersion,
+                                      championByKey(l.championId)!.image.full
+                                    )
+                                  "
+                                  :alt="championName(l.championId) || ''"
+                                  class="h-5 w-5 shrink-0 rounded-full object-cover"
+                                />
+                                <span
+                                  class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                  >{{ championName(l.championId) || l.championId }}</span
+                                >
+                                <div
+                                  class="fast-stat-bar-container ml-[5px] h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+                                >
+                                  <div
+                                    class="h-full rounded bg-error transition-[width]"
+                                    :style="{
+                                      width:
+                                        Math.min(
+                                          100,
+                                          (Math.abs(l.delta) /
+                                            Math.max(
+                                              ...[
+                                                ...(overviewProgressionData?.gainers ?? []).map(
+                                                  g2 => Math.abs(g2.delta)
+                                                ),
+                                                ...(overviewProgressionData?.losers ?? []).map(l2 =>
+                                                  Math.abs(l2.delta)
+                                                ),
+                                              ],
+                                              1
+                                            )) *
+                                            100
+                                        ) + '%',
+                                    }"
+                                  />
+                                </div>
+                                <span class="w-9 shrink-0 text-right font-medium text-error"
+                                  >{{ Number(l.delta).toFixed(2) }}%</span
+                                >
+                              </div>
+                            </td>
+                          </tr>
+                        </template>
+                        <tr
+                          v-if="
+                            !overviewProgressionData?.gainers?.length &&
+                            !overviewProgressionData?.losers?.length
+                          "
+                        >
+                          <td class="py-2 text-center text-text/60">
+                            {{ t('statisticsPage.fastStatsNoProgression') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.fastStatsNoProgression') }}
+                    </div>
+                  </div>
+
+                  <!-- Bans par équipe gagnante -->
+                  <div
+                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.overviewTeamsBansByWin') }}
+                    </h3>
+                    <table
+                      v-if="(overviewTeamsData.bans.byWin ?? []).length"
+                      class="fast-stat-table w-full text-xs"
+                    >
+                      <tbody>
+                        <tr
+                          v-for="(b, idx) in (overviewTeamsData.bans.byWin ?? []).slice(
+                            0,
+                            bansExpandByWin ? 20 : 5
+                          )"
+                          :key="'win-' + b.championId"
+                          class="fast-stat-row"
+                        >
+                          <td class="py-0.5">
+                            <div class="flex items-center gap-0.5">
+                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                              <img
+                                v-if="gameVersion && championByKey(b.championId)"
+                                :src="
+                                  getChampionImageUrl(
+                                    gameVersion,
+                                    championByKey(b.championId)!.image.full
+                                  )
+                                "
+                                :alt="championName(b.championId) || ''"
+                                class="h-5 w-5 shrink-0 rounded-full object-cover"
+                              />
+                              <span
+                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                >{{ championName(b.championId) || b.championId }}</span
+                              >
+                              <div
+                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+                              >
+                                <div
+                                  class="h-full rounded bg-success transition-[width]"
+                                  :style="{
+                                    width:
+                                      Math.min(
+                                        100,
+                                        ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
+                                          0) /
+                                          Math.max(
+                                            ...(overviewTeamsData.bans.byWin ?? []).map(
+                                              x =>
+                                                parseFloat(
+                                                  String(x.banRatePercent).replace(',', '.')
+                                                ) || 0
+                                            ),
+                                            1
+                                          )) *
+                                          100
+                                      ) + '%',
+                                  }"
+                                />
+                              </div>
+                              <span class="w-9 shrink-0 text-right font-medium text-text">{{
+                                b.banRatePercent
+                              }}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div
+                      v-if="(overviewTeamsData.bans.byWin ?? []).length"
+                      class="mt-1 text-center"
+                    >
+                      <button
+                        v-if="(overviewTeamsData.bans.byWin ?? []).length > 5"
+                        type="button"
+                        class="fast-stat-button inline-flex items-center justify-center rounded bg-accent p-1 text-background transition-colors hover:opacity-90"
+                        :aria-label="
+                          bansExpandByWin
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
                         "
+                        @click="bansExpandByWin = !bansExpandByWin"
                       >
-                        <td colspan="2" class="py-3 text-center text-text/60">
-                          {{ t('statisticsPage.fastStatsNoProgression') }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-else class="py-6 text-center text-text/60">
-                    {{ t('statisticsPage.fastStatsNoProgression') }}
+                        <svg
+                          class="h-3 w-3 transition-transform"
+                          :class="{ 'rotate-180': bansExpandByWin }"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                <!-- Bans par équipe gagnante -->
-                <div
-                  v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                  class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4"
-                >
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{ t('statisticsPage.overviewTeamsBansByWin') }}
-                  </h3>
-                  <table
-                    v-if="(overviewTeamsData.bans.byWin ?? []).length"
-                    class="fast-stat-table w-full text-sm"
+                  <!-- Bans par équipe perdante -->
+                  <div
+                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
+                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <tbody>
-                      <tr
-                        v-for="(b, idx) in (overviewTeamsData.bans.byWin ?? []).slice(
-                          0,
-                          bansExpandByWin ? 20 : 5
-                        )"
-                        :key="'win-' + b.championId"
-                        class="fast-stat-row"
-                      >
-                        <td class="py-1">
-                          <div class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                            <img
-                              v-if="gameVersion && championByKey(b.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(b.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(b.championId) || ''"
-                              class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              width="20"
-                              height="20"
-                            />
-                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                              championName(b.championId) || b.championId
-                            }}</span>
-                          </div>
-                        </td>
-                        <td class="w-[140px] py-1 pl-2">
-                          <div class="flex items-center justify-end gap-2">
-                            <div
-                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
-                            >
-                              <div
-                                class="h-full rounded bg-success transition-[width]"
-                                :style="{
-                                  width:
-                                    Math.min(
-                                      100,
-                                      ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
-                                        0) /
-                                        Math.max(
-                                          ...(overviewTeamsData.bans.byWin ?? []).map(
-                                            x =>
-                                              parseFloat(
-                                                String(x.banRatePercent).replace(',', '.')
-                                              ) || 0
-                                          ),
-                                          1
-                                        )) *
-                                        100
-                                    ) + '%',
-                                }"
-                              />
-                            </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text">{{
-                              b.banRatePercent
-                            }}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-if="(overviewTeamsData.bans.byWin ?? []).length" class="mt-2 text-center">
-                    <button
-                      v-if="(overviewTeamsData.bans.byWin ?? []).length > 5"
-                      type="button"
-                      class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
-                      @click="bansExpandByWin = !bansExpandByWin"
+                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.overviewTeamsBansByLoss') }}
+                    </h3>
+                    <table
+                      v-if="(overviewTeamsData.bans.byLoss ?? []).length"
+                      class="fast-stat-table w-full text-xs"
                     >
-                      {{
-                        bansExpandByWin
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
+                      <tbody>
+                        <tr
+                          v-for="(b, idx) in (overviewTeamsData.bans.byLoss ?? []).slice(
+                            0,
+                            bansExpandByLoss ? 20 : 5
+                          )"
+                          :key="'loss-' + b.championId"
+                          class="fast-stat-row"
+                        >
+                          <td class="py-0.5">
+                            <div class="flex items-center gap-0.5">
+                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                              <img
+                                v-if="gameVersion && championByKey(b.championId)"
+                                :src="
+                                  getChampionImageUrl(
+                                    gameVersion,
+                                    championByKey(b.championId)!.image.full
+                                  )
+                                "
+                                :alt="championName(b.championId) || ''"
+                                class="h-5 w-5 shrink-0 rounded-full object-cover"
+                              />
+                              <span
+                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                                >{{ championName(b.championId) || b.championId }}</span
+                              >
+                              <div
+                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+                              >
+                                <div
+                                  class="h-full rounded bg-error transition-[width]"
+                                  :style="{
+                                    width:
+                                      Math.min(
+                                        100,
+                                        ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
+                                          0) /
+                                          Math.max(
+                                            ...(overviewTeamsData.bans.byLoss ?? []).map(
+                                              x =>
+                                                parseFloat(
+                                                  String(x.banRatePercent).replace(',', '.')
+                                                ) || 0
+                                            ),
+                                            1
+                                          )) *
+                                          100
+                                      ) + '%',
+                                  }"
+                                />
+                              </div>
+                              <span class="w-9 shrink-0 text-right font-medium text-text">{{
+                                b.banRatePercent
+                              }}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div
+                      v-if="(overviewTeamsData.bans.byLoss ?? []).length"
+                      class="mt-1 text-center"
+                    >
+                      <button
+                        v-if="(overviewTeamsData.bans.byLoss ?? []).length > 5"
+                        type="button"
+                        class="fast-stat-button inline-flex items-center justify-center rounded bg-accent p-1 text-background transition-colors hover:opacity-90"
+                        :aria-label="
+                          bansExpandByLoss
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        "
+                        @click="bansExpandByLoss = !bansExpandByLoss"
+                      >
+                        <svg
+                          class="h-3 w-3 transition-transform"
+                          :class="{ 'rotate-180': bansExpandByLoss }"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <!-- Bans par équipe perdante -->
-                <div
-                  v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                  class="fast-stat-card rounded-lg border border-primary/30 bg-surface/30 p-4"
-                >
-                  <h3 class="fast-stat-title mb-2 text-base font-semibold text-text">
-                    {{ t('statisticsPage.overviewTeamsBansByLoss') }}
-                  </h3>
-                  <table
-                    v-if="(overviewTeamsData.bans.byLoss ?? []).length"
-                    class="fast-stat-table w-full text-sm"
-                  >
-                    <tbody>
-                      <tr
-                        v-for="(b, idx) in (overviewTeamsData.bans.byLoss ?? []).slice(
-                          0,
-                          bansExpandByLoss ? 20 : 5
-                        )"
-                        :key="'loss-' + b.championId"
-                        class="fast-stat-row"
-                      >
-                        <td class="py-1">
-                          <div class="flex items-center gap-2">
-                            <span class="w-6 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                            <img
-                              v-if="gameVersion && championByKey(b.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(b.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(b.championId) || ''"
-                              class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              width="20"
-                              height="20"
-                            />
-                            <span class="min-w-0 truncate text-sm font-medium text-text">{{
-                              championName(b.championId) || b.championId
-                            }}</span>
-                          </div>
-                        </td>
-                        <td class="w-[140px] py-1 pl-2">
-                          <div class="flex items-center justify-end gap-2">
-                            <div
-                              class="fast-stat-bar-container h-2 w-[110px] overflow-hidden rounded bg-surface/80"
-                            >
-                              <div
-                                class="h-full rounded bg-error transition-[width]"
-                                :style="{
-                                  width:
-                                    Math.min(
-                                      100,
-                                      ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
-                                        0) /
-                                        Math.max(
-                                          ...(overviewTeamsData.bans.byLoss ?? []).map(
-                                            x =>
-                                              parseFloat(
-                                                String(x.banRatePercent).replace(',', '.')
-                                              ) || 0
-                                          ),
-                                          1
-                                        )) *
-                                        100
-                                    ) + '%',
-                                }"
-                              />
-                            </div>
-                            <span class="min-w-[2.5rem] text-right text-sm font-medium text-text">{{
-                              b.banRatePercent
-                            }}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div v-if="(overviewTeamsData.bans.byLoss ?? []).length" class="mt-2 text-center">
-                    <button
-                      v-if="(overviewTeamsData.bans.byLoss ?? []).length > 5"
-                      type="button"
-                      class="fast-stat-button rounded bg-accent px-3 py-1.5 text-xs font-medium text-background transition-colors hover:opacity-90"
-                      @click="bansExpandByLoss = !bansExpandByLoss"
-                    >
-                      {{
-                        bansExpandByLoss
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div class="grid gap-4 lg:grid-cols-2">
-                <div
-                  v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                  class="rounded-lg border border-primary/30 bg-surface/30 p-6"
-                >
-                  <h3
-                    class="group/tooltip mb-3 flex items-center gap-1.5 text-lg font-medium text-text"
+                <!-- Section Objectifs -->
+                <section class="space-y-3">
+                  <h2
+                    class="group/tooltip flex items-center gap-1.5 text-lg font-semibold text-text-accent"
                   >
                     {{ t('statisticsPage.overviewTeamsObjectives') }}
                     <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
@@ -919,6 +894,993 @@
                         {{ t('statisticsPage.tooltipOverviewObjectives') }}
                       </span>
                     </span>
+                  </h2>
+                  <div
+                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
+                    class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+                  >
+                    <p class="mb-3 text-xs text-text/60">
+                      {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
+                    </p>
+                    <div class="overflow-x-auto">
+                      <table class="w-full min-w-[280px] text-left text-sm">
+                        <thead>
+                          <tr class="border-b border-primary/30 text-text/70">
+                            <th class="py-1.5 pr-2 font-medium">
+                              {{ t('statisticsPage.overviewTeamsObjective') }}
+                            </th>
+                            <th class="py-1.5 pr-2 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsFirstByWin') }}
+                            </th>
+                            <th class="py-1.5 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsFirstByLoss') }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-primary/20 text-text/80">
+                          <tr>
+                            <td class="py-1.5 pr-2">
+                              {{ t('statisticsPage.overviewTeamsFirstBlood') }}
+                            </td>
+                            <td class="py-1.5 pr-2 text-center">
+                              {{
+                                firstPercentByTeam(
+                                  overviewTeamsData.objectives.firstBlood.firstByWin,
+                                  overviewTeamsData.objectives.firstBlood.firstByLoss,
+                                  overviewTeamsData.matchCount
+                                ).win
+                              }}
+                            </td>
+                            <td class="py-1.5 text-center">
+                              {{
+                                firstPercentByTeam(
+                                  overviewTeamsData.objectives.firstBlood.firstByWin,
+                                  overviewTeamsData.objectives.firstBlood.firstByLoss,
+                                  overviewTeamsData.matchCount
+                                ).loss
+                              }}
+                            </td>
+                          </tr>
+                          <template v-for="key in objectiveKeysWithKills" :key="key">
+                            <tr>
+                              <td class="py-1.5 pr-2">
+                                <button
+                                  type="button"
+                                  class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
+                                  @click="toggleObjective(key)"
+                                >
+                                  <span
+                                    class="inline-block transition-transform duration-200"
+                                    :class="openObjectiveKeys.has(key) ? 'rotate-180' : ''"
+                                    aria-hidden
+                                    >▼</span
+                                  >
+                                  {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
+                                </button>
+                              </td>
+                              <td class="py-1.5 pr-2 text-center">
+                                {{
+                                  firstPercentByTeam(
+                                    objectiveRow(key).firstByWin,
+                                    objectiveRow(key).firstByLoss,
+                                    overviewTeamsData.matchCount
+                                  ).win
+                                }}
+                              </td>
+                              <td class="py-1.5 text-center">
+                                {{
+                                  firstPercentByTeam(
+                                    objectiveRow(key).firstByWin,
+                                    objectiveRow(key).firstByLoss,
+                                    overviewTeamsData.matchCount
+                                  ).loss
+                                }}
+                              </td>
+                            </tr>
+                            <template v-if="openObjectiveKeys.has(key)">
+                              <tr
+                                v-for="count in objectiveCounts(key)"
+                                :key="key + '-' + count"
+                                class="bg-surface/30"
+                              >
+                                <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                                <td class="py-1 pr-2 text-center text-text/80">
+                                  {{ percentForCount(key, count, true) }}
+                                </td>
+                                <td class="py-1 text-center text-text/80">
+                                  {{ percentForCount(key, count, false) }}
+                                </td>
+                              </tr>
+                            </template>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
+            </div>
+
+            <!-- Dernière mise à jour, filtrer par version et par division (en bas de la vue d'ensemble) -->
+            <div
+              v-if="overviewData"
+              class="rounded-lg border border-primary/30 bg-surface/30 p-4 text-sm text-text/80"
+            >
+              <p>
+                {{
+                  t('statisticsPage.overviewDescriptionSummary', {
+                    lastUpdate: overviewData.lastUpdate
+                      ? formatGeneratedAt(overviewData.lastUpdate)
+                      : '—',
+                    total: overviewEffectiveTotalMatches,
+                    count: overviewData.playerCount ?? 0,
+                  })
+                }}
+              </p>
+              <p v-if="overviewDescriptionVersionsSummary" class="mt-1">
+                {{ t('statisticsPage.overviewNumberByVersion') }} :
+                {{ overviewDescriptionVersionsSummary }}
+              </p>
+              <p
+                v-if="overviewDivisionsForDescription.length"
+                class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1"
+              >
+                <span class="text-text/80"
+                  >{{ t('statisticsPage.overviewNumberByDivision') }} :</span
+                >
+                <template v-for="(d, idx) in overviewDivisionsForDescription" :key="d.rankTier">
+                  <span v-if="idx > 0" class="text-text/40" aria-hidden="true">·</span>
+                  <span class="inline-flex items-center gap-1.5 text-sky-400">
+                    <img
+                      v-if="getRankedEmblemUrl(d.rankTier)"
+                      :src="getRankedEmblemUrl(d.rankTier)!"
+                      :alt="d.rankTier"
+                      class="inline-block h-[1.5em] w-[1.5em] shrink-0 object-contain align-middle"
+                    />
+                    <span v-else>{{ d.rankTier }}</span>
+                    <span>({{ d.matchCount }}, {{ divisionPercent(d) }}%)</span>
+                  </span>
+                </template>
+              </p>
+            </div>
+          </div>
+
+          <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
+          <div v-show="activeTab === 'detail'" class="space-y-6">
+            <template v-if="overviewDetailPending">
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
+              </div>
+            </template>
+            <template v-else>
+              <div
+                v-if="overviewDetailError"
+                class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
+              >
+                <p class="text-text/90">{{ t('statisticsPage.overviewDetailTimeout') }}</p>
+                <button
+                  type="button"
+                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+                  @click="loadOverviewDetail(true)"
+                >
+                  {{ t('statisticsPage.retry') }}
+                </button>
+              </div>
+              <template v-if="overviewDetailPending || overviewDetailData || overviewDetailError">
+                <fieldset
+                  class="overview-runes-fieldset rounded-lg border border-primary/30 bg-surface/30 p-6"
+                >
+                  <legend class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.overviewDetailRunes') }}
+                  </legend>
+                  <div
+                    v-if="overviewDetailPending && !overviewDetailData"
+                    class="py-4 text-center text-text/70"
+                  >
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <!-- Tree layout when rune paths are loaded -->
+                  <div
+                    v-else-if="overviewRunesByPath.some(p => p.cells.length > 0)"
+                    class="blocks flex flex-wrap gap-6"
+                  >
+                    <div
+                      v-for="{ path, cells } in overviewRunesByPath"
+                      :key="path.id"
+                      class="runes overview-runes-grid"
+                    >
+                      <button
+                        v-for="(cell, idx) in cells"
+                        :key="path.id + '-' + cell.rune.id + '-' + idx"
+                        type="button"
+                        class="overview-rune-cell"
+                        :class="{ 'rune main': cell.row === 0, rune: cell.row !== 0 }"
+                        :style="{ gridArea: `${cell.row + 1} / ${cell.col + 1}` }"
+                        :title="
+                          cell.rune.name +
+                          (cell.stats
+                            ? ` — ${Number(cell.stats.pickrate).toFixed(2)}% pick, ${Number(cell.stats.winrate).toFixed(2)}% WR`
+                            : '')
+                        "
+                      >
+                        <img
+                          v-if="gameVersion"
+                          :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
+                          :alt="cell.rune.name"
+                          class="overview-rune-img"
+                          width="32"
+                          height="32"
+                        />
+                        <div v-if="cell.stats" class="overview-rune-stat">
+                          <div class="overview-rune-pick">
+                            {{ Number(cell.stats.pickrate).toFixed(2) }}%
+                            {{ t('statisticsPage.overviewDetailPickRate') }}
+                          </div>
+                          <div class="overview-rune-wr">
+                            {{ Number(cell.stats.winrate).toFixed(2) }}%
+                            {{ t('statisticsPage.overviewDetailWinRate') }}
+                          </div>
+                        </div>
+                        <div v-else class="overview-rune-stat overview-rune-no-stat">—</div>
+                      </button>
+                    </div>
+                  </div>
+                  <!-- Fallback: flat list when rune paths not yet loaded -->
+                  <div
+                    v-else-if="(overviewDetailData?.runes ?? []).length"
+                    class="blocks runes overview-runes-fallback grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8"
+                  >
+                    <button
+                      v-for="r in overviewDetailData?.runes ?? []"
+                      :key="r.runeId"
+                      type="button"
+                      class="overview-rune-cell flex flex-col items-center gap-1 rounded border border-primary/20 bg-surface/50 p-2 text-center transition-colors hover:bg-primary/20"
+                      :title="
+                        (getRuneById(r.runeId)?.name ?? r.runeId) +
+                        ' — ' +
+                        r.pickrate +
+                        '% pick, ' +
+                        r.winrate +
+                        '% WR'
+                      "
+                    >
+                      <img
+                        v-if="gameVersion && getRuneById(r.runeId)"
+                        :src="getRuneImageUrl(gameVersion, getRuneById(r.runeId)!.icon)"
+                        :alt="getRuneById(r.runeId)?.name ?? ''"
+                        class="overview-rune-img h-8 w-8 object-contain"
+                        width="32"
+                        height="32"
+                      />
+                      <div class="overview-rune-stat">
+                        <div class="overview-rune-pick">
+                          {{ Number(r.pickrate).toFixed(2) }}%
+                          {{ t('statisticsPage.overviewDetailPickRate') }}
+                        </div>
+                        <div class="overview-rune-wr">
+                          {{ Number(r.winrate).toFixed(2) }}%
+                          {{ t('statisticsPage.overviewDetailWinRate') }}
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                  <!-- Sorts d'invocateur : même section, horizontal -->
+                  <div class="mt-6 border-t border-primary/30 pt-4">
+                    <h3 class="mb-3 text-base font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailSummonerSpells') }}
+                    </h3>
+                    <div class="flex flex-wrap items-center gap-3">
+                      <div
+                        v-for="s in overviewDetailData?.summonerSpells ?? []"
+                        :key="s.spellId"
+                        class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-3 py-2"
+                      >
+                        <img
+                          v-if="gameVersion && spellImageName(s.spellId)"
+                          :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
+                          :alt="spellName(s.spellId) ?? ''"
+                          class="h-6 w-6 object-contain"
+                          width="24"
+                          height="24"
+                        />
+                        <span class="text-sm font-medium text-text/90">{{
+                          spellName(s.spellId) ?? s.spellId
+                        }}</span>
+                        <span class="text-xs text-text/70"
+                          >{{ Number(s.pickrate).toFixed(2) }}% pick —
+                          {{ Number(s.winrate).toFixed(2) }}% WR</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </fieldset>
+
+                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <!-- Rune sets -->
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                    <h3 class="mb-3 text-lg font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailRuneSets') }}
+                    </h3>
+                    <div class="flex flex-wrap gap-3">
+                      <div
+                        v-for="(set, idx) in (overviewDetailData?.runeSets ?? []).slice(
+                          0,
+                          detailExpand.runeSets ? 20 : 5
+                        )"
+                        :key="idx"
+                        class="rune-set"
+                      >
+                        <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
+                          <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
+                          <div class="rune-set-wr" :style="{ '--n': set.winrate }">
+                            {{ Number(set.winrate).toFixed(2) }}%
+                          </div>
+                        </div>
+                        <div class="rune-set-runes">
+                          <div
+                            v-for="runeId in runeIdsFromSet(set.runes)"
+                            :key="runeId"
+                            class="rune-set-tooltip"
+                            :title="getRuneById(runeId)?.name ?? ''"
+                          >
+                            <div class="rune-set-rune">
+                              <div
+                                v-if="gameVersion && getRuneById(runeId)"
+                                class="rune-set-img"
+                                :style="{
+                                  '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
+                                }"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      v-if="(overviewDetailData?.runeSets ?? []).length > 5"
+                      type="button"
+                      class="mt-2 text-sm font-medium text-accent hover:underline"
+                      @click="detailExpand.runeSets = !detailExpand.runeSets"
+                    >
+                      {{
+                        detailExpand.runeSets
+                          ? t('statisticsPage.showLess')
+                          : t('statisticsPage.fastStatsSeeMore')
+                      }}
+                    </button>
+                  </div>
+
+                  <!-- Items -->
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                    <h3 class="mb-3 text-lg font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailItems') }}
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                      <div
+                        v-for="it in (overviewDetailData?.items ?? []).slice(
+                          0,
+                          detailExpand.items ? 40 : 5
+                        )"
+                        :key="it.itemId"
+                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                      >
+                        <img
+                          v-if="gameVersion && itemImageName(it.itemId)"
+                          :src="getItemImageUrl(gameVersion, itemImageName(it.itemId)!)"
+                          :alt="itemName(it.itemId) ?? ''"
+                          class="h-5 w-5 object-contain"
+                          width="20"
+                          height="20"
+                        />
+                        <span class="max-w-[80px] truncate text-xs text-text/90">{{
+                          itemName(it.itemId) ?? it.itemId
+                        }}</span>
+                        <span class="text-xs text-text/70"
+                          >{{ it.pickrate }}% — {{ it.winrate }}%</span
+                        >
+                      </div>
+                    </div>
+                    <button
+                      v-if="(overviewDetailData?.items ?? []).length > 5"
+                      type="button"
+                      class="mt-2 text-sm font-medium text-accent hover:underline"
+                      @click="detailExpand.items = !detailExpand.items"
+                    >
+                      {{
+                        detailExpand.items
+                          ? t('statisticsPage.showLess')
+                          : t('statisticsPage.fastStatsSeeMore')
+                      }}
+                    </button>
+                  </div>
+
+                  <!-- Item sets -->
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                    <h3 class="mb-3 text-lg font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailItemSets') }}
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                      <div
+                        v-for="(set, idx) in (overviewDetailData?.itemSets ?? []).slice(
+                          0,
+                          detailExpand.itemSets ? 20 : 5
+                        )"
+                        :key="idx"
+                        class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
+                      >
+                        <template v-for="itemId in set.items" :key="itemId">
+                          <img
+                            v-if="gameVersion && itemImageName(itemId)"
+                            :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
+                            :alt="itemName(itemId) ?? ''"
+                            class="h-5 w-5 object-contain"
+                            width="20"
+                            height="20"
+                          />
+                        </template>
+                        <span class="text-xs text-text/70"
+                          >{{ Number(set.pickrate).toFixed(2) }}% —
+                          {{ Number(set.winrate).toFixed(2) }}%</span
+                        >
+                      </div>
+                    </div>
+                    <button
+                      v-if="(overviewDetailData?.itemSets ?? []).length > 5"
+                      type="button"
+                      class="mt-2 text-sm font-medium text-accent hover:underline"
+                      @click="detailExpand.itemSets = !detailExpand.itemSets"
+                    >
+                      {{
+                        detailExpand.itemSets
+                          ? t('statisticsPage.showLess')
+                          : t('statisticsPage.fastStatsSeeMore')
+                      }}
+                    </button>
+                  </div>
+
+                  <!-- Items by order -->
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                    <h3 class="mb-3 text-lg font-medium text-text">
+                      {{ t('statisticsPage.overviewDetailItemsByOrder') }}
+                    </h3>
+                    <div class="space-y-2">
+                      <div
+                        v-for="slotIdx in [0, 1, 2, 3, 4, 5]"
+                        :key="slotIdx"
+                        class="rounded border border-primary/20 bg-surface/30 p-2"
+                      >
+                        <div class="mb-1 text-xs font-medium text-text/70">
+                          Slot {{ slotIdx + 1 }}
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                          <div
+                            v-for="row in sortedItemsBySlot(slotIdx).slice(
+                              0,
+                              detailExpand.itemsByOrder ? 10 : 5
+                            )"
+                            :key="row.itemId"
+                            class="flex items-center gap-1 rounded px-1 py-0.5"
+                            :title="
+                              (itemName(row.itemId) ?? row.itemId) +
+                              ' — ' +
+                              Number(row.winrate).toFixed(2) +
+                              '%'
+                            "
+                          >
+                            <img
+                              v-if="gameVersion && itemImageName(row.itemId)"
+                              :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                              :alt="itemName(row.itemId) ?? ''"
+                              class="h-4 w-4 object-contain"
+                              width="16"
+                              height="16"
+                            />
+                            <span class="text-xs text-text/80"
+                              >{{ Number(row.winrate).toFixed(2) }}%</span
+                            >
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="mt-2 text-sm font-medium text-accent hover:underline"
+                      @click="detailExpand.itemsByOrder = !detailExpand.itemsByOrder"
+                    >
+                      {{
+                        detailExpand.itemsByOrder
+                          ? t('statisticsPage.showLess')
+                          : t('statisticsPage.fastStatsSeeMore')
+                      }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <div v-else class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <div class="py-4 text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
+          <div v-show="activeTab === 'progressions'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+              <h2 class="mb-4 text-xl font-semibold text-text-accent">
+                {{ t('statisticsPage.progressionsTitle') }}
+              </h2>
+              <p class="mb-4 text-text/80">
+                {{
+                  t('statisticsPage.progressionsDescription', {
+                    version: progressionFullData?.oldestVersion ?? '—',
+                  })
+                }}
+              </p>
+              <div v-if="progressionFullPending" class="text-text/70">
+                {{ t('statisticsPage.loading') }}
+              </div>
+              <div v-else-if="!progressionFullData?.oldestVersion" class="text-text/70">
+                {{ t('statisticsPage.progressionsNoVersion') }}
+              </div>
+              <div v-else-if="progressionFullData" class="space-y-8">
+                <!-- Progression du winrate -->
+                <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+                  <h3 class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.progressionsWinrateTable') }}
+                  </h3>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/30 text-left text-text/80">
+                          <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
+                          <th class="pb-2 pr-2 text-right">
+                            {{ t('statisticsPage.progressionsWinrateCol') }}
+                          </th>
+                          <th class="pb-2 pl-2 text-right">
+                            {{ t('statisticsPage.progressionsDelta') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in paginatedProgressionsChampions"
+                          :key="'wr-' + row.championId"
+                          class="border-b border-primary/20"
+                        >
+                          <td class="py-1.5 pr-2">
+                            <NuxtLink
+                              :to="localePath('/statistics/champion/' + row.championId)"
+                              class="flex items-center gap-2 hover:text-accent"
+                            >
+                              <img
+                                v-if="gameVersion && championByKey(row.championId)"
+                                :src="
+                                  getChampionImageUrl(
+                                    gameVersion,
+                                    championByKey(row.championId)!.image.full
+                                  )
+                                "
+                                :alt="championName(row.championId) ?? ''"
+                                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                                width="24"
+                                height="24"
+                              />
+                              <span>{{ championName(row.championId) || row.championId }}</span>
+                            </NuxtLink>
+                          </td>
+                          <td class="py-1.5 text-right">{{ Number(row.wrSince).toFixed(2) }}%</td>
+                          <td
+                            class="py-1.5 pl-2 text-right"
+                            :class="row.deltaWr >= 0 ? 'text-success' : 'text-error'"
+                          >
+                            {{ row.deltaWr >= 0 ? '+' : '' }}{{ row.deltaWr.toFixed(2) }}%
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <!-- Progression de la popularité -->
+                <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
+                  <h3 class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.progressionsPopularityTable') }}
+                  </h3>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/30 text-left text-text/80">
+                          <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
+                          <th class="pb-2 pr-2 text-right">
+                            {{ t('statisticsPage.progressionsPopularity') }}
+                          </th>
+                          <th class="pb-2 pl-2 text-right">
+                            {{ t('statisticsPage.progressionsDelta') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in paginatedProgressionsByPickrate"
+                          :key="'pick-' + row.championId"
+                          class="border-b border-primary/20"
+                        >
+                          <td class="py-1.5 pr-2">
+                            <NuxtLink
+                              :to="localePath('/statistics/champion/' + row.championId)"
+                              class="flex items-center gap-2 hover:text-accent"
+                            >
+                              <img
+                                v-if="gameVersion && championByKey(row.championId)"
+                                :src="
+                                  getChampionImageUrl(
+                                    gameVersion,
+                                    championByKey(row.championId)!.image.full
+                                  )
+                                "
+                                :alt="championName(row.championId) ?? ''"
+                                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                                width="24"
+                                height="24"
+                              />
+                              <span>{{ championName(row.championId) || row.championId }}</span>
+                            </NuxtLink>
+                          </td>
+                          <td class="py-1.5 text-right">
+                            {{ Number(row.pickrateSince).toFixed(2) }}%
+                          </td>
+                          <td
+                            class="py-1.5 pl-2 text-right"
+                            :class="row.deltaPick >= 0 ? 'text-success' : 'text-error'"
+                          >
+                            {{ row.deltaPick >= 0 ? '+' : '' }}{{ row.deltaPick.toFixed(2) }}%
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <div
+                  v-if="totalProgressionsCount > 0"
+                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+                >
+                  <span>{{ totalProgressionsCount }} {{ t('statisticsPage.champion') }}</span>
+                  <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5">
+                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                      <select
+                        v-model.number="progressionsPageSize"
+                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                      >
+                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                      </select>
+                    </label>
+                    <span class="text-text/70">
+                      {{ (progressionsPage - 1) * progressionsPageSize + 1 }}-{{
+                        Math.min(progressionsPage * progressionsPageSize, totalProgressionsCount)
+                      }}
+                      / {{ totalProgressionsCount }}
+                    </span>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="progressionsPage <= 1"
+                        @click="progressionsPage = Math.max(1, progressionsPage - 1)"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="progressionsPage >= totalProgressionsPages"
+                        @click="
+                          progressionsPage = Math.min(totalProgressionsPages, progressionsPage + 1)
+                        "
+                      >
+                        ›
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab: Par côté (Blue / Red) -->
+          <div v-show="activeTab === 'sides'" class="space-y-6">
+            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+              <h2 class="mb-4 text-xl font-semibold text-text-accent">
+                {{ t('statisticsPage.sidesTitle') }}
+              </h2>
+              <p class="mb-4 text-text/80">
+                {{ t('statisticsPage.sidesDescription') }}
+              </p>
+              <div v-if="overviewSidesPending" class="text-text/70">
+                {{ t('statisticsPage.loading') }}
+              </div>
+              <div v-else-if="overviewSidesData" class="space-y-6">
+                <!-- Donut Blue / Red % victoire (cercle entier, Solo/duo) -->
+                <div
+                  class="flex flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-6"
+                >
+                  <div
+                    class="pie-chart-2 relative inline-flex h-[150px] w-[150px] items-center justify-center"
+                    style="padding: 0"
+                  >
+                    <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
+                      <!-- Fond du donut (cercle entier) -->
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="14"
+                        stroke-linecap="butt"
+                        class="text-surface/50 dark:text-surface/40"
+                        :stroke-dasharray="sidesDonutCircumference + ' ' + sidesDonutCircumference"
+                        stroke-dashoffset="0"
+                      />
+                      <!-- Part bleue -->
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="14"
+                        stroke-linecap="butt"
+                        class="text-blue-500 dark:text-blue-400"
+                        :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
+                        stroke-dashoffset="0"
+                      />
+                      <!-- Part rouge -->
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="48"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="14"
+                        stroke-linecap="butt"
+                        class="text-red-500 dark:text-red-400"
+                        :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
+                        :stroke-dashoffset="-sidesDonutBlueDash"
+                      />
+                    </svg>
+                    <div class="relative z-10 flex flex-col items-center text-center">
+                      <span class="block text-xl font-bold text-blue-600 dark:text-blue-400">
+                        {{ sidesDonutBluePct }}%
+                      </span>
+                      <span class="block text-lg font-medium text-red-600 dark:text-red-400">
+                        {{ sidesDonutRedPct }}%
+                      </span>
+                    </div>
+                  </div>
+                  <p class="mt-3 text-sm text-text/70">
+                    {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
+                  </p>
+                </div>
+                <!-- Champions les plus joués par côté -->
+                <div>
+                  <h3 class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.sidesMostPlayedBySide') }}
+                  </h3>
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
+                        {{ t('statisticsPage.sidesBlue') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
+                        <div
+                          v-for="c in (overviewSidesData.championPickBySide?.blue ?? []).slice(
+                            0,
+                            sidesExpandPickBlue ? 20 : 5
+                          )"
+                          :key="'pick-blue-' + c.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                          :title="
+                            (championName(c.championId) ?? c.championId) +
+                            ' — ' +
+                            c.games +
+                            ' parties'
+                          "
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(c.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(c.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(c.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
+                          />
+                          <span class="text-xs text-text/80"
+                            >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
+                          >
+                        </div>
+                      </div>
+                      <button
+                        v-if="(overviewSidesData.championPickBySide?.blue ?? []).length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandPickBlue = !sidesExpandPickBlue"
+                      >
+                        {{
+                          sidesExpandPickBlue
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
+                    </div>
+                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
+                        {{ t('statisticsPage.sidesRed') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
+                        <div
+                          v-for="c in (overviewSidesData.championPickBySide?.red ?? []).slice(
+                            0,
+                            sidesExpandPickRed ? 20 : 5
+                          )"
+                          :key="'pick-red-' + c.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                          :title="
+                            (championName(c.championId) ?? c.championId) +
+                            ' — ' +
+                            c.games +
+                            ' parties'
+                          "
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(c.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(c.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(c.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
+                          />
+                          <span class="text-xs text-text/80"
+                            >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
+                          >
+                        </div>
+                      </div>
+                      <button
+                        v-if="(overviewSidesData.championPickBySide?.red ?? []).length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandPickRed = !sidesExpandPickRed"
+                      >
+                        {{
+                          sidesExpandPickRed
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <!-- Champions par côté (top winrate, min 10 games) -->
+                <div>
+                  <h3 class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.sidesChampionsBySide') }}
+                  </h3>
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
+                        {{ t('statisticsPage.sidesBlue') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
+                        <div
+                          v-for="c in overviewSidesData.championWinrateBySide.blue.slice(
+                            0,
+                            sidesExpandBlue ? 20 : 5
+                          )"
+                          :key="'blue-' + c.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                          :title="
+                            (championName(c.championId) ?? c.championId) +
+                            ' — ' +
+                            Number(c.winrate).toFixed(2) +
+                            '%'
+                          "
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(c.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(c.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(c.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
+                          />
+                          <span class="text-xs text-text/80"
+                            >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
+                          >
+                        </div>
+                      </div>
+                      <button
+                        v-if="overviewSidesData.championWinrateBySide.blue.length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandBlue = !sidesExpandBlue"
+                      >
+                        {{
+                          sidesExpandBlue
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
+                    </div>
+                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
+                        {{ t('statisticsPage.sidesRed') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
+                        <div
+                          v-for="c in overviewSidesData.championWinrateBySide.red.slice(
+                            0,
+                            sidesExpandRed ? 20 : 5
+                          )"
+                          :key="'red-' + c.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                          :title="
+                            (championName(c.championId) ?? c.championId) +
+                            ' — ' +
+                            Number(c.winrate).toFixed(2) +
+                            '%'
+                          "
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(c.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(c.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(c.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
+                          />
+                          <span class="text-xs text-text/80"
+                            >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
+                          >
+                        </div>
+                      </div>
+                      <button
+                        v-if="overviewSidesData.championWinrateBySide.red.length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandRed = !sidesExpandRed"
+                      >
+                        {{
+                          sidesExpandRed
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <!-- Objectifs par côté (table comme vue d'ensemble, colonnes Bleu / Rouge) -->
+                <div>
+                  <h3 class="mb-3 text-lg font-medium text-text">
+                    {{ t('statisticsPage.sidesObjectivesBySide') }}
                   </h3>
                   <p class="mb-3 text-xs text-text/60">
                     {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
@@ -930,11 +1892,13 @@
                           <th class="py-1.5 pr-2 font-medium">
                             {{ t('statisticsPage.overviewTeamsObjective') }}
                           </th>
-                          <th class="py-1.5 pr-2 text-center font-medium">
-                            {{ t('statisticsPage.overviewTeamsFirstByWin') }}
+                          <th
+                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
+                          >
+                            {{ t('statisticsPage.sidesBlue') }}
                           </th>
-                          <th class="py-1.5 text-center font-medium">
-                            {{ t('statisticsPage.overviewTeamsFirstByLoss') }}
+                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
+                            {{ t('statisticsPage.sidesRed') }}
                           </th>
                         </tr>
                       </thead>
@@ -945,34 +1909,38 @@
                           </td>
                           <td class="py-1.5 pr-2 text-center">
                             {{
-                              firstPercentByTeam(
-                                overviewTeamsData.objectives.firstBlood.firstByWin,
-                                overviewTeamsData.objectives.firstBlood.firstByLoss,
-                                overviewTeamsData.matchCount
-                              ).win
+                              firstPercentBySide(
+                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ??
+                                  0,
+                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ??
+                                  0,
+                                overviewSidesData.matchCount
+                              ).blue
                             }}
                           </td>
                           <td class="py-1.5 text-center">
                             {{
-                              firstPercentByTeam(
-                                overviewTeamsData.objectives.firstBlood.firstByWin,
-                                overviewTeamsData.objectives.firstBlood.firstByLoss,
-                                overviewTeamsData.matchCount
-                              ).loss
+                              firstPercentBySide(
+                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ??
+                                  0,
+                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ??
+                                  0,
+                                overviewSidesData.matchCount
+                              ).red
                             }}
                           </td>
                         </tr>
-                        <template v-for="key in objectiveKeysWithKills" :key="key">
+                        <template v-for="key in sidesObjectiveKeysWithKills" :key="key">
                           <tr>
                             <td class="py-1.5 pr-2">
                               <button
                                 type="button"
                                 class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                                @click="toggleObjective(key)"
+                                @click="toggleSidesObjective(key)"
                               >
                                 <span
                                   class="inline-block transition-transform duration-200"
-                                  :class="openObjectiveKeys.has(key) ? 'rotate-180' : ''"
+                                  :class="openSidesObjectiveKeys.has(key) ? 'rotate-180' : ''"
                                   aria-hidden
                                   >▼</span
                                 >
@@ -981,35 +1949,35 @@
                             </td>
                             <td class="py-1.5 pr-2 text-center">
                               {{
-                                firstPercentByTeam(
-                                  objectiveRow(key).firstByWin,
-                                  objectiveRow(key).firstByLoss,
-                                  overviewTeamsData.matchCount
-                                ).win
+                                firstPercentBySide(
+                                  objectiveRowSides(key).firstByBlue,
+                                  objectiveRowSides(key).firstByRed,
+                                  overviewSidesData.matchCount
+                                ).blue
                               }}
                             </td>
                             <td class="py-1.5 text-center">
                               {{
-                                firstPercentByTeam(
-                                  objectiveRow(key).firstByWin,
-                                  objectiveRow(key).firstByLoss,
-                                  overviewTeamsData.matchCount
-                                ).loss
+                                firstPercentBySide(
+                                  objectiveRowSides(key).firstByBlue,
+                                  objectiveRowSides(key).firstByRed,
+                                  overviewSidesData.matchCount
+                                ).red
                               }}
                             </td>
                           </tr>
-                          <template v-if="openObjectiveKeys.has(key)">
+                          <template v-if="openSidesObjectiveKeys.has(key)">
                             <tr
-                              v-for="count in objectiveCounts(key)"
+                              v-for="count in sidesObjectiveCounts(key)"
                               :key="key + '-' + count"
                               class="bg-surface/30"
                             >
                               <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
                               <td class="py-1 pr-2 text-center text-text/80">
-                                {{ percentForCount(key, count, true) }}
+                                {{ percentForCountSides(key, count, true) }}
                               </td>
                               <td class="py-1 text-center text-text/80">
-                                {{ percentForCount(key, count, false) }}
+                                {{ percentForCountSides(key, count, false) }}
                               </td>
                             </tr>
                           </template>
@@ -1018,1363 +1986,229 @@
                     </table>
                   </div>
                 </div>
-              </div>
-            </div>
-            <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
-          </div>
-        </div>
-
-        <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
-        <div v-show="activeTab === 'detail'" class="space-y-6">
-          <template v-if="overviewDetailPending">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
-            </div>
-          </template>
-          <template v-else>
-            <div
-              v-if="overviewDetailError"
-              class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
-            >
-              <p class="text-text/90">{{ t('statisticsPage.overviewDetailTimeout') }}</p>
-              <button
-                type="button"
-                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-                @click="loadOverviewDetail(true)"
-              >
-                {{ t('statisticsPage.retry') }}
-              </button>
-            </div>
-            <template v-if="overviewDetailPending || overviewDetailData || overviewDetailError">
-              <fieldset
-                class="overview-runes-fieldset rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <legend class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.overviewDetailRunes') }}
-                </legend>
-                <div
-                  v-if="overviewDetailPending && !overviewDetailData"
-                  class="py-4 text-center text-text/70"
-                >
-                  {{ t('statisticsPage.loading') }}
-                </div>
-                <!-- Tree layout when rune paths are loaded -->
-                <div
-                  v-else-if="overviewRunesByPath.some(p => p.cells.length > 0)"
-                  class="blocks flex flex-wrap gap-6"
-                >
-                  <div
-                    v-for="{ path, cells } in overviewRunesByPath"
-                    :key="path.id"
-                    class="runes overview-runes-grid"
-                  >
-                    <button
-                      v-for="(cell, idx) in cells"
-                      :key="path.id + '-' + cell.rune.id + '-' + idx"
-                      type="button"
-                      class="overview-rune-cell"
-                      :class="{ 'rune main': cell.row === 0, rune: cell.row !== 0 }"
-                      :style="{ gridArea: `${cell.row + 1} / ${cell.col + 1}` }"
-                      :title="
-                        cell.rune.name +
-                        (cell.stats
-                          ? ` — ${Number(cell.stats.pickrate).toFixed(2)}% pick, ${Number(cell.stats.winrate).toFixed(2)}% WR`
-                          : '')
-                      "
-                    >
-                      <img
-                        v-if="gameVersion"
-                        :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
-                        :alt="cell.rune.name"
-                        class="overview-rune-img"
-                        width="32"
-                        height="32"
-                      />
-                      <div v-if="cell.stats" class="overview-rune-stat">
-                        <div class="overview-rune-pick">
-                          {{ Number(cell.stats.pickrate).toFixed(2) }}%
-                          {{ t('statisticsPage.overviewDetailPickRate') }}
-                        </div>
-                        <div class="overview-rune-wr">
-                          {{ Number(cell.stats.winrate).toFixed(2) }}%
-                          {{ t('statisticsPage.overviewDetailWinRate') }}
-                        </div>
-                      </div>
-                      <div v-else class="overview-rune-stat overview-rune-no-stat">—</div>
-                    </button>
-                  </div>
-                </div>
-                <!-- Fallback: flat list when rune paths not yet loaded -->
-                <div
-                  v-else-if="(overviewDetailData?.runes ?? []).length"
-                  class="blocks runes overview-runes-fallback grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8"
-                >
-                  <button
-                    v-for="r in overviewDetailData?.runes ?? []"
-                    :key="r.runeId"
-                    type="button"
-                    class="overview-rune-cell flex flex-col items-center gap-1 rounded border border-primary/20 bg-surface/50 p-2 text-center transition-colors hover:bg-primary/20"
-                    :title="
-                      (getRuneById(r.runeId)?.name ?? r.runeId) +
-                      ' — ' +
-                      r.pickrate +
-                      '% pick, ' +
-                      r.winrate +
-                      '% WR'
-                    "
-                  >
-                    <img
-                      v-if="gameVersion && getRuneById(r.runeId)"
-                      :src="getRuneImageUrl(gameVersion, getRuneById(r.runeId)!.icon)"
-                      :alt="getRuneById(r.runeId)?.name ?? ''"
-                      class="overview-rune-img h-8 w-8 object-contain"
-                      width="32"
-                      height="32"
-                    />
-                    <div class="overview-rune-stat">
-                      <div class="overview-rune-pick">
-                        {{ Number(r.pickrate).toFixed(2) }}%
-                        {{ t('statisticsPage.overviewDetailPickRate') }}
-                      </div>
-                      <div class="overview-rune-wr">
-                        {{ Number(r.winrate).toFixed(2) }}%
-                        {{ t('statisticsPage.overviewDetailWinRate') }}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-                <!-- Sorts d'invocateur : même section, horizontal -->
-                <div class="mt-6 border-t border-primary/30 pt-4">
-                  <h3 class="mb-3 text-base font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailSummonerSpells') }}
-                  </h3>
-                  <div class="flex flex-wrap items-center gap-3">
-                    <div
-                      v-for="s in overviewDetailData?.summonerSpells ?? []"
-                      :key="s.spellId"
-                      class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-3 py-2"
-                    >
-                      <img
-                        v-if="gameVersion && spellImageName(s.spellId)"
-                        :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
-                        :alt="spellName(s.spellId) ?? ''"
-                        class="h-6 w-6 object-contain"
-                        width="24"
-                        height="24"
-                      />
-                      <span class="text-sm font-medium text-text/90">{{
-                        spellName(s.spellId) ?? s.spellId
-                      }}</span>
-                      <span class="text-xs text-text/70"
-                        >{{ Number(s.pickrate).toFixed(2) }}% pick —
-                        {{ Number(s.winrate).toFixed(2) }}% WR</span
-                      >
-                    </div>
-                  </div>
-                </div>
-              </fieldset>
-
-              <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <!-- Rune sets -->
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <!-- Bans par côté -->
+                <div>
                   <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailRuneSets') }}
+                    {{ t('statisticsPage.sidesBansBySide') }}
                   </h3>
-                  <div class="flex flex-wrap gap-3">
-                    <div
-                      v-for="(set, idx) in (overviewDetailData?.runeSets ?? []).slice(
-                        0,
-                        detailExpand.runeSets ? 20 : 5
-                      )"
-                      :key="idx"
-                      class="rune-set"
-                    >
-                      <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
-                        <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
-                        <div class="rune-set-wr" :style="{ '--n': set.winrate }">
-                          {{ Number(set.winrate).toFixed(2) }}%
-                        </div>
-                      </div>
-                      <div class="rune-set-runes">
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
+                        {{ t('statisticsPage.sidesBlue') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
                         <div
-                          v-for="runeId in runeIdsFromSet(set.runes)"
-                          :key="runeId"
-                          class="rune-set-tooltip"
-                          :title="getRuneById(runeId)?.name ?? ''"
-                        >
-                          <div class="rune-set-rune">
-                            <div
-                              v-if="gameVersion && getRuneById(runeId)"
-                              class="rune-set-img"
-                              :style="{
-                                '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
-                              }"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    v-if="(overviewDetailData?.runeSets ?? []).length > 5"
-                    type="button"
-                    class="mt-2 text-sm font-medium text-accent hover:underline"
-                    @click="detailExpand.runeSets = !detailExpand.runeSets"
-                  >
-                    {{
-                      detailExpand.runeSets
-                        ? t('statisticsPage.showLess')
-                        : t('statisticsPage.fastStatsSeeMore')
-                    }}
-                  </button>
-                </div>
-
-                <!-- Items -->
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailItems') }}
-                  </h3>
-                  <div class="flex flex-wrap gap-2">
-                    <div
-                      v-for="it in (overviewDetailData?.items ?? []).slice(
-                        0,
-                        detailExpand.items ? 40 : 5
-                      )"
-                      :key="it.itemId"
-                      class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                    >
-                      <img
-                        v-if="gameVersion && itemImageName(it.itemId)"
-                        :src="getItemImageUrl(gameVersion, itemImageName(it.itemId)!)"
-                        :alt="itemName(it.itemId) ?? ''"
-                        class="h-5 w-5 object-contain"
-                        width="20"
-                        height="20"
-                      />
-                      <span class="max-w-[80px] truncate text-xs text-text/90">{{
-                        itemName(it.itemId) ?? it.itemId
-                      }}</span>
-                      <span class="text-xs text-text/70"
-                        >{{ it.pickrate }}% — {{ it.winrate }}%</span
-                      >
-                    </div>
-                  </div>
-                  <button
-                    v-if="(overviewDetailData?.items ?? []).length > 5"
-                    type="button"
-                    class="mt-2 text-sm font-medium text-accent hover:underline"
-                    @click="detailExpand.items = !detailExpand.items"
-                  >
-                    {{
-                      detailExpand.items
-                        ? t('statisticsPage.showLess')
-                        : t('statisticsPage.fastStatsSeeMore')
-                    }}
-                  </button>
-                </div>
-
-                <!-- Item sets -->
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailItemSets') }}
-                  </h3>
-                  <div class="flex flex-wrap gap-2">
-                    <div
-                      v-for="(set, idx) in (overviewDetailData?.itemSets ?? []).slice(
-                        0,
-                        detailExpand.itemSets ? 20 : 5
-                      )"
-                      :key="idx"
-                      class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
-                    >
-                      <template v-for="itemId in set.items" :key="itemId">
-                        <img
-                          v-if="gameVersion && itemImageName(itemId)"
-                          :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
-                          :alt="itemName(itemId) ?? ''"
-                          class="h-5 w-5 object-contain"
-                          width="20"
-                          height="20"
-                        />
-                      </template>
-                      <span class="text-xs text-text/70"
-                        >{{ Number(set.pickrate).toFixed(2) }}% —
-                        {{ Number(set.winrate).toFixed(2) }}%</span
-                      >
-                    </div>
-                  </div>
-                  <button
-                    v-if="(overviewDetailData?.itemSets ?? []).length > 5"
-                    type="button"
-                    class="mt-2 text-sm font-medium text-accent hover:underline"
-                    @click="detailExpand.itemSets = !detailExpand.itemSets"
-                  >
-                    {{
-                      detailExpand.itemSets
-                        ? t('statisticsPage.showLess')
-                        : t('statisticsPage.fastStatsSeeMore')
-                    }}
-                  </button>
-                </div>
-
-                <!-- Items by order -->
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailItemsByOrder') }}
-                  </h3>
-                  <div class="space-y-2">
-                    <div
-                      v-for="slotIdx in [0, 1, 2, 3, 4, 5]"
-                      :key="slotIdx"
-                      class="rounded border border-primary/20 bg-surface/30 p-2"
-                    >
-                      <div class="mb-1 text-xs font-medium text-text/70">
-                        Slot {{ slotIdx + 1 }}
-                      </div>
-                      <div class="flex flex-wrap gap-1.5">
-                        <div
-                          v-for="row in sortedItemsBySlot(slotIdx).slice(
+                          v-for="b in overviewSidesData.bansBySide.blue.slice(
                             0,
-                            detailExpand.itemsByOrder ? 10 : 5
+                            sidesExpandBansBlue ? 20 : 5
                           )"
-                          :key="row.itemId"
-                          class="flex items-center gap-1 rounded px-1 py-0.5"
-                          :title="
-                            (itemName(row.itemId) ?? row.itemId) +
-                            ' — ' +
-                            Number(row.winrate).toFixed(2) +
-                            '%'
-                          "
+                          :key="'ban-blue-' + b.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
                         >
                           <img
-                            v-if="gameVersion && itemImageName(row.itemId)"
-                            :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                            :alt="itemName(row.itemId) ?? ''"
-                            class="h-4 w-4 object-contain"
-                            width="16"
-                            height="16"
+                            v-if="gameVersion && championByKey(b.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(b.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(b.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
                           />
-                          <span class="text-xs text-text/80"
-                            >{{ Number(row.winrate).toFixed(2) }}%</span
-                          >
+                          <span class="text-xs text-text/80">{{ b.count }}</span>
                         </div>
                       </div>
+                      <button
+                        v-if="overviewSidesData.bansBySide.blue.length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandBansBlue = !sidesExpandBansBlue"
+                      >
+                        {{
+                          sidesExpandBansBlue
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
+                    </div>
+                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
+                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
+                        {{ t('statisticsPage.sidesRed') }}
+                      </h4>
+                      <div class="flex flex-wrap gap-2">
+                        <div
+                          v-for="b in overviewSidesData.bansBySide.red.slice(
+                            0,
+                            sidesExpandBansRed ? 20 : 5
+                          )"
+                          :key="'ban-red-' + b.championId"
+                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
+                        >
+                          <img
+                            v-if="gameVersion && championByKey(b.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(b.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(b.championId) ?? ''"
+                            class="h-6 w-6 rounded-full object-cover"
+                            width="24"
+                            height="24"
+                          />
+                          <span class="text-xs text-text/80">{{ b.count }}</span>
+                        </div>
+                      </div>
+                      <button
+                        v-if="overviewSidesData.bansBySide.red.length > 5"
+                        type="button"
+                        class="mt-2 text-sm font-medium text-accent hover:underline"
+                        @click="sidesExpandBansRed = !sidesExpandBansRed"
+                      >
+                        {{
+                          sidesExpandBansRed
+                            ? t('statisticsPage.showLess')
+                            : t('statisticsPage.fastStatsSeeMore')
+                        }}
+                      </button>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    class="mt-2 text-sm font-medium text-accent hover:underline"
-                    @click="detailExpand.itemsByOrder = !detailExpand.itemsByOrder"
-                  >
-                    {{
-                      detailExpand.itemsByOrder
-                        ? t('statisticsPage.showLess')
-                        : t('statisticsPage.fastStatsSeeMore')
-                    }}
-                  </button>
                 </div>
               </div>
-            </template>
-            <div v-else class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-              <div class="py-4 text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+              <div v-else class="rounded border border-primary/30 bg-surface/50 p-4 text-text/70">
+                {{ t('statisticsPage.overviewNoData') }}
+              </div>
             </div>
-          </template>
-        </div>
+          </div>
 
-        <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-        <div v-show="activeTab === 'progressions'" class="space-y-6">
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-            <h2 class="mb-4 text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.progressionsTitle') }}
-            </h2>
-            <p class="mb-4 text-text/80">
-              {{
-                t('statisticsPage.progressionsDescription', {
-                  version: progressionFullData?.oldestVersion ?? '—',
-                })
-              }}
-            </p>
-            <div v-if="progressionFullPending" class="text-text/70">
+          <!-- Tab: Champions -->
+          <div v-show="activeTab === 'champions'" class="space-y-2">
+            <div v-if="championsPending || matchupTierPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
-            <div v-else-if="!progressionFullData?.oldestVersion" class="text-text/70">
-              {{ t('statisticsPage.progressionsNoVersion') }}
-            </div>
-            <div v-else-if="progressionFullData" class="space-y-8">
-              <!-- Progression du winrate -->
-              <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.progressionsWinrateTable') }}
-                </h3>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-primary/30 text-left text-text/80">
-                        <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
-                        <th class="pb-2 pr-2 text-right">
-                          {{ t('statisticsPage.progressionsWinrateCol') }}
-                        </th>
-                        <th class="pb-2 pl-2 text-right">
-                          {{ t('statisticsPage.progressionsDelta') }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="row in paginatedProgressionsChampions"
-                        :key="'wr-' + row.championId"
-                        class="border-b border-primary/20"
-                      >
-                        <td class="py-1.5 pr-2">
-                          <NuxtLink
-                            :to="localePath('/statistics/champion/' + row.championId)"
-                            class="flex items-center gap-2 hover:text-accent"
-                          >
-                            <img
-                              v-if="gameVersion && championByKey(row.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(row.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(row.championId) ?? ''"
-                              class="h-6 w-6 shrink-0 rounded-full object-cover"
-                              width="24"
-                              height="24"
-                            />
-                            <span>{{ championName(row.championId) || row.championId }}</span>
-                          </NuxtLink>
-                        </td>
-                        <td class="py-1.5 text-right">{{ Number(row.wrSince).toFixed(2) }}%</td>
-                        <td
-                          class="py-1.5 pl-2 text-right"
-                          :class="row.deltaWr >= 0 ? 'text-success' : 'text-error'"
-                        >
-                          {{ row.deltaWr >= 0 ? '+' : '' }}{{ row.deltaWr.toFixed(2) }}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- Progression de la popularité -->
-              <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.progressionsPopularityTable') }}
-                </h3>
-                <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="border-b border-primary/30 text-left text-text/80">
-                        <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
-                        <th class="pb-2 pr-2 text-right">
-                          {{ t('statisticsPage.progressionsPopularity') }}
-                        </th>
-                        <th class="pb-2 pl-2 text-right">
-                          {{ t('statisticsPage.progressionsDelta') }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        v-for="row in paginatedProgressionsByPickrate"
-                        :key="'pick-' + row.championId"
-                        class="border-b border-primary/20"
-                      >
-                        <td class="py-1.5 pr-2">
-                          <NuxtLink
-                            :to="localePath('/statistics/champion/' + row.championId)"
-                            class="flex items-center gap-2 hover:text-accent"
-                          >
-                            <img
-                              v-if="gameVersion && championByKey(row.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(row.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(row.championId) ?? ''"
-                              class="h-6 w-6 shrink-0 rounded-full object-cover"
-                              width="24"
-                              height="24"
-                            />
-                            <span>{{ championName(row.championId) || row.championId }}</span>
-                          </NuxtLink>
-                        </td>
-                        <td class="py-1.5 text-right">
-                          {{ Number(row.pickrateSince).toFixed(2) }}%
-                        </td>
-                        <td
-                          class="py-1.5 pl-2 text-right"
-                          :class="row.deltaPick >= 0 ? 'text-success' : 'text-error'"
-                        >
-                          {{ row.deltaPick >= 0 ? '+' : '' }}{{ row.deltaPick.toFixed(2) }}%
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div
-                v-if="totalProgressionsCount > 0"
-                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-              >
-                <span>{{ totalProgressionsCount }} {{ t('statisticsPage.champion') }}</span>
-                <div class="flex items-center gap-3">
-                  <label class="flex items-center gap-1.5">
-                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                    <select
-                      v-model.number="progressionsPageSize"
-                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                    >
-                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                  </label>
-                  <span class="text-text/70">
-                    {{ (progressionsPage - 1) * progressionsPageSize + 1 }}-{{
-                      Math.min(progressionsPage * progressionsPageSize, totalProgressionsCount)
-                    }}
-                    / {{ totalProgressionsCount }}
-                  </span>
-                  <div class="flex gap-1">
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="progressionsPage <= 1"
-                      @click="progressionsPage = Math.max(1, progressionsPage - 1)"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="progressionsPage >= totalProgressionsPages"
-                      @click="
-                        progressionsPage = Math.min(totalProgressionsPages, progressionsPage + 1)
-                      "
-                    >
-                      ›
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab: Par côté (Blue / Red) -->
-        <div v-show="activeTab === 'sides'" class="space-y-6">
-          <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-            <h2 class="mb-4 text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.sidesTitle') }}
-            </h2>
-            <p class="mb-4 text-text/80">
-              {{ t('statisticsPage.sidesDescription') }}
-            </p>
-            <div v-if="overviewSidesPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div v-else-if="overviewSidesData" class="space-y-6">
-              <!-- Donut Blue / Red % victoire (cercle entier, Solo/duo) -->
-              <div
-                class="flex flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <div
-                  class="pie-chart-2 relative inline-flex h-[150px] w-[150px] items-center justify-center"
-                  style="padding: 0"
-                >
-                  <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
-                    <!-- Fond du donut (cercle entier) -->
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="48"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="14"
-                      stroke-linecap="butt"
-                      class="text-surface/50 dark:text-surface/40"
-                      :stroke-dasharray="sidesDonutCircumference + ' ' + sidesDonutCircumference"
-                      stroke-dashoffset="0"
-                    />
-                    <!-- Part bleue -->
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="48"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="14"
-                      stroke-linecap="butt"
-                      class="text-blue-500 dark:text-blue-400"
-                      :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
-                      stroke-dashoffset="0"
-                    />
-                    <!-- Part rouge -->
-                    <circle
-                      cx="60"
-                      cy="60"
-                      r="48"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="14"
-                      stroke-linecap="butt"
-                      class="text-red-500 dark:text-red-400"
-                      :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
-                      :stroke-dashoffset="-sidesDonutBlueDash"
-                    />
-                  </svg>
-                  <div class="relative z-10 flex flex-col items-center text-center">
-                    <span class="block text-xl font-bold text-blue-600 dark:text-blue-400">
-                      {{ sidesDonutBluePct }}%
-                    </span>
-                    <span class="block text-lg font-medium text-red-600 dark:text-red-400">
-                      {{ sidesDonutRedPct }}%
-                    </span>
-                  </div>
-                </div>
-                <p class="mt-3 text-sm text-text/70">
-                  {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
-                </p>
-              </div>
-              <!-- Champions les plus joués par côté -->
-              <div>
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.sidesMostPlayedBySide') }}
-                </h3>
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                      {{ t('statisticsPage.sidesBlue') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="c in (overviewSidesData.championPickBySide?.blue ?? []).slice(
-                          0,
-                          sidesExpandPickBlue ? 20 : 5
-                        )"
-                        :key="'pick-blue-' + c.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        :title="
-                          (championName(c.championId) ?? c.championId) +
-                          ' — ' +
-                          c.games +
-                          ' parties'
-                        "
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(c.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(c.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(c.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80"
-                          >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="(overviewSidesData.championPickBySide?.blue ?? []).length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandPickBlue = !sidesExpandPickBlue"
-                    >
-                      {{
-                        sidesExpandPickBlue
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                  <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                      {{ t('statisticsPage.sidesRed') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="c in (overviewSidesData.championPickBySide?.red ?? []).slice(
-                          0,
-                          sidesExpandPickRed ? 20 : 5
-                        )"
-                        :key="'pick-red-' + c.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        :title="
-                          (championName(c.championId) ?? c.championId) +
-                          ' — ' +
-                          c.games +
-                          ' parties'
-                        "
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(c.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(c.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(c.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80"
-                          >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="(overviewSidesData.championPickBySide?.red ?? []).length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandPickRed = !sidesExpandPickRed"
-                    >
-                      {{
-                        sidesExpandPickRed
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <!-- Champions par côté (top winrate, min 10 games) -->
-              <div>
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.sidesChampionsBySide') }}
-                </h3>
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                      {{ t('statisticsPage.sidesBlue') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="c in overviewSidesData.championWinrateBySide.blue.slice(
-                          0,
-                          sidesExpandBlue ? 20 : 5
-                        )"
-                        :key="'blue-' + c.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        :title="
-                          (championName(c.championId) ?? c.championId) +
-                          ' — ' +
-                          Number(c.winrate).toFixed(2) +
-                          '%'
-                        "
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(c.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(c.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(c.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80"
-                          >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="overviewSidesData.championWinrateBySide.blue.length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandBlue = !sidesExpandBlue"
-                    >
-                      {{
-                        sidesExpandBlue
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                  <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                      {{ t('statisticsPage.sidesRed') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="c in overviewSidesData.championWinrateBySide.red.slice(
-                          0,
-                          sidesExpandRed ? 20 : 5
-                        )"
-                        :key="'red-' + c.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        :title="
-                          (championName(c.championId) ?? c.championId) +
-                          ' — ' +
-                          Number(c.winrate).toFixed(2) +
-                          '%'
-                        "
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(c.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(c.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(c.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80"
-                          >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="overviewSidesData.championWinrateBySide.red.length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandRed = !sidesExpandRed"
-                    >
-                      {{
-                        sidesExpandRed
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <!-- Objectifs par côté (table comme vue d'ensemble, colonnes Bleu / Rouge) -->
-              <div>
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.sidesObjectivesBySide') }}
-                </h3>
-                <p class="mb-3 text-xs text-text/60">
-                  {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
-                </p>
-                <div class="overflow-x-auto">
-                  <table class="w-full min-w-[280px] text-left text-sm">
-                    <thead>
-                      <tr class="border-b border-primary/30 text-text/70">
-                        <th class="py-1.5 pr-2 font-medium">
-                          {{ t('statisticsPage.overviewTeamsObjective') }}
-                        </th>
-                        <th
-                          class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
-                        >
-                          {{ t('statisticsPage.sidesBlue') }}
-                        </th>
-                        <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
-                          {{ t('statisticsPage.sidesRed') }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-primary/20 text-text/80">
-                      <tr>
-                        <td class="py-1.5 pr-2">
-                          {{ t('statisticsPage.overviewTeamsFirstBlood') }}
-                        </td>
-                        <td class="py-1.5 pr-2 text-center">
-                          {{
-                            firstPercentBySide(
-                              overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ?? 0,
-                              overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ?? 0,
-                              overviewSidesData.matchCount
-                            ).blue
-                          }}
-                        </td>
-                        <td class="py-1.5 text-center">
-                          {{
-                            firstPercentBySide(
-                              overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ?? 0,
-                              overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ?? 0,
-                              overviewSidesData.matchCount
-                            ).red
-                          }}
-                        </td>
-                      </tr>
-                      <template v-for="key in sidesObjectiveKeysWithKills" :key="key">
-                        <tr>
-                          <td class="py-1.5 pr-2">
-                            <button
-                              type="button"
-                              class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                              @click="toggleSidesObjective(key)"
-                            >
-                              <span
-                                class="inline-block transition-transform duration-200"
-                                :class="openSidesObjectiveKeys.has(key) ? 'rotate-180' : ''"
-                                aria-hidden
-                                >▼</span
-                              >
-                              {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
-                            </button>
-                          </td>
-                          <td class="py-1.5 pr-2 text-center">
-                            {{
-                              firstPercentBySide(
-                                objectiveRowSides(key).firstByBlue,
-                                objectiveRowSides(key).firstByRed,
-                                overviewSidesData.matchCount
-                              ).blue
-                            }}
-                          </td>
-                          <td class="py-1.5 text-center">
-                            {{
-                              firstPercentBySide(
-                                objectiveRowSides(key).firstByBlue,
-                                objectiveRowSides(key).firstByRed,
-                                overviewSidesData.matchCount
-                              ).red
-                            }}
-                          </td>
-                        </tr>
-                        <template v-if="openSidesObjectiveKeys.has(key)">
-                          <tr
-                            v-for="count in sidesObjectiveCounts(key)"
-                            :key="key + '-' + count"
-                            class="bg-surface/30"
-                          >
-                            <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
-                            <td class="py-1 pr-2 text-center text-text/80">
-                              {{ percentForCountSides(key, count, true) }}
-                            </td>
-                            <td class="py-1 text-center text-text/80">
-                              {{ percentForCountSides(key, count, false) }}
-                            </td>
-                          </tr>
-                        </template>
-                      </template>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <!-- Bans par côté -->
-              <div>
-                <h3 class="mb-3 text-lg font-medium text-text">
-                  {{ t('statisticsPage.sidesBansBySide') }}
-                </h3>
-                <div class="grid gap-4 sm:grid-cols-2">
-                  <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                      {{ t('statisticsPage.sidesBlue') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="b in overviewSidesData.bansBySide.blue.slice(
-                          0,
-                          sidesExpandBansBlue ? 20 : 5
-                        )"
-                        :key="'ban-blue-' + b.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(b.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(b.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(b.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80">{{ b.count }}</span>
-                      </div>
-                    </div>
-                    <button
-                      v-if="overviewSidesData.bansBySide.blue.length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandBansBlue = !sidesExpandBansBlue"
-                    >
-                      {{
-                        sidesExpandBansBlue
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                  <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                    <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                      {{ t('statisticsPage.sidesRed') }}
-                    </h4>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="b in overviewSidesData.bansBySide.red.slice(
-                          0,
-                          sidesExpandBansRed ? 20 : 5
-                        )"
-                        :key="'ban-red-' + b.championId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                      >
-                        <img
-                          v-if="gameVersion && championByKey(b.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(b.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(b.championId) ?? ''"
-                          class="h-6 w-6 rounded-full object-cover"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-xs text-text/80">{{ b.count }}</span>
-                      </div>
-                    </div>
-                    <button
-                      v-if="overviewSidesData.bansBySide.red.length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="sidesExpandBansRed = !sidesExpandBansRed"
-                    >
-                      {{
-                        sidesExpandBansRed
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="rounded border border-primary/30 bg-surface/50 p-4 text-text/70">
-              {{ t('statisticsPage.overviewNoData') }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab: Champions -->
-        <div v-show="activeTab === 'champions'" class="space-y-4">
-          <div v-if="championsPending || matchupTierPending" class="text-text/70">
-            {{ t('statisticsPage.loading') }}
-          </div>
-          <div
-            v-else-if="championsError || matchupTierError"
-            class="rounded border border-error bg-surface p-3 text-error"
-          >
-            {{ championsError || matchupTierError }}
-          </div>
-          <div
-            v-else-if="championsData?.message && !championsData?.champions?.length"
-            class="text-text/70"
-          >
-            {{ championsData.message }}
-          </div>
-          <div v-else class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
-            <table class="w-full min-w-[400px] text-left text-sm">
-              <thead class="border-b border-primary/30 bg-surface/50">
-                <tr>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.champion') }}
-                  </th>
-                  <th
-                    class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
-                    :class="
-                      championsSortOrder === 'games'
-                        ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                        : 'hover:bg-surface/50'
-                    "
-                    @click="setChampionsSort('games')"
-                  >
-                    <span class="inline-flex items-center gap-1">
-                      {{ t('statisticsPage.games') }}
-                      <template v-if="championsSortOrder === 'games'">
-                        <span class="text-amber-500" aria-hidden="true">{{
-                          championsSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </template>
-                    </span>
-                  </th>
-                  <th
-                    class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
-                    :class="
-                      championsSortOrder === 'wins'
-                        ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                        : 'hover:bg-surface/50'
-                    "
-                    @click="setChampionsSort('wins')"
-                  >
-                    <span class="inline-flex items-center gap-1">
-                      {{ t('statisticsPage.wins') }}
-                      <template v-if="championsSortOrder === 'wins'">
-                        <span class="text-amber-500" aria-hidden="true">{{
-                          championsSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </template>
-                    </span>
-                  </th>
-                  <th
-                    class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
-                    :class="
-                      championsSortOrder === 'winrate'
-                        ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                        : 'hover:bg-surface/50'
-                    "
-                    @click="setChampionsSort('winrate')"
-                  >
-                    <span class="inline-flex items-center gap-1">
-                      {{ t('statisticsPage.winrate') }}
-                      <template v-if="championsSortOrder === 'winrate'">
-                        <span class="text-amber-500" aria-hidden="true">{{
-                          championsSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </template>
-                    </span>
-                  </th>
-                  <th
-                    class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
-                    :class="
-                      championsSortOrder === 'pickrate'
-                        ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                        : 'hover:bg-surface/50'
-                    "
-                    @click="setChampionsSort('pickrate')"
-                  >
-                    <span class="inline-flex items-center gap-1">
-                      {{ t('statisticsPage.pickrate') }}
-                      <template v-if="championsSortOrder === 'pickrate'">
-                        <span class="text-amber-500" aria-hidden="true">{{
-                          championsSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </template>
-                    </span>
-                  </th>
-                  <th
-                    class="cursor-pointer select-none px-4 py-3 font-semibold text-text transition-[box-shadow]"
-                    :class="
-                      championsSortOrder === 'banrate'
-                        ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                        : 'hover:bg-surface/50'
-                    "
-                    @click="setChampionsSort('banrate')"
-                  >
-                    <span class="inline-flex items-center gap-1">
-                      {{ t('statisticsPage.banrate') }}
-                      <template v-if="championsSortOrder === 'banrate'">
-                        <span class="text-amber-500" aria-hidden="true">{{
-                          championsSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </template>
-                    </span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-primary/20">
-                <tr
-                  v-for="row in paginatedChampions"
-                  :key="row.championId"
-                  class="cursor-pointer hover:bg-surface/50"
-                  @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
-                >
-                  <td class="px-4 py-2 font-medium text-text">
-                    <div class="flex items-center gap-2">
-                      <img
-                        v-if="gameVersion && championByKey(row.championId)"
-                        :src="
-                          getChampionImageUrl(
-                            gameVersion,
-                            championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="championName(row.championId) || ''"
-                        class="h-8 w-8 rounded-full object-cover"
-                        width="32"
-                        height="32"
-                      />
-                      <span class="text-accent underline-offset-2 hover:underline">{{
-                        championName(row.championId) || row.championId
-                      }}</span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-2 text-text/90">{{ row.games }}</td>
-                  <td class="px-4 py-2 text-text/90">{{ row.wins }}</td>
-                  <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
-                  <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
-                  <td class="px-4 py-2 text-text/90">
-                    {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
             <div
-              v-if="totalChampionsCount > 0"
-              class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+              v-else-if="championsError || matchupTierError"
+              class="rounded border border-error bg-surface p-3 text-error"
             >
-              <span>
-                {{ t('statisticsPage.totalGames') }}:
-                {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
-                <span v-if="championSearchQuery">
-                  ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
-                >
-              </span>
-              <div class="flex items-center gap-3">
-                <label class="flex items-center gap-1.5">
-                  <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                  <select
-                    v-model.number="championsPageSize"
-                    class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                  >
-                    <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                  </select>
-                </label>
-                <span class="text-text/70">
-                  {{ (championsPage - 1) * championsPageSize + 1 }}-{{
-                    Math.min(championsPage * championsPageSize, totalChampionsCount)
-                  }}
-                  / {{ totalChampionsCount }}
-                </span>
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                    :disabled="championsPage <= 1"
-                    @click="championsPage = Math.max(1, championsPage - 1)"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                    :disabled="championsPage >= totalChampionsPages"
-                    @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
-                  >
-                    ›
-                  </button>
-                </div>
-              </div>
+              {{ championsError || matchupTierError }}
             </div>
-          </div>
-        </div>
-
-        <!-- Tab: Tier list -->
-        <div v-show="activeTab === 'tierlist'" class="space-y-4">
-          <div class="flex flex-wrap items-center gap-4">
-            <h2 class="text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.tierListTitle') }}
-            </h2>
-            <div class="flex gap-2">
-              <button
-                type="button"
-                :class="[
-                  'rounded px-3 py-1.5 text-sm font-medium',
-                  tierListViewModel === 'table'
-                    ? 'bg-accent text-background'
-                    : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-                ]"
-                @click="tierListViewModel = 'table'"
-              >
-                {{ t('statisticsPage.tierListViewTable') }}
-              </button>
-              <button
-                type="button"
-                :class="[
-                  'rounded px-3 py-1.5 text-sm font-medium',
-                  tierListViewModel === 'chart'
-                    ? 'bg-accent text-background'
-                    : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-                ]"
-                @click="tierListViewModel = 'chart'"
-              >
-                {{ t('statisticsPage.tierListViewChart') }}
-              </button>
-            </div>
-          </div>
-          <div v-if="championsPending" class="text-text/70">{{ t('statisticsPage.loading') }}</div>
-          <div
-            v-else-if="championsError"
-            class="rounded border border-error bg-surface p-3 text-error"
-          >
-            {{ championsError }}
-          </div>
-          <template v-else>
-            <!-- Vue tableau -->
             <div
-              v-show="tierListViewModel === 'table'"
-              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+              v-else-if="championsData?.message && !championsData?.champions?.length"
+              class="text-text/70"
             >
-              <table class="w-full min-w-[500px] text-left text-sm">
+              {{ championsData.message }}
+            </div>
+            <div v-else class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
+              <table class="w-full min-w-[400px] text-left text-sm">
                 <thead class="border-b border-primary/30 bg-surface/50">
                   <tr>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="px-4 py-1.5 font-semibold text-text">
                       {{ t('statisticsPage.champion') }}
                     </th>
                     <th
-                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                      @click="setTierListSort('tier')"
+                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                      :class="
+                        championsSortOrder === 'games'
+                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                          : 'hover:bg-surface/50'
+                      "
+                      @click="setChampionsSort('games')"
                     >
-                      {{ t('statisticsPage.tierListTier') }}
-                      <span v-if="tierListSortOrder === 'tier'" class="ml-1">{{
-                        tierListSortDir === 'desc' ? '↓' : '↑'
-                      }}</span>
+                      <span class="inline-flex items-center gap-1">
+                        {{ t('statisticsPage.games') }}
+                        <template v-if="championsSortOrder === 'games'">
+                          <span class="text-amber-500" aria-hidden="true">{{
+                            championsSortDir === 'desc' ? '↓' : '↑'
+                          }}</span>
+                        </template>
+                      </span>
                     </th>
                     <th
-                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                      @click="setTierListSort('score')"
+                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                      :class="
+                        championsSortOrder === 'wins'
+                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                          : 'hover:bg-surface/50'
+                      "
+                      @click="setChampionsSort('wins')"
                     >
-                      {{ t('statisticsPage.matchupScore') }}
-                      <span v-if="tierListSortOrder === 'score'" class="ml-1">{{
-                        tierListSortDir === 'desc' ? '↓' : '↑'
-                      }}</span>
-                    </th>
-                    <th class="px-4 py-3 font-semibold text-text">
-                      {{ t('statisticsPage.patchDelta') }}
+                      <span class="inline-flex items-center gap-1">
+                        {{ t('statisticsPage.wins') }}
+                        <template v-if="championsSortOrder === 'wins'">
+                          <span class="text-amber-500" aria-hidden="true">{{
+                            championsSortDir === 'desc' ? '↓' : '↑'
+                          }}</span>
+                        </template>
+                      </span>
                     </th>
                     <th
-                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                      @click="setTierListSort('winrate')"
+                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                      :class="
+                        championsSortOrder === 'winrate'
+                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                          : 'hover:bg-surface/50'
+                      "
+                      @click="setChampionsSort('winrate')"
                     >
-                      {{ t('statisticsPage.winrate') }}
-                      <span v-if="tierListSortOrder === 'winrate'" class="ml-1">{{
-                        tierListSortDir === 'desc' ? '↓' : '↑'
-                      }}</span>
+                      <span class="inline-flex items-center gap-1">
+                        {{ t('statisticsPage.winrate') }}
+                        <template v-if="championsSortOrder === 'winrate'">
+                          <span class="text-amber-500" aria-hidden="true">{{
+                            championsSortDir === 'desc' ? '↓' : '↑'
+                          }}</span>
+                        </template>
+                      </span>
                     </th>
                     <th
-                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                      @click="setTierListSort('pickrate')"
+                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                      :class="
+                        championsSortOrder === 'pickrate'
+                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                          : 'hover:bg-surface/50'
+                      "
+                      @click="setChampionsSort('pickrate')"
                     >
-                      {{ t('statisticsPage.pickrate') }}
-                      <span v-if="tierListSortOrder === 'pickrate'" class="ml-1">{{
-                        tierListSortDir === 'desc' ? '↓' : '↑'
-                      }}</span>
+                      <span class="inline-flex items-center gap-1">
+                        {{ t('statisticsPage.pickrate') }}
+                        <template v-if="championsSortOrder === 'pickrate'">
+                          <span class="text-amber-500" aria-hidden="true">{{
+                            championsSortDir === 'desc' ? '↓' : '↑'
+                          }}</span>
+                        </template>
+                      </span>
                     </th>
                     <th
-                      class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                      @click="setTierListSort('banrate')"
+                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                      :class="
+                        championsSortOrder === 'banrate'
+                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                          : 'hover:bg-surface/50'
+                      "
+                      @click="setChampionsSort('banrate')"
                     >
-                      {{ t('statisticsPage.banrate') }}
-                      <span v-if="tierListSortOrder === 'banrate'" class="ml-1">{{
-                        tierListSortDir === 'desc' ? '↓' : '↑'
-                      }}</span>
-                    </th>
-                    <th class="px-4 py-3 font-semibold text-text">
-                      {{ t('statisticsPage.tierListRole') }}
+                      <span class="inline-flex items-center gap-1">
+                        {{ t('statisticsPage.banrate') }}
+                        <template v-if="championsSortOrder === 'banrate'">
+                          <span class="text-amber-500" aria-hidden="true">{{
+                            championsSortDir === 'desc' ? '↓' : '↑'
+                          }}</span>
+                        </template>
+                      </span>
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-primary/20">
                   <tr
-                    v-for="row in paginatedTierList"
+                    v-for="row in paginatedChampions"
                     :key="row.championId"
                     class="cursor-pointer hover:bg-surface/50"
                     @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
                   >
-                    <td class="px-4 py-2 font-medium text-text">
+                    <td class="px-4 py-1 font-medium text-text">
                       <div class="flex items-center gap-2">
                         <img
                           v-if="gameVersion && championByKey(row.championId)"
@@ -2385,52 +2219,34 @@
                             )
                           "
                           :alt="championName(row.championId) || ''"
-                          class="h-8 w-8 rounded-full object-cover"
-                          width="32"
-                          height="32"
+                          class="h-5 w-5 rounded-full object-cover"
                         />
                         <span class="text-accent underline-offset-2 hover:underline">{{
                           championName(row.championId) || row.championId
                         }}</span>
                       </div>
                     </td>
-                    <td class="px-4 py-2">
-                      <span
-                        :class="[
-                          'inline-flex h-7 w-7 items-center justify-center rounded font-bold text-background',
-                          row.tier === 'S' && 'bg-amber-500',
-                          row.tier === 'A' && 'bg-slate-400',
-                          row.tier === 'B' && 'bg-amber-700',
-                          row.tier === 'C' && 'bg-stone-600',
-                          row.tier === 'F' && 'bg-stone-700',
-                        ]"
-                      >
-                        {{ t('statisticsPage.tier' + row.tier) }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-2 text-text/90">{{ Number(row.score).toFixed(2) }}</td>
-                    <td class="px-4 py-2 text-text/90">
-                      {{
-                        row.deltaVsPrevPatch != null
-                          ? (row.deltaVsPrevPatch > 0 ? '+' : '') +
-                            Number(row.deltaVsPrevPatch).toFixed(2)
-                          : '—'
-                      }}
-                    </td>
-                    <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
-                    <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
-                    <td class="px-4 py-2 text-text/90">
+                    <td class="px-4 py-1 text-text/90">{{ row.games }}</td>
+                    <td class="px-4 py-1 text-text/90">{{ row.wins }}</td>
+                    <td class="px-4 py-1 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
+                    <td class="px-4 py-1 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
+                    <td class="px-4 py-1 text-text/90">
                       {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
                     </td>
-                    <td class="px-4 py-2 text-xs text-text/70">{{ row.primaryRole ?? '—' }}</td>
                   </tr>
                 </tbody>
               </table>
               <div
-                v-if="totalTierListCount > 0"
-                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+                v-if="totalChampionsCount > 0"
+                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-1 text-sm text-text/80"
               >
-                <span>{{ t('statisticsPage.showing') }} {{ totalTierListCount }}</span>
+                <span>
+                  {{ t('statisticsPage.totalGames') }}:
+                  {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
+                  <span v-if="championSearchQuery">
+                    ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
+                  >
+                </span>
                 <div class="flex items-center gap-3">
                   <label class="flex items-center gap-1.5">
                     <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
@@ -2442,25 +2258,25 @@
                     </select>
                   </label>
                   <span class="text-text/70">
-                    {{ (tierListPage - 1) * championsPageSize + 1 }}-{{
-                      Math.min(tierListPage * championsPageSize, totalTierListCount)
+                    {{ (championsPage - 1) * championsPageSize + 1 }}-{{
+                      Math.min(championsPage * championsPageSize, totalChampionsCount)
                     }}
-                    / {{ totalTierListCount }}
+                    / {{ totalChampionsCount }}
                   </span>
                   <div class="flex gap-1">
                     <button
                       type="button"
                       class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="tierListPage <= 1"
-                      @click="tierListPage = Math.max(1, tierListPage - 1)"
+                      :disabled="championsPage <= 1"
+                      @click="championsPage = Math.max(1, championsPage - 1)"
                     >
                       ‹
                     </button>
                     <button
                       type="button"
                       class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="tierListPage >= totalTierListPages"
-                      @click="tierListPage = Math.min(totalTierListPages, tierListPage + 1)"
+                      :disabled="championsPage >= totalChampionsPages"
+                      @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
                     >
                       ›
                     </button>
@@ -2468,476 +2284,703 @@
                 </div>
               </div>
             </div>
-            <!-- Vue graphique : barres par champion (ordre worst → best, couleur = tier) -->
+          </div>
+
+          <!-- Tab: Tier list -->
+          <div v-show="activeTab === 'tierlist'" class="space-y-4">
+            <div class="flex flex-wrap items-center gap-4">
+              <h2 class="text-xl font-semibold text-text-accent">
+                {{ t('statisticsPage.tierListTitle') }}
+              </h2>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium',
+                    tierListViewModel === 'table'
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/50 text-text/80 hover:bg-primary/20',
+                  ]"
+                  @click="tierListViewModel = 'table'"
+                >
+                  {{ t('statisticsPage.tierListViewTable') }}
+                </button>
+                <button
+                  type="button"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium',
+                    tierListViewModel === 'chart'
+                      ? 'bg-accent text-background'
+                      : 'bg-surface/50 text-text/80 hover:bg-primary/20',
+                  ]"
+                  @click="tierListViewModel = 'chart'"
+                >
+                  {{ t('statisticsPage.tierListViewChart') }}
+                </button>
+              </div>
+            </div>
+            <div v-if="championsPending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
             <div
-              v-show="tierListViewModel === 'chart'"
-              class="flex flex-col gap-4 rounded-lg border border-primary/30 bg-surface/30 p-4 lg:flex-row"
+              v-else-if="championsError"
+              class="rounded border border-error bg-surface p-3 text-error"
             >
-              <div class="flex-1 overflow-x-auto">
+              {{ championsError }}
+            </div>
+            <template v-else>
+              <!-- Vue tableau -->
+              <div
+                v-show="tierListViewModel === 'table'"
+                class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+              >
+                <table class="w-full min-w-[500px] text-left text-sm">
+                  <thead class="border-b border-primary/30 bg-surface/50">
+                    <tr>
+                      <th class="px-4 py-3 font-semibold text-text">
+                        {{ t('statisticsPage.champion') }}
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="setTierListSort('tier')"
+                      >
+                        {{ t('statisticsPage.tierListTier') }}
+                        <span v-if="tierListSortOrder === 'tier'" class="ml-1">{{
+                          tierListSortDir === 'desc' ? '↓' : '↑'
+                        }}</span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="setTierListSort('score')"
+                      >
+                        {{ t('statisticsPage.matchupScore') }}
+                        <span v-if="tierListSortOrder === 'score'" class="ml-1">{{
+                          tierListSortDir === 'desc' ? '↓' : '↑'
+                        }}</span>
+                      </th>
+                      <th class="px-4 py-3 font-semibold text-text">
+                        {{ t('statisticsPage.patchDelta') }}
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="setTierListSort('winrate')"
+                      >
+                        {{ t('statisticsPage.winrate') }}
+                        <span v-if="tierListSortOrder === 'winrate'" class="ml-1">{{
+                          tierListSortDir === 'desc' ? '↓' : '↑'
+                        }}</span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="setTierListSort('pickrate')"
+                      >
+                        {{ t('statisticsPage.pickrate') }}
+                        <span v-if="tierListSortOrder === 'pickrate'" class="ml-1">{{
+                          tierListSortDir === 'desc' ? '↓' : '↑'
+                        }}</span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="setTierListSort('banrate')"
+                      >
+                        {{ t('statisticsPage.banrate') }}
+                        <span v-if="tierListSortOrder === 'banrate'" class="ml-1">{{
+                          tierListSortDir === 'desc' ? '↓' : '↑'
+                        }}</span>
+                      </th>
+                      <th class="px-4 py-3 font-semibold text-text">
+                        {{ t('statisticsPage.tierListRole') }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-primary/20">
+                    <tr
+                      v-for="row in paginatedTierList"
+                      :key="row.championId"
+                      class="cursor-pointer hover:bg-surface/50"
+                      @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
+                    >
+                      <td class="px-4 py-2 font-medium text-text">
+                        <div class="flex items-center gap-2">
+                          <img
+                            v-if="gameVersion && championByKey(row.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(row.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(row.championId) || ''"
+                            class="h-8 w-8 rounded-full object-cover"
+                            width="32"
+                            height="32"
+                          />
+                          <span class="text-accent underline-offset-2 hover:underline">{{
+                            championName(row.championId) || row.championId
+                          }}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2">
+                        <span
+                          :class="[
+                            'inline-flex h-7 w-7 items-center justify-center rounded font-bold text-background',
+                            row.tier === 'S' && 'bg-amber-500',
+                            row.tier === 'A' && 'bg-slate-400',
+                            row.tier === 'B' && 'bg-amber-700',
+                            row.tier === 'C' && 'bg-stone-600',
+                            row.tier === 'F' && 'bg-stone-700',
+                          ]"
+                        >
+                          {{ t('statisticsPage.tier' + row.tier) }}
+                        </span>
+                      </td>
+                      <td class="px-4 py-2 text-text/90">{{ Number(row.score).toFixed(2) }}</td>
+                      <td class="px-4 py-2 text-text/90">
+                        {{
+                          row.deltaVsPrevPatch != null
+                            ? (row.deltaVsPrevPatch > 0 ? '+' : '') +
+                              Number(row.deltaVsPrevPatch).toFixed(2)
+                            : '—'
+                        }}
+                      </td>
+                      <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
+                      <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
+                      <td class="px-4 py-2 text-text/90">
+                        {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
+                      </td>
+                      <td class="px-4 py-2 text-xs text-text/70">{{ row.primaryRole ?? '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
                 <div
-                  class="tier-list-bar-chart flex items-center justify-start gap-0.5"
-                  style="min-height: 160px; min-width: min(100%, max-content)"
+                  v-if="totalTierListCount > 0"
+                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
                 >
-                  <NuxtLink
-                    v-for="c in tierListBarChartData"
-                    :key="c.championId"
-                    :to="localePath('/statistics/champion/' + c.championId)"
-                    class="tier-list-bar-item flex h-40 flex-col items-center justify-center gap-0"
-                    :title="
-                      (championName(c.championId) || c.championId) +
-                      ' – ' +
-                      Number(c.score).toFixed(2)
-                    "
-                  >
-                    <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
-                      <div
-                        v-if="c.score >= 0"
-                        class="tier-bar tier-bar-up w-6 shrink-0 rounded-t"
-                        :style="{
-                          height: c.barHeight * 0.52 + 'px',
-                          minHeight: c.score > 0 ? '4px' : '0',
-                          backgroundColor: TIER_CHART_COLORS[c.tier],
-                        }"
-                      />
+                  <span>{{ t('statisticsPage.showing') }} {{ totalTierListCount }}</span>
+                  <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5">
+                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                      <select
+                        v-model.number="championsPageSize"
+                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                      >
+                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                      </select>
+                    </label>
+                    <span class="text-text/70">
+                      {{ (tierListPage - 1) * championsPageSize + 1 }}-{{
+                        Math.min(tierListPage * championsPageSize, totalTierListCount)
+                      }}
+                      / {{ totalTierListCount }}
+                    </span>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="tierListPage <= 1"
+                        @click="tierListPage = Math.max(1, tierListPage - 1)"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="tierListPage >= totalTierListPages"
+                        @click="tierListPage = Math.min(totalTierListPages, tierListPage + 1)"
+                      >
+                        ›
+                      </button>
                     </div>
-                    <img
-                      v-if="gameVersion && championByKey(c.championId)"
-                      :src="
-                        getChampionImageUrl(gameVersion, championByKey(c.championId)!.image.full)
+                  </div>
+                </div>
+              </div>
+              <!-- Vue graphique : barres par champion (ordre worst → best, couleur = tier) -->
+              <div
+                v-show="tierListViewModel === 'chart'"
+                class="flex flex-col gap-4 rounded-lg border border-primary/30 bg-surface/30 p-4 lg:flex-row"
+              >
+                <div class="flex-1 overflow-x-auto">
+                  <div
+                    class="tier-list-bar-chart flex items-center justify-start gap-0.5"
+                    style="min-height: 160px; min-width: min(100%, max-content)"
+                  >
+                    <NuxtLink
+                      v-for="c in tierListBarChartData"
+                      :key="c.championId"
+                      :to="localePath('/statistics/champion/' + c.championId)"
+                      class="tier-list-bar-item flex h-40 flex-col items-center justify-center gap-0"
+                      :title="
+                        (championName(c.championId) || c.championId) +
+                        ' – ' +
+                        Number(c.score).toFixed(2)
                       "
-                      :alt="championName(c.championId) || ''"
-                      class="h-8 w-8 shrink-0 rounded-full border-2 border-primary/30 object-cover"
-                      width="32"
-                      height="32"
-                    />
-                    <div class="flex min-h-[52px] flex-1 flex-col items-center justify-start">
-                      <div
-                        v-if="c.score < 0"
-                        class="tier-bar tier-bar-down w-6 shrink-0 rounded-b"
-                        :style="{
-                          height: c.barHeight * 0.52 + 'px',
-                          minHeight: c.score < 0 ? '4px' : '0',
-                          backgroundColor: TIER_CHART_COLORS[c.tier],
-                        }"
-                      />
-                    </div>
-                  </NuxtLink>
-                </div>
-                <div class="mt-1 flex justify-between text-[10px] text-text/50">
-                  <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
-                  <span>{{ t('statisticsPage.tierListChartBest') }}</span>
-                </div>
-              </div>
-              <!-- Légende des tiers (style image) -->
-              <div
-                class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 px-4 py-3 lg:w-56"
-              >
-                <div class="mb-2 text-sm font-semibold text-text">
-                  {{ t('statisticsPage.tierListLegend') }}
-                </div>
-                <div class="space-y-1.5 text-xs">
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="inline-block h-4 w-4 shrink-0 rounded"
-                      style="background-color: #eab308"
-                    />
-                    <span class="font-medium text-amber-400">S</span>
-                    <span class="text-text/80">{{ t('statisticsPage.tierLegendS') }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="inline-block h-4 w-4 shrink-0 rounded"
-                      style="background-color: #38bdf8"
-                    />
-                    <span class="font-medium text-sky-400">A</span>
-                    <span class="text-text/80">{{ t('statisticsPage.tierLegendA') }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="inline-block h-4 w-4 shrink-0 rounded"
-                      style="background-color: #a78bfa"
-                    />
-                    <span class="font-medium text-violet-400">B</span>
-                    <span class="text-text/80">{{ t('statisticsPage.tierLegendB') }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="inline-block h-4 w-4 shrink-0 rounded"
-                      style="background-color: #fb923c"
-                    />
-                    <span class="font-medium text-orange-400">C</span>
-                    <span class="text-text/80">{{ t('statisticsPage.tierLegendC') }}</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span
-                      class="inline-block h-4 w-4 shrink-0 rounded"
-                      style="background-color: #dc2626"
-                    />
-                    <span class="font-medium text-red-500">F</span>
-                    <span class="text-text/80">{{ t('statisticsPage.tierLegendF') }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </template>
-        </div>
-
-        <!-- Tab: Durée de partie -->
-        <div v-show="activeTab === 'duration'" class="space-y-4">
-          <h2 class="text-xl font-semibold text-text-accent">
-            {{ t('statisticsPage.durationTitle') }}
-          </h2>
-          <p class="text-sm text-text/80">{{ t('statisticsPage.durationDescription') }}</p>
-          <div
-            v-if="overviewDurationWinratePending || !overviewDurationWinrateData?.buckets?.length"
-            class="text-text/70"
-          >
-            {{ t('statisticsPage.loading') }}
-          </div>
-          <div
-            v-else-if="durationWinrateChartBuckets.length"
-            class="relative flex justify-center rounded-lg border border-primary/30 bg-surface/30 p-4"
-          >
-            <div class="relative inline-block min-h-[260px] w-full max-w-[600px]">
-              <svg
-                :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                class="h-auto w-full"
-                :width="CHART_W"
-                :height="CHART_H"
-                preserveAspectRatio="xMidYMid meet"
-                aria-hidden="true"
-              >
-                <defs>
-                  <linearGradient id="duration-fill-global" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
-                    <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
-                  </linearGradient>
-                </defs>
-                <path :d="durationWinrateChartClosedPath" fill="url(#duration-fill-global)" />
-                <path
-                  :d="durationWinrateChartLinePath"
-                  fill="none"
-                  stroke="rgb(var(--rgb-accent))"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-                <g v-for="(pt, i) in durationWinrateChartPointsList" :key="'dpt-' + i">
-                  <circle
-                    :cx="pt.x"
-                    :cy="pt.y"
-                    r="12"
-                    fill="transparent"
-                    class="cursor-pointer"
-                    @mouseenter="
-                      durationChartTooltip = {
-                        durationLabel: pt.durationLabel,
-                        winrate: pt.winrate,
-                        matchCount: pt.matchCount,
-                        x: pt.x,
-                        y: pt.y,
-                      }
-                    "
-                    @mouseleave="durationChartTooltip = null"
-                  />
-                  <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
-                </g>
-                <g v-for="(tick, i) in durationWinrateAxisX.ticks" :key="'dx-' + i">
-                  <line
-                    :x1="tick.x"
-                    :y1="CHART_PAD.top + PLOT_H"
-                    :y2="CHART_PAD.top + PLOT_H + 4"
-                    stroke="currentColor"
-                    stroke-width="1"
-                    class="text-text/50"
-                  />
-                  <text
-                    :x="tick.x"
-                    :y="CHART_H - 6"
-                    text-anchor="middle"
-                    class="fill-text/70 text-[10px]"
-                  >
-                    {{ tick.value }}
-                  </text>
-                </g>
-                <g v-for="(tick, i) in durationWinrateAxisY.ticks" :key="'dy-' + i">
-                  <line
-                    :x1="CHART_PAD.left"
-                    :y1="tick.y"
-                    :x2="CHART_PAD.left - 4"
-                    :y2="tick.y"
-                    stroke="currentColor"
-                    stroke-width="1"
-                    class="text-text/50"
-                  />
-                  <text
-                    :x="CHART_PAD.left - 8"
-                    :y="tick.y + 4"
-                    text-anchor="end"
-                    class="fill-text/70 text-[10px]"
-                  >
-                    {{ tick.value }}%
-                  </text>
-                </g>
-              </svg>
-              <div
-                v-if="durationChartTooltip"
-                class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
-                :style="{
-                  left: (durationChartTooltip.x / CHART_W) * 100 + '%',
-                  top: (durationChartTooltip.y / CHART_H) * 100 + '%',
-                  transform: 'translate(-50%, -100%) translateY(-8px)',
-                }"
-              >
-                <div class="font-medium text-text">
-                  {{ durationChartTooltip.durationLabel }}
-                </div>
-                <div class="text-text/80">
-                  {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
-                  {{ t('statisticsPage.winrate') }}
-                </div>
-                <div class="text-text/70">
-                  {{ durationChartTooltip.matchCount }}
-                  {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab: Objets (global) -->
-        <div v-show="activeTab === 'items'" class="space-y-4">
-          <h2 class="text-xl font-semibold text-text-accent">
-            {{ t('statisticsPage.itemsTitle') }}
-          </h2>
-          <p class="text-sm text-text/80">{{ t('statisticsPage.itemsDescription') }}</p>
-          <div v-if="overviewDetailPending" class="text-text/70">
-            {{ t('statisticsPage.loading') }}
-          </div>
-          <div
-            v-else-if="overviewDetailError"
-            class="rounded border border-error/50 p-3 text-error"
-          >
-            {{ t('statisticsPage.overviewDetailTimeout') }}
-          </div>
-          <div
-            v-else-if="overviewDetailData?.items?.length"
-            class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
-          >
-            <table class="w-full text-left text-sm">
-              <thead class="border-b border-primary/30 bg-surface/50">
-                <tr>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailItems') }}
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailPickRate') }} %
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailWinRate') }} %
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.itemStats') }}
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.itemEconomy') }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-primary/20">
-                <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-surface/50">
-                  <td class="px-4 py-2">
-                    <div class="flex items-center gap-2">
+                    >
+                      <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
+                        <div
+                          v-if="c.score >= 0"
+                          class="tier-bar tier-bar-up w-6 shrink-0 rounded-t"
+                          :style="{
+                            height: c.barHeight * 0.52 + 'px',
+                            minHeight: c.score > 0 ? '4px' : '0',
+                            backgroundColor: TIER_CHART_COLORS[c.tier],
+                          }"
+                        />
+                      </div>
                       <img
-                        v-if="itemImageName(row.itemId)"
-                        :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                        :alt="itemName(row.itemId) || ''"
-                        class="h-8 w-8 rounded object-cover"
+                        v-if="gameVersion && championByKey(c.championId)"
+                        :src="
+                          getChampionImageUrl(gameVersion, championByKey(c.championId)!.image.full)
+                        "
+                        :alt="championName(c.championId) || ''"
+                        class="h-8 w-8 shrink-0 rounded-full border-2 border-primary/30 object-cover"
                         width="32"
                         height="32"
                       />
-                      <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
-                    </div>
-                  </td>
-                  <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-                  <td class="px-4 py-2 text-text/90">
-                    {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-                  </td>
-                  <td class="max-w-[200px] px-4 py-2 text-text/80">
-                    <span
-                      v-if="itemStatsForItem(row.itemId).length"
-                      :title="itemStatsForItem(row.itemId).join(', ')"
-                      class="line-clamp-2 text-xs"
-                    >
-                      {{ itemStatsForItem(row.itemId).join(', ') }}
-                    </span>
-                    <span v-else class="text-text/50">—</span>
-                  </td>
-                  <td class="max-w-[160px] px-4 py-2 text-text/80">
-                    <span
-                      v-if="itemEconomicForItem(row.itemId).length"
-                      :title="itemEconomicForItem(row.itemId).join(', ')"
-                      class="line-clamp-2 text-xs"
-                    >
-                      {{ itemEconomicForItem(row.itemId).join(', ') }}
-                    </span>
-                    <span v-else class="text-text/50">—</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div
-              v-if="totalItemsCount > 0"
-              class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-            >
-              <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
-              <div class="flex items-center gap-3">
-                <label class="flex items-center gap-1.5">
-                  <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                  <select
-                    v-model.number="itemsPageSize"
-                    class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                  >
-                    <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                  </select>
-                </label>
-                <span class="text-text/70">
-                  {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
-                    Math.min(itemsPage * itemsPageSize, totalItemsCount)
-                  }}
-                  / {{ totalItemsCount }}
-                </span>
-                <div class="flex gap-1">
-                  <button
-                    type="button"
-                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                    :disabled="itemsPage <= 1"
-                    @click="itemsPage = Math.max(1, itemsPage - 1)"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                    :disabled="itemsPage >= totalItemsPages"
-                    @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
-                  >
-                    ›
-                  </button>
+                      <div class="flex min-h-[52px] flex-1 flex-col items-center justify-start">
+                        <div
+                          v-if="c.score < 0"
+                          class="tier-bar tier-bar-down w-6 shrink-0 rounded-b"
+                          :style="{
+                            height: c.barHeight * 0.52 + 'px',
+                            minHeight: c.score < 0 ? '4px' : '0',
+                            backgroundColor: TIER_CHART_COLORS[c.tier],
+                          }"
+                        />
+                      </div>
+                    </NuxtLink>
+                  </div>
+                  <div class="mt-1 flex justify-between text-[10px] text-text/50">
+                    <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
+                    <span>{{ t('statisticsPage.tierListChartBest') }}</span>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
-        </div>
-
-        <!-- Tab: Sorts d'invocateur (global) -->
-        <div v-show="activeTab === 'spells'" class="space-y-4">
-          <h2 class="text-xl font-semibold text-text-accent">
-            {{ t('statisticsPage.spellsTitle') }}
-          </h2>
-          <p class="text-sm text-text/80">{{ t('statisticsPage.spellsDescription') }}</p>
-          <div v-if="overviewDetailPending" class="text-text/70">
-            {{ t('statisticsPage.loading') }}
-          </div>
-          <div
-            v-else-if="overviewDetailError"
-            class="rounded border border-error/50 p-3 text-error"
-          >
-            {{ t('statisticsPage.overviewDetailTimeout') }}
-          </div>
-          <div
-            v-else-if="overviewDetailData?.summonerSpells?.length"
-            class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
-          >
-            <table class="w-full text-left text-sm">
-              <thead class="border-b border-primary/30 bg-surface/50">
-                <tr>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailSummonerSpells') }}
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailPickRate') }} %
-                  </th>
-                  <th class="px-4 py-3 font-semibold text-text">
-                    {{ t('statisticsPage.overviewDetailWinRate') }} %
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-primary/20">
-                <tr
-                  v-for="row in overviewDetailData?.summonerSpells ?? []"
-                  :key="row.spellId"
-                  class="hover:bg-surface/50"
+                <!-- Légende des tiers (style image) -->
+                <div
+                  class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 px-4 py-3 lg:w-56"
                 >
-                  <td class="px-4 py-2">
+                  <div class="mb-2 text-sm font-semibold text-text">
+                    {{ t('statisticsPage.tierListLegend') }}
+                  </div>
+                  <div class="space-y-1.5 text-xs">
                     <div class="flex items-center gap-2">
-                      <img
-                        v-if="spellImageName(row.spellId)"
-                        :src="getSpellImageUrl(gameVersion, spellImageName(row.spellId)!)"
-                        :alt="spellName(row.spellId) || ''"
-                        class="h-8 w-8 rounded object-cover"
-                        width="32"
-                        height="32"
+                      <span
+                        class="inline-block h-4 w-4 shrink-0 rounded"
+                        style="background-color: #eab308"
                       />
-                      <span class="text-text">{{ spellName(row.spellId) || row.spellId }}</span>
+                      <span class="font-medium text-amber-400">S</span>
+                      <span class="text-text/80">{{ t('statisticsPage.tierLegendS') }}</span>
                     </div>
-                  </td>
-                  <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-                  <td class="px-4 py-2 text-text/90">
-                    {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="inline-block h-4 w-4 shrink-0 rounded"
+                        style="background-color: #38bdf8"
+                      />
+                      <span class="font-medium text-sky-400">A</span>
+                      <span class="text-text/80">{{ t('statisticsPage.tierLegendA') }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="inline-block h-4 w-4 shrink-0 rounded"
+                        style="background-color: #a78bfa"
+                      />
+                      <span class="font-medium text-violet-400">B</span>
+                      <span class="text-text/80">{{ t('statisticsPage.tierLegendB') }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="inline-block h-4 w-4 shrink-0 rounded"
+                        style="background-color: #fb923c"
+                      />
+                      <span class="font-medium text-orange-400">C</span>
+                      <span class="text-text/80">{{ t('statisticsPage.tierLegendC') }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="inline-block h-4 w-4 shrink-0 rounded"
+                        style="background-color: #dc2626"
+                      />
+                      <span class="font-medium text-red-500">F</span>
+                      <span class="text-text/80">{{ t('statisticsPage.tierLegendF') }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
           </div>
-          <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
-        </div>
 
-        <!-- Tab: Abandons -->
-        <div v-show="activeTab === 'abandons'" class="space-y-4">
-          <h2 class="text-xl font-semibold text-text-accent">
-            {{ t('statisticsPage.abandonsTitle') }}
-          </h2>
-          <p class="text-sm text-text/80">{{ t('statisticsPage.abandonsDescription') }}</p>
-          <div v-if="overviewAbandonsPending" class="text-text/70">
-            {{ t('statisticsPage.loading') }}
+          <!-- Tab: Durée de partie -->
+          <div v-show="activeTab === 'duration'" class="space-y-4">
+            <h2 class="text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.durationTitle') }}
+            </h2>
+            <p class="text-sm text-text/80">
+              {{ t('statisticsPage.overviewDurationWinrateDescription') }}
+            </p>
+            <div
+              v-if="overviewDurationWinratePending || !overviewDurationWinrateData?.buckets?.length"
+              class="text-text/70"
+            >
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div
+              v-else-if="durationWinrateChartBuckets.length"
+              class="relative w-full rounded-lg border border-primary/30 bg-surface/30 p-4"
+            >
+              <div class="relative min-h-[280px] w-full">
+                <svg
+                  :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
+                  class="h-auto min-h-[260px] w-full"
+                  preserveAspectRatio="xMidYMid meet"
+                  aria-hidden="true"
+                >
+                  <defs>
+                    <linearGradient id="duration-fill-global" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
+                      <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
+                    </linearGradient>
+                  </defs>
+                  <path :d="durationWinrateChartClosedPath" fill="url(#duration-fill-global)" />
+                  <path
+                    :d="durationWinrateChartLinePath"
+                    fill="none"
+                    stroke="rgb(var(--rgb-accent))"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <g v-for="(pt, i) in durationWinrateChartPointsList" :key="'dpt-' + i">
+                    <circle
+                      :cx="pt.x"
+                      :cy="pt.y"
+                      r="12"
+                      fill="transparent"
+                      class="cursor-pointer"
+                      @mouseenter="
+                        durationChartTooltip = {
+                          durationLabel: pt.durationLabel,
+                          winrate: pt.winrate,
+                          matchCount: pt.matchCount,
+                          x: pt.x,
+                          y: pt.y,
+                        }
+                      "
+                      @mouseleave="durationChartTooltip = null"
+                    />
+                    <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
+                  </g>
+                  <g v-for="(tick, i) in durationWinrateAxisX.ticks" :key="'dx-' + i">
+                    <line
+                      :x1="tick.x"
+                      :y1="CHART_PAD.top + PLOT_H"
+                      :y2="CHART_PAD.top + PLOT_H + 4"
+                      stroke="currentColor"
+                      stroke-width="1"
+                      class="text-text/50"
+                    />
+                    <text
+                      :x="tick.x"
+                      :y="CHART_H - 6"
+                      text-anchor="middle"
+                      class="fill-text/70 text-[10px]"
+                    >
+                      {{ tick.value }}
+                    </text>
+                  </g>
+                  <g v-for="(tick, i) in durationWinrateAxisY.ticks" :key="'dy-' + i">
+                    <line
+                      :x1="CHART_PAD.left"
+                      :y1="tick.y"
+                      :x2="CHART_PAD.left - 4"
+                      :y2="tick.y"
+                      stroke="currentColor"
+                      stroke-width="1"
+                      class="text-text/50"
+                    />
+                    <text
+                      :x="CHART_PAD.left - 8"
+                      :y="tick.y + 4"
+                      text-anchor="end"
+                      class="fill-text/70 text-[10px]"
+                    >
+                      {{ tick.value }}
+                    </text>
+                  </g>
+                  <!-- Légende abscisse (X) -->
+                  <text
+                    :x="CHART_W / 2"
+                    :y="CHART_H - 4"
+                    text-anchor="middle"
+                    class="fill-text/60 text-[11px]"
+                  >
+                    {{ t('statisticsPage.overviewDurationWinrateAxisX') }}
+                  </text>
+                  <!-- Légende ordonnée (Y) -->
+                  <text
+                    :x="14"
+                    :y="CHART_H / 2"
+                    text-anchor="middle"
+                    class="fill-text/60 text-[11px]"
+                    :transform="`rotate(-90, 14, ${CHART_H / 2})`"
+                  >
+                    {{ t('statisticsPage.overviewDurationMatchesAxisY') }}
+                  </text>
+                </svg>
+                <div
+                  v-if="durationChartTooltip"
+                  class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
+                  :style="{
+                    left: (durationChartTooltip.x / CHART_W) * 100 + '%',
+                    top: (durationChartTooltip.y / CHART_H) * 100 + '%',
+                    transform: 'translate(-50%, -100%) translateY(-8px)',
+                  }"
+                >
+                  <div class="font-medium text-text">
+                    {{ durationChartTooltip.durationLabel }}
+                  </div>
+                  <div class="text-text/80">
+                    {{ durationChartTooltip.matchCount }}
+                    {{ t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-else-if="overviewAbandonsData" class="grid gap-4 sm:grid-cols-3">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-              <div class="text-sm text-text/70">{{ t('statisticsPage.abandonsRemakeRate') }}</div>
-              <div class="text-2xl font-semibold text-text">
-                {{ overviewAbandonsData.remakeRate?.toFixed(2) ?? 0 }}%
-              </div>
-              <div class="text-xs text-text/50">
-                {{ overviewAbandonsData.remakeCount }} / {{ overviewAbandonsData.totalMatches }}
+
+          <!-- Tab: Objets (global) -->
+          <div v-show="activeTab === 'items'" class="space-y-4">
+            <h2 class="text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.itemsTitle') }}
+            </h2>
+            <p class="text-sm text-text/80">{{ t('statisticsPage.itemsDescription') }}</p>
+            <div v-if="overviewDetailPending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div
+              v-else-if="overviewDetailError"
+              class="rounded border border-error/50 p-3 text-error"
+            >
+              {{ t('statisticsPage.overviewDetailTimeout') }}
+            </div>
+            <div
+              v-else-if="overviewDetailData?.items?.length"
+              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+            >
+              <table class="w-full text-left text-sm">
+                <thead class="border-b border-primary/30 bg-surface/50">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailItems') }}
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailPickRate') }} %
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailWinRate') }} %
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.itemStats') }}
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.itemEconomy') }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-primary/20">
+                  <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-surface/50">
+                    <td class="px-4 py-2">
+                      <div class="flex items-center gap-2">
+                        <img
+                          v-if="itemImageName(row.itemId)"
+                          :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                          :alt="itemName(row.itemId) || ''"
+                          class="h-8 w-8 rounded object-cover"
+                          width="32"
+                          height="32"
+                        />
+                        <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
+                    <td class="px-4 py-2 text-text/90">
+                      {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                    </td>
+                    <td class="max-w-[200px] px-4 py-2 text-text/80">
+                      <span
+                        v-if="itemStatsForItem(row.itemId).length"
+                        :title="itemStatsForItem(row.itemId).join(', ')"
+                        class="line-clamp-2 text-xs"
+                      >
+                        {{ itemStatsForItem(row.itemId).join(', ') }}
+                      </span>
+                      <span v-else class="text-text/50">—</span>
+                    </td>
+                    <td class="max-w-[160px] px-4 py-2 text-text/80">
+                      <span
+                        v-if="itemEconomicForItem(row.itemId).length"
+                        :title="itemEconomicForItem(row.itemId).join(', ')"
+                        class="line-clamp-2 text-xs"
+                      >
+                        {{ itemEconomicForItem(row.itemId).join(', ') }}
+                      </span>
+                      <span v-else class="text-text/50">—</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div
+                v-if="totalItemsCount > 0"
+                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+              >
+                <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
+                <div class="flex items-center gap-3">
+                  <label class="flex items-center gap-1.5">
+                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                    <select
+                      v-model.number="itemsPageSize"
+                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                    >
+                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                    </select>
+                  </label>
+                  <span class="text-text/70">
+                    {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
+                      Math.min(itemsPage * itemsPageSize, totalItemsCount)
+                    }}
+                    / {{ totalItemsCount }}
+                  </span>
+                  <div class="flex gap-1">
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="itemsPage <= 1"
+                      @click="itemsPage = Math.max(1, itemsPage - 1)"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                      :disabled="itemsPage >= totalItemsPages"
+                      @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
+                    >
+                      ›
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-              <div class="text-sm text-text/70">
-                {{ t('statisticsPage.abandonsEarlySurrenderRate') }}
-              </div>
-              <div class="text-2xl font-semibold text-text">
-                {{ overviewAbandonsData.earlySurrenderRate?.toFixed(2) ?? 0 }}%
-              </div>
-              <div class="text-xs text-text/50">
-                {{ overviewAbandonsData.earlySurrenderCount }} /
-                {{ overviewAbandonsData.totalMatches }}
-              </div>
-            </div>
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-              <div class="text-sm text-text/70">
-                {{ t('statisticsPage.abandonsSurrenderRate') }}
-              </div>
-              <div class="text-2xl font-semibold text-text">
-                {{ overviewAbandonsData.surrenderRate?.toFixed(2) ?? 0 }}%
-              </div>
-              <div class="text-xs text-text/50">
-                {{ overviewAbandonsData.surrenderCount }} / {{ overviewAbandonsData.totalMatches }}
-              </div>
-            </div>
+            <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
           </div>
-          <div v-else class="text-text/70">{{ t('statisticsPage.noData') }}</div>
+
+          <!-- Tab: Sorts d'invocateur (global) -->
+          <div v-show="activeTab === 'spells'" class="space-y-4">
+            <h2 class="text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.spellsTitle') }}
+            </h2>
+            <p class="text-sm text-text/80">{{ t('statisticsPage.spellsDescription') }}</p>
+            <div v-if="overviewDetailPending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div
+              v-else-if="overviewDetailError"
+              class="rounded border border-error/50 p-3 text-error"
+            >
+              {{ t('statisticsPage.overviewDetailTimeout') }}
+            </div>
+            <div
+              v-else-if="overviewDetailData?.summonerSpells?.length"
+              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+            >
+              <table class="w-full text-left text-sm">
+                <thead class="border-b border-primary/30 bg-surface/50">
+                  <tr>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailSummonerSpells') }}
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailPickRate') }} %
+                    </th>
+                    <th class="px-4 py-3 font-semibold text-text">
+                      {{ t('statisticsPage.overviewDetailWinRate') }} %
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-primary/20">
+                  <tr
+                    v-for="row in overviewDetailData?.summonerSpells ?? []"
+                    :key="row.spellId"
+                    class="hover:bg-surface/50"
+                  >
+                    <td class="px-4 py-2">
+                      <div class="flex items-center gap-2">
+                        <img
+                          v-if="spellImageName(row.spellId)"
+                          :src="getSpellImageUrl(gameVersion, spellImageName(row.spellId)!)"
+                          :alt="spellName(row.spellId) || ''"
+                          class="h-8 w-8 rounded object-cover"
+                          width="32"
+                          height="32"
+                        />
+                        <span class="text-text">{{ spellName(row.spellId) || row.spellId }}</span>
+                      </div>
+                    </td>
+                    <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
+                    <td class="px-4 py-2 text-text/90">
+                      {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+          </div>
+
+          <!-- Tab: Abandons -->
+          <div v-show="activeTab === 'abandons'" class="space-y-4">
+            <h2 class="text-xl font-semibold text-text-accent">
+              {{ t('statisticsPage.abandonsTitle') }}
+            </h2>
+            <p class="text-sm text-text/80">{{ t('statisticsPage.abandonsDescription') }}</p>
+            <div v-if="overviewAbandonsPending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div v-else-if="overviewAbandonsData" class="grid gap-4 sm:grid-cols-3">
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <div class="text-sm text-text/70">{{ t('statisticsPage.abandonsRemakeRate') }}</div>
+                <div class="text-2xl font-semibold text-text">
+                  {{ overviewAbandonsData.remakeRate?.toFixed(2) ?? 0 }}%
+                </div>
+                <div class="text-xs text-text/50">
+                  {{ overviewAbandonsData.remakeCount }} / {{ overviewAbandonsData.totalMatches }}
+                </div>
+              </div>
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <div class="text-sm text-text/70">
+                  {{ t('statisticsPage.abandonsEarlySurrenderRate') }}
+                </div>
+                <div class="text-2xl font-semibold text-text">
+                  {{ overviewAbandonsData.earlySurrenderRate?.toFixed(2) ?? 0 }}%
+                </div>
+                <div class="text-xs text-text/50">
+                  {{ overviewAbandonsData.earlySurrenderCount }} /
+                  {{ overviewAbandonsData.totalMatches }}
+                </div>
+              </div>
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                <div class="text-sm text-text/70">
+                  {{ t('statisticsPage.abandonsSurrenderRate') }}
+                </div>
+                <div class="text-2xl font-semibold text-text">
+                  {{ overviewAbandonsData.surrenderRate?.toFixed(2) ?? 0 }}%
+                </div>
+                <div class="text-xs text-text/50">
+                  {{ overviewAbandonsData.surrenderCount }} /
+                  {{ overviewAbandonsData.totalMatches }}
+                </div>
+              </div>
+            </div>
+            <div v-else class="text-text/70">{{ t('statisticsPage.noData') }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -3335,6 +3378,9 @@ const overviewDivisionsForDescription = computed(() => {
   return list.filter(d => d.rankTier !== 'UNRANKED')
 })
 /** Pourcentage de parties pour une division (sur le total des divisions). */
+function formatDivisionLabel(tier: string): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()
+}
 function divisionPercent(d: { matchCount: number }): string {
   const divisions = overviewData.value?.matchesByDivision ?? []
   const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
@@ -3639,7 +3685,7 @@ function catmullRomToBezier(pts: Array<{ x: number; y: number }>): string {
   return d
 }
 
-/** Points for line chart: X=duration, Y=winrate. Winrate à gauche, 0 en commun (bas-gauche). Courbe lissée (Catmull-Rom). */
+/** Points for line chart: X=duration (min), Y=nombre de parties. Courbe lissée (Catmull-Rom). */
 function durationWinrateChartScaled(
   buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
 ) {
@@ -3664,15 +3710,16 @@ function durationWinrateChartScaled(
   const minDur = Math.min(...sorted.map(b => b.durationMin))
   const maxDur = Math.max(...sorted.map(b => b.durationMin + 5))
   const durRange = maxDur - minDur || 1
+  const maxCount = Math.max(...sorted.map(b => b.matchCount), 1)
   const originY = CHART_PAD.top + PLOT_H
   const pts = sorted.map(b => {
     const midDur = b.durationMin + 2.5
     const x = CHART_PAD.left + ((midDur - minDur) / durRange) * PLOT_W
-    const y = originY - (b.winrate / 100) * PLOT_H
+    const y = originY - (b.matchCount / maxCount) * PLOT_H
     return {
       x,
       y,
-      label: `${b.durationMin}-${b.durationMin + 5} min: ${Number(b.winrate).toFixed(2)}% WR (${b.matchCount})`,
+      label: `${b.durationMin}-${b.durationMin + 5} min: ${b.matchCount} parties`,
       durationLabel: `${b.durationMin}-${b.durationMin + 5} min`,
       winrate: b.winrate,
       matchCount: b.matchCount,
@@ -3692,11 +3739,16 @@ function durationWinrateChartScaled(
     })
   }
   const axisYTicks: { value: number; y: number }[] = []
-  for (let v = 0; v <= 100; v += 20) {
+  const yStep = Math.max(1, Math.ceil(maxCount / 5))
+  for (let v = 0; v <= maxCount; v += yStep) {
     axisYTicks.push({
       value: v,
-      y: originY - (v / 100) * PLOT_H,
+      y: originY - (v / maxCount) * PLOT_H,
     })
+  }
+  const lastTick = axisYTicks[axisYTicks.length - 1]?.value ?? 0
+  if (lastTick < maxCount) {
+    axisYTicks.push({ value: maxCount, y: CHART_PAD.top })
   }
   return {
     linePath,

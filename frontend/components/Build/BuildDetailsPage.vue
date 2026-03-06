@@ -675,13 +675,11 @@ watch(
   { immediate: true }
 )
 
-// Si aucune description, forcer l'onglet actif sur "stats"
+// Onglet par défaut : description si le build en a une, sinon stats
 watch(
   hasDescriptionTab,
   hasDesc => {
-    if (!hasDesc && activeTab.value === 'description') {
-      activeTab.value = 'stats'
-    }
+    activeTab.value = hasDesc ? 'description' : 'stats'
   },
   { immediate: true }
 )

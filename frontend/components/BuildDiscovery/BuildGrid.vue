@@ -92,7 +92,7 @@
               class="min-h-[44px] rounded-lg border border-accent/70 bg-surface px-4 py-2 text-xs font-semibold text-text transition-colors hover:bg-accent/10"
               @click="navigateToBuild(build.id)"
             >
-              {{ t('buildDiscovery.viewBuild') || 'Voir le build' }}
+              {{ t('buildDiscovery.viewBuild') }}
             </button>
           </div>
 
