@@ -99,7 +99,20 @@
             :disabled="shareLoading"
             @click="shareBuilds"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
             {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
           </button>
         </div>
@@ -192,10 +205,24 @@
             :title="t('buildsPage.shareCodeCopy')"
             @click="copyShareCode"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
           </button>
         </div>
-        <p v-if="shareCopied" class="mb-2 text-sm text-green-400">{{ t('buildsPage.shareCodeCopied') }}</p>
+        <p v-if="shareCopied" class="mb-2 text-sm text-green-400">
+          {{ t('buildsPage.shareCodeCopied') }}
+        </p>
         <p class="mb-4 text-xs text-text-secondary">{{ t('buildsPage.shareCodeExpiry') }}</p>
         <button
           class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
@@ -395,7 +422,9 @@ const shareBuilds = async () => {
   const allBuilds = buildStore.getSavedBuilds()
   if (allBuilds.length === 0) {
     shareError.value = t('buildsPage.shareNoBuilds')
-    setTimeout(() => { shareError.value = null }, 3000)
+    setTimeout(() => {
+      shareError.value = null
+    }, 3000)
     return
   }
 
@@ -403,15 +432,19 @@ const shareBuilds = async () => {
   shareError.value = null
   try {
     const stored = allBuilds.map(b => serializeBuild(b))
+    const buildIds = new Set(allBuilds.map(b => b.id))
+    const favoriteIds = favoritesStore.favoriteBuildIds.filter(id => buildIds.has(id))
     const res = await $fetch<{ code: string; expiresAt: string }>('/api/share-builds', {
       method: 'POST',
-      body: { builds: stored },
+      body: { builds: stored, favoriteIds },
     })
     shareCode.value = res.code
     shareCopied.value = false
   } catch {
     shareError.value = t('buildsPage.shareError')
-    setTimeout(() => { shareError.value = null }, 4000)
+    setTimeout(() => {
+      shareError.value = null
+    }, 4000)
   } finally {
     shareLoading.value = false
   }
@@ -422,7 +455,9 @@ const copyShareCode = async () => {
   try {
     await navigator.clipboard.writeText(shareCode.value)
     shareCopied.value = true
-    setTimeout(() => { shareCopied.value = false }, 2000)
+    setTimeout(() => {
+      shareCopied.value = false
+    }, 2000)
   } catch {
     // Fallback: select text for manual copy
   }

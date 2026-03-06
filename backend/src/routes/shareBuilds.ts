@@ -53,12 +53,12 @@ async function cleanupExpired(): Promise<void> {
 
 /**
  * POST /api/share-builds
- * Body: { builds: StoredBuild[] }
+ * Body: { builds: StoredBuild[], favoriteIds?: string[] }
  * Returns: { code, expiresAt }
  */
 router.post('/', async (req, res) => {
   try {
-    const { builds } = req.body as { builds?: unknown[] }
+    const { builds, favoriteIds } = req.body as { builds?: unknown[]; favoriteIds?: unknown }
 
     if (!Array.isArray(builds) || builds.length === 0) {
       return res.status(400).json({ error: 'Body must contain a non-empty "builds" array' })
@@ -66,6 +66,11 @@ router.post('/', async (req, res) => {
     if (builds.length > MAX_BUILDS) {
       return res.status(400).json({ error: `Maximum ${MAX_BUILDS} builds allowed` })
     }
+
+    const buildIds = new Set((builds as Array<{ id?: string }>).map(b => b?.id).filter(Boolean) as string[])
+    const storedFavoriteIds = Array.isArray(favoriteIds)
+      ? (favoriteIds as string[]).filter(id => typeof id === 'string' && buildIds.has(id))
+      : []
 
     const dirResult = await FileManager.ensureDir(sharedDir)
     if (dirResult.isErr()) {
@@ -86,6 +91,7 @@ router.post('/', async (req, res) => {
     const payload = {
       code,
       builds,
+      favoriteIds: storedFavoriteIds,
       createdAt: now.toISOString(),
       expiresAt,
     }
@@ -135,6 +141,7 @@ router.get('/:code', async (req, res) => {
     const filePath = join(sharedDir, `${code}.json`)
     const readResult = await FileManager.readJson<{
       builds: unknown[]
+      favoriteIds?: string[]
       expiresAt: string
     }>(filePath)
 
@@ -178,7 +185,11 @@ router.get('/:code', async (req, res) => {
 
     cleanupExpired()
 
-    return res.json({ builds: data.builds, expiresAt: data.expiresAt })
+    return res.json({
+      builds: data.builds,
+      favoriteIds: Array.isArray(data.favoriteIds) ? data.favoriteIds : [],
+      expiresAt: data.expiresAt,
+    })
   } catch (error) {
     console.error('[Share] Unexpected error:', error)
     return res.status(500).json({ error: 'Internal server error' })

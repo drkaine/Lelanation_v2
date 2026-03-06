@@ -269,7 +269,7 @@ router.get('/data-stats', async (_req, res) => {
       prisma.match.count({ where: { rank: null } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count({
-        where: {
+      where: {
           OR: [
             { puuidKeyVersion: null },
             { puuidKeyVersion: { notIn: ['perso', 'erreur', 'perdu'] } },

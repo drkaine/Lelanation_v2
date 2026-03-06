@@ -12,7 +12,13 @@ function getRuntimeConfigSafe(): any {
 export function apiUrl(path: string): string {
   const cfg = getRuntimeConfigSafe()
 
-  // If apiBase is configured, always prefer it (useful in dev or when backend is separate).
+  // Client: always use same-origin (path only). Requests go to current domain and are proxied by Nitro.
+  // Using apiBase on client would point to localhost on the user's machine, not the server.
+  if (process.client) {
+    return path
+  }
+
+  // Server: need absolute URL. Use apiBase if set (backend on different host/port), else siteUrl.
   const configuredBase =
     (cfg.public?.apiBase as string | undefined) ||
     (process.env.NUXT_PUBLIC_API_BASE as string | undefined) ||
@@ -21,13 +27,6 @@ export function apiUrl(path: string): string {
     return configuredBase.replace(/\/$/, '') + path
   }
 
-  // Default: same-origin `/api` (works with Nitro proxy rules in prod and devProxy in dev).
-  if (process.client) {
-    return path
-  }
-
-  // On server, Node fetch requires an absolute URL.
-  // Avoid relying on request-scoped composables (can be missing in store actions).
   const siteUrl =
     (cfg.public?.siteUrl as string | undefined) ||
     (process.env.NUXT_PUBLIC_SITE_URL as string | undefined) ||

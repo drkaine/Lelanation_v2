@@ -30,6 +30,25 @@ npm run tauri dev    # Développement
 npm run tauri build  # Build (Windows : .msi/.exe dans src-tauri/target/release/bundle/)
 ```
 
+## Version (une seule source de vérité)
+
+La version est pilotée par **`package.json`** uniquement. Un hook `postversion` synchronise automatiquement vers `tauri.conf.json` et `Cargo.toml`.
+
+Pour monter en version (une seule commande) :
+
+```bash
+# Version exacte
+npm version 0.12.0
+
+# Ou sémantiquement
+npm version patch   # 0.11.0 → 0.11.1
+npm version minor   # 0.11.0 → 0.12.0
+npm version major   # 0.11.0 → 1.0.0
+```
+
+Cela met à jour `package.json`, puis le script `scripts/sync-version.mjs` met à jour `tauri.conf.json` et `Cargo.toml`.  
+Sans commit/tag automatique : `npm version 0.12.0 --no-git-tag-version`.
+
 ## « Éditeur inconnu » sous Windows
 
 À l’installation, Windows peut afficher **« Éditeur inconnu »** au lieu de **« Darkaine »**. Ce n’est pas un souci de configuration : le champ `publisher: "Darkaine"` dans `tauri.conf.json` est déjà correct. Windows affiche l’éditeur à partir du **certificat de signature de code** de l’exécutable. Sans signature, il affiche toujours « Éditeur inconnu ».
@@ -63,6 +82,19 @@ Si tu veux taguer un commit précis (pas forcément le HEAD) :
 git tag -a companion-v1.3.0 <sha_du_commit> -m "Companion installer 1.3.0"
 git push origin companion-v1.3.0
 ```
+
+### Secrets GitHub pour la CI
+
+Pour que la workflow génère **`latest.json`** et que l’auto-update in-app fonctionne, il faut configurer le secret **`TAURI_SIGNING_PRIVATE_KEY`** :
+
+1. La clé privée Tauri (minisign) correspond à la `pubkey` dans `tauri.conf.json`. Elle se trouve en local dans `~/.tauri/lelanation.key` (ou là où tu l’as générée avec `npx tauri signer generate -w ~/.tauri/lelanation.key`).
+2. Dans GitHub : **Settings → Secrets and variables → Actions → New repository secret**.
+3. Nom : `TAURI_SIGNING_PRIVATE_KEY`. Valeur : le **contenu complet** du fichier de clé privée (les deux lignes).
+4. Si la clé a un mot de passe, ajoute aussi le secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` ; sinon laisser vide.
+
+Sans ce secret, la CI affiche « Skipping latest.json – no updater signature found » et l’app ne pourra pas proposer de mise à jour.
+
+Pour la **signature de code Windows** (éditeur « Darkaine »), voir [CODE_SIGNING_WINDOWS.md](./CODE_SIGNING_WINDOWS.md) ; en CI il faut aussi les secrets `WINDOWS_CODESIGN_PFX_B64` et `WINDOWS_CODESIGN_PASSWORD`.
 
 ## Structure
 

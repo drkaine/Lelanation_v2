@@ -5,7 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { apiBase } from "../config";
-import { getFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
+import { getFavoriteIds, setFavoriteIds, toggleFavorite, isFavorite } from "../favorites";
 import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
@@ -81,7 +81,7 @@ function displayedBuildFor(b: Build): Build {
 }
 
 const latestVersion = ref("");
-const currentAppVersion = ref("0.3.0");
+const currentAppVersion = ref("");
 const pendingUpdate = shallowRef<Update | null>(null);
 const updateInstalling = ref(false);
 const updateRestarting = ref(false);
@@ -309,8 +309,16 @@ async function linkBuildsFromCode() {
       linkError.value = true;
       return;
     }
-    const payload = (await r.json()) as { builds: StoredBuild[] };
+    const payload = (await r.json()) as { builds: StoredBuild[]; favoriteIds?: string[] };
     const count = mergeImportedBuilds(payload.builds);
+    if (Array.isArray(payload.favoriteIds) && payload.favoriteIds.length > 0) {
+      const buildIds = new Set(payload.builds.map((b) => b.id));
+      const validFavIds = payload.favoriteIds.filter((id) => typeof id === "string" && buildIds.has(id));
+      const current = getFavoriteIds();
+      const merged = [...new Set([...current, ...validFavIds])];
+      setFavoriteIds(merged);
+      refreshFavorites();
+    }
     loadImportedBuilds();
     linkCode.value = "";
     linkMessage.value = count > 0
@@ -765,7 +773,7 @@ function stopUpdateCheckLoop() {
 
 async function checkForUpdates() {
   try {
-    currentAppVersion.value = await getVersion().catch(() => currentAppVersion.value);
+    currentAppVersion.value = await getVersion().catch(() => "");
     const update = await check();
     if (update) {
       latestVersion.value = update.version;

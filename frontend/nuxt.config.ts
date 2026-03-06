@@ -138,7 +138,7 @@ export default defineNuxtConfig({
   nitro: {
     devProxy: {
       '/api': {
-        target: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001',
+        target: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3500',
         changeOrigin: true,
       },
     },
@@ -228,9 +228,9 @@ export default defineNuxtConfig({
         },
       },
       // Proxy all other /api/** requests to the backend, but NOT /api/_nuxt_icon/**
-      // Note: The route above takes precedence, so /api/_nuxt_icon/** won't be proxied
+      // Note: Nitro strips /api from the path, so target must include /api to rebuild full path.
       '/api/**': {
-        proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:4001') + '/**',
+        proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3500') + '/api/**',
       },
       // Pages/HTML should not be cached aggressively. Prevents "new HTML + old _nuxt"
       // or "old HTML + new _nuxt" mismatches during deployments.
