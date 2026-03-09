@@ -374,7 +374,7 @@ export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   summonerSpells: [],
 }
 
-/** Stats from matches.teams: bans and objectives (first + kills + distribution for %). */
+/** Stats from match_teams: bans and objectives (first + kills + distribution for %). */
 export interface OverviewTeamsStats {
   matchCount: number
   bans: {
@@ -907,32 +907,26 @@ export async function getOverviewSidesStats(
       .sort((a, b) => b.games - a.games)
       .slice(0, 20)
 
-    // 3) Objectives by side from match.teams (100 / 200)
+    // 3) Objectives by side from match_teams (100 / 200)
     const objBySideSql = `
-      WITH match_teams AS (
-        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'objectives' AS objectives
-        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
-        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
-          AND (elem->>'teamId')::int IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
-      ),
-      base AS (SELECT match_id, team_id FROM match_teams),
-      mt AS (SELECT match_id, team_id, objectives FROM match_teams WHERE objectives IS NOT NULL)
       SELECT
         mt.team_id,
-        SUM(CASE WHEN (mt.objectives->'champion'->>'first')::boolean THEN 1 ELSE 0 END)::int AS first_blood,
-        SUM(CASE WHEN (mt.objectives->'baron'->>'first')::boolean THEN 1 ELSE 0 END)::int AS baron_first,
-        SUM(COALESCE((mt.objectives->'baron'->>'kills')::int, 0))::int AS baron_kills,
-        SUM(CASE WHEN (mt.objectives->'dragon'->>'first')::boolean THEN 1 ELSE 0 END)::int AS dragon_first,
-        SUM(COALESCE((mt.objectives->'dragon'->>'kills')::int, 0))::int AS dragon_kills,
-        SUM(CASE WHEN (mt.objectives->'tower'->>'first')::boolean THEN 1 ELSE 0 END)::int AS tower_first,
-        SUM(COALESCE((mt.objectives->'tower'->>'kills')::int, 0))::int AS tower_kills,
-        SUM(CASE WHEN (mt.objectives->'inhibitor'->>'first')::boolean THEN 1 ELSE 0 END)::int AS inhibitor_first,
-        SUM(COALESCE((mt.objectives->'inhibitor'->>'kills')::int, 0))::int AS inhibitor_kills,
-        SUM(CASE WHEN (mt.objectives->'riftHerald'->>'first')::boolean THEN 1 ELSE 0 END)::int AS rift_herald_first,
-        SUM(COALESCE((mt.objectives->'riftHerald'->>'kills')::int, 0))::int AS rift_herald_kills,
-        SUM(CASE WHEN (mt.objectives->'horde'->>'first')::boolean THEN 1 ELSE 0 END)::int AS horde_first,
-        SUM(COALESCE((mt.objectives->'horde'->>'kills')::int, 0))::int AS horde_kills
-      FROM mt
+        SUM(CASE WHEN mt.champion_first THEN 1 ELSE 0 END)::int AS first_blood,
+        SUM(CASE WHEN mt.baron_first THEN 1 ELSE 0 END)::int AS baron_first,
+        SUM(mt.baron_kills)::int AS baron_kills,
+        SUM(CASE WHEN mt.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first,
+        SUM(mt.dragon_kills)::int AS dragon_kills,
+        SUM(CASE WHEN mt.tower_first THEN 1 ELSE 0 END)::int AS tower_first,
+        SUM(mt.tower_kills)::int AS tower_kills,
+        SUM(CASE WHEN mt.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first,
+        SUM(mt.inhibitor_kills)::int AS inhibitor_kills,
+        SUM(CASE WHEN mt.rift_herald_first THEN 1 ELSE 0 END)::int AS rift_herald_first,
+        SUM(mt.rift_herald_kills)::int AS rift_herald_kills,
+        SUM(CASE WHEN mt.horde_first THEN 1 ELSE 0 END)::int AS horde_first,
+        SUM(mt.horde_kills)::int AS horde_kills
+      FROM match_teams mt
+      INNER JOIN matches m ON m.id = mt.match_id
+      WHERE mt.team_id IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
       GROUP BY mt.team_id
     `
     const objRows = await prisma.$queryRawUnsafe<
@@ -974,21 +968,16 @@ export async function getOverviewSidesStats(
 
     // 3b) Distribution per objective (per-team kill count -> match count) for table
     const distSql = `
-      WITH match_teams AS (
-        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'objectives' AS objectives
-        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
-        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
-          AND (elem->>'teamId')::int IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
-      ),
-      mt AS (SELECT match_id, team_id, objectives FROM match_teams WHERE objectives IS NOT NULL)
       SELECT mt.team_id,
-             COALESCE((mt.objectives->'baron'->>'kills')::int, 0) AS baron_kills,
-             COALESCE((mt.objectives->'dragon'->>'kills')::int, 0) AS dragon_kills,
-             COALESCE((mt.objectives->'tower'->>'kills')::int, 0) AS tower_kills,
-             COALESCE((mt.objectives->'inhibitor'->>'kills')::int, 0) AS inhibitor_kills,
-             COALESCE((mt.objectives->'riftHerald'->>'kills')::int, 0) AS rift_herald_kills,
-             COALESCE((mt.objectives->'horde'->>'kills')::int, 0) AS horde_kills
-      FROM mt
+             mt.baron_kills,
+             mt.dragon_kills,
+             mt.tower_kills,
+             mt.inhibitor_kills,
+             mt.rift_herald_kills,
+             mt.horde_kills
+      FROM match_teams mt
+      INNER JOIN matches m ON m.id = mt.match_id
+      WHERE mt.team_id IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
     `
     const distRows = await prisma.$queryRawUnsafe<
       Array<{
@@ -1082,21 +1071,16 @@ export async function getOverviewSidesStats(
       },
     }
 
-    // 4) Bans by side from match.teams
+    // 4) Bans by side from the normalised bans table
     const bansBySideSql = `
-      WITH match_teams AS (
-        SELECT m.id AS match_id, (elem->>'teamId')::int AS team_id, elem->'bans' AS bans
-        FROM matches m, jsonb_array_elements(COALESCE(m.teams, '[]'::jsonb)) AS elem
-        WHERE m.teams IS NOT NULL AND jsonb_array_length(m.teams) > 0
-          AND (elem->>'teamId') IS NOT NULL AND (elem->>'teamId') ~ '^(100|200)$'
+      WITH ban_rows AS (
+        SELECT mt.team_id, b.champion_id, COUNT(*)::int AS cnt
+        FROM match_teams mt
+        INNER JOIN matches m ON m.id = mt.match_id
+        INNER JOIN bans b ON b.match_team_id = mt.id
+        WHERE mt.team_id IN (100, 200)
           AND ${matchCond}
-      ),
-      ban_rows AS (
-        SELECT mt.team_id, (b->>'championId')::int AS champion_id, COUNT(*)::int AS cnt
-        FROM match_teams mt, jsonb_array_elements(COALESCE(mt.bans, '[]'::jsonb)) AS b
-        WHERE mt.bans IS NOT NULL AND jsonb_typeof(mt.bans) = 'array'
-          AND b->>'championId' IS NOT NULL AND (b->>'championId') ~ '^\\d+$'
-        GROUP BY mt.team_id, (b->>'championId')::int
+        GROUP BY mt.team_id, b.champion_id
       )
       SELECT team_id, champion_id, cnt FROM ban_rows ORDER BY team_id, cnt DESC
     `
