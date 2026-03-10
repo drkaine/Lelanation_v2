@@ -28,6 +28,14 @@ import { partitionChallenges, handleUnknownChallengeKeys, allowedToParticipantCh
 const BATCH_FIX_NULLS = 50
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
+/** Max matches per run for timeline backfill (drakes, skill order, starter, jungle first clear). */
+const BATCH_TIMELINE_BACKFILL = 25
+/** Max matches per run for rune backfill (participant_runes from getMatch perks). */
+const BATCH_RUNE_BACKFILL = 20
+/** Bounded queue size for Phase 4: API producer pushes, DB consumers pop. */
+const INGEST_QUEUE_SIZE = 50
+/** Number of concurrent DB writers in Phase 4 (consumers). */
+const INGEST_CONSUMER_COUNT = 2
 // Maximum number of jungle camp kills tracked per player (first clear only).
 // A standard first clear is 6 camps for most paths (up to 8 with scuttle/leash).
 const JUNGLE_FIRST_CLEAR_MAX_CAMPS = 10
@@ -45,6 +53,65 @@ async function runWithConcurrency(tasks: (() => Promise<void>)[], limit: number)
     }
   })
   await Promise.all(workers)
+}
+
+/** Item pushed by the API producer and consumed for DB writes. */
+export interface MatchIngestItem {
+  matchId: string
+  region: string
+  matchDto: RiotMatchDto
+  timelineDto?: RiotMatchTimelineDto
+  puuidKeyVersion: string | null
+  playerId: bigint
+}
+
+/**
+ * Bounded async queue for producer/consumer. push() waits when full; pop() returns null when poisoned.
+ * pushPoison(n) pushes n nulls so n consumers can exit.
+ */
+function createBoundedQueue<T>(maxSize: number): {
+  push(item: T): Promise<void>
+  pop(): Promise<T | null>
+  pushPoison(consumerCount: number): void
+} {
+  const items: T[] = []
+  const waiters: Array<() => void> = []
+  const pushWaiters: Array<() => void> = []
+  let poisoned = false
+  let poisonToPush = 0
+
+  return {
+    async push(item: T): Promise<void> {
+      if (poisoned) return
+      while (items.length >= maxSize) {
+        await new Promise<void>((r) => pushWaiters.push(r))
+      }
+      if (poisoned) return
+      items.push(item)
+      if (waiters.length > 0) (waiters.shift()!)()
+    },
+    async pop(): Promise<T | null> {
+      for (;;) {
+        if (items.length > 0) {
+          const value = items.shift()!
+          if (pushWaiters.length > 0) (pushWaiters.shift()!)()
+          return value
+        }
+        if (poisonToPush > 0) {
+          poisonToPush--
+          if (pushWaiters.length > 0) (pushWaiters.shift()!)()
+          return null
+        }
+        if (poisoned && poisonToPush === 0) return null
+        await new Promise<void>((r) => waiters.push(r))
+      }
+    },
+    pushPoison(consumerCount: number): void {
+      poisoned = true
+      poisonToPush += consumerCount
+      while (waiters.length > 0) (waiters.shift()!)()
+    },
+  }
 }
 
 export interface RiotPollerStatus {
@@ -550,21 +617,15 @@ function buildMatchTeamData(
     ban3: number | null
     ban4: number | null
     ban5: number | null
-    baronFirst: boolean
     baronKills: number
-    dragonFirst: boolean
     dragonKills: number
-    towerFirst: boolean
     towerKills: number
-    hordeFirst: boolean
     hordeKills: number
-    riftHeraldFirst: boolean
     riftHeraldKills: number
-    inhibitorFirst: boolean
     inhibitorKills: number
-    championFirst: boolean
     championKills: number
   }
+  firstObjectives: Array<{ objectiveType: string }> // baron, dragon, tower, horde, rift_herald, inhibitor (champion/tower from participants)
   bans: Array<{ championId: number; pickOrder: number }>
 }> {
   if (!info?.teams || info.teams.length === 0) return []
@@ -607,6 +668,15 @@ function buildMatchTeamData(
         })
         .map((b, idx) => ({ championId: b.championId as number, pickOrder: idx + 1 }))
 
+      const firstObjectives: Array<{ objectiveType: string }> = []
+      if (toFirst(baronObj.first)) firstObjectives.push({ objectiveType: 'baron' })
+      if (toFirst(dragonObj.first)) firstObjectives.push({ objectiveType: 'dragon' })
+      if (toFirst(towerObj.first)) firstObjectives.push({ objectiveType: 'tower' })
+      if (toFirst(hordeObj.first)) firstObjectives.push({ objectiveType: 'horde' })
+      if (toFirst(riftHeraldObj.first)) firstObjectives.push({ objectiveType: 'rift_herald' })
+      if (toFirst(inhibitorObj.first)) firstObjectives.push({ objectiveType: 'inhibitor' })
+      if (toFirst(championObj.first)) firstObjectives.push({ objectiveType: 'champion' })
+
       return {
         teamRow: {
           matchId,
@@ -619,22 +689,16 @@ function buildMatchTeamData(
           ban3: toBan(t, 2),
           ban4: toBan(t, 3),
           ban5: toBan(t, 4),
-          baronFirst: toFirst(baronObj.first),
           baronKills: toKills(baronObj.kills),
-          dragonFirst: toFirst(dragonObj.first),
           dragonKills: toKills(dragonObj.kills),
-          towerFirst: toFirst(towerObj.first),
           towerKills: toKills(towerObj.kills),
-          hordeFirst: toFirst(hordeObj.first),
           hordeKills: toKills(hordeObj.kills),
-          riftHeraldFirst: toFirst(riftHeraldObj.first),
           riftHeraldKills: toKills(riftHeraldObj.kills),
-          inhibitorFirst: toFirst(inhibitorObj.first),
           inhibitorKills: toKills(inhibitorObj.kills),
-          championFirst: toFirst(championObj.first),
           championKills: toKills(championObj.kills),
         },
         bans: teamBans,
+        firstObjectives,
       }
     })
 }
@@ -802,10 +866,10 @@ export async function upsertMatchAndParticipants(
   counters.matchesFetched++
   if (logger) await logger.info('DB: match created', { matchId })
 
-  // Build match_teams + bans
+  // Build match_teams + bans + first objectives (single source of truth in match_team_first_objectives)
   const teamDataItems = buildMatchTeamData(match.id, info, participantDtos)
   const matchTeamIdByTeamId = new Map<number, bigint>()
-  for (const { teamRow, bans } of teamDataItems) {
+  for (const { teamRow, bans, firstObjectives } of teamDataItems) {
     const created = await prisma.matchTeam.create({ data: teamRow })
     matchTeamIdByTeamId.set(teamRow.teamId, created.id)
     if (bans.length > 0) {
@@ -816,6 +880,18 @@ export async function upsertMatchAndParticipants(
           championId: b.championId,
           pickOrder: b.pickOrder,
         })),
+      })
+    }
+    // Insert "team got first" rows (participant_id null); champion/tower may get participant rows below from first blood/first tower
+    if (firstObjectives.length > 0) {
+      await prisma.matchTeamFirstObjective.createMany({
+        data: firstObjectives.map((obj) => ({
+          matchTeamId: created.id,
+          objectiveType: obj.objectiveType,
+          participantId: null,
+          isKill: true,
+        })),
+        skipDuplicates: true,
       })
     }
   }
@@ -873,7 +949,6 @@ export async function upsertMatchAndParticipants(
         matchId: match.id,
         teamId: p.teamId ?? null,
         championId: p.championId ?? 0,
-        win: p.win ?? false,
         role,
         rankTier,
         rankDivision,
@@ -886,13 +961,6 @@ export async function upsertMatchAndParticipants(
         totalDamageDealtToChampions: p.totalDamageDealtToChampions ?? null,
         totalMinionsKilled: p.totalMinionsKilled ?? null,
         visionScore: p.visionScore ?? null,
-        firstBloodKill: (p as { firstBloodKill?: boolean }).firstBloodKill ?? null,
-        firstBloodAssist: (p as { firstBloodAssist?: boolean }).firstBloodAssist ?? null,
-        firstTowerKill: (p as { firstTowerKill?: boolean }).firstTowerKill ?? null,
-        firstTowerAssist: (p as { firstTowerAssist?: boolean }).firstTowerAssist ?? null,
-        gameEndedInSurrender: (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender ?? null,
-        gameEndedInEarlySurrender: (p as { gameEndedInEarlySurrender?: boolean }).gameEndedInEarlySurrender ?? null,
-        teamEarlySurrendered: (p as { teamEarlySurrendered?: boolean }).teamEarlySurrendered ?? null,
         baronKills: (p as { baronKills?: number }).baronKills ?? null,
         consumablesPurchased: (p as { consumablesPurchased?: number }).consumablesPurchased ?? null,
         damageDealtToBuildings: (p as { damageDealtToBuildings?: number }).damageDealtToBuildings ?? null,
@@ -963,6 +1031,55 @@ export async function upsertMatchAndParticipants(
       },
     })
     counters.participantsFetched++
+
+    // First blood / first tower: single source of truth in match_team_first_objectives
+    const teamId = p.teamId ?? 0
+    const matchTeamId = teamId ? matchTeamIdByTeamId.get(teamId) : undefined
+    if (matchTeamId) {
+      const firstObjRows: Array<{
+        matchTeamId: bigint
+        objectiveType: string
+        participantId: bigint
+        isKill: boolean
+      }> = []
+      const px = p as {
+        firstBloodKill?: boolean
+        firstBloodAssist?: boolean
+        firstTowerKill?: boolean
+        firstTowerAssist?: boolean
+      }
+      if (px.firstBloodKill)
+        firstObjRows.push({
+          matchTeamId,
+          objectiveType: 'champion',
+          participantId: participant.id,
+          isKill: true,
+        })
+      if (px.firstBloodAssist)
+        firstObjRows.push({
+          matchTeamId,
+          objectiveType: 'champion',
+          participantId: participant.id,
+          isKill: false,
+        })
+      if (px.firstTowerKill)
+        firstObjRows.push({
+          matchTeamId,
+          objectiveType: 'tower',
+          participantId: participant.id,
+          isKill: true,
+        })
+      if (px.firstTowerAssist)
+        firstObjRows.push({
+          matchTeamId,
+          objectiveType: 'tower',
+          participantId: participant.id,
+          isKill: false,
+        })
+      if (firstObjRows.length > 0) {
+        await prisma.matchTeamFirstObjective.createMany({ data: firstObjRows, skipDuplicates: true })
+      }
+    }
 
     // ── Normalised double-writes ─────────────────────────────────────────────
 
@@ -1276,8 +1393,71 @@ async function runStep4ForPlayer(
     take: PLAYERS_PER_LOOP,
   })
 
+  const queue = createBoundedQueue<MatchIngestItem>(INGEST_QUEUE_SIZE)
+  const flags = { foundPrismaError: false }
+
+  const runConsumer = async (): Promise<void> => {
+    for (;;) {
+      const item = await queue.pop()
+      if (item === null) return
+      try {
+        await upsertMatchAndParticipants(
+          item.region,
+          item.matchDto,
+          item.puuidKeyVersion,
+          counters,
+          logger
+        )
+        const matchRow = await prisma.match.findUnique({
+          where: { matchId: item.matchId },
+          select: { id: true, createdAt: true },
+        })
+        if (matchRow) {
+          if (item.timelineDto) {
+            try {
+              await extractAndInsertJungleFirstClear(
+                matchRow.id,
+                item.matchId,
+                item.timelineDto,
+                logger
+              )
+              await extractAndInsertTimelineExtras(
+                matchRow.id,
+                item.matchId,
+                item.timelineDto,
+                logger
+              )
+            } catch {
+              // Non-fatal: timeline parse error
+            }
+          }
+          const player = await prisma.player.findUnique({
+            where: { id: item.playerId },
+            select: { lastSeen: true },
+          })
+          const candidate = matchRow.createdAt
+          const next =
+            !player?.lastSeen || candidate > player.lastSeen ? candidate : player.lastSeen
+          await prisma.player.update({
+            where: { id: item.playerId },
+            data: { lastSeen: next },
+          })
+        }
+      } catch (err) {
+        await logger.error('Prisma error upserting match', err)
+        flags.foundPrismaError = true
+      }
+    }
+  }
+
+  const consumerPromises = Array.from({ length: INGEST_CONSUMER_COUNT }, () => runConsumer())
+
   for (const player of players) {
-    if (state.shouldStop) return 'ok'
+    if (state.shouldStop) {
+      queue.pushPoison(INGEST_CONSUMER_COUNT)
+      await Promise.all(consumerPromises)
+      return 'ok'
+    }
 
     const matchIdsRes = await client.getMatchIdsByPuuid(player.puuid, {
       queue: filters.queue,
@@ -1290,6 +1470,8 @@ async function runStep4ForPlayer(
       if (matchIdsRes.status === 400 && is400Decrypt(matchIdsRes.body)) {
         counters.error400Count++
         await logger.error('400 decrypt', matchIdsRes.body)
+        queue.pushPoison(INGEST_CONSUMER_COUNT)
+        await Promise.all(consumerPromises)
         return '400_decrypt'
       }
       continue
@@ -1303,11 +1485,7 @@ async function runStep4ForPlayer(
     const existingSet = new Set(existing.map((m) => m.matchId))
     const toFetch = matchIds.filter((id) => !existingSet.has(id))
 
-    // Fetch and upsert matches in parallel (MATCH_FETCH_CONCURRENCY at a time).
-    // Flags shared across concurrent tasks:
     let found400Decrypt = false
-    let foundPrismaError = false
-
     const fetchTasks = toFetch.map((matchId) => async () => {
       if (state.shouldStop || found400Decrypt) return
       const matchRes = await client.getMatch(matchId)
@@ -1322,48 +1500,36 @@ async function runStep4ForPlayer(
         }
         return
       }
+      let timelineDto: RiotMatchTimelineDto | undefined
       try {
-        await upsertMatchAndParticipants(region, matchRes.data, puuidKeyVersion, counters, logger)
-        // After participants are committed, fetch the timeline and extract jungle first-clear path.
-        // Silently skipped on failure to avoid blocking the main ingestion pipeline.
-        try {
-          const matchDbRow = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
-          if (matchDbRow) {
-            const timelineRes = await client.getMatchTimeline(matchId)
-            counters.requestCount++
-            if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
-            if (timelineRes.ok) {
-              await extractAndInsertJungleFirstClear(matchDbRow.id, matchId, timelineRes.data, logger)
-              await extractAndInsertTimelineExtras(matchDbRow.id, matchId, timelineRes.data, logger)
-            }
-          }
-        } catch {
-          // Non-fatal: timeline unavailable or parse error — match data already committed
-        }
-      } catch (err) {
-        await logger.error('Prisma error upserting match', err)
-        foundPrismaError = true
+        const timelineRes = await client.getMatchTimeline(matchId)
+        counters.requestCount++
+        if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
+        if (timelineRes.ok) timelineDto = timelineRes.data
+      } catch {
+        // Non-fatal: push without timeline
       }
+      await queue.push({
+        matchId,
+        region,
+        matchDto: matchRes.data,
+        timelineDto,
+        puuidKeyVersion,
+        playerId: player.id,
+      })
     })
 
     await runWithConcurrency(fetchTasks, MATCH_FETCH_CONCURRENCY)
-
-    if (found400Decrypt) return '400_decrypt'
-    if (foundPrismaError) return 'prisma_error'
-
-    const lastMatch = matchIds[0]
-    let lastSeen: Date | null = null
-    if (lastMatch) {
-      const m = await prisma.match.findUnique({ where: { matchId: lastMatch }, select: { createdAt: true } })
-      if (m) lastSeen = m.createdAt
+    if (found400Decrypt) {
+      queue.pushPoison(INGEST_CONSUMER_COUNT)
+      await Promise.all(consumerPromises)
+      return '400_decrypt'
     }
-    await prisma.player.update({
-      where: { id: player.id },
-      data: { lastSeen },
-    })
   }
 
-  return 'ok'
+  queue.pushPoison(INGEST_CONSUMER_COUNT)
+  await Promise.all(consumerPromises)
+  return flags.foundPrismaError ? 'prisma_error' : 'ok'
 }
 
 /** Resolves the API key and sets it on the client without making a test request. */
@@ -1449,6 +1615,146 @@ async function runPhase3(
   })
 }
 
+/**
+ * Phase 3b: backfill timeline-derived data for matches that were ingested before we stored
+ * drakes, skill order, starter items, and jungle first clear.
+ * Idempotent: uses skipDuplicates / updateMany. Runs one batch per call.
+ */
+async function runStep3bBackfillTimeline(
+  client: RiotHttpClient,
+  logger: ReturnType<typeof createRiotPollerLogger>
+): Promise<number> {
+  const matches = await prisma.match.findMany({
+    where: {
+      matchTeams: { some: {} },
+      OR: [
+        { matchTeams: { every: { drakes: { none: {} } } } },
+        { participants: { every: { participantSpellOrders: { none: {} } } } },
+      ],
+    },
+    take: BATCH_TIMELINE_BACKFILL,
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, matchId: true },
+  })
+  if (matches.length === 0) return 0
+
+  let done = 0
+  for (const m of matches) {
+    if (state.shouldStop) break
+    const platform = m.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
+    client.setPlatform(platform)
+    const timelineRes = await client.getMatchTimeline(m.matchId)
+    setState({ requestCount: state.requestCount + 1 })
+    if (!timelineRes.ok) {
+      if (timelineRes.status === 429) setState({ error429Count: state.error429Count + 1 })
+      continue
+    }
+    try {
+      await extractAndInsertJungleFirstClear(m.id, m.matchId, timelineRes.data, logger)
+      await extractAndInsertTimelineExtras(m.id, m.matchId, timelineRes.data, logger)
+      done++
+    } catch (err) {
+      void logger.error('Timeline backfill failed', err, { matchId: m.matchId })
+    }
+  }
+  if (done > 0) {
+    await logger.step('Phase 3b: timeline backfill batch', { processed: done, batchSize: matches.length })
+  }
+  return done
+}
+
+/**
+ * Phase 3b: run timeline backfill until no more matches missing timeline data or shouldStop.
+ * Includes matches missing drakes OR missing participant_spell_orders.
+ */
+async function runPhase3b(
+  client: RiotHttpClient,
+  logger: ReturnType<typeof createRiotPollerLogger>
+): Promise<void> {
+  await logger.step('Phase 3b start: backfill timeline data (drakes, skill order, starter, jungle first clear)', {})
+  let total = 0
+  while (!state.shouldStop) {
+    const done = await runStep3bBackfillTimeline(client, logger)
+    total += done
+    if (done === 0) break
+  }
+  await logger.step('Phase 3b end', { totalTimelineBackfilled: total })
+}
+
+/**
+ * Phase 3c: backfill participant_runes from match detail (perks) for matches that have no runes.
+ * One batch per call.
+ */
+async function runStep3cBackfillRunes(
+  client: RiotHttpClient,
+  logger: ReturnType<typeof createRiotPollerLogger>
+): Promise<number> {
+  const matches = await prisma.match.findMany({
+    where: {
+      matchTeams: { some: {} },
+      participants: { some: {}, every: { participantRunes: { none: {} } } },
+    },
+    take: BATCH_RUNE_BACKFILL,
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, matchId: true },
+  })
+  if (matches.length === 0) return 0
+
+  let done = 0
+  for (const m of matches) {
+    if (state.shouldStop) break
+    const platform = m.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
+    client.setPlatform(platform)
+    const matchRes = await client.getMatch(m.matchId)
+    setState({ requestCount: state.requestCount + 1 })
+    if (!matchRes.ok) {
+      if (matchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
+      continue
+    }
+    const participantDtos = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
+    if (participantDtos.length === 0) continue
+
+    const dbParticipants = await prisma.participant.findMany({
+      where: { matchId: m.id },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    })
+    if (dbParticipants.length !== participantDtos.length) continue
+
+    await prisma.participantRune.deleteMany({ where: { matchId: m.id } })
+
+    for (let i = 0; i < dbParticipants.length; i++) {
+      const runes = (participantDtos[i] as { perks?: unknown }).perks ?? (participantDtos[i] as { runes?: unknown }).runes ?? null
+      const rows = buildRuneRows(dbParticipants[i].id, m.id, runes)
+      if (rows.length > 0) {
+        await prisma.participantRune.createMany({ data: rows })
+      }
+    }
+    done++
+  }
+  if (done > 0) {
+    await logger.step('Phase 3c: rune backfill batch', { processed: done, batchSize: matches.length })
+  }
+  return done
+}
+
+/**
+ * Phase 3c: run rune backfill until no more matches missing runes or shouldStop.
+ */
+async function runPhase3c(
+  client: RiotHttpClient,
+  logger: ReturnType<typeof createRiotPollerLogger>
+): Promise<void> {
+  await logger.step('Phase 3c start: backfill participant_runes from match detail', {})
+  let total = 0
+  while (!state.shouldStop) {
+    const done = await runStep3cBackfillRunes(client, logger)
+    total += done
+    if (done === 0) break
+  }
+  await logger.step('Phase 3c end', { totalRuneBackfilled: total })
+}
+
 async function runStep4Counters() {
   return {
     requestCount: state.requestCount,
@@ -1487,6 +1793,12 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
 
     // ── Phase 3: backfill null rank/role data for current-key players ──────────
     await runPhase3(client, logger, clefType)
+
+    // ── Phase 3b: backfill timeline data (drakes, soul, skill order, starter, jungle first clear) ──
+    await runPhase3b(client, logger)
+
+    // ── Phase 3c: backfill participant_runes from match detail (perks) ─────────────────────────
+    await runPhase3c(client, logger)
 
     await logger.step('Initialization phases complete, entering collection loop', {})
 

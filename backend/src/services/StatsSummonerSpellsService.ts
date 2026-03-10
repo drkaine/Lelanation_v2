@@ -59,9 +59,10 @@ export async function getSummonerSpellsByChampion(
       Array<{ spell_id: string; games: string; wins: string }>
     >(
       `WITH base AS (
-         SELECT p.win, jsonb_array_elements_text(COALESCE(p.summoner_spells, '[]'::jsonb))::int AS spell_id
+         SELECT mt.win, jsonb_array_elements_text(COALESCE(p.summoner_spells, '[]'::jsonb))::int AS spell_id
          FROM participants p
          INNER JOIN matches m ON m.id = p.match_id
+         INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
          WHERE p.champion_id = $1 AND m.game_version LIKE $2 ${rankFilter}
        )
        SELECT spell_id::text AS spell_id, COUNT(*)::text AS games, SUM(CASE WHEN win THEN 1 ELSE 0 END)::text AS wins
@@ -120,11 +121,12 @@ export async function getSummonerSpellsDuosByChampion(
       Array<{ id1: string; id2: string; games: string; wins: string }>
     >(
       `WITH base AS (
-         SELECT p.win,
+         SELECT mt.win,
                 LEAST((p.summoner_spells->>0)::int, (p.summoner_spells->>1)::int) AS id1,
                 GREATEST((p.summoner_spells->>0)::int, (p.summoner_spells->>1)::int) AS id2
          FROM participants p
          INNER JOIN matches m ON m.id = p.match_id
+         INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
          WHERE p.champion_id = $1 AND m.game_version LIKE $2
            AND p.summoner_spells IS NOT NULL AND jsonb_array_length(p.summoner_spells) >= 2 ${rankFilter}
        )

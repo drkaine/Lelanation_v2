@@ -18,7 +18,6 @@ model Match {
   gameDuration             Int?     @map("game_duration")
   platformId               String?  @map("platform_id")
   rank                     String?  // average rank of players in the match, e.g. "GOLD_II"
-  // Aggregated from participants (BOOL_OR) — moved here in step 1 normalisation
   gameEndedInSurrender     Boolean? @map("game_ended_in_surrender")
   gameEndedInEarlySurrender Boolean? @map("game_ended_in_early_surrender")
   createdAt                DateTime @default(now()) @map("created_at")
@@ -30,18 +29,12 @@ model Match {
 }
 
 // Participant: colonnes indexées pour agrégations.
-// Legacy JSON columns (items, runes, summonerSpells, statPerks, challenges, spell*_casts, teamId, win,
-// unrealKills, teamEarlySurrendered, gameEndedIn*) are kept during step-1 transition and will be
-// dropped in the step-2 cleanup migration.
 model Participant {
   id                          BigInt   @id @default(autoincrement())
   playerId                    BigInt   @map("player_id")
   matchId                     BigInt   @map("match_id")
-  // LEGACY — will move to match_teams.team_id in step 2
-  teamId                      Int?     @map("team_id")
+  teamId                      Int?     @map("team_id") // 100 = blue, 200 = red (Riot API)
   championId                  Int      @map("champion_id")
-  // LEGACY — win is now on match_teams; kept for backward compat
-  win                         Boolean
   role                        String?  // TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT
   rankTier                    String?  @map("rank_tier")
   rankDivision                String?  @map("rank_division")
@@ -54,15 +47,6 @@ model Participant {
   totalDamageDealtToChampions Int?     @map("total_damage_dealt_to_champions")
   totalMinionsKilled          Int?     @map("total_minions_killed")
   visionScore                 Int?     @map("vision_score")
-  firstBloodKill              Boolean? @map("first_blood_kill")
-  firstBloodAssist            Boolean? @map("first_blood_assist")
-  firstTowerAssist            Boolean? @map("first_tower_assist")
-  firstTowerKill              Boolean? @map("first_tower_kill")
-  // LEGACY — will be aggregated into matches in step 2
-  gameEndedInSurrender        Boolean? @map("game_ended_in_surrender")
-  gameEndedInEarlySurrender   Boolean? @map("game_ended_in_early_surrender")
-  // LEGACY — will move to match_teams in step 2
-  teamEarlySurrendered        Boolean? @map("team_early_surrendered")
   baronKills                  Int?     @map("baron_kills")
   consumablesPurchased        Int?     @map("consumables_purchased")
   damageDealtToBuildings      Int?     @map("damage_dealt_to_buildings")
@@ -114,26 +98,22 @@ model Participant {
   turretKills                 Int?     @map("turret_kills")
   turretTakedowns             Int?     @map("turret_takedowns")
   turretsLost                 Int?     @map("turrets_lost")
-  // LEGACY — will be dropped in step 2
   unrealKills                 Int?     @map("unreal_kills")
   visionWardsBoughtInGame     Int?     @map("vision_wards_bought_in_game")
   wardsKilled                 Int?     @map("wards_killed")
   wardsPlaced                 Int?     @map("wards_placed")
-  // LEGACY spell casts — moved to participant_spells in step 1, dropped in step 2
   spell1Casts                 Int?     @map("spell1_casts")
   spell2Casts                 Int?     @map("spell2_casts")
   spell3Casts                 Int?     @map("spell3_casts")
   spell4Casts                 Int?     @map("spell4_casts")
-  // LEGACY summoner spell casts — moved to participant_summoner_spells in step 1, dropped in step 2
   summoner1Casts              Int?     @map("summoner1_casts")
   summoner2Casts              Int?     @map("summoner2_casts")
-  // LEGACY JSON blobs — each normalised into dedicated tables in step 1, dropped in step 2
   statPerks                   Json?    @map("stat_perks")
   items                       Json?
   runes                       Json?
   summonerSpells              Json?    @map("summoner_spells")
   challenges                  Json?
-  // Challenge values: one column per allowlisted key (replaces participant_challenges table)
+  // Challenge values: one column per allowlisted key
   challengeSoloKills                       Float? @map("ch_solo_kills")
   challengeTakedowns                       Float? @map("ch_takedowns")
   challengeBountyGold                     Float? @map("ch_bounty_gold")
@@ -233,6 +213,7 @@ model Participant {
   participantPerks             ParticipantPerk[]
   participantJungleFirstClears ParticipantJungleFirstClear[]
   participantSpellOrders       ParticipantSpellOrder[]
+  matchTeamFirstObjectives     MatchTeamFirstObjective[]
 
   @@index([matchId])
   @@index([playerId])
@@ -240,7 +221,6 @@ model Participant {
   @@index([rankTier])
   @@index([role])
   @@index([championId, rankTier])
-  @@index([gameEndedInSurrender])
   @@map("participants")
 }
 
@@ -253,37 +233,49 @@ model MatchTeam {
   rankTier            String?  @map("rank_tier") // average rank of the 5 participants in this team
   win                 Boolean  @default(false)
   teamEarlySurrendered Boolean @default(false) @map("team_early_surrendered")
-  // LEGACY ban columns — kept during step-1 transition; replaced by bans table, dropped in step 2
   ban1                Int?     @map("ban_1")
   ban2                Int?     @map("ban_2")
   ban3                Int?     @map("ban_3")
   ban4                Int?     @map("ban_4")
   ban5                Int?     @map("ban_5")
-  baronFirst          Boolean  @default(false) @map("baron_first")
   baronKills          Int      @default(0) @map("baron_kills")
-  dragonFirst         Boolean  @default(false) @map("dragon_first")
   dragonKills         Int      @default(0) @map("dragon_kills")
-  towerFirst          Boolean  @default(false) @map("tower_first")
   towerKills          Int      @default(0) @map("tower_kills")
-  hordeFirst          Boolean  @default(false) @map("horde_first")
   hordeKills          Int      @default(0) @map("horde_kills")
-  riftHeraldFirst     Boolean  @default(false) @map("rift_herald_first")
   riftHeraldKills     Int      @default(0) @map("rift_herald_kills")
-  inhibitorFirst      Boolean  @default(false) @map("inhibitor_first")
   inhibitorKills      Int      @default(0) @map("inhibitor_kills")
-  championFirst       Boolean  @default(false) @map("champion_first")
   championKills       Int      @default(0) @map("champion_kills")
   createdAt           DateTime @default(now()) @map("created_at")
 
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
   bans  Ban[]
   drakes MatchTeamDrake[]
+  firstObjectiveParticipants MatchTeamFirstObjective[]
 
   @@unique([matchId, teamId])
   @@index([matchId])
   @@index([teamId])
   @@index([win])
   @@map("match_teams")
+}
+
+// Single source of truth for all "first" objectives: which team got it (+ optional killer/assist).
+// participant_id set = who got kill (is_kill true) or assist (false); null = team got first, participant unknown (timeline can fill later for herald/horde/dragon/baron).
+model MatchTeamFirstObjective {
+  id            BigInt   @id @default(autoincrement())
+  matchTeamId   BigInt   @map("match_team_id")
+  objectiveType String   @map("objective_type") // champion | tower | dragon | baron | horde | rift_herald | inhibitor
+  participantId BigInt?  @map("participant_id")  // null = team first only; set = kill or assist
+  isKill        Boolean  @default(true) @map("is_kill") // true = kill, false = assist (ignored when participant_id null)
+
+  matchTeam   MatchTeam   @relation(fields: [matchTeamId], references: [id], onDelete: Cascade)
+  participant Participant? @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([matchTeamId, objectiveType, participantId])
+  @@index([matchTeamId])
+  @@index([participantId])
+  @@index([objectiveType])
+  @@map("match_team_first_objectives")
 }
 
 model Ban {

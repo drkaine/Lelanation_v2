@@ -2,9 +2,139 @@
 
 Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses Riot (match detail, timeline, account, league).
 
+**Sources des explications :** [Riot Developer Portal – Match-v5](https://developer.riotgames.com/apis#match-v5), [changelog match-v5 (RiotTuxedo)](https://gist.github.com/RiotTuxedo/758ee4d88693b768a880ece93cd78663) et références communautaires (ex. RiotNet) lorsque la doc officielle ne détaille pas tous les champs.
+
 ---
 
-## `matches`
+## Signification des valeurs
+
+### Match & équipes
+
+- **match_id** — Identifiant unique du match côté Riot (ex. `EUW1_1234567890`).
+- **game_version** — Version du client LoL (ex. `14.5.123.1234`).
+- **game_duration** — Durée de la partie en secondes.
+- **rank** — Rang moyen des joueurs du match (ex. `GOLD_II`), calculé à partir des rangs Solo/Duo des participants.
+- **game_ended_in_surrender** — Au moins un participant a voté / la partie s’est terminée par abandon.
+- **game_ended_in_early_surrender** — Abandon avant la fin du délai habituel (early surrender).
+- **team_id** — 100 = équipe bleue, 200 = équipe rouge.
+- **win** — true si l’équipe (ou le participant) a gagné la partie.
+- **rank_tier** (équipe) — Rang moyen des 5 joueurs de l’équipe.
+- **team_early_surrendered** — L’équipe a initié un early surrender.
+- **ban_1 … ban_5** — ChampionId des bans, dans l’ordre de ban (pick_order 1–5).
+- **baron_first** — Cette équipe a tué le premier Baron.
+- **baron_kills** — Nombre de Barons tués par l’équipe.
+- **dragon_first**, **dragon_kills** — Idem pour les dragons.
+- **tower_first**, **tower_kills** — Première tour détruite / nombre de tours détruites.
+- **horde** — Horde de Void Grubs (objectif top).
+- **rift_herald_first**, **rift_herald_kills** — Héraut de la faille.
+- **inhibitor_first**, **inhibitor_kills** — Inhibiteurs.
+- **champion_first**, **champion_kills** — Premier kill de champion / nombre de kills de champions (au niveau équipe).
+
+### Participants – identité & rôle
+
+- **puuid** — Identifiant compte Riot (persistant, utilisé par l’API).
+- **champion_id** — ID du champion joué (référence Data Dragon / CDragon).
+- **role** — Position jouée : TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT. Dérivé de `individualPosition` / `teamPosition` (Riot : *teamPosition* = meilleure estimation avec contrainte “un joueur par rôle”).
+- **rank_tier**, **rank_division**, **rank_lp** — Rang Solo/Duo en fin de partie (ex. GOLD, II, 42 LP) ; peut être complété via League v4 en backfill.
+
+### Participants – KDA, or, dégâts, vision
+
+- **kills**, **deaths**, **assists** — Nombre de kills, morts et assists du participant.
+- **champ_level** — Niveau du champion en fin de partie.
+- **gold_earned** — Or total gagné pendant la partie.
+- **gold_spent** — Or dépensé (achats).
+- **total_damage_dealt_to_champions** — Dégâts totaux infligés aux champions ennemis.
+- **total_damage_dealt** — Dégâts totaux infligés (toutes cibles).
+- **total_damage_taken** — Dégâts totaux reçus.
+- **total_minions_killed** — Crédits (minions) tués.
+- **vision_score** — Score de vision (wards, révélations, etc.).
+
+### Participants – first blood / first tower
+
+- **first_blood_kill** — Le participant a réalisé le premier kill de la partie.
+- **first_blood_assist** — Le participant a assisté le premier kill.
+- **first_tower_kill** — Le participant a détruit la première tour.
+- **first_tower_assist** — Le participant a assisté la destruction de la première tour.
+
+### Participants – objectifs & dégâts spéciaux
+
+- **baron_kills**, **dragon_kills** — Participations aux kills Baron / Dragon (comptage côté participant).
+- **damage_dealt_to_objectives** — Dégâts aux objectifs (dragon, baron, etc.).
+- **damage_dealt_to_turrets** — Dégâts aux tours.
+- **damage_dealt_to_buildings** — Dégâts aux structures (tours, inhibiteurs).
+- **damage_dealt_to_epic_monsters** — Dégâts aux monstres épiques.
+- **damage_self_mitigated** — Dégâts évités / absorbés (boucliers, armure, etc.).
+- **inhibitor_kills**, **inhibitor_takedowns**, **inhibitors_lost** — Inhibiteurs détruits / participations / inhibiteurs perdus.
+- **objectives_stolen** — Objectifs “volés” (ex. dragon/baron volé à l’équipe adverse).
+- **objectives_stolen_assists** — Participations à ces vols.
+- **turret_kills**, **turret_takedowns**, **turrets_lost** — Tours détruites / participations / tours perdues.
+
+### Participants – dégâts par type
+
+- **magic_damage_dealt**, **physical_damage_dealt**, **true_damage_dealt** — Dégâts magiques / physiques / purs infligés.
+- **magic_damage_dealt_to_champions**, etc. — Même chose en ciblant uniquement les champions.
+- **magic_damage_taken**, **physical_damage_taken**, **true_damage_taken** — Dégâts reçus par type.
+
+### Participants – multi-kills & séries
+
+- **double_kills**, **triple_kills**, **quadra_kills**, **penta_kills** — Nombre de doubles, triples, quadra et pentakills.
+- **unreal_kills** — Kills au-delà du pentakill (ex. hexakill en mode spécial).
+- **killing_sprees** — Nombre de séries de kills (au moins 3 kills sans mourir).
+- **largest_killing_spree** — Plus longue série de kills.
+- **largest_multi_kill** — Plus gros multi-kill (2 = double, 5 = penta).
+- **largest_critical_strike** — Plus gros coup critique infligé.
+
+### Participants – soins, bouclier, CC
+
+- **total_heal** — Soins totaux appliqués (à soi, alliés, etc.).
+- **total_heals_on_teammates** — Soins appliqués uniquement aux alliés (post-mitigation).
+- **total_units_healed** — Nombre d’unités soignées.
+- **total_damage_shielded_on_teammates** — Dégâts absorbés par des boucliers donnés aux alliés.
+- **time_ccing_others** — Temps pendant lequel le participant a contrôlé des ennemis (stun, slow, etc.).
+- **total_time_cc_dealt** — Durée totale de CC infligée (en ms ou unité Riot).
+- **total_time_spent_dead** — Temps passé mort.
+- **longest_time_spent_living** — Plus longue période en vie sans mourir.
+
+### Participants – jungle & farm
+
+- **neutral_minions_killed** — Monstres neutres tués (jungle, crabes, etc.).
+- **total_ally_jungle_minions_killed** — Camps tués dans la jungle alliée.
+- **total_enemy_jungle_minions_killed** — Camps tués dans la jungle ennemie.
+
+### Participants – wards & achats
+
+- **wards_placed**, **wards_killed** — Sentinelles posées / détruites.
+- **vision_wards_bought_in_game** — Contrôle achetés (pink wards).
+- **sight_wards_bought_in_game** — Sentinelles jaunes achetées.
+- **consumables_purchased**, **items_purchased** — Nombre d’objets consommables / d’objets achetés.
+- **role_bound_item** — Objet lié au rôle (ex. support item).
+
+### Participants – sorts & runes
+
+- **spell1_casts … spell4_casts** — Nombre d’utilisations des sorts Q, W, E, R (champion).
+- **summoner1_casts**, **summoner2_casts** — Nombre d’utilisations des deux sorts de l’invocateur.
+- **items** (JSON) — Liste des ID d’objets en fin de partie (slots 0–6, 6 = trinket).
+- **runes** (JSON) — Arbre de runes (perks.styles, selections).
+- **stat_perks** — IDs des perks de stat (défense, flex, offense).
+
+### Challenges (colonnes ch_*)
+
+Les **challenges** sont des indicateurs optionnels fournis par Riot (ex. “soloKills”, “takedowns”, “earliestBaron”). Chaque clé de l’allowlist est stockée dans une colonne dédiée (`ch_*`) ; la valeur est en général un nombre (Float). Les noms des clés sont documentés / évoluent avec le jeu ; les clés inconnues sont enregistrées dans `challenge_keys_registry` pour détection et notification.
+
+### Timeline – drakes, ordre des skills, starter
+
+- **match_teams_drake.drake_type** — Type du dragon (ex. FIRE_DRAGON, WATER_DRAGON, ELDER_DRAGON).
+- **match_teams_drake.soul** — Nom de l’âme accordée à l’équipe (ex. Infernal) quand l’événement DRAGON_SOUL_GIVEN se produit.
+- **match_teams_drake.order** — Ordre global du kill de dragon dans la partie (1 = premier dragon tué).
+- **participant_spell_orders** — Ordre dans lequel le joueur a monté ses compétences (SKILL_LEVEL_UP) : spell_slot 1–4 = Q–R, order = 1-based.
+- **participant_items.starter** — true si cet objet est le premier acheté (hors wards/trinkets), d’après l’événement ITEM_PURCHASED dans la timeline.
+- **participant_jungle_first_clear** — Ordre des camps de jungle tués pendant le premier clear (jungleMinionsKilled par frame), pour les joueurs en rôle JUNGLE.
+
+---
+
+## Détail des tables (colonnes ↔ source Riot)
+
+### `matches`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -17,7 +147,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 ---
 
-## `match_teams`
+### `match_teams`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -37,7 +167,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 ---
 
-## `bans`
+### `bans`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -46,9 +176,20 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 | champion_id | teams[].bans[].championId |
 | pick_order | 1–5 (ordre du ban) |
 
+### `match_team_first_objectives`
+
+Source unique pour « qui a eu le kill / l’assist » sur les objectifs « first » (évite la redondance 10× dans participants).
+
+| Colonne | Source Riot |
+|--------|-------------|
+| match_team_id | Équipe concernée (l’équipe qui a eu le first) |
+| objective_type | `champion` (first blood), `tower` (first tower) ; extensible à `dragon`, `baron`, `horde`, `rift_herald` via timeline |
+| participant_id | participants[].id (celui qui a fait le kill ou l’assist) |
+| is_kill | true = kill, false = assist |
+
 ---
 
-## `players`
+### `players`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -58,7 +199,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 ---
 
-## `participants` (colonnes scalaires)
+### `participants` (colonnes scalaires)
 
 ### Identité / équipe / rang
 
@@ -90,14 +231,10 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 | total_minions_killed | participants[].totalMinionsKilled |
 | vision_score | participants[].visionScore |
 
-### First blood / first tower
+### First blood / first tower (source unique : match_teams + match_team_first_objectives)
 
-| Colonne | Source Riot |
-|--------|-------------|
-| first_blood_kill | participants[].firstBloodKill |
-| first_blood_assist | participants[].firstBloodAssist |
-| first_tower_kill | participants[].firstTowerKill |
-| first_tower_assist | participants[].firstTowerAssist |
+- **match_teams** : `champion_first`, `tower_first` (équipe qui a eu le first blood / first tower).
+- **match_team_first_objectives** : qui a fait le kill ou l’assist — une ligne par (équipe, type d’objectif, participant, is_kill). Types : `champion` (first blood), `tower` (first tower). Source Riot : participants[].firstBloodKill / firstBloodAssist / firstTowerKill / firstTowerAssist.
 
 ### Surrender
 
@@ -203,7 +340,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 ---
 
-## `participants` — colonnes challenges (allowlist)
+### `participants` — colonnes challenges (allowlist)
 
 Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Float) :
 
@@ -299,7 +436,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_items`
+### `participant_items`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -310,7 +447,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_runes`
+### `participant_runes`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -322,7 +459,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_summoner_spells`
+### `participant_summoner_spells`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -333,7 +470,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_spells`
+### `participant_spells`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -343,7 +480,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_perks`
+### `participant_perks`
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -352,7 +489,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_jungle_first_clear` (timeline)
+### `participant_jungle_first_clear` (timeline)
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -362,7 +499,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `match_teams_drake` (timeline)
+### `match_teams_drake` (timeline)
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -373,7 +510,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `participant_spell_orders` (timeline)
+### `participant_spell_orders` (timeline)
 
 | Colonne | Source Riot |
 |--------|-------------|
@@ -384,7 +521,7 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-## `challenge_keys_registry`
+### `challenge_keys_registry`
 
 | Colonne | Source Riot |
 |--------|-------------|

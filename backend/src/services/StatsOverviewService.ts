@@ -828,9 +828,10 @@ export async function getOverviewSidesStats(
     const sideWinrateSql = `
       SELECT p.team_id AS team_id,
              COUNT(DISTINCT p.match_id)::int AS matches,
-             COUNT(DISTINCT CASE WHEN p.win THEN p.match_id END)::int AS wins
+             COUNT(DISTINCT CASE WHEN mt.win THEN p.match_id END)::int AS wins
       FROM participants p
       INNER JOIN matches m ON m.id = p.match_id
+      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
       WHERE ${matchCond} AND p.team_id IN (100, 200)
       GROUP BY p.team_id
     `
@@ -854,9 +855,10 @@ export async function getOverviewSidesStats(
     const champBySideSql = `
       SELECT p.team_id AS team_id, p.champion_id AS champion_id,
              COUNT(*)::int AS games,
-             SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins
+             SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins
       FROM participants p
       INNER JOIN matches m ON m.id = p.match_id
+      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
       WHERE ${matchCond} AND p.team_id IN (100, 200)
       GROUP BY p.team_id, p.champion_id
       HAVING COUNT(*) >= 10
@@ -907,22 +909,22 @@ export async function getOverviewSidesStats(
       .sort((a, b) => b.games - a.games)
       .slice(0, 20)
 
-    // 3) Objectives by side from match_teams (100 / 200)
+    // 3) Objectives by side: *_kills from match_teams, *_first from match_team_first_objectives
     const objBySideSql = `
       SELECT
         mt.team_id,
-        SUM(CASE WHEN mt.champion_first THEN 1 ELSE 0 END)::int AS first_blood,
-        SUM(CASE WHEN mt.baron_first THEN 1 ELSE 0 END)::int AS baron_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'champion') THEN 1 ELSE 0 END)::int AS first_blood,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'baron') THEN 1 ELSE 0 END)::int AS baron_first,
         SUM(mt.baron_kills)::int AS baron_kills,
-        SUM(CASE WHEN mt.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'dragon') THEN 1 ELSE 0 END)::int AS dragon_first,
         SUM(mt.dragon_kills)::int AS dragon_kills,
-        SUM(CASE WHEN mt.tower_first THEN 1 ELSE 0 END)::int AS tower_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'tower') THEN 1 ELSE 0 END)::int AS tower_first,
         SUM(mt.tower_kills)::int AS tower_kills,
-        SUM(CASE WHEN mt.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'inhibitor') THEN 1 ELSE 0 END)::int AS inhibitor_first,
         SUM(mt.inhibitor_kills)::int AS inhibitor_kills,
-        SUM(CASE WHEN mt.rift_herald_first THEN 1 ELSE 0 END)::int AS rift_herald_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'rift_herald') THEN 1 ELSE 0 END)::int AS rift_herald_first,
         SUM(mt.rift_herald_kills)::int AS rift_herald_kills,
-        SUM(CASE WHEN mt.horde_first THEN 1 ELSE 0 END)::int AS horde_first,
+        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'horde') THEN 1 ELSE 0 END)::int AS horde_first,
         SUM(mt.horde_kills)::int AS horde_kills
       FROM match_teams mt
       INNER JOIN matches m ON m.id = mt.match_id

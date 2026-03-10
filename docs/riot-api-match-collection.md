@@ -263,6 +263,20 @@ Si le poller signale « aucun nouveau match » en boucle alors que vous avez des
 - **Erreurs nombreuses (ex. 130/cycle)** : Souvent liées aux rate limits Riot (100 req/2 min) ou aux erreurs 500/503 de l’API Riot. Vérifier [Riot Status](https://status.riotgames.com/). En cas de backlog élevé (> 20k joueurs non pollés), le **mode rapide** s’active automatiquement : 1 fenêtre de patch, pas de fetch des rangs (backfill plus tard), 100 joueurs/run, délai 30 s entre cycles.
 - **Mode rapide** : Quand `players where last_seen IS NULL` ≥ `RIOT_MATCH_FAST_BACKLOG_THRESHOLD` (défaut 20k), on réduit les appels API (1 fenêtre, skip rank) pour vider la file plus vite. Les rangs sont rattrapés par le backfill.
 
+### Découplage récupération API / écriture DB (Phase 4)
+
+En Phase 4 (collecte par joueur), le poller sépare volontairement :
+
+1. **Producteur** : récupère les données côté API uniquement (`getMatch`, `getMatchTimeline`) avec un parallélisme borné (`MATCH_FETCH_CONCURRENCY`). Les réponses sont poussées dans une **file bornée en mémoire**.
+2. **Consommateur(s)** : dépilent la file et exécutent uniquement les écritures DB (`upsertMatchAndParticipants`, timeline extras, mise à jour `player.lastSeen`).
+
+**Intérêts** :
+- L’API reste le goulot d’étranglement ; on ne bloque pas les appels API sur des écritures DB lentes.
+- Les écritures peuvent être parallélisées (plusieurs workers de consommation) sans ajouter de requêtes API.
+- Backpressure : si la DB est lente, la file se remplit et le producteur attend (pas d’accumulation infinie en mémoire).
+
+**Implémentation actuelle** : file bornée (taille fixe, ex. 50 slots), un ou deux workers de consommation. Pas de table ni de fichier temporaire : tout est en mémoire dans le process. Une évolution possible serait une table de staging (ex. `match_raw_ingest`) ou une queue externe (Redis/Bull) pour du durable et du multi-process.
+
 ### Poller in-process (recommandé) vs one-shot
 
 - **Poller** : au démarrage du backend (`lelanation-backend`), une boucle de collecte tourne dans le même process (pas de worker PM2 séparé). Test de la clé API (env puis fichier admin), puis boucle infinie : data manquantes → migration PUUID si besoin → crawl players (match IDs + matchs Europe), avec heartbeat et statut dans `data/cron/status.json` (section `poller`). Redémarrer le backend pour redémarrer le poller.

@@ -229,13 +229,14 @@ export async function getTopPlayersByChampion(options: {
         pl.tag_name,
         pl.region,
         COUNT(*)::int AS games,
-        SUM(CASE WHEN p.win THEN 1 ELSE 0 END)::int AS wins,
-        ROUND(100.0 * SUM(CASE WHEN p.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
+        SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins,
+        ROUND(100.0 * SUM(CASE WHEN mt.win THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2)::double precision AS winrate,
         MAX(lr.rank_tier) AS "rankTier",
         ROUND(AVG(p.kills)::numeric, 2)::double precision AS "avgKills",
         ROUND(AVG(p.deaths)::numeric, 2)::double precision AS "avgDeaths",
         ROUND(AVG(p.assists)::numeric, 2)::double precision AS "avgAssists"
       FROM participants p
+      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
       JOIN players pl ON pl.id = p.player_id
       LEFT JOIN latest_rank lr ON lr.player_id = p.player_id
       WHERE p.champion_id = ${championId}
