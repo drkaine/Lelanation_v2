@@ -48,8 +48,22 @@ export interface AllowedChallenge {
 }
 
 /**
+ * Converts allowlisted challenge key/value pairs into the Participant update shape:
+ * Prisma field names (challenge + PascalCase(key)) -> value.
+ * Used to write challenge columns on participants instead of participant_challenges.
+ */
+export function allowedToParticipantChallengeData(allowed: AllowedChallenge[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const { key, value } of allowed) {
+    const field = 'challenge' + key.charAt(0).toUpperCase() + key.slice(1)
+    out[field] = value
+  }
+  return out
+}
+
+/**
  * Splits a raw challenges object into:
- *   - allowed: key/value pairs to store in participant_challenges
+ *   - allowed: key/value pairs to store on participant challenge columns
  *   - unknown: keys not in the allowlist (to log in registry)
  *
  * Non-numeric values are silently skipped (e.g. legendaryItemUsed array).
@@ -120,7 +134,7 @@ export async function handleUnknownChallengeKeys(
 
   await discord.sendAlert(
     '🆕 Nouvelles clés challenges détectées',
-    `${newKeyEntries.length} clé(s) inconnue(s) hors allowlist trouvée(s) dans les données Riot. Elles ne seront pas stockées dans \`participant_challenges\`.`,
+    `${newKeyEntries.length} clé(s) inconnue(s) hors allowlist trouvée(s) dans les données Riot. Elles ne seront pas stockées dans les colonnes challenge du participant.`,
     undefined,
     context
   )

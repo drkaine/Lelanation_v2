@@ -16,13 +16,21 @@ import {
   getClefTypeFromFile,
   type RiotMatchDto,
   type RiotParticipantDto,
+  type RiotMatchTimelineDto,
+  type RiotTimelineEventEliteMonsterKill,
+  type RiotTimelineEventDragonSoulGiven,
+  type RiotTimelineEventSkillLevelUp,
+  type RiotTimelineEventItemPurchased,
 } from '../services/RiotHttpClient.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank, formatRankString } from '../utils/rankScore.js'
-import { partitionChallenges, handleUnknownChallengeKeys } from '../services/ChallengeNormalisationService.js'
+import { partitionChallenges, handleUnknownChallengeKeys, allowedToParticipantChallengeData } from '../services/ChallengeNormalisationService.js'
 const BATCH_FIX_NULLS = 50
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
+// Maximum number of jungle camp kills tracked per player (first clear only).
+// A standard first clear is 6 camps for most paths (up to 8 with scuttle/leash).
+const JUNGLE_FIRST_CLEAR_MAX_CAMPS = 10
 
 /**
  * Run async tasks with a bounded concurrency (like p-limit but inline).
@@ -439,18 +447,6 @@ async function runPhase2b(
     }
   }
   await logger.step('Phase 2b end', { totalRecovered, totalLost })
-}
-
-function sameSummoner(
-  aGameName: string | null | undefined,
-  aTagLine: string | null | undefined,
-  bGameName: string | null | undefined,
-  bTagLine: string | null | undefined
-): boolean {
-  return (
-    (aGameName ?? '').trim().toLowerCase() === (bGameName ?? '').trim().toLowerCase() &&
-    (aTagLine ?? '').trim().toLowerCase() === (bTagLine ?? '').trim().toLowerCase()
-  )
 }
 
 async function runStep3FixNulls(
@@ -1002,13 +998,14 @@ export async function upsertMatchAndParticipants(
     const perkRows = buildPerkRows(pid, mid, statPerks)
     if (perkRows.length > 0) await prisma.participantPerk.createMany({ data: perkRows })
 
-    // participant_challenges (filtered by allowlist)
+    // challenge columns on participant (filtered by allowlist)
     if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
       const { allowed, unknown } = partitionChallenges(challenges as Record<string, unknown>)
       if (allowed.length > 0) {
-        await prisma.participantChallenge.createMany({
-          data: allowed.map((c) => ({ participantId: pid, matchId: mid, key: c.key, value: c.value })),
-          skipDuplicates: true,
+        const challengeData = allowedToParticipantChallengeData(allowed)
+        await prisma.participant.update({
+          where: { id: pid },
+          data: challengeData,
         })
       }
       for (const [k, v] of Object.entries(unknown)) {
@@ -1021,6 +1018,236 @@ export async function upsertMatchAndParticipants(
 
   // Fire-and-forget: register unknown challenge keys + Discord notify
   void handleUnknownChallengeKeys(allUnknownKeys)
+}
+
+/**
+ * Extract jungle first-clear path order from a timeline and persist it.
+ * One row per camp kill, ordered by kill sequence (orderIndex 0, 1, 2, …).
+ * Only populates rows for participants with role='JUNGLE'. Capped at JUNGLE_FIRST_CLEAR_MAX_CAMPS.
+ * Idempotent: uses skipDuplicates (ON CONFLICT DO NOTHING on the unique index).
+ *
+ * Source: participantFrames[riotPid].jungleMinionsKilled per frame.
+ * Resolution: 1 frame = 1 min, so kills within the same minute share the same timestampMs.
+ */
+async function extractAndInsertJungleFirstClear(
+  matchDbId: bigint,
+  riotMatchId: string,
+  timeline: RiotMatchTimelineDto,
+  logger?: ReturnType<typeof createRiotPollerLogger>
+): Promise<void> {
+  const frames = timeline.info?.frames
+  if (!frames?.length) return
+
+  // Find participants with role JUNGLE for this match (DB id mapped from Riot participantId 1–10).
+  const dbParticipants = await prisma.participant.findMany({
+    where: { matchId: matchDbId, role: 'JUNGLE' },
+    select: { id: true, matchId: true },
+  })
+  if (dbParticipants.length === 0) return
+
+  // Build a map riotParticipantId (1–10) → DB participantId.
+  // The Riot timeline lists participants in metadata in order (index 0 = riotPid 1, …).
+  // We resolve via participantFrames key which IS the riotParticipantId as a string.
+  // We match DB participants by join order: participants are stored in insertion order
+  // (participantId 1-5 = team 100, 6-10 = team 200). Query by matchId ordered by id.
+  const allMatchParticipants = await prisma.participant.findMany({
+    where: { matchId: matchDbId },
+    select: { id: true, role: true },
+    orderBy: { id: 'asc' },
+  })
+  // riotParticipantId is 1-indexed; map index (0-based) + 1 → DB id
+  const riotPidToDbId = new Map<number, bigint>()
+  for (let i = 0; i < allMatchParticipants.length; i++) {
+    riotPidToDbId.set(i + 1, allMatchParticipants[i].id)
+  }
+
+  // Build set of riotPids that are junglers
+  const junglerDbIds = new Set(dbParticipants.map((p) => p.id))
+  const junglerRiotPids = new Set<number>()
+  for (const [riotPid, dbId] of riotPidToDbId) {
+    if (junglerDbIds.has(dbId)) junglerRiotPids.add(riotPid)
+  }
+  if (junglerRiotPids.size === 0) return
+
+  // Per-jungler state: previous jungleMinionsKilled and current orderIndex
+  const prevKills = new Map<number, number>()
+  const orderIdx = new Map<number, number>()
+  const done = new Set<number>()
+  for (const riotPid of junglerRiotPids) {
+    prevKills.set(riotPid, 0)
+    orderIdx.set(riotPid, 0)
+  }
+
+  const rows: Array<{ participantId: bigint; matchId: bigint; orderIndex: number; timestampMs: number }> = []
+
+  for (const frame of frames) {
+    const ts = frame.timestamp ?? 0
+    for (const riotPid of junglerRiotPids) {
+      if (done.has(riotPid)) continue
+      const frameData = frame.participantFrames?.[String(riotPid)]
+      if (!frameData) continue
+      const curr = frameData.jungleMinionsKilled ?? 0
+      const prev = prevKills.get(riotPid) ?? 0
+      if (curr > prev) {
+        const dbId = riotPidToDbId.get(riotPid)
+        if (dbId == null) continue
+        const newKills = curr - prev
+        for (let k = 0; k < newKills; k++) {
+          const idx = (orderIdx.get(riotPid) ?? 0)
+          rows.push({ participantId: dbId, matchId: matchDbId, orderIndex: idx, timestampMs: ts })
+          orderIdx.set(riotPid, idx + 1)
+          if ((orderIdx.get(riotPid) ?? 0) >= JUNGLE_FIRST_CLEAR_MAX_CAMPS) {
+            done.add(riotPid)
+            break
+          }
+        }
+        prevKills.set(riotPid, curr)
+      }
+    }
+    // Stop early if all junglers have reached the cap
+    if (done.size === junglerRiotPids.size) break
+  }
+
+  if (rows.length === 0) return
+
+  await prisma.participantJungleFirstClear.createMany({ data: rows, skipDuplicates: true })
+  if (logger) {
+    await logger.info('DB: jungle first clear inserted', { matchId: riotMatchId, rows: rows.length })
+  }
+}
+
+/** Ward and trinket item IDs excluded when detecting the starter item purchase. */
+const WARD_ITEM_IDS = new Set([2055, 3340, 3363, 3364])
+
+/**
+ * Extract and persist drake kills, dragon soul, skill level-up order, and starter items
+ * from a match timeline.
+ * Idempotent via skipDuplicates / updateMany.
+ */
+async function extractAndInsertTimelineExtras(
+  matchDbId: bigint,
+  riotMatchId: string,
+  timeline: RiotMatchTimelineDto,
+  logger?: ReturnType<typeof createRiotPollerLogger>
+): Promise<void> {
+  const frames = timeline.info?.frames
+  if (!frames?.length) return
+
+  // Build riotParticipantId (1–10) → DB participant.id
+  const allMatchParticipants = await prisma.participant.findMany({
+    where: { matchId: matchDbId },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
+  const riotPidToDbId = new Map<number, bigint>()
+  for (let i = 0; i < allMatchParticipants.length; i++) {
+    riotPidToDbId.set(i + 1, allMatchParticipants[i].id)
+  }
+
+  // Build Riot teamId (100/200) → DB match_team.id
+  const matchTeams = await prisma.matchTeam.findMany({
+    where: { matchId: matchDbId },
+    select: { id: true, teamId: true },
+  })
+  const matchTeamIdByTeamId = new Map<number, bigint>()
+  for (const t of matchTeams) matchTeamIdByTeamId.set(t.teamId, t.id)
+
+  // Collect all events in chronological order
+  const allEvents: Array<{ type: string; [key: string]: unknown }> = []
+  for (const frame of frames) {
+    if (frame.events) {
+      for (const ev of frame.events) allEvents.push(ev as (typeof allEvents)[number])
+    }
+  }
+
+  // ── 1 + 2. Drake kills (ELITE_MONSTER_KILL) + soul (DRAGON_SOUL_GIVEN) ────
+  // Intermediate: per-team ordered list of {drakeType, order, soul?}
+  type DrakeEntry = { drakeType: string; order: number; matchTeamId: bigint; soul: string | null }
+  const drakesByTeam = new Map<number, DrakeEntry[]>()
+  let globalDrakeOrder = 1
+
+  for (const ev of allEvents) {
+    if (ev.type === 'ELITE_MONSTER_KILL') {
+      const e = ev as unknown as RiotTimelineEventEliteMonsterKill
+      if (e.monsterType !== 'DRAGON') continue
+      const teamId = e.killerTeamId
+      if (!teamId) continue
+      const matchTeamId = matchTeamIdByTeamId.get(teamId)
+      if (!matchTeamId) continue
+      const drakeType = e.monsterSubType ?? 'DRAGON'
+      if (!drakesByTeam.has(teamId)) drakesByTeam.set(teamId, [])
+      drakesByTeam.get(teamId)!.push({ drakeType, order: globalDrakeOrder, matchTeamId, soul: null })
+      globalDrakeOrder++
+      continue
+    }
+    if (ev.type === 'DRAGON_SOUL_GIVEN') {
+      const e = ev as unknown as RiotTimelineEventDragonSoulGiven
+      const teamRows = drakesByTeam.get(e.teamId)
+      if (!teamRows?.length) continue
+      // Mark soul on the last drake of this team
+      teamRows[teamRows.length - 1].soul = e.name
+    }
+  }
+
+  const drakeInsertRows: Array<{
+    matchId: bigint; matchTeamId: bigint; drakeType: string; order: number; soul: string | null
+  }> = []
+  for (const rows of drakesByTeam.values()) {
+    for (const r of rows) {
+      drakeInsertRows.push({ matchId: matchDbId, matchTeamId: r.matchTeamId, drakeType: r.drakeType, order: r.order, soul: r.soul })
+    }
+  }
+  if (drakeInsertRows.length > 0) {
+    await prisma.matchTeamDrake.createMany({ data: drakeInsertRows, skipDuplicates: true })
+  }
+
+  // ── 3. Skill level-up order (SKILL_LEVEL_UP) ────────────────────────────────
+  const skillOrderCounters = new Map<bigint, number>() // dbParticipantId → next 1-based order
+  const spellOrderRows: Array<{
+    participantId: bigint; matchId: bigint; spellSlot: number; order: number; timestampMs: number
+  }> = []
+
+  for (const ev of allEvents) {
+    if (ev.type !== 'SKILL_LEVEL_UP') continue
+    const e = ev as unknown as RiotTimelineEventSkillLevelUp
+    const dbId = riotPidToDbId.get(e.participantId)
+    if (!dbId) continue
+    const order = (skillOrderCounters.get(dbId) ?? 0) + 1
+    skillOrderCounters.set(dbId, order)
+    spellOrderRows.push({ participantId: dbId, matchId: matchDbId, spellSlot: e.skillSlot, order, timestampMs: e.timestamp })
+  }
+  if (spellOrderRows.length > 0) {
+    await prisma.participantSpellOrder.createMany({ data: spellOrderRows, skipDuplicates: true })
+  }
+
+  // ── 4. Starter item: first non-ward/trinket ITEM_PURCHASED per participant ──
+  const starterItemByPid = new Map<bigint, number>() // dbParticipantId → first item id
+
+  for (const ev of allEvents) {
+    if (ev.type !== 'ITEM_PURCHASED') continue
+    const e = ev as unknown as RiotTimelineEventItemPurchased
+    const dbId = riotPidToDbId.get(e.participantId)
+    if (!dbId) continue
+    if (starterItemByPid.has(dbId)) continue
+    if (WARD_ITEM_IDS.has(e.itemId)) continue
+    starterItemByPid.set(dbId, e.itemId)
+  }
+
+  for (const [dbParticipantId, itemId] of starterItemByPid) {
+    await prisma.participantItem.updateMany({
+      where: { participantId: dbParticipantId, itemId },
+      data: { starter: true },
+    })
+  }
+
+  if (logger) {
+    await logger.info('DB: timeline extras inserted', {
+      matchId: riotMatchId,
+      drakes: drakeInsertRows.length,
+      spellOrders: spellOrderRows.length,
+      starters: starterItemByPid.size,
+    })
+  }
 }
 
 async function runStep4ForPlayer(
@@ -1097,6 +1324,22 @@ async function runStep4ForPlayer(
       }
       try {
         await upsertMatchAndParticipants(region, matchRes.data, puuidKeyVersion, counters, logger)
+        // After participants are committed, fetch the timeline and extract jungle first-clear path.
+        // Silently skipped on failure to avoid blocking the main ingestion pipeline.
+        try {
+          const matchDbRow = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
+          if (matchDbRow) {
+            const timelineRes = await client.getMatchTimeline(matchId)
+            counters.requestCount++
+            if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
+            if (timelineRes.ok) {
+              await extractAndInsertJungleFirstClear(matchDbRow.id, matchId, timelineRes.data, logger)
+              await extractAndInsertTimelineExtras(matchDbRow.id, matchId, timelineRes.data, logger)
+            }
+          }
+        } catch {
+          // Non-fatal: timeline unavailable or parse error — match data already committed
+        }
       } catch (err) {
         await logger.error('Prisma error upserting match', err)
         foundPrismaError = true
@@ -1118,27 +1361,6 @@ async function runStep4ForPlayer(
       where: { id: player.id },
       data: { lastSeen },
     })
-
-    if (matchIds.length > 0) {
-      const accRes = await client.getAccountByPuuid(player.puuid)
-      counters.requestCount++
-      if (!accRes.ok && accRes.status === 429) counters.error429Count++
-      if (accRes.ok) {
-        const gn = accRes.data.gameName ?? null
-        const tl = accRes.data.tagLine ?? null
-        if (!sameSummoner(player.gameName, player.tagName, gn, tl)) {
-          await prisma.player.update({
-            where: { id: player.id },
-            data: { gameName: gn, tagName: tl },
-          })
-          await logger.info('DB: player updated (gameName/tagName)', {
-            puuid: player.puuid.slice(0, 8),
-            gameName: gn,
-            tagLine: tl,
-          })
-        }
-      }
-    }
   }
 
   return 'ok'

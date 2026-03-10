@@ -133,17 +133,106 @@ model Participant {
   runes                       Json?
   summonerSpells              Json?    @map("summoner_spells")
   challenges                  Json?
+  // Challenge values: one column per allowlisted key (replaces participant_challenges table)
+  challengeSoloKills                       Float? @map("ch_solo_kills")
+  challengeTakedowns                       Float? @map("ch_takedowns")
+  challengeBountyGold                     Float? @map("ch_bounty_gold")
+  challengeDoubleAces                     Float? @map("ch_double_aces")
+  challengeBuffsStolen                    Float? @map("ch_buffs_stolen")
+  challengeFlawlessAces                   Float? @map("ch_flawless_aces")
+  challengeHadOpenNexus                   Float? @map("ch_had_open_nexus")
+  challengeQuickCleanse                   Float? @map("ch_quick_cleanse")
+  challengeSnowballsHit                   Float? @map("ch_snowballs_hit")
+  challengeWardsGuarded                   Float? @map("ch_wards_guarded")
+  challengeEarliestBaron                  Float? @map("ch_earliest_baron")
+  challengeSkillshotsHit                  Float? @map("ch_skillshots_hit")
+  challengeUnseenRecalls                  Float? @map("ch_unseen_recalls")
+  challengeMaxKillDeficit                 Float? @map("ch_max_kill_deficit")
+  challengeQuickSoloKills                 Float? @map("ch_quick_solo_kills")
+  challengeSoloBaronKills                 Float? @map("ch_solo_baron_kills")
+  challengeVoidMonsterKill                Float? @map("ch_void_monster_kill")
+  challengeFullTeamTakedown               Float? @map("ch_full_team_takedown")
+  challengeInitialBuffCount              Float? @map("ch_initial_buff_count")
+  challengeInitialCrabCount               Float? @map("ch_initial_crab_count")
+  challengeOutnumberedKills               Float? @map("ch_outnumbered_kills")
+  challengePickKillWithAlly               Float? @map("ch_pick_kill_with_ally")
+  challengeQuickFirstTurret              Float? @map("ch_quick_first_turret")
+  challengeScuttleCrabKills               Float? @map("ch_scuttle_crab_kills")
+  challengeSkillshotsDodged              Float? @map("ch_skillshots_dodged")
+  challengeMultiKillOneSpell              Float? @map("ch_multi_kill_one_spell")
+  challengeSaveAllyFromDeath             Float? @map("ch_save_ally_from_death")
+  challengeTakedownsInAlcove             Float? @map("ch_takedowns_in_alcove")
+  challengeTurretPlatesTaken             Float? @map("ch_turret_plates_taken")
+  challengeHealFromMapSources            Float? @map("ch_heal_from_map_sources")
+  challenge12AssistStreakCount           Float? @map("ch_12_assist_streak_count")
+  challengeInfernalScalePickup           Float? @map("ch_infernal_scale_pickup")
+  challengeAcesBefore15Minutes           Float? @map("ch_aces_before_15_minutes")
+  challengeDeathsByEnemyChamps           Float? @map("ch_deaths_by_enemy_champs")
+  challengeKillsUnderOwnTurret           Float? @map("ch_kills_under_own_turret")
+  challengeRiftHeraldTakedowns           Float? @map("ch_rift_herald_takedowns")
+  challengeTeamRiftHeraldKills           Float? @map("ch_team_rift_herald_kills")
+  challengeKillsNearEnemyTurret          Float? @map("ch_kills_near_enemy_turret")
+  challengeTeamElderDragonKills          Float? @map("ch_team_elder_dragon_kills")
+  challengeElderDragonMultikills         Float? @map("ch_elder_dragon_multikills")
+  challengeFirstTurretKilledTime        Float? @map("ch_first_turret_killed_time")
+  challengeFistBumpParticipation         Float? @map("ch_fist_bump_participation")
+  challengeMejaisFullStackInTime         Float? @map("ch_mejais_full_stack_in_time")
+  challengeTakedownOnFirstTurret         Float? @map("ch_takedown_on_first_turret")
+  challengeTakedownsFirstXMinutes        Float? @map("ch_takedowns_first_x_minutes")
+  challengeWardTakedownsBefore20M        Float? @map("ch_ward_takedowns_before_20_m")
+  challengeJungleCsBefore10Minutes       Float? @map("ch_jungle_cs_before_10_minutes")
+  challengeKillAfterHiddenWithAlly       Float? @map("ch_kill_after_hidden_with_ally")
+  challengeLandSkillShotsEarlyGame       Float? @map("ch_land_skill_shots_early_game")
+  challengePerfectDragonSoulsTaken        Float? @map("ch_perfect_dragon_souls_taken")
+  challengeTookLargeDamageSurvived       Float? @map("ch_took_large_damage_survived")
+  challengeTwoWardsOneSweeperCount       Float? @map("ch_two_wards_one_sweeper_count")
+  challengeMaxLevelLeadLaneOpponent      Float? @map("ch_max_level_lead_lane_opponent")
+  challengeTakedownsInEnemyFountain     Float? @map("ch_takedowns_in_enemy_fountain")
+  challengeImmobilizeAndKillWithAlly     Float? @map("ch_immobilize_and_kill_with_ally")
+  challengeKnockEnemyIntoTeamAndKill     Float? @map("ch_knock_enemy_into_team_and_kill")
+  challengeLaneMinionsFirst10Minutes     Float? @map("ch_lane_minions_first_10_minutes")
+  challengePlayedChampSelectPosition     Float? @map("ch_played_champ_select_position")
+  challengeCompleteSupportQuestInTime    Float? @map("ch_complete_support_quest_in_time")
+  challengeDodgeSkillShotsSmallWindow   Float? @map("ch_dodge_skill_shots_small_window")
+  challengeMultiTurretRiftHeraldCount    Float? @map("ch_multi_turret_rift_herald_count")
+  challengeSurvivedSingleDigitHpCount   Float? @map("ch_survived_single_digit_hp_count")
+  challengeTurretsTakenWithRiftHerald   Float? @map("ch_turrets_taken_with_rift_herald")
+  challengeLaningPhaseGoldExpAdvantage   Float? @map("ch_laning_phase_gold_exp_advantage")
+  challengeMoreEnemyJungleThanOpponent   Float? @map("ch_more_enemy_jungle_than_opponent")
+  challengeEnemyChampionImmobilizations Float? @map("ch_enemy_champion_immobilizations")
+  challengeKillsWithHelpFromEpicMonster  Float? @map("ch_kills_with_help_from_epic_monster")
+  challengeMaxCsAdvantageOnLaneOpponent Float? @map("ch_max_cs_advantage_on_lane_opponent")
+  challengeTwentyMinionsIn3SecondsCount Float? @map("ch_twenty_minions_in_3_seconds_count")
+  challengeEpicMonsterStolenWithoutSmite Float? @map("ch_epic_monster_stolen_without_smite")
+  challengeBlastConeOppositeOpponentCount Float? @map("ch_blast_cone_opposite_opponent_count")
+  challengeMultikillsAfterAggressiveFlash Float? @map("ch_multikills_after_aggressive_flash")
+  challengeSurvivedThreeImmobilizesInFight Float? @map("ch_survived_three_immobilizes_in_fight")
+  challengeEarlyLaningPhaseGoldExpAdvantage Float? @map("ch_early_laning_phase_gold_exp_advantage")
+  challengeElderDragonKillsWithOpposingSoul Float? @map("ch_elder_dragon_kills_with_opposing_soul")
+  challengeEpicMonsterKillsNearEnemyJungler Float? @map("ch_epic_monster_kills_near_enemy_jungler")
+  challengeTakedownsBeforeJungleMinionSpawn Float? @map("ch_takedowns_before_jungle_minion_spawn")
+  challengeVisionScoreAdvantageLaneOpponent Float? @map("ch_vision_score_advantage_lane_opponent")
+  challengeOuterTurretExecutesBefore10Minutes Float? @map("ch_outer_turret_executes_before_10_minutes")
+  challengeBaronBuffGoldAdvantageOverThreshold Float? @map("ch_baron_buff_gold_advantage_over_threshold")
+  challengeKillsOnOtherLanesEarlyJungleAsLaner Float? @map("ch_kills_on_other_lanes_early_jungle_as_laner")
+  challengeTakedownsAfterGainingLevelAdvantage Float? @map("ch_takedowns_after_gaining_level_advantage")
+  challengeKilledChampTookFullTeamDamageSurvived Float? @map("ch_killed_champ_took_full_team_damage_survived")
+  challengeEpicMonsterKillsWithin30SecondsOfSpawn Float? @map("ch_epic_monster_kills_within_30_seconds_of_spawn")
+  challengeJunglerTakedownsNearDamagedEpicMonster Float? @map("ch_jungler_takedowns_near_damaged_epic_monster")
+  challengeGetTakedownsInAllLanesEarlyJungleAsLaner Float? @map("ch_get_takedowns_in_all_lanes_early_jungle_as_laner")
+  challengeControlWardTimeCoverageInRiverOrEnemyHalf Float? @map("ch_control_ward_time_coverage_in_river_or_enemy_half")
   createdAt                   DateTime @default(now()) @map("created_at")
 
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
-  participantItems          ParticipantItem[]
-  participantRunes          ParticipantRune[]
-  participantSummonerSpells ParticipantSummonerSpell[]
-  participantSpells         ParticipantSpell[]
-  participantPerks          ParticipantPerk[]
-  participantChallenges     ParticipantChallenge[]
+  participantItems             ParticipantItem[]
+  participantRunes             ParticipantRune[]
+  participantSummonerSpells    ParticipantSummonerSpell[]
+  participantSpells            ParticipantSpell[]
+  participantPerks             ParticipantPerk[]
+  participantJungleFirstClears ParticipantJungleFirstClear[]
+  participantSpellOrders       ParticipantSpellOrder[]
 
   @@index([matchId])
   @@index([playerId])
@@ -188,6 +277,7 @@ model MatchTeam {
 
   match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
   bans  Ban[]
+  drakes MatchTeamDrake[]
 
   @@unique([matchId, teamId])
   @@index([matchId])
@@ -220,6 +310,7 @@ model ParticipantItem {
   matchId       BigInt   @map("match_id") // denormalized
   itemId        Int      @map("item_id")
   itemSlot      Int      @map("item_slot") // 0–5 = build slots, 6 = trinket
+  starter       Boolean  @default(false)  // first non-ward item purchased (from timeline)
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
@@ -294,21 +385,59 @@ model ParticipantPerk {
   @@map("participant_perks")
 }
 
-// Allowlisted challenge key/value pairs per participant
-model ParticipantChallenge {
+// First clear path order for junglers: one row per camp killed during the first clear.
+// Source: timeline participantFrames[].jungleMinionsKilled delta per 1-min frame.
+// Only populated for participants with role='JUNGLE'. Capped at JUNGLE_FIRST_CLEAR_MAX_CAMPS camps.
+model ParticipantJungleFirstClear {
   id            BigInt   @id @default(autoincrement())
   participantId BigInt   @map("participant_id")
-  matchId       BigInt   @map("match_id")
-  key           String
-  value         Float    // all allowlisted challenge values are numeric (int or float)
+  matchId       BigInt   @map("match_id") // denormalized for simpler queries
+  orderIndex    Int      @map("order_index") // 0 = first camp killed, 1 = second, …
+  timestampMs   Int      @map("timestamp_ms") // end-of-frame timestamp (ms from game start)
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 
-  @@unique([participantId, key])
+  @@unique([participantId, orderIndex])
+  @@index([matchId, participantId])
+  @@index([matchId])
+  @@map("participant_jungle_first_clear")
+}
+
+// Drake kills per team, in global order across the match (timeline-derived).
+// soul is set on the last row for the team when DRAGON_SOUL_GIVEN fires.
+model MatchTeamDrake {
+  id          BigInt   @id @default(autoincrement())
+  matchId     BigInt   @map("match_id")
+  matchTeamId BigInt   @map("match_team_id")
+  drakeType   String   @map("drake_type") // e.g. "FIRE_DRAGON", "WATER_DRAGON", "ELDER_DRAGON"
+  soul        String?  // set when this team received the soul (nullable)
+  order       Int      // global kill order across both teams (1 = first drake of the match)
+
+  matchTeam MatchTeam @relation(fields: [matchTeamId], references: [id], onDelete: Cascade)
+
+  @@unique([matchTeamId, order])
+  @@index([matchId])
+  @@index([matchTeamId])
+  @@index([drakeType])
+  @@map("match_teams_drake")
+}
+
+// Skill level-up order per participant (timeline-derived).
+// One row per SKILL_LEVEL_UP event; `order` is 1-based (1 = first skill levelled).
+model ParticipantSpellOrder {
+  id            BigInt   @id @default(autoincrement())
+  participantId BigInt   @map("participant_id")
+  matchId       BigInt   @map("match_id") // denormalized
+  spellSlot     Int      @map("spell_slot") // 1=Q, 2=W, 3=E, 4=R
+  order         Int      // 1-based level-up sequence index for this participant
+  timestampMs   Int      @map("timestamp_ms")
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, order])
   @@index([participantId])
   @@index([matchId])
-  @@index([key])
-  @@map("participant_challenges")
+  @@map("participant_spell_orders")
 }
 
 // ─── Challenge key discovery registry ────────────────────────────────────────
@@ -319,6 +448,7 @@ model ChallengeKeyRegistry {
   key          String   @id
   sampleValue  Json     @map("sample_value") // last seen raw value (for Discord notification)
   isNew        Boolean  @default(true) @map("is_new")
+  pollValue    Boolean  @default(true) @map("poll_value") // whether to include this key in allowlist candidates
   notifiedAt   DateTime? @map("notified_at")
   firstSeenAt  DateTime  @default(now()) @map("first_seen_at")
 

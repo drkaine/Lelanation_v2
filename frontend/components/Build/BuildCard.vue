@@ -21,8 +21,6 @@
         <button
           v-if="readonly && buildSubBuilds.length > 0"
           class="flip-button"
-          type="button"
-          :aria-label="localFlipped ? 'Voir le build' : 'Voir les variantes'"
           :title="localFlipped ? 'Voir le build' : 'Voir les variantes'"
           @click.stop="localFlipped = !localFlipped"
         >
@@ -104,9 +102,8 @@
             <img
               v-if="selectedChampion"
               :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
-              alt=""
+              :alt="selectedChampion.name"
               class="champion-portrait"
-              role="presentation"
               @mouseenter="onChampionMouseEnter"
               @mouseleave="onChampionMouseLeave"
             />
@@ -521,12 +518,7 @@
       >
         <div class="back-header">
           <span class="back-title">Variantes</span>
-          <button
-            type="button"
-            class="back-close-btn"
-            aria-label="Fermer les variantes"
-            @click.stop="localFlipped = false"
-          >
+          <button class="back-close-btn" @click.stop="localFlipped = false">
             <svg
               width="14"
               height="14"
@@ -591,102 +583,17 @@
             </button>
           </li>
         </ul>
-        <div v-if="!readonly" class="back-actions-row">
-          <button
-            v-if="copySourceOptions.length > 0"
-            class="back-copy-from-btn"
-            type="button"
-            title="Copier des champs depuis le build principal ou une variante"
-            @click.stop="openCopyFromModal"
-          >
-            Copier depuis…
-          </button>
-          <button class="back-add-btn" type="button" @click.stop="createVariantFromBack">
-            + Nouvelle variante
-          </button>
-        </div>
+        <button
+          v-if="!readonly"
+          class="back-add-btn"
+          type="button"
+          @click.stop="createVariantFromBack"
+        >
+          + Nouvelle variante
+        </button>
       </div>
     </div>
     <!-- end .flip-container -->
-
-    <!-- Modale Copier depuis (builder uniquement) -->
-    <Teleport to="body">
-      <div
-        v-if="showCopyFromModal"
-        class="copy-from-overlay"
-        @click.self="showCopyFromModal = false"
-      >
-        <div class="copy-from-modal">
-          <h3 class="copy-from-title">Copier des champs</h3>
-          <p class="copy-from-hint">
-            Choisissez la source, la destination puis les champs à copier.
-          </p>
-          <div class="copy-from-field">
-            <label class="copy-from-label">Source (d’où copier)</label>
-            <select v-model="copySource" class="copy-from-select">
-              <option
-                v-for="opt in copySourceOptions"
-                :key="'src-' + String(opt.value)"
-                :value="opt.value"
-              >
-                {{ opt.label }}
-              </option>
-            </select>
-          </div>
-          <div class="copy-from-field">
-            <label class="copy-from-label">Destination (vers où copier)</label>
-            <select v-model="copyDestination" class="copy-from-select">
-              <option
-                v-for="opt in copyDestinationOptions"
-                :key="'dst-' + String(opt.value)"
-                :value="opt.value"
-              >
-                {{ opt.label }}
-              </option>
-            </select>
-          </div>
-          <div class="copy-from-checkboxes">
-            <label class="copy-from-cb">
-              <input v-model="copyFields.tout" type="checkbox" />
-              <span>Tout (build complet)</span>
-            </label>
-            <label class="copy-from-cb">
-              <input v-model="copyFields.items" type="checkbox" />
-              <span>Items</span>
-            </label>
-            <label class="copy-from-cb">
-              <input v-model="copyFields.skills" type="checkbox" />
-              <span>Ordre de compétences</span>
-            </label>
-            <label class="copy-from-cb">
-              <input v-model="copyFields.runes" type="checkbox" />
-              <span>Runes, shards et sorts d'invocation</span>
-            </label>
-          </div>
-          <p
-            v-if="!copyFields.tout && !copyFields.items && !copyFields.skills && !copyFields.runes"
-            class="copy-from-warn"
-          >
-            Cochez au moins une option.
-          </p>
-          <div class="copy-from-actions">
-            <button type="button" class="copy-from-cancel" @click="showCopyFromModal = false">
-              Annuler
-            </button>
-            <button
-              type="button"
-              class="copy-from-submit"
-              :disabled="
-                !copyFields.tout && !copyFields.items && !copyFields.skills && !copyFields.runes
-              "
-              @click="applyCopyFrom"
-            >
-              Copier
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
     <!-- Items Manager (under the card): drag & drop, remove & reset items (seulement si pas readonly) -->
     <div v-if="!readonly" class="items-manager">
@@ -900,123 +807,6 @@ function selectVariant(idx: number | null) {
 
 function createVariantFromBack() {
   buildStore.createSubBuild()
-}
-
-// ── Modale "Copier depuis" (builder) ───────────────────────────────────────
-const showCopyFromModal = ref(false)
-const copySource = ref<'main' | number>('main')
-const copyDestination = ref<'main' | number>('main')
-const copyFields = ref({
-  tout: false,
-  items: false,
-  skills: false,
-  runes: false,
-})
-
-/** Toutes les options de destination : build principal + toutes les variantes. */
-const copyDestinationOptions = computed<{ value: 'main' | number; label: string }[]>(() => {
-  const b = buildStore.currentBuild
-  if (!b) return []
-  const subs = (b.subBuilds as SubBuild[] | undefined) ?? []
-  const out: { value: 'main' | number; label: string }[] = [
-    { value: 'main', label: b.name?.trim() || 'Build principal' },
-  ]
-  subs.forEach((sub, i) => {
-    out.push({ value: i, label: sub.title?.trim() || `Variante ${i + 1}` })
-  })
-  return out
-})
-
-/** Options de source : build principal + variantes, sauf la destination (éviter copier vers soi-même). */
-const copySourceOptions = computed<{ value: 'main' | number; label: string }[]>(() => {
-  const dest = copyDestination.value
-  const b = buildStore.currentBuild
-  if (!b) return []
-  const subs = (b.subBuilds as SubBuild[] | undefined) ?? []
-  const out: { value: 'main' | number; label: string }[] = []
-  if (dest !== 'main') {
-    out.push({ value: 'main', label: b.name?.trim() || 'Build principal' })
-  }
-  subs.forEach((sub, i) => {
-    if (dest !== i) {
-      out.push({ value: i, label: sub.title?.trim() || `Variante ${i + 1}` })
-    }
-  })
-  return out
-})
-
-function openCopyFromModal() {
-  copyDestination.value =
-    buildStore.displayedVariant === 'main' ? 'main' : (buildStore.displayedVariant as number)
-  const opts = copySourceOptions.value
-  if (opts.length > 0) {
-    const currentSource = copySource.value
-    if (!opts.some(o => o.value === currentSource)) {
-      copySource.value = opts[0].value
-    }
-  }
-  showCopyFromModal.value = true
-}
-
-watch(copyDestination, dest => {
-  if (copySource.value === dest) {
-    const opts = copySourceOptions.value
-    if (opts.length > 0) copySource.value = opts[0].value
-  }
-})
-
-// « Tout » et les 3 options sont exclusifs : cocher Tout décoche les 3 ; avoir les 3 cochés équivaut à Tout
-watch(
-  () => copyFields.value.tout,
-  isTout => {
-    if (isTout) {
-      copyFields.value.items = false
-      copyFields.value.skills = false
-      copyFields.value.runes = false
-    }
-  }
-)
-watch(
-  () => copyFields.value.items && copyFields.value.skills && copyFields.value.runes,
-  allThree => {
-    if (allThree) {
-      copyFields.value.tout = true
-      copyFields.value.items = false
-      copyFields.value.skills = false
-      copyFields.value.runes = false
-    }
-  }
-)
-
-function applyCopyFrom() {
-  const f = copyFields.value
-  if (!f.tout && !f.items && !f.skills && !f.runes) return
-  const payload: {
-    items?: boolean
-    runes?: boolean
-    shards?: boolean
-    summonerSpells?: boolean
-    skillOrder?: boolean
-    description?: boolean
-  } = {}
-  if (f.tout) {
-    payload.items = true
-    payload.runes = true
-    payload.shards = true
-    payload.summonerSpells = true
-    payload.skillOrder = true
-    payload.description = true
-  } else {
-    if (f.items) payload.items = true
-    if (f.skills) payload.skillOrder = true
-    if (f.runes) {
-      payload.runes = true
-      payload.shards = true
-      payload.summonerSpells = true
-    }
-  }
-  buildStore.copyVariantFieldsTo(copySource.value, copyDestination.value, payload)
-  showCopyFromModal.value = false
 }
 
 function onMainTitleInput(title: string) {
@@ -1752,10 +1542,8 @@ watch(locale, () => {
 }
 
 .back-close-btn {
-  min-width: 48px;
-  min-height: 48px;
-  width: 48px;
-  height: 48px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1852,181 +1640,13 @@ watch(locale, () => {
   color: #fecaca;
 }
 
-.back-actions-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(200, 155, 60, 0.25);
-}
-
-.back-copy-from-btn,
-.back-add-btn {
-  padding: 8px 14px;
-  border-radius: 6px;
-  border: 1px solid rgba(200, 155, 60, 0.5);
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--color-gold-300);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.back-copy-from-btn:hover,
-.back-add-btn:hover {
-  background: rgba(200, 155, 60, 0.2);
-  border-color: var(--color-gold-300);
-}
-
-/* ── Modale Copier depuis ── */
-.copy-from-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-.copy-from-modal {
-  background: rgb(26, 26, 46);
-  border: 1px solid var(--color-gold-300, #c89b3c);
-  border-radius: 12px;
-  padding: 24px 28px;
-  max-width: 400px;
-  width: 90%;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.copy-from-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-gold-300);
-  margin: 0;
-}
-
-.copy-from-hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.75);
-  margin: 0;
-}
-
-.copy-from-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.copy-from-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.copy-from-select {
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(200, 155, 60, 0.5);
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.copy-from-select:focus {
-  outline: none;
-  border-color: var(--color-gold-300);
-}
-
-.copy-from-checkboxes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.copy-from-cb {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
-  cursor: pointer;
-}
-
-.copy-from-cb input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--color-gold-300);
-}
-
-.copy-from-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
-.copy-from-cancel {
-  padding: 9px 20px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.copy-from-cancel:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.copy-from-submit {
-  padding: 9px 20px;
-  border-radius: 8px;
-  border: 1px solid var(--color-gold-300);
-  background: rgba(200, 155, 60, 0.25);
-  color: var(--color-gold-300);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.copy-from-submit:hover {
-  background: rgba(200, 155, 60, 0.4);
-}
-
-.copy-from-submit:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.copy-from-submit:disabled:hover {
-  background: rgba(200, 155, 60, 0.25);
-}
-
-.copy-from-warn {
-  margin: 0;
-  font-size: 12px;
-  color: rgba(248, 113, 113, 0.95);
-}
-
 /* ── Bouton flip (readonly) ── */
 .flip-button {
   position: absolute;
-  top: 4px;
-  left: 4px;
-  min-width: 48px;
-  min-height: 48px;
-  width: 48px;
-  height: 48px;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;

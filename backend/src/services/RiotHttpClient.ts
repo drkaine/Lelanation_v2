@@ -212,6 +212,13 @@ export class RiotHttpClient {
     return this.request<RiotMatchDto>('GET', 'match-v5-detail', url)
   }
 
+  async getMatchTimeline(matchId: string): Promise<
+    { ok: true; data: RiotMatchTimelineDto } | { ok: false; status: number; message?: string; body?: unknown }
+  > {
+    const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`
+    return this.request<RiotMatchTimelineDto>('GET', 'match-v5-timeline', url)
+  }
+
   async getAccountByRiotId(
     gameName: string,
     tagLine: string,
@@ -285,6 +292,64 @@ export interface RiotMatchDto {
       objectives?: Record<string, { first?: boolean; kills?: number }>
     }>
   }
+}
+
+export interface RiotMatchTimelineDto {
+  info?: {
+    frameInterval?: number
+    frames?: RiotTimelineFrameDto[]
+  }
+}
+
+export interface RiotTimelineFrameDto {
+  timestamp: number
+  participantFrames: Record<string, RiotParticipantFrameDto>
+  events?: RiotTimelineEventDto[]
+}
+
+export interface RiotParticipantFrameDto {
+  participantId: number
+  jungleMinionsKilled?: number
+  [key: string]: unknown
+}
+
+/** Union of all timeline event shapes we care about. */
+export type RiotTimelineEventDto =
+  | RiotTimelineEventEliteMonsterKill
+  | RiotTimelineEventDragonSoulGiven
+  | RiotTimelineEventSkillLevelUp
+  | RiotTimelineEventItemPurchased
+  | { type: string; [key: string]: unknown }
+
+export interface RiotTimelineEventEliteMonsterKill {
+  type: 'ELITE_MONSTER_KILL'
+  timestamp: number
+  killerId: number
+  killerTeamId?: number // team that got the kill (100/200)
+  monsterType: string   // "DRAGON", "BARON_NASHOR", etc.
+  monsterSubType?: string // "FIRE_DRAGON", "WATER_DRAGON", "ELDER_DRAGON", etc.
+}
+
+export interface RiotTimelineEventDragonSoulGiven {
+  type: 'DRAGON_SOUL_GIVEN'
+  timestamp: number
+  name: string    // soul name, e.g. "Infernal"
+  teamId: number  // 100 or 200
+}
+
+export interface RiotTimelineEventSkillLevelUp {
+  type: 'SKILL_LEVEL_UP'
+  timestamp: number
+  participantId: number
+  skillSlot: number  // 1=Q, 2=W, 3=E, 4=R
+  levelUpType: string
+}
+
+export interface RiotTimelineEventItemPurchased {
+  type: 'ITEM_PURCHASED'
+  timestamp: number
+  participantId: number
+  itemId: number
 }
 
 export interface RiotParticipantDto {
