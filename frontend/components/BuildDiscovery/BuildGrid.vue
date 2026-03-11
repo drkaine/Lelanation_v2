@@ -52,6 +52,7 @@
             <BuildCard
               :build="build"
               :readonly="true"
+              :sheet-tooltips="tooltipsEnabled"
               @variant-change="
                 idx => {
                   displayedSubMap[build.id] = idx
@@ -279,10 +280,14 @@ import { useVersionStore } from '~/stores/VersionStore'
 import type { Build } from '~/types/build'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { useClientHydrated } from '~/composables/useClientHydrated'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
 const { t, locale } = useI18n()
 const buildStore = useBuildStore()
 const { hydrated } = useClientHydrated()
+
+// Global tooltip preference (shared state via composable)
+const { tooltipsEnabled } = useTooltipsPreference()
 const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 const expandedDescriptions = ref<Record<string, boolean>>({})

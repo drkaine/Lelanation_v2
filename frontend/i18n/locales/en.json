@@ -10,7 +10,8 @@
     "admin": "Admin",
     "appAdmin": "Lelanation App",
     "download": "Download",
-    "language": "Language"
+    "language": "Language",
+    "disableTooltips": "Disable tooltips"
   },
   "home": {
     "subtitle": "The go-to platform to create, optimize and share your League of Legends builds",

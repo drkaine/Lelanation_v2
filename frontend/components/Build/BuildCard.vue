@@ -82,7 +82,7 @@
                 'role-icon',
                 selectedRoles.includes(role) ? 'role-selected' : 'role-unselected',
               ]"
-              :title="getRoleName(role)"
+              :title="tooltipsEnabled ? getRoleName(role) : undefined"
               :disabled="readonly"
               @click="!readonly && toggleRole(role)"
             >
@@ -101,6 +101,7 @@
           <div class="champion-portrait-container">
             <img
               v-if="selectedChampion"
+              ref="championPortraitRef"
               :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
               :alt="selectedChampion.name"
               class="champion-portrait"
@@ -123,7 +124,9 @@
                 :src="getSpellImageUrl(versionForImages, spell.image.full)"
                 :alt="spell.name"
                 class="summoner-spell-icon"
-                :title="sheetTooltip(spell?.name, 'Summoner Spell')"
+                :title="sheetTooltip(getSummonerSpellDisplayName(spell), 'Summoner Spell')"
+                @mouseenter="onSheetElementEnter($event, 'spell', spell, 'Summoner Spell')"
+                @mouseleave="onSheetElementLeave"
               />
             </template>
             <div
@@ -148,6 +151,8 @@
                 alt="Keystone"
                 class="keystone-icon"
                 :title="sheetTooltip(keystoneRuneId ? getRuneNameById(keystoneRuneId) : '', 'Rune')"
+                @mouseenter="onSheetElementEnter($event, 'rune', keystoneRuneId ?? 0, 'Rune')"
+                @mouseleave="onSheetElementLeave"
               />
               <div v-else class="keystone-placeholder"></div>
             </div>
@@ -163,6 +168,8 @@
                   :alt="`Rune ${index + 1}`"
                   class="primary-rune-icon"
                   :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
+                  @mouseenter="onSheetElementEnter($event, 'rune', runeId, 'Rune')"
+                  @mouseleave="onSheetElementLeave"
                 />
                 <div
                   v-for="n in 3 - primaryRunesRow.length"
@@ -180,6 +187,10 @@
                   :alt="secondaryPathName"
                   class="secondary-path-icon"
                   :title="sheetTooltip(secondaryPathName, 'Secondary Path')"
+                  @mouseenter="
+                    onSheetElementEnter($event, 'path', secondaryPathId ?? 0, 'Secondary Path')
+                  "
+                  @mouseleave="onSheetElementLeave"
                 />
                 <div v-else class="secondary-path-placeholder"></div>
                 <!-- Runes secondaires -->
@@ -190,6 +201,8 @@
                   :alt="`Secondary Rune ${index + 1}`"
                   class="secondary-rune-icon"
                   :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
+                  @mouseenter="onSheetElementEnter($event, 'rune', runeId, 'Rune')"
+                  @mouseleave="onSheetElementLeave"
                 />
                 <div
                   v-for="n in 2 - filteredSecondaryRuneIds.length"
@@ -209,6 +222,8 @@
               :alt="`Shard ${index + 1}`"
               class="shard-icon-strip"
               :title="sheetTooltip(shardId ? getShardNameById(shardId) : '', 'Shard')"
+              @mouseenter="onSheetElementEnter($event, 'shard', shardId, 'Shard')"
+              @mouseleave="onSheetElementLeave"
             />
             <div
               v-for="n in 3 - filteredShardIds.length"
@@ -225,12 +240,18 @@
         <div class="items-section">
           <!-- Starting Items (2) + Boots slot (1) - Toujours visible -->
           <div class="starting-items-row">
-            <div v-for="item in startingItems" :key="`starter-${item.id}`" class="item-wrapper">
+            <div
+              v-for="item in startingItems"
+              :key="`starter-${item.id}`"
+              class="item-wrapper"
+              @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+              @mouseleave="onSheetElementLeave"
+            >
               <img
                 :src="getItemImageUrl(versionForImages, item.image.full)"
                 :alt="item.name"
                 class="item-icon"
-                :title="sheetTooltip(item?.name, 'Item')"
+                :title="sheetTooltip(getItemDisplayName(item), 'Item')"
               />
             </div>
             <div
@@ -247,7 +268,13 @@
                 :src="getItemImageUrl(versionForImages, bootsItems[0].image.full)"
                 :alt="bootsItems[0].name"
                 class="boots-icon-single"
-                :title="sheetTooltip(bootsItems[0]?.name, 'Boots')"
+                :title="
+                  sheetTooltip(bootsItems[0] ? getItemDisplayName(bootsItems[0]) : '', 'Boots')
+                "
+                @mouseenter="
+                  onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
+                "
+                @mouseleave="onSheetElementLeave"
               />
 
               <!-- Deux paires de bottes : image recomposée en deux moitiés -->
@@ -255,12 +282,24 @@
                 <div
                   class="boots-item-split boots-item-left"
                   :style="getBootBackgroundStyle(bootsItems[0])"
-                  :title="sheetTooltip(bootsItems[0]?.name, 'Boots')"
+                  :title="
+                    sheetTooltip(bootsItems[0] ? getItemDisplayName(bootsItems[0]) : '', 'Boots')
+                  "
+                  @mouseenter="
+                    onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
+                  "
+                  @mouseleave="onSheetElementLeave"
                 ></div>
                 <div
                   class="boots-item-split boots-item-right"
                   :style="getBootBackgroundStyle(bootsItems[1])"
-                  :title="sheetTooltip(bootsItems[1]?.name, 'Boots')"
+                  :title="
+                    sheetTooltip(bootsItems[1] ? getItemDisplayName(bootsItems[1]) : '', 'Boots')
+                  "
+                  @mouseenter="
+                    onSheetElementEnter($event, 'item', bootsItems[1] ?? { id: '' }, 'Boots')
+                  "
+                  @mouseleave="onSheetElementLeave"
                 ></div>
               </template>
 
@@ -273,12 +312,16 @@
             <!-- Path 1 (3 items avec flèches) -->
             <div class="items-path">
               <template v-for="(item, index) in coreItemsPath1" :key="`path1-${item.id}`">
-                <div class="item-wrapper">
+                <div
+                  class="item-wrapper"
+                  @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+                  @mouseleave="onSheetElementLeave"
+                >
                   <img
                     :src="getItemImageUrl(versionForImages, item.image.full)"
                     :alt="item.name"
                     class="item-icon"
-                    :title="sheetTooltip(item?.name, 'Item')"
+                    :title="sheetTooltip(getItemDisplayName(item), 'Item')"
                   />
                 </div>
                 <span v-if="index < coreItemsPath1.length - 1" class="arrow-right">→</span>
@@ -298,12 +341,16 @@
             <!-- Path 2 (3 items avec flèches) -->
             <div class="items-path">
               <template v-for="(item, index) in coreItemsPath2" :key="`path2-${item.id}`">
-                <div class="item-wrapper">
+                <div
+                  class="item-wrapper"
+                  @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+                  @mouseleave="onSheetElementLeave"
+                >
                   <img
                     :src="getItemImageUrl(versionForImages, item.image.full)"
                     :alt="item.name"
                     class="item-icon"
-                    :title="sheetTooltip(item?.name, 'Item')"
+                    :title="sheetTooltip(getItemDisplayName(item), 'Item')"
                   />
                 </div>
                 <span v-if="index < coreItemsPath2.length - 1" class="arrow-right">→</span>
@@ -341,7 +388,7 @@
                   "
                   :alt="ability.name"
                   class="skill-icon"
-                  :title="ability.name"
+                  :title="tooltipsEnabled ? ability.name : undefined"
                 />
                 <span class="skill-key">
                   {{ t(`skills.key.${ability.key}`) }}
@@ -383,7 +430,7 @@
                   "
                   :alt="ability.name"
                   class="skill-icon"
-                  :title="ability.name"
+                  :title="tooltipsEnabled ? ability.name : undefined"
                 />
                 <span class="skill-key">
                   {{ t(`skills.key.${ability.key}`) }}
@@ -407,108 +454,232 @@
         <!-- Lelanation (bottom left) -->
         <div class="build-footer">lelanation.fr</div>
 
-        <!-- Tooltip -->
-        <div
-          v-if="showTooltip && selectedChampion"
-          ref="tooltipRef"
-          class="tooltip-box absolute z-50 rounded-lg border border-accent bg-background shadow-lg"
-          :class="tooltipPositionClass"
-        >
-          <!-- Tooltip content (same as before) -->
-          <div class="tooltip-top">
-            <div class="tooltip-present">
-              <img
-                :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
-                :alt="selectedChampion.name"
-                class="tooltip-champion-image"
-              />
-              <div class="tooltip-text">
-                <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
-                <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
-              </div>
-            </div>
-            <div
-              v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
-              class="tooltip-tags-container"
-            >
-              <div class="tooltip-tags">
-                {{ translatedTags }}
-              </div>
-            </div>
-          </div>
-
-          <hr class="tooltip-separator" />
-
-          <div class="tooltip-body">
-            <div class="tooltip-spells">
-              <div
-                v-if="
-                  selectedChampion.passive &&
-                  selectedChampion.passive.image &&
-                  selectedChampion.passive.image.full &&
-                  selectedChampion.passive.image.full !== selectedChampion.image.full
-                "
-                class="tooltip-spell"
-              >
-                <div class="tooltip-spell-img-container">
-                  <img
-                    :src="
-                      getChampionPassiveImageUrl(
-                        versionForImages,
-                        selectedChampion.passive.image.full
-                      )
-                    "
-                    :alt="selectedChampion.passive.name"
-                    class="tooltip-spell-img"
-                  />
-                </div>
-                <div class="tooltip-spell-content">
-                  <div class="tooltip-spell-name">Passive: {{ selectedChampion.passive.name }}</div>
-                  <div
-                    v-if="formattedPassive"
-                    class="tooltip-spell-description"
-                    v-html="formattedPassive"
-                  />
+        <!-- Tooltip (rendered via Teleport to body to avoid z-index issues with grid stacking context) -->
+        <Teleport to="body">
+          <div
+            v-if="showTooltip && selectedChampion"
+            ref="tooltipRef"
+            class="tooltip-box tooltip-box-fixed z-[9999] rounded-lg border border-accent bg-background shadow-lg"
+            :style="tooltipFixedStyle"
+          >
+            <!-- Tooltip content (same as before) -->
+            <div class="tooltip-top">
+              <div class="tooltip-present">
+                <img
+                  :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
+                  :alt="selectedChampion.name"
+                  class="tooltip-champion-image"
+                />
+                <div class="tooltip-text">
+                  <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
+                  <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
                 </div>
               </div>
-
               <div
-                v-for="(spell, index) in formattedSpells"
-                :key="spell.id || index"
-                class="tooltip-spell"
+                v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
+                class="tooltip-tags-container"
               >
-                <div v-if="spell && spell.image" class="tooltip-spell-wrapper">
-                  <div
-                    class="tooltip-spell-img-container"
-                    :data-spell-key="['Q', 'W', 'E', 'R'][index]"
-                  >
+                <div class="tooltip-tags">
+                  {{ translatedTags }}
+                </div>
+              </div>
+            </div>
+
+            <hr class="tooltip-separator" />
+
+            <div class="tooltip-body">
+              <div class="tooltip-spells">
+                <div
+                  v-if="
+                    selectedChampion.passive &&
+                    selectedChampion.passive.image &&
+                    selectedChampion.passive.image.full &&
+                    selectedChampion.passive.image.full !== selectedChampion.image.full
+                  "
+                  class="tooltip-spell"
+                >
+                  <div class="tooltip-spell-img-container">
                     <img
                       :src="
-                        getChampionSpellImageUrl(
+                        getChampionPassiveImageUrl(
                           versionForImages,
-                          selectedChampion.id,
-                          spell.image.full
+                          selectedChampion.passive.image.full
                         )
                       "
-                      :alt="spell.name"
+                      :alt="selectedChampion.passive.name"
                       class="tooltip-spell-img"
                     />
                   </div>
                   <div class="tooltip-spell-content">
                     <div class="tooltip-spell-name">
-                      {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
+                      Passive: {{ selectedChampion.passive.name }}
                     </div>
                     <div
-                      v-if="spell.description"
+                      v-if="formattedPassive"
                       class="tooltip-spell-description"
-                      v-html="spell.description"
+                      v-html="formattedPassive"
                     />
+                  </div>
+                </div>
+
+                <div
+                  v-for="(spell, index) in formattedSpells"
+                  :key="spell.id || index"
+                  class="tooltip-spell"
+                >
+                  <div v-if="spell && spell.image" class="tooltip-spell-wrapper">
+                    <div
+                      class="tooltip-spell-img-container"
+                      :data-spell-key="['Q', 'W', 'E', 'R'][index]"
+                    >
+                      <img
+                        :src="
+                          getChampionSpellImageUrl(
+                            versionForImages,
+                            selectedChampion.id,
+                            spell.image.full
+                          )
+                        "
+                        :alt="spell.name"
+                        class="tooltip-spell-img"
+                      />
+                    </div>
+                    <div class="tooltip-spell-content">
+                      <div class="tooltip-spell-name">
+                        {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
+                      </div>
+                      <div
+                        v-if="spell.description"
+                        class="tooltip-spell-description"
+                        v-html="spell.description"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </Teleport>
+
+        <!-- Sheet element tooltip (items, runes, spells, shards) — même structure que ItemSelector / RuneSelector -->
+        <Teleport to="body">
+          <div
+            v-if="sheetElementTooltip.show && sheetElementTooltipResolved"
+            ref="sheetElementTooltipRef"
+            class="sheet-element-tooltip-wrapper pointer-events-none fixed z-[9999] rounded-lg border border-accent bg-background shadow-lg"
+            :style="sheetElementTooltipFixedStyle"
+          >
+            <!-- Item: comme ItemSelector -->
+            <template v-if="sheetElementTooltipResolved.type === 'item'">
+              <div class="item-tooltip">
+                <div class="item-tooltip-content">
+                  <div class="item-tooltip-header">
+                    <img
+                      :src="
+                        getItemImageUrl(
+                          versionForImages,
+                          sheetElementTooltipResolved.item.image.full
+                        )
+                      "
+                      :alt="sheetElementTooltipResolved.item.name"
+                      class="item-tooltip-image"
+                    />
+                    <div class="item-tooltip-text">
+                      <div class="item-tooltip-name">
+                        {{ sheetElementTooltipResolved.item.name }}
+                      </div>
+                      <div class="item-tooltip-price">
+                        {{ sheetElementTooltipResolved.item.gold?.total ?? 0 }}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    v-if="sheetElementTooltipResolved.item.plaintext"
+                    class="item-tooltip-plaintext"
+                  >
+                    {{ sheetElementTooltipResolved.item.plaintext }}
+                  </div>
+                  <!-- eslint-disable vue/no-v-html -->
+                  <div
+                    v-if="sheetElementTooltipResolved.item.description"
+                    class="item-tooltip-description"
+                    v-html="sheetElementTooltipResolved.item.description"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
+                </div>
+              </div>
+            </template>
+            <!-- Rune: comme RuneSelector -->
+            <template v-else-if="sheetElementTooltipResolved.type === 'rune'">
+              <div class="rune-tooltip">
+                <div class="rune-tooltip-content">
+                  <div class="rune-tooltip-header">
+                    <div class="rune-tooltip-name">{{ sheetElementTooltipResolved.rune.name }}</div>
+                  </div>
+                  <!-- eslint-disable vue/no-v-html -->
+                  <div
+                    v-if="sheetElementTooltipResolved.rune.longDesc"
+                    class="rune-tooltip-description"
+                    v-html="sheetElementTooltipResolved.rune.longDesc"
+                  />
+                  <div
+                    v-else-if="sheetElementTooltipResolved.rune.shortDesc"
+                    class="rune-tooltip-description"
+                    v-html="sheetElementTooltipResolved.rune.shortDesc"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
+                </div>
+              </div>
+            </template>
+            <!-- Spell: image + nom + description -->
+            <template v-else-if="sheetElementTooltipResolved.type === 'spell'">
+              <div class="item-tooltip">
+                <div class="item-tooltip-content">
+                  <div class="item-tooltip-header">
+                    <img
+                      v-if="
+                        (sheetElementTooltipResolved.spell as { image?: { full: string } }).image
+                          ?.full
+                      "
+                      :src="
+                        getSpellImageUrl(
+                          versionForImages,
+                          (sheetElementTooltipResolved.spell as { image?: { full: string } }).image!
+                            .full
+                        )
+                      "
+                      :alt="sheetElementTooltipResolved.spell.name"
+                      class="item-tooltip-image"
+                    />
+                    <div class="item-tooltip-text">
+                      <div class="item-tooltip-name">
+                        {{ sheetElementTooltipResolved.spell.name }}
+                      </div>
+                    </div>
+                  </div>
+                  <!-- eslint-disable vue/no-v-html -->
+                  <div
+                    v-if="sheetElementTooltipResolved.spell.description"
+                    class="item-tooltip-description"
+                    v-html="sheetElementTooltipResolved.spell.description"
+                  />
+                  <!-- eslint-enable vue/no-v-html -->
+                </div>
+              </div>
+            </template>
+            <!-- Shard / Path: nom seul -->
+            <template
+              v-else-if="
+                sheetElementTooltipResolved.type === 'shard' ||
+                sheetElementTooltipResolved.type === 'path'
+              "
+            >
+              <div class="sheet-tooltip-simple px-3 py-2 text-sm">
+                {{ sheetElementTooltipResolved.name }}
+              </div>
+            </template>
+          </div>
+        </Teleport>
       </div>
 
       <!-- Face arrière : liste des variantes (builder + readonly) -->
@@ -633,7 +804,7 @@
                     'items-manager-inline-icon--drag-over':
                       dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
                   }"
-                  :title="getItemDisplayName(entry.item)"
+                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
                   :draggable="!props.build"
                   @dragstart="onItemDragStart(entry.index, $event)"
                   @dragover="onItemDragOver(entry.index, $event)"
@@ -666,7 +837,7 @@
                     'items-manager-inline-icon--drag-over':
                       dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
                   }"
-                  :title="getItemDisplayName(entry.item)"
+                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
                   :draggable="!props.build"
                   @dragstart="onItemDragStart(entry.index, $event)"
                   @dragover="onItemDragOver(entry.index, $event)"
@@ -699,7 +870,7 @@
                     'items-manager-inline-icon--drag-over':
                       dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
                   }"
-                  :title="getItemDisplayName(entry.item)"
+                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
                   :draggable="!props.build"
                   @dragstart="onItemDragStart(entry.index, $event)"
                   @dragover="onItemDragOver(entry.index, $event)"
@@ -742,9 +913,10 @@ import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import type { Build, SubBuild, Item, Role } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
-import { useChampionsStore } from '~/stores/ChampionsStore'
+import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import {
   getChampionImageUrl,
   getChampionSpellImageUrl,
@@ -755,6 +927,7 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatLethality } from '~/utils/formatItemStats'
 
 interface Props {
@@ -775,10 +948,17 @@ const emit = defineEmits<{
 }>()
 
 const buildStore = useBuildStore()
+const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
-const championsStore = useChampionsStore()
+const summonerSpellsStore = useSummonerSpellsStore()
 const { locale, t } = useI18n()
+
+// Global tooltip preference (shared state via composable)
+const { tooltipsEnabled } = useTooltipsPreference()
+
+// effectiveSheetTooltips: respect both the prop and the global preference
+const effectiveSheetTooltips = computed(() => props.sheetTooltips && tooltipsEnabled.value)
 
 // ── Flip (mode readonly) ──────────────────────────────────────────────────
 const localFlipped = ref(false)
@@ -819,14 +999,26 @@ function onSubTitleInput(index: number, title: string) {
   buildStore.setSubBuildTitle(index, title)
 }
 
-/** Nom d'affichage de l'item (résolu via le store pour éviter d'afficher l'id quand l'item n'a pas de nom) */
-function getItemDisplayName(item: Item): string {
-  const full = itemsStore.items.find(i => i.id === item.id)
-  return full?.name ?? item.name ?? item.id
+/** Nom d'affichage de l'item — résolu depuis itemsStore (comme dans ItemSelector) */
+function getItemDisplayName(item: { id: string; name?: string }): string {
+  return itemsStore.items.find(i => i.id === item.id)?.name ?? item.name ?? item.id
+}
+
+/** Nom d'affichage d'un sort d'invocateur — résolu depuis summonerSpellsStore */
+function getSummonerSpellDisplayName(
+  spell: { id?: string; key?: string; name?: string } | null | undefined
+): string {
+  if (!spell) return ''
+  const id = String(spell.id ?? spell.key ?? '')
+  if (id) {
+    const found = summonerSpellsStore.getSpellById(id)
+    if (found?.name) return found.name
+  }
+  return spell.name ?? ''
 }
 
 function sheetTooltip(label?: string | null, fallback = ''): string {
-  if (!props.sheetTooltips) return ''
+  if (!effectiveSheetTooltips.value) return ''
   return label?.trim() || fallback
 }
 
@@ -835,16 +1027,143 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
-const tooltipPosition = ref<'right' | 'left'>('right')
-const tooltipVerticalPosition = ref<'top' | 'bottom'>('top')
+const championPortraitRef = ref<HTMLElement | null>(null)
 
-const onChampionMouseEnter = () => {
+// Fixed positioning for the teleported tooltip
+const tooltipFixedStyle = ref<Record<string, string>>({})
+
+const onChampionMouseEnter = (event: MouseEvent) => {
+  if (!tooltipsEnabled.value) return
   showTooltip.value = true
+  championPortraitRef.value = event.currentTarget as HTMLElement
 }
 
 const onChampionMouseLeave = () => {
   showTooltip.value = false
 }
+
+// ── Sheet element tooltip (items, runes, spells, shards) — contenu résolu de façon réactive ───
+type SheetTooltipType = 'item' | 'rune' | 'spell' | 'shard' | 'path'
+type SheetTooltipPayload =
+  | { id: string; name?: string }
+  | number
+  | { id?: string; key?: string; name?: string }
+
+const sheetElementTooltip = ref<{
+  show: boolean
+  type: SheetTooltipType
+  payload: SheetTooltipPayload
+  fallback: string
+  anchorEl: HTMLElement | null
+}>({
+  show: false,
+  type: 'item',
+  payload: { id: '' },
+  fallback: '',
+  anchorEl: null,
+})
+const sheetElementTooltipRef = ref<HTMLElement | null>(null)
+const sheetElementTooltipFixedStyle = ref<Record<string, string>>({})
+
+function onSheetElementEnter(
+  ev: MouseEvent,
+  type: SheetTooltipType,
+  payload: SheetTooltipPayload,
+  fallback: string
+) {
+  if (!effectiveSheetTooltips.value) return
+  const el = ev.currentTarget as HTMLElement
+  sheetElementTooltip.value = { show: true, type, payload, fallback: fallback || '', anchorEl: el }
+}
+
+function onSheetElementLeave() {
+  sheetElementTooltip.value = { ...sheetElementTooltip.value, show: false, anchorEl: null }
+}
+
+// Données complètes pour le tooltip (comme ItemSelector/RuneSelector)
+const sheetElementTooltipResolved = computed(() => {
+  const tt = sheetElementTooltip.value
+  if (!tt.show) return null
+  switch (tt.type) {
+    case 'item': {
+      const p = tt.payload as { id: string; name?: string }
+      const item = itemsStore.items.find(i => i.id === p?.id)
+      return item ? { type: 'item' as const, item } : null
+    }
+    case 'rune': {
+      const id = tt.payload as number
+      const rune = findRuneInStore(id)
+      return rune ? { type: 'rune' as const, rune } : null
+    }
+    case 'spell': {
+      const p = tt.payload as { id?: string; key?: string; name?: string }
+      const sid = String(p?.id ?? p?.key ?? '')
+      const spell = sid ? summonerSpellsStore.getSpellById(sid) : undefined
+      return spell ? { type: 'spell' as const, spell } : null
+    }
+    case 'shard': {
+      const id = tt.payload as number
+      const name = getShardNameById(id) || tt.fallback
+      return { type: 'shard' as const, name }
+    }
+    case 'path': {
+      const id = tt.payload as number
+      const path = runesStore.getRunePathById(id)
+      return path
+        ? { type: 'path' as const, name: path.name }
+        : { type: 'path' as const, name: tt.fallback }
+    }
+    default:
+      return null
+  }
+})
+
+function calculateSheetElementTooltipPosition() {
+  const { anchorEl, show } = sheetElementTooltip.value
+  const tooltipEl = sheetElementTooltipRef.value
+  if (!show || !anchorEl || !tooltipEl) return
+  const anchor = anchorEl.getBoundingClientRect()
+  const tooltipRect = tooltipEl.getBoundingClientRect()
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const ttWidth = tooltipRect.width || 180
+  const ttHeight = tooltipRect.height || 32
+  let left: number
+  if (
+    anchor.left + anchor.width / 2 - ttWidth / 2 >= 8 &&
+    anchor.left + anchor.width / 2 + ttWidth / 2 <= viewportWidth - 8
+  ) {
+    left = anchor.left + anchor.width / 2 - ttWidth / 2
+  } else if (anchor.right + 8 + ttWidth <= viewportWidth) {
+    left = anchor.right + 8
+  } else {
+    left = Math.max(8, anchor.left - 8 - ttWidth)
+  }
+  let top = anchor.top - 4 - ttHeight
+  if (top < 8) top = anchor.bottom + 4
+  if (top + ttHeight > viewportHeight - 8) top = viewportHeight - ttHeight - 8
+  sheetElementTooltipFixedStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px` }
+}
+
+watch(
+  () => sheetElementTooltip.value.show,
+  async newValue => {
+    if (newValue) {
+      await nextTick()
+      calculateSheetElementTooltipPosition()
+      window.addEventListener('scroll', calculateSheetElementTooltipPosition, true)
+      window.addEventListener('resize', calculateSheetElementTooltipPosition)
+    } else {
+      window.removeEventListener('scroll', calculateSheetElementTooltipPosition, true)
+      window.removeEventListener('resize', calculateSheetElementTooltipPosition)
+    }
+  }
+)
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', calculateSheetElementTooltipPosition, true)
+  window.removeEventListener('resize', calculateSheetElementTooltipPosition)
+})
 
 // Utiliser le build en prop si fourni, sinon le build courant du store
 // En mode readonly avec une variante sélectionnée, on fusionne le sub-build avec le build parent
@@ -1092,12 +1411,6 @@ const skillOrderAbilities = computed(() => {
     .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
 })
 
-// Primary rune path
-const primaryPath = computed(() => {
-  if (!selectedPrimaryRunes.value?.primary?.pathId) return null
-  return runesStore.getRunePathById(selectedPrimaryRunes.value.primary.pathId)
-})
-
 // Keystone (première rune principale)
 const keystoneRuneId = computed(() => {
   if (!selectedPrimaryRunes.value?.primary?.keystone) return null
@@ -1115,19 +1428,17 @@ const primaryRunesRow = computed(() => {
 })
 
 // Secondary rune path
-const secondaryPath = computed(() => {
-  if (!selectedSecondaryRunes.value?.secondary?.pathId) return null
-  return runesStore.getRunePathById(selectedSecondaryRunes.value.secondary.pathId)
-})
+const secondaryPathId = computed(() => selectedSecondaryRunes.value?.secondary?.pathId ?? null)
+const secondaryPath = computed(() =>
+  secondaryPathId.value ? runesStore.getRunePathById(secondaryPathId.value) : null
+)
 
 const secondaryPathIcon = computed(() => {
   if (!secondaryPath.value) return null
   return getRunePathImageUrl(versionForImages.value, secondaryPath.value.icon)
 })
 
-const secondaryPathName = computed(() => {
-  return secondaryPath.value?.name || ''
-})
+const secondaryPathName = computed(() => secondaryPath.value?.name ?? '')
 
 const filteredSecondaryRuneIds = computed(() => {
   if (!selectedSecondaryRunes.value?.secondary) return []
@@ -1137,63 +1448,40 @@ const filteredSecondaryRuneIds = computed(() => {
   ].filter(id => id && id !== 0)
 })
 
-// Internal helper to find a rune object by ID in currently loaded paths
-const findRuneById = (runeId: number) => {
-  const paths = [primaryPath.value, secondaryPath.value].filter(
-    Boolean
-  ) as (typeof primaryPath.value)[]
-  for (const path of paths) {
-    for (const slot of path!.slots) {
+// Find a rune by id across all loaded paths
+function findRuneInStore(runeId: number) {
+  for (const path of runesStore.runePaths) {
+    for (const slot of path.slots) {
       for (const rune of slot.runes) {
-        if (rune.id === runeId) {
-          return rune
-        }
+        if (rune.id === runeId) return rune
       }
     }
   }
   return null
 }
 
-// Get rune icon by ID
 const getRuneIconById = (runeId: number): string => {
-  if (!primaryPath.value && !secondaryPath.value) {
-    return ''
-  }
-
-  const rune = findRuneById(runeId)
+  const rune = findRuneInStore(runeId)
   return rune ? getRuneImageUrl(versionForImages.value, rune.icon) : ''
 }
 
-const getRuneNameById = (runeId: number): string => {
-  const rune = findRuneById(runeId)
-  return rune ? rune.name : ''
-}
+const getRuneNameById = (runeId: number): string => findRuneInStore(runeId)?.name ?? ''
 
 // Shards metadata (icon + label)
-const shardInfo: Record<
-  number,
-  {
-    icon: string
-    name: string
-  }
-> = {
-  5008: { icon: '/icons/shards/adaptative.png', name: 'Force adaptative' },
-  5005: { icon: '/icons/shards/speed.png', name: 'Vitesse d’attaque' },
-  5006: { icon: '/icons/shards/move.png', name: 'Vitesse de déplacement' },
-  5007: { icon: '/icons/shards/cdr.png', name: 'Hâte de compétence' },
-  5001: { icon: '/icons/shards/hp.png', name: 'PV' },
-  5002: { icon: '/icons/shards/growth.png', name: 'Armure' },
-  5003: { icon: '/icons/shards/tenacity.png', name: 'Résistance magique' },
+const shardIcons: Record<number, string> = {
+  5008: '/icons/shards/adaptative.png',
+  5005: '/icons/shards/speed.png',
+  5006: '/icons/shards/move.png',
+  5007: '/icons/shards/cdr.png',
+  5001: '/icons/shards/hp.png',
+  5002: '/icons/shards/growth.png',
+  5003: '/icons/shards/tenacity.png',
 }
 
-// Get shard icon by ID
-const getShardIconById = (shardId: number): string => {
-  return shardInfo[shardId]?.icon || '/icons/shards/adaptative.png'
-}
+const getShardIconById = (shardId: number): string =>
+  shardIcons[shardId] || '/icons/shards/adaptative.png'
 
-const getShardNameById = (shardId: number): string => {
-  return shardInfo[shardId]?.name || ''
-}
+const getShardNameById = (shardId: number): string => t(`runes.shards.${shardId}.name`, '')
 
 const filteredShardIds = computed(() => {
   if (!selectedShards.value) return []
@@ -1228,46 +1516,42 @@ const formattedSpells = computed(() => {
   }))
 })
 
-// Compute tooltip position class
-const tooltipPositionClass = computed(() => {
-  const classes: string[] = []
-
-  if (tooltipPosition.value === 'right') {
-    classes.push('left-full', 'ml-2')
-  } else {
-    classes.push('right-full', 'mr-2')
-  }
-
-  if (tooltipVerticalPosition.value === 'top') {
-    classes.push('top-0')
-  } else {
-    classes.push('bottom-0')
-  }
-
-  return classes.join(' ')
-})
-
-// Calculate tooltip position to avoid going off-screen
+// Calculate tooltip position using fixed coordinates (teleported to body)
 const calculateTooltipPosition = async () => {
-  if (!tooltipRef.value || !showTooltip.value) return
+  if (!tooltipRef.value || !showTooltip.value || !championPortraitRef.value) return
 
   await nextTick()
 
+  const anchor = championPortraitRef.value.getBoundingClientRect()
   const tooltip = tooltipRef.value
-  const rect = tooltip.getBoundingClientRect()
+  const tooltipRect = tooltip.getBoundingClientRect()
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
 
-  if (rect.right > viewportWidth) {
-    tooltipPosition.value = 'left'
+  // Tooltip width/height (may be 0 on first render, use defaults)
+  const ttWidth = tooltipRect.width || 500
+  const ttHeight = tooltipRect.height || 400
+
+  // Horizontal: prefer right of the portrait, fall back to left
+  let left: number
+  if (anchor.right + 8 + ttWidth <= viewportWidth) {
+    left = anchor.right + 8
   } else {
-    tooltipPosition.value = 'right'
+    left = Math.max(8, anchor.left - 8 - ttWidth)
   }
 
-  if (rect.bottom > viewportHeight) {
-    tooltipVerticalPosition.value = 'bottom'
+  // Vertical: align to top of portrait, fall back upward if overflows
+  let top: number
+  if (anchor.top + ttHeight <= viewportHeight) {
+    top = anchor.top
   } else {
-    tooltipVerticalPosition.value = 'top'
+    top = Math.max(8, viewportHeight - ttHeight - 8)
+  }
+
+  tooltipFixedStyle.value = {
+    position: 'fixed',
+    top: `${top}px`,
+    left: `${left}px`,
   }
 }
 
@@ -1437,9 +1721,20 @@ watch(
 
 // Charger le build sauvegardé au montage (seulement si pas de build en prop)
 onMounted(() => {
+  const locale = riotLocale.value
   // Ensure we have full champion payload (spells/passive) for readonly cards and old lightweight builds.
   if (championsStore.status === 'idle' && championsStore.champions.length === 0) {
-    championsStore.loadChampions(riotLocale.value).catch(() => undefined)
+    championsStore.loadChampions(locale).catch(() => undefined)
+  }
+  // Load item / rune / spell data for sheet tooltips (same stores as the builder)
+  if (itemsStore.status === 'idle' || itemsStore.items.length === 0) {
+    itemsStore.loadItems(locale).catch(() => undefined)
+  }
+  if (runesStore.status === 'idle' || runesStore.runePaths.length === 0) {
+    runesStore.loadRunes(locale).catch(() => undefined)
+  }
+  if (summonerSpellsStore.status === 'idle' || summonerSpellsStore.spells.length === 0) {
+    summonerSpellsStore.loadSummonerSpells(locale).catch(() => undefined)
   }
   if (!props.build && !buildStore.currentBuild) {
     // Charger depuis localStorage uniquement si aucun build n'est déjà présent dans le store
@@ -1459,16 +1754,15 @@ onMounted(() => {
       }
     }
   }
-
-  // Load runes in current locale (for tooltips)
-  runesStore.loadRunes(riotLocale.value)
 })
 
 watch(locale, () => {
-  runesStore.loadRunes(riotLocale.value)
   if (championsStore.status !== 'loading') {
     championsStore.loadChampions(riotLocale.value).catch(() => undefined)
   }
+  itemsStore.loadItems(riotLocale.value).catch(() => undefined)
+  runesStore.loadRunes(riotLocale.value).catch(() => undefined)
+  summonerSpellsStore.loadSummonerSpells(riotLocale.value).catch(() => undefined)
 })
 </script>
 
@@ -2114,14 +2408,9 @@ watch(locale, () => {
   top: 0;
   width: 50%;
   height: 100%;
-  cursor: pointer;
-  transition: opacity 0.2s;
+  cursor: default;
   background-size: 32px 32px;
   background-repeat: no-repeat;
-}
-
-.boots-item-split:hover {
-  opacity: 0.7;
 }
 
 .boots-item-left {
@@ -2304,12 +2593,7 @@ watch(locale, () => {
 
 .item-wrapper {
   position: relative;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-.item-wrapper:hover {
-  opacity: 0.7;
+  cursor: default;
 }
 
 .item-icon {
@@ -2498,7 +2782,11 @@ watch(locale, () => {
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* Tooltip styles (same as before) */
+/* Tooltip styles */
+.tooltip-box-fixed {
+  pointer-events: none;
+}
+
 .tooltip-box {
   width: min(680px, calc(100vw - 2rem));
   max-width: min(680px, calc(100vw - 2rem));
@@ -2717,5 +3005,112 @@ watch(locale, () => {
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.7);
   line-height: 1.4;
+}
+
+/* Sheet element tooltips (item / rune / spell) — même rendu que ItemSelector / RuneSelector */
+.sheet-element-tooltip-wrapper :deep(.item-tooltip) {
+  width: min(320px, calc(100vw - 2rem));
+  max-width: min(320px, calc(100vw - 2rem));
+  min-width: 280px;
+  padding: 1em;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-header) {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-image) {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent));
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-text) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-name) {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-accent));
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-price) {
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text) / 0.8);
+  line-height: 1.3;
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-plaintext) {
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text) / 0.9);
+  line-height: 1.4;
+  font-style: italic;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sheet-element-tooltip-wrapper :deep(.item-tooltip-description) {
+  font-size: 0.8rem;
+  color: rgb(var(--rgb-text) / 0.7);
+  line-height: 1.4;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip) {
+  max-width: 300px;
+  padding: 0.75rem;
+  pointer-events: none;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-header) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-name) {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-accent));
+  line-height: 1.2;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-description) {
+  font-size: 0.8rem;
+  color: rgb(var(--rgb-text));
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+.sheet-element-tooltip-wrapper :deep(.sheet-tooltip-simple) {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgb(var(--rgb-accent));
 }
 </style>

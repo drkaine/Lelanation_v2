@@ -45,7 +45,7 @@
       <div class="flex items-center gap-2">
         <img
           v-if="primaryRunePath"
-          :src="getRunePathImageUrl(primaryRunePath.icon)"
+          :src="getRunePathImageUrl(version, primaryRunePath.icon)"
           :alt="primaryRunePath.name"
           class="h-6 w-6 rounded"
         />

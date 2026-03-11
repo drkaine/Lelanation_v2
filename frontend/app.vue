@@ -8,6 +8,18 @@
     </a>
     <template v-if="!isStreamerMode">
       <AppNavbar />
+      <div class="tooltips-toggle-bar">
+        <label class="tooltips-toggle-label">
+          <input
+            type="checkbox"
+            :checked="tooltipsDisabled"
+            class="tooltips-toggle-checkbox"
+            @change="toggleTooltipsDisabled()"
+          />
+          <span>{{ t('nav.disableTooltips') }}</span>
+        </label>
+        <span class="tooltips-toggle-shortcut">Alt + T</span>
+      </div>
     </template>
     <template v-else>
       <div class="streamer-panel streamer-panel-top" :class="{ 'is-open': streamerNavOpen }">
@@ -48,18 +60,24 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
+import { watch, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
+const { t } = useI18n()
 const route = useRoute()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
 const { isStreamerMode } = useStreamerMode()
+const { tooltipsDisabled, tooltipsEnabled, toggleTooltipsDisabled } = useTooltipsPreference()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
+
+provide('tooltipsEnabled', tooltipsEnabled)
 
 useHead(() => ({
   htmlAttrs: localeHead.value.htmlAttrs,
@@ -74,6 +92,22 @@ watch(isStreamerMode, enabled => {
     streamerFooterOpen.value = false
   }
 })
+
+const onKeyDown = (event: KeyboardEvent) => {
+  if (event.altKey && event.key === 't' && !isStreamerMode.value) {
+    event.preventDefault()
+    toggleTooltipsDisabled()
+  }
+}
+
+if (import.meta.client) {
+  onMounted(() => {
+    window.addEventListener('keydown', onKeyDown)
+  })
+  onUnmounted(() => {
+    window.removeEventListener('keydown', onKeyDown)
+  })
+}
 </script>
 
 <style>
@@ -191,5 +225,41 @@ watch(isStreamerMode, enabled => {
 
 .streamer-toggle-bottom-open {
   bottom: 66px;
+}
+
+.tooltips-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 3px 16px;
+  background: rgb(var(--rgb-background) / 0.85);
+  border-bottom: 1px solid rgb(var(--rgb-accent) / 0.15);
+  font-size: 11px;
+  color: rgb(var(--rgb-text) / 0.6);
+}
+
+.tooltips-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tooltips-toggle-checkbox {
+  width: 12px;
+  height: 12px;
+  cursor: pointer;
+  accent-color: rgb(var(--rgb-accent));
+}
+
+.tooltips-toggle-shortcut {
+  font-size: 10px;
+  color: rgb(var(--rgb-accent) / 0.5);
+  border: 1px solid rgb(var(--rgb-accent) / 0.3);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: monospace;
 }
 </style>

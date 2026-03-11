@@ -4,7 +4,7 @@
       <div class="left-header">
         <LanguageSwitcher />
         <NuxtLink :to="localePath('/')" class="link" :aria-label="t('nav.home')">
-          <span>Lelariva</span>
+          <span>Lelanation</span>
         </NuxtLink>
       </div>
 
