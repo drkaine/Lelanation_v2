@@ -11,6 +11,7 @@
 
       <section>
         <h2 class="mt-8 text-xl font-bold text-text">{{ t('legal.riotData.title') }}</h2>
+        <p class="mt-2 text-text/80">{{ t('legal.riotData.disclaimer') }}</p>
         <p class="mt-2 text-text/80" v-html="t('legal.riotData.p1')" />
         <p class="mt-2 text-text/80" v-html="t('legal.riotData.p2')" />
         <p class="mt-2 text-text/80" v-html="t('legal.riotData.p3')" />

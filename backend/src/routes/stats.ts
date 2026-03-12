@@ -12,6 +12,7 @@ import {
   getMatchupDetailsByChampion,
   patchFromGameVersion,
 } from '../services/MatchupTierService.js'
+import { getTierList } from '../services/TierListService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
@@ -565,6 +566,43 @@ router.get('/matchup-tier-list', async (req: Request, res: Response) => {
     lane: lane ?? null,
     rows,
   })
+})
+
+/** GET /api/stats/tier-list - Lolalytics-style tier list (one row per champion, all ranks + optional highElo). Query: ?patch=16.4 (optional; if omitted uses latest patch in DB)&platformId=EUW1&rankTier=all */
+router.get('/tier-list', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version) ?? undefined
+  const platformId = queryString(req.query.platformId) ?? null
+  const rankTierRaw = queryString(req.query.rankTier)
+  const rankTier = rankTierRaw === 'all' || !rankTierRaw ? 'all' : rankTierRaw
+  try {
+    const data = await getTierList({ patch: patch || undefined, platformId, rankTier })
+    if (!data) {
+      return res.status(200).json({
+        patch: patch ?? null,
+        rankTier,
+        rows: [],
+        message: 'Database not configured or no stats yet.',
+      })
+    }
+    return res.json({
+      patch: data.patch,
+      rankTier: data.rankTier,
+      rows: data.rows,
+      highEloRows: data.highEloRows ?? undefined,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[tier-list]', message, err)
+    // Return 200 with error in body so frontend can show it (avoids 500 and CORS issues)
+    return res.status(200).json({
+      patch: patch ?? null,
+      rankTier,
+      rows: [],
+      error: 'Tier list failed',
+      message: message,
+    })
+  }
 })
 
 /** GET /api/stats/champions/:championId/summoner-spells - per-spell stats for this champion. Query: ?version=16.1 &rankTier=GOLD */

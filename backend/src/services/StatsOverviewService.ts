@@ -518,9 +518,12 @@ export async function getOverviewProgressionStats(
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   try {
-    const rows = await prisma.$queryRaw<OverviewProgressionRow>(
-      Prisma.sql`SELECT get_stats_overview_progression(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression`
-    )
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`SET LOCAL statement_timeout = 20000`)
+      return tx.$queryRaw<OverviewProgressionRow>(
+        Prisma.sql`SELECT get_stats_overview_progression(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression`
+      )
+    })
     const raw = rows[0]?.get_stats_overview_progression
     if (!raw) return { oldestVersion: versionOldest, gainers: [], losers: [] }
     const mapEntry = (e: { championId: number; wrOldest: number; wrSince: number; delta: number }) => ({
@@ -574,9 +577,12 @@ export async function getOverviewProgressionFullStats(
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   try {
-    const rows = await prisma.$queryRaw<OverviewProgressionFullRow>(
-      Prisma.sql`SELECT get_stats_overview_progression_full(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression_full`
-    )
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`SET LOCAL statement_timeout = 20000`)
+      return tx.$queryRaw<OverviewProgressionFullRow>(
+        Prisma.sql`SELECT get_stats_overview_progression_full(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression_full`
+      )
+    })
     const raw = rows[0]?.get_stats_overview_progression_full
     if (!raw) return { oldestVersion: versionOldest, champions: [] }
     const mapEntry = (e: {

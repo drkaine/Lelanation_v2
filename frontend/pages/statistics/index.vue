@@ -2087,14 +2087,14 @@
 
           <!-- Tab: Champions -->
           <div v-show="activeTab === 'champions'" class="space-y-2">
-            <div v-if="championsPending || matchupTierPending" class="text-text/70">
+            <div v-if="championsPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
             <div
-              v-else-if="championsError || matchupTierError"
+              v-else-if="championsError"
               class="rounded border border-error bg-surface p-3 text-error"
             >
-              {{ championsError || matchupTierError }}
+              {{ championsError }}
             </div>
             <div
               v-else-if="championsData?.message && !championsData?.champions?.length"
@@ -2319,78 +2319,159 @@
                 </button>
               </div>
             </div>
-            <div v-if="championsPending" class="text-text/70">
+            <div v-if="tierListPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
             <div
-              v-else-if="championsError"
+              v-else-if="tierListError"
               class="rounded border border-error bg-surface p-3 text-error"
             >
-              {{ championsError }}
+              {{ tierListError }}
             </div>
             <template v-else>
+              <div
+                v-if="totalTierListCount === 0"
+                class="rounded-lg border border-primary/30 bg-surface/30 p-4 text-text/70"
+              >
+                {{ t('statisticsPage.tierListNoData') }}
+              </div>
               <!-- Vue tableau -->
               <div
-                v-show="tierListViewModel === 'table'"
+                v-show="tierListViewModel === 'table' && totalTierListCount > 0"
                 class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
               >
-                <table class="w-full min-w-[500px] text-left text-sm">
+                <table class="w-full min-w-[800px] text-left text-sm">
                   <thead class="border-b border-primary/30 bg-surface/50">
                     <tr>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="cycleTierListSort('rank')"
+                      >
+                        {{ t('statisticsPage.tierListRank') }}
+                        <span class="ml-1">{{ tierListSortIcon('rank') }}</span>
+                      </th>
                       <th class="px-4 py-3 font-semibold text-text">
                         {{ t('statisticsPage.champion') }}
                       </th>
                       <th
                         class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="setTierListSort('tier')"
+                        @click="cycleTierListSort('tier')"
                       >
                         {{ t('statisticsPage.tierListTier') }}
-                        <span v-if="tierListSortOrder === 'tier'" class="ml-1">{{
-                          tierListSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
+                        <span class="ml-1">{{ tierListSortIcon('tier') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListTierTooltip')"
+                          >?</span
+                        >
                       </th>
                       <th
                         class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="setTierListSort('score')"
+                        @click="cycleTierListSort('mainRolePct')"
                       >
-                        {{ t('statisticsPage.matchupScore') }}
-                        <span v-if="tierListSortOrder === 'score'" class="ml-1">{{
-                          tierListSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
-                      </th>
-                      <th class="px-4 py-3 font-semibold text-text">
-                        {{ t('statisticsPage.patchDelta') }}
+                        {{ t('statisticsPage.tierListMainRole') }}
+                        <span class="ml-1">{{ tierListSortIcon('mainRolePct') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListMainRoleTooltip')"
+                          >?</span
+                        >
                       </th>
                       <th
                         class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="setTierListSort('winrate')"
+                        @click="cycleTierListSort('winrate')"
                       >
                         {{ t('statisticsPage.winrate') }}
-                        <span v-if="tierListSortOrder === 'winrate'" class="ml-1">{{
-                          tierListSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
+                        <span class="ml-1">{{ tierListSortIcon('winrate') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListWinrateTooltip')"
+                          >?</span
+                        >
                       </th>
                       <th
                         class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="setTierListSort('pickrate')"
+                        @click="cycleTierListSort('pickrate')"
                       >
                         {{ t('statisticsPage.pickrate') }}
-                        <span v-if="tierListSortOrder === 'pickrate'" class="ml-1">{{
-                          tierListSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
+                        <span class="ml-1">{{ tierListSortIcon('pickrate') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListPickrateTooltip')"
+                          >?</span
+                        >
                       </th>
                       <th
                         class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="setTierListSort('banrate')"
+                        @click="cycleTierListSort('banrate')"
                       >
                         {{ t('statisticsPage.banrate') }}
-                        <span v-if="tierListSortOrder === 'banrate'" class="ml-1">{{
-                          tierListSortDir === 'desc' ? '↓' : '↑'
-                        }}</span>
+                        <span class="ml-1">{{ tierListSortIcon('banrate') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListBanrateTooltip')"
+                          >?</span
+                        >
                       </th>
-                      <th class="px-4 py-3 font-semibold text-text">
-                        {{ t('statisticsPage.tierListRole') }}
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="cycleTierListSort('pbi')"
+                      >
+                        {{ t('statisticsPage.tierListPbi') }}
+                        <span class="ml-1">{{ tierListSortIcon('pbi') }}</span>
+                        <span
+                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                          :title="t('statisticsPage.tierListPbiTooltip')"
+                          >?</span
+                        >
                       </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                        @click="cycleTierListSort('games')"
+                      >
+                        {{ t('statisticsPage.tierListGames') }}
+                        <span class="ml-1">{{ tierListSortIcon('games') }}</span>
+                      </th>
+                      <template v-if="(tierListData?.highEloRows?.length ?? 0) > 0">
+                        <th
+                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                          @click="cycleTierListSort('highEloRank')"
+                        >
+                          {{ t('statisticsPage.tierListHighEloRank') }}
+                          <span class="ml-1">{{ tierListSortIcon('highEloRank') }}</span>
+                        </th>
+                        <th
+                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                          @click="cycleTierListSort('highEloWinrate')"
+                        >
+                          {{ t('statisticsPage.tierListHighEloWin') }}
+                          <span class="ml-1">{{ tierListSortIcon('highEloWinrate') }}</span>
+                          <span
+                            class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                            :title="t('statisticsPage.tierListHighEloWinTooltip')"
+                            >?</span
+                          >
+                        </th>
+                        <th
+                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                          @click="cycleTierListSort('highEloGames')"
+                        >
+                          {{ t('statisticsPage.tierListHighEloGames') }}
+                          <span class="ml-1">{{ tierListSortIcon('highEloGames') }}</span>
+                        </th>
+                        <th
+                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
+                          @click="cycleTierListSort('delta')"
+                        >
+                          {{ t('statisticsPage.tierListDelta') }}
+                          <span class="ml-1">{{ tierListSortIcon('delta') }}</span>
+                          <span
+                            class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
+                            :title="t('statisticsPage.tierListDeltaTooltip')"
+                            >?</span
+                          >
+                        </th>
+                      </template>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-primary/20">
@@ -2400,6 +2481,7 @@
                       class="cursor-pointer hover:bg-surface/50"
                       @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
                     >
+                      <td class="px-4 py-2 text-text/90">{{ row.rank }}</td>
                       <td class="px-4 py-2 font-medium text-text">
                         <div class="flex items-center gap-2">
                           <img
@@ -2424,31 +2506,50 @@
                         <span
                           :class="[
                             'inline-flex h-7 w-7 items-center justify-center rounded font-bold text-background',
+                            row.tier === 'S+' && 'bg-violet-500',
                             row.tier === 'S' && 'bg-amber-500',
-                            row.tier === 'A' && 'bg-slate-400',
-                            row.tier === 'B' && 'bg-amber-700',
-                            row.tier === 'C' && 'bg-stone-600',
-                            row.tier === 'F' && 'bg-stone-700',
+                            row.tier === 'A' && 'bg-sky-400',
+                            row.tier === 'B' && 'bg-violet-400',
+                            row.tier === 'C' && 'bg-orange-400',
+                            row.tier === 'D' && 'bg-red-600',
                           ]"
                         >
                           {{ t('statisticsPage.tier' + row.tier) }}
                         </span>
                       </td>
-                      <td class="px-4 py-2 text-text/90">{{ Number(row.score).toFixed(2) }}</td>
                       <td class="px-4 py-2 text-text/90">
                         {{
-                          row.deltaVsPrevPatch != null
-                            ? (row.deltaVsPrevPatch > 0 ? '+' : '') +
-                              Number(row.deltaVsPrevPatch).toFixed(2)
-                            : '—'
+                          ROLE_OPTIONS.find(r => r.value === row.mainRole)?.label ?? row.mainRole
                         }}
+                        {{ Number(row.mainRolePct).toFixed(0) }}%
                       </td>
-                      <td class="px-4 py-2 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
-                      <td class="px-4 py-2 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
-                      <td class="px-4 py-2 text-text/90">
-                        {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
-                      </td>
-                      <td class="px-4 py-2 text-xs text-text/70">{{ row.primaryRole ?? '—' }}</td>
+                      <td class="px-4 py-2 text-text/90">{{ (row.winrate * 100).toFixed(2) }}%</td>
+                      <td class="px-4 py-2 text-text/90">{{ (row.pickrate * 100).toFixed(2) }}%</td>
+                      <td class="px-4 py-2 text-text/90">{{ (row.banrate * 100).toFixed(2) }}%</td>
+                      <td class="px-4 py-2 text-text/90">{{ Number(row.pbi).toFixed(2) }}</td>
+                      <td class="px-4 py-2 text-text/90">{{ row.games.toLocaleString() }}</td>
+                      <template v-if="(tierListData?.highEloRows?.length ?? 0) > 0">
+                        <td class="px-4 py-2 text-text/90">
+                          {{ row.highEloRank != null ? row.highEloRank : '—' }}
+                        </td>
+                        <td class="px-4 py-2 text-text/90">
+                          {{
+                            row.highEloWinrate != null
+                              ? (row.highEloWinrate * 100).toFixed(2) + '%'
+                              : '—'
+                          }}
+                        </td>
+                        <td class="px-4 py-2 text-text/90">
+                          {{ row.highEloGames != null ? row.highEloGames.toLocaleString() : '—' }}
+                        </td>
+                        <td class="px-4 py-2 text-text/90">
+                          {{
+                            row.delta != null
+                              ? (row.delta > 0 ? '+' : '') + Number(row.delta).toFixed(2) + '%'
+                              : '—'
+                          }}
+                        </td>
+                      </template>
                     </tr>
                   </tbody>
                 </table>
@@ -2496,7 +2597,7 @@
               </div>
               <!-- Vue graphique : barres par champion (ordre worst → best, couleur = tier) -->
               <div
-                v-show="tierListViewModel === 'chart'"
+                v-show="tierListViewModel === 'chart' && totalTierListCount > 0"
                 class="flex flex-col gap-4 rounded-lg border border-primary/30 bg-surface/30 p-4 lg:flex-row"
               >
                 <div class="flex-1 overflow-x-auto">
@@ -2511,18 +2612,18 @@
                       class="tier-list-bar-item flex h-40 flex-col items-center justify-center gap-0"
                       :title="
                         (championName(c.championId) || c.championId) +
-                        ' – ' +
-                        Number(c.score).toFixed(2)
+                        ' – PBI ' +
+                        Number(c.pbi).toFixed(2)
                       "
                     >
                       <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
                         <div
-                          v-if="c.score >= 0"
+                          v-if="c.pbi >= 0"
                           class="tier-bar tier-bar-up w-6 shrink-0 rounded-t"
                           :style="{
                             height: c.barHeight * 0.52 + 'px',
-                            minHeight: c.score > 0 ? '4px' : '0',
-                            backgroundColor: TIER_CHART_COLORS[c.tier],
+                            minHeight: c.pbi > 0 ? '4px' : '0',
+                            backgroundColor: TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
                           }"
                         />
                       </div>
@@ -2538,12 +2639,12 @@
                       />
                       <div class="flex min-h-[52px] flex-1 flex-col items-center justify-start">
                         <div
-                          v-if="c.score < 0"
+                          v-if="c.pbi < 0"
                           class="tier-bar tier-bar-down w-6 shrink-0 rounded-b"
                           :style="{
                             height: c.barHeight * 0.52 + 'px',
-                            minHeight: c.score < 0 ? '4px' : '0',
-                            backgroundColor: TIER_CHART_COLORS[c.tier],
+                            minHeight: c.pbi < 0 ? '4px' : '0',
+                            backgroundColor: TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
                           }"
                         />
                       </div>
@@ -3160,158 +3261,142 @@ function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
   activeTab.value = 'champions'
 }
 
-/** Tier list: assign S/A/B/C/F by matchup score percentiles (best score => top tier). */
-type Tier = 'S' | 'A' | 'B' | 'C' | 'F'
-function computeTiers(
-  champions: Array<{
-    championId: number
-    score: number
-    deltaVsPrevPatch: number | null
-    winrate: number
-    pickrate: number
-    banrate?: number
-    byRole?: Record<string, { games: number }>
-  }>
-): Array<{
-  championId: number
-  score: number
-  deltaVsPrevPatch: number | null
-  winrate: number
-  pickrate: number
-  banrate?: number
-  tier: Tier
-  primaryRole: string | null
-}> {
-  if (!champions.length) return []
-  const sorted = [...champions].sort((a, b) => b.score - a.score)
-  const n = sorted.length
-  const pct = (i: number) => Math.floor((i / n) * 100)
-  const tierRanges: Array<{ tier: Tier; maxPct: number }> = [
-    { tier: 'S', maxPct: 10 },
-    { tier: 'A', maxPct: 30 },
-    { tier: 'B', maxPct: 60 },
-    { tier: 'C', maxPct: 85 },
-    { tier: 'F', maxPct: 100 },
-  ]
-  return sorted.map((c, i) => {
-    const p = pct(i)
-    let tier: Tier = 'F'
-    for (const r of tierRanges) {
-      if (p < r.maxPct) {
-        tier = r.tier
-        break
-      }
-    }
-    const byRole = (c as { byRole?: Record<string, { games: number }> }).byRole
-    let primaryRole: string | null = null
-    if (byRole && typeof byRole === 'object') {
-      const entries = Object.entries(byRole)
-      if (entries.length) {
-        const best = entries.reduce((a, b) => (b[1].games > a[1].games ? b : a))
-        primaryRole = best[0]
-      }
-    }
-    return {
-      championId: c.championId,
-      score: c.score,
-      deltaVsPrevPatch: c.deltaVsPrevPatch,
-      winrate: c.winrate,
-      pickrate: c.pickrate,
-      banrate: c.banrate,
-      tier,
-      primaryRole,
-    }
-  })
-}
+/** Tier list: types and sort (3-state: default, asc, desc). */
+type TierListSortColumn =
+  | 'rank'
+  | 'champion'
+  | 'tier'
+  | 'mainRolePct'
+  | 'winrate'
+  | 'pickrate'
+  | 'banrate'
+  | 'pbi'
+  | 'games'
+  | 'highEloRank'
+  | 'highEloWinrate'
+  | 'highEloGames'
+  | 'delta'
 
 const tierListViewModel = ref<'table' | 'chart'>('table')
-const tierListSortOrder = ref<'score' | 'delta' | 'winrate' | 'pickrate' | 'banrate' | 'tier'>(
-  'score'
-)
+const tierListSortColumn = ref<TierListSortColumn | null>(null)
 const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
-const TIER_ORDER: Record<Tier, number> = { S: 5, A: 4, B: 3, C: 2, F: 1 }
-const championsWithTier = computed(() => {
-  const championsById = new Map((championsData.value?.champions ?? []).map(c => [c.championId, c]))
-  const list = (matchupTierData.value?.rows ?? []).map(r => {
-    const champ = championsById.get(r.championId)
+const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1 }
+
+/** High-elo row by champion id for delta and GM+Chall columns. */
+const highEloRowsByChampionId = computed(() => {
+  const rows = tierListData.value?.highEloRows ?? []
+  const map = new Map<number, (typeof rows)[0]>()
+  for (const r of rows) map.set(r.championId, r)
+  return map
+})
+
+/** Tier list rows with optional delta (global winrate - highElo winrate). */
+interface TierListRowWithDelta {
+  rank: number
+  championId: number
+  tier: string
+  mainRole: string
+  mainRolePct: number
+  winrate: number
+  pickrate: number
+  banrate: number
+  pbi: number
+  games: number
+  highEloRank?: number
+  highEloWinrate?: number
+  highEloGames?: number
+  delta?: number
+}
+const tierListRows = computed((): TierListRowWithDelta[] => {
+  const rows = tierListData.value?.rows ?? []
+  const highElo = highEloRowsByChampionId.value
+  return rows.map(r => {
+    const he = highElo.get(r.championId)
+    const winratePct = r.winrate * 100
+    const highEloWinratePct = he ? he.winrate * 100 : undefined
+    const delta = highEloWinratePct != null ? winratePct - highEloWinratePct : undefined
     return {
-      championId: r.championId,
-      score: r.avgScore,
-      deltaVsPrevPatch: r.avgDeltaVsPrevPatch,
-      winrate: champ?.winrate ?? r.avgWinrate,
-      pickrate: champ?.pickrate ?? 0,
-      banrate: champ?.banrate,
-      byRole: (champ as { byRole?: Record<string, { games: number }> } | undefined)?.byRole,
+      ...r,
+      highEloRank: he?.rank,
+      highEloWinrate: he?.winrate,
+      highEloGames: he?.games,
+      delta,
     }
   })
-  return computeTiers(
-    list as Array<{
-      championId: number
-      score: number
-      deltaVsPrevPatch: number | null
-      winrate: number
-      pickrate: number
-      banrate?: number
-      byRole?: Record<string, { games: number }>
-    }>
-  )
 })
-const sortedChampionsWithTier = computed(() => {
-  const list = championsWithTier.value
-  const sort = tierListSortOrder.value
+
+const sortedTierListRows = computed(() => {
+  const list = tierListRows.value
+  const col = tierListSortColumn.value
   const dir = tierListSortDir.value
+  if (!col || col === 'champion') return [...list]
   const mult = dir === 'desc' ? 1 : -1
   return [...list].sort((a, b) => {
     let diff = 0
-    if (sort === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
-    else if (sort === 'score') diff = (b.score ?? 0) - (a.score ?? 0)
-    else if (sort === 'delta') diff = (b.deltaVsPrevPatch ?? 0) - (a.deltaVsPrevPatch ?? 0)
-    else if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
-    else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
-    else if (sort === 'banrate') diff = (b.banrate ?? 0) - (a.banrate ?? 0)
-    else diff = 0
+    if (col === 'rank') diff = a.rank - b.rank
+    else if (col === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
+    else if (col === 'mainRolePct') diff = a.mainRolePct - b.mainRolePct
+    else if (col === 'winrate') diff = a.winrate - b.winrate
+    else if (col === 'pickrate') diff = a.pickrate - b.pickrate
+    else if (col === 'banrate') diff = a.banrate - b.banrate
+    else if (col === 'pbi') diff = a.pbi - b.pbi
+    else if (col === 'games') diff = a.games - b.games
+    else if (col === 'highEloRank') diff = (a.highEloRank ?? 0) - (b.highEloRank ?? 0)
+    else if (col === 'highEloWinrate') diff = (a.highEloWinrate ?? 0) - (b.highEloWinrate ?? 0)
+    else if (col === 'highEloGames') diff = (a.highEloGames ?? 0) - (b.highEloGames ?? 0)
+    else if (col === 'delta') diff = (a.delta ?? 0) - (b.delta ?? 0)
     return mult * diff
   })
 })
-const totalTierListCount = computed(() => sortedChampionsWithTier.value.length)
+
+const totalTierListCount = computed(() => sortedTierListRows.value.length)
 const totalTierListPages = computed(() =>
   Math.max(1, Math.ceil(totalTierListCount.value / championsPageSize.value))
 )
 const paginatedTierList = computed(() => {
-  const list = sortedChampionsWithTier.value
+  const list = sortedTierListRows.value
   const size = championsPageSize.value
   const page = Math.min(tierListPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
   const start = (page - 1) * size
   return list.slice(start, start + size)
 })
-/** Tier list bar chart: champions ordered by matchup score (worst to best). */
+
+/** Tier list bar chart: ordered by PBI (worst to best). */
 const tierListBarChartData = computed(() => {
-  const list = [...championsWithTier.value].sort((a, b) => a.score - b.score)
-  const minScore = Math.min(...list.map(c => c.score), -10)
-  const maxScore = Math.max(...list.map(c => c.score), 10)
-  const range = Math.max(Math.abs(minScore), Math.abs(maxScore), 1)
+  const list = [...tierListRows.value].sort((a, b) => a.pbi - b.pbi)
+  const minPbi = Math.min(...list.map(c => c.pbi), -5)
+  const maxPbi = Math.max(...list.map(c => c.pbi), 10)
+  const range = Math.max(Math.abs(minPbi), Math.abs(maxPbi), 1)
   return list.map(c => ({
     ...c,
-    barHeight: (Math.abs(c.score) / range) * 100,
+    barHeight: (Math.abs(c.pbi) / range) * 100,
   }))
 })
-const TIER_CHART_COLORS: Record<Tier, string> = {
+
+const TIER_CHART_COLORS: Record<string, string> = {
+  'S+': '#c084fc',
   S: '#eab308',
   A: '#38bdf8',
   B: '#a78bfa',
   C: '#fb923c',
-  F: '#dc2626',
+  D: '#dc2626',
 }
-function setTierListSort(col: 'tier' | 'score' | 'delta' | 'winrate' | 'pickrate' | 'banrate') {
-  if (tierListSortOrder.value === col) {
-    tierListSortDir.value = tierListSortDir.value === 'desc' ? 'asc' : 'desc'
+
+function cycleTierListSort(col: TierListSortColumn) {
+  if (tierListSortColumn.value === col) {
+    if (tierListSortDir.value === 'desc') tierListSortDir.value = 'asc'
+    else tierListSortColumn.value = null
   } else {
-    tierListSortOrder.value = col
+    tierListSortColumn.value = col
     tierListSortDir.value = 'desc'
   }
 }
-watch([tierListSortOrder, tierListSortDir, championsPageSize], () => {
+function tierListSortIcon(col: TierListSortColumn): string {
+  if (tierListSortColumn.value !== col) return '—'
+  return tierListSortDir.value === 'desc' ? '↓' : '↑'
+}
+watch([tierListSortColumn, tierListSortDir, championsPageSize], () => {
   tierListPage.value = 1
 })
 
@@ -4197,22 +4282,34 @@ const championsData = ref<{
 } | null>(null)
 const championsPending = ref(true)
 const championsError = ref<string | null>(null)
-const matchupTierPending = ref(false)
-const matchupTierError = ref<string | null>(null)
-const matchupTierData = ref<{
+const tierListPending = ref(false)
+const tierListError = ref<string | null>(null)
+const tierListData = ref<{
   patch: string
-  rankTier: string | null
-  lane: string | null
+  rankTier: string
   rows: Array<{
+    rank: number
     championId: number
-    matchups: number
-    totalGames: number
-    avgScore: number
-    avgWinrate: number
-    avgKda: number
-    avgLevel: number
-    avgConfidence: number
-    avgDeltaVsPrevPatch: number | null
+    tier: string
+    mainRole: string
+    mainRolePct: number
+    winrate: number
+    pickrate: number
+    banrate: number
+    pbi: number
+    games: number
+  }>
+  highEloRows?: Array<{
+    rank: number
+    championId: number
+    tier: string
+    mainRole: string
+    mainRolePct: number
+    winrate: number
+    pickrate: number
+    banrate: number
+    pbi: number
+    games: number
   }>
 } | null>(null)
 const queryString = computed(() => {
@@ -4244,39 +4341,46 @@ function patchFromVersion(version: string | null | undefined): string | null {
   if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
   return `${major}.${minor}`
 }
-const effectiveMatchupPatch = computed(() => {
+const effectiveTierListPatch = computed(() => {
   const fromFilter = patchFromVersion(statsVersionFilter.value)
   if (fromFilter) return fromFilter
   return patchFromVersion(gameVersion.value)
 })
-async function loadMatchupTierList() {
-  const patch = effectiveMatchupPatch.value
-  if (!patch) {
-    matchupTierData.value = null
-    return
-  }
-  matchupTierPending.value = true
-  matchupTierError.value = null
+async function loadTierList() {
+  tierListPending.value = true
+  tierListError.value = null
   try {
     const params = new URLSearchParams()
-    params.set('patch', patch)
-    for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-    if (statsRoleFilter.value) params.set('lane', statsRoleFilter.value)
-    params.set('minGames', '20')
-    params.set('limit', '300')
-    matchupTierData.value = await statsFetch(
-      apiUrl(`/api/stats/matchup-tier-list?${params.toString()}`)
-    )
+    const patch = effectiveTierListPatch.value
+    if (patch) params.set('patch', patch)
+    params.set('rankTier', 'all')
+    const data = await statsFetch<{
+      patch: string
+      rankTier: string
+      rows: unknown[]
+      highEloRows?: unknown[]
+      error?: string
+      message?: string
+    }>(apiUrl(`/api/stats/tier-list?${params.toString()}`))
+    tierListData.value = data
+    if (data?.error || data?.message) {
+      tierListError.value = [data.error, data.message].filter(Boolean).join(': ')
+    } else {
+      tierListError.value = null
+    }
   } catch (err) {
-    matchupTierError.value = err instanceof Error ? err.message : String(err)
-    matchupTierData.value = null
+    tierListError.value = err instanceof Error ? err.message : String(err)
+    tierListData.value = null
   } finally {
-    matchupTierPending.value = false
+    tierListPending.value = false
   }
 }
 watch([statsDivisionFilter, statsRoleFilter], () => {
   if (activeTab.value === 'champions' || activeTab.value === 'tierlist') loadChampions()
-  if (activeTab.value === 'tierlist') loadMatchupTierList()
+  if (activeTab.value === 'tierlist') loadTierList()
+})
+watch(effectiveTierListPatch, (patch, oldPatch) => {
+  if (activeTab.value === 'tierlist' && (patch || oldPatch)) loadTierList()
 })
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
@@ -4402,7 +4506,7 @@ watch(activeTab, async tab => {
   }
   if (tab === 'sides') loadOverviewSides()
   if (tab === 'tierlist' || tab === 'champions') loadChampions()
-  if (tab === 'tierlist') loadMatchupTierList()
+  if (tab === 'tierlist') loadTierList()
   if (tab === 'duration') loadOverviewDurationWinrate()
   if (tab === 'items' || tab === 'spells' || tab === 'detail') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
@@ -4438,7 +4542,7 @@ onMounted(async () => {
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
   // Champions chargés à la demande à l’ouverture des onglets Champions / Tier list
-  loadMatchupTierList()
+  loadTierList()
 })
 </script>
 
