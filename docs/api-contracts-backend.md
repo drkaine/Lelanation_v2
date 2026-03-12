@@ -313,6 +313,12 @@ Reset cache metrics.
 
 ---
 
+### Statistics (LoL)
+
+Les endpoints `/api/stats/*` (overview, champions, overview-teams, overview-detail, duration-winrate, progression, abandons, tier-list, matchups, etc.) exposent les statistiques calculées à partir de la base PostgreSQL. Pour les **formules et définitions** des métriques (winrate, pickrate, banrate, objectifs, etc.), voir [Calculs des statistiques](stats-calculations.md).
+
+---
+
 ### Health & Status
 
 #### GET `/api/health`

@@ -1,6 +1,6 @@
 # Audit des formules de stats (champions, runes, items, summoner spells)
 
-Ce document compare les formules cibles (document utilisateur) avec l’implémentation actuelle.
+Ce document compare les formules cibles (document utilisateur) avec l’implémentation actuelle. Pour une **liste et une explication** de tous les calculs (winrate, pickrate, objectifs, durée, progression, tier list, matchups, abandons), voir [Calculs des statistiques](stats-calculations.md).
 
 **Notation:**  
 - `M` = ensemble des matchs filtrés (patch / queue / région)  

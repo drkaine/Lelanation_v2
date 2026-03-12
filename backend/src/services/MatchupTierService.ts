@@ -6,6 +6,9 @@ const GLOBAL_RANK_KEY = 'GLOBAL'
 const SCORE_MIN = -10
 const SCORE_MAX = 10
 
+/** Min games for a champion to be "eligible" when computing average winrate vs opponent (Delta method). */
+export const MATCHUP_DELTA_MIN_GAMES_ELIGIBLE = 100
+
 interface MatchParticipantForMatchup {
   championId?: number
   teamId?: number | null
@@ -110,6 +113,49 @@ function computeScoreFromAggregates(games: number, wins: number, avgKda: number,
     score: clamp(scored, SCORE_MIN, SCORE_MAX),
     confidence: Number(confidence.toFixed(4)),
   }
+}
+
+// ─── Note de matchup type Lolalytics (Delta + bandes + pondération) ─────────
+// Voir docs/stats-calculations.md §9.1. Matchup = champion à un rôle donné vs opposant au même rôle.
+
+/**
+ * Delta(A→B) = winrate_A_vs_B (en %) - moyenne des winrates des autres champions (éligibles) vs B.
+ * Retourne le score de base (-10, -6, -3, 0, 3, 6, 10) selon les bandes de Delta.
+ */
+export function deltaToMatchupBaseScore(delta: number): number {
+  if (delta < -5) return -10
+  if (delta < -2) return -6
+  if (delta < -0.5) return -3
+  if (delta <= 0.5) return 0
+  if (delta <= 2) return 3
+  if (delta <= 5) return 6
+  return 10
+}
+
+/**
+ * Pondération = games(A vs B) / total_games(A au rôle).
+ * Score de matchup pondéré = score_de_base(Delta) × pondération.
+ */
+export function matchupScoreFromDeltaAndWeight(params: {
+  delta: number
+  gamesInMatchup: number
+  totalGamesChampion: number
+}): number {
+  const { delta, gamesInMatchup, totalGamesChampion } = params
+  const base = deltaToMatchupBaseScore(delta)
+  if (totalGamesChampion <= 0) return 0
+  const weight = gamesInMatchup / totalGamesChampion
+  return base * weight
+}
+
+/**
+ * Delta(A→B) en points de winrate : winrate_A_vs_B (%) - avg_winrate_others_vs_B (%).
+ */
+export function computeDelta(
+  winrateAVsBPercent: number,
+  avgWinrateOthersVsBPercent: number
+): number {
+  return winrateAVsBPercent - avgWinrateOthersVsBPercent
 }
 
 async function recomputeScoreAndDelta(row: {
@@ -331,5 +377,8 @@ export const __testables = {
   buildMatchupRows,
   previousPatch,
   rankTierFromMatchRank,
+  deltaToMatchupBaseScore,
+  matchupScoreFromDeltaAndWeight,
+  computeDelta,
 }
 

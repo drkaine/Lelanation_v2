@@ -45,6 +45,8 @@ cd backend
 npx prisma migrate deploy
 ```
 
+Si des migrations « stats » prennent longtemps, voir [Migrations longues (stats, vues matérialisées)](migrations-long-running.md) pour le découpage et comment arrêter / reprendre.
+
 ---
 
 ## Méthodes d’accès

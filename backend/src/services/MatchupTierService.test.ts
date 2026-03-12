@@ -57,3 +57,35 @@ test('buildMatchupRows creates mirrored lane-vs-lane rows', () => {
   assert.equal(globalAatrox?.wins, 1)
   assert.equal(globalJax?.wins, 0)
 })
+
+test('deltaToMatchupBaseScore maps Delta to -10,-6,-3,0,3,6,10 bands', () => {
+  const { deltaToMatchupBaseScore } = __testables
+  assert.equal(deltaToMatchupBaseScore(-6), -10)
+  assert.equal(deltaToMatchupBaseScore(-5), -6)
+  assert.equal(deltaToMatchupBaseScore(-3), -6)
+  assert.equal(deltaToMatchupBaseScore(-2), -3)
+  assert.equal(deltaToMatchupBaseScore(-1), -3)
+  assert.equal(deltaToMatchupBaseScore(-0.5), 0)
+  assert.equal(deltaToMatchupBaseScore(0), 0)
+  assert.equal(deltaToMatchupBaseScore(0.5), 0)
+  assert.equal(deltaToMatchupBaseScore(1), 3)
+  assert.equal(deltaToMatchupBaseScore(2), 3)
+  assert.equal(deltaToMatchupBaseScore(3), 6)
+  assert.equal(deltaToMatchupBaseScore(5), 6)
+  assert.equal(deltaToMatchupBaseScore(6), 10)
+})
+
+test('matchupScoreFromDeltaAndWeight applies pondération', () => {
+  const { matchupScoreFromDeltaAndWeight } = __testables
+  // Delta 4 → base 6. Si 100 games dans le matchup et 500 total → weight 0.2 → score 1.2
+  assert.ok(Math.abs(matchupScoreFromDeltaAndWeight({ delta: 4, gamesInMatchup: 100, totalGamesChampion: 500 }) - 1.2) < 1e-9)
+  // delta -3 → base -6, weight 50/200 = 0.25 → -1.5
+  assert.ok(Math.abs(matchupScoreFromDeltaAndWeight({ delta: -3, gamesInMatchup: 50, totalGamesChampion: 200 }) - (-1.5)) < 1e-9)
+  assert.equal(matchupScoreFromDeltaAndWeight({ delta: 1, gamesInMatchup: 10, totalGamesChampion: 0 }), 0)
+})
+
+test('computeDelta is winrate A vs B minus avg others vs B', () => {
+  const { computeDelta } = __testables
+  assert.equal(computeDelta(54, 50), 4)
+  assert.equal(computeDelta(46, 50), -4)
+})

@@ -182,7 +182,12 @@ export type RiotPollerInit = {
   clefType: string | null
 }
 
-/** Returns true if backfill (steps 2, 2b, 3) is needed: players to sync, or null ranks/roles for valid-key players. */
+/**
+ * Returns true if backfill (phase 3) is needed.
+ * rankTier=null means "never processed" (needs backfill).
+ * rankTier='UNRANKED' means "processed, player has no Solo/Duo rank" — not a missing value.
+ * Match.rank is recomputed only when at least one participant has a real tier (not null/UNRANKED).
+ */
 async function hasMissingBackfillData(clefType: string | null): Promise<boolean> {
   const playerFilter = clefType ? { player: { puuidKeyVersion: clefType } } : {}
   const [playersToSync, nullRole, nullRank, matchesNullRank] = await Promise.all([
@@ -191,44 +196,25 @@ async function hasMissingBackfillData(clefType: string | null): Promise<boolean>
           where: {
             OR: [
               { puuidKeyVersion: null },
-              { puuidKeyVersion: { notIn: ['erreur', 'perdu', clefType] } },
+              { puuidKeyVersion: { notIn: ['perdu', clefType] } },
+              { gameName: null, puuidKeyVersion: clefType },
             ],
-            gameName: { not: null },
-            tagName: { not: null },
           },
         })
       : Promise.resolve(0),
     prisma.participant.count({ where: { role: null, ...playerFilter } }),
+    // null only = never processed; UNRANKED = processed, no rank → skip
     prisma.participant.count({ where: { rankTier: null, ...playerFilter } }),
-    prisma.match.count({ where: { rank: null, participants: { some: { rankTier: { not: null } } } } }),
+    prisma.match.count({
+      where: {
+        rank: null,
+        participants: { some: { rankTier: { not: null, notIn: ['UNRANKED'] } } },
+      },
+    }),
   ])
   return playersToSync > 0 || nullRole > 0 || nullRank > 0 || matchesNullRank > 0
 }
 
-/**
- * Apply a PUUID update to a player, handling P2002 conflicts (mark as 'perdu').
- * Returns 'synced' | 'perdu' | 'throw'.
- */
-async function applyPuuidUpdate(
-  playerId: bigint,
-  puuid: string,
-  clefType: string,
-  extraData?: Partial<{ tagName: string }>
-): Promise<'synced' | 'perdu'> {
-  try {
-    await prisma.player.update({
-      where: { id: playerId },
-      data: { puuid, puuidKeyVersion: clefType, ...extraData },
-    })
-    return 'synced'
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      await prisma.player.update({ where: { id: playerId }, data: { puuidKeyVersion: 'perdu' } })
-      return 'perdu'
-    }
-    throw e
-  }
-}
 
 /**
  * Extract (gameName, tagLine) from a match participant, preferring the fields that Riot
@@ -249,13 +235,16 @@ function participantNames(part: RiotParticipantDto): { gn: string; tl: string } 
 }
 
 /**
- * Phase 2: sync all players whose puuidKeyVersion != clefType (and != 'erreur').
+ * Phase 2: sync all players whose puuidKeyVersion != clefType (includes 'erreur' and null).
  *
- * Strategy: instead of calling getAccountByRiotId() for every player (1 req/player), we first
- * look up matches already stored in our DB where those players participated. A single getMatch()
- * call covers up to 10 players at once via the riotIdGameName/riotIdTagline fields that Riot
- * includes in every participant entry. Only players we still can't resolve after match lookups
- * fall back to the individual getAccountByRiotId() call.
+ * Strategy: positional matching against existing match history in our DB.
+ * DB participants are stored in insertion order (= Riot response order), so
+ * dbParticipant[i] ↔ riotParticipant[i] for the same match. One getMatch() call
+ * resolves up to 10 players and also backfills role, challenges, and runes.
+ *
+ * No fallback API calls (getAccountByRiotId etc.). Players with no match history
+ * or whose PUUID conflicts with an existing row get puuid = String(player.id)
+ * as a placeholder (will be overwritten on their next real match in Phase 4).
  */
 async function runPhase2(
   client: RiotHttpClient,
@@ -263,43 +252,30 @@ async function runPhase2(
   clefType: string | null
 ): Promise<void> {
   if (!clefType) return
-  await logger.step('Phase 2 start: sync players to current key (match-based)', { clefType })
+  await logger.step('Phase 2 start: sync players to current key (positional match-based)', { clefType })
   let totalSynced = 0
-  let totalPerdu = 0
-  let totalViaMatch = 0
-  let totalViaRiotId = 0
+  let totalPlaceholder = 0
 
   while (!state.shouldStop) {
-    const batch = await prisma.player.findMany({
+    // Include 'erreur' players and players with missing gameName (Match-v5 replaces Account-v1)
+    const batch: { id: bigint; puuidKeyVersion: string | null }[] = await prisma.player.findMany({
       where: {
-        // NULL must be included explicitly — Prisma's notIn excludes NULL rows in SQL
-        // Note: 'erreur' is kept in the exclusion list for backward-compat — those players are
-        // handled by Phase 2b until they drain to zero.
         OR: [
           { puuidKeyVersion: null },
-          { puuidKeyVersion: { notIn: ['erreur', 'perdu', clefType] } },
+          { puuidKeyVersion: { notIn: ['perdu', clefType] } },
+          { gameName: null, puuidKeyVersion: clefType },
         ],
-        gameName: { not: null },
-        tagName: { not: null },
       },
       take: 100,
       orderBy: { createdAt: 'desc' },
-      select: { id: true, gameName: true, tagName: true, puuid: true },
+      select: { id: true, puuidKeyVersion: true },
     })
     if (batch.length === 0) break
 
-    // Build a lookup: "gamename#tagline" → player (for matching against match participants)
-    const pendingByName = new Map<string, typeof batch[0]>()
-    for (const p of batch) {
-      const key = `${(p.gameName ?? '').trim().toLowerCase()}#${(p.tagName ?? '').trim().toLowerCase()}`
-      if (key !== '#') pendingByName.set(key, p)
-    }
+    const playerIds: bigint[] = batch.map(p => p.id)
+    const pendingIds = new Set(playerIds)
 
-    // ── Step 1: batch-resolve via existing match history in our DB ──────────
-    const playerIds = batch.map(p => p.id)
-
-    // Find which internal match IDs these players participated in, and count how many
-    // pending players each match covers — prioritise the most-covering matches.
+    // Find matches where these players participated, prioritise highest coverage
     const partRows = await prisma.participant.findMany({
       where: { playerId: { in: playerIds } },
       select: { matchId: true },
@@ -313,19 +289,16 @@ async function runPhase2(
       .map(([id]) => id)
 
     if (sortedInternalIds.length > 0) {
-      // Fetch Riot match IDs and rebuild the coverage-ordered list
       const matchRows = await prisma.match.findMany({
         where: { id: { in: sortedInternalIds } },
         select: { id: true, matchId: true },
       })
       const internalToRiot = new Map(matchRows.map(m => [m.id, m.matchId]))
-      // Preserve coverage order (most players covered first)
-      const riotIds = sortedInternalIds
-        .map(id => internalToRiot.get(id))
-        .filter((id): id is string => id !== undefined)
 
-      for (const riotMatchId of riotIds) {
-        if (state.shouldStop || pendingByName.size === 0) break
+      for (const internalId of sortedInternalIds) {
+        if (state.shouldStop || pendingIds.size === 0) break
+        const riotMatchId = internalToRiot.get(internalId)
+        if (!riotMatchId) continue
 
         const matchRes = await client.getMatch(riotMatchId)
         setState({ requestCount: state.requestCount + 1 })
@@ -334,187 +307,72 @@ async function runPhase2(
           continue
         }
 
-        const participants = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
-        for (const part of participants) {
-          if (!part.puuid) continue
-          const { gn, tl } = participantNames(part)
-          if (!gn || !tl) continue
+        // Positional matching: DB participants ordered by id == Riot insertion order
+        const dbParticipants = await prisma.participant.findMany({
+          where: { matchId: internalId },
+          select: { id: true, playerId: true },
+          orderBy: { id: 'asc' },
+        })
+        const riotParticipants = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
+        if (dbParticipants.length !== riotParticipants.length) continue
 
-          const key = `${gn}#${tl}`
-          const player = pendingByName.get(key)
-          if (!player) continue
+        for (let i = 0; i < dbParticipants.length; i++) {
+          const dbPart = dbParticipants[i]
+          const riotPart = riotParticipants[i]
+          const playerId = dbPart.playerId
+          if (!pendingIds.has(playerId) || !riotPart.puuid) continue
 
-          const result = await applyPuuidUpdate(player.id, part.puuid, clefType)
-          pendingByName.delete(key)
-          if (result === 'synced') { totalSynced++; totalViaMatch++ }
-          else totalPerdu++
-        }
-      }
-    }
-
-    // ── Step 2: fallback — individual getAccountByRiotId for unresolved players ──
-    for (const p of pendingByName.values()) {
-      if (state.shouldStop) break
-      const gameName = (p.gameName ?? '').trim()
-      const tagLine = (p.tagName ?? '').trim()
-      if (!gameName || !tagLine) continue
-
-      const res = await client.getAccountByRiotId(gameName, tagLine)
-      setState({ requestCount: state.requestCount + 1 })
-      if (res.ok) {
-        const result = await applyPuuidUpdate(p.id, res.data.puuid, clefType)
-        if (result === 'synced') { totalSynced++; totalViaRiotId++ }
-        else totalPerdu++
-        continue
-      }
-      if (res.status === 429) setState({ error429Count: state.error429Count + 1 })
-
-      // Fallback: same gameName but with tagLine = 'EUW'
-      const resEuw = await client.getAccountByRiotId(gameName, 'EUW')
-      setState({ requestCount: state.requestCount + 1 })
-      if (resEuw.ok) {
-        const result = await applyPuuidUpdate(p.id, resEuw.data.puuid, clefType, { tagName: 'EUW' })
-        if (result === 'synced') { totalSynced++; totalViaRiotId++ }
-        else totalPerdu++
-        continue
-      }
-
-      // Last resort: fetch the player's most recent match from Riot and scan participants by name.
-      // If found → update PUUID. If not → mark 'perdu' immediately (no intermediate 'erreur' state).
-      const matchIdsRes = await client.getMatchIdsByPuuid(p.puuid, { queue: 420, count: 1 })
-      setState({ requestCount: state.requestCount + 1 })
-      if (!matchIdsRes.ok) {
-        if (matchIdsRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-        // On 429 we skip without marking perdu (will be retried next loop iteration)
-        else { await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'perdu' } }); totalPerdu++ }
-        continue
-      }
-      const riotMatchIds = Array.isArray(matchIdsRes.data) ? matchIdsRes.data : []
-      if (!riotMatchIds[0]) {
-        await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'perdu' } })
-        totalPerdu++
-        continue
-      }
-      const lastMatchRes = await client.getMatch(riotMatchIds[0])
-      setState({ requestCount: state.requestCount + 1 })
-      if (!lastMatchRes.ok) {
-        if (lastMatchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-        continue
-      }
-      const lastMatchParts = (lastMatchRes.data.info?.participants ?? []) as RiotParticipantDto[]
-      let foundViaRiotHistory = false
-      for (const part of lastMatchParts) {
-        if (!part.puuid) continue
-        const { gn, tl } = participantNames(part)
-        if (!gn || !tl) continue
-        if (gn === gameName.toLowerCase() && tl === tagLine.toLowerCase()) {
-          const result = await applyPuuidUpdate(p.id, part.puuid, clefType)
-          if (result === 'synced') { totalSynced++; totalViaRiotId++ }
-          else totalPerdu++
-          foundViaRiotHistory = true
-          break
-        }
-      }
-      if (!foundViaRiotHistory) {
-        await prisma.player.update({ where: { id: p.id }, data: { puuidKeyVersion: 'perdu' } })
-        totalPerdu++
-      }
-    }
-  }
-  await logger.step('Phase 2 end', { totalSynced, totalPerdu, totalViaMatch, totalViaRiotId })
-}
-
-/**
- * Phase 2b: recover players with puuidKeyVersion='erreur' via match history.
- *
- * Optimisation: riotIdGameName/riotIdTagline are already present in Match v5 participant data, so
- * we no longer need to call getAccountByPuuid() for each of the 10 participants (saves up to 10
- * requests per match). We also check our own DB first to avoid a getMatchIdsByPuuid() call when
- * we already have a match stored for that player.
- *
- * If still unresolvable → marks as 'perdu' (excluded from all future processing).
- */
-async function runPhase2b(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>,
-  clefType: string | null
-): Promise<void> {
-  if (!clefType) return
-  await logger.step('Phase 2b start: recover erreur players', {})
-  let totalRecovered = 0
-  let totalLost = 0
-  while (!state.shouldStop) {
-    const batch = await prisma.player.findMany({
-      where: { puuidKeyVersion: 'erreur', gameName: { not: null }, tagName: { not: null } },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-    })
-    if (batch.length === 0) break
-    for (const player of batch) {
-      if (state.shouldStop) break
-      const gameNameNorm = (player.gameName ?? '').trim().toLowerCase()
-      const tagLineNorm = (player.tagName ?? '').trim().toLowerCase()
-
-      // ── Try to find a match in our own DB first (avoids getMatchIdsByPuuid call) ──
-      let riotMatchId: string | null = null
-      const localPart = await prisma.participant.findFirst({
-        where: { playerId: player.id },
-        select: { match: { select: { matchId: true } } },
-        orderBy: { id: 'desc' },
-      })
-      if (localPart?.match?.matchId) {
-        riotMatchId = localPart.match.matchId
-      } else {
-        // Fall back: ask Riot for the player's most recent match
-        const matchIdsRes = await client.getMatchIdsByPuuid(player.puuid, { queue: 420, count: 1 })
-        setState({ requestCount: state.requestCount + 1 })
-        if (!matchIdsRes.ok) {
-          if (matchIdsRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-          else {
-            await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-            totalLost++
+          const { gn, tl } = participantNames(riotPart)
+          try {
+            await prisma.player.update({
+              where: { id: playerId },
+              data: {
+                puuid: riotPart.puuid,
+                puuidKeyVersion: clefType,
+                ...(gn ? { gameName: gn } : {}),
+                ...(tl ? { tagName: tl } : {}),
+              },
+            })
+            pendingIds.delete(playerId)
+            totalSynced++
+          } catch (e) {
+            if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+              // PUUID already taken by another player row — use id as placeholder
+              await prisma.player.update({
+                where: { id: playerId },
+                data: { puuid: String(playerId), puuidKeyVersion: clefType },
+              })
+              pendingIds.delete(playerId)
+              totalPlaceholder++
+            } else {
+              throw e
+            }
           }
-          continue
-        }
-        const ids = Array.isArray(matchIdsRes.data) ? matchIdsRes.data : []
-        if (!ids[0]) {
-          await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-          totalLost++
-          continue
-        }
-        riotMatchId = ids[0]
-      }
 
-      const matchRes = await client.getMatch(riotMatchId)
-      setState({ requestCount: state.requestCount + 1 })
-      if (!matchRes.ok) {
-        if (matchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-        continue
-      }
-
-      // Match participant data already contains riotIdGameName/riotIdTagline — no extra calls needed
-      const participants = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
-      let found = false
-      for (const part of participants) {
-        if (!part.puuid) continue
-        const { gn, tl } = participantNames(part)
-        if (!gn || !tl) continue
-        if (gn === gameNameNorm && tl === tagLineNorm) {
-          const result = await applyPuuidUpdate(player.id, part.puuid, clefType)
-          if (result === 'synced') totalRecovered++
-          else totalLost++
-          found = true
-          break
+          // Opportunistic backfill: role, challenges, runes for this participant
+          await backfillParticipantFromMatchDto(dbPart.id, internalId, riotPart)
         }
-      }
-      if (!found) {
-        await prisma.player.update({ where: { id: player.id }, data: { puuidKeyVersion: 'perdu' } })
-        totalLost++
       }
     }
+
+    // Players with no match history or still unresolved:
+    // → placeholder PUUID only for those needing PUUID migration (not just gameName refresh)
+    for (const playerId of pendingIds) {
+      const player = batch.find(b => b.id === playerId)!
+      if (player.puuidKeyVersion !== clefType) {
+        await prisma.player.update({
+          where: { id: playerId },
+          data: { puuid: String(playerId), puuidKeyVersion: clefType },
+        })
+        totalPlaceholder++
+      }
+      // else: already on correct key, gameName will be populated when they next appear in Phase 4
+    }
   }
-  await logger.step('Phase 2b end', { totalRecovered, totalLost })
+
+  await logger.step('Phase 2 end', { totalSynced, totalPlaceholder })
 }
+
 
 async function runStep3FixNulls(
   client: RiotHttpClient,
@@ -539,7 +397,7 @@ async function runStep3FixNulls(
     if (!matchRes.ok) continue
     const part = matchRes.data.info?.participants?.find((x) => x.puuid === p.player.puuid)
     if (part) {
-      const role = roleFromPosition(part.individualPosition, part.teamPosition)
+      const role = roleFromPosition(part.teamPosition, part.individualPosition)
       if (role) {
         await prisma.participant.update({ where: { id: p.id }, data: { role } })
         counters.participantsRoleFixed++
@@ -571,18 +429,31 @@ async function runStep3FixNulls(
           rankLp: solo.leaguePoints ?? null,
         },
       })
-      counters.participantsRankFixed++
-      await logger.info('DB: participant updated (rank)', { participantId: String(p.id), tier: solo.tier })
+    } else {
+      // Player has no Solo/Duo rank entry → explicitly unranked (not just missing)
+      await prisma.participant.update({
+        where: { id: p.id },
+        data: { rankTier: 'UNRANKED', rankDivision: null, rankLp: null },
+      })
     }
+    counters.participantsRankFixed++
+    await logger.info('DB: participant updated (rank)', {
+      participantId: String(p.id),
+      tier: solo?.tier ?? 'UNRANKED',
+    })
   }
 
   const matchesNullRank = await prisma.match.findMany({
-    where: { rank: null, participants: { some: { rankTier: { not: null } } } },
+    where: {
+      rank: null,
+      participants: { some: { rankTier: { not: null, notIn: ['UNRANKED'] } } },
+    },
     include: { participants: { include: { player: true } } },
     take: BATCH_FIX_NULLS,
   })
   for (const m of matchesNullRank) {
-    const parts = m.participants.filter((p) => p.rankTier != null)
+    // Exclude UNRANKED participants from the average — they have no meaningful rank score
+    const parts = m.participants.filter((p) => p.rankTier != null && p.rankTier !== 'UNRANKED')
     if (parts.length === 0) continue
     let totalScore = 0
     for (const p of parts) {
@@ -824,15 +695,15 @@ export async function upsertMatchAndParticipants(
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
   const existingPlayers = await prisma.player.findMany({
     where: { puuid: { in: puuids } },
-    select: { id: true, puuid: true, puuidKeyVersion: true },
+    select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
   })
   const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
-  // Compute match-level rank from all participants
+  // Compute match-level rank from all participants (exclude UNRANKED)
   const rankScores: number[] = []
   for (const p of participantDtos) {
     const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier
-    if (tier) {
+    if (tier && tier !== 'UNRANKED') {
       const div = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? ''
       const lp = (p as { leaguePoints?: number }).leaguePoints ?? null
       rankScores.push(rankToScore(tier, div, lp))
@@ -902,24 +773,42 @@ export async function upsertMatchAndParticipants(
   for (const p of participantDtos) {
     const puuid = p.puuid
     if (!puuid) continue
+    const { gn: partGameName, tl: partTagName } = participantNames(p)
     const existingPlayer = existingByPuuid.get(puuid)
     let playerId: bigint
     if (existingPlayer == null) {
       const newPlayer = await prisma.player.create({
-        data: { puuid, region, puuidKeyVersion, gameName: null, tagName: null, lastSeen: null },
+        data: {
+          puuid,
+          region,
+          puuidKeyVersion,
+          gameName: partGameName || null,
+          tagName: partTagName || null,
+          lastSeen: null,
+        },
       })
       playerId = newPlayer.id
-      existingByPuuid.set(puuid, { id: playerId, puuid, puuidKeyVersion })
+      existingByPuuid.set(puuid, { id: playerId, puuid, puuidKeyVersion, gameName: partGameName || null })
       counters.playersFetched++
     } else {
       playerId = existingPlayer.id
+      const playerUpdates: Record<string, unknown> = {}
       if (existingPlayer.puuidKeyVersion === 'perdu' && puuidKeyVersion) {
-        await prisma.player.update({ where: { id: existingPlayer.id }, data: { puuidKeyVersion } })
+        playerUpdates['puuidKeyVersion'] = puuidKeyVersion
         existingPlayer.puuidKeyVersion = puuidKeyVersion
+      }
+      // Populate gameName/tagName from match participant if missing
+      if (!existingPlayer.gameName && partGameName) {
+        playerUpdates['gameName'] = partGameName
+        playerUpdates['tagName'] = partTagName || null
+        existingPlayer.gameName = partGameName
+      }
+      if (Object.keys(playerUpdates).length > 0) {
+        await prisma.player.update({ where: { id: existingPlayer.id }, data: playerUpdates })
       }
     }
 
-    const role = roleFromPosition(p.individualPosition, p.teamPosition)
+    const role = roleFromPosition(p.teamPosition, p.individualPosition)
     const rankTier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? null
     const rankDivision = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
     const rankLp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
@@ -1367,6 +1256,45 @@ async function extractAndInsertTimelineExtras(
   }
 }
 
+/**
+ * Backfill participant data from a Match v5 participant DTO.
+ * Updates role (teamPosition, UTILITY→SUPPORT via roleFromPosition), challenges columns,
+ * and participant_runes if none exist yet.
+ */
+async function backfillParticipantFromMatchDto(
+  participantId: bigint,
+  matchDbId: bigint,
+  riotPart: RiotParticipantDto
+): Promise<void> {
+  const role = roleFromPosition(riotPart.teamPosition, riotPart.individualPosition)
+
+  const challenges = (riotPart as { challenges?: unknown }).challenges ?? null
+  let challengeData: ReturnType<typeof allowedToParticipantChallengeData> | null = null
+  if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
+    const { allowed, unknown } = partitionChallenges(challenges as Record<string, unknown>)
+    if (allowed.length > 0) challengeData = allowedToParticipantChallengeData(allowed)
+    void handleUnknownChallengeKeys(unknown)
+  }
+
+  const updateData = {
+    ...(role ? { role } : {}),
+    ...(challengeData ?? {}),
+  }
+  if (Object.keys(updateData).length > 0) {
+    await prisma.participant.update({ where: { id: participantId }, data: updateData })
+  }
+
+  // Runes: backfill only if none exist yet for this participant
+  const runes = (riotPart as { perks?: unknown }).perks ?? (riotPart as { runes?: unknown }).runes ?? null
+  if (runes) {
+    const existing = await prisma.participantRune.count({ where: { participantId } })
+    if (existing === 0) {
+      const rows = buildRuneRows(participantId, matchDbId, runes)
+      if (rows.length > 0) await prisma.participantRune.createMany({ data: rows, skipDuplicates: true })
+    }
+  }
+}
+
 async function runStep4ForPlayer(
   client: RiotHttpClient,
   logger: ReturnType<typeof createRiotPollerLogger>,
@@ -1785,11 +1713,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   })
 
   try {
-    // ── Phase 2: sync all players with wrong/missing key version ──────────────
+    // ── Phase 2: sync all players with wrong/missing key version (includes 'erreur') ──
     await runPhase2(client, logger, clefType)
-
-    // ── Phase 2b: recover 'erreur' players, mark unresolvable as 'perdu' ──────
-    await runPhase2b(client, logger, clefType)
 
     // ── Phase 3: backfill null rank/role data for current-key players ──────────
     await runPhase3(client, logger, clefType)
@@ -1829,9 +1754,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         participantsFetched: countersEuw.participantsFetched,
       })
       if (resultEuw === '400_decrypt') {
-        // Key changed: re-run full phases 2 + 2b
+        // Key changed: re-run phase 2 (includes former 'erreur' players)
         await runPhase2(client, logger, clefType)
-        await runPhase2b(client, logger, clefType)
         continue
       }
       if (resultEuw === 'prisma_error') await logger.alerte('Prisma error in step 4 (euw1), continuing')
@@ -1850,7 +1774,6 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       })
       if (resultEun === '400_decrypt') {
         await runPhase2(client, logger, clefType)
-        await runPhase2b(client, logger, clefType)
         continue
       }
       if (resultEun === 'prisma_error') await logger.alerte('Prisma error in step 4 (eun1), continuing')

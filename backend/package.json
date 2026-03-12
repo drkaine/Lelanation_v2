@@ -7,12 +7,14 @@
     "dev": "tsx watch src/index.ts",
     "dev:no-watch": "tsx src/index.ts",
     "build": "prisma generate && tsc",
+    "build:no-generate": "tsc && pm2 restart lelanation-backend",
     "start": "node dist/index.js",
     "sync:data": "tsx src/scripts/syncData.ts",
     "copy:assets": "tsx src/scripts/copyStaticAssets.ts",
     "generate:excluded-items": "tsx src/scripts/generateExcludedItems.ts",
     "typecheck": "tsc --noEmit",
     "test:matchups": "tsx --test src/services/MatchupTierService.test.ts",
+    "test:stats": "tsx --test src/utils/statsFormulas.test.ts src/services/TierListService.test.ts src/services/StatsAbandonsService.test.ts src/services/MatchupTierService.test.ts",
     "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/riotPoller.db.test.ts"
   },
   "devDependencies": {

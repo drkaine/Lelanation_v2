@@ -2,7 +2,12 @@
 
 ## Overview
 
-Lelanation uses a file-based storage system (no database). Data is stored as JSON files and cached in Redis for performance. This document describes the data structures used throughout the application.
+Lelanation uses both file-based storage and a PostgreSQL database:
+
+- **Builds, game data (champions, items, runes), analytics** : JSON files, cache Redis.
+- **Statistiques LoL (matchs, participants, classements)** : base PostgreSQL (Prisma). Voir [Accès à la base de données](database-access.md) et [Calculs des statistiques](stats-calculations.md).
+
+Ce document décrit principalement les structures de données côté fichiers et cache.
 
 ## Storage Strategy
 

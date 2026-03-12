@@ -45,6 +45,10 @@ Lelanation is a League of Legends build configuration and statistics website. Th
 - [Sources de données et versions](./data-sources-and-versions.md) – Community Dragon en backend, shared-builds, versions.json (recap patches + dates)
 - [Riot API – Collecte de matchs](./riot-api-match-collection.md) – Workflow, limites, file PUUID, TOS
 
+### Statistics (LoL)
+- [Calculs des statistiques](./stats-calculations.md) – Formules : winrate, pickrate, banrate, objectifs, durée, progression, tier list, matchups, abandons
+- [Audit des formules de stats](./stats-formulas-audit.md) – Conformité des implémentations et cas particuliers (banrate overview vs teams, etc.)
+
 ### Components & UI
 - [Component Inventory - Frontend](./component-inventory-frontend.md) ✓
 

@@ -22,6 +22,29 @@ export interface OverviewAbandonsResult {
   surrenderRate: number
 }
 
+/**
+ * Pure calculation of abandon rates from counts (for testing and reuse).
+ * rate = 100 * count / totalMatches when totalMatches > 0.
+ */
+export function computeAbandonRates(
+  totalMatches: number,
+  remakeCount: number,
+  earlySurrenderCount: number,
+  surrenderCount: number
+): Pick<
+  OverviewAbandonsResult,
+  'remakeRate' | 'earlySurrenderRate' | 'surrenderRate'
+> {
+  if (totalMatches <= 0) {
+    return { remakeRate: 0, earlySurrenderRate: 0, surrenderRate: 0 }
+  }
+  return {
+    remakeRate: (remakeCount / totalMatches) * 100,
+    earlySurrenderRate: (earlySurrenderCount / totalMatches) * 100,
+    surrenderRate: (surrenderCount / totalMatches) * 100,
+  }
+}
+
 function normalizeParam(value: string | string[] | null | undefined): string | null {
   if (value == null) return null
   const s = Array.isArray(value) ? value[0] : value
@@ -103,14 +126,15 @@ export async function getOverviewAbandons(
     )
     const surrenderCount = Number(surrenderResult[0]?.count ?? 0)
 
+    const rates = computeAbandonRates(totalMatches, remakeCount, earlySurrenderCount, surrenderCount)
     const result: OverviewAbandonsResult = {
       totalMatches,
       remakeCount,
-      remakeRate: (remakeCount / totalMatches) * 100,
+      remakeRate: rates.remakeRate,
       earlySurrenderCount,
-      earlySurrenderRate: (earlySurrenderCount / totalMatches) * 100,
+      earlySurrenderRate: rates.earlySurrenderRate,
       surrenderCount,
-      surrenderRate: (surrenderCount / totalMatches) * 100,
+      surrenderRate: rates.surrenderRate,
     }
     abandonsCache.set(cacheKey, { data: result, expiresAt: now + ABANDONS_CACHE_TTL_MS })
     return result

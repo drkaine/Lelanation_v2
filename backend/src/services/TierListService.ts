@@ -90,6 +90,12 @@ function computePbi(winratePct: number, pickratePct: number, banratePct: number)
   return ((winratePct - 50) * pickratePct) / denom
 }
 
+export const __testables = {
+  assignTier,
+  computePbi,
+  tierScoreFromWinrateAndGames: (winrate: number, games: number) => (winrate - 0.5) * Math.sqrt(games),
+}
+
 /** Build tier list rows from per-(champion, role) rows: pick main role per champion, tier_score, tier, PBI, rank. */
 function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
   const byChampion = new Map<
