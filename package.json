@@ -8,6 +8,10 @@
     "companion-app",
     "packages/*"
   ],
+  "overrides": {
+    "serialize-javascript": "7.0.4",
+    "minimatch": "9.0.7"
+  },
   "scripts": {
     "prepare": "husky",
     "sync:data": "cd backend && npm run sync:data",

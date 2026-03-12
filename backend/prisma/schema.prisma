@@ -8,6 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Niveau match: champs légers. Team data (bans/objectives) est normalisée dans match_teams/bans.

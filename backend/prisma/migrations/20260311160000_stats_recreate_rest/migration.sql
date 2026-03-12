@@ -78,9 +78,10 @@ BEGIN
          COALESCE((SELECT j FROM bans_loss_agg), '[]'::jsonb)
     INTO bans_by_win, bans_by_loss;
 
-  -- objectives from match_teams columns
+  -- objectives: *_kills from match_teams; *_first from match_team_first_objectives (columns dropped in 20260310150000)
   WITH filtered_mt AS (
-    SELECT mt.*
+    SELECT mt.id, mt.win, mt.baron_kills, mt.dragon_kills, mt.tower_kills,
+      mt.inhibitor_kills, mt.rift_herald_kills, mt.horde_kills
     FROM match_teams mt
     INNER JOIN matches m ON m.id = mt.match_id
     WHERE (p_version IS NULL OR p_version = '' OR (m.game_version IS NOT NULL AND m.game_version LIKE p_version || '.%'))
@@ -92,10 +93,20 @@ BEGIN
       )
   ),
   obj_flat AS (
-    SELECT fm.win, fm.champion_first AS first_blood,
-      fm.baron_first, fm.baron_kills, fm.dragon_first, fm.dragon_kills,
-      fm.tower_first, fm.tower_kills, fm.inhibitor_first, fm.inhibitor_kills,
-      fm.rift_herald_first, fm.rift_herald_kills, fm.horde_first, fm.horde_kills
+    SELECT fm.win,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'champion') AS first_blood,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'baron') AS baron_first,
+      fm.baron_kills,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'dragon') AS dragon_first,
+      fm.dragon_kills,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'tower') AS tower_first,
+      fm.tower_kills,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'inhibitor') AS inhibitor_first,
+      fm.inhibitor_kills,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'rift_herald') AS rift_herald_first,
+      fm.rift_herald_kills,
+      EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = fm.id AND o.objective_type = 'horde') AS horde_first,
+      fm.horde_kills
     FROM filtered_mt fm
   ),
   obj_agg AS (
