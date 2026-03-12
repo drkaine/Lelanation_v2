@@ -1,10 +1,12 @@
 import express from 'express'
-import { join } from 'path'
+import { join, resolve, sep } from 'path'
 import { promises as fs } from 'fs'
 import { FileManager } from '../utils/fileManager.js'
 
 const router = express.Router()
 const imagesDir = join(process.cwd(), 'data', 'images')
+/** Resolved root for path-traversal checks (must compare resolved paths). */
+const imagesDirResolved = resolve(imagesDir)
 
 /**
  * Serve images from local storage
@@ -48,21 +50,21 @@ router.get('/:version/:type/{*filename}', async (req, res) => {
     // Construct file path (filename can include subdirectories like 'paths/' or 'runes/')
     // Images are stored in latest-only structure. `:version` is kept for backward compatibility.
     const filePath = join(imagesDir, 'latest', type, filename)
+    const resolvedPath = resolve(filePath)
 
-    // Security: ensure path is within imagesDir
-    const normalizedPath = join(imagesDir, 'latest', type, filename)
-    if (!normalizedPath.startsWith(imagesDir)) {
+    // Security: prevent path traversal (e.g. filename = '../../etc/passwd'); compare resolved paths
+    if (resolvedPath !== imagesDirResolved && !resolvedPath.startsWith(imagesDirResolved + sep)) {
       return res.status(403).json({ error: 'Invalid path' })
     }
 
-    // Check if file exists
-    const exists = await FileManager.exists(filePath)
+    // Check if file exists (use resolved path for consistency)
+    const exists = await FileManager.exists(resolvedPath)
     if (!exists) {
       return res.status(404).json({ error: 'Image not found' })
     }
 
     // Read and serve file
-    const fileBuffer = await fs.readFile(filePath)
+    const fileBuffer = await fs.readFile(resolvedPath)
 
     // Set appropriate content type
     const ext = filename.split('.').pop()?.toLowerCase()
