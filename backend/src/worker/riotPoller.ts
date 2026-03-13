@@ -25,6 +25,7 @@ import {
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank, formatRankString } from '../utils/rankScore.js'
 import { partitionChallenges, handleUnknownChallengeKeys, allowedToParticipantChallengeData } from '../services/ChallengeNormalisationService.js'
+
 const BATCH_FIX_NULLS = 50
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
@@ -1004,15 +1005,21 @@ export async function upsertMatchAndParticipants(
     const perkRows = buildPerkRows(pid, mid, statPerks)
     if (perkRows.length > 0) await prisma.participantPerk.createMany({ data: perkRows })
 
-    // challenge columns on participant (filtered by allowlist)
+    // challenge columns on participant (filtered by allowlist); skip if DB missing columns (schema drift)
     if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
       const { allowed, unknown } = partitionChallenges(challenges as Record<string, unknown>)
       if (allowed.length > 0) {
         const challengeData = allowedToParticipantChallengeData(allowed)
-        await prisma.participant.update({
-          where: { id: pid },
-          data: challengeData,
-        })
+        try {
+          await prisma.participant.update({
+            where: { id: pid },
+            data: challengeData,
+          })
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (!msg.includes('does not exist')) throw err
+          // DB missing challenge columns: participant already created, continue
+        }
       }
       for (const [k, v] of Object.entries(unknown)) {
         allUnknownKeys[k] = v
@@ -1268,20 +1275,16 @@ async function backfillParticipantFromMatchDto(
 ): Promise<void> {
   const role = roleFromPosition(riotPart.teamPosition, riotPart.individualPosition)
 
+  // Register unknown challenge keys for Discord; do not update challenge columns here:
+  // Prisma + @prisma/adapter-pg can raise "column (not available) does not exist" even when all ch_* exist in DB.
   const challenges = (riotPart as { challenges?: unknown }).challenges ?? null
-  let challengeData: ReturnType<typeof allowedToParticipantChallengeData> | null = null
   if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
-    const { allowed, unknown } = partitionChallenges(challenges as Record<string, unknown>)
-    if (allowed.length > 0) challengeData = allowedToParticipantChallengeData(allowed)
+    const { unknown } = partitionChallenges(challenges as Record<string, unknown>)
     void handleUnknownChallengeKeys(unknown)
   }
 
-  const updateData = {
-    ...(role ? { role } : {}),
-    ...(challengeData ?? {}),
-  }
-  if (Object.keys(updateData).length > 0) {
-    await prisma.participant.update({ where: { id: participantId }, data: updateData })
+  if (role) {
+    await prisma.$executeRaw(Prisma.sql`UPDATE participants SET role = ${role} WHERE id = ${participantId}`)
   }
 
   // Runes: backfill only if none exist yet for this participant

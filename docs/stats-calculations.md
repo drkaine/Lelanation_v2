@@ -10,7 +10,7 @@ Ce document liste et explique les formules utilisées pour les statistiques LoL 
 
 - **Matchs filtrés** : selon `game_version` (ex. 16.1) et/ou `rank` (ex. GOLD). Une partie des stats est calculée sans filtre (cache en vues matérialisées).
 - **Équipe gagnante / perdante** : déduite de `match_teams.win` (plus de `participants.win`).
-- **Rôle équipe** : les 5 premiers participants d’un match = équipe 100 (bleue), les 5 suivants = équipe 200 (rouge), via `ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id)`.
+- **Côté équipe** : les 5 premiers participants d’un match = équipe 100 (bleue), les 5 suivants = équipe 200 (rouge), via `ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id)`.
 
 ---
 

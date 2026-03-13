@@ -1,6 +1,6 @@
 /**
  * Top players and champion stats: computed on the fly from participants (no pre-aggregated table).
- * total_games/total_wins from view players_with_stats.
+ * total_games/total_wins from get_players_with_stats().
  */
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
@@ -69,7 +69,7 @@ export async function getTopPlayers(options: {
       if (idList.length === 0) return []
       const rows = await prisma.$queryRaw<ViewRow[]>(Prisma.sql`
         SELECT id, puuid, game_name, tag_name, region, total_games, total_wins
-        FROM players_with_stats
+        FROM get_players_with_stats()
         WHERE total_games >= ${minGames} AND id = ANY(${idList}::bigint[])
         ORDER BY total_wins DESC
         LIMIT ${limit}
@@ -128,7 +128,7 @@ export async function getPlayerBySummonerName(summonerName: string): Promise<Pla
       Array<{ puuid: string; game_name: string | null; tag_name: string | null; region: string; total_games: number; total_wins: number }>
     >(Prisma.sql`
       SELECT puuid, game_name, tag_name, region, total_games, total_wins
-      FROM players_with_stats
+      FROM get_players_with_stats()
       WHERE game_name ILIKE ${pattern} OR tag_name ILIKE ${pattern}
       LIMIT 1
     `)

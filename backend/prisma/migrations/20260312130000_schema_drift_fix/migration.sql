@@ -1,0 +1,1 @@
+-- No-op: schema drift fix placeholder (file was missing, required by Prisma).

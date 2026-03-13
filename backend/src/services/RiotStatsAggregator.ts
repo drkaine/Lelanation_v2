@@ -1,7 +1,6 @@
 /**
  * Aggregates LoL stats from PostgreSQL via get_stats_champions() (single round-trip).
- * Winrate / pickrate by champion; optional filters by rank and role.
- * Sans filtre (NULL, NULL) : lecture depuis mv_stats_champions (< 1 s). Avec filtre : cache mémoire 5 min.
+ * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -74,19 +73,10 @@ export class RiotStatsAggregator {
       const cached = championsCache.get(cacheKey)
       if (cached && cached.expiresAt > now) return cached.data
 
-      let raw: RawChampionsResult | null = null
-      if (pRankTier === null && pRole === null) {
-        const mvRows = await prisma.$queryRaw<Array<{ data: RawChampionsResult | null }>>`
-          SELECT data FROM mv_stats_champions LIMIT 1
-        `
-        raw = mvRows[0]?.data ?? null
-      }
-      if (raw === null) {
-        const rows = await prisma.$queryRaw<ChampionsRow>`
-          SELECT get_stats_champions(${pRankTier}, ${pRole}) AS get_stats_champions
-        `
-        raw = rows[0]?.get_stats_champions ?? null
-      }
+      const rows = await prisma.$queryRaw<ChampionsRow>`
+        SELECT get_stats_champions(${pRankTier}, ${pRole}) AS get_stats_champions
+      `
+      const raw = rows[0]?.get_stats_champions ?? null
       if (!raw) return null
 
       const champions: ChampionStats[] = (raw.champions ?? []).map((c) => {

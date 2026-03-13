@@ -189,29 +189,51 @@ DECLARE
   result jsonb;
   version_cond text;
   rank_cond text;
+  m_version_cond text;
+  m_rank_cond text;
 BEGIN
   IF p_version IS NULL OR p_version = '' THEN
     version_cond := '1=1';
+    m_version_cond := '1=1';
   ELSE
     version_cond := 'game_version IS NOT NULL AND game_version LIKE ' || quote_literal(p_version || '.%');
+    m_version_cond := 'm.game_version IS NOT NULL AND m.game_version LIKE ' || quote_literal(p_version || '.%');
   END IF;
   IF p_rank_tier IS NULL OR p_rank_tier = '' THEN
     rank_cond := '1=1';
+    m_rank_cond := '1=1';
   ELSE
     rank_cond := 'rank IS NOT NULL AND rank != '''' AND UPPER(TRIM(split_part(rank, ''_'', 1))) = UPPER(TRIM(' || quote_literal(p_rank_tier) || '))';
+    m_rank_cond := 'm.rank IS NOT NULL AND m.rank != '''' AND UPPER(TRIM(split_part(m.rank, ''_'', 1))) = UPPER(TRIM(' || quote_literal(p_rank_tier) || '))';
   END IF;
 
   EXECUTE format(
-    'SELECT COUNT(*) FROM mv_overview_detail_base WHERE %s AND %s',
-    version_cond,
-    rank_cond
-  ) INTO total_participants;
-
-  EXECUTE format(
-    'SELECT COUNT(DISTINCT match_id) FROM mv_overview_detail_base WHERE %s AND %s',
-    version_cond,
-    rank_cond
-  ) INTO total_matches;
+    $count$
+    WITH base AS (
+      SELECT p.match_id,
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object(''id'', rune_styles.style_id, ''selections'', rune_styles.sel) ORDER BY rune_styles.min_slot)
+          FROM (
+            SELECT pr.style_id, jsonb_agg(jsonb_build_object(''perk'', pr.perk_id) ORDER BY pr.slot) AS sel, MIN(pr.slot) AS min_slot
+            FROM participant_runes pr WHERE pr.participant_id = p.id GROUP BY pr.style_id
+          ) rune_styles
+        ), ''[]''::jsonb) AS runes,
+        COALESCE((SELECT jsonb_agg(pi.item_id ORDER BY pi.item_slot) FROM participant_items pi WHERE pi.participant_id = p.id), ''[]''::jsonb) AS items,
+        COALESCE((SELECT jsonb_agg(pss.spell_id ORDER BY pss.spell_slot) FROM participant_summoner_spells pss WHERE pss.participant_id = p.id), ''[]''::jsonb) AS summoner_spells,
+        mt.win
+      FROM participants p
+      INNER JOIN matches m ON m.id = p.match_id
+      INNER JOIN (
+        SELECT id, match_id, CASE WHEN ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id) <= 5 THEN 100 ELSE 200 END AS team_id FROM participants
+      ) p_team ON p_team.id = p.id AND p_team.match_id = p.match_id
+      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p_team.team_id
+      WHERE %s AND %s
+    )
+    SELECT COUNT(*), COUNT(DISTINCT match_id) FROM base
+    $count$,
+    m_version_cond,
+    m_rank_cond
+  ) INTO total_participants, total_matches;
 
   IF total_participants = 0 THEN
     RETURN jsonb_build_object(
@@ -228,8 +250,23 @@ BEGIN
   EXECUTE format(
     $query$
   WITH base AS (
-    SELECT match_id, runes, items, summoner_spells, win
-    FROM mv_overview_detail_base
+    SELECT p.match_id,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(''id'', rune_styles.style_id, ''selections'', rune_styles.sel) ORDER BY rune_styles.min_slot)
+        FROM (
+          SELECT pr.style_id, jsonb_agg(jsonb_build_object(''perk'', pr.perk_id) ORDER BY pr.slot) AS sel, MIN(pr.slot) AS min_slot
+          FROM participant_runes pr WHERE pr.participant_id = p.id GROUP BY pr.style_id
+        ) rune_styles
+      ), ''[]''::jsonb) AS runes,
+      COALESCE((SELECT jsonb_agg(pi.item_id ORDER BY pi.item_slot) FROM participant_items pi WHERE pi.participant_id = p.id), ''[]''::jsonb) AS items,
+      COALESCE((SELECT jsonb_agg(pss.spell_id ORDER BY pss.spell_slot) FROM participant_summoner_spells pss WHERE pss.participant_id = p.id), ''[]''::jsonb) AS summoner_spells,
+      mt.win
+    FROM participants p
+    INNER JOIN matches m ON m.id = p.match_id
+    INNER JOIN (
+      SELECT id, match_id, CASE WHEN ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id) <= 5 THEN 100 ELSE 200 END AS team_id FROM participants
+    ) p_team ON p_team.id = p.id AND p_team.match_id = p.match_id
+    INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p_team.team_id
     WHERE %s AND %s
   ),
   runes_array AS (
@@ -381,8 +418,8 @@ BEGIN
   )
   FROM (SELECT 1) _
     $query$,
-    version_cond,
-    rank_cond,
+    m_version_cond,
+    m_rank_cond,
     total_matches,
     total_participants,
     total_participants,
@@ -746,4 +783,4 @@ BEGIN
   RETURN result;
 END;
 $$;
--- MVs (mv_stats_champions, mv_stats_overview, mv_stats_overview_teams) are in 20260311160001–003 for progress visibility.
+-- No MVs: stats are computed via SQL functions only (get_stats_overview, get_stats_champions, get_stats_overview_teams, get_stats_overview_detail, get_players_with_stats).

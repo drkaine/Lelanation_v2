@@ -706,12 +706,12 @@ router.post('/aggregate', async (_req: Request, res: Response) => {
   }
 })
 
-/** POST /api/stats/refresh-players - no-op: total_games/total_wins via view players_with_stats */
+/** POST /api/stats/refresh-players - no-op: total_games/total_wins via get_players_with_stats() */
 router.post('/refresh-players', async (_req: Request, res: Response) => {
   try {
     return res.json({
       ok: true,
-      message: 'Stats computed from view players_with_stats, no refresh needed',
+      message: 'Stats computed from get_players_with_stats(), no refresh needed',
     })
   } catch (err) {
     return res.status(500).json({

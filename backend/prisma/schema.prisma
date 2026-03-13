@@ -435,13 +435,14 @@ model ParticipantSpellOrder {
 
 // ─── Challenge key discovery registry ────────────────────────────────────────
 
-// Tracks every challenge key seen in Riot data. Keys NOT in the allowlist land here.
-// is_new=true until a Discord notification has been sent (transitions to false after notify).
+// Liste les champs présents dans la clé challenge (une entrée par clé, une fois).
+// poll_value = false par défaut (indique si la clé doit être proposée en allowlist).
+// On notifie toujours (Discord) lorsqu'une nouvelle clé absente de cette table est découverte.
 model ChallengeKeyRegistry {
-  key          String   @id
-  sampleValue  Json     @map("sample_value") // last seen raw value (for Discord notification)
-  isNew        Boolean  @default(true) @map("is_new")
-  pollValue    Boolean  @default(true) @map("poll_value") // whether to include this key in allowlist candidates
+  key          String    @id
+  sampleValue  Json      @map("sample_value") // dernière valeur vue (pour la notification Discord)
+  isNew        Boolean   @default(true) @map("is_new")
+  pollValue    Boolean   @default(false) @map("poll_value")
   notifiedAt   DateTime? @map("notified_at")
   firstSeenAt  DateTime  @default(now()) @map("first_seen_at")
 

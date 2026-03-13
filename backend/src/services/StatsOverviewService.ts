@@ -84,24 +84,16 @@ export async function getOverviewStats(
   const cached = overviewStatsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   try {
-    let raw: unknown
-    if (pVersion === null && pRankTier === null) {
-      const mvRows = await prisma.$queryRaw<Array<{ data: unknown }>>(
-        Prisma.sql`SELECT data FROM mv_stats_overview LIMIT 1`
-      )
-      raw = mvRows[0]?.data ?? null
-    } else {
-      const rows = await prisma.$queryRawUnsafe<OverviewRow>(
-        'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
-        pVersion ?? null,
-        pRankTier ?? null
-      )
-      const row0 = rows[0] as Record<string, unknown> | undefined
-      raw =
-        row0?.get_stats_overview ??
-        row0?.['get_stats_overview'] ??
-        (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
-    }
+    const rows = await prisma.$queryRawUnsafe<OverviewRow>(
+      'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
+      pVersion ?? null,
+      pRankTier ?? null
+    )
+    const row0 = rows[0] as Record<string, unknown> | undefined
+    let raw: unknown =
+      row0?.get_stats_overview ??
+      row0?.['get_stats_overview'] ??
+      (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
     if (typeof raw === 'string') {
       try {
         raw = JSON.parse(raw) as RawOverviewResult
@@ -340,27 +332,13 @@ export function invalidateOverviewDetailCache(): void {
 }
 
 /**
- * Rafraîchit les vues matérialisées stats (champions, overview, overview_teams).
- * À appeler après collecte de matchs pour que les endpoints sans filtre restent < 1 s.
+ * No-op: stats are computed by SQL functions only (no materialized views).
+ * Kept for API compatibility; optionally invalidates in-memory caches so next request uses fresh DB.
  */
 export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; error?: string }> {
-  if (!isDatabaseConfigured()) return { ok: true }
-  const views = ['mv_stats_champions', 'mv_stats_overview', 'mv_stats_overview_teams'] as const
-  const useConcurrent = String(process.env.STATS_MV_REFRESH_CONCURRENTLY ?? 'false').toLowerCase() === 'true'
-  try {
-    for (const name of views) {
-      if (useConcurrent) {
-        await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${name}`)
-      } else {
-        await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${name}`)
-      }
-    }
-    return { ok: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.warn('[refreshStatsMaterializedViews]', msg)
-    return { ok: false, error: msg }
-  }
+  overviewStatsCache.clear()
+  overviewTeamsCache.clear()
+  return { ok: true }
 }
 
 /** Empty overview detail payload (when DB returns null or error). */
@@ -626,19 +604,10 @@ export async function getOverviewTeamsStats(
   const cached = overviewTeamsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   try {
-    let raw: OverviewTeamsStats | null = null
-    if (pVersion === null && pRankTier === null) {
-      const mvRows = await prisma.$queryRaw<Array<{ data: unknown }>>(
-        Prisma.sql`SELECT data FROM mv_stats_overview_teams LIMIT 1`
-      )
-      raw = (mvRows[0]?.data ?? null) as OverviewTeamsStats | null
-    }
-    if (raw === null) {
-      const rows = await prisma.$queryRaw<OverviewTeamsRow>(
-        Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
-      )
-      raw = rows[0]?.get_stats_overview_teams ?? null
-    }
+    const rows = await prisma.$queryRaw<OverviewTeamsRow>(
+      Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+    )
+    const raw = rows[0]?.get_stats_overview_teams ?? null
     if (!raw) return null
 
     const mapBan = (b: { championId: number; count: number }) => ({

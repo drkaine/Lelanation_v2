@@ -529,4 +529,4 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 | sample_value | Valeur brute (JSON) pour notification Discord |
 | is_new | true à la création ; false après notification |
 | notified_at | Rempli après envoi Discord |
-| poll_value | true par défaut (migration) |
+| poll_value | false par défaut (indique si la clé est candidate à l'allowlist) |
