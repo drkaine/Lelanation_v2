@@ -26,6 +26,7 @@ import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import { partitionChallenges, handleUnknownChallengeKeys } from '../services/ChallengeNormalisationService.js'
 import { aggregatePendingMatches, runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
+import { syncActivePatches, refreshAllMaterializedViews } from '../services/MaterializedViewService.js'
 
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
@@ -148,6 +149,20 @@ const defaultStatus: RiotPollerStatus = {
 
 let state: RiotPollerStatus = { ...defaultStatus }
 let loopPromise: Promise<void> | null = null
+
+/** When true, orchestrator will start puuid-migration script after poller loop exits (e.g. on 400_decrypt). */
+let triggerPuuidMigrationOnPollerExit = false
+
+export function setTriggerPuuidMigrationOnPollerExit(value: boolean): void {
+  triggerPuuidMigrationOnPollerExit = value
+}
+
+/** Returns and clears the flag. Called by orchestrator when poller loop has finished. */
+export function getAndClearTriggerPuuidMigrationOnPollerExit(): boolean {
+  const v = triggerPuuidMigrationOnPollerExit
+  triggerPuuidMigrationOnPollerExit = false
+  return v
+}
 
 function setState(partial: Partial<RiotPollerStatus>): void {
   state = { ...state, ...partial }
@@ -1527,8 +1542,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         participantsFetched: countersEuw.participantsFetched,
       })
       if (resultEuw === '400_decrypt') {
-        // Key changed: re-run phase 2 (includes former 'erreur' players)
-        await runPhase2(client, logger, clefType)
+        setTriggerPuuidMigrationOnPollerExit(true)
+        requestStopRiotPoller()
         continue
       }
       if (resultEuw === 'prisma_error') await logger.alerte('Prisma error in step 4 (euw1), continuing')
@@ -1546,7 +1561,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         participantsFetched: countersEun.participantsFetched,
       })
       if (resultEun === '400_decrypt') {
-        await runPhase2(client, logger, clefType)
+        setTriggerPuuidMigrationOnPollerExit(true)
+        requestStopRiotPoller()
         continue
       }
       if (resultEun === 'prisma_error') await logger.alerte('Prisma error in step 4 (eun1), continuing')
@@ -1556,13 +1572,24 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         const aggregated = await aggregatePendingMatches(logger)
         if (aggregated > 0) {
           await logger.step('Aggregation: matches aggregated', { count: aggregated })
+          await syncActivePatches()
         }
       } catch (err) {
         await logger.alerte('Aggregation error (non-fatal)')
         void err
       }
 
-      // ── Old patch raw data cleanup (every 20 loops) ─────────────────────
+      // ── Refresh vues matérialisées (toutes les 20 boucles, ~toutes les 2h selon rythme) ──
+      if (loopIteration % 20 === 0) {
+        try {
+          await refreshAllMaterializedViews()
+        } catch (err) {
+          await logger.alerte('Refresh MVs error (non-fatal)')
+          void err
+        }
+      }
+
+      // ── Clôture patches passés ayant atteint maxMatches (archive + suppression brutes) ──
       if (loopIteration % 20 === 0) {
         try {
           await runPatchCleanupFromConfig(logger)

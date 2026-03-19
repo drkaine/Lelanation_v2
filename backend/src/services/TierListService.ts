@@ -1,6 +1,6 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
- * Aggregates from champion_core_stats aggregate tables; main role = role with max games;
+ * Aggregates from mv_champion_core_stats (vue matérialisée); main role = role with max games;
  * tier from tier_score percentiles; PBI = (winrate - 50) * 100 * pickrate / (100 - banrate).
  */
 import { prisma } from '../db.js'
@@ -199,7 +199,7 @@ async function fetchRoleRows(
 
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
 
-  // Build where filter for champion_core_stats
+  // Build where filter for mv_champion_core_stats
   const where: Record<string, unknown> = {}
   if (rankValue) {
     where.rankTier = rankValue
@@ -211,7 +211,7 @@ async function fetchRoleRows(
     where.gameVersion = { startsWith: patch }
   }
 
-  const coreRows = await prisma.championCoreStat.findMany({
+  const coreRows = await prisma.mvChampionCoreStat.findMany({
     where,
     select: {
       championId: true,

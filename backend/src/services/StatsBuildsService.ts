@@ -50,7 +50,7 @@ export async function getBuildsByChampion(
     if (pPatch) coreWhere.gameVersion = pPatch
     if (pRegion) coreWhere.region = pRegion
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true, countGame: true },
     })
@@ -60,7 +60,7 @@ export async function getBuildsByChampion(
     const statIds = coreStats.map((s) => s.id)
 
     // Item combinations
-    const itemStatRows = await prisma.championItemStat.findMany({
+    const itemStatRows = await prisma.mvChampionItemStat.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         itemList: true,
@@ -106,7 +106,7 @@ export async function getBuildsByChampion(
     builds.splice(limit)
 
     // Solo items
-    const soloRows = await prisma.championItemSoloStat.findMany({
+    const soloRows = await prisma.mvChampionItemSoloStat.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         itemId: true,

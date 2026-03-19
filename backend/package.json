@@ -17,7 +17,9 @@
     "test:stats": "tsx --test src/utils/statsFormulas.test.ts src/services/TierListService.test.ts src/services/StatsAbandonsService.test.ts src/services/MatchupTierService.test.ts",
     "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/riotPoller.db.test.ts",
     "prisma:generate": "cd .. && npx prisma generate --schema=backend/prisma/schema.prisma",
-    "prisma:migrate": "prisma migrate deploy"
+    "prisma:migrate": "prisma migrate deploy",
+    "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
+    "script:league-xp": "tsx src/worker/runScript.ts league-xp"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

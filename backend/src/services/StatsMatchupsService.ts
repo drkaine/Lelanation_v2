@@ -1,5 +1,5 @@
 /**
- * Matchups by champion: winrate vs each opponent, from champion_vs_stats aggregate table.
+ * Matchups by champion: winrate vs each opponent, from mv_champion_vs_stats (vue matérialisée).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -31,14 +31,14 @@ export async function getMatchupsByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    // Get all champion_core_stat IDs for this champion matching filters
+    // Get all champion_core_stat IDs from MV for this champion matching filters
     const coreWhere: Record<string, unknown> = { championId }
     if (pRankTier) coreWhere.rankTier = pRankTier
     if (pRole) coreWhere.role = pRole
     if (pVersion) coreWhere.gameVersion = pVersion
     if (pRegion) coreWhere.region = pRegion
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true },
     })
@@ -46,7 +46,7 @@ export async function getMatchupsByChampion(
 
     const statIds = coreStats.map((s) => s.id)
 
-    const vsRows = await prisma.championVsStat.findMany({
+    const vsRows = await prisma.mvChampionVsStat.findMany({
       where: {
         championStatId: { in: statIds },
       },

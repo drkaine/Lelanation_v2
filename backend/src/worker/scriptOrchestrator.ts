@@ -24,6 +24,7 @@ import {
   isRiotPollerRunning,
   getRiotPollerStatus,
   getPollerLoopPromise,
+  getAndClearTriggerPuuidMigrationOnPollerExit,
 } from './riotPoller.js'
 import {
   runPuuidMigrationScript,
@@ -198,13 +199,18 @@ export async function startScript(
   if (name === 'poller') {
     activePoller = true
     startRiotPoller()
-    // Clear activePoller flag once the loop finishes
+    // Clear activePoller flag once the loop finishes; if 400_decrypt triggered, start puuid-migration
     void (async () => {
-      await getPollerLoopPromise()
+      const loopPromise = getPollerLoopPromise()
+      if (loopPromise) await loopPromise
       activePoller = false
       lastFinishedScript = 'poller'
       lastFinishedAt = new Date().toISOString()
       lastError = getRiotPollerStatus().lastError
+      if (getAndClearTriggerPuuidMigrationOnPollerExit()) {
+        const r = await startScript('puuid-migration')
+        if (!r.ok) lastError = r.error
+      }
     })()
     return { ok: true }
   }

@@ -40,7 +40,7 @@ export async function getRunesByChampion(
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true, countGame: true },
     })
@@ -49,7 +49,7 @@ export async function getRunesByChampion(
     const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
     const statIds = coreStats.map((s) => s.id)
 
-    const runeStatRows = await prisma.championRunesStat.findMany({
+    const runeStatRows = await prisma.mvChampionRunesStat.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         runeList: true,
@@ -131,7 +131,7 @@ export async function getRuneStatsByChampion(
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true, countGame: true },
     })
@@ -214,7 +214,7 @@ export async function getShardStatsByChampion(options: {
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true, countGame: true },
     })
@@ -223,7 +223,7 @@ export async function getShardStatsByChampion(options: {
     const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
     const statIds = coreStats.map((s) => s.id)
 
-    const shardRows = await prisma.championShardSoloStat.findMany({
+    const shardRows = await prisma.mvChampionShardSoloStat.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         shardId: true,

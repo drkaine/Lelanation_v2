@@ -258,7 +258,7 @@ export async function getOverviewStats(
     const matchWhere = buildMatchWhere(version, rankTier)
 
     const [coreRows, matchCountRows, matchDivisionRows, matchVersionRows, playerCountResult] = await Promise.all([
-      prisma.championCoreStat.findMany({
+      prisma.mvChampionCoreStat.findMany({
         where: coreWhere,
         select: { championId: true, countWin: true, countGame: true, countBan: true },
       }),
@@ -391,7 +391,7 @@ export async function getOverviewDetailStats(
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
     if (pRankTier) coreWhere.rankTier = pRankTier
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true, countGame: true },
     })
@@ -404,11 +404,11 @@ export async function getOverviewDetailStats(
     const statIds = coreStats.map((s) => s.id)
 
     const [soloRunes, soloItems, spells] = await Promise.all([
-      prisma.championRunesSoloStat.findMany({
+      prisma.mvChampionRunesSoloStat.findMany({
         where: { championStatId: { in: statIds } },
         select: { perkId: true, countWin: true, countGame: true },
       }),
-      prisma.championItemSoloStat.findMany({
+      prisma.mvChampionItemSoloStat.findMany({
         where: { championStatId: { in: statIds } },
         select: { itemId: true, countWin: true, countGame: true, countStarter: true, countCore: true },
       }),
@@ -474,7 +474,7 @@ export async function getOverviewDetailStats(
       .sort((a, b) => b.games - a.games)
 
     // Item sets (combinations) - from champion_item_stats
-    const itemSetRows = await prisma.championItemStat.findMany({
+    const itemSetRows = await prisma.mvChampionItemStat.findMany({
       where: { championStatId: { in: statIds } },
       select: { itemList: true, countWin: true, countGame: true },
       take: 2000,
@@ -502,7 +502,7 @@ export async function getOverviewDetailStats(
       .slice(0, 50)
 
     // Rune sets (combinations) - from champion_runes_stats
-    const runeSetRows = await prisma.championRunesStat.findMany({
+    const runeSetRows = await prisma.mvChampionRunesStat.findMany({
       where: { championStatId: { in: statIds } },
       select: { runeList: true, countWin: true, countGame: true },
       take: 2000,
@@ -580,7 +580,7 @@ export async function getOverviewTeamsStats(
     if (pVersion) teamWhere.gameVersion = { startsWith: pVersion }
     if (pRankTier) teamWhere.rankTier = pRankTier
 
-    const teamStats = await prisma.teamCoreStat.findMany({
+    const teamStats = await prisma.mvTeamCoreStat.findMany({
       where: teamWhere,
       select: {
         team: true,
@@ -630,7 +630,7 @@ export async function getOverviewTeamsStats(
     }
 
     // Bans from champion_core_stats - group by champion, filter by win/loss
-    const coreStatsBan = await prisma.championCoreStat.findMany({
+    const coreStatsBan = await prisma.mvChampionCoreStat.findMany({
       where: {
         ...(pVersion ? { gameVersion: { startsWith: pVersion } } : {}),
         ...(pRankTier ? { rankTier: pRankTier } : {}),
@@ -689,7 +689,7 @@ export async function getOverviewTeamsStats(
         byLoss: addBanRate(byLossRaw, totalBansByLoss),
         top20Total,
       },
-      objectives: {
+  objectives: {
         firstBlood: { firstByWin: winAgg.firstBlood.first, firstByLoss: lossAgg.firstBlood.first },
         baron: objData(winAgg.baron, lossAgg.baron),
         dragon: objData(winAgg.dragon, lossAgg.dragon),
@@ -728,7 +728,7 @@ export async function getOverviewDurationWinrateStats(
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
     if (pRankTier) coreWhere.rankTier = pRankTier
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true },
     })
@@ -779,7 +779,7 @@ export async function getDurationWinrateByChampion(
     if (version) coreWhere.gameVersion = { startsWith: version }
     if (rankTier) coreWhere.rankTier = rankTier
 
-    const coreStats = await prisma.championCoreStat.findMany({
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
       select: { id: true },
     })
@@ -837,11 +837,11 @@ export async function getOverviewProgressionStats(
     if (pRankTier) sinceWhere.rankTier = pRankTier
 
     const [oldestRows, sinceRows] = await Promise.all([
-      prisma.championCoreStat.findMany({
+      prisma.mvChampionCoreStat.findMany({
         where: oldestWhere,
         select: { championId: true, countWin: true, countGame: true },
       }),
-      prisma.championCoreStat.findMany({
+      prisma.mvChampionCoreStat.findMany({
         where: sinceWhere,
         select: { championId: true, countWin: true, countGame: true },
       }),
@@ -918,11 +918,11 @@ export async function getOverviewProgressionFullStats(
     if (pRankTier) sinceWhere.rankTier = pRankTier
 
     const [oldestRows, sinceRows] = await Promise.all([
-      prisma.championCoreStat.findMany({
+      prisma.mvChampionCoreStat.findMany({
         where: oldestWhere,
         select: { championId: true, countWin: true, countGame: true },
       }),
-      prisma.championCoreStat.findMany({
+      prisma.mvChampionCoreStat.findMany({
         where: sinceWhere,
         select: { championId: true, countWin: true, countGame: true },
       }),
@@ -1107,8 +1107,8 @@ export async function getOverviewSidesStats(
     const redObjRow = objRows.find((r) => Number(r.team_id) === 200)
 
     const result: OverviewSidesStats = {
-      blue: toSide(blueRow),
-      red: toSide(redRow),
+        blue: toSide(blueRow),
+        red: toSide(redRow),
       totalMatches: Math.round(totalMatchCount / 2),
       champsByBlue,
       champsByRed,

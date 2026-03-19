@@ -1,5 +1,5 @@
 /**
- * Aggregates LoL champion stats from champion_core_stats aggregate table.
+ * Aggregates LoL champion stats from mv_champion_core_stats (vue matérialisée).
  * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
 import { prisma } from '../db.js'
@@ -63,7 +63,7 @@ export class RiotStatsAggregator {
       if (pVersion) where.gameVersion = pVersion
       if (pRegion) where.region = pRegion
 
-      const rows = await prisma.championCoreStat.findMany({
+      const rows = await prisma.mvChampionCoreStat.findMany({
         where,
         select: {
           championId: true,

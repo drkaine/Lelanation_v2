@@ -39,7 +39,7 @@ async function getChampionStatIds(
   if (pVersion) coreWhere.gameVersion = pVersion
   if (pRankTier) coreWhere.rankTier = pRankTier
 
-  const coreStats = await prisma.championCoreStat.findMany({
+  const coreStats = await prisma.mvChampionCoreStat.findMany({
     where: coreWhere,
     select: { id: true, countGame: true },
   })
@@ -61,7 +61,7 @@ export async function getSummonerSpellsByChampion(
     const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, pRankTier)
     if (statIds.length === 0) return { totalGames: 0, spells: [] }
 
-    const spellRows = await prisma.championSummonerSpellAgg.findMany({
+    const spellRows = await prisma.mvChampionSummonerSpellAgg.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         spellId: true,
