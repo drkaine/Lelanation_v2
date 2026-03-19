@@ -162,7 +162,10 @@ export class RiotHttpClient {
         }
         return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
       }
-      if (res.status === 401 || res.status === 403) {
+      // 401 reliably indicates invalid/expired key.
+      // 403 can also mean endpoint/permission/routing constraints, so do not
+      // automatically mark the key as invalid for that status.
+      if (res.status === 401) {
         this.onInvalidKey?.()
         return { ok: false, status: res.status, message: 'Invalid or expired API key', body: data }
       }
@@ -255,6 +258,18 @@ export class RiotHttpClient {
   }
 
   /**
+   * League v4: entries by PUUID.
+   * Uses platform host: `{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{encryptedPUUID}`.
+   */
+  async getLeagueEntriesByPuuid(puuid: string): Promise<
+    { ok: true; data: RiotLeagueEntryDto[] } | { ok: false; status: number; message?: string; body?: unknown }
+  > {
+    // League-v4 routes on platform host (euw1/eun1), not regional host (europe).
+    const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
+    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url)
+  }
+
+  /**
    * League v4: paginated list of all league entries for a given queue, tier, and division.
    * Useful for discovering new players at a specific Elo bracket.
    * GET /lol/league/v4/entries/{queue}/{tier}/{division}?page={page}
@@ -271,6 +286,16 @@ export interface RiotAccountDto {
   puuid: string
   gameName?: string
   tagLine?: string
+  // Some deployments/proxies may enrich this endpoint with ranked info.
+  // We keep these optional + loosely typed to avoid coupling to one exact schema.
+  tier?: string
+  rankTier?: string
+  division?: string
+  rankDivision?: string
+  leaguePoints?: number
+  lp?: number
+  // Allow extra fields without TypeScript friction.
+  [key: string]: unknown
 }
 
 export interface RiotSummonerDto {

@@ -1,8 +1,7 @@
 /**
  * Riot poller: runs inside the backend process.
  * - Init: resolves API key (any subsequent 401/403 stops the poller automatically).
- * - Steps 2 + 2b + 3 (backfill / migration puuid): once at start, then again only when missing data is detected.
- * - Step 4 (poll players -> matches): loop; on 429 we sleep and retry, we never exit the loop.
+ * - Loop: take players, fetch match lists, fetch full match + timeline (fill DB). Sync PUUID / key is optional via `runPhase2` (script puuid-migration only).
  * Logs to logs/riot-poller.log; exposes status for admin API.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
@@ -24,16 +23,12 @@ import {
 } from '../services/RiotHttpClient.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
-import { partitionChallenges, handleUnknownChallengeKeys } from '../services/ChallengeNormalisationService.js'
-import { aggregatePendingMatches, runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
+import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
+import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches, refreshAllMaterializedViews } from '../services/MaterializedViewService.js'
 
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
-/** Max matches per run for timeline backfill (drakes, skill order, starter, jungle first clear). */
-const BATCH_TIMELINE_BACKFILL = 25
-/** Max matches per run for rune backfill (participant_runes from getMatch perks). */
-const BATCH_RUNE_BACKFILL = 20
 /** Bounded queue size for Phase 4: API producer pushes, DB consumers pop. */
 const INGEST_QUEUE_SIZE = 50
 /** Number of concurrent DB writers in Phase 4 (consumers). */
@@ -196,26 +191,6 @@ export type RiotPollerInit = {
 }
 
 /**
- * Returns true if backfill (phase 3) is needed.
- * The new schema stores rankTier directly on MatchPlayer (default 'UNRANKED').
- * We only check for players needing PUUID sync — rank/role are now always set at ingestion time.
- */
-async function hasMissingBackfillData(clefType: string | null): Promise<boolean> {
-  if (!clefType) return false
-  const playersToSync = await prisma.player.count({
-    where: {
-      OR: [
-        { puuidKeyVersion: null },
-        { puuidKeyVersion: { notIn: ['perdu', clefType] } },
-        { gameName: null, puuidKeyVersion: clefType },
-      ],
-    },
-  })
-  return playersToSync > 0
-}
-
-
-/**
  * Extract (gameName, tagLine) from a match participant, preferring the fields that Riot
  * includes directly in Match v5 responses (riotIdGameName / riotIdTagline / riotIdTagLine).
  */
@@ -373,18 +348,6 @@ export async function runPhase2(
   await logger.step('Phase 2 end', { totalSynced, totalPlaceholder })
 }
 
-
-async function runStep3FixNulls(
-  _client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>,
-  counters: { matchesRankFixed: number; participantsRankFixed: number; participantsRoleFixed: number },
-  _clefType: string | null
-): Promise<void> {
-  await logger.step('Step 3 start', {})
-  // In new schema, rank/role are always set at ingestion time — nothing to backfill.
-  await logger.step('Step 3 end', { ...counters })
-}
-
 // ─── Normalisation helpers ────────────────────────────────────────────────────
 
 function buildMatchTeamData(
@@ -479,13 +442,33 @@ function buildItemRows(
   matchPlayerId: bigint,
   items: unknown
 ): Array<{ matchPlayerId: bigint; itemId: number; order: number }> {
-  if (!Array.isArray(items)) return []
-  const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
-  for (let slot = 0; slot < items.length && slot <= 6; slot++) {
-    const itemId = Number(items[slot])
-    if (Number.isFinite(itemId) && itemId > 0) {
-      rows.push({ matchPlayerId, itemId, order: slot })
+  // match-v5: can be either:
+  // - participants[].items = number[] (expected)
+  // - participants[].item0..item6 = number (sometimes)
+  if (Array.isArray(items)) {
+    const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
+    for (let slot = 0; slot < items.length && slot <= 6; slot++) {
+      const itemId = Number(items[slot])
+      if (Number.isFinite(itemId) && itemId > 0) {
+        rows.push({ matchPlayerId, itemId, order: slot })
+      }
     }
+    return rows
+  }
+
+  if (items == null || typeof items !== 'object') return []
+
+  const obj = items as Record<string, unknown>
+  const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
+  for (let slot = 0; slot <= 6; slot++) {
+    const v =
+      obj[`item${slot}`] ??
+      obj[`item_${slot}`] ??
+      obj[`itemId${slot}`] ??
+      obj[`item_id_${slot}`] ??
+      null
+    const itemId = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
+    if (Number.isFinite(itemId) && itemId > 0) rows.push({ matchPlayerId, itemId, order: slot })
   }
   return rows
 }
@@ -506,13 +489,20 @@ function buildRuneRows(
   for (const style of styles) {
     if (!style || typeof style !== 'object') continue
     const s = style as Record<string, unknown>
-    const styleId = Number(s['id'])
+    const styleIdRaw = s['id'] ?? s['styleId'] ?? s['style_id'] ?? s['style']
+    const styleId = Number(styleIdRaw)
     if (!Number.isFinite(styleId)) continue
-    const selections = Array.isArray(s['selections']) ? s['selections'] : []
+    const selections =
+      Array.isArray(s['selections']) ? s['selections'] : Array.isArray(s['selection']) ? s['selection'] : []
     for (const sel of selections) {
+      if (typeof sel === 'number' && Number.isFinite(sel)) {
+        rows.push({ matchPlayerId, perkId: sel, style: styleId })
+        continue
+      }
       const selObj = sel as Record<string, unknown>
-      if (!selObj) continue
-      const perkId = Number(selObj['perk'])
+      if (!selObj || typeof selObj !== 'object') continue
+      const perkIdRaw = selObj['perk'] ?? selObj['perkId'] ?? selObj['perk_id'] ?? selObj['id']
+      const perkId = Number(perkIdRaw)
       if (!Number.isFinite(perkId)) continue
       rows.push({ matchPlayerId, perkId, style: styleId })
     }
@@ -548,7 +538,128 @@ function buildShardRows(
   return rows
 }
 
+function durationBucketFromRaw(raw: unknown): number | null {
+  const d = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(d)) return null
+  // Heuristic:
+  // - if Riot returns seconds (e.g. 300, 600, 900), convert to minutes
+  // - if Riot already returns minutes/buckets (e.g. 0,5,10), keep as-is
+  if (d > 120) return Math.floor(d / 60)
+  return Math.floor(d)
+}
+
+function toIntOr0(raw: unknown): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
+  if (typeof raw === 'string') {
+    const n = Number(raw)
+    return Number.isFinite(n) ? Math.trunc(n) : 0
+  }
+  return 0
+}
+
+function buildBucketRows(
+  matchPlayerId: bigint,
+  bucketsRaw: unknown
+): Array<{
+  matchPlayerId: bigint
+  durationBucket: number
+  currentGold: number
+  magicDamageDone: number
+  magicDamageDoneToChampion: number
+  magicDamageTaken: number
+  physicalDamageDone: number
+  physicalDamageDoneToChampion: number
+  physicalDamageTaken: number
+  totalDamageDone: number
+  totalDamageDoneToChampion: number
+  totalDamageTaken: number
+  trueDamageDone: number
+  trueDamageDoneToChampion: number
+  trueDamageTaken: number
+  goldPerSecond: number
+  jungleMinionsKilled: number
+  level: number
+  minionsKilled: number
+  timeEnemySpentControlled: number
+  totalGold: number
+  xp: number
+}> {
+  if (!Array.isArray(bucketsRaw)) return []
+
+  const out: Array<{
+    matchPlayerId: bigint
+    durationBucket: number
+    currentGold: number
+    magicDamageDone: number
+    magicDamageDoneToChampion: number
+    magicDamageTaken: number
+    physicalDamageDone: number
+    physicalDamageDoneToChampion: number
+    physicalDamageTaken: number
+    totalDamageDone: number
+    totalDamageDoneToChampion: number
+    totalDamageTaken: number
+    trueDamageDone: number
+    trueDamageDoneToChampion: number
+    trueDamageTaken: number
+    goldPerSecond: number
+    jungleMinionsKilled: number
+    level: number
+    minionsKilled: number
+    timeEnemySpentControlled: number
+    totalGold: number
+    xp: number
+  }> = []
+
+  for (const b of bucketsRaw) {
+    if (b == null || typeof b !== 'object') continue
+    const br = b as Record<string, unknown>
+    const durationBucket = durationBucketFromRaw(br.duration ?? br.time ?? br.timestamp)
+    if (durationBucket == null) continue
+
+    out.push({
+      matchPlayerId,
+      durationBucket,
+      currentGold: toIntOr0(br.currentGold ?? br.current_gold),
+      magicDamageDone: toIntOr0(br.magicDamageDone ?? br.magic_damage_done),
+      magicDamageDoneToChampion: toIntOr0(
+        br.magicDamageDoneToChampion ?? br.magic_damage_done_to_champion
+      ),
+      magicDamageTaken: toIntOr0(br.magicDamageTaken ?? br.magic_damage_taken),
+      physicalDamageDone: toIntOr0(br.physicalDamageDone ?? br.physical_damage_done),
+      physicalDamageDoneToChampion: toIntOr0(
+        br.physicalDamageDoneToChampion ?? br.physical_damage_done_to_champion
+      ),
+      physicalDamageTaken: toIntOr0(br.physicalDamageTaken ?? br.physical_damage_taken),
+      totalDamageDone: toIntOr0(br.totalDamageDone ?? br.total_damage_done),
+      totalDamageDoneToChampion: toIntOr0(
+        br.totalDamageDoneToChampion ?? br.total_damage_done_to_champion
+      ),
+      totalDamageTaken: toIntOr0(br.totalDamageTaken ?? br.total_damage_taken),
+      trueDamageDone: toIntOr0(br.trueDamageDone ?? br.true_damage_done),
+      trueDamageDoneToChampion: toIntOr0(
+        br.trueDamageDoneToChampion ?? br.true_damage_done_to_champion
+      ),
+      trueDamageTaken: toIntOr0(br.trueDamageTaken ?? br.true_damage_taken),
+      goldPerSecond: toIntOr0(br.goldPerSecond ?? br.gold_per_second),
+      jungleMinionsKilled: toIntOr0(
+        br.jungleMinionsKilled ?? br.jungle_minions_killed
+      ),
+      level: toIntOr0(br.level),
+      minionsKilled: toIntOr0(br.minionsKilled ?? br.minions_killed),
+      timeEnemySpentControlled: toIntOr0(
+        br.timeEnemySpentControlled ?? br.time_enemy_spent_controlled
+      ),
+      totalGold: toIntOr0(br.totalGold ?? br.total_gold),
+      xp: toIntOr0(br.xp),
+    })
+  }
+
+  return out
+}
+
 export async function upsertMatchAndParticipants(
+  client: RiotHttpClient,
   region: string,
   dto: RiotMatchDto,
   puuidKeyVersion: string | null,
@@ -573,6 +684,73 @@ export async function upsertMatchAndParticipants(
     select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
   })
   const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
+
+  // Per-match cache: reduce repeated calls when multiple rows share the same PUUID.
+  const accountRankCache = new Map<
+    string,
+    { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
+  >()
+  const debugBucketIngest = process.env.DEBUG_BUCKET_INGEST === '1'
+  let bucketDebugLogged = false
+  const debugItemIngest = process.env.DEBUG_ITEM_INGEST === '1'
+  let itemDebugLogged = false
+
+  function normalizeRankTier(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null
+    const t = raw.trim().toUpperCase()
+    if (!t || t === 'UNRANKED') return null
+    return t.split('_')[0]?.trim() || null
+  }
+
+  function normalizeRankDivision(raw: unknown): string | null {
+    if (raw == null) return null
+    if (typeof raw !== 'string') return null
+    const d = raw.trim()
+    if (!d || d.toUpperCase() === 'UNRANKED') return null
+    return d
+  }
+
+  function normalizeRankLp(raw: unknown): number | null {
+    if (raw == null) return null
+    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
+    if (typeof raw === 'string') {
+      const n = Number(raw)
+      return Number.isFinite(n) ? Math.trunc(n) : null
+    }
+    return null
+  }
+
+  async function fetchAccountRankIfNeeded(puuid: string): Promise<{
+    rankTier?: string
+    rankDivision?: string | null
+    rankLp?: number | null
+  }> {
+    const cached = accountRankCache.get(puuid)
+    if (cached) return cached
+
+    // Use League v4 entries by PUUID to get tier/rank/LP.
+    // We pick SOLO queue by default, as the rest of the pipeline assumes solo/duo bracket.
+    const entriesRes = await client.getLeagueEntriesByPuuid(puuid)
+    if (!entriesRes.ok || !Array.isArray(entriesRes.data)) {
+      const empty = { rankTier: undefined, rankDivision: null, rankLp: null }
+      accountRankCache.set(puuid, empty)
+      return empty
+    }
+
+    const entries = entriesRes.data as unknown as Array<Record<string, unknown>>
+    const solo =
+      entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
+      entries.find((e) => String(e.queueType ?? '').toUpperCase().includes('RANKED_SOLO')) ??
+      entries[0]
+
+    const rankTier = normalizeRankTier(solo?.tier)
+    const rankDivision = normalizeRankDivision(solo?.rank)
+    const rankLp = normalizeRankLp(solo?.leaguePoints)
+
+    const out = { rankTier: rankTier ?? undefined, rankDivision, rankLp }
+    accountRankCache.set(puuid, out)
+    return out
+  }
 
   // Compute match-level rank from all participants (exclude UNRANKED/null)
   const rankScores: number[] = []
@@ -611,6 +789,7 @@ export async function upsertMatchAndParticipants(
       gameEndedInSurrender,
       gameEndedInEarlySurrender,
       region,
+      ingestedAt: new Date(),
     },
   })
   counters.matchesFetched++
@@ -633,9 +812,6 @@ export async function upsertMatchAndParticipants(
       })
     }
   }
-
-  // Collect unknown challenge keys seen across all participants (de-duped)
-  const allUnknownKeys: Record<string, unknown> = {}
 
   for (let pIdx = 0; pIdx < participantDtos.length; pIdx++) {
     const p = participantDtos[pIdx]
@@ -682,7 +858,8 @@ export async function upsertMatchAndParticipants(
     const riotTeamId = p.teamId ?? 100
     const teamDbId = teamIdByRiotTeam.get(riotTeamId) ?? teamIdByRiotTeam.values().next().value!
 
-    const items = (p as { items?: unknown }).items ?? null
+    // Items can be provided as an array `items` or as item0..item6 scalars.
+    const itemsSource = (p as Record<string, unknown>).items ?? p
     const runes = (p as { perks?: unknown }).perks ?? (p as { runes?: unknown }).runes ?? null
     const summoner1Id = (p as { summoner1Id?: number }).summoner1Id ?? null
     const summoner2Id = (p as { summoner2Id?: number }).summoner2Id ?? null
@@ -702,6 +879,17 @@ export async function upsertMatchAndParticipants(
     }
     const b = (key: string): boolean => (p as Record<string, unknown>)[key] === true
 
+    // Enrich missing rankDivision / rankLp (and optionally rankTier) from Riot account-by-puuid.
+    let finalRankTier = rankTier
+    let finalRankDivision = rankDivision
+    let finalRankLp = rankLp
+    if (finalRankDivision == null || finalRankLp == null || finalRankTier === 'UNRANKED') {
+      const accountRank = await fetchAccountRankIfNeeded(puuid)
+      if (finalRankTier === 'UNRANKED' && accountRank.rankTier) finalRankTier = accountRank.rankTier
+      if (finalRankDivision == null && accountRank.rankDivision != null) finalRankDivision = accountRank.rankDivision
+      if (finalRankLp == null && accountRank.rankLp != null) finalRankLp = accountRank.rankLp
+    }
+
     const matchPlayer = await prisma.matchPlayer.create({
       data: {
         matchId: match.id,
@@ -709,9 +897,9 @@ export async function upsertMatchAndParticipants(
         teamId: teamDbId,
         championId: p.championId ?? 0,
         role,
-        rankTier,
-        rankDivision,
-        rankLp,
+        rankTier: finalRankTier,
+        rankDivision: finalRankDivision,
+        rankLp: finalRankLp,
         participantId: pIdx + 1,
       },
     })
@@ -891,7 +1079,20 @@ export async function upsertMatchAndParticipants(
     }
 
     // match_player_items
-    const itemRows = buildItemRows(mpId, items)
+    if (debugItemIngest && !itemDebugLogged && logger) {
+      itemDebugLogged = true
+      const anyObj = p as Record<string, unknown>
+      const scalarKeys: string[] = []
+      for (let slot = 0; slot <= 6; slot++) {
+        if (anyObj[`item${slot}`] != null) scalarKeys.push(`item${slot}`)
+      }
+      void logger.step('DEBUG item ingest', {
+        hasItemsArray: anyObj['items'] != null,
+        scalarKeys: scalarKeys.slice(0, 20),
+        sampleItem0: anyObj['item0'] ?? null,
+      })
+    }
+    const itemRows = buildItemRows(mpId, itemsSource)
     if (itemRows.length > 0) await prisma.matchPlayerItem.createMany({ data: itemRows })
 
     // match_player_runes
@@ -910,19 +1111,38 @@ export async function upsertMatchAndParticipants(
       await prisma.matchPlayerShard.createMany({ data: shardRows, skipDuplicates: true })
     }
 
-    // Collect unknown challenge keys
-    if (ch) {
-      const { unknown } = partitionChallenges(ch)
-      for (const [k, v] of Object.entries(unknown)) {
-        allUnknownKeys[k] = v
-      }
+    // match_player_bucket (duration buckets of gold/damage/time stats)
+    // Source expected: participants[].buckets from match-v5 detail.
+    const bucketsRaw = (p as Record<string, unknown>).buckets ?? (p as Record<string, unknown>).bucket ?? null
+    if (debugBucketIngest && !bucketDebugLogged && logger) {
+      bucketDebugLogged = true
+      const isArray = Array.isArray(bucketsRaw)
+      const sample0 = isArray && bucketsRaw.length > 0 ? bucketsRaw[0] : null
+      const sampleKeys = sample0 && typeof sample0 === 'object' ? Object.keys(sample0 as Record<string, unknown>).slice(0, 25) : []
+      const sampleDuration =
+        sample0 && typeof sample0 === 'object'
+          ? (sample0 as Record<string, unknown>).duration ??
+            (sample0 as Record<string, unknown>).time ??
+            (sample0 as Record<string, unknown>).timestamp ??
+            (sample0 as Record<string, unknown>).endTime ??
+            null
+          : null
+      void logger.step('DEBUG bucket ingest (participant.buckets)', {
+        bucketsPresent: bucketsRaw != null,
+        bucketsType: bucketsRaw == null ? null : typeof bucketsRaw,
+        bucketsIsArray: isArray,
+        sampleDuration,
+        sampleKeys,
+      })
     }
+    const bucketRows = buildBucketRows(mpId, bucketsRaw)
+    if (bucketRows.length > 0) {
+      await prisma.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
+    }
+
   }
 
   if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
-
-  // Fire-and-forget: notify of unknown challenge keys
-  void handleUnknownChallengeKeys(allUnknownKeys)
 }
 
 /**
@@ -1048,6 +1268,99 @@ async function extractAndInsertTimelineExtras(
     await prisma.matchPlayerSpellOrder.createMany({ data: spellOrderRows, skipDuplicates: true })
   }
 
+  // ── 3b. Time buckets from timeline participantFrames -> match_player_bucket ──
+  const toInt = (v: unknown): number => {
+    if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
+    if (typeof v === 'string') {
+      const n = Number(v)
+      return Number.isFinite(n) ? Math.trunc(n) : 0
+    }
+    return 0
+  }
+  const bucketRows: Array<{
+    matchPlayerId: bigint
+    durationBucket: number
+    currentGold: number
+    magicDamageDone: number
+    magicDamageDoneToChampion: number
+    magicDamageTaken: number
+    physicalDamageDone: number
+    physicalDamageDoneToChampion: number
+    physicalDamageTaken: number
+    totalDamageDone: number
+    totalDamageDoneToChampion: number
+    totalDamageTaken: number
+    trueDamageDone: number
+    trueDamageDoneToChampion: number
+    trueDamageTaken: number
+    goldPerSecond: number
+    jungleMinionsKilled: number
+    level: number
+    minionsKilled: number
+    timeEnemySpentControlled: number
+    totalGold: number
+    xp: number
+  }> = []
+  for (const frame of frames) {
+    const durationBucket = Math.floor((toInt(frame.timestamp) / 1000) / 60)
+    const pf = frame.participantFrames ?? {}
+    for (const [riotPidRaw, pfRaw] of Object.entries(pf)) {
+      const riotPid = Number(riotPidRaw)
+      if (!Number.isFinite(riotPid) || riotPid <= 0) continue
+      const dbId = riotPidToDbId.get(riotPid)
+      if (!dbId) continue
+      if (!pfRaw || typeof pfRaw !== 'object') continue
+      const pfo = pfRaw as Record<string, unknown>
+      const damageStats = (pfo['damageStats'] && typeof pfo['damageStats'] === 'object')
+        ? (pfo['damageStats'] as Record<string, unknown>)
+        : {}
+      const championStats = (pfo['championStats'] && typeof pfo['championStats'] === 'object')
+        ? (pfo['championStats'] as Record<string, unknown>)
+        : {}
+
+      const totalGold = toInt(pfo['totalGold'] ?? pfo['total_gold'])
+      const timestampSeconds = Math.max(1, Math.floor(toInt(frame.timestamp) / 1000))
+
+      bucketRows.push({
+        matchPlayerId: dbId,
+        durationBucket,
+        currentGold: toInt(pfo['currentGold'] ?? pfo['current_gold']),
+        magicDamageDone: toInt(damageStats['magicDamageDone'] ?? damageStats['magic_damage_done']),
+        magicDamageDoneToChampion: toInt(
+          damageStats['magicDamageDoneToChampions'] ?? damageStats['magicDamageDoneToChampion'] ?? damageStats['magic_damage_done_to_champion']
+        ),
+        magicDamageTaken: toInt(damageStats['magicDamageTaken'] ?? damageStats['magic_damage_taken']),
+        physicalDamageDone: toInt(damageStats['physicalDamageDone'] ?? damageStats['physical_damage_done']),
+        physicalDamageDoneToChampion: toInt(
+          damageStats['physicalDamageDoneToChampions'] ?? damageStats['physicalDamageDoneToChampion'] ?? damageStats['physical_damage_done_to_champion']
+        ),
+        physicalDamageTaken: toInt(damageStats['physicalDamageTaken'] ?? damageStats['physical_damage_taken']),
+        totalDamageDone: toInt(damageStats['totalDamageDone'] ?? damageStats['total_damage_done']),
+        totalDamageDoneToChampion: toInt(
+          damageStats['totalDamageDoneToChampions'] ?? damageStats['totalDamageDoneToChampion'] ?? damageStats['total_damage_done_to_champion']
+        ),
+        totalDamageTaken: toInt(damageStats['totalDamageTaken'] ?? damageStats['total_damage_taken']),
+        trueDamageDone: toInt(damageStats['trueDamageDone'] ?? damageStats['true_damage_done']),
+        trueDamageDoneToChampion: toInt(
+          damageStats['trueDamageDoneToChampions'] ?? damageStats['trueDamageDoneToChampion'] ?? damageStats['true_damage_done_to_champion']
+        ),
+        trueDamageTaken: toInt(damageStats['trueDamageTaken'] ?? damageStats['true_damage_taken']),
+        goldPerSecond: Math.floor(totalGold / timestampSeconds),
+        jungleMinionsKilled: toInt(pfo['jungleMinionsKilled'] ?? pfo['jungle_minions_killed']),
+        level: toInt(pfo['level']),
+        minionsKilled: toInt(pfo['minionsKilled'] ?? pfo['minions_killed']),
+        timeEnemySpentControlled: toInt(
+          championStats['timeEnemySpentControlled'] ?? championStats['time_enemy_spent_controlled']
+        ),
+        totalGold,
+        xp: toInt(pfo['xp']),
+      })
+    }
+  }
+  if (bucketRows.length > 0) {
+    await prisma.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
+  }
+
   // ── 4. Starter item: first non-ward/trinket ITEM_PURCHASED per participant ──
   const starterItemByPid = new Map<bigint, number>() // dbParticipantId → first item id
 
@@ -1073,24 +1386,9 @@ async function extractAndInsertTimelineExtras(
       matchId: riotMatchId,
       drakes: drakeInsertRows.length,
       spellOrders: spellOrderRows.length,
+      buckets: bucketRows.length,
       starters: starterItemByPid.size,
     })
-  }
-}
-
-/**
- * Backfill match_player runes from a Match v5 participant DTO if none exist yet.
- */
-async function backfillMatchPlayerRunes(
-  matchPlayerId: bigint,
-  riotPart: RiotParticipantDto
-): Promise<void> {
-  const runes = (riotPart as { perks?: unknown }).perks ?? (riotPart as { runes?: unknown }).runes ?? null
-  if (!runes) return
-  const existing = await prisma.matchPlayerRune.count({ where: { matchPlayerId } })
-  if (existing === 0) {
-    const rows = buildRuneRows(matchPlayerId, runes)
-    if (rows.length > 0) await prisma.matchPlayerRune.createMany({ data: rows, skipDuplicates: true })
   }
 }
 
@@ -1128,13 +1426,7 @@ async function runStep4ForPlayer(
       const item = await queue.pop()
       if (item === null) return
       try {
-        await upsertMatchAndParticipants(
-          item.region,
-          item.matchDto,
-          item.puuidKeyVersion,
-          counters,
-          logger
-        )
+        await upsertMatchAndParticipants(client, item.region, item.matchDto, item.puuidKeyVersion, counters, logger)
         const matchRow = await prisma.match.findUnique({
           where: { riotMatchId: item.matchId },
           select: { id: true },
@@ -1178,6 +1470,8 @@ async function runStep4ForPlayer(
       await Promise.all(consumerPromises)
       return 'ok'
     }
+
+    const playersFetchedBefore = counters.playersFetched
 
     const matchIdsRes = await client.getMatchIdsByPuuid(player.puuid, {
       queue: filters.queue,
@@ -1240,6 +1534,13 @@ async function runStep4ForPlayer(
     })
 
     await runWithConcurrency(fetchTasks, MATCH_FETCH_CONCURRENCY)
+    const newPlayersFromPlayer = counters.playersFetched - playersFetchedBefore
+    await logger.step('Player matches fetched', {
+      playerId: player.id.toString(),
+      region,
+      matchesCount: matchIds.length,
+      newPlayersCount: newPlayersFromPlayer,
+    })
     if (found400Decrypt) {
       queue.pushPoison(INGEST_CONSUMER_COUNT)
       await Promise.all(consumerPromises)
@@ -1287,186 +1588,13 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
 
   client.setOnInvalidKey(() => {
     const msg = 'API key invalid or expired — stopping poller'
+    if (state.shouldStop && state.lastError === msg) return
     setState({ shouldStop: true, lastError: msg })
     void logger.error(msg, {})
   })
 
   const clefType = client.getActiveKeyInfo()?.clefType ?? (await getClefTypeFromFile())
   return { ok: true, client, logger, filters, clefType }
-}
-
-/**
- * Phase 3: fix all null rank/role data for 'clefType' players.
- * Loops until no missing data or stuck (API failures prevent progress).
- */
-async function runPhase3(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>,
-  clefType: string | null
-): Promise<void> {
-  await logger.step('Phase 3 start: backfill null data', {})
-  const MAX_STUCK = 3
-  let stuckCount = 0
-  while (!state.shouldStop) {
-    const missing = await hasMissingBackfillData(clefType)
-    if (!missing) break
-    const counters = { matchesRankFixed: 0, participantsRankFixed: 0, participantsRoleFixed: 0 }
-    await runStep3FixNulls(client, logger, counters, clefType)
-    setState({
-      matchesRankFixed: state.matchesRankFixed + counters.matchesRankFixed,
-      participantsRankFixed: state.participantsRankFixed + counters.participantsRankFixed,
-      participantsRoleFixed: state.participantsRoleFixed + counters.participantsRoleFixed,
-    })
-    const totalFixed = counters.matchesRankFixed + counters.participantsRankFixed + counters.participantsRoleFixed
-    if (totalFixed === 0) {
-      stuckCount++
-      if (stuckCount >= MAX_STUCK) {
-        await logger.step('Phase 3 stuck: cannot fix remaining data (API failures?)', { stuckCount })
-        break
-      }
-    } else {
-      stuckCount = 0
-    }
-  }
-  await logger.step('Phase 3 end', {
-    matchesRankFixed: state.matchesRankFixed,
-    participantsRankFixed: state.participantsRankFixed,
-    participantsRoleFixed: state.participantsRoleFixed,
-  })
-}
-
-/**
- * Phase 3b: backfill timeline-derived data for matches that were ingested before we stored
- * drakes, skill order, starter items, and jungle first clear.
- * Idempotent: uses skipDuplicates / updateMany. Runs one batch per call.
- */
-async function runStep3bBackfillTimeline(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>
-): Promise<number> {
-  const matches = await prisma.match.findMany({
-    where: {
-      teams: { some: {} },
-      OR: [
-        { drakeDetails: { none: {} } },
-        { matchPlayers: { every: { spellOrders: { none: {} } } } },
-      ],
-    },
-    take: BATCH_TIMELINE_BACKFILL,
-    orderBy: { id: 'desc' },
-    select: { id: true, riotMatchId: true },
-  })
-  if (matches.length === 0) return 0
-
-  let done = 0
-  for (const m of matches) {
-    if (state.shouldStop) break
-    const platform = m.riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
-    client.setPlatform(platform)
-    const timelineRes = await client.getMatchTimeline(m.riotMatchId)
-    setState({ requestCount: state.requestCount + 1 })
-    if (!timelineRes.ok) {
-      if (timelineRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-      continue
-    }
-    try {
-      await extractAndInsertJungleFirstClear(m.id, m.riotMatchId, timelineRes.data, logger)
-      await extractAndInsertTimelineExtras(m.id, m.riotMatchId, timelineRes.data, logger)
-      done++
-    } catch (err) {
-      void logger.error('Timeline backfill failed', err, { matchId: m.riotMatchId })
-    }
-  }
-  if (done > 0) {
-    await logger.step('Phase 3b: timeline backfill batch', { processed: done, batchSize: matches.length })
-  }
-  return done
-}
-
-/**
- * Phase 3b: run timeline backfill until no more matches missing timeline data or shouldStop.
- * Includes matches missing drakes OR missing participant_spell_orders.
- */
-async function runPhase3b(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>
-): Promise<void> {
-  await logger.step('Phase 3b start: backfill timeline data (drakes, skill order, starter, jungle first clear)', {})
-  let total = 0
-  while (!state.shouldStop) {
-    const done = await runStep3bBackfillTimeline(client, logger)
-    total += done
-    if (done === 0) break
-  }
-  await logger.step('Phase 3b end', { totalTimelineBackfilled: total })
-}
-
-/**
- * Phase 3c: backfill participant_runes from match detail (perks) for matches that have no runes.
- * One batch per call.
- */
-async function runStep3cBackfillRunes(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>
-): Promise<number> {
-  const matches = await prisma.match.findMany({
-    where: {
-      teams: { some: {} },
-      matchPlayers: { some: {}, every: { runes: { none: {} } } },
-    },
-    take: BATCH_RUNE_BACKFILL,
-    orderBy: { id: 'desc' },
-    select: { id: true, riotMatchId: true },
-  })
-  if (matches.length === 0) return 0
-
-  let done = 0
-  for (const m of matches) {
-    if (state.shouldStop) break
-    const platform = m.riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
-    client.setPlatform(platform)
-    const matchRes = await client.getMatch(m.riotMatchId)
-    setState({ requestCount: state.requestCount + 1 })
-    if (!matchRes.ok) {
-      if (matchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
-      continue
-    }
-    const participantDtos = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
-    if (participantDtos.length === 0) continue
-
-    const dbMatchPlayers = await prisma.matchPlayer.findMany({
-      where: { matchId: m.id },
-      select: { id: true, participantId: true },
-      orderBy: { participantId: 'asc' },
-    })
-    if (dbMatchPlayers.length !== participantDtos.length) continue
-
-    for (let i = 0; i < dbMatchPlayers.length; i++) {
-      await backfillMatchPlayerRunes(dbMatchPlayers[i].id, participantDtos[i])
-    }
-    done++
-  }
-  if (done > 0) {
-    await logger.step('Phase 3c: rune backfill batch', { processed: done, batchSize: matches.length })
-  }
-  return done
-}
-
-/**
- * Phase 3c: run rune backfill until no more matches missing runes or shouldStop.
- */
-async function runPhase3c(
-  client: RiotHttpClient,
-  logger: ReturnType<typeof createRiotPollerLogger>
-): Promise<void> {
-  await logger.step('Phase 3c start: backfill participant_runes from match detail', {})
-  let total = 0
-  while (!state.shouldStop) {
-    const done = await runStep3cBackfillRunes(client, logger)
-    total += done
-    if (done === 0) break
-  }
-  await logger.step('Phase 3c end', { totalRuneBackfilled: total })
 }
 
 async function runStep4Counters() {
@@ -1499,35 +1627,12 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   })
 
   try {
-    // ── Phase 2: sync all players with wrong/missing key version (includes 'erreur') ──
-    await runPhase2(client, logger, clefType)
+    await logger.step('Poller start: entering match collection loop', {})
 
-    // ── Phase 3: backfill null rank/role data for current-key players ──────────
-    await runPhase3(client, logger, clefType)
-
-    // ── Phase 3b: backfill timeline data (drakes, soul, skill order, starter, jungle first clear) ──
-    await runPhase3b(client, logger)
-
-    // ── Phase 3c: backfill participant_runes from match detail (perks) ─────────────────────────
-    await runPhase3c(client, logger)
-
-    await logger.step('Initialization phases complete, entering collection loop', {})
-
-    // ── Phase 4: main collection loop ─────────────────────────────────────────
+    // ── Main collection loop ──────────────────────────────────────────────────
     let loopIteration = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
-      // Fix any new null data produced by step 4 (newly collected matches)
-      const missing = await hasMissingBackfillData(clefType)
-      if (missing) {
-        const counters = { matchesRankFixed: 0, participantsRankFixed: 0, participantsRoleFixed: 0 }
-        await runStep3FixNulls(client, logger, counters, clefType)
-        setState({
-          matchesRankFixed: state.matchesRankFixed + counters.matchesRankFixed,
-          participantsRankFixed: state.participantsRankFixed + counters.participantsRankFixed,
-          participantsRoleFixed: state.participantsRoleFixed + counters.participantsRoleFixed,
-        })
-      }
 
       // EUW1 collection
       client.setPlatform('euw1')
@@ -1567,21 +1672,10 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
       if (resultEun === 'prisma_error') await logger.alerte('Prisma error in step 4 (eun1), continuing')
 
-      // ── Aggregate pending matches into stats tables ─────────────────────
-      try {
-        const aggregated = await aggregatePendingMatches(logger)
-        if (aggregated > 0) {
-          await logger.step('Aggregation: matches aggregated', { count: aggregated })
-          await syncActivePatches()
-        }
-      } catch (err) {
-        await logger.alerte('Aggregation error (non-fatal)')
-        void err
-      }
-
-      // ── Refresh vues matérialisées (toutes les 20 boucles, ~toutes les 2h selon rythme) ──
-      if (loopIteration % 20 === 0) {
+      // ── Sync active_patches puis refresh vues matérialisées (toutes les 400 boucles, ~toutes les 4h) ──
+      if (loopIteration % 400 === 0) {
         try {
+          await syncActivePatches()
           await refreshAllMaterializedViews()
         } catch (err) {
           await logger.alerte('Refresh MVs error (non-fatal)')
@@ -1590,13 +1684,21 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
 
       // ── Clôture patches passés ayant atteint maxMatches (archive + suppression brutes) ──
-      if (loopIteration % 20 === 0) {
+      if (loopIteration % 200 === 0) {
         try {
           await runPatchCleanupFromConfig(logger)
         } catch (err) {
           await logger.alerte('Patch cleanup error (non-fatal)')
           void err
         }
+      }
+
+      // ── Snapshot quotidien WR / pick / bans par tier (UTC), une fois par jour après l’heure configurée ──
+      try {
+        await tryRunChampionTierDailySnapshot(logger)
+      } catch (err) {
+        await logger.alerte('Champion tier snapshot check error (non-fatal)')
+        void err
       }
     }
   } catch (err) {

@@ -19,7 +19,9 @@
     "prisma:generate": "cd .. && npx prisma generate --schema=backend/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
-    "script:league-xp": "tsx src/worker/runScript.ts league-xp"
+    "script:league-xp": "tsx src/worker/runScript.ts league-xp",
+    "script:data-enrich": "tsx src/worker/runScript.ts data-enrich",
+    "script:data-enrich-cycle": "tsx src/scripts/runDataEnrichWithPoller.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

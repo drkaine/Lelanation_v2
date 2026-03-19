@@ -37,11 +37,16 @@ import {
   type LeagueXpOptions,
   type LeagueXpStatus,
 } from './leagueXpScript.js'
+import {
+  runDataEnrichScript,
+  getDataEnrichStatus,
+  type DataEnrichStatus,
+} from './dataEnrichScript.js'
 export type { LeagueXpOptions }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ScriptName = 'poller' | 'puuid-migration' | 'league-xp'
+export type ScriptName = 'poller' | 'puuid-migration' | 'league-xp' | 'data-enrich'
 
 export interface OrchestratorStatus {
   activeScript: ScriptName | null
@@ -58,7 +63,7 @@ export interface OrchestratorStatus {
 
 /** Tracks non-poller script runs (poller uses its own internal state). */
 interface ActiveNonPollerState {
-  name: Exclude<ScriptName, 'poller'>
+  name: 'puuid-migration' | 'league-xp' | 'data-enrich'
   shouldStop: boolean
   startedAt: string
 }
@@ -152,6 +157,30 @@ export function getOrchestratorStatus(): OrchestratorStatus {
     }
   }
 
+  if (activeNonPoller?.name === 'data-enrich') {
+    const s: DataEnrichStatus = getDataEnrichStatus()
+    return {
+      activeScript: 'data-enrich',
+      isRunning: s.phase === 'running',
+      startedAt: s.startedAt,
+      finishedAt: s.finishedAt,
+      lastError: s.lastError,
+      shouldStop: activeNonPoller.shouldStop,
+      counters: {
+        phase: s.phase,
+        requestCount: s.requestCount,
+        error429Count: s.error429Count,
+        matchesScanned: s.matchesScanned,
+        matchesEnriched: s.matchesEnriched,
+        rowsItems: s.rowsItems,
+        rowsRunes: s.rowsRunes,
+        rowsBuckets: s.rowsBuckets,
+        rowsRanks: s.rowsRanks,
+        missingMatches: s.missingMatches,
+      },
+    }
+  }
+
   return {
     activeScript: null,
     isRunning: false,
@@ -187,6 +216,14 @@ export async function startScript(
   name: ScriptName,
   options?: LeagueXpOptions
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Special flow: data-enrich can pause poller automatically.
+  if (name === 'data-enrich' && isPollerActive() && activeNonPoller === null) {
+    requestStopRiotPoller()
+    const loopPromise = getPollerLoopPromise()
+    if (loopPromise) await loopPromise
+    activePoller = false
+  }
+
   if (isAnyScriptRunning()) {
     const current = getActiveScriptName()
     return { ok: false, error: `Script '${current}' is already running. Stop it first.` }
@@ -264,6 +301,42 @@ export async function startScript(
         lastFinishedAt = new Date().toISOString()
         lastError = msg
         activeNonPoller = null
+      })
+    return { ok: true }
+  }
+
+  if (name === 'data-enrich') {
+    activeNonPoller = {
+      name: 'data-enrich',
+      shouldStop: false,
+      startedAt: new Date().toISOString(),
+    }
+    const ctx = activeNonPoller
+    void runDataEnrichScript(
+      () => ctx.shouldStop
+    )
+      .then(async () => {
+        lastFinishedScript = 'data-enrich'
+        lastFinishedAt = new Date().toISOString()
+        lastError = getDataEnrichStatus().lastError
+        activeNonPoller = null
+        // Requested behavior: restart poller automatically when one-shot is finished.
+        if (!isAnyScriptRunning()) {
+          const r = await startScript('poller')
+          if (!r.ok) lastError = r.error
+        }
+      })
+      .catch(async (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        lastFinishedScript = 'data-enrich'
+        lastFinishedAt = new Date().toISOString()
+        lastError = msg
+        activeNonPoller = null
+        // Even on error, restart poller automatically unless another script was started.
+        if (!isAnyScriptRunning()) {
+          const r = await startScript('poller')
+          if (!r.ok) lastError = r.error
+        }
       })
     return { ok: true }
   }

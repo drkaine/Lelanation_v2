@@ -412,7 +412,7 @@ export async function getOverviewDetailStats(
         where: { championStatId: { in: statIds } },
         select: { itemId: true, countWin: true, countGame: true, countStarter: true, countCore: true },
       }),
-      prisma.championSummonerSpellAgg.findMany({
+      prisma.mvChampionSummonerSpellAgg.findMany({
         where: {
           championStatId: { in: statIds },
           ...(!includeSmite ? { spellId: { not: 11 } } : {}),
@@ -738,7 +738,7 @@ export async function getOverviewDurationWinrateStats(
       return { buckets: [] }
     }
 
-    const bucketRows = await prisma.championBucket.findMany({
+    const bucketRows = await prisma.mvChampionBucket.findMany({
       where: { championStatId: { in: statIds } },
       select: { durationBucket: true, countWin: true, countGame: true },
     })
@@ -786,7 +786,7 @@ export async function getDurationWinrateByChampion(
     const statIds = coreStats.map((s) => s.id)
     if (statIds.length === 0) return { buckets: [] }
 
-    const bucketRows = await prisma.championBucket.findMany({
+    const bucketRows = await prisma.mvChampionBucket.findMany({
       where: { championStatId: { in: statIds } },
       select: { durationBucket: true, countWin: true, countGame: true },
     })

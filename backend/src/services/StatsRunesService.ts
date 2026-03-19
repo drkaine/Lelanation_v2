@@ -140,7 +140,7 @@ export async function getRuneStatsByChampion(
     const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
     const statIds = coreStats.map((s) => s.id)
 
-    const soloRows = await prisma.championRunesSoloStat.findMany({
+    const soloRows = await prisma.mvChampionRunesSoloStat.findMany({
       where: { championStatId: { in: statIds } },
       select: {
         perkId: true,

@@ -35,6 +35,7 @@ import {
   getSummonerSpellsByChampion,
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
+import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { isDatabaseConfigured } from '../db.js'
 import {
   getPrecomputedChampions,
@@ -627,6 +628,31 @@ router.get('/tier-list', async (req: Request, res: Response) => {
       message: message,
     })
   }
+})
+
+/** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) WR / pick / bans par tier. Query: ?rankTier=DIAMOND&from=2026-01-01&to=2026-03-01&limit=365 */
+router.get('/champions/:championId/tier-trend-snapshots', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  if (!isDatabaseConfigured()) {
+    return res.status(200).json({ championId, points: [], message: 'Database not configured.' })
+  }
+  const rankTier = queryString(req.query.rankTier)
+  const fromDate = queryString(req.query.from)
+  const toDate = queryString(req.query.to)
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 365
+  const points = await getChampionTierSnapshotsForCharts({
+    championId,
+    rankTier: rankTier ?? null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+    limit: Number.isFinite(limit) ? Math.min(2000, Math.max(1, limit)) : 365,
+  })
+  return res.json({ championId, rankTier: rankTier ?? null, fromDate: fromDate ?? null, toDate: toDate ?? null, points })
 })
 
 /** GET /api/stats/champions/:championId/summoner-spells - per-spell stats for this champion. Query: ?version=16.1 &rankTier=GOLD */

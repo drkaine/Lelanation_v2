@@ -551,11 +551,11 @@ router.post('/riot-poller/start', async (_req, res) => {
 
 /**
  * POST /api/admin/riot-script/start
- * Body: { script: 'poller' | 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
+ * Body: { script: 'poller' | 'puuid-migration' | 'league-xp' | 'data-enrich', options?: { queue, tier, division, region, maxPages } }
  * Starts the specified script. Returns 409 if a script is already running.
  */
 router.post('/riot-script/start', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
+  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp', 'data-enrich']
   const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
   if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
     return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
