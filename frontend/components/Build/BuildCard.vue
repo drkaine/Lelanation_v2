@@ -1,74 +1,266 @@
 <!-- eslint-disable vue/no-v-html -- spell/description from game data -->
 <template>
-  <div class="build-card-wrapper">
+  <div
+    class="build-card-wrapper"
+    :class="{ 'build-card-wrapper--streamer-scaled': isStreamerMode }"
+  >
+    <div
+      v-if="
+        !hideTopActions && (canShowReadonlyDescription || (!readonly && hasChampion) || !readonly)
+      "
+      class="card-top-actions"
+    >
+      <button
+        v-if="canShowReadonlyDescription || (!readonly && hasChampion)"
+        class="card-top-action-button"
+        :title="localFlipped ? 'Voir le build' : 'Voir la description'"
+        type="button"
+        @click.stop="localFlipped = !localFlipped"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+          <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+          <path d="M8 16H3v5" />
+        </svg>
+      </button>
+
+      <input
+        v-if="!readonly"
+        :value="cardAuthor"
+        type="text"
+        maxlength="30"
+        class="card-top-author-input"
+        :placeholder="t('createBuild.author')"
+        @input="updateCardAuthor(($event.target as HTMLInputElement).value)"
+      />
+
+      <div v-if="!readonly" class="card-top-visibility-toggle">
+        <button
+          type="button"
+          class="card-top-visibility-button"
+          :class="{ 'is-active': cardVisibility === 'public' }"
+          @click="setCardVisibility('public')"
+        >
+          {{ t('buildsPage.public') }}
+        </button>
+        <button
+          type="button"
+          class="card-top-visibility-button"
+          :class="{ 'is-active': cardVisibility === 'private' }"
+          @click="setCardVisibility('private')"
+        >
+          {{ t('buildsPage.private') }}
+        </button>
+      </div>
+
+      <button
+        v-if="!readonly"
+        class="card-top-action-button"
+        title="Réinitialiser la sheet"
+        type="button"
+        @click="resetBuild"
+      >
+        <Icon name="mdi:refresh" size="16px" />
+      </button>
+    </div>
+    <div
+      v-if="
+        variantsPopoverOpen &&
+        ((readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion))
+      "
+      ref="variantsPopoverRef"
+      class="variants-popover"
+    >
+      <div class="variants-popover-header">
+        <span class="variants-popover-title">{{ t('buildCard.variantsTitle') }}</span>
+        <div v-if="!readonly" class="variants-popover-header-actions">
+          <button
+            type="button"
+            class="variants-popover-copy-btn"
+            :disabled="totalVariantCount < 2"
+            @click.stop="openCopyPicker()"
+          >
+            {{ t('buildCard.copyToVariants') }}
+          </button>
+          <button class="variants-popover-add" type="button" @click.stop="createVariantFromBack">
+            {{ t('buildCard.addVariant') }}
+          </button>
+        </div>
+      </div>
+      <ul class="variants-popover-list">
+        <li
+          class="variants-popover-item"
+          :class="{ 'variants-popover-item-active': activeVariantKey === 'main' }"
+          @click.stop="selectVariant(null)"
+        >
+          <span class="variants-popover-dot"></span>
+          <template v-if="!readonly">
+            <input
+              class="variants-popover-input"
+              type="text"
+              maxlength="40"
+              :value="buildStore.currentBuild?.name || ''"
+              :placeholder="t('buildCard.mainBuildTitlePlaceholder')"
+              @click.stop
+              @input="onMainTitleInput(($event.target as HTMLInputElement).value)"
+            />
+          </template>
+          <span v-else class="variants-popover-label">
+            {{ displayBuild?.name || t('buildCard.mainBuildName') }}
+          </span>
+        </li>
+        <li
+          v-for="(sub, idx) in buildSubBuilds"
+          :key="idx"
+          class="variants-popover-item"
+          :class="{ 'variants-popover-item-active': activeVariantKey === idx }"
+          @click.stop="selectVariant(idx)"
+        >
+          <span class="variants-popover-dot"></span>
+          <template v-if="!readonly">
+            <input
+              class="variants-popover-input"
+              type="text"
+              maxlength="40"
+              :value="sub.title || t('buildCard.variantN', { n: idx + 2 })"
+              @click.stop
+              @input="onSubTitleInput(idx, ($event.target as HTMLInputElement).value)"
+            />
+          </template>
+          <span v-else class="variants-popover-label">
+            {{ sub.title || t('buildCard.variantN', { n: idx + 2 }) }}
+          </span>
+          <button
+            v-if="!readonly"
+            type="button"
+            class="variants-popover-remove"
+            :title="t('buildCard.removeVariant')"
+            @click.stop="buildStore.removeSubBuild(idx)"
+          >
+            ✕
+          </button>
+        </li>
+      </ul>
+      <div v-if="copyPickerOpen" class="variants-copy-picker">
+        <div class="variants-copy-picker-title">{{ t('buildCard.copyPickerTitle') }}</div>
+        <div class="variants-copy-picker-row">
+          <label class="variants-copy-picker-label">{{ t('buildCard.copyFrom') }}</label>
+          <select v-model="copySource" class="variants-copy-picker-select">
+            <option value="main">
+              {{ buildStore.currentBuild?.name || t('buildCard.mainBuildName') }}
+            </option>
+            <option v-for="(sub, idx) in buildSubBuilds" :key="idx" :value="idx">
+              {{ sub.title || t('buildCard.variantN', { n: idx + 2 }) }}
+            </option>
+          </select>
+        </div>
+        <div class="variants-copy-picker-row">
+          <span class="variants-copy-picker-label">{{ t('buildCard.copyTo') }}</span>
+          <div class="variants-copy-destinations">
+            <label class="variants-copy-option">
+              <input
+                type="checkbox"
+                :checked="copyDestinations.includes('main')"
+                :disabled="copySource === 'main'"
+                @change="toggleCopyDestination('main', ($event.target as HTMLInputElement).checked)"
+              />
+              <span>{{ buildStore.currentBuild?.name || t('buildCard.mainBuildName') }}</span>
+            </label>
+            <label v-for="(sub, idx) in buildSubBuilds" :key="idx" class="variants-copy-option">
+              <input
+                type="checkbox"
+                :checked="copyDestinations.includes(idx)"
+                :disabled="copySource === idx"
+                @change="toggleCopyDestination(idx, ($event.target as HTMLInputElement).checked)"
+              />
+              <span>{{ sub.title || t('buildCard.variantN', { n: idx + 2 }) }}</span>
+            </label>
+          </div>
+        </div>
+        <div class="variants-copy-picker-divider" />
+        <label class="variants-copy-option">
+          <input type="checkbox" :checked="copyAllSelected" @change="toggleCopyAll" />
+          <span>{{ t('buildCard.copyAll') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.items" type="checkbox" />
+          <span>{{ t('buildCard.copyItems') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.runes" type="checkbox" />
+          <span>{{ t('buildCard.copyRunes') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.shards" type="checkbox" />
+          <span>{{ t('buildCard.copyShards') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.summonerSpells" type="checkbox" />
+          <span>{{ t('buildCard.copySummoners') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.firstThreeUps" type="checkbox" />
+          <span>{{ t('buildCard.copyFirstThreeUps') }}</span>
+        </label>
+        <label class="variants-copy-option">
+          <input v-model="copySelection.skillUpOrder" type="checkbox" />
+          <span>{{ t('buildCard.copySkillUpOrder') }}</span>
+        </label>
+        <div class="variants-copy-picker-actions">
+          <button type="button" class="variants-copy-picker-cancel" @click="closeCopyPicker()">
+            {{ t('buildCard.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="variants-copy-picker-apply"
+            :disabled="!canApplyCopy"
+            @click="applyCopySelection"
+          >
+            {{ t('buildCard.apply') }}
+          </button>
+        </div>
+      </div>
+    </div>
     <!-- Flip container (only in readonly mode with sub-builds) -->
     <div class="flip-container" :class="{ flipped: localFlipped }">
       <div class="build-card">
         <!-- Version (top right) -->
         <div class="build-version">{{ version }}</div>
 
-        <!-- Bouton Reset (seulement si pas en mode readonly) -->
         <button
-          v-if="!readonly"
-          class="reset-button"
-          title="Réinitialiser la sheet"
-          @click="resetBuild"
+          v-if="(readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion)"
+          ref="variantsTriggerRef"
+          class="variants-count-indicator"
+          type="button"
+          @click.stop="toggleVariantsPopover"
         >
-          <Icon name="mdi:refresh" size="16px" />
-        </button>
-
-        <!-- Bouton flip variantes (mode readonly, remplace le reset) -->
-        <button
-          v-if="readonly && buildSubBuilds.length > 0"
-          class="flip-button"
-          :title="localFlipped ? 'Voir le build' : 'Voir les variantes'"
-          @click.stop="localFlipped = !localFlipped"
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+          <div
+            class="variants-poker-icon"
+            :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
           >
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-            <path d="M21 3v5h-5" />
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-            <path d="M8 16H3v5" />
-          </svg>
-          <span v-if="buildSubBuilds.length > 0" class="flip-badge">
-            {{ 1 + buildSubBuilds.length }}
-          </span>
-        </button>
-
-        <!-- Bouton variantes (mode builder, à côté du reset) -->
-        <button
-          v-if="!readonly && hasChampion"
-          class="variants-builder-btn"
-          :title="buildSubBuilds.length > 0 ? 'Gérer les variantes' : 'Créer une variante'"
-          @click.stop="localFlipped = !localFlipped"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-            <path d="M21 3v5h-5" />
-            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-            <path d="M8 16H3v5" />
-          </svg>
-          <span v-if="buildSubBuilds.length > 0" class="variants-builder-badge">
-            {{ 1 + buildSubBuilds.length }}
-          </span>
+            <span
+              v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+              :key="`variant-card-${n}`"
+              class="variants-poker-card"
+              :style="{
+                transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                zIndex: n,
+              }"
+            />
+            <span class="variants-poker-badge">
+              {{ totalVariantCount }}
+            </span>
+          </div>
         </button>
 
         <!-- Roles Section - Entre la version et le séparateur -->
@@ -98,7 +290,12 @@
         <!-- Champion Section (Top) - Toujours visible -->
         <div class="champion-section">
           <!-- Portrait en forme de losange -->
-          <div class="champion-portrait-container">
+          <div
+            class="champion-portrait-container"
+            :class="{
+              'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.champion,
+            }"
+          >
             <img
               v-if="selectedChampion"
               ref="championPortraitRef"
@@ -117,7 +314,13 @@
           </h2>
 
           <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
-          <div class="summoner-spells-row">
+          <div
+            class="summoner-spells-row"
+            :class="{
+              'validation-blink-frame':
+                props.highlightMissingFields && missingFieldChecks.summonerSpells,
+            }"
+          >
             <template v-for="(spell, index) in filteredSummonerSpells" :key="index">
               <img
                 v-if="spell"
@@ -144,7 +347,13 @@
         <div class="runes-section">
           <div class="runes-container">
             <!-- Keystone (grande icône à gauche) - première rune principale -->
-            <div class="keystone-container">
+            <div
+              class="keystone-container"
+              :class="{
+                'validation-blink-frame':
+                  props.highlightMissingFields && missingFieldChecks.runesPrimary,
+              }"
+            >
               <img
                 v-if="keystoneRuneId"
                 :src="getRuneIconById(keystoneRuneId)"
@@ -160,7 +369,13 @@
             <!-- Runes principales et secondaires -->
             <div class="runes-main">
               <!-- Runes principales (3 horizontales) - Toujours visible -->
-              <div class="primary-runes-row">
+              <div
+                class="primary-runes-row"
+                :class="{
+                  'validation-blink-frame':
+                    props.highlightMissingFields && missingFieldChecks.runesPrimary,
+                }"
+              >
                 <img
                   v-for="(runeId, index) in primaryRunesRow"
                   :key="index"
@@ -179,7 +394,13 @@
               </div>
 
               <!-- Runes secondaires (path icon + 2 runes horizontales en dessous) - Toujours visible -->
-              <div class="secondary-runes-row">
+              <div
+                class="secondary-runes-row"
+                :class="{
+                  'validation-blink-frame':
+                    props.highlightMissingFields && missingFieldChecks.runesSecondary,
+                }"
+              >
                 <!-- Icône du path secondaire -->
                 <img
                   v-if="secondaryPathIcon"
@@ -237,7 +458,12 @@
         <div class="separator-line"></div>
 
         <!-- Items Section - Toujours visible -->
-        <div class="items-section">
+        <div
+          class="items-section"
+          :class="{
+            'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.items,
+          }"
+        >
           <!-- Starting Items (2) + Boots slot (1) - Toujours visible -->
           <div class="starting-items-row">
             <div
@@ -370,83 +596,174 @@
         </div>
 
         <!-- First Three Ups Section (Between items and skills) - Toujours visible -->
-        <div class="first-three-ups-section">
+        <div
+          class="first-three-ups-section"
+          :class="{
+            'validation-blink-frame':
+              props.highlightMissingFields && missingFieldChecks.firstThreeUps,
+          }"
+        >
           <div class="first-three-ups-vertical">
             <div
-              v-for="(ability, index) in firstThreeUpsAbilities"
+              v-for="(slot, index) in firstThreeUpSlots"
               :key="index"
               class="first-three-ups-item"
             >
-              <div class="skill-icon-wrapper">
+              <div
+                class="skill-icon-wrapper skill-slot-trigger"
+                :class="{ 'skill-slot-trigger--editable': canEditSkillOrder }"
+                @click.stop="toggleSkillDropdown(`first-${index}`)"
+              >
                 <img
+                  v-if="slot.spell"
                   :src="
                     getChampionSpellImageUrl(
                       versionForImages,
                       selectedChampion?.id || '',
-                      ability.image.full
+                      slot.spell.image.full
                     )
                   "
-                  :alt="ability.name"
+                  :alt="slot.spell.name"
                   class="skill-icon"
-                  :title="tooltipsEnabled ? ability.name : undefined"
+                  :title="
+                    tooltipsEnabled
+                      ? slot.spell.name
+                      : canEditSkillOrder
+                        ? t('skills.selectSkill')
+                        : undefined
+                  "
                 />
-                <span class="skill-key">
-                  {{ t(`skills.key.${ability.key}`) }}
+                <div v-else class="skill-placeholder"></div>
+                <span v-if="slot.key" class="skill-key">
+                  {{ t(`skills.key.${slot.key}`) }}
                 </span>
                 <span class="level-badge">{{ index + 1 }}</span>
               </div>
-              <span v-if="index < firstThreeUpsAbilities.length - 1" class="arrow-down">↓</span>
-            </div>
-            <div
-              v-for="n in 3 - firstThreeUpsAbilities.length"
-              :key="`empty-first-${n}`"
-              class="first-three-ups-item"
-            >
-              <div class="skill-placeholder-wrapper">
-                <div class="skill-placeholder"></div>
-                <span class="level-badge">{{ firstThreeUpsAbilities.length + n }}</span>
+              <div
+                v-if="canEditSkillOrder && openSkillDropdown === `first-${index}`"
+                class="skill-slot-dropdown"
+                @click.stop
+              >
+                <button
+                  v-for="spell in availableSkillSpells"
+                  :key="spell.key"
+                  type="button"
+                  class="skill-slot-dropdown-option"
+                  :class="{
+                    'is-active': slot.key === spell.key,
+                    'is-disabled': isFirstThreeUpSelected(spell.key, index),
+                  }"
+                  :disabled="isFirstThreeUpSelected(spell.key, index)"
+                  :title="
+                    tooltipsEnabled
+                      ? slot.key === spell.key
+                        ? t('skills.clickToDeselect')
+                        : isFirstThreeUpSelected(spell.key, index)
+                          ? t('skills.alreadyUsedElsewhere')
+                          : t('skills.select')
+                      : undefined
+                  "
+                  @click="toggleFirstThreeUp(index, spell.key)"
+                >
+                  <img
+                    :src="
+                      getChampionSpellImageUrl(
+                        versionForImages,
+                        selectedChampion?.id || '',
+                        spell.image.full
+                      )
+                    "
+                    :alt="spell.name"
+                    class="skill-slot-dropdown-icon"
+                  />
+                  <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
+                </button>
               </div>
-              <span v-if="n < 3 - firstThreeUpsAbilities.length" class="arrow-down">↓</span>
+              <span v-if="index < 2" class="arrow-down">↓</span>
             </div>
           </div>
         </div>
 
         <!-- Skill Order Section (Right) - Toujours visible (même disposition que first three ups : clé sur l'image) -->
-        <div class="skill-order-section">
+        <div
+          class="skill-order-section"
+          :class="{
+            'validation-blink-frame':
+              props.highlightMissingFields && missingFieldChecks.skillUpOrder,
+          }"
+        >
           <div class="skill-order-vertical">
-            <div
-              v-for="(ability, index) in skillOrderAbilities"
-              :key="index"
-              class="skill-order-item"
-            >
-              <div class="skill-icon-wrapper">
+            <div v-for="(slot, index) in skillOrderSlots" :key="index" class="skill-order-item">
+              <div
+                class="skill-icon-wrapper skill-slot-trigger"
+                :class="{ 'skill-slot-trigger--editable': canEditSkillOrder }"
+                @click.stop="toggleSkillDropdown(`order-${index}`)"
+              >
                 <img
+                  v-if="slot.spell"
                   :src="
                     getChampionSpellImageUrl(
                       versionForImages,
                       selectedChampion?.id || '',
-                      ability.image.full
+                      slot.spell.image.full
                     )
                   "
-                  :alt="ability.name"
+                  :alt="slot.spell.name"
                   class="skill-icon"
-                  :title="tooltipsEnabled ? ability.name : undefined"
+                  :title="
+                    tooltipsEnabled
+                      ? slot.spell.name
+                      : canEditSkillOrder
+                        ? t('skills.selectSkill')
+                        : undefined
+                  "
                 />
-                <span class="skill-key">
-                  {{ t(`skills.key.${ability.key}`) }}
+                <div v-else class="skill-placeholder"></div>
+                <span v-if="slot.key" class="skill-key">
+                  {{ t(`skills.key.${slot.key}`) }}
                 </span>
+                <span class="max-badge">MAX</span>
               </div>
-              <span v-if="index < skillOrderAbilities.length - 1" class="arrow-down">↓</span>
-            </div>
-            <div
-              v-for="n in 3 - skillOrderAbilities.length"
-              :key="`empty-skill-${n}`"
-              class="skill-order-item"
-            >
-              <div class="skill-placeholder-wrapper">
-                <div class="skill-placeholder"></div>
+              <div
+                v-if="canEditSkillOrder && openSkillDropdown === `order-${index}`"
+                class="skill-slot-dropdown"
+                @click.stop
+              >
+                <button
+                  v-for="spell in availableSkillSpells"
+                  :key="spell.key"
+                  type="button"
+                  class="skill-slot-dropdown-option"
+                  :class="{
+                    'is-active': slot.key === spell.key,
+                    'is-disabled': isSkillUpOrderSelected(spell.key, index),
+                  }"
+                  :disabled="isSkillUpOrderSelected(spell.key, index)"
+                  :title="
+                    tooltipsEnabled
+                      ? slot.key === spell.key
+                        ? t('skills.clickToDeselect')
+                        : isSkillUpOrderSelected(spell.key, index)
+                          ? t('skills.alreadyUsedElsewhere')
+                          : t('skills.select')
+                      : undefined
+                  "
+                  @click="toggleSkillUpOrder(index, spell.key)"
+                >
+                  <img
+                    :src="
+                      getChampionSpellImageUrl(
+                        versionForImages,
+                        selectedChampion?.id || '',
+                        spell.image.full
+                      )
+                    "
+                    :alt="spell.name"
+                    class="skill-slot-dropdown-icon"
+                  />
+                  <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
+                </button>
               </div>
-              <span v-if="n < 3 - skillOrderAbilities.length" class="arrow-down">↓</span>
             </div>
           </div>
         </div>
@@ -667,13 +984,27 @@
                 </div>
               </div>
             </template>
-            <!-- Shard / Path: nom seul -->
-            <template
-              v-else-if="
-                sheetElementTooltipResolved.type === 'shard' ||
-                sheetElementTooltipResolved.type === 'path'
-              "
-            >
+            <template v-else-if="sheetElementTooltipResolved.type === 'shard'">
+              <div class="item-tooltip">
+                <div class="item-tooltip-content">
+                  <div class="item-tooltip-header">
+                    <div class="item-tooltip-text">
+                      <div class="item-tooltip-name">
+                        {{ sheetElementTooltipResolved.name }}
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    v-if="sheetElementTooltipResolved.description"
+                    class="item-tooltip-description"
+                  >
+                    {{ sheetElementTooltipResolved.description }}
+                  </div>
+                </div>
+              </div>
+            </template>
+            <!-- Path: nom seul -->
+            <template v-else-if="sheetElementTooltipResolved.type === 'path'">
               <div class="sheet-tooltip-simple px-3 py-2 text-sm">
                 {{ sheetElementTooltipResolved.name }}
               </div>
@@ -682,86 +1013,75 @@
         </Teleport>
       </div>
 
-      <!-- Face arrière : liste des variantes (builder + readonly) -->
-      <div
-        v-if="(readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion)"
-        class="build-card-back"
-      >
-        <div class="back-header">
-          <span class="back-title">Variantes</span>
-          <button class="back-close-btn" @click.stop="localFlipped = false">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-            >
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <ul class="back-variants-list">
-          <li
-            class="back-variant-item"
-            :class="{ 'back-variant-active': localDisplayedSubIndex === null }"
-            @click.stop="selectVariant(null)"
-          >
-            <span class="back-variant-dot"></span>
-            <template v-if="!readonly">
-              <input
-                class="back-variant-input"
-                type="text"
-                maxlength="40"
-                :value="buildStore.currentBuild?.name || ''"
-                placeholder="Titre du build principal"
-                @click.stop
-                @input="onMainTitleInput(($event.target as HTMLInputElement).value)"
-              />
-            </template>
-            <span v-else class="back-variant-label">
-              {{ displayBuild?.name || 'Build principal' }}
-            </span>
-          </li>
-          <li
-            v-for="(sub, idx) in buildSubBuilds"
-            :key="idx"
-            class="back-variant-item"
-            :class="{ 'back-variant-active': localDisplayedSubIndex === idx }"
-            @click.stop="selectVariant(idx)"
-          >
-            <span class="back-variant-dot"></span>
-            <template v-if="!readonly">
-              <input
-                class="back-variant-input"
-                type="text"
-                maxlength="40"
-                :value="sub.title || `Variante ${idx + 2}`"
-                @click.stop
-                @input="onSubTitleInput(idx, ($event.target as HTMLInputElement).value)"
-              />
-            </template>
-            <span v-else class="back-variant-label">{{ sub.title || `Variante ${idx + 2}` }}</span>
-            <button
-              v-if="!readonly"
-              type="button"
-              class="back-variant-remove"
-              title="Supprimer la variante"
-              @click.stop="buildStore.removeSubBuild(idx)"
-            >
-              ✕
-            </button>
-          </li>
-        </ul>
-        <button
-          v-if="!readonly"
-          class="back-add-btn"
-          type="button"
-          @click.stop="createVariantFromBack"
+      <!-- Face arrière : description -->
+      <div v-if="canShowReadonlyDescription || (!readonly && hasChampion)" class="build-card-back">
+        <div
+          v-if="showBackHeader"
+          class="back-header"
+          :class="{ 'back-header--without-selector': !showBackVariantSelector }"
         >
-          + Nouvelle variante
-        </button>
+          <div class="back-header-slot back-header-slot--left">
+            <button
+              v-if="showBackVariantSelector"
+              ref="variantsTriggerRef"
+              class="variants-count-indicator variants-count-indicator--back"
+              type="button"
+              @click.stop="toggleVariantsPopover"
+            >
+              <div
+                class="variants-poker-icon"
+                :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+              >
+                <span
+                  v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+                  :key="`back-variant-card-${n}`"
+                  class="variants-poker-card"
+                  :style="{
+                    transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                    zIndex: n,
+                  }"
+                />
+                <span class="variants-poker-badge">
+                  {{ totalVariantCount }}
+                </span>
+              </div>
+            </button>
+          </div>
+          <span class="back-title">
+            {{ activeDescriptionTitle }}
+          </span>
+          <div class="back-header-slot back-header-slot--right">
+            <label
+              v-if="showDescriptionToggle"
+              class="back-description-toggle"
+              :class="{ 'is-disabled': readonly }"
+            >
+              <input
+                class="back-description-toggle-input"
+                type="checkbox"
+                :checked="descriptionMode === 'single'"
+                :disabled="readonly"
+                @change="toggleCommonDescription(($event.target as HTMLInputElement).checked)"
+              />
+              <span
+                class="back-description-toggle-track"
+                :class="{ 'is-active': descriptionMode === 'single' }"
+              >
+                <span class="back-description-toggle-thumb" />
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="back-description-panel">
+          <DescriptionEditor
+            v-if="!readonly"
+            :model-value="activeDescriptionValue"
+            @update:model-value="updateActiveDescription"
+          />
+          <!-- eslint-disable vue/no-v-html -->
+          <div v-else class="back-description-readonly" v-html="readonlyDescriptionHtml"></div>
+          <!-- eslint-enable vue/no-v-html -->
+        </div>
       </div>
     </div>
     <!-- end .flip-container -->
@@ -769,137 +1089,181 @@
     <!-- Items Manager (under the card): drag & drop, remove & reset items (seulement si pas readonly) -->
     <div v-if="!readonly" class="items-manager">
       <div class="items-manager-header">
-        <div class="items-manager-title">{{ t('buildCard.itemsManagement') }}</div>
-        <div class="items-manager-header-actions">
+        <div class="items-manager-tabs">
           <button
-            class="items-stats-toggle-btn"
+            class="items-manager-tab-btn"
+            :class="{ 'is-active': !showItemStats }"
             type="button"
-            @click="showItemStats = !showItemStats"
+            @click="showItemStats = false"
           >
-            {{ showItemStats ? 'Masquer stats items' : 'Stats items' }}
+            {{ t('buildCard.itemsManagement') }}
           </button>
+          <button
+            class="items-manager-tab-btn"
+            :class="{ 'is-active': showItemStats }"
+            type="button"
+            @click="showItemStats = true"
+          >
+            Stats items
+          </button>
+        </div>
+        <div class="items-manager-header-actions">
           <button class="items-reset-btn" type="button" @click="resetItemsOnly">
             {{ t('buildCard.resetItems') }}
           </button>
         </div>
       </div>
-      <div v-if="buildItems.length === 0" class="items-manager-empty">
-        {{ t('buildCard.noItems') }}
-      </div>
-      <div v-else>
-        <div class="items-manager-groups">
-          <div class="items-manager-group">
-            <span class="items-manager-group-label">Starters</span>
-            <div class="items-manager-inline">
-              <template
-                v-for="(entry, rowIndex) in managerStarterItems"
-                :key="`starter-${entry.index}-${entry.item.id}`"
-              >
-                <img
-                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                  :alt="entry.item.name"
-                  class="items-manager-inline-icon"
-                  :class="{
-                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                    'items-manager-inline-icon--drag-over':
-                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                  }"
-                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                  :draggable="!props.build"
-                  @dragstart="onItemDragStart(entry.index, $event)"
-                  @dragover="onItemDragOver(entry.index, $event)"
-                  @drop="onItemDrop(entry.index, $event)"
-                  @dragend="onItemDragEnd"
-                />
-                <span
-                  v-if="rowIndex < managerStarterItems.length - 1"
-                  class="items-manager-inline-separator"
-                  >→</span
+      <div v-if="!showItemStats">
+        <div v-if="buildItems.length === 0" class="items-manager-empty">
+          {{ t('buildCard.noItems') }}
+        </div>
+        <div v-else>
+          <div class="items-manager-groups">
+            <div class="items-manager-group">
+              <span class="items-manager-group-label">Starters</span>
+              <div class="items-manager-inline">
+                <template
+                  v-for="(entry, rowIndex) in managerStarterItems"
+                  :key="`starter-${entry.index}-${entry.item.id}`"
                 >
-              </template>
-              <span v-if="managerStarterItems.length === 0" class="items-manager-empty">-</span>
+                  <img
+                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                    :alt="entry.item.name"
+                    class="items-manager-inline-icon"
+                    :class="{
+                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                      'items-manager-inline-icon--drag-over':
+                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                    }"
+                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
+                    :draggable="!props.build"
+                    @dragstart="onItemDragStart(entry.index, $event)"
+                    @dragover="onItemDragOver(entry.index, $event)"
+                    @drop="onItemDrop(entry.index, $event)"
+                    @dragend="onItemDragEnd"
+                  />
+                  <span
+                    v-if="rowIndex < managerStarterItems.length - 1"
+                    class="items-manager-inline-separator"
+                    >→</span
+                  >
+                </template>
+                <span v-if="managerStarterItems.length === 0" class="items-manager-empty">-</span>
+              </div>
             </div>
-          </div>
 
-          <div class="items-manager-group">
-            <span class="items-manager-group-label">Bottes</span>
-            <div class="items-manager-inline">
-              <template
-                v-for="(entry, rowIndex) in managerBootsItems"
-                :key="`boots-${entry.index}-${entry.item.id}`"
-              >
-                <img
-                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                  :alt="entry.item.name"
-                  class="items-manager-inline-icon"
-                  :class="{
-                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                    'items-manager-inline-icon--drag-over':
-                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                  }"
-                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                  :draggable="!props.build"
-                  @dragstart="onItemDragStart(entry.index, $event)"
-                  @dragover="onItemDragOver(entry.index, $event)"
-                  @drop="onItemDrop(entry.index, $event)"
-                  @dragend="onItemDragEnd"
-                />
-                <span
-                  v-if="rowIndex < managerBootsItems.length - 1"
-                  class="items-manager-inline-separator"
-                  >→</span
+            <div class="items-manager-group">
+              <span class="items-manager-group-label">Bottes</span>
+              <div class="items-manager-inline">
+                <template
+                  v-for="(entry, rowIndex) in managerBootsItems"
+                  :key="`boots-${entry.index}-${entry.item.id}`"
                 >
-              </template>
-              <span v-if="managerBootsItems.length === 0" class="items-manager-empty">-</span>
+                  <img
+                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                    :alt="entry.item.name"
+                    class="items-manager-inline-icon"
+                    :class="{
+                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                      'items-manager-inline-icon--drag-over':
+                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                    }"
+                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
+                    :draggable="!props.build"
+                    @dragstart="onItemDragStart(entry.index, $event)"
+                    @dragover="onItemDragOver(entry.index, $event)"
+                    @drop="onItemDrop(entry.index, $event)"
+                    @dragend="onItemDragEnd"
+                  />
+                  <span
+                    v-if="rowIndex < managerBootsItems.length - 1"
+                    class="items-manager-inline-separator"
+                    >→</span
+                  >
+                </template>
+                <span v-if="managerBootsItems.length === 0" class="items-manager-empty">-</span>
+              </div>
             </div>
-          </div>
 
-          <div class="items-manager-group">
-            <span class="items-manager-group-label">Reste</span>
-            <div class="items-manager-inline">
-              <template
-                v-for="(entry, rowIndex) in managerOtherItems"
-                :key="`other-${entry.index}-${entry.item.id}`"
-              >
-                <img
-                  :src="getItemImageUrl(versionForImages, entry.item.image.full)"
-                  :alt="entry.item.name"
-                  class="items-manager-inline-icon"
-                  :class="{
-                    'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
-                    'items-manager-inline-icon--drag-over':
-                      dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
-                  }"
-                  :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
-                  :draggable="!props.build"
-                  @dragstart="onItemDragStart(entry.index, $event)"
-                  @dragover="onItemDragOver(entry.index, $event)"
-                  @drop="onItemDrop(entry.index, $event)"
-                  @dragend="onItemDragEnd"
-                />
-                <span
-                  v-if="rowIndex < managerOtherItems.length - 1"
-                  class="items-manager-inline-separator"
-                  >→</span
+            <div class="items-manager-group">
+              <span class="items-manager-group-label">Core</span>
+              <div class="items-manager-inline">
+                <template
+                  v-for="(entry, rowIndex) in managerCoreItems"
+                  :key="`core-${entry.index}-${entry.item.id}`"
                 >
-              </template>
-              <span v-if="managerOtherItems.length === 0" class="items-manager-empty">-</span>
+                  <img
+                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                    :alt="entry.item.name"
+                    class="items-manager-inline-icon"
+                    :class="{
+                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                      'items-manager-inline-icon--drag-over':
+                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                    }"
+                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
+                    :draggable="!props.build"
+                    @dragstart="onItemDragStart(entry.index, $event)"
+                    @dragover="onItemDragOver(entry.index, $event)"
+                    @drop="onItemDrop(entry.index, $event)"
+                    @dragend="onItemDragEnd"
+                  />
+                  <span
+                    v-if="rowIndex < managerCoreItems.length - 1"
+                    class="items-manager-inline-separator"
+                    >→</span
+                  >
+                </template>
+                <span v-if="managerCoreItems.length === 0" class="items-manager-empty">-</span>
+              </div>
+            </div>
+
+            <div class="items-manager-group">
+              <span class="items-manager-group-label">Final</span>
+              <div class="items-manager-inline">
+                <template
+                  v-for="(entry, rowIndex) in managerFinalItems"
+                  :key="`final-${entry.index}-${entry.item.id}`"
+                >
+                  <img
+                    :src="getItemImageUrl(versionForImages, entry.item.image.full)"
+                    :alt="entry.item.name"
+                    class="items-manager-inline-icon"
+                    :class="{
+                      'items-manager-inline-icon--dragging': draggingItemIndex === entry.index,
+                      'items-manager-inline-icon--drag-over':
+                        dragOverItemIndex === entry.index && draggingItemIndex !== entry.index,
+                    }"
+                    :title="tooltipsEnabled ? getItemDisplayName(entry.item) : undefined"
+                    :draggable="!props.build"
+                    @dragstart="onItemDragStart(entry.index, $event)"
+                    @dragover="onItemDragOver(entry.index, $event)"
+                    @drop="onItemDrop(entry.index, $event)"
+                    @dragend="onItemDragEnd"
+                  />
+                  <span
+                    v-if="rowIndex < managerFinalItems.length - 1"
+                    class="items-manager-inline-separator"
+                    >→</span
+                  >
+                </template>
+                <span v-if="managerFinalItems.length === 0" class="items-manager-empty">-</span>
+              </div>
             </div>
           </div>
         </div>
-
-        <div v-if="showItemStats" class="items-manager-stats">
-          <p class="items-manager-stats-note">
-            Stats des items (hors starters, et 1 seule botte prise en compte).
-          </p>
-          <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
-            Aucune stat item détectée
-          </div>
-          <div v-else class="items-manager-stats-grid">
-            <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
-              <span class="items-manager-stats-label">{{ row.label }}</span>
-              <span class="items-manager-stats-value">{{ row.value }}</span>
-            </div>
+      </div>
+      <div v-else class="items-manager-stats">
+        <p class="items-manager-stats-note">
+          Stats des items (hors starters, et 1 seule botte prise en compte).
+        </p>
+        <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
+          Aucune stat item détectée
+        </div>
+        <div v-else class="items-manager-stats-grid">
+          <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
+            <span class="items-manager-stats-label">{{ row.label }}</span>
+            <span class="items-manager-stats-value">{{ row.value }}</span>
           </div>
         </div>
       </div>
@@ -911,7 +1275,7 @@
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
-import type { Build, SubBuild, Item, Role } from '@lelanation/shared-types'
+import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -927,19 +1291,30 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatLethality } from '~/utils/formatItemStats'
+import { linkifyDescription } from '~/utils/linkifyDescription'
+import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
+import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
   readonly?: boolean // Si true, désactive les interactions (bouton reset, toggle rôles, etc.)
   sheetTooltips?: boolean // Active les tooltips de la sheet (summoners/runes/shards/items)
+  hideTopActions?: boolean
+  highlightMissingFields?: boolean
+  /** En readonly : variante à afficher par défaut (null = build principal). Ex. quand la recherche ne matche qu'une variante. */
+  initialDisplayedVariantIndex?: number | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   build: null,
   readonly: false,
   sheetTooltips: false,
+  hideTopActions: false,
+  highlightMissingFields: false,
+  initialDisplayedVariantIndex: null,
 })
 
 const emit = defineEmits<{
@@ -952,7 +1327,11 @@ const championsStore = useChampionsStore()
 const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
+const localePath = useLocalePath()
+const route = useRoute()
 const { locale, t } = useI18n()
+const { isStreamerMode } = useStreamerMode()
+const hideTopActions = computed(() => props.hideTopActions)
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -965,13 +1344,113 @@ const localFlipped = ref(false)
 /** Index de la variante affichée localement (null = build principal). Utilisé en mode readonly. */
 const localDisplayedSubIndex = ref<number | null>(null)
 
+// En readonly, initialiser la variante affichée depuis la prop (ex. recherche qui ne matche qu'une variante)
+watch(
+  () => [props.build?.id, props.initialDisplayedVariantIndex] as const,
+  ([_buildId, initialIdx]) => {
+    if (!props.readonly || !props.build) return
+    const idx = initialIdx ?? null
+    const subs = (props.build.subBuilds ?? []) as SubBuild[]
+    if (idx === null || (typeof idx === 'number' && idx >= 0 && idx < subs.length)) {
+      localDisplayedSubIndex.value = idx
+    }
+  },
+  { immediate: true }
+)
+const variantsPopoverOpen = ref(false)
+const variantsPopoverRef = ref<HTMLElement | null>(null)
+const variantsTriggerRef = ref<HTMLElement | null>(null)
+const copyPickerOpen = ref(false)
+const copySource = ref<'main' | number>('main')
+const copyDestinations = ref<('main' | number)[]>([])
+const openSkillDropdown = ref<string | null>(null)
+const copySelection = ref({
+  items: true,
+  runes: true,
+  shards: true,
+  summonerSpells: true,
+  firstThreeUps: false,
+  skillUpOrder: false,
+})
+
 /** Liste des sous-builds du build affiché (prop ou store). */
 const buildSubBuilds = computed<SubBuild[]>(() => {
   const b = props.build ?? buildStore.currentBuild
   return (b?.subBuilds as SubBuild[] | undefined) ?? []
 })
+const totalVariantCount = computed(() => buildSubBuilds.value.length + 1)
 
 const hasChampion = computed(() => !!buildStore.currentBuild?.champion)
+const activeVariantKey = computed<'main' | number>(() =>
+  props.readonly ? (localDisplayedSubIndex.value ?? 'main') : buildStore.displayedVariant
+)
+const descriptionMode = computed(
+  () => (props.build ?? buildStore.currentBuild)?.descriptionMode ?? 'single'
+)
+const canShowReadonlyDescription = computed(
+  () => props.readonly && Boolean(activeDescriptionValue.value?.trim())
+)
+const isBuilderPage = computed(
+  () => route.path.includes('/builds/create') || route.path.includes('/builds/edit/')
+)
+const canEditSkillOrder = computed(() => isBuilderPage.value && !props.readonly && !props.build)
+const showBackHeader = computed(() => isBuilderPage.value || showBackVariantSelector.value)
+const showDescriptionToggle = computed(() => isBuilderPage.value && buildSubBuilds.value.length > 0)
+const showBackVariantSelector = computed(
+  () => buildSubBuilds.value.length > 0 && descriptionMode.value === 'multiple'
+)
+const copyAllSelected = computed(
+  () =>
+    copySelection.value.items &&
+    copySelection.value.runes &&
+    copySelection.value.shards &&
+    copySelection.value.summonerSpells &&
+    copySelection.value.firstThreeUps &&
+    copySelection.value.skillUpOrder
+)
+const hasCopySelection = computed(
+  () =>
+    copySelection.value.items ||
+    copySelection.value.runes ||
+    copySelection.value.shards ||
+    copySelection.value.summonerSpells ||
+    copySelection.value.firstThreeUps ||
+    copySelection.value.skillUpOrder
+)
+const canApplyCopy = computed(() => hasCopySelection.value && copyDestinations.value.length > 0)
+
+const cardAuthor = computed(() => buildStore.currentBuild?.author ?? '')
+const cardVisibility = computed<'public' | 'private'>(() => {
+  return (buildStore.currentBuild?.visibility as 'public' | 'private' | undefined) ?? 'public'
+})
+
+const activeDescriptionTitle = computed(() => {
+  if (!isBuilderPage.value) {
+    return 'Description'
+  }
+  if (descriptionMode.value === 'single' || buildSubBuilds.value.length === 0) {
+    return 'Description commune'
+  }
+  return 'Description unique'
+})
+
+const activeDescriptionValue = computed(() => {
+  const build = props.build ?? buildStore.currentBuild
+  if (!build) return ''
+  if (descriptionMode.value === 'single' || buildSubBuilds.value.length === 0) {
+    return build.description ?? ''
+  }
+  if (activeVariantKey.value === 'main') {
+    return build.description ?? ''
+  }
+  return build.subBuilds?.[activeVariantKey.value]?.description ?? ''
+})
+const readonlyDescriptionHtml = computed(() => {
+  const text = activeDescriptionValue.value?.trim()
+  if (!text) return 'Aucune description'
+  if (text.includes('<')) return sanitizeDescriptionHtml(text)
+  return linkifyDescription(text)
+})
 
 function selectVariant(idx: number | null) {
   if (props.readonly) {
@@ -982,11 +1461,112 @@ function selectVariant(idx: number | null) {
   } else {
     buildStore.showSubBuild(idx)
   }
-  localFlipped.value = false
+  variantsPopoverOpen.value = false
 }
 
 function createVariantFromBack() {
   buildStore.createSubBuild()
+}
+
+function toggleVariantsPopover() {
+  variantsPopoverOpen.value = !variantsPopoverOpen.value
+  if (!variantsPopoverOpen.value) closeCopyPicker()
+}
+
+function toggleFlipped() {
+  localFlipped.value = !localFlipped.value
+}
+
+function setDescMode(mode: 'single' | 'multiple') {
+  if (props.readonly || props.build) return
+  buildStore.setDescriptionMode(mode)
+}
+
+function toggleCommonDescription(enabled: boolean) {
+  setDescMode(enabled ? 'single' : 'multiple')
+}
+
+function updateActiveDescription(value: string) {
+  if (props.readonly || props.build) return
+  if (descriptionMode.value === 'single' || activeVariantKey.value === 'main') {
+    buildStore.setDescription(value)
+    return
+  }
+  buildStore.setSubBuildDescription(activeVariantKey.value, value)
+}
+
+function openCopyPicker() {
+  if (props.readonly || props.build) return
+  copySource.value = buildStore.displayedVariant
+  copyDestinations.value = []
+  copyPickerOpen.value = true
+}
+
+function closeCopyPicker() {
+  copyPickerOpen.value = false
+  copyDestinations.value = []
+}
+
+function toggleCopyDestination(key: 'main' | number, checked: boolean) {
+  if (checked) {
+    if (!copyDestinations.value.includes(key))
+      copyDestinations.value = [...copyDestinations.value, key]
+  } else {
+    copyDestinations.value = copyDestinations.value.filter(k => k !== key)
+  }
+}
+
+function toggleCopyAll(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  copySelection.value = {
+    items: checked,
+    runes: checked,
+    shards: checked,
+    summonerSpells: checked,
+    firstThreeUps: checked,
+    skillUpOrder: checked,
+  }
+}
+
+function applyCopySelection() {
+  if (props.readonly || props.build) return
+  const source =
+    copySource.value === 'main' || copySource.value === null ? 'main' : copySource.value
+  const fields = {
+    items: copySelection.value.items,
+    runes: copySelection.value.runes,
+    shards: copySelection.value.shards,
+    summonerSpells: copySelection.value.summonerSpells,
+    firstThreeUps: copySelection.value.firstThreeUps,
+    skillUpOrder: copySelection.value.skillUpOrder,
+  }
+  for (const dest of copyDestinations.value) {
+    if (dest === source) continue
+    const destKey = dest === 'main' || dest === null ? 'main' : dest
+    buildStore.copyVariantFieldsTo(source, destKey, fields)
+  }
+  closeCopyPicker()
+  variantsPopoverOpen.value = false
+}
+
+function onDocumentPointerDown(event: MouseEvent) {
+  const target = event.target as Node | null
+  if (!target) return
+  const targetElement = target as HTMLElement
+
+  if (
+    openSkillDropdown.value &&
+    !targetElement.closest('.skill-slot-dropdown') &&
+    !targetElement.closest('.skill-slot-trigger')
+  ) {
+    openSkillDropdown.value = null
+  }
+
+  if (!variantsPopoverOpen.value) return
+  if (variantsPopoverRef.value?.contains(target) || variantsTriggerRef.value?.contains(target))
+    return
+  variantsPopoverOpen.value = false
+  closeCopyPicker()
 }
 
 function onMainTitleInput(title: string) {
@@ -997,6 +1577,16 @@ function onMainTitleInput(title: string) {
 function onSubTitleInput(index: number, title: string) {
   if (props.readonly || props.build) return
   buildStore.setSubBuildTitle(index, title)
+}
+
+function updateCardAuthor(author: string) {
+  if (props.readonly || props.build) return
+  buildStore.setAuthor(author)
+}
+
+function setCardVisibility(visibility: 'public' | 'private') {
+  if (props.readonly || props.build) return
+  buildStore.setVisibility(visibility)
 }
 
 /** Nom d'affichage de l'item — résolu depuis itemsStore (comme dans ItemSelector) */
@@ -1104,7 +1694,8 @@ const sheetElementTooltipResolved = computed(() => {
     case 'shard': {
       const id = tt.payload as number
       const name = getShardNameById(id) || tt.fallback
-      return { type: 'shard' as const, name }
+      const description = getShardDescriptionById(id)
+      return { type: 'shard' as const, name, description }
     }
     case 'path': {
       const id = tt.payload as number
@@ -1195,6 +1786,27 @@ const displayBuild = computed<Build | null>(() => {
   }
 
   return baseBuild
+})
+
+const missingFieldChecks = computed(() => {
+  const build = props.build || buildStore.currentBuild
+  const firstThreeUps = build?.skillOrder?.firstThreeUps ?? []
+  const skillUpOrder = build?.skillOrder?.skillUpOrder ?? []
+
+  return {
+    champion: !build?.champion,
+    items: !build?.items || build.items.length === 0,
+    runesPrimary: !(build?.runes?.primary?.pathId && build.runes.primary.keystone),
+    runesSecondary: !build?.runes?.secondary?.pathId,
+    summonerSpells: !(
+      build?.summonerSpells &&
+      build.summonerSpells.length === 2 &&
+      build.summonerSpells[0] &&
+      build.summonerSpells[1]
+    ),
+    firstThreeUps: firstThreeUps.length !== 3 || firstThreeUps.some(skillKey => !skillKey),
+    skillUpOrder: skillUpOrder.length !== 3 || skillUpOrder.some(skillKey => !skillKey),
+  }
 })
 
 const selectedChampion = computed(() => {
@@ -1375,41 +1987,112 @@ const coreItemsPath2 = computed(() => {
 })
 
 // First Three Ups - Les 3 premiers "up" (niveaux 1, 2, 3)
-const firstThreeUpsAbilities = computed(() => {
-  if (!selectedChampion.value || !displayBuild.value?.skillOrder) return []
+type AbilityKey = 'Q' | 'W' | 'E' | 'R'
+type SkillSlotSpell = { key: AbilityKey; image: { full: string }; name: string }
+type SkillSlotState = { key: AbilityKey | null; spell: SkillSlotSpell | null }
 
-  const skillOrder = displayBuild.value.skillOrder
-  if (!skillOrder.firstThreeUps) return []
-
-  // Retourner les 3 compétences dans l'ordre de firstThreeUps
-  return skillOrder.firstThreeUps
-    .filter((ability): ability is 'Q' | 'W' | 'E' | 'R' => ability !== null)
-    .map(key => {
-      const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
-      const spell = selectedChampion.value?.spells[index]
-      return spell ? { ...spell, key } : null
-    })
-    .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
+const createEmptySkillOrder = (): SkillOrder => ({
+  firstThreeUps: [null as any, null as any, null as any],
+  skillUpOrder: [null as any, null as any, null as any],
 })
 
-// Skill order - calculer les 3 premières compétences à maxer
-// Afficher l'ordre de montée des compétences (skillUpOrder)
-const skillOrderAbilities = computed(() => {
-  if (!selectedChampion.value || !displayBuild.value?.skillOrder) return []
-
-  const skillOrder = displayBuild.value.skillOrder
-  if (!skillOrder.skillUpOrder) return []
-
-  // Retourner les 3 compétences dans l'ordre de skillUpOrder
-  return skillOrder.skillUpOrder
-    .filter((ability): ability is 'Q' | 'W' | 'E' | 'R' => ability !== null)
-    .map(key => {
-      const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
+const availableSkillSpells = computed<SkillSlotSpell[]>(() => {
+  if (!selectedChampion.value) return []
+  return (['Q', 'W', 'E', 'R'] as AbilityKey[])
+    .map((key, index) => {
       const spell = selectedChampion.value?.spells[index]
-      return spell ? { ...spell, key } : null
+      if (!spell?.image?.full) return null
+      return {
+        key,
+        image: spell.image,
+        name: spell.name,
+      }
     })
-    .filter(Boolean) as Array<{ key: 'Q' | 'W' | 'E' | 'R'; image: { full: string }; name: string }>
+    .filter(Boolean) as SkillSlotSpell[]
 })
+
+const getSkillSlotSpell = (ability: AbilityKey | null | undefined): SkillSlotSpell | null => {
+  if (!ability) return null
+  return availableSkillSpells.value.find(spell => spell.key === ability) ?? null
+}
+
+const ensureSkillOrderInitialized = () => {
+  if (props.readonly || props.build) return
+  buildStore.ensureCurrentBuild()
+  if (!buildStore.displayedBuild?.skillOrder) {
+    buildStore.setSkillOrder(createEmptySkillOrder())
+  }
+}
+
+const firstThreeUpSlots = computed<SkillSlotState[]>(() => {
+  const firstThreeUps = displayBuild.value?.skillOrder?.firstThreeUps ?? []
+  return Array.from({ length: 3 }, (_, index) => {
+    const key = (firstThreeUps[index] as AbilityKey | null | undefined) ?? null
+    return {
+      key,
+      spell: getSkillSlotSpell(key),
+    }
+  })
+})
+
+const skillOrderSlots = computed<SkillSlotState[]>(() => {
+  const skillUpOrder = displayBuild.value?.skillOrder?.skillUpOrder ?? []
+  return Array.from({ length: 3 }, (_, index) => {
+    const key = (skillUpOrder[index] as AbilityKey | null | undefined) ?? null
+    return {
+      key,
+      spell: getSkillSlotSpell(key),
+    }
+  })
+})
+
+const toggleSkillDropdown = (slotId: string) => {
+  if (!canEditSkillOrder.value || !selectedChampion.value) return
+  ensureSkillOrderInitialized()
+  openSkillDropdown.value = openSkillDropdown.value === slotId ? null : slotId
+}
+
+const toggleFirstThreeUp = (index: number, ability: AbilityKey) => {
+  ensureSkillOrderInitialized()
+  const skillOrder = buildStore.displayedBuild?.skillOrder ?? createEmptySkillOrder()
+  const current = skillOrder.firstThreeUps[index] ?? null
+  const nextFirstThreeUps = [...skillOrder.firstThreeUps] as Array<AbilityKey | null>
+  nextFirstThreeUps[index] = current === ability ? null : ability
+  buildStore.setSkillOrder({
+    ...skillOrder,
+    firstThreeUps: nextFirstThreeUps as SkillOrder['firstThreeUps'],
+  })
+  openSkillDropdown.value = null
+}
+
+const toggleSkillUpOrder = (index: number, ability: AbilityKey) => {
+  ensureSkillOrderInitialized()
+  const skillOrder = buildStore.displayedBuild?.skillOrder ?? createEmptySkillOrder()
+  const current = skillOrder.skillUpOrder[index] ?? null
+  const nextSkillUpOrder = [...skillOrder.skillUpOrder] as Array<AbilityKey | null>
+  nextSkillUpOrder[index] = current === ability ? null : ability
+  buildStore.setSkillOrder({
+    ...skillOrder,
+    skillUpOrder: nextSkillUpOrder as SkillOrder['skillUpOrder'],
+  })
+  openSkillDropdown.value = null
+}
+
+// Règle : un même spell ne peut pas être monté deux niveaux consécutifs (1==2 ou 2==3 interdit),
+// mais peut réapparaître en 1 et 3 (ex: Q → W → Q est valide).
+const isFirstThreeUpSelected = (spellId: AbilityKey, currentIndex: number): boolean => {
+  const ups = displayBuild.value?.skillOrder?.firstThreeUps
+  if (!ups) return false
+  const adjacentIndices = currentIndex === 0 ? [1] : currentIndex === 1 ? [0, 2] : [1]
+  return adjacentIndices.some(idx => ups[idx] === spellId)
+}
+
+// Règle stricte : les 3 compétences à maxer doivent toutes être différentes.
+const isSkillUpOrderSelected = (spellId: AbilityKey, currentIndex: number): boolean => {
+  const order = displayBuild.value?.skillOrder?.skillUpOrder
+  if (!order) return false
+  return order.some((selected, idx) => idx !== currentIndex && selected === spellId)
+}
 
 // Keystone (première rune principale)
 const keystoneRuneId = computed(() => {
@@ -1482,6 +2165,7 @@ const getShardIconById = (shardId: number): string =>
   shardIcons[shardId] || '/icons/shards/adaptative.png'
 
 const getShardNameById = (shardId: number): string => t(`runes.shards.${shardId}.name`, '')
+const getShardDescriptionById = (shardId: number): string => t(`runes.shards.${shardId}.desc`, '')
 
 const filteredShardIds = computed(() => {
   if (!selectedShards.value) return []
@@ -1571,14 +2255,17 @@ watch(showTooltip, async newValue => {
 onUnmounted(() => {
   window.removeEventListener('scroll', calculateTooltipPosition, true)
   window.removeEventListener('resize', calculateTooltipPosition)
+  document.removeEventListener('mousedown', onDocumentPointerDown)
 })
 
 // Reset build function
 const resetBuild = () => {
   if (props.readonly || props.build) return // Ne pas modifier si readonly ou si build en prop
+  localFlipped.value = false
+  localDisplayedSubIndex.value = null
+  showItemStats.value = false
   buildStore.createNewBuild()
-  // Sauvegarder le build vide
-  buildStore.saveBuild()
+  navigateTo(localePath('/builds/create/champion'))
 }
 
 const resetItemsOnly = () => {
@@ -1690,16 +2377,42 @@ const buildItemsWithIndex = computed(() => {
   return buildItems.value.map((item, index) => ({ item, index }))
 })
 
+const managerBuckets = computed(() => {
+  const starterItems: Array<{ item: Item; index: number }> = []
+  const bootsItems: Array<{ item: Item; index: number }> = []
+  const coreItems: Array<{ item: Item; index: number }> = []
+
+  for (const entry of buildItemsWithIndex.value) {
+    if (isStarterItem(entry.item) && starterItems.length < 2) {
+      starterItems.push(entry)
+      continue
+    }
+
+    if (isBootsItem(entry.item) && !isStarterItem(entry.item) && bootsItems.length < 2) {
+      bootsItems.push(entry)
+      continue
+    }
+
+    coreItems.push(entry)
+  }
+
+  return { starterItems, bootsItems, coreItems }
+})
+
 const managerStarterItems = computed(() => {
-  return buildItemsWithIndex.value.filter(({ item }) => isStarterItem(item))
+  return managerBuckets.value.starterItems
 })
 
 const managerBootsItems = computed(() => {
-  return buildItemsWithIndex.value.filter(({ item }) => isBootsItem(item) && !isStarterItem(item))
+  return managerBuckets.value.bootsItems
 })
 
-const managerOtherItems = computed(() => {
-  return buildItemsWithIndex.value.filter(({ item }) => !isStarterItem(item) && !isBootsItem(item))
+const managerCoreItems = computed(() => {
+  return managerBuckets.value.coreItems.slice(0, 3)
+})
+
+const managerFinalItems = computed(() => {
+  return managerBuckets.value.coreItems.slice(3)
 })
 
 // Persistance automatique - sauvegarder à chaque modification (seulement si pas de build en prop)
@@ -1737,23 +2450,9 @@ onMounted(() => {
     summonerSpellsStore.loadSummonerSpells(locale).catch(() => undefined)
   }
   if (!props.build && !buildStore.currentBuild) {
-    // Charger depuis localStorage uniquement si aucun build n'est déjà présent dans le store
-    try {
-      const saved = localStorage.getItem('lelanation_current_build')
-      if (saved) {
-        const build = JSON.parse(saved) as Build
-        buildStore.setCurrentBuild(build)
-      } else {
-        // Créer un nouveau build si aucun n'existe
-        buildStore.createNewBuild()
-      }
-    } catch (error) {
-      // Failed to load saved build - create new one
-      if (!buildStore.currentBuild) {
-        buildStore.createNewBuild()
-      }
-    }
+    buildStore.ensureCurrentBuild()
   }
+  document.addEventListener('mousedown', onDocumentPointerDown)
 })
 
 watch(locale, () => {
@@ -1764,13 +2463,349 @@ watch(locale, () => {
   runesStore.loadRunes(riotLocale.value).catch(() => undefined)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value).catch(() => undefined)
 })
+
+defineExpose({
+  toggleFlipped,
+})
 </script>
 
 <style scoped>
 .build-card-wrapper {
+  position: relative;
   display: inline-flex;
   flex-direction: column;
   gap: 8px;
+  --build-card-width: 300px;
+  --card-border-color: var(--color-blue-300);
+  --card-border-color-soft: rgb(0 90 130 / 0.45);
+}
+
+.build-card-wrapper--streamer-scaled .flip-container {
+  zoom: 1.3;
+  transform-origin: top left;
+}
+
+.build-card-wrapper--streamer-scaled {
+  --build-card-width: 390px;
+  min-height: 585px;
+}
+
+.card-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-top-author-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.3);
+  background: rgba(8, 16, 31, 0.92);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.card-top-author-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.card-top-author-input:focus {
+  outline: none;
+  border-color: var(--color-gold-300);
+}
+
+.card-top-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9999px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(8, 16, 31, 0.92);
+  flex: 0 0 auto;
+}
+
+.card-top-visibility-button {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.card-top-visibility-button.is-active {
+  color: white;
+}
+
+.card-top-visibility-button.is-active:first-child {
+  background: rgba(22, 163, 74, 0.9);
+}
+
+.card-top-visibility-button.is-active:last-child {
+  background: rgba(220, 38, 38, 0.9);
+}
+
+.variants-popover {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  z-index: 40;
+  width: 300px;
+  max-height: 360px;
+  padding: 10px;
+  border: 1px solid rgba(200, 155, 60, 0.45);
+  border-radius: 8px;
+  background: rgba(8, 16, 31, 0.96);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.variants-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.variants-popover-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-gold-300);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.variants-popover-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.variants-popover-copy-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.variants-popover-copy-btn:hover:not(:disabled) {
+  background: rgba(200, 155, 60, 0.12);
+  color: var(--color-gold-300);
+}
+
+.variants-popover-copy-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.variants-popover-add {
+  padding: 4px 8px;
+  border-radius: 9999px;
+  border: 1px solid rgba(200, 155, 60, 0.5);
+  background: rgba(200, 155, 60, 0.14);
+  color: var(--color-gold-300);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.variants-popover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.variants-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.22);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+}
+
+.variants-popover-item-active {
+  border-color: var(--color-gold-300);
+  background: rgba(200, 155, 60, 0.16);
+}
+
+.variants-popover-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-gold-300);
+  flex-shrink: 0;
+}
+
+.variants-popover-input,
+.variants-popover-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.variants-popover-input {
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 60, 0.5);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+}
+
+.variants-popover-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.variants-popover-copy,
+.variants-popover-remove {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.variants-popover-remove {
+  color: rgba(248, 113, 113, 0.95);
+}
+
+.variants-popover-copy:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.variants-copy-picker {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(200, 155, 60, 0.25);
+  background: #08101f;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.variants-copy-picker-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-gold-300);
+}
+
+.variants-copy-picker-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.variants-copy-picker-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.variants-copy-picker-select {
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+  width: 100%;
+}
+
+.variants-copy-destinations {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.variants-copy-picker-divider {
+  height: 1px;
+  background: rgba(200, 155, 60, 0.18);
+  margin: 6px 0 2px;
+}
+
+.variants-copy-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.variants-copy-option input {
+  accent-color: var(--color-gold-300);
+}
+
+.variants-copy-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.variants-copy-picker-cancel,
+.variants-copy-picker-apply {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.variants-copy-picker-apply {
+  background: rgba(200, 155, 60, 0.14);
+  color: var(--color-gold-300);
+}
+
+.variants-copy-picker-apply:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.card-top-action-button {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-gold-300);
+  border-radius: 4px;
+  color: var(--color-gold-300);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-top-action-button:hover {
+  background: rgba(0, 0, 0, 0.5);
+  transform: rotate(180deg);
 }
 
 /* ── Flip animation ── */
@@ -1820,37 +2855,140 @@ watch(locale, () => {
 }
 
 .back-header {
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-gold-400);
+}
+
+.back-header--without-selector {
+  grid-template-columns: 6px 1fr 42px;
+}
+
+.back-header-slot {
+  width: 42px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--color-gold-300);
+}
+
+.back-header-slot--left {
+  justify-content: flex-start;
+}
+
+.back-header-slot--right {
+  justify-content: flex-end;
 }
 
 .back-title {
-  font-size: 14px;
+  min-width: 0;
+  font-size: clamp(10px, 0.8vw, 13px);
   font-weight: 700;
   color: var(--color-gold-300);
-  letter-spacing: 1.5px;
+  letter-spacing: clamp(0.6px, 0.12vw, 1.2px);
   text-transform: uppercase;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
 }
 
-.back-close-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
+.variants-count-indicator--back {
+  position: static;
+  margin-right: 0;
+  flex-shrink: 0;
+}
+
+.back-description-toggle {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-gold-300);
-  border-radius: 4px;
-  color: var(--color-gold-300);
+  gap: 0;
+  padding: 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--card-border-color-soft);
+  background: rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  transition: background 0.2s;
+  flex-shrink: 0;
 }
 
-.back-close-btn:hover {
-  background: rgba(0, 0, 0, 0.5);
+.back-description-toggle.is-disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.back-description-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.back-description-toggle-track {
+  width: 30px;
+  height: 16px;
+  padding: 2px;
+  border-radius: 9999px;
+  background: rgb(var(--rgb-text) / 0.35);
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.back-description-toggle-track.is-active {
+  background: rgb(var(--rgb-accent) / 0.7);
+}
+
+.back-description-toggle-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: rgb(var(--rgb-background));
+  transition: transform 0.2s ease;
+}
+
+.back-description-toggle-track.is-active .back-description-toggle-thumb {
+  transform: translateX(14px);
+}
+
+.back-description-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.back-description-textarea {
+  flex: 1;
+  min-height: 220px;
+  resize: none;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border-color-soft);
+  background: rgba(0, 0, 0, 0.26);
+  color: #fff;
+  font-size: clamp(10px, 0.82vw, 12px);
+  line-height: 1.4;
+}
+
+.back-description-readonly {
+  flex: 1;
+  min-height: 220px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--card-border-color-soft);
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: clamp(10px, 0.82vw, 12px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+.back-description-readonly :deep(a) {
+  color: var(--color-gold-300);
+  text-decoration: underline;
+  pointer-events: auto;
 }
 
 .back-variants-list {
@@ -1934,46 +3072,6 @@ watch(locale, () => {
   color: #fecaca;
 }
 
-/* ── Bouton flip (readonly) ── */
-.flip-button {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-gold-300);
-  border-radius: 4px;
-  color: var(--color-gold-300);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  z-index: 10;
-}
-
-.flip-button:hover {
-  background: rgba(200, 155, 60, 0.2);
-}
-
-.flip-badge {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  background: var(--color-gold-300, #c89b3c);
-  color: var(--color-background, #0a1428);
-  font-size: 9px;
-  font-weight: 700;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
 .build-card {
   position: relative;
   width: 300px;
@@ -1987,6 +3085,26 @@ watch(locale, () => {
   flex-direction: column;
   font-family: var(--font-beaufort, ui-sans-serif, system-ui, sans-serif);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.validation-blink-frame {
+  border-radius: 8px;
+  animation: validation-blink-red 1s ease-in-out infinite;
+}
+
+@keyframes validation-blink-red {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(248, 113, 113, 0.18),
+      0 0 0 0 rgba(220, 38, 38, 0);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(248, 113, 113, 0.95),
+      0 0 18px rgba(220, 38, 38, 0.7);
+  }
 }
 
 .build-version {
@@ -2036,7 +3154,6 @@ watch(locale, () => {
 .role-selected {
   opacity: 1;
   filter: grayscale(0%);
-  border: 1px solid var(--color-gold-300);
   background: rgba(200, 155, 60, 0.1);
 }
 
@@ -2046,67 +3163,67 @@ watch(locale, () => {
   object-fit: contain;
 }
 
-.reset-button {
+.variants-count-indicator {
   position: absolute;
   top: 8px;
   left: 8px;
-  width: 24px;
-  height: 24px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-gold-300);
-  border-radius: 4px;
-  color: var(--color-gold-300);
-  cursor: pointer;
-  transition: all 0.2s ease;
+  gap: 8px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgb(200 155 60 / 0.4);
+  color: rgb(240 230 210 / 0.82);
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
   z-index: 10;
 }
 
-.reset-button:hover {
-  background: rgba(0, 0, 0, 0.5);
-  transform: rotate(180deg);
+.variants-poker-icon {
+  position: relative;
+  width: 28px;
+  height: 20px;
+  flex: 0 0 auto;
 }
 
-.variants-builder-btn {
+.variants-poker-card {
   position: absolute;
-  top: 8px;
-  left: 36px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-gold-300);
-  border-radius: 4px;
-  color: var(--color-gold-300);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  z-index: 10;
+  top: 1px;
+  left: 0;
+  width: 14px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgb(240 230 210 / 0.85);
+  background: linear-gradient(145deg, rgb(18 32 58 / 0.96), rgb(8 16 31 / 0.96));
+  box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+  transform-origin: bottom left;
 }
 
-.variants-builder-btn:hover {
-  background: rgba(200, 155, 60, 0.25);
-  border-color: var(--color-gold-200, #e0c070);
-}
-
-.variants-builder-badge {
+.variants-poker-card::before {
+  content: '';
   position: absolute;
-  top: -5px;
-  right: -5px;
+  inset: 2px;
+  border-radius: 2px;
+  border: 1px solid rgb(200 155 60 / 0.4);
+}
+
+.variants-poker-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  border-radius: 9999px;
   background: var(--color-gold-300);
   color: var(--color-background, #0a1428);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
+  line-height: 12px;
+  text-align: center;
+  z-index: 6;
 }
 
 /* Champion Section */
@@ -2134,7 +3251,7 @@ watch(locale, () => {
   width: 100%;
   height: 100%;
   transform: translate(-50%, -50%);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cmask id='diamond-border-mask'%3E%3Crect width='100' height='100' fill='white'/%3E%3Cpolygon points='50,6 94,50 50,94 6,50' fill='black'/%3E%3C/mask%3E%3C/defs%3E%3Cpolygon points='50,0 100,50 50,100 0,50' fill='%23c89b3c' mask='url(%23diamond-border-mask)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cmask id='diamond-border-mask'%3E%3Crect width='100' height='100' fill='white'/%3E%3Cpolygon points='50,2 98,50 50,98 2,50' fill='black'/%3E%3C/mask%3E%3C/defs%3E%3Cpolygon points='50,0 100,50 50,100 0,50' fill='%23c89b3c' mask='url(%23diamond-border-mask)'/%3E%3C/svg%3E");
   background-size: 100% 100%;
   background-repeat: no-repeat;
   background-position: center;
@@ -2165,7 +3282,7 @@ watch(locale, () => {
   transform: translate(-50%, -50%);
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-primary-light);
   opacity: 0.3;
   z-index: 1;
 }
@@ -2185,14 +3302,18 @@ watch(locale, () => {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   word-break: break-word;
+  min-height: 36px;
 }
 
 .separator-line {
   width: 100%;
   height: 1px;
-  background: var(--color-gold-300);
+  background: var(--color-gold-400);
   opacity: 0.8;
   margin: 8px 0;
+  display: block;
+  position: relative;
+  z-index: 1;
 }
 
 .summoner-spells-row {
@@ -2201,13 +3322,15 @@ watch(locale, () => {
   justify-content: center;
   margin-top: 6px;
   margin-bottom: 6px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .summoner-spell-icon {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid var(--color-gold-300);
+  border: 0.5px solid var(--card-border-color);
   object-fit: cover;
 }
 
@@ -2215,43 +3338,60 @@ watch(locale, () => {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-blue-300);
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
 }
 
 /* Runes Section */
 .runes-section {
-  margin: 8px 0;
+  margin: -6px 0 3px;
   position: relative;
   padding-right: 40px; /* espace réservé pour la colonne de shards à droite */
+  min-height: 84px;
+  display: flex;
+  align-items: center;
 }
 
 .runes-container {
   display: flex;
   gap: 8px;
-  align-items: flex-start;
+  align-items: center;
+  min-height: 84px;
 }
 
 .keystone-container {
   flex-shrink: 0;
+  width: 84px;
+  height: 84px;
 }
 
 .keystone-icon {
-  width: 52px;
-  height: 52px;
+  width: 84px !important;
+  height: 84px !important;
+  min-width: 84px !important;
+  min-height: 84px !important;
+  max-width: 84px !important;
+  max-height: 84px !important;
   border-radius: 50%;
-  border: 2px solid var(--color-gold-300);
+  border: none;
   object-fit: cover;
+  flex: 0 0 84px;
+  display: block;
 }
 
 .keystone-placeholder {
-  width: 52px;
-  height: 52px;
+  width: 84px !important;
+  height: 84px !important;
+  min-width: 84px !important;
+  min-height: 84px !important;
+  max-width: 84px !important;
+  max-height: 84px !important;
   border-radius: 50%;
-  border: 2px dashed var(--color-gold-300);
+  border: none;
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
+  flex: 0 0 84px;
 }
 
 .runes-main {
@@ -2259,6 +3399,8 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  justify-content: center;
+  min-height: 84px;
 }
 
 .primary-runes-row {
@@ -2267,21 +3409,32 @@ watch(locale, () => {
   gap: 4px;
 }
 
-.primary-rune-icon {
-  width: 28px;
-  height: 28px;
+.primary-runes-row > .primary-rune-icon {
+  width: 35px !important;
+  height: 35px !important;
+  min-width: 35px !important;
+  min-height: 35px !important;
+  max-width: 35px !important;
+  max-height: 35px !important;
   border-radius: 50%;
-  border: 1px solid var(--color-gold-300);
+  border: none;
   object-fit: cover;
+  flex: 0 0 35px;
+  display: block;
 }
 
-.primary-rune-placeholder {
-  width: 28px;
-  height: 28px;
+.primary-runes-row > .primary-rune-placeholder {
+  width: 35px !important;
+  height: 35px !important;
+  min-width: 35px !important;
+  min-height: 35px !important;
+  max-width: 35px !important;
+  max-height: 35px !important;
   border-radius: 50%;
-  border: 1px dashed var(--color-gold-300);
+  border: none;
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
+  flex: 0 0 35px;
 }
 
 .shards-vertical {
@@ -2295,7 +3448,7 @@ watch(locale, () => {
   width: 16px;
   height: 16px;
   border-radius: 2px;
-  border: 1px solid var(--color-gold-300);
+  border: 1px solid var(--card-border-color);
   object-fit: cover;
 }
 
@@ -2312,18 +3465,18 @@ watch(locale, () => {
 }
 
 .shard-icon-strip {
-  width: 20px;
-  height: 20px;
+  width: 25px;
+  height: 25px;
   border-radius: 3px;
-  border: 1px solid var(--color-gold-300);
+  border: 0.5px solid var(--card-border-color);
   object-fit: cover;
 }
 
 .shard-placeholder {
-  width: 20px;
-  height: 20px;
+  width: 25px;
+  height: 25px;
   border-radius: 3px;
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-blue-300);
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
 }
@@ -2335,43 +3488,71 @@ watch(locale, () => {
   margin-top: 4px;
 }
 
-.secondary-path-icon {
-  width: 28px;
-  height: 28px;
+.secondary-runes-row > .secondary-path-icon {
+  width: 35px;
+  height: 35px;
+  min-width: 35px;
+  min-height: 35px;
+  max-width: 35px;
+  max-height: 35px;
   border-radius: 50%;
-  border: 1px solid var(--color-gold-300);
+  border: none;
   object-fit: cover;
+  transform: translateY(1px);
+  flex: 0 0 35px;
+  display: block;
 }
 
-.secondary-path-placeholder {
-  width: 28px;
-  height: 28px;
+.secondary-runes-row > .secondary-path-placeholder {
+  width: 35px;
+  height: 35px;
+  min-width: 35px;
+  min-height: 35px;
+  max-width: 35px;
+  max-height: 35px;
   border-radius: 50%;
-  border: 1px dashed var(--color-gold-300);
+  border: none;
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
+  transform: translateY(1px);
+  flex: 0 0 35px;
 }
 
-.secondary-rune-icon {
-  width: 24px;
-  height: 24px;
+.secondary-runes-row > .secondary-rune-icon {
+  width: 35px;
+  height: 35px;
+  min-width: 35px;
+  min-height: 35px;
+  max-width: 35px;
+  max-height: 35px;
   border-radius: 50%;
-  border: 1px solid var(--color-gold-300);
+  border: none;
   object-fit: cover;
+  flex: 0 0 35px;
+  display: block;
 }
 
-.secondary-rune-placeholder {
-  width: 24px;
-  height: 24px;
+.secondary-runes-row > .secondary-rune-placeholder {
+  width: 35px;
+  height: 35px;
+  min-width: 35px;
+  min-height: 35px;
+  max-width: 35px;
+  max-height: 35px;
   border-radius: 50%;
-  border: 1px dashed var(--color-gold-300);
+  border: none;
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
+  flex: 0 0 35px;
 }
-/* Items Section */
+/* Items Section - alignée avec les cases skills (top: 300px, lignes 38px + gap 6px) */
 .items-section {
-  margin: 8px 0;
-  padding-left: 10px; /* Même espacement que les skills à droite */
+  position: absolute;
+  top: 300px;
+  left: 10px;
+  margin: 0;
+  padding-left: 0;
+  z-index: 5;
 }
 
 .starting-items-row {
@@ -2379,10 +3560,10 @@ watch(locale, () => {
   align-items: center;
   gap: 6px;
   justify-content: flex-start;
-  margin-bottom: 8px;
+  min-height: 38px;
+  margin-bottom: 6px;
   padding-left: 0;
   /* Centrer par rapport à un path de 3 items (32px * 3 + 14px * 2 flèches = 124px) */
-  /* Starting items = 32px * 2 + 6px gap = 70px, donc offset = (124 - 70) / 2 = 27px */
   margin-left: 27px;
 }
 
@@ -2391,7 +3572,7 @@ watch(locale, () => {
   height: 32px;
   position: relative;
   border-radius: 4px;
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-primary-light);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
 }
@@ -2425,8 +3606,10 @@ watch(locale, () => {
 
 /* Items manager (below card) */
 .items-manager {
+  width: var(--build-card-width);
+  box-sizing: border-box;
   padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--card-border-color-soft);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.15);
 }
@@ -2436,6 +3619,14 @@ watch(locale, () => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-bottom: 8px;
+}
+
+.items-manager-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .items-manager-header-actions {
@@ -2444,37 +3635,37 @@ watch(locale, () => {
   gap: 6px;
 }
 
-.items-manager-title {
-  font-weight: 700;
-  font-size: 12px;
-  margin-bottom: 8px;
-  opacity: 0.9;
-}
-
 .items-reset-btn {
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--card-border-color-soft);
   background: rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
 
-.items-stats-toggle-btn {
+.items-manager-tab-btn {
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(200, 155, 60, 0.45);
-  background: rgba(200, 155, 60, 0.18);
+  border: 1px solid var(--card-border-color-soft);
+  background: rgba(0, 0, 0, 0.2);
   cursor: pointer;
+  opacity: 0.82;
 }
 
 .items-reset-btn:hover {
   background: rgba(0, 0, 0, 0.55);
 }
 
-.items-stats-toggle-btn:hover {
+.items-manager-tab-btn:hover {
   background: rgba(200, 155, 60, 0.28);
+}
+
+.items-manager-tab-btn.is-active {
+  background: rgba(200, 155, 60, 0.22);
+  border-color: rgba(200, 155, 60, 0.5);
+  opacity: 1;
 }
 
 .items-manager-empty {
@@ -2517,7 +3708,7 @@ watch(locale, () => {
   height: 25px;
   margin-top: 5px;
   border-radius: 4px;
-  border: 1px solid var(--color-gold-300);
+  border: 1px solid var(--card-border-color);
   flex: 0 0 auto;
   cursor: grab;
   transition:
@@ -2532,7 +3723,6 @@ watch(locale, () => {
 }
 
 .items-manager-inline-icon--drag-over {
-  transform: scale(1.08);
   box-shadow: 0 0 0 1px var(--color-gold-300);
 }
 
@@ -2587,8 +3777,9 @@ watch(locale, () => {
 .items-path {
   display: flex;
   align-items: center;
-  gap: 6px; /* Même gap que les starting items */
+  gap: 6px;
   justify-content: flex-start;
+  min-height: 38px;
 }
 
 .item-wrapper {
@@ -2600,7 +3791,7 @@ watch(locale, () => {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid var(--color-gold-300);
+  border: 1px solid var(--card-border-color);
   object-fit: cover;
   display: block;
 }
@@ -2609,13 +3800,13 @@ watch(locale, () => {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-primary-light);
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
 }
 
 .arrow-right {
-  color: var(--color-gold-300);
+  color: var(--color-gold-400);
   font-size: 14px;
   font-weight: bold;
 }
@@ -2639,8 +3830,9 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   position: relative;
+  width: 32px;
+  min-height: 38px;
 }
 
 .first-three-ups-item .skill-icon-wrapper {
@@ -2648,6 +3840,7 @@ watch(locale, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .first-three-ups-item .skill-placeholder-wrapper {
@@ -2655,6 +3848,7 @@ watch(locale, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .first-three-ups-item .skill-icon {
@@ -2680,8 +3874,8 @@ watch(locale, () => {
 
 .first-three-ups-item .level-badge {
   position: absolute;
-  top: -2px;
-  left: -2px;
+  top: -7px;
+  left: -7px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2692,6 +3886,26 @@ watch(locale, () => {
   color: var(--color-blue-600);
   font-size: 9px;
   font-weight: bold;
+  z-index: 1;
+}
+
+.skill-order-item .max-badge {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 9999px;
+  background-color: #7dd3fc;
+  color: #082f49;
+  font-size: 6px;
+  font-weight: bold;
+  line-height: 1;
+  text-transform: uppercase;
   z-index: 1;
 }
 
@@ -2713,8 +3927,9 @@ watch(locale, () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
   position: relative;
+  width: 32px;
+  min-height: 38px;
 }
 
 /* Wrapper pour positionner la clé (Q/W/E/R) sur l'icône, comme first-three-ups */
@@ -2724,6 +3939,7 @@ watch(locale, () => {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .skill-order-item .skill-icon {
@@ -2734,7 +3950,7 @@ watch(locale, () => {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid var(--color-gold-300);
+  border: 1px solid var(--color-blue-200);
   object-fit: cover;
 }
 
@@ -2742,7 +3958,7 @@ watch(locale, () => {
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px dashed var(--color-gold-300);
+  border: 1px dashed var(--color-blue-200);
   background: rgba(255, 255, 255, 0.05);
   opacity: 0.3;
 }
@@ -2765,12 +3981,75 @@ watch(locale, () => {
   z-index: 1;
 }
 
+.skill-slot-trigger--editable {
+  cursor: pointer;
+}
+
+.skill-slot-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 15;
+  min-width: 84px;
+  padding: 4px;
+  border: 1px solid var(--card-border-color-soft);
+  border-radius: 8px;
+  background: rgba(8, 16, 31, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+}
+
+.skill-slot-dropdown-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.skill-slot-dropdown-option:hover {
+  background: rgba(200, 155, 60, 0.18);
+}
+
+.skill-slot-dropdown-option.is-active {
+  background: rgba(200, 155, 60, 0.22);
+}
+
+.skill-slot-dropdown-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.skill-slot-dropdown-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--card-border-color-soft);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.skill-slot-dropdown-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .arrow-down {
-  color: var(--color-gold-300);
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  color: var(--color-gold-400);
   font-size: 8px;
   font-weight: bold;
-  margin-top: 1px;
   line-height: 1;
+  z-index: 2;
 }
 
 /* Footer */

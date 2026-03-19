@@ -12,6 +12,7 @@ declare global {
 }
 
 const MATOMO_SCRIPT_ID = 'matomo-tracker'
+const MATOMO_JS_ID = 'matomo-js'
 
 export function useMatomo() {
   const config = useRuntimeConfig().public
@@ -33,22 +34,26 @@ export function useMatomo() {
     if (document.getElementById(MATOMO_SCRIPT_ID)) return
 
     const baseUrl = host!.replace(/\/$/, '')
-    const script = document.createElement('script')
-    script.id = MATOMO_SCRIPT_ID
-    script.textContent = `
-      var _paq = window._paq = window._paq || [];
-      _paq.push(['setTrackerUrl', '${baseUrl}/matomo.php']);
-      _paq.push(['setSiteId', '${siteId}']);
-      _paq.push(['trackPageView']);
-      _paq.push(['enableLinkTracking']);
-      (function() {
-        var u = '${baseUrl}/';
-        var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
-        g.async = true; g.src = u + 'matomo.js'; g.id = 'matomo-js';
-        s.parentNode.insertBefore(g, s);
-      })();
-    `
-    document.head.appendChild(script)
+    window._paq = window._paq || []
+    window._paq.push(['setTrackerUrl', `${baseUrl}/matomo.php`])
+    window._paq.push(['setSiteId', `${siteId}`])
+    window._paq.push(['trackPageView'])
+    window._paq.push(['enableLinkTracking'])
+
+    // Mark Matomo as initialized before loading the external script
+    // so repeated calls don't try to inject it again.
+    const marker = document.createElement('meta')
+    marker.id = MATOMO_SCRIPT_ID
+    document.head.appendChild(marker)
+
+    if (!document.getElementById(MATOMO_JS_ID)) {
+      const trackerScript = document.createElement('script')
+      trackerScript.async = true
+      trackerScript.src = `${baseUrl}/matomo.js`
+      trackerScript.id = MATOMO_JS_ID
+      ;(document.head || document.body || document.documentElement).appendChild(trackerScript)
+    }
+
     window.__matomoLoaded = true
   }
 

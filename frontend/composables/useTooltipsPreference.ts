@@ -6,7 +6,6 @@ const TOOLTIPS_DISABLED_KEY = 'lelanation_tooltips_disabled'
 export function useTooltipsPreference() {
   const tooltipsDisabled = useState<boolean>('tooltips-disabled', () => false)
   const initialized = useState<boolean>('tooltips-disabled-initialized', () => false)
-
   const { isStreamerMode } = useStreamerMode()
 
   // IMPORTANT: do not read localStorage before hydration, or SSR/CSR can diverge.
@@ -19,6 +18,9 @@ export function useTooltipsPreference() {
         tooltipsDisabled.value = saved === '1'
       } catch {
         // ignore
+      }
+      if (isStreamerMode.value) {
+        tooltipsDisabled.value = true
       }
     })
   }
@@ -37,8 +39,7 @@ export function useTooltipsPreference() {
     )
   }
 
-  // In streamer mode, tooltips are always disabled
-  const tooltipsEnabled = computed(() => !tooltipsDisabled.value && !isStreamerMode.value)
+  const tooltipsEnabled = computed(() => !tooltipsDisabled.value)
 
   const setTooltipsDisabled = (value: boolean) => {
     tooltipsDisabled.value = value

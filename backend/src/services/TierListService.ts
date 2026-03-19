@@ -1,9 +1,8 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
- * Aggregates from participants / match_teams / bans; main role = role with max games;
+ * Aggregates from champion_core_stats aggregate tables; main role = role with max games;
  * tier from tier_score percentiles; PBI = (winrate - 50) * 100 * pickrate / (100 - banrate).
  */
-import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 
@@ -47,7 +46,6 @@ export interface GetTierListResult {
   highEloRows?: TierListRow[]
 }
 
-/** Raw row from SQL; pg may return bigint/numeric as string. */
 interface RoleRow {
   patch: string
   platform_id: string
@@ -96,7 +94,6 @@ export const __testables = {
   tierScoreFromWinrateAndGames: (winrate: number, games: number) => (winrate - 0.5) * Math.sqrt(games),
 }
 
-/** Build tier list rows from per-(champion, role) rows: pick main role per champion, tier_score, tier, PBI, rank. */
 function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
   const byChampion = new Map<
     number,
@@ -148,7 +145,7 @@ function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
 
     rows.push({
       championId,
-      tier: 'D', // assigned below
+      tier: 'D',
       mainRole: main.role,
       mainRolePct,
       winrate: main.winrate,
@@ -181,205 +178,110 @@ function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
   }))
 }
 
+/** Normalize patch string to "major.minor" (e.g. "15.10" → "15.10") */
+function normalizePatch(gameVersion: string): string {
+  const parts = gameVersion.split('.')
+  return `${parts[0] ?? '0'}.${parts[1] ?? '0'}`
+}
+
 async function fetchRoleRows(
   patch: string,
   _platformId: string | null,
   rankFilter: 'all' | 'high_elo' | string | null
 ): Promise<RoleRow[]> {
-  const rankOnlyHighElo = rankFilter === 'high_elo'
-  const rankValue: string | null = rankOnlyHighElo ? null : rankFilter === 'all' || rankFilter === null ? null : rankFilter
+  const highEloOnly = rankFilter === 'high_elo'
+  const rankValue: string | null =
+    highEloOnly
+      ? null
+      : rankFilter === 'all' || rankFilter === null
+        ? null
+        : rankFilter
 
-  const rows = await prisma.$queryRaw<RoleRow[]>(
-    rankOnlyHighElo
-      ? Prisma.sql`
-    WITH patch_norm AS (
-      SELECT m.id, m.platform_id,
-        (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) AS patch
-      FROM matches m
-      WHERE m.game_version IS NOT NULL AND m.game_duration IS NOT NULL AND m.game_duration > 0
-        AND (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) = ${patch}
-    ),
-    p_team AS (
-      SELECT id, match_id,
-        CASE WHEN ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id) <= 5 THEN 100 ELSE 200 END AS team_id
-      FROM participants
-    ),
-    agg AS (
-      SELECT
-        pn.patch,
-        COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        p.champion_id,
-        p.role,
-        COUNT(*)::int AS games,
-        SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins
-      FROM participants p
-      JOIN patch_norm pn ON p.match_id = pn.id
-      INNER JOIN p_team ON p_team.id = p.id AND p_team.match_id = p.match_id
-      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p_team.team_id
-      WHERE p.role IS NOT NULL AND p.role != ''
-        AND p.rank_tier IN ('CHALLENGER', 'GRANDMASTER')
-      GROUP BY pn.patch, COALESCE(pn.platform_id, 'GLOBAL'), p.champion_id, p.role
-    ),
-    role_totals AS (
-      SELECT patch, platform_id, role, SUM(games)::bigint AS total_role_games
-      FROM agg GROUP BY patch, platform_id, role
-    ),
-    match_counts AS (
-      SELECT patch, platform_id, COUNT(*)::bigint AS total_matches
-      FROM patch_norm GROUP BY patch, platform_id
-    ),
-    bans_agg AS (
-      SELECT b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        COUNT(*)::bigint AS champion_bans
-      FROM bans b
-      JOIN patch_norm pn ON b.match_id = pn.id
-      GROUP BY b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL')
-    )
-    SELECT
-      a.patch,
-      a.platform_id,
-      a.champion_id,
-      a.role,
-      a.games,
-      (a.wins::float / NULLIF(a.games, 0)) AS winrate,
-      (a.games::float / NULLIF(rt.total_role_games, 0)) AS pickrate,
-      (COALESCE(ba.champion_bans, 0)::float / NULLIF(mc.total_matches, 0)) AS banrate
-    FROM agg a
-    JOIN role_totals rt ON rt.patch = a.patch AND rt.platform_id = a.platform_id AND rt.role = a.role
-    JOIN match_counts mc ON mc.patch = a.patch AND mc.platform_id = a.platform_id
-    LEFT JOIN bans_agg ba ON ba.champion_id = a.champion_id AND ba.patch = a.patch AND ba.platform_id = a.platform_id
-  `
-      : rankValue !== null
-        ? Prisma.sql`
-    WITH patch_norm AS (
-      SELECT m.id, m.platform_id,
-        (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) AS patch
-      FROM matches m
-      WHERE m.game_version IS NOT NULL AND m.game_duration IS NOT NULL AND m.game_duration > 0
-        AND (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) = ${patch}
-    ),
-    p_team AS (
-      SELECT id, match_id,
-        CASE WHEN ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id) <= 5 THEN 100 ELSE 200 END AS team_id
-      FROM participants
-    ),
-    agg AS (
-      SELECT
-        pn.patch,
-        COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        p.champion_id,
-        p.role,
-        COUNT(*)::int AS games,
-        SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins
-      FROM participants p
-      JOIN patch_norm pn ON p.match_id = pn.id
-      INNER JOIN p_team ON p_team.id = p.id AND p_team.match_id = p.match_id
-      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p_team.team_id
-      WHERE p.role IS NOT NULL AND p.role != ''
-        AND p.rank_tier = ${rankValue}
-      GROUP BY pn.patch, COALESCE(pn.platform_id, 'GLOBAL'), p.champion_id, p.role
-    ),
-    role_totals AS (
-      SELECT patch, platform_id, role, SUM(games)::bigint AS total_role_games
-      FROM agg GROUP BY patch, platform_id, role
-    ),
-    match_counts AS (
-      SELECT patch, platform_id, COUNT(*)::bigint AS total_matches
-      FROM patch_norm GROUP BY patch, platform_id
-    ),
-    bans_agg AS (
-      SELECT b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        COUNT(*)::bigint AS champion_bans
-      FROM bans b
-      JOIN patch_norm pn ON b.match_id = pn.id
-      GROUP BY b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL')
-    )
-    SELECT
-      a.patch,
-      a.platform_id,
-      a.champion_id,
-      a.role,
-      a.games,
-      (a.wins::float / NULLIF(a.games, 0)) AS winrate,
-      (a.games::float / NULLIF(rt.total_role_games, 0)) AS pickrate,
-      (COALESCE(ba.champion_bans, 0)::float / NULLIF(mc.total_matches, 0)) AS banrate
-    FROM agg a
-    JOIN role_totals rt ON rt.patch = a.patch AND rt.platform_id = a.platform_id AND rt.role = a.role
-    JOIN match_counts mc ON mc.patch = a.patch AND mc.platform_id = a.platform_id
-    LEFT JOIN bans_agg ba ON ba.champion_id = a.champion_id AND ba.patch = a.patch AND ba.platform_id = a.platform_id
-  `
-        : Prisma.sql`
-    WITH patch_norm AS (
-      SELECT m.id, m.platform_id,
-        (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) AS patch
-      FROM matches m
-      WHERE m.game_version IS NOT NULL AND m.game_duration IS NOT NULL AND m.game_duration > 0
-        AND (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) = ${patch}
-    ),
-    p_team AS (
-      SELECT id, match_id,
-        CASE WHEN ROW_NUMBER() OVER (PARTITION BY match_id ORDER BY id) <= 5 THEN 100 ELSE 200 END AS team_id
-      FROM participants
-    ),
-    agg AS (
-      SELECT
-        pn.patch,
-        COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        p.champion_id,
-        p.role,
-        COUNT(*)::int AS games,
-        SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins
-      FROM participants p
-      JOIN patch_norm pn ON p.match_id = pn.id
-      INNER JOIN p_team ON p_team.id = p.id AND p_team.match_id = p.match_id
-      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p_team.team_id
-      WHERE p.role IS NOT NULL AND p.role != ''
-      GROUP BY pn.patch, COALESCE(pn.platform_id, 'GLOBAL'), p.champion_id, p.role
-    ),
-    role_totals AS (
-      SELECT patch, platform_id, role, SUM(games)::bigint AS total_role_games
-      FROM agg GROUP BY patch, platform_id, role
-    ),
-    match_counts AS (
-      SELECT patch, platform_id, COUNT(*)::bigint AS total_matches
-      FROM patch_norm GROUP BY patch, platform_id
-    ),
-    bans_agg AS (
-      SELECT b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL') AS platform_id,
-        COUNT(*)::bigint AS champion_bans
-      FROM bans b
-      JOIN patch_norm pn ON b.match_id = pn.id
-      GROUP BY b.champion_id, pn.patch, COALESCE(pn.platform_id, 'GLOBAL')
-    )
-    SELECT
-      a.patch,
-      a.platform_id,
-      a.champion_id,
-      a.role,
-      a.games,
-      (a.wins::float / NULLIF(a.games, 0)) AS winrate,
-      (a.games::float / NULLIF(rt.total_role_games, 0)) AS pickrate,
-      (COALESCE(ba.champion_bans, 0)::float / NULLIF(mc.total_matches, 0)) AS banrate
-    FROM agg a
-    JOIN role_totals rt ON rt.patch = a.patch AND rt.platform_id = a.platform_id AND rt.role = a.role
-    JOIN match_counts mc ON mc.patch = a.patch AND mc.platform_id = a.platform_id
-    LEFT JOIN bans_agg ba ON ba.champion_id = a.champion_id AND ba.patch = a.patch AND ba.platform_id = a.platform_id
-  `
-  )
-  return rows
+  const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
+
+  // Build where filter for champion_core_stats
+  const where: Record<string, unknown> = {}
+  if (rankValue) {
+    where.rankTier = rankValue
+  } else if (highEloOnly) {
+    where.rankTier = { in: HIGH_ELO_TIERS }
+  }
+  // Filter by patch prefix (game_version starts with "major.minor")
+  if (patch) {
+    where.gameVersion = { startsWith: patch }
+  }
+
+  const coreRows = await prisma.championCoreStat.findMany({
+    where,
+    select: {
+      championId: true,
+      role: true,
+      gameVersion: true,
+      region: true,
+      countWin: true,
+      countGame: true,
+      countBan: true,
+    },
+  })
+
+  if (coreRows.length === 0) return []
+
+  // Aggregate by (champion_id, role) across all versions matching the patch and all regions
+  const aggByChampionRole = new Map<
+    string,
+    { championId: number; role: string; wins: number; games: number; bans: number }
+  >()
+  let totalGamesAllRoles = 0
+
+  for (const row of coreRows) {
+    const key = `${row.championId}::${row.role}`
+    let entry = aggByChampionRole.get(key)
+    if (!entry) {
+      entry = { championId: row.championId, role: row.role, wins: 0, games: 0, bans: 0 }
+      aggByChampionRole.set(key, entry)
+    }
+    entry.wins += row.countWin
+    entry.games += row.countGame
+    entry.bans += row.countBan
+    totalGamesAllRoles += row.countGame
+  }
+
+  // Total matches ≈ totalGames / 10 (10 players per match)
+  const totalMatches = Math.max(1, Math.round(totalGamesAllRoles / 10))
+
+  // Compute role totals (denominator for pickrate)
+  const roleTotal = new Map<string, number>()
+  for (const entry of aggByChampionRole.values()) {
+    roleTotal.set(entry.role, (roleTotal.get(entry.role) ?? 0) + entry.games)
+  }
+
+  const roleRows: RoleRow[] = []
+  for (const entry of aggByChampionRole.values()) {
+    if (entry.games === 0) continue
+    const roleTotalGames = roleTotal.get(entry.role) ?? 1
+    roleRows.push({
+      patch,
+      platform_id: 'GLOBAL',
+      champion_id: entry.championId,
+      role: entry.role,
+      games: entry.games,
+      wins: entry.wins,
+      winrate: entry.games > 0 ? entry.wins / entry.games : 0,
+      pickrate: roleTotalGames > 0 ? entry.games / roleTotalGames : 0,
+      banrate: totalMatches > 0 ? entry.bans / totalMatches : 0,
+    })
+  }
+
+  return roleRows
 }
 
-/** Get the most recent patch (major.minor) that has matches in the DB. */
 async function getLatestPatch(): Promise<string | null> {
-  const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
-    SELECT (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch
-    FROM matches
-    WHERE game_version IS NOT NULL AND game_duration IS NOT NULL AND game_duration > 0
-    GROUP BY 1
-    ORDER BY 1 DESC
-    LIMIT 1
-  `
-  return rows[0]?.patch ?? null
+  const row = await prisma.match.findFirst({
+    orderBy: { id: 'desc' },
+    select: { gameVersion: true },
+  })
+  if (!row?.gameVersion) return null
+  return normalizePatch(row.gameVersion)
 }
 
 export async function getTierList(options: GetTierListOptions): Promise<GetTierListResult | null> {

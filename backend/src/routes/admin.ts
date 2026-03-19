@@ -19,11 +19,15 @@ import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
-  getRiotPollerStatus,
-  requestStopRiotPoller,
-  startRiotPoller,
-  isRiotPollerRunning,
-} from '../worker/riotPoller.js'
+  startScript,
+  requestStop,
+  isAnyScriptRunning,
+  getOrchestratorStatus,
+  getLastFinishedInfo,
+  type ScriptName,
+  type LeagueXpOptions,
+} from '../worker/scriptOrchestrator.js'
+import { getRiotPollerStatus } from '../worker/riotPoller.js'
 import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -234,7 +238,7 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
 /** GET /api/admin/data-stats - stats for Data tab (collecte: players, matches, participants, migration, etc.). */
 router.get('/data-stats', async (_req, res) => {
   let dataStats: {
-    matchesWithoutRank: number
+    matchesUnranked: number
     lastNewPlayerAt: string | null
     playersNotMigrated: number
     playersErreur: number
@@ -244,7 +248,7 @@ router.get('/data-stats', async (_req, res) => {
     totalPlayers: number
     totalMatches: number
   } = {
-    matchesWithoutRank: 0,
+    matchesUnranked: 0,
     lastNewPlayerAt: null,
     playersNotMigrated: 0,
     playersErreur: 0,
@@ -256,7 +260,7 @@ router.get('/data-stats', async (_req, res) => {
   }
   try {
     const [
-      matchesWithoutRank,
+      matchesUnranked,
       lastPlayer,
       playersNotMigrated,
       playersErreur,
@@ -266,7 +270,7 @@ router.get('/data-stats', async (_req, res) => {
       totalPlayers,
       totalMatches,
     ] = await Promise.all([
-      prisma.match.count({ where: { rank: null } }),
+      prisma.match.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count({
       where: {
@@ -278,13 +282,13 @@ router.get('/data-stats', async (_req, res) => {
       }),
       prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
       prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
-      prisma.participant.count({ where: { role: null } }),
-      prisma.participant.count({ where: { rankTier: null } }),
+      prisma.matchPlayer.count({ where: { role: 'FILL' } }),
+      prisma.matchPlayer.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.count(),
       prisma.match.count(),
     ])
     dataStats = {
-      matchesWithoutRank,
+      matchesUnranked,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       playersNotMigrated,
       playersErreur,
@@ -329,7 +333,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
   })
 
   let dataStats: {
-    matchesWithoutRank: number
+    matchesUnranked: number
     lastNewPlayerAt: string | null
     playersNotMigrated: number
     playersErreur: number
@@ -339,7 +343,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     totalPlayers: number
     totalMatches: number
   } = {
-    matchesWithoutRank: 0,
+    matchesUnranked: 0,
     lastNewPlayerAt: null,
     playersNotMigrated: 0,
     playersErreur: 0,
@@ -351,7 +355,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
   }
   try {
     const [
-      matchesWithoutRank,
+      matchesUnranked,
       lastPlayer,
       playersNotMigrated,
       playersErreur,
@@ -361,7 +365,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
       totalPlayers,
       totalMatches,
     ] = await Promise.all([
-      prisma.match.count({ where: { rank: null } }),
+      prisma.match.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count({
         where: {
@@ -373,13 +377,13 @@ router.get('/riot-scripts-status', async (_req, res) => {
       }),
       prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
       prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
-      prisma.participant.count({ where: { role: null } }),
-      prisma.participant.count({ where: { rankTier: null } }),
+      prisma.matchPlayer.count({ where: { role: 'FILL' } }),
+      prisma.matchPlayer.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.count(),
       prisma.match.count(),
     ])
     dataStats = {
-      matchesWithoutRank,
+      matchesUnranked,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       playersNotMigrated,
       playersErreur,
@@ -393,6 +397,8 @@ router.get('/riot-scripts-status', async (_req, res) => {
     // ignore
   }
 
+  const orchestratorStatus = getOrchestratorStatus()
+  const lastFinished = getLastFinishedInfo()
   const pollerStatus = getRiotPollerStatus()
   const startedAt = pollerStatus.lastLoopStartedAt ? new Date(pollerStatus.lastLoopStartedAt).getTime() : 0
   const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
@@ -417,7 +423,19 @@ router.get('/riot-scripts-status', async (_req, res) => {
     participantsRoleFixed: pollerStatus.participantsRoleFixed,
   }
 
-  return res.json({ scripts: [], crons, dataStats, riotPoller })
+  const orchestrator = {
+    activeScript: orchestratorStatus.activeScript,
+    isRunning: orchestratorStatus.isRunning,
+    startedAt: orchestratorStatus.startedAt,
+    finishedAt: orchestratorStatus.finishedAt,
+    lastError: orchestratorStatus.lastError,
+    shouldStop: orchestratorStatus.shouldStop,
+    counters: orchestratorStatus.counters,
+    lastFinishedScript: lastFinished.script,
+    lastFinishedAt: lastFinished.finishedAt,
+  }
+
+  return res.json({ scripts: [], crons, dataStats, riotPoller, orchestrator })
 })
 
 const ROOT_LOGS_DIR = resolve(backendRoot, '..', 'logs')
@@ -432,6 +450,13 @@ router.get('/riot-poller/status', (_req, res) => {
   const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
   const requestsPerMinute = elapsedMin >= 1 / 60 ? Math.round((s.requestCount / elapsedMin) * 10) / 10 : null
   return res.json({ ...s, requestsPerMinute })
+})
+
+/** GET /api/admin/riot-script/status — unified orchestrator status (all scripts). */
+router.get('/riot-script/status', (_req, res) => {
+  const s = getOrchestratorStatus()
+  const lastFinished = getLastFinishedInfo()
+  return res.json({ ...s, lastFinishedScript: lastFinished.script, lastFinishedAt: lastFinished.finishedAt })
 })
 
 /** GET /api/admin/riot-apikey - current key status (masked) */
@@ -501,25 +526,70 @@ router.post('/riot-apikey/test', async (_req, res) => {
   }
 })
 
-/** GET /api/admin/riot-api-stats - poller stats for admin UI */
+/** GET /api/admin/riot-api-stats - poller stats for admin UI (legacy endpoint). */
 router.get('/riot-api-stats', (_req, res) => {
   return res.json(getRiotPollerStatus())
 })
 
 router.post('/riot-poller/stop', (_req, res) => {
-  if (!isRiotPollerRunning()) {
-    return res.json({ success: true, message: 'Poller already stopped.' })
+  if (!isAnyScriptRunning()) {
+    return res.json({ success: true, message: 'No script running.' })
   }
-  requestStopRiotPoller()
-  return res.status(202).json({ success: true, message: 'Stop requested. The current loop will finish then stop.' })
+  requestStop()
+  return res.status(202).json({ success: true, message: 'Stop requested. The current task will finish then the script will stop.' })
 })
 
-router.post('/riot-poller/start', (_req, res) => {
-  if (isRiotPollerRunning()) {
-    return res.json({ success: true, message: 'Poller already running.' })
+router.post('/riot-poller/start', async (_req, res) => {
+  if (isAnyScriptRunning()) {
+    const s = getOrchestratorStatus()
+    return res.json({ success: true, message: `Script '${s.activeScript}' is already running.` })
   }
-  startRiotPoller()
+  const result = await startScript('poller')
+  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
   return res.status(202).json({ success: true, message: 'Poller started.' })
+})
+
+/**
+ * POST /api/admin/riot-script/start
+ * Body: { script: 'poller' | 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
+ * Starts the specified script. Returns 409 if a script is already running.
+ */
+router.post('/riot-script/start', async (req, res) => {
+  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
+  const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
+  if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
+    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
+  }
+
+  const options: LeagueXpOptions = {}
+  if (scriptName === 'league-xp' && req.body?.options && typeof req.body.options === 'object') {
+    const o = req.body.options as Record<string, unknown>
+    if (typeof o['queue'] === 'string') options.queue = o['queue']
+    if (typeof o['tier'] === 'string') options.tier = o['tier'].toUpperCase()
+    if (typeof o['division'] === 'string') options.division = o['division'].toUpperCase()
+    if (typeof o['region'] === 'string') options.region = o['region'].toLowerCase()
+    if (typeof o['maxPages'] === 'number') options.maxPages = Math.max(1, Math.min(100, Math.trunc(o['maxPages'])))
+  }
+
+  const result = await startScript(scriptName, options)
+  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
+  return res.status(202).json({ success: true, message: `Script '${scriptName}' started.` })
+})
+
+/**
+ * POST /api/admin/riot-script/stop
+ * Gracefully stops the currently running script.
+ */
+router.post('/riot-script/stop', (_req, res) => {
+  if (!isAnyScriptRunning()) {
+    return res.json({ success: true, message: 'No script is running.' })
+  }
+  const s = getOrchestratorStatus()
+  requestStop()
+  return res.status(202).json({
+    success: true,
+    message: `Stop requested for '${s.activeScript}'. It will finish its current task before stopping.`,
+  })
 })
 
 router.get('/riot-poller/logs', async (req, res) => {

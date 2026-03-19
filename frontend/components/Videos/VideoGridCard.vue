@@ -9,26 +9,18 @@
       <img
         :src="video.thumbnailUrl"
         :alt="video.title"
-        class="h-36 w-full object-cover"
+        class="h-44 w-full object-cover"
         :loading="fetchPriority === 'high' ? 'eager' : 'lazy'"
         :fetchpriority="fetchPriority"
       />
       <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/5" />
     </div>
 
-    <div class="p-4">
+    <div class="p-3">
       <p class="title-2l text-sm font-semibold text-text">
         {{ video.title }}
       </p>
-      <p class="mt-2 text-xs text-text/60">{{ formatDate(video.publishedAt) }}</p>
-
-      <div class="mt-4">
-        <span
-          class="block w-full rounded-lg bg-accent/75 px-3 py-2 text-center text-sm font-semibold text-background transition-colors group-hover:bg-accent"
-        >
-          Voir la vidéo
-        </span>
-      </div>
+      <p class="mt-1 text-xs text-text/60">{{ formatDate(video.publishedAt) }}</p>
     </div>
   </a>
 </template>

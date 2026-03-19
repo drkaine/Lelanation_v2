@@ -136,7 +136,7 @@
                   <!-- Dropdown -->
                   <div
                     v-if="openShareDropdown"
-                    class="absolute right-0 top-full z-50 mt-1 w-52 rounded-lg border border-primary shadow-lg"
+                    class="absolute right-0 top-full z-50 mt-1 max-h-[min(80vh,320px)] w-52 overflow-y-auto rounded-lg border border-primary shadow-lg"
                     style="background-color: rgb(26, 26, 46)"
                     @click.stop
                   >
@@ -155,11 +155,18 @@
                       <span>Télécharger l'image</span>
                     </button>
                     <button
-                      class="flex w-full items-center gap-2 rounded-b-lg border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                      class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                       @click="copyBuildImage"
                     >
                       <span class="text-base">📋</span>
                       <span>Copier l'image</span>
+                    </button>
+                    <button
+                      class="flex w-full items-center gap-2 rounded-b-lg border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                      @click="copyBuildImageWithAuthorAndDescription"
+                    >
+                      <span class="text-base">🖼️</span>
+                      <span>{{ t('buildDiscovery.shareImageWithAuthorDescription') }}</span>
                     </button>
                   </div>
                 </div>
@@ -465,7 +472,9 @@ const captureBuildImage = async (): Promise<Blob | null> => {
         const style = el.style
         const isSeparator = el.classList.contains('separator-line')
         const isSpellOrLevelBadge =
-          el.classList.contains('skill-key') || el.classList.contains('level-badge')
+          el.classList.contains('skill-key') ||
+          el.classList.contains('level-badge') ||
+          el.classList.contains('max-badge')
 
         if (!isSeparator && !isSpellOrLevelBadge) {
           style.backgroundColor = 'transparent'
@@ -477,6 +486,11 @@ const captureBuildImage = async (): Promise<Blob | null> => {
         } else if (el.classList.contains('level-badge')) {
           style.backgroundColor = '#c9a227'
           style.color = '#2563eb'
+        } else if (el.classList.contains('max-badge')) {
+          style.backgroundColor = '#7dd3fc'
+          style.color = '#082f49'
+          style.visibility = 'visible'
+          style.opacity = '1'
         }
 
         const bgColor = computed.backgroundColor
@@ -578,6 +592,134 @@ const copyBuildImage = async () => {
   } catch {
     // Fallback: télécharger l'image
     downloadBuildImage()
+  }
+}
+
+const DESCRIPTION_MAX_CHARS = 250
+const CARD_PADDING = 16
+const AUTHOR_FONT = '14px system-ui, sans-serif'
+const DESC_FONT = '12px system-ui, sans-serif'
+const LINE_HEIGHT_AUTHOR = 20
+const LINE_HEIGHT_DESC = 16
+const TEXT_COLOR = 'rgba(255, 255, 255, 0.9)'
+const TEXT_COLOR_DIM = 'rgba(255, 255, 255, 0.7)'
+
+/** Wrap text to fit maxWidth; returns array of lines. */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const words = text.split(/\s+/)
+  const lines: string[] = []
+  let current = ''
+  for (const w of words) {
+    const next = current ? `${current} ${w}` : w
+    const m = ctx.measureText(next)
+    if (m.width > maxWidth && current) {
+      lines.push(current)
+      current = w
+    } else {
+      current = next
+    }
+  }
+  if (current) lines.push(current)
+  return lines
+}
+
+/** Capture build card image then composite author + first 250 chars of description below. */
+const captureBuildImageWithAuthorAndDescription = async (): Promise<Blob | null> => {
+  if (!build.value) return null
+  const blob = await captureBuildImage()
+  if (!blob) return null
+
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const cardWidth = img.width
+      const cardHeight = img.height
+
+      const authorText = (build.value?.author || t('buildDiscovery.anonymous')).trim() || '—'
+      const descRaw = (activeDescription.value || '').trim().slice(0, DESCRIPTION_MAX_CHARS)
+      const descText = descRaw + (descRaw.length >= DESCRIPTION_MAX_CHARS ? '…' : '')
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(null)
+        return
+      }
+
+      ctx.font = AUTHOR_FONT
+      const authorWidth = cardWidth - CARD_PADDING * 2
+      ctx.font = DESC_FONT
+      const descLines = descText ? wrapText(ctx, descText, authorWidth) : []
+      const descHeight =
+        descLines.length > 0 ? descLines.length * LINE_HEIGHT_DESC + CARD_PADDING : 0
+      const authorBlockHeight = CARD_PADDING + LINE_HEIGHT_AUTHOR
+      const totalHeight = cardHeight + authorBlockHeight + descHeight + CARD_PADDING
+
+      canvas.width = cardWidth
+      canvas.height = totalHeight
+
+      ctx.fillStyle = '#0a0a14'
+      ctx.fillRect(0, 0, cardWidth, totalHeight)
+      ctx.drawImage(img, 0, 0)
+
+      let y = cardHeight + CARD_PADDING
+      ctx.font = AUTHOR_FONT
+      ctx.fillStyle = TEXT_COLOR
+      ctx.fillText(
+        `${t('buildDiscovery.byAuthor')} ${authorText}`,
+        CARD_PADDING,
+        y + LINE_HEIGHT_AUTHOR * 0.8
+      )
+      y += authorBlockHeight
+
+      if (descLines.length > 0) {
+        ctx.font = DESC_FONT
+        ctx.fillStyle = TEXT_COLOR_DIM
+        for (const line of descLines) {
+          ctx.fillText(line, CARD_PADDING, y + LINE_HEIGHT_DESC * 0.8)
+          y += LINE_HEIGHT_DESC
+        }
+      }
+
+      canvas.toBlob(
+        b => {
+          URL.revokeObjectURL(img.src)
+          resolve(b)
+        },
+        'image/png',
+        1.0
+      )
+    }
+    img.onerror = () => resolve(null)
+    img.src = URL.createObjectURL(blob)
+  })
+}
+
+const copyBuildImageWithAuthorAndDescription = async () => {
+  if (!build.value) return
+  try {
+    const blob = await captureBuildImageWithAuthorAndDescription()
+    if (!blob) return
+
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': blob,
+      }),
+    ])
+    openShareDropdown.value = false
+  } catch {
+    const blob = await captureBuildImageWithAuthorAndDescription()
+    if (blob) {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `build-${build.value.id}-avec-auteur-description.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      openShareDropdown.value = false
+    }
   }
 }
 

@@ -84,10 +84,6 @@
                     @input="updateBuildName"
                   />
                 </div>
-                <div class="mb-8">
-                  <h3 class="mb-4 text-xl font-bold">Skill Order</h3>
-                  <SkillOrderSelector />
-                </div>
                 <StatsDisplay />
               </div>
             </div>
@@ -148,7 +144,6 @@ import { useBuildStore } from '~/stores/BuildStore'
 import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import ItemSelector from '~/components/Build/ItemSelector.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
-import SkillOrderSelector from '~/components/Build/SkillOrderSelector.vue'
 import StatsDisplay from '~/components/Build/StatsDisplay.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'

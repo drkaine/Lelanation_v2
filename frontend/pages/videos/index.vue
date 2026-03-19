@@ -1,6 +1,6 @@
 <template>
-  <div class="videos-page min-h-screen p-4 text-text">
-    <div class="max-w-8xl mx-auto px-2">
+  <div class="videos-page min-h-screen px-[15px] py-4 text-text">
+    <div class="mx-auto max-w-none px-0">
       <div
         v-if="youtube.error"
         class="mb-4 rounded-lg border border-error bg-surface p-3 text-sm text-error"
@@ -12,12 +12,12 @@
         v-if="youtube.loadingStatus || isLoadingAll"
         class="py-8 text-center text-text-secondary"
       >
-        Chargement…
+        {{ t('videosPage.loading') }}
       </div>
 
       <div v-else-if="creators.length === 0" class="py-12 text-center">
-        <p class="text-lg text-text">Aucun créateur configuré</p>
-        <p class="mt-2 text-sm text-text/70">Demande à un admin d’ajouter des chaînes.</p>
+        <p class="text-lg text-text">{{ t('videosPage.noCreatorsTitle') }}</p>
+        <p class="mt-2 text-sm text-text/70">{{ t('videosPage.noCreatorsText') }}</p>
       </div>
 
       <div v-else class="space-y-4">
@@ -127,12 +127,12 @@
         </div>
 
         <!-- Results grid -->
-        <div class="mx-auto max-w-5xl">
+        <div class="videos-results">
           <div v-if="paginatedVideos.length === 0" class="py-10 text-center text-text/70">
             Aucun résultat.
           </div>
 
-          <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div v-else class="videos-grid-list">
             <VideoGridCard
               v-for="(v, idx) in paginatedVideos"
               :key="v.id"
@@ -438,5 +438,26 @@ onMounted(async () => {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+.videos-results {
+  width: 100%;
+}
+
+.videos-grid-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  gap: 12px;
+}
+
+.videos-grid-list > * {
+  width: min(100%, 360px);
+}
+
+@media (max-width: 640px) {
+  .videos-grid-list > * {
+    width: 100%;
+  }
 }
 </style>

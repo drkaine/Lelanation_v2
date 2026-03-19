@@ -253,6 +253,18 @@ export class RiotHttpClient {
     const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-summoner/${encodeURIComponent(encryptedSummonerId)}`
     return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-summoner', url)
   }
+
+  /**
+   * League v4: paginated list of all league entries for a given queue, tier, and division.
+   * Useful for discovering new players at a specific Elo bracket.
+   * GET /lol/league/v4/entries/{queue}/{tier}/{division}?page={page}
+   */
+  async getLeagueEntries(queue: string, tier: string, division: string, page = 1): Promise<
+    { ok: true; data: RiotLeagueEntryDto[] } | { ok: false; status: number; message?: string; body?: unknown }
+  > {
+    const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/${encodeURIComponent(queue)}/${encodeURIComponent(tier)}/${encodeURIComponent(division)}?page=${page}`
+    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries', url)
+  }
 }
 
 export interface RiotAccountDto {
@@ -269,10 +281,19 @@ export interface RiotSummonerDto {
 }
 
 export interface RiotLeagueEntryDto {
+  leagueId?: string
   queueType: string
   tier: string
   rank: string
+  summonerId?: string
+  puuid?: string
   leaguePoints?: number
+  wins?: number
+  losses?: number
+  veteran?: boolean
+  inactive?: boolean
+  freshBlood?: boolean
+  hotStreak?: boolean
 }
 
 export interface RiotMatchDto {

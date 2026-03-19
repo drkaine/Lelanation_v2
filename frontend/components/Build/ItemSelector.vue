@@ -71,12 +71,16 @@
             >
               <button
                 class="item"
+                :class="{
+                  'item--selected': isSelected(item),
+                  'item--capacity-reached': !isSelected(item) && isItemCapacityReached(item),
+                }"
                 :disabled="
-                  (!isSelected(item) && availableSlots >= 9 && !isBootsItem(item)) ||
+                  (!isSelected(item) && isItemCapacityReached(item)) ||
                   (!isSelected(item) && !canAddItem(item))
                 "
                 :title="
-                  !isStreamerMode && !isSelected(item) && !canAddItem(item)
+                  tooltipsEnabled && !isSelected(item) && !canAddItem(item)
                     ? getItemValidationError(item) || ''
                     : ''
                 "
@@ -102,7 +106,7 @@
 
       <!-- Tooltip -->
       <div
-        v-if="hoveredItem && !isStreamerMode"
+        v-if="hoveredItem && tooltipsEnabled"
         ref="tooltipRef"
         class="item-tooltip pointer-events-none fixed z-50 rounded-lg border border-accent bg-background shadow-lg"
         :style="tooltipStyle"
@@ -157,6 +161,7 @@ import type { Item } from '~/types/build'
 
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -166,6 +171,7 @@ const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
 const { locale, t } = useI18n()
 const { isStreamerMode } = useStreamerMode()
+const { tooltipsEnabled } = useTooltipsPreference()
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
 const riotLocale = computed(() => getRiotLanguage(locale.value))
@@ -475,8 +481,7 @@ const categoryOrderKeys = computed(() => {
   const ordered = Object.keys(categoryOrder).sort(
     (a, b) => categoryOrder[a as ItemCategory] - categoryOrder[b as ItemCategory]
   ) as ItemCategory[]
-  if (!isStreamerMode.value) return ordered
-  return ordered.filter(category => category !== 'basic' && category !== 'epic')
+  return ordered
 })
 
 // Get category label for display
@@ -548,16 +553,6 @@ const isItemFiltered = (item: Item): boolean => {
   return matchesTags && matchesSearch
 }
 
-const availableSlots = computed(() => {
-  const items = buildStore.displayedBuild?.items || []
-  const starterItems = items.filter(i => isStarterItem(i))
-  const bootsItems = items.filter(i => isBootsItem(i))
-  const otherItems = items.filter(i => !isStarterItem(i) && !isBootsItem(i))
-  // Count slots: starter (max 2) + boots (1 slot for up to 2 boots) + other items (max 6)
-  // Total max = 2 + 1 + 6 = 9 slots, but can have up to 10 items (2 starter + 2 boots + 6 other)
-  return starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
-})
-
 // Helper functions to check item types
 const isStarterItem = (item: Item): boolean => {
   return getItemCategory(item) === 'starter'
@@ -567,33 +562,26 @@ const isBootsItem = (item: Item): boolean => {
   return getItemCategory(item) === 'boots'
 }
 
-// Items that can be in core items even if classified as starter
-// (when starter slots are full)
-const canBeInCoreItems = (item: Item): boolean => {
-  // IDs that can be in core items
-  const flexibleStarterIds = new Set([
-    '1036', // Épée longue (Long Sword)
-    '1082', // Sceau noir (Dark Seal)
-    '1083', // Cull
-    '3070', // Larme de la déesse
-  ])
+const getItemBuckets = (items: Item[]) => {
+  const starterItems: Item[] = []
+  const bootsItems: Item[] = []
+  const coreItems: Item[] = []
 
-  if (flexibleStarterIds.has(item.id)) {
-    return true
+  for (const item of items) {
+    if (isStarterItem(item) && starterItems.length < 2) {
+      starterItems.push(item)
+      continue
+    }
+
+    if (isBootsItem(item) && !isStarterItem(item) && bootsItems.length < 2) {
+      bootsItems.push(item)
+      continue
+    }
+
+    coreItems.push(item)
   }
 
-  // Pattern-based check for Dark Seal (Sceau noir) - fallback if ID doesn't match
-  const itemNameLower = item.name.toLowerCase()
-  if (itemNameLower.includes('dark seal') || itemNameLower.includes('sceau noir')) {
-    return true
-  }
-
-  // Pattern-based check for Long Sword (Épée longue) - fallback if ID doesn't match
-  if (itemNameLower.includes('épée longue') || itemNameLower.includes('long sword')) {
-    return true
-  }
-
-  return false
+  return { starterItems, bootsItems, coreItems }
 }
 
 const isSelected = (item: Item): boolean => {
@@ -740,6 +728,21 @@ const canAddItem = (item: Item): boolean => {
   return getItemValidationError(item) === null
 }
 
+const isItemCapacityReached = (item: Item): boolean => {
+  const currentItems = buildStore.displayedBuild?.items || []
+  const { starterItems, bootsItems, coreItems } = getItemBuckets(currentItems)
+
+  if (isStarterItem(item)) {
+    return starterItems.length >= 2
+  }
+
+  if (isBootsItem(item)) {
+    return bootsItems.length >= 2
+  }
+
+  return coreItems.length >= 6
+}
+
 const toggleItem = (item: Item) => {
   if (isSelected(item)) {
     // Remove item
@@ -753,43 +756,27 @@ const toggleItem = (item: Item) => {
 
     // Add item with special logic
     const currentItems = buildStore.displayedBuild?.items || []
-    const starterItems = currentItems.filter(i => isStarterItem(i))
-    const bootsItems = currentItems.filter(i => isBootsItem(i))
-    const otherItems = currentItems.filter(i => !isStarterItem(i) && !isBootsItem(i))
+    const { starterItems, bootsItems, coreItems } = getItemBuckets(currentItems)
 
     // Check if we can add this item
     if (isStarterItem(item)) {
       // Max 2 starter items
       if (starterItems.length < 2) {
         // Insert at the beginning (positions 0-1)
-        const newItems = [...starterItems, item, ...bootsItems, ...otherItems]
+        const newItems = [...starterItems, item, ...bootsItems, ...coreItems]
         buildStore.setItems(newItems)
-      } else if (canBeInCoreItems(item)) {
-        // If starter slots are full but item can be in core items, add it there
-        const totalSlots = starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
-        if (totalSlots < 9) {
-          // Insert after starter and boots
-          const newItems = [...starterItems, ...bootsItems, ...otherItems, item]
-          buildStore.setItems(newItems)
-        }
       }
     } else if (isBootsItem(item)) {
-      // Max 2 boots (they share 1 slot, so we can have 2 boots + 5 other items = 6 slots)
+      // Max 2 boots in their dedicated section.
       if (bootsItems.length < 2) {
         // Insert after starter items
-        const newItems = [...starterItems, ...bootsItems, item, ...otherItems]
+        const newItems = [...starterItems, ...bootsItems, item, ...coreItems]
         buildStore.setItems(newItems)
       }
-    } else {
-      // Other items: check total slots
-      // Max slots = 2 starter + 1 boots slot + 6 other = 9 slots total
-      // But can have up to 10 items: 2 starter + 2 boots + 6 other
-      const totalSlots = starterItems.length + (bootsItems.length > 0 ? 1 : 0) + otherItems.length
-      if (totalSlots < 9) {
-        // Insert after starter and boots
-        const newItems = [...starterItems, ...bootsItems, ...otherItems, item]
-        buildStore.setItems(newItems)
-      }
+    } else if (coreItems.length < 6) {
+      // Core section is always capped at 6 items.
+      const newItems = [...starterItems, ...bootsItems, ...coreItems, item]
+      buildStore.setItems(newItems)
     }
   }
 }
@@ -864,7 +851,7 @@ const tooltipStyle = computed(() => {
 
 // Handle mouse move to update tooltip position
 const handleMouseMove = (event: MouseEvent) => {
-  if (isStreamerMode.value) return
+  if (!tooltipsEnabled.value) return
   if (hoveredItem.value) {
     tooltipPosition.value = {
       x: event.clientX,
@@ -878,7 +865,7 @@ const handleMouseMove = (event: MouseEvent) => {
 
 // Handle item hover
 const handleItemHover = (item: Item, event: MouseEvent) => {
-  if (isStreamerMode.value) return
+  if (!tooltipsEnabled.value) return
   hoveredItem.value = item
   tooltipPosition.value = {
     x: event.clientX,
@@ -906,6 +893,12 @@ watch(hoveredItem, async newValue => {
 
 watch(isStreamerMode, enabled => {
   if (enabled) {
+    hoveredItem.value = null
+  }
+})
+
+watch(tooltipsEnabled, enabled => {
+  if (!enabled) {
     hoveredItem.value = null
   }
 })
@@ -1025,6 +1018,7 @@ watch(locale, () => {
   padding: 0;
   margin: 0;
   transition: border-color 0.2s;
+  overflow: visible;
 }
 
 .item-price {
@@ -1032,6 +1026,7 @@ watch(locale, () => {
   color: rgb(var(--rgb-text) / 0.8);
   text-align: center;
   white-space: nowrap;
+  padding-top: 3px;
 }
 
 .gold-icon {
@@ -1041,7 +1036,6 @@ watch(locale, () => {
 .item:disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  filter: grayscale(0.5);
 }
 
 .item-wrapper.hide {
@@ -1057,8 +1051,7 @@ watch(locale, () => {
   filter: grayscale(1) brightness(0.4);
 }
 
-/* Only gray out items that don't match filters, not all items */
-.item-wrapper:not(.hide) img {
+.item--selected img {
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
 }
 
@@ -1075,13 +1068,13 @@ watch(locale, () => {
   inset: 0;
   border: 2px solid rgb(var(--rgb-accent));
   pointer-events: none;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  padding: 2px;
+  overflow: visible;
 }
 
 .item-index {
+  position: absolute;
+  right: -0.65rem;
+  bottom: -0.65rem;
   background: rgb(var(--rgb-accent));
   color: rgb(var(--rgb-background));
   font-size: 0.75rem;
@@ -1093,6 +1086,7 @@ watch(locale, () => {
   justify-content: center;
   border-radius: 50%;
   border: 1px solid rgb(var(--rgb-background));
+  z-index: 2;
 }
 
 @media (hover: hover) {

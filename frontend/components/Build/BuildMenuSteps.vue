@@ -13,13 +13,6 @@
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="hasChampion ? localePath('/builds/create/skill-order') : '#'"
-      :class="[linkClass('skill-order'), !hasChampion ? 'disabled' : '']"
-    >
-      {{ t('menu-build.skillOrder') }}
-    </NuxtLink>
-    <span class="arrow" aria-hidden="true"></span>
-    <NuxtLink
       :to="hasChampion ? localePath('/builds/create/info') : '#'"
       :class="[linkClass('info'), !hasChampion ? 'disabled' : '']"
     >
@@ -42,7 +35,6 @@ const stepMap = {
   champion: 'champion',
   rune: 'rune',
   item: 'item',
-  'skill-order': 'skill-order',
   info: 'info',
 } as const
 
@@ -52,7 +44,6 @@ const currentRouteStep = computed(() => {
   if (path.includes('/champion')) return 'champion'
   if (path.includes('/rune')) return 'rune'
   if (path.includes('/item')) return 'item'
-  if (path.includes('/skill-order')) return 'skill-order'
   if (path.includes('/info')) return 'info'
   return props.currentStep || 'champion'
 })

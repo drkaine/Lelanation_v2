@@ -1,9 +1,15 @@
 import { onMounted, watch } from 'vue'
 
 const STREAMER_MODE_STORAGE_KEY = 'lelanation_streamer_mode'
+const STREAMER_MODE_COOKIE_KEY = 'lelanation_streamer_mode'
 
 export function useStreamerMode() {
-  const isStreamerMode = useState<boolean>('streamer-mode', () => false)
+  const modeCookie = useCookie<string | null>(STREAMER_MODE_COOKIE_KEY, {
+    sameSite: 'lax',
+    path: '/',
+    default: () => null,
+  })
+  const isStreamerMode = useState<boolean>('streamer-mode', () => modeCookie.value === '1')
   const initialized = useState<boolean>('streamer-mode-initialized', () => false)
 
   // IMPORTANT: do not read localStorage before hydration, or SSR/CSR can diverge.
@@ -13,7 +19,10 @@ export function useStreamerMode() {
       initialized.value = true
       try {
         const saved = localStorage.getItem(STREAMER_MODE_STORAGE_KEY)
-        isStreamerMode.value = saved === '1'
+        if (saved === '1' || saved === '0') {
+          isStreamerMode.value = saved === '1'
+          modeCookie.value = saved
+        }
       } catch {
         // ignore
       }
@@ -26,6 +35,7 @@ export function useStreamerMode() {
       value => {
         try {
           localStorage.setItem(STREAMER_MODE_STORAGE_KEY, value ? '1' : '0')
+          modeCookie.value = value ? '1' : '0'
         } catch {
           // ignore
         }

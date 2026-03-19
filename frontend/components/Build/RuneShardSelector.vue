@@ -209,7 +209,6 @@ watch(
 }
 
 .shard-button:hover {
-  transform: scale(1.1);
   opacity: 1;
 }
 

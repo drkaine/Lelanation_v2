@@ -28,9 +28,11 @@
                   : 'border-dashed border-text/30 bg-surface',
               ]"
               :title="
-                getFirstThreeUp(index)
-                  ? getSpellName(getFirstThreeUp(index)!)
-                  : t('skills.selectSkill')
+                tooltipsEnabled
+                  ? getFirstThreeUp(index)
+                    ? getSpellName(getFirstThreeUp(index)!)
+                    : t('skills.selectSkill')
+                  : undefined
               "
               @click.stop="toggleDropdown(`first-${index}`)"
             >
@@ -72,11 +74,13 @@
                 ]"
                 :disabled="isFirstThreeUpSelected(spell.id, index)"
                 :title="
-                  getFirstThreeUp(index) === spell.id
-                    ? t('skills.clickToDeselect')
-                    : isFirstThreeUpSelected(spell.id, index)
-                      ? t('skills.alreadyUsedElsewhere')
-                      : t('skills.select')
+                  tooltipsEnabled
+                    ? getFirstThreeUp(index) === spell.id
+                      ? t('skills.clickToDeselect')
+                      : isFirstThreeUpSelected(spell.id, index)
+                        ? t('skills.alreadyUsedElsewhere')
+                        : t('skills.select')
+                    : undefined
                 "
                 @click="toggleFirstThreeUp(index, spell.id)"
               >
@@ -116,9 +120,11 @@
                   : 'border-dashed border-text/30 bg-surface',
               ]"
               :title="
-                getSkillUpOrder(index)
-                  ? getSpellName(getSkillUpOrder(index)!)
-                  : t('skills.selectSkill')
+                tooltipsEnabled
+                  ? getSkillUpOrder(index)
+                    ? getSpellName(getSkillUpOrder(index)!)
+                    : t('skills.selectSkill')
+                  : undefined
               "
               @click.stop="toggleDropdown(`order-${index}`)"
             >
@@ -160,11 +166,13 @@
                 ]"
                 :disabled="isSkillUpOrderSelected(spell.id, index)"
                 :title="
-                  getSkillUpOrder(index) === spell.id
-                    ? t('skills.clickToDeselect')
-                    : isSkillUpOrderSelected(spell.id, index)
-                      ? t('skills.alreadyUsedElsewhere')
-                      : t('skills.select')
+                  tooltipsEnabled
+                    ? getSkillUpOrder(index) === spell.id
+                      ? t('skills.clickToDeselect')
+                      : isSkillUpOrderSelected(spell.id, index)
+                        ? t('skills.alreadyUsedElsewhere')
+                        : t('skills.select')
+                    : undefined
                 "
                 @click="toggleSkillUpOrder(index, spell.id)"
               >
@@ -192,9 +200,11 @@ import type { SkillOrder } from '~/types/build'
 
 import { getChampionSpellImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
 const buildStore = useBuildStore()
 const { t } = useI18n()
+const { tooltipsEnabled } = useTooltipsPreference()
 
 const openDropdown = ref<string | null>(null)
 

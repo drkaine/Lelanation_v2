@@ -1,7 +1,8 @@
 /**
  * Overview stats for the statistics page: total matches, last update, top winrate champions,
- * matches per division, distinct participant count (unique player_id in participants).
- * Uses PostgreSQL views and get_stats_overview() for a single round-trip.
+ * matches per division, distinct participant count (unique player_id in match_players).
+ * Uses new aggregate tables (champion_core_stats, team_core_stats, champion_bucket, etc.)
+ * and raw tables (matchs, match_players, teams, bans) with the new schema.
  */
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
@@ -17,7 +18,6 @@ export interface OverviewStats {
     winrate: number
     pickrate: number
   }>
-  /** Top 5 by pickrate (for Fast Stats encart). */
   topPickrateChampions?: Array<{
     championId: number
     games: number
@@ -25,146 +25,16 @@ export interface OverviewStats {
     winrate: number
     pickrate: number
   }>
-  /** Top 5 by banrate (for Fast Stats encart). */
   topBanrateChampions?: Array<{
     championId: number
     banCount: number
     banrate: number
   }>
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
-  /** Match count per game version (16.x only, e.g. 16.1, 16.2, 16.3). */
   matchesByVersion: Array<{ version: string; matchCount: number }>
-  /** Distinct player_id in participants (joueurs récupérés = participants uniques). */
   playerCount: number
 }
 
-type OverviewRow = Array<{ get_stats_overview: OverviewStats | null }>
-
-/** Raw shape from DB (JSONB); may be string when driver does not parse. */
-interface RawOverviewResult {
-  totalMatches?: number | null
-  lastUpdate?: string | null
-  topWinrateChampions?: unknown
-  topPickrateChampions?: unknown
-  topBanrateChampions?: unknown
-  matchesByDivision?: unknown
-  matchesByVersion?: unknown
-  playerCount?: number | null
-}
-
-/** Ensure overview query params are string | null (never array) to avoid Prisma/Postgres "syntax error at or near [" */
-function normalizeOverviewParam(
-  value: string | string[] | null | undefined
-): string | null {
-  if (value == null) return null
-  let s: string
-  if (Array.isArray(value)) {
-    const first = value[0]
-    s = typeof first === 'string' ? first : ''
-  } else {
-    s = typeof value === 'string' ? value : ''
-  }
-  if (s === '' || s === '[]' || s.startsWith('[')) return null
-  return s
-}
-
-/**
- * Load overview stats for the statistics page. Returns null if DB not configured.
- * Single round-trip via get_stats_overview(p_version, p_rank_tier). Optional filters by version and rank tier (e.g. GOLD).
- */
-export async function getOverviewStats(
-  version?: string | string[] | null,
-  rankTier?: string | string[] | null
-): Promise<OverviewStats | null> {
-  if (!isDatabaseConfigured()) return null
-  const pVersion = normalizeOverviewParam(version)
-  const pRankTier = normalizeOverviewParam(rankTier)
-  const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
-  const cached = overviewStatsCache.get(cacheKey)
-  if (cached && cached.expiresAt > now) return cached.data
-  try {
-    const rows = await prisma.$queryRawUnsafe<OverviewRow>(
-      'SELECT get_stats_overview($1::text, $2::text) AS get_stats_overview',
-      pVersion ?? null,
-      pRankTier ?? null
-    )
-    const row0 = rows[0] as Record<string, unknown> | undefined
-    let raw: unknown =
-      row0?.get_stats_overview ??
-      row0?.['get_stats_overview'] ??
-      (row0 && Object.keys(row0).length > 0 ? Object.values(row0)[0] : null)
-    if (typeof raw === 'string') {
-      try {
-        raw = JSON.parse(raw) as RawOverviewResult
-      } catch {
-        console.warn('[getOverviewStats] raw is string but not valid JSON')
-        return null
-      }
-    }
-    if (!raw || typeof raw !== 'object') {
-      console.warn('[getOverviewStats] no raw result, type:', typeof raw)
-      return null
-    }
-    const r = raw as RawOverviewResult
-
-    const lastUpdate =
-      r.lastUpdate == null ? null : typeof r.lastUpdate === 'string' ? r.lastUpdate : String(r.lastUpdate)
-
-    const result: OverviewStats = {
-      totalMatches: Number(r.totalMatches) ?? 0,
-      lastUpdate,
-      topWinrateChampions: Array.isArray(r.topWinrateChampions)
-        ? (r.topWinrateChampions as Array<{ championId: number; games: number; wins: number; winrate: number; pickrate: number }>).map((c) => ({
-            championId: Number(c.championId),
-            games: Number(c.games),
-            wins: Number(c.wins),
-            winrate: Number(c.winrate),
-            pickrate: Number(c.pickrate),
-          }))
-        : [],
-      topPickrateChampions: Array.isArray(r.topPickrateChampions)
-        ? (r.topPickrateChampions as Array<{ championId: number; games: number; wins: number; winrate: number; pickrate: number }>).map((c) => ({
-            championId: Number(c.championId),
-            games: Number(c.games),
-            wins: Number(c.wins),
-            winrate: Number(c.winrate),
-            pickrate: Number(c.pickrate),
-          }))
-        : [],
-      topBanrateChampions: Array.isArray(r.topBanrateChampions)
-        ? (r.topBanrateChampions as Array<{ championId: number; banCount: number; banrate: number }>).map((c) => ({
-            championId: Number(c.championId),
-            banCount: Number(c.banCount ?? 0),
-            banrate: Number(c.banrate ?? 0),
-          }))
-        : [],
-      matchesByDivision: Array.isArray(r.matchesByDivision)
-        ? (r.matchesByDivision as Array<{ rankTier: string; matchCount: number }>).map((d) => ({
-            rankTier: String(d.rankTier ?? '').trim(),
-            matchCount: Number(d.matchCount) ?? 0,
-          }))
-        : [],
-      matchesByVersion: Array.isArray(r.matchesByVersion)
-        ? (r.matchesByVersion as Array<{ version: string; matchCount: number }>).map((v) => ({
-            version: String(v.version ?? '').trim(),
-            matchCount: Number(v.matchCount) ?? 0,
-          }))
-        : [],
-      playerCount: Number(r.playerCount) ?? 0,
-    }
-    overviewStatsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
-    return result
-  } catch (err) {
-    console.error('[getOverviewStats]', err instanceof Error ? err.message : err)
-    if (err instanceof Error && err.cause) {
-      console.error('[getOverviewStats] cause:', err.cause)
-    }
-    return null
-  }
-}
-
-/** Overview detail: runes (per perk), rune sets, items, item sets, items by order, summoner spells. */
 export interface OverviewDetailStats {
   totalParticipants: number
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
@@ -196,152 +66,6 @@ export interface OverviewDetailStats {
   }>
 }
 
-type OverviewDetailRow = Array<{ get_stats_overview_detail: OverviewDetailStats | null }>
-
-/** Item IDs to exclude from overview detail stats (e.g. support items, trinkets). */
-const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
-
-/** Cache overview-detail par (version, rankTier, includeSmite) pour éviter 504 sur requêtes répétées. TTL 10 min. */
-const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
-
-/** Cache TTL 5 min pour overview, teams, duration-winrate, progression, sides. */
-const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
-const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
-const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
-const overviewDurationWinrateCache = new Map<string, { data: OverviewDurationWinrateStats; expiresAt: number }>()
-const overviewProgressionCache = new Map<string, { data: OverviewProgressionStats; expiresAt: number }>()
-const overviewProgressionFullCache = new Map<string, { data: OverviewProgressionFullStats; expiresAt: number }>()
-const overviewSidesCache = new Map<string, { data: OverviewSidesStats; expiresAt: number }>()
-function overviewCacheKey(v: string | null, r: string | null): string {
-  return `${v ?? ''}|${r ?? ''}`
-}
-const overviewDetailCache = new Map<
-  string,
-  { data: OverviewDetailStats; expiresAt: number }
->()
-
-function overviewDetailCacheKey(
-  pVersion: string | null,
-  pRankTier: string | null,
-  includeSmite: boolean
-): string {
-  return `${pVersion ?? ''}|${pRankTier ?? ''}|${includeSmite}`
-}
-
-export async function getOverviewDetailStats(
-  version?: string | null,
-  rankTier?: string | null,
-  includeSmite?: boolean
-): Promise<OverviewDetailStats | null> {
-  if (!isDatabaseConfigured()) return null
-  const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-  const key = overviewDetailCacheKey(pVersion, pRankTier, includeSmite ?? false)
-  const now = Date.now()
-  const cached = overviewDetailCache.get(key)
-  if (cached && cached.expiresAt > now) return cached.data
-  try {
-    const rows = await prisma.$queryRaw<OverviewDetailRow>(
-      Prisma.sql`SELECT get_stats_overview_detail(${pVersion}, ${pRankTier}) AS get_stats_overview_detail`
-    )
-    const raw = rows[0]?.get_stats_overview_detail
-    if (!raw) {
-      console.warn('[getOverviewDetailStats] no raw result from get_stats_overview_detail (rows[0] falsy or empty)')
-      return null
-    }
-
-    const mapRune = (r: { runeId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
-      runeId: Number(r.runeId),
-      games: Number(r.games),
-      wins: Number(r.wins),
-      pickrate: Number(r.pickrate),
-      winrate: Number(r.winrate),
-    })
-    const mapRuneSet = (rs: { runes: unknown; games: number; wins: number; pickrate: number; winrate: number }) => ({
-      runes: rs.runes,
-      games: Number(rs.games),
-      wins: Number(rs.wins),
-      pickrate: Number(rs.pickrate),
-      winrate: Number(rs.winrate),
-    })
-    const mapItem = (i: { itemId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
-      itemId: Number(i.itemId),
-      games: Number(i.games),
-      wins: Number(i.wins),
-      pickrate: Number(i.pickrate),
-      winrate: Number(i.winrate),
-    })
-    const mapItemSet = (is: { items: number[]; games: number; wins: number; pickrate: number; winrate: number }) => ({
-      items: Array.isArray(is.items) ? is.items.map(Number) : [],
-      games: Number(is.games),
-      wins: Number(is.wins),
-      pickrate: Number(is.pickrate),
-      winrate: Number(is.winrate),
-    })
-    const mapSpell = (s: { spellId: number; games: number; wins: number; pickrate: number; winrate: number }) => ({
-      spellId: Number(s.spellId),
-      games: Number(s.games),
-      wins: Number(s.wins),
-      pickrate: Number(s.pickrate),
-      winrate: Number(s.winrate),
-    })
-
-    const itemsByOrder: Record<string, Array<{ itemId: number; games: number; wins: number; winrate: number }>> = {}
-    if (raw.itemsByOrder && typeof raw.itemsByOrder === 'object') {
-      for (const [slot, arr] of Object.entries(raw.itemsByOrder)) {
-        const mapped = Array.isArray(arr)
-          ? arr.map((x: { itemId: number; games: number; wins: number; winrate: number }) => ({
-              itemId: Number(x.itemId),
-              games: Number(x.games),
-              wins: Number(x.wins),
-              winrate: Number(x.winrate),
-            }))
-          : []
-        itemsByOrder[slot] = mapped.filter(x => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(x.itemId))
-      }
-    }
-
-    const rawSpells = Array.isArray(raw.summonerSpells) ? raw.summonerSpells.map(mapSpell) : []
-    const summonerSpells = includeSmite ? rawSpells : rawSpells.filter(s => s.spellId !== 11)
-    const mappedItems = Array.isArray(raw.items) ? raw.items.map(mapItem) : []
-    const items = mappedItems.filter(i => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(i.itemId))
-    const mappedItemSets = Array.isArray(raw.itemSets) ? raw.itemSets.map(mapItemSet) : []
-    const itemSets = mappedItemSets.filter(
-      set => !set.items.some(id => OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id))
-    )
-    const data: OverviewDetailStats = {
-      totalParticipants: Number(raw.totalParticipants) ?? 0,
-      runes: Array.isArray(raw.runes) ? raw.runes.map(mapRune) : [],
-      runeSets: Array.isArray(raw.runeSets) ? raw.runeSets.map(mapRuneSet) : [],
-      items,
-      itemSets,
-      itemsByOrder,
-      summonerSpells,
-    }
-    overviewDetailCache.set(key, { data, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
-    return data
-  } catch (err) {
-    console.error('[getOverviewDetailStats]', err)
-    return null
-  }
-}
-
-/** Invalider le cache overview-detail (ex. après REFRESH MATERIALIZED VIEW mv_overview_detail_base). */
-export function invalidateOverviewDetailCache(): void {
-  overviewDetailCache.clear()
-}
-
-/**
- * No-op: stats are computed by SQL functions only (no materialized views).
- * Kept for API compatibility; optionally invalidates in-memory caches so next request uses fresh DB.
- */
-export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; error?: string }> {
-  overviewStatsCache.clear()
-  overviewTeamsCache.clear()
-  return { ok: true }
-}
-
-/** Empty overview detail payload (when DB returns null or error). */
 export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   totalParticipants: 0,
   runes: [],
@@ -352,19 +76,18 @@ export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   summonerSpells: [],
 }
 
-/** Stats from match_teams: bans and objectives (first + kills + distribution for %). */
 export interface OverviewTeamsStats {
   matchCount: number
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
-    /** Top 20 champions by total ban count (byWin + byLoss), with ban rate % over all bans. */
     top20Total: Array<{ championId: number; count: number; banRatePercent: string }>
   }
   objectives: {
     firstBlood: { firstByWin: number; firstByLoss: number }
     baron: ObjectiveWithDistribution
     dragon: ObjectiveWithDistribution
+    elder: ObjectiveWithDistribution
     tower: ObjectiveWithDistribution
     inhibitor: ObjectiveWithDistribution
     riftHerald: ObjectiveWithDistribution
@@ -377,93 +100,18 @@ export interface ObjectiveWithDistribution {
   firstByLoss: number
   killsByWin: number
   killsByLoss: number
-  /** Count of matches (by winning team) per kill count: { "0": n, "1": m, ... } */
   distributionByWin: Record<string, number>
-  /** Count of matches (by losing team) per kill count */
   distributionByLoss: Record<string, number>
 }
 
-type OverviewTeamsRow = Array<{ get_stats_overview_teams: OverviewTeamsStats | null }>
-
-/** Duration vs winrate by 5-min buckets (uses version and rank_tier filters). */
 export interface OverviewDurationWinrateStats {
   buckets: Array<{
-    durationMin: number
-    matchCount: number
-    wins: number
+    durationMinutes: number
+    matches: number
     winrate: number
   }>
 }
 
-type OverviewDurationWinrateRow = Array<{ get_stats_overview_duration_winrate: OverviewDurationWinrateStats | null }>
-
-export async function getOverviewDurationWinrateStats(
-  version?: string | null,
-  rankTier?: string | null
-): Promise<OverviewDurationWinrateStats | null> {
-  if (!isDatabaseConfigured()) return null
-  const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-  const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
-  const cached = overviewDurationWinrateCache.get(cacheKey)
-  if (cached && cached.expiresAt > now) return cached.data
-  try {
-    const rows = await prisma.$queryRaw<OverviewDurationWinrateRow>(
-      Prisma.sql`SELECT get_stats_overview_duration_winrate(${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
-    )
-    const raw = rows[0]?.get_stats_overview_duration_winrate
-    if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
-      return { buckets: [] }
-    }
-    const result: OverviewDurationWinrateStats = {
-      buckets: raw.buckets.map((b: { durationMin: number; matchCount: number; wins: number; winrate: number }) => ({
-        durationMin: Number(b.durationMin),
-        matchCount: Number(b.matchCount),
-        wins: Number(b.wins),
-        winrate: Number(b.winrate),
-      })),
-    }
-    overviewDurationWinrateCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
-    return result
-  } catch (err) {
-    console.error('[getOverviewDurationWinrateStats]', err)
-    return null
-  }
-}
-
-/** Duration vs winrate by 5-min buckets for a specific champion. */
-export async function getDurationWinrateByChampion(
-  championId: number,
-  version?: string | null,
-  rankTier?: string | null
-): Promise<OverviewDurationWinrateStats | null> {
-  if (!isDatabaseConfigured()) return null
-  try {
-    const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-    const rows = await prisma.$queryRaw<OverviewDurationWinrateRow>(
-      Prisma.sql`SELECT get_stats_duration_winrate_by_champion(${championId}, ${pVersion}, ${pRankTier}) AS get_stats_overview_duration_winrate`
-    )
-    const raw = rows[0]?.get_stats_overview_duration_winrate
-    if (!raw || !raw.buckets || !Array.isArray(raw.buckets)) {
-      return { buckets: [] }
-    }
-    return {
-      buckets: raw.buckets.map((b: { durationMin: number; matchCount: number; wins: number; winrate: number }) => ({
-        durationMin: Number(b.durationMin),
-        matchCount: Number(b.matchCount),
-        wins: Number(b.wins),
-        winrate: Number(b.winrate),
-      })),
-    }
-  } catch (err) {
-    console.error('[getDurationWinrateByChampion]', err)
-    return null
-  }
-}
-
-/** Progression: delta WR from oldest version to all since. For "Winrate depuis X" encart. */
 export interface OverviewProgressionStats {
   oldestVersion: string | null
   gainers: Array<{
@@ -480,7 +128,692 @@ export interface OverviewProgressionStats {
   }>
 }
 
-type OverviewProgressionRow = Array<{ get_stats_overview_progression: OverviewProgressionStats | null }>
+export interface OverviewProgressionFullStats {
+  oldestVersion: string | null
+  champions: Array<{
+    championId: number
+    wrOldest: number
+    wrSince: number
+    deltaWr: number
+    pickrateOldest: number
+    pickrateSince: number
+    deltaPick: number
+  }>
+}
+
+export interface OverviewSidesStats {
+  blue: { matches: number; wins: number; winrate: number }
+  red: { matches: number; wins: number; winrate: number }
+  totalMatches: number
+  champsByBlue: Array<{ championId: number; games: number; wins: number; winrate: number }>
+  champsByRed: Array<{ championId: number; games: number; wins: number; winrate: number }>
+  topObjectivesBlue: ObjectiveSideWithDistribution
+  topObjectivesRed: ObjectiveSideWithDistribution
+  objectiveCountsBySide: ObjectiveCountsBySide
+}
+
+export interface ObjectiveSideWithDistribution {
+  baron: { count: number }
+  dragon: { count: number }
+  tower: { count: number }
+  riftHerald: { count: number }
+  inhibitor: { count: number }
+  horde: { count: number }
+  firstBlood: { count: number }
+}
+
+export interface ObjectiveCountsBySide {
+  blue: ObjectiveSideWithDistribution
+  red: ObjectiveSideWithDistribution
+}
+
+// ── Cache ────────────────────────────────────────────────────────────────────
+
+const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
+const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
+
+const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
+const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
+const overviewDurationWinrateCache = new Map<string, { data: OverviewDurationWinrateStats; expiresAt: number }>()
+const overviewProgressionCache = new Map<string, { data: OverviewProgressionStats; expiresAt: number }>()
+const overviewProgressionFullCache = new Map<string, { data: OverviewProgressionFullStats; expiresAt: number }>()
+const overviewSidesCache = new Map<string, { data: OverviewSidesStats; expiresAt: number }>()
+const overviewDetailCache = new Map<string, { data: OverviewDetailStats; expiresAt: number }>()
+
+function overviewCacheKey(v: string | null, r: string | null): string {
+  return `${v ?? ''}|${r ?? ''}`
+}
+function overviewDetailCacheKey(v: string | null, r: string | null, s: boolean): string {
+  return `${v ?? ''}|${r ?? ''}|${s}`
+}
+function sidesCacheKey(
+  version: string | string[] | null | undefined,
+  rankTier: string | string[] | null | undefined
+): string {
+  const v = Array.isArray(version) ? version.join(',') : version ?? ''
+  const r = Array.isArray(rankTier) ? rankTier.join(',') : rankTier ?? ''
+  return `${v}|${r}`
+}
+
+// ── Param normalisation ──────────────────────────────────────────────────────
+
+function normalizeOverviewParam(
+  value: string | string[] | null | undefined
+): string | null {
+  if (value == null) return null
+  let s: string
+  if (Array.isArray(value)) {
+    const first = value[0]
+    s = typeof first === 'string' ? first : ''
+  } else {
+    s = typeof value === 'string' ? value : ''
+  }
+  if (s === '' || s === '[]' || s.startsWith('[')) return null
+  return s
+}
+
+function toParamArray(value: string | string[] | null | undefined): string[] {
+  if (value == null) return []
+  if (Array.isArray(value)) {
+    return value.filter((s): s is string => typeof s === 'string' && s !== '' && !s.startsWith('['))
+  }
+  if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
+  return []
+}
+
+/** Build Prisma where for matchs table given version + rankTier filters. */
+function buildMatchWhere(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
+): Record<string, unknown> {
+  const where: Record<string, unknown> = {}
+  const versions = toParamArray(version)
+  const ranks = toParamArray(rankTier)
+  if (versions.length === 1) where.gameVersion = { startsWith: versions[0] }
+  else if (versions.length > 1) where.gameVersion = { in: versions.flatMap(v => [v]) }
+  if (ranks.length === 1) where.rankTier = ranks[0]
+  else if (ranks.length > 1) where.rankTier = { in: ranks }
+  return where
+}
+
+// ── getOverviewStats ─────────────────────────────────────────────────────────
+
+export async function getOverviewStats(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
+): Promise<OverviewStats | null> {
+  if (!isDatabaseConfigured()) return null
+  const pVersion = normalizeOverviewParam(version)
+  const pRankTier = normalizeOverviewParam(rankTier)
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewStatsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
+
+  try {
+    const coreWhere: Record<string, unknown> = {}
+    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
+    if (pRankTier) coreWhere.rankTier = pRankTier
+
+    const matchWhere = buildMatchWhere(version, rankTier)
+
+    const [coreRows, matchCountRows, matchDivisionRows, matchVersionRows, playerCountResult] = await Promise.all([
+      prisma.championCoreStat.findMany({
+        where: coreWhere,
+        select: { championId: true, countWin: true, countGame: true, countBan: true },
+      }),
+      prisma.match.count({ where: matchWhere }),
+      prisma.match.groupBy({
+        by: ['rankTier'],
+        where: matchWhere,
+        _count: { _all: true },
+        orderBy: { _count: { rankTier: 'desc' } },
+      }),
+      prisma.match.groupBy({
+        by: ['gameVersion'],
+        where: matchWhere,
+        _count: { _all: true },
+        orderBy: { _count: { gameVersion: 'desc' } },
+        take: 20,
+      }),
+      prisma.$queryRaw<[{ cnt: bigint }]>(
+        Prisma.sql`SELECT COUNT(DISTINCT player_id) AS cnt FROM match_players`
+      ),
+    ])
+
+    const totalMatches = matchCountRows
+
+    // Aggregate champion stats
+    const byChampion = new Map<number, { wins: number; games: number; bans: number }>()
+    let totalParticipants = 0
+    for (const row of coreRows) {
+      let entry = byChampion.get(row.championId)
+      if (!entry) {
+        entry = { wins: 0, games: 0, bans: 0 }
+        byChampion.set(row.championId, entry)
+      }
+      entry.wins += row.countWin
+      entry.games += row.countGame
+      entry.bans += row.countBan
+      totalParticipants += row.countGame
+    }
+
+    const champList = Array.from(byChampion.entries())
+      .filter(([, e]) => e.games >= 20)
+      .map(([championId, e]) => ({
+        championId,
+        games: e.games,
+        wins: e.wins,
+        winrate: e.games > 0 ? (e.wins / e.games) * 100 : 0,
+        pickrate: totalParticipants > 0 ? (e.games / totalParticipants) * 100 : 0,
+        banrate: totalMatches > 0 ? (e.bans / totalMatches) * 100 : 0,
+        bans: e.bans,
+      }))
+
+    const topWinrateChampions = [...champList]
+      .sort((a, b) => b.winrate - a.winrate)
+      .slice(0, 5)
+      .map(({ championId, games, wins, winrate, pickrate }) => ({
+        championId, games, wins,
+        winrate: Math.round(winrate * 100) / 100,
+        pickrate: Math.round(pickrate * 100) / 100,
+      }))
+
+    const topPickrateChampions = [...champList]
+      .sort((a, b) => b.pickrate - a.pickrate)
+      .slice(0, 5)
+      .map(({ championId, games, wins, winrate, pickrate }) => ({
+        championId, games, wins,
+        winrate: Math.round(winrate * 100) / 100,
+        pickrate: Math.round(pickrate * 100) / 100,
+      }))
+
+    const topBanrateChampions = [...champList]
+      .filter(c => c.bans > 0)
+      .sort((a, b) => b.bans - a.bans)
+      .slice(0, 5)
+      .map(({ championId, bans, banrate }) => ({
+        championId,
+        banCount: bans,
+        banrate: Math.round(banrate * 100) / 100,
+      }))
+
+    const matchesByDivision = matchDivisionRows.map((r) => ({
+      rankTier: r.rankTier,
+      matchCount: r._count._all,
+    }))
+
+    const matchesByVersion = matchVersionRows.map((r) => ({
+      version: r.gameVersion,
+      matchCount: r._count._all,
+    }))
+
+    const playerCount = Number(playerCountResult[0]?.cnt ?? 0)
+
+    const result: OverviewStats = {
+      totalMatches,
+      lastUpdate: null,
+      topWinrateChampions,
+      topPickrateChampions,
+      topBanrateChampions,
+      matchesByDivision,
+      matchesByVersion,
+      playerCount,
+    }
+
+    overviewStatsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
+  } catch (err) {
+    console.error('[getOverviewStats]', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+// ── getOverviewDetailStats ───────────────────────────────────────────────────
+
+const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
+
+export async function getOverviewDetailStats(
+  version?: string | null,
+  rankTier?: string | null,
+  includeSmite?: boolean
+): Promise<OverviewDetailStats | null> {
+  if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const key = overviewDetailCacheKey(pVersion, pRankTier, includeSmite ?? false)
+  const now = Date.now()
+  const cached = overviewDetailCache.get(key)
+  if (cached && cached.expiresAt > now) return cached.data
+
+  try {
+    const coreWhere: Record<string, unknown> = {}
+    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
+    if (pRankTier) coreWhere.rankTier = pRankTier
+
+    const coreStats = await prisma.championCoreStat.findMany({
+      where: coreWhere,
+      select: { id: true, countGame: true },
+    })
+    const totalParticipants = coreStats.reduce((s, r) => s + r.countGame, 0)
+    if (totalParticipants === 0) {
+      overviewDetailCache.set(key, { data: EMPTY_OVERVIEW_DETAIL, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
+      return EMPTY_OVERVIEW_DETAIL
+    }
+
+    const statIds = coreStats.map((s) => s.id)
+
+    const [soloRunes, soloItems, spells] = await Promise.all([
+      prisma.championRunesSoloStat.findMany({
+        where: { championStatId: { in: statIds } },
+        select: { perkId: true, countWin: true, countGame: true },
+      }),
+      prisma.championItemSoloStat.findMany({
+        where: { championStatId: { in: statIds } },
+        select: { itemId: true, countWin: true, countGame: true, countStarter: true, countCore: true },
+      }),
+      prisma.championSummonerSpellAgg.findMany({
+        where: {
+          championStatId: { in: statIds },
+          ...(!includeSmite ? { spellId: { not: 11 } } : {}),
+        },
+        select: { spellId: true, countWin: true, countGame: true },
+      }),
+    ])
+
+    // Per-rune aggregation
+    const runeMap = new Map<number, { wins: number; games: number }>()
+    for (const r of soloRunes) {
+      let e = runeMap.get(r.perkId)
+      if (!e) { e = { wins: 0, games: 0 }; runeMap.set(r.perkId, e) }
+      e.wins += r.countWin; e.games += r.countGame
+    }
+    const runes = Array.from(runeMap.entries())
+      .map(([runeId, e]) => ({
+        runeId,
+        games: e.games,
+        wins: e.wins,
+        pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+
+    // Per-item aggregation
+    const itemMap = new Map<number, { wins: number; games: number }>()
+    for (const r of soloItems) {
+      if (OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(r.itemId)) continue
+      let e = itemMap.get(r.itemId)
+      if (!e) { e = { wins: 0, games: 0 }; itemMap.set(r.itemId, e) }
+      e.wins += r.countWin; e.games += r.countGame
+    }
+    const items = Array.from(itemMap.entries())
+      .map(([itemId, e]) => ({
+        itemId,
+        games: e.games,
+        wins: e.wins,
+        pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+
+    // Summoner spells
+    const spellMap = new Map<number, { wins: number; games: number }>()
+    for (const r of spells) {
+      let e = spellMap.get(r.spellId)
+      if (!e) { e = { wins: 0, games: 0 }; spellMap.set(r.spellId, e) }
+      e.wins += r.countWin; e.games += r.countGame
+    }
+    const summonerSpells = Array.from(spellMap.entries())
+      .map(([spellId, e]) => ({
+        spellId,
+        games: e.games,
+        wins: e.wins,
+        pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+      }))
+      .sort((a, b) => b.games - a.games)
+
+    // Item sets (combinations) - from champion_item_stats
+    const itemSetRows = await prisma.championItemStat.findMany({
+      where: { championStatId: { in: statIds } },
+      select: { itemList: true, countWin: true, countGame: true },
+      take: 2000,
+    })
+    const itemSetMap = new Map<string, { wins: number; games: number }>()
+    for (const r of itemSetRows) {
+      let e = itemSetMap.get(r.itemList)
+      if (!e) { e = { wins: 0, games: 0 }; itemSetMap.set(r.itemList, e) }
+      e.wins += r.countWin; e.games += r.countGame
+    }
+    const itemSets = Array.from(itemSetMap.entries())
+      .filter(([, e]) => e.games >= 5)
+      .map(([listStr, e]) => {
+        let parsedItems: number[]
+        try { parsedItems = JSON.parse(listStr) as number[] } catch { parsedItems = [] }
+        return {
+          items: parsedItems.filter((id) => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id)),
+          games: e.games,
+          wins: e.wins,
+          pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+        }
+      })
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 50)
+
+    // Rune sets (combinations) - from champion_runes_stats
+    const runeSetRows = await prisma.championRunesStat.findMany({
+      where: { championStatId: { in: statIds } },
+      select: { runeList: true, countWin: true, countGame: true },
+      take: 2000,
+    })
+    const runeSetMap = new Map<string, { wins: number; games: number }>()
+    for (const r of runeSetRows) {
+      let e = runeSetMap.get(r.runeList)
+      if (!e) { e = { wins: 0, games: 0 }; runeSetMap.set(r.runeList, e) }
+      e.wins += r.countWin; e.games += r.countGame
+    }
+    const runeSets = Array.from(runeSetMap.entries())
+      .filter(([, e]) => e.games >= 5)
+      .map(([listStr, e]) => {
+        let parsedRunes: unknown
+        try { parsedRunes = JSON.parse(listStr) } catch { parsedRunes = listStr }
+        return {
+          runes: parsedRunes,
+          games: e.games,
+          wins: e.wins,
+          pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+        }
+      })
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 50)
+
+    const result: OverviewDetailStats = {
+      totalParticipants,
+      runes,
+      runeSets,
+      items,
+      itemSets,
+      itemsByOrder: {},
+      summonerSpells,
+    }
+    overviewDetailCache.set(key, { data: result, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
+    return result
+  } catch (err) {
+    console.error('[getOverviewDetailStats]', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+export function invalidateOverviewDetailCache(): void {
+  overviewDetailCache.clear()
+}
+
+export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; error?: string }> {
+  overviewStatsCache.clear()
+  overviewTeamsCache.clear()
+  overviewDetailCache.clear()
+  overviewDurationWinrateCache.clear()
+  overviewProgressionCache.clear()
+  overviewProgressionFullCache.clear()
+  overviewSidesCache.clear()
+  return { ok: true }
+}
+
+// ── getOverviewTeamsStats ────────────────────────────────────────────────────
+
+export async function getOverviewTeamsStats(
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewTeamsStats | null> {
+  if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewTeamsCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
+
+  try {
+    const teamWhere: Record<string, unknown> = {}
+    if (pVersion) teamWhere.gameVersion = { startsWith: pVersion }
+    if (pRankTier) teamWhere.rankTier = pRankTier
+
+    const teamStats = await prisma.teamCoreStat.findMany({
+      where: teamWhere,
+      select: {
+        team: true,
+        countWin: true,
+        countGame: true,
+        countFirstBlood: true,
+        sumBaronKills: true,
+        countBaronFirst: true,
+        sumDragonKills: true,
+        countDragonFirst: true,
+        sumTowerKills: true,
+        countTowerFirst: true,
+        sumHordeKills: true,
+        countHordeFirst: true,
+        sumRiftHeraldKills: true,
+        countRiftHeraldFirst: true,
+        sumInhibitorKills: true,
+        sumChampionKills: true,
+        sumElderKills: true,
+      },
+    })
+
+    const matchCount = teamStats.reduce((s, r) => s + r.countGame, 0) / 2
+
+    // Aggregate objectives by win/loss
+    const winAgg = { baron: { first: 0, kills: 0 }, dragon: { first: 0, kills: 0 }, elder: { first: 0, kills: 0 }, tower: { first: 0, kills: 0 }, inhibitor: { first: 0, kills: 0 }, riftHerald: { first: 0, kills: 0 }, horde: { first: 0, kills: 0 }, firstBlood: { first: 0 } }
+    const lossAgg = { baron: { first: 0, kills: 0 }, dragon: { first: 0, kills: 0 }, elder: { first: 0, kills: 0 }, tower: { first: 0, kills: 0 }, inhibitor: { first: 0, kills: 0 }, riftHerald: { first: 0, kills: 0 }, horde: { first: 0, kills: 0 }, firstBlood: { first: 0 } }
+
+    for (const r of teamStats) {
+      const isWin = r.countWin > r.countGame / 2
+      const agg = isWin ? winAgg : lossAgg
+      agg.baron.first += r.countBaronFirst
+      agg.baron.kills += r.sumBaronKills
+      agg.dragon.first += r.countDragonFirst
+      agg.dragon.kills += r.sumDragonKills
+      agg.tower.first += r.countTowerFirst
+      agg.tower.kills += r.sumTowerKills
+      agg.horde.first += r.countHordeFirst
+      agg.horde.kills += r.sumHordeKills
+      agg.riftHerald.first += r.countRiftHeraldFirst
+      agg.riftHerald.kills += r.sumRiftHeraldKills
+      agg.inhibitor.first += 0
+      agg.inhibitor.kills += r.sumInhibitorKills
+      agg.elder.first += 0
+      agg.elder.kills += r.sumElderKills
+      agg.firstBlood.first += r.countFirstBlood
+    }
+
+    // Bans from champion_core_stats - group by champion, filter by win/loss
+    const coreStatsBan = await prisma.championCoreStat.findMany({
+      where: {
+        ...(pVersion ? { gameVersion: { startsWith: pVersion } } : {}),
+        ...(pRankTier ? { rankTier: pRankTier } : {}),
+      },
+      select: { championId: true, countBan: true, countWin: true, countGame: true },
+    })
+
+    const bansByChamp = new Map<number, { byWin: number; byLoss: number }>()
+    for (const r of coreStatsBan) {
+      if (r.countBan === 0) continue
+      let e = bansByChamp.get(r.championId)
+      if (!e) { e = { byWin: 0, byLoss: 0 }; bansByChamp.set(r.championId, e) }
+      // Approximate: bans are evenly split, no win/loss info in aggregate
+      e.byWin += Math.round(r.countBan / 2)
+      e.byLoss += r.countBan - Math.round(r.countBan / 2)
+    }
+
+    const banList = Array.from(bansByChamp.entries())
+      .map(([cid, e]) => ({ championId: cid, byWin: e.byWin, byLoss: e.byLoss, total: e.byWin + e.byLoss }))
+      .sort((a, b) => b.total - a.total)
+
+    const totalBansByWin = banList.reduce((s, b) => s + b.byWin, 0)
+    const totalBansByLoss = banList.reduce((s, b) => s + b.byLoss, 0)
+    const totalBansAll = banList.reduce((s, b) => s + b.total, 0)
+
+    const addBanRate = (
+      list: Array<{ championId: number; count: number }>,
+      total: number
+    ): Array<{ championId: number; count: number; banRatePercent: string }> =>
+      list.map((b) => ({
+        ...b,
+        banRatePercent: total > 0 ? (Math.round((b.count / total) * 1000) / 10).toFixed(1) + '%' : '—',
+      }))
+
+    const byWinRaw = banList.slice(0, 20).map(b => ({ championId: b.championId, count: b.byWin }))
+    const byLossRaw = banList.slice(0, 20).map(b => ({ championId: b.championId, count: b.byLoss }))
+    const top20Total = banList.slice(0, 20).map(b => ({
+      championId: b.championId,
+      count: b.total,
+      banRatePercent: totalBansAll > 0 ? (Math.round((b.total / totalBansAll) * 1000) / 10).toFixed(1) + '%' : '—',
+    }))
+
+    const objData = (win: { first: number; kills: number }, loss: { first: number; kills: number }): ObjectiveWithDistribution => ({
+      firstByWin: win.first,
+      firstByLoss: loss.first,
+      killsByWin: win.kills,
+      killsByLoss: loss.kills,
+      distributionByWin: {},
+      distributionByLoss: {},
+    })
+
+    const result: OverviewTeamsStats = {
+      matchCount: Math.round(matchCount),
+      bans: {
+        byWin: addBanRate(byWinRaw, totalBansByWin),
+        byLoss: addBanRate(byLossRaw, totalBansByLoss),
+        top20Total,
+      },
+      objectives: {
+        firstBlood: { firstByWin: winAgg.firstBlood.first, firstByLoss: lossAgg.firstBlood.first },
+        baron: objData(winAgg.baron, lossAgg.baron),
+        dragon: objData(winAgg.dragon, lossAgg.dragon),
+        elder: objData(winAgg.elder, lossAgg.elder),
+        tower: objData(winAgg.tower, lossAgg.tower),
+        inhibitor: objData(winAgg.inhibitor, lossAgg.inhibitor),
+        riftHerald: objData(winAgg.riftHerald, lossAgg.riftHerald),
+        horde: objData(winAgg.horde, lossAgg.horde),
+      },
+    }
+
+    overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
+  } catch (err) {
+    console.error('[getOverviewTeamsStats]', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
+// ── getOverviewDurationWinrateStats ──────────────────────────────────────────
+
+export async function getOverviewDurationWinrateStats(
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewDurationWinrateStats | null> {
+  if (!isDatabaseConfigured()) return null
+  const pVersion = version != null && version !== '' ? version : null
+  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const now = Date.now()
+  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cached = overviewDurationWinrateCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
+
+  try {
+    const coreWhere: Record<string, unknown> = {}
+    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
+    if (pRankTier) coreWhere.rankTier = pRankTier
+
+    const coreStats = await prisma.championCoreStat.findMany({
+      where: coreWhere,
+      select: { id: true },
+    })
+    const statIds = coreStats.map((s) => s.id)
+
+    if (statIds.length === 0) {
+      return { buckets: [] }
+    }
+
+    const bucketRows = await prisma.championBucket.findMany({
+      where: { championStatId: { in: statIds } },
+      select: { durationBucket: true, countWin: true, countGame: true },
+    })
+
+    const bucketMap = new Map<number, { wins: number; games: number }>()
+    for (const row of bucketRows) {
+      let e = bucketMap.get(row.durationBucket)
+      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(row.durationBucket, e) }
+      e.wins += row.countWin
+      e.games += row.countGame
+    }
+
+    const buckets = Array.from(bucketMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([durationBucket, e]) => ({
+        durationMinutes: durationBucket,
+        matches: e.games,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+      }))
+
+    const result: OverviewDurationWinrateStats = { buckets }
+    overviewDurationWinrateCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
+    return result
+  } catch (err) {
+    console.error('[getOverviewDurationWinrateStats]', err)
+    return null
+  }
+}
+
+export async function getDurationWinrateByChampion(
+  championId: number,
+  version?: string | null,
+  rankTier?: string | null
+): Promise<OverviewDurationWinrateStats | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const coreWhere: Record<string, unknown> = { championId }
+    if (version) coreWhere.gameVersion = { startsWith: version }
+    if (rankTier) coreWhere.rankTier = rankTier
+
+    const coreStats = await prisma.championCoreStat.findMany({
+      where: coreWhere,
+      select: { id: true },
+    })
+    const statIds = coreStats.map((s) => s.id)
+    if (statIds.length === 0) return { buckets: [] }
+
+    const bucketRows = await prisma.championBucket.findMany({
+      where: { championStatId: { in: statIds } },
+      select: { durationBucket: true, countWin: true, countGame: true },
+    })
+
+    const bucketMap = new Map<number, { wins: number; games: number }>()
+    for (const row of bucketRows) {
+      let e = bucketMap.get(row.durationBucket)
+      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(row.durationBucket, e) }
+      e.wins += row.countWin
+      e.games += row.countGame
+    }
+
+    const buckets = Array.from(bucketMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([durationBucket, e]) => ({
+        durationMinutes: durationBucket,
+        matches: e.games,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+      }))
+
+    return { buckets }
+  } catch {
+    return null
+  }
+}
+
+// ── Progression stats ────────────────────────────────────────────────────────
 
 export async function getOverviewProgressionStats(
   versionOldest?: string | null,
@@ -495,25 +828,66 @@ export async function getOverviewProgressionStats(
   const cacheKey = overviewCacheKey(versionOldest, pRankTier)
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
+
   try {
-    const rows = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(Prisma.sql`SET LOCAL statement_timeout = 20000`)
-      return tx.$queryRaw<OverviewProgressionRow>(
-        Prisma.sql`SELECT get_stats_overview_progression(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression`
-      )
-    })
-    const raw = rows[0]?.get_stats_overview_progression
-    if (!raw) return { oldestVersion: versionOldest, gainers: [], losers: [] }
-    const mapEntry = (e: { championId: number; wrOldest: number; wrSince: number; delta: number }) => ({
-      championId: Number(e.championId),
-      wrOldest: Number(e.wrOldest),
-      wrSince: Number(e.wrSince),
-      delta: Number(e.delta),
-    })
+    const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
+    if (pRankTier) oldestWhere.rankTier = pRankTier
+
+    const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
+    if (pRankTier) sinceWhere.rankTier = pRankTier
+
+    const [oldestRows, sinceRows] = await Promise.all([
+      prisma.championCoreStat.findMany({
+        where: oldestWhere,
+        select: { championId: true, countWin: true, countGame: true },
+      }),
+      prisma.championCoreStat.findMany({
+        where: sinceWhere,
+        select: { championId: true, countWin: true, countGame: true },
+      }),
+    ])
+
+    const aggByChamp = (rows: Array<{ championId: number; countWin: number; countGame: number }>) => {
+      const m = new Map<number, { wins: number; games: number }>()
+      for (const r of rows) {
+        let e = m.get(r.championId)
+        if (!e) { e = { wins: 0, games: 0 }; m.set(r.championId, e) }
+        e.wins += r.countWin; e.games += r.countGame
+      }
+      return m
+    }
+
+    const oldestMap = aggByChamp(oldestRows)
+    const sinceMap = aggByChamp(sinceRows)
+
+    const progressionRows: Array<{ championId: number; wrOldest: number; wrSince: number; delta: number }> = []
+    for (const [cid, oldEntry] of oldestMap.entries()) {
+      if (oldEntry.games < 20) continue
+      const sinceEntry = sinceMap.get(cid)
+      if (!sinceEntry || sinceEntry.games < 20) continue
+      const wrOldest = oldEntry.wins / oldEntry.games
+      const wrSince = sinceEntry.wins / sinceEntry.games
+      progressionRows.push({ championId: cid, wrOldest, wrSince, delta: wrSince - wrOldest })
+    }
+
+    progressionRows.sort((a, b) => b.delta - a.delta)
+    const gainers = progressionRows.slice(0, 10)
+    const losers = [...progressionRows].sort((a, b) => a.delta - b.delta).slice(0, 10)
+
     const result: OverviewProgressionStats = {
-      oldestVersion: raw.oldestVersion ?? versionOldest,
-      gainers: Array.isArray(raw.gainers) ? raw.gainers.map(mapEntry) : [],
-      losers: Array.isArray(raw.losers) ? raw.losers.map(mapEntry) : [],
+      oldestVersion: versionOldest,
+      gainers: gainers.map(r => ({
+        championId: r.championId,
+        wrOldest: Math.round(r.wrOldest * 10000) / 100,
+        wrSince: Math.round(r.wrSince * 10000) / 100,
+        delta: Math.round(r.delta * 10000) / 100,
+      })),
+      losers: losers.map(r => ({
+        championId: r.championId,
+        wrOldest: Math.round(r.wrOldest * 10000) / 100,
+        wrSince: Math.round(r.wrSince * 10000) / 100,
+        delta: Math.round(r.delta * 10000) / 100,
+      })),
     }
     overviewProgressionCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
@@ -522,24 +896,6 @@ export async function getOverviewProgressionStats(
     return null
   }
 }
-
-/** Progression complète: tous les champions avec delta WR et delta pickrate (pour onglet Progressions). */
-export interface OverviewProgressionFullStats {
-  oldestVersion: string | null
-  champions: Array<{
-    championId: number
-    wrOldest: number
-    wrSince: number
-    deltaWr: number
-    pickrateOldest: number
-    pickrateSince: number
-    deltaPick: number
-  }>
-}
-
-type OverviewProgressionFullRow = Array<{
-  get_stats_overview_progression_full: OverviewProgressionFullStats | null
-}>
 
 export async function getOverviewProgressionFullStats(
   versionOldest?: string | null,
@@ -554,36 +910,58 @@ export async function getOverviewProgressionFullStats(
   const cacheKey = overviewCacheKey(versionOldest, pRankTier)
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
+
   try {
-    const rows = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(Prisma.sql`SET LOCAL statement_timeout = 20000`)
-      return tx.$queryRaw<OverviewProgressionFullRow>(
-        Prisma.sql`SELECT get_stats_overview_progression_full(${versionOldest}, ${pRankTier}) AS get_stats_overview_progression_full`
-      )
-    })
-    const raw = rows[0]?.get_stats_overview_progression_full
-    if (!raw) return { oldestVersion: versionOldest, champions: [] }
-    const mapEntry = (e: {
-      championId: number
-      wrOldest: number
-      wrSince: number
-      deltaWr: number
-      pickrateOldest: number
-      pickrateSince: number
-      deltaPick: number
-    }) => ({
-      championId: Number(e.championId),
-      wrOldest: Number(e.wrOldest),
-      wrSince: Number(e.wrSince),
-      deltaWr: Number(e.deltaWr),
-      pickrateOldest: Number(e.pickrateOldest),
-      pickrateSince: Number(e.pickrateSince),
-      deltaPick: Number(e.deltaPick),
-    })
-    const result: OverviewProgressionFullStats = {
-      oldestVersion: raw.oldestVersion ?? versionOldest,
-      champions: Array.isArray(raw.champions) ? raw.champions.map(mapEntry) : [],
+    const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
+    if (pRankTier) oldestWhere.rankTier = pRankTier
+    const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
+    if (pRankTier) sinceWhere.rankTier = pRankTier
+
+    const [oldestRows, sinceRows] = await Promise.all([
+      prisma.championCoreStat.findMany({
+        where: oldestWhere,
+        select: { championId: true, countWin: true, countGame: true },
+      }),
+      prisma.championCoreStat.findMany({
+        where: sinceWhere,
+        select: { championId: true, countWin: true, countGame: true },
+      }),
+    ])
+
+    const aggByChamp = (rows: typeof oldestRows) => {
+      const m = new Map<number, { wins: number; games: number }>()
+      for (const r of rows) {
+        let e = m.get(r.championId)
+        if (!e) { e = { wins: 0, games: 0 }; m.set(r.championId, e) }
+        e.wins += r.countWin; e.games += r.countGame
+      }
+      return m
     }
+
+    const oldestMap = aggByChamp(oldestRows)
+    const sinceMap = aggByChamp(sinceRows)
+    const oldestTotalGames = Array.from(oldestMap.values()).reduce((s, e) => s + e.games, 0)
+    const sinceTotalGames = Array.from(sinceMap.values()).reduce((s, e) => s + e.games, 0)
+
+    const champions: OverviewProgressionFullStats['champions'] = []
+    for (const [cid, oldEntry] of oldestMap.entries()) {
+      if (oldEntry.games < 20) continue
+      const sinceEntry = sinceMap.get(cid)
+      if (!sinceEntry || sinceEntry.games < 20) continue
+      champions.push({
+        championId: cid,
+        wrOldest: Math.round((oldEntry.wins / oldEntry.games) * 10000) / 100,
+        wrSince: Math.round((sinceEntry.wins / sinceEntry.games) * 10000) / 100,
+        deltaWr: Math.round(((sinceEntry.wins / sinceEntry.games) - (oldEntry.wins / oldEntry.games)) * 10000) / 100,
+        pickrateOldest: oldestTotalGames > 0 ? Math.round((oldEntry.games / oldestTotalGames) * 10000) / 100 : 0,
+        pickrateSince: sinceTotalGames > 0 ? Math.round((sinceEntry.games / sinceTotalGames) * 10000) / 100 : 0,
+        deltaPick: sinceTotalGames > 0 && oldestTotalGames > 0
+          ? Math.round(((sinceEntry.games / sinceTotalGames) - (oldEntry.games / oldestTotalGames)) * 10000) / 100
+          : 0,
+      })
+    }
+
+    const result: OverviewProgressionFullStats = { oldestVersion: versionOldest, champions }
     overviewProgressionFullCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result
   } catch (err) {
@@ -592,199 +970,39 @@ export async function getOverviewProgressionFullStats(
   }
 }
 
-export async function getOverviewTeamsStats(
-  version?: string | null,
-  rankTier?: string | null
-): Promise<OverviewTeamsStats | null> {
+// ── getOverviewMeta ──────────────────────────────────────────────────────────
+
+export async function getOverviewMeta(
+  _version?: string | string[] | null,
+  _rankTier?: string | string[] | null
+): Promise<{ lastUpdate: string | null; playerCount: number } | null> {
   if (!isDatabaseConfigured()) return null
-  const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-  const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
-  const cached = overviewTeamsCache.get(cacheKey)
-  if (cached && cached.expiresAt > now) return cached.data
   try {
-    const rows = await prisma.$queryRaw<OverviewTeamsRow>(
-      Prisma.sql`SELECT get_stats_overview_teams(${pVersion}, ${pRankTier}) AS get_stats_overview_teams`
+    const playerCountResult = await prisma.$queryRaw<[{ cnt: bigint }]>(
+      Prisma.sql`SELECT COUNT(DISTINCT player_id) AS cnt FROM match_players`
     )
-    const raw = rows[0]?.get_stats_overview_teams ?? null
-    if (!raw) return null
-
-    const mapBan = (b: { championId: number; count: number }) => ({
-      championId: Number(b.championId),
-      count: Number(b.count),
-    })
-    const addBanRate = (
-      list: Array<{ championId: number; count: number }>,
-      total: number
-    ): Array<{ championId: number; count: number; banRatePercent: string }> =>
-      list.map((b) => ({
-        ...b,
-        banRatePercent:
-          total > 0 ? (Math.round((b.count / total) * 1000) / 10).toFixed(1) + '%' : '—',
-      }))
-    const byWinRaw = Array.isArray(raw.bans?.byWin) ? raw.bans.byWin.map(mapBan) : []
-    const byLossRaw = Array.isArray(raw.bans?.byLoss) ? raw.bans.byLoss.map(mapBan) : []
-    const totalBansByWin = byWinRaw.reduce((acc, b) => acc + b.count, 0)
-    const totalBansByLoss = byLossRaw.reduce((acc, b) => acc + b.count, 0)
-    const byChamp = new Map<number, number>()
-    for (const b of byWinRaw) byChamp.set(b.championId, (byChamp.get(b.championId) ?? 0) + b.count)
-    for (const b of byLossRaw) byChamp.set(b.championId, (byChamp.get(b.championId) ?? 0) + b.count)
-    const totalBansAll = Array.from(byChamp.values()).reduce((a, n) => a + n, 0)
-    const top20Total = Array.from(byChamp.entries())
-      .map(([championId, count]) => ({
-        championId,
-        count,
-        banRatePercent:
-          totalBansAll > 0 ? (Math.round((count / totalBansAll) * 1000) / 10).toFixed(1) + '%' : '—',
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 20)
-    const objWithKills = (o: Record<string, unknown>): ObjectiveWithDistribution => {
-      const distWin = (o?.distributionByWin as Record<string, number>) ?? {}
-      const distLoss = (o?.distributionByLoss as Record<string, number>) ?? {}
-      const distWinNum: Record<string, number> = {}
-      const distLossNum: Record<string, number> = {}
-      for (const k of Object.keys(distWin)) distWinNum[k] = Number(distWin[k])
-      for (const k of Object.keys(distLoss)) distLossNum[k] = Number(distLoss[k])
-      return {
-        firstByWin: Number(o?.firstByWin ?? 0),
-        firstByLoss: Number(o?.firstByLoss ?? 0),
-        killsByWin: Number(o?.killsByWin ?? 0),
-        killsByLoss: Number(o?.killsByLoss ?? 0),
-        distributionByWin: distWinNum,
-        distributionByLoss: distLossNum,
-      }
-    }
-    const objFirstOnly = (o: Record<string, number>) => ({
-      firstByWin: Number(o?.firstByWin ?? 0),
-      firstByLoss: Number(o?.firstByLoss ?? 0),
-    })
-
-    const result: OverviewTeamsStats = {
-      matchCount: Number(raw.matchCount) ?? 0,
-      bans: {
-        byWin: addBanRate(byWinRaw, totalBansByWin),
-        byLoss: addBanRate(byLossRaw, totalBansByLoss),
-        top20Total,
-      },
-      objectives: {
-        firstBlood: objFirstOnly((raw.objectives?.firstBlood as Record<string, number>) ?? {}),
-        baron: objWithKills((raw.objectives?.baron ?? {}) as unknown as Record<string, unknown>),
-        dragon: objWithKills((raw.objectives?.dragon ?? {}) as unknown as Record<string, unknown>),
-        tower: objWithKills((raw.objectives?.tower ?? {}) as unknown as Record<string, unknown>),
-        inhibitor: objWithKills((raw.objectives?.inhibitor ?? {}) as unknown as Record<string, unknown>),
-        riftHerald: objWithKills((raw.objectives?.riftHerald ?? {}) as unknown as Record<string, unknown>),
-        horde: objWithKills((raw.objectives?.horde ?? {}) as unknown as Record<string, unknown>),
-      },
-    }
-    overviewTeamsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
-    return result
+    const playerCount = Number(playerCountResult[0]?.cnt ?? 0)
+    return { lastUpdate: null, playerCount }
   } catch (err) {
-    console.error('[getOverviewTeamsStats]', err)
+    console.error('[getOverviewMeta]', err)
     return null
   }
 }
 
-/** Normalize version/rankTier to non-empty string array (for multi-select). */
-function toParamArray(value: string | string[] | null | undefined): string[] {
-  if (value == null) return []
-  if (Array.isArray(value)) {
-    return value.filter((s): s is string => typeof s === 'string' && s !== '' && !s.startsWith('['))
-  }
-  if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
-  return []
-}
+// ── getOverviewSidesStats ────────────────────────────────────────────────────
 
-/** Build SQL condition for version + rank; supports multiple versions and rank tiers (OR within each). */
-function buildMatchCond(
-  pVersion: string | string[] | null | undefined,
-  pRankTier: string | string[] | null | undefined
+function buildRawMatchCond(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
 ): string {
-  const esc = (s: string) => String(s).replace(/'/g, "''")
-  const versions = toParamArray(pVersion)
-  const rankTiers = toParamArray(pRankTier)
-  const versionCond =
-    versions.length === 0
-      ? '1=1'
-      : `(${versions.map((v) => `m.game_version IS NOT NULL AND m.game_version LIKE '${esc(v)}.%'`).join(' OR ')})`
-  const rankCond =
-    rankTiers.length === 0
-      ? '1=1'
-      : `(${rankTiers
-          .map(
-            (r) =>
-              `m.rank IS NOT NULL AND m.rank != '' AND UPPER(TRIM(split_part(m.rank, '_', 1))) = UPPER(TRIM('${esc(r)}'))`
-          )
-          .join(' OR ')})`
-  return `${versionCond} AND ${rankCond}`
-}
-
-/** Side = Blue (100) vs Red (200). */
-export interface OverviewSidesStats {
-  matchCount: number
-  sideWinrate: {
-    blue: { matches: number; wins: number; winrate: number }
-    red: { matches: number; wins: number; winrate: number }
-  }
-  championWinrateBySide: {
-    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
-    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
-  }
-  /** Top 20 by games (most played) per side. */
-  championPickBySide: {
-    blue: Array<{ championId: number; games: number; wins: number; winrate: number }>
-    red: Array<{ championId: number; games: number; wins: number; winrate: number }>
-  }
-  objectivesBySide: {
-    blue: ObjectiveCountsBySide
-    red: ObjectiveCountsBySide
-  }
-  /** Same shape as overview teams objectives: first + distribution for table (Blue/Red columns). */
-  objectivesBySideTable: {
-    firstBlood: { firstByBlue: number; firstByRed: number }
-    baron: ObjectiveSideWithDistribution
-    dragon: ObjectiveSideWithDistribution
-    tower: ObjectiveSideWithDistribution
-    inhibitor: ObjectiveSideWithDistribution
-    riftHerald: ObjectiveSideWithDistribution
-    horde: ObjectiveSideWithDistribution
-  }
-  bansBySide: {
-    blue: Array<{ championId: number; count: number }>
-    red: Array<{ championId: number; count: number }>
-  }
-}
-
-export interface ObjectiveSideWithDistribution {
-  firstByBlue: number
-  firstByRed: number
-  killsByBlue: number
-  killsByRed: number
-  distributionByBlue: Record<string, number>
-  distributionByRed: Record<string, number>
-}
-
-export interface ObjectiveCountsBySide {
-  firstBlood: number
-  baronFirst: number
-  baronKills: number
-  dragonFirst: number
-  dragonKills: number
-  towerFirst: number
-  towerKills: number
-  inhibitorFirst: number
-  inhibitorKills: number
-  riftHeraldFirst: number
-  riftHeraldKills: number
-  hordeFirst: number
-  hordeKills: number
-}
-
-function sidesCacheKey(version: string | string[] | null | undefined, rankTier: string | string[] | null | undefined): string {
-  const v = toParamArray(version).join(',')
-  const r = toParamArray(rankTier).join(',')
-  return `${v}|${r}`
+  const parts: string[] = []
+  const versions = toParamArray(version)
+  const ranks = toParamArray(rankTier)
+  if (versions.length === 1) parts.push(`m.game_version LIKE '${versions[0]}%'`)
+  else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v}'`).join(',')})`)
+  if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
+  else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map(r => `'${r}'`).join(',')})`)
+  return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 
 export async function getOverviewSidesStats(
@@ -796,25 +1014,24 @@ export async function getOverviewSidesStats(
   const cacheKey = sidesCacheKey(version, rankTier)
   const cached = overviewSidesCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
-  const matchCond = buildMatchCond(version, rankTier)
+  const matchCond = buildRawMatchCond(version, rankTier)
 
   try {
-    // 1) Side winrate: from participants with team_id 100/200
+    // Side winrate: teams table uses team=100 or team=200
     const sideWinrateSql = `
-      SELECT p.team_id AS team_id,
-             COUNT(DISTINCT p.match_id)::int AS matches,
-             COUNT(DISTINCT CASE WHEN mt.win THEN p.match_id END)::int AS wins
-      FROM participants p
-      INNER JOIN matches m ON m.id = p.match_id
-      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
-      WHERE ${matchCond} AND p.team_id IN (100, 200)
-      GROUP BY p.team_id
+      SELECT t.team AS team_id,
+             COUNT(DISTINCT t.match_id)::int AS matches,
+             COUNT(DISTINCT CASE WHEN t.win THEN t.match_id END)::int AS wins
+      FROM teams t
+      INNER JOIN matchs m ON m.id = t.match_id
+      WHERE ${matchCond} AND t.team IN (100, 200)
+      GROUP BY t.team
     `
     const sideRows = await prisma.$queryRawUnsafe<
       Array<{ team_id: number; matches: number; wins: number }>
     >(sideWinrateSql)
-    const blueRow = sideRows.find((r) => r.team_id === 100)
-    const redRow = sideRows.find((r) => r.team_id === 200)
+    const blueRow = sideRows.find((r) => Number(r.team_id) === 100)
+    const redRow = sideRows.find((r) => Number(r.team_id) === 200)
     const toSide = (r: { matches: number; wins: number } | undefined) => {
       const matches = r ? Number(r.matches) : 0
       const wins = r ? Number(r.wins) : 0
@@ -826,23 +1043,23 @@ export async function getOverviewSidesStats(
     }
     const totalMatchCount = (blueRow ? Number(blueRow.matches) : 0) + (redRow ? Number(redRow.matches) : 0)
 
-    // 2) Champion winrate by side (top 20 each)
+    // Champion winrate by side
     const champBySideSql = `
-      SELECT p.team_id AS team_id, p.champion_id AS champion_id,
+      SELECT t.team AS team_id, mp.champion_id,
              COUNT(*)::int AS games,
-             SUM(CASE WHEN mt.win THEN 1 ELSE 0 END)::int AS wins
-      FROM participants p
-      INNER JOIN matches m ON m.id = p.match_id
-      INNER JOIN match_teams mt ON mt.match_id = p.match_id AND mt.team_id = p.team_id
-      WHERE ${matchCond} AND p.team_id IN (100, 200)
-      GROUP BY p.team_id, p.champion_id
+             SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
+      FROM match_players mp
+      INNER JOIN teams t ON t.id = mp.team_id
+      INNER JOIN matchs m ON m.id = mp.match_id
+      WHERE ${matchCond} AND t.team IN (100, 200)
+      GROUP BY t.team, mp.champion_id
       HAVING COUNT(*) >= 10
     `
     const champRows = await prisma.$queryRawUnsafe<
       Array<{ team_id: number; champion_id: number; games: number; wins: number }>
     >(champBySideSql)
-    const blueChamps = champRows
-      .filter((r) => r.team_id === 100)
+    const champsByBlue = champRows
+      .filter((r) => Number(r.team_id) === 100)
       .map((r) => ({
         championId: Number(r.champion_id),
         games: Number(r.games),
@@ -851,8 +1068,8 @@ export async function getOverviewSidesStats(
       }))
       .sort((a, b) => b.winrate - a.winrate)
       .slice(0, 20)
-    const redChamps = champRows
-      .filter((r) => r.team_id === 200)
+    const champsByRed = champRows
+      .filter((r) => Number(r.team_id) === 200)
       .map((r) => ({
         championId: Number(r.champion_id),
         games: Number(r.games),
@@ -862,228 +1079,45 @@ export async function getOverviewSidesStats(
       .sort((a, b) => b.winrate - a.winrate)
       .slice(0, 20)
 
-    // 2b) Most played by side (top 20 by games)
-    const bluePick = champRows
-      .filter((r) => r.team_id === 100)
-      .map((r) => ({
-        championId: Number(r.champion_id),
-        games: Number(r.games),
-        wins: Number(r.wins),
-        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.games - a.games)
-      .slice(0, 20)
-    const redPick = champRows
-      .filter((r) => r.team_id === 200)
-      .map((r) => ({
-        championId: Number(r.champion_id),
-        games: Number(r.games),
-        wins: Number(r.wins),
-        winrate: Number(r.games) > 0 ? Math.round((Number(r.wins) / Number(r.games)) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.games - a.games)
-      .slice(0, 20)
-
-    // 3) Objectives by side: *_kills from match_teams, *_first from match_team_first_objectives
+    // Objectives by side from teams table
     const objBySideSql = `
-      SELECT
-        mt.team_id,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'champion') THEN 1 ELSE 0 END)::int AS first_blood,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'baron') THEN 1 ELSE 0 END)::int AS baron_first,
-        SUM(mt.baron_kills)::int AS baron_kills,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'dragon') THEN 1 ELSE 0 END)::int AS dragon_first,
-        SUM(mt.dragon_kills)::int AS dragon_kills,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'tower') THEN 1 ELSE 0 END)::int AS tower_first,
-        SUM(mt.tower_kills)::int AS tower_kills,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'inhibitor') THEN 1 ELSE 0 END)::int AS inhibitor_first,
-        SUM(mt.inhibitor_kills)::int AS inhibitor_kills,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'rift_herald') THEN 1 ELSE 0 END)::int AS rift_herald_first,
-        SUM(mt.rift_herald_kills)::int AS rift_herald_kills,
-        SUM(CASE WHEN EXISTS (SELECT 1 FROM match_team_first_objectives o WHERE o.match_team_id = mt.id AND o.objective_type = 'horde') THEN 1 ELSE 0 END)::int AS horde_first,
-        SUM(mt.horde_kills)::int AS horde_kills
-      FROM match_teams mt
-      INNER JOIN matches m ON m.id = mt.match_id
-      WHERE mt.team_id IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
-      GROUP BY mt.team_id
+      SELECT t.team AS team_id,
+        SUM(t.baron_kills)::int AS baron, SUM(t.dragon_kills)::int AS dragon,
+        SUM(t.tower_kills)::int AS tower, SUM(t.rift_herald_kills)::int AS rift_herald,
+        SUM(t.inhibitor_kills)::int AS inhibitor, SUM(t.horde_kills)::int AS horde,
+        SUM(CASE WHEN t.first_blood THEN 1 ELSE 0 END)::int AS first_blood
+      FROM teams t
+      INNER JOIN matchs m ON m.id = t.match_id
+      WHERE ${matchCond} AND t.team IN (100, 200)
+      GROUP BY t.team
     `
     const objRows = await prisma.$queryRawUnsafe<
-      Array<{
-        team_id: number
-        first_blood: number
-        baron_first: number
-        baron_kills: number
-        dragon_first: number
-        dragon_kills: number
-        tower_first: number
-        tower_kills: number
-        inhibitor_first: number
-        inhibitor_kills: number
-        rift_herald_first: number
-        rift_herald_kills: number
-        horde_first: number
-        horde_kills: number
-      }>
+      Array<{ team_id: number; baron: number; dragon: number; tower: number; rift_herald: number; inhibitor: number; horde: number; first_blood: number }>
     >(objBySideSql)
-
-    const toObj = (r: (typeof objRows)[0] | undefined): ObjectiveCountsBySide => ({
-      firstBlood: r ? Number(r.first_blood) : 0,
-      baronFirst: r ? Number(r.baron_first) : 0,
-      baronKills: r ? Number(r.baron_kills) : 0,
-      dragonFirst: r ? Number(r.dragon_first) : 0,
-      dragonKills: r ? Number(r.dragon_kills) : 0,
-      towerFirst: r ? Number(r.tower_first) : 0,
-      towerKills: r ? Number(r.tower_kills) : 0,
-      inhibitorFirst: r ? Number(r.inhibitor_first) : 0,
-      inhibitorKills: r ? Number(r.inhibitor_kills) : 0,
-      riftHeraldFirst: r ? Number(r.rift_herald_first) : 0,
-      riftHeraldKills: r ? Number(r.rift_herald_kills) : 0,
-      hordeFirst: r ? Number(r.horde_first) : 0,
-      hordeKills: r ? Number(r.horde_kills) : 0,
+    const toObjSide = (r: typeof objRows[0] | undefined): ObjectiveSideWithDistribution => ({
+      baron: { count: r ? Number(r.baron) : 0 },
+      dragon: { count: r ? Number(r.dragon) : 0 },
+      tower: { count: r ? Number(r.tower) : 0 },
+      riftHerald: { count: r ? Number(r.rift_herald) : 0 },
+      inhibitor: { count: r ? Number(r.inhibitor) : 0 },
+      horde: { count: r ? Number(r.horde) : 0 },
+      firstBlood: { count: r ? Number(r.first_blood) : 0 },
     })
-    const blueObj = toObj(objRows.find((r) => r.team_id === 100))
-    const redObj = toObj(objRows.find((r) => r.team_id === 200))
-
-    // 3b) Distribution per objective (per-team kill count -> match count) for table
-    const distSql = `
-      SELECT mt.team_id,
-             mt.baron_kills,
-             mt.dragon_kills,
-             mt.tower_kills,
-             mt.inhibitor_kills,
-             mt.rift_herald_kills,
-             mt.horde_kills
-      FROM match_teams mt
-      INNER JOIN matches m ON m.id = mt.match_id
-      WHERE mt.team_id IN (100, 200) AND ${matchCond.replace(/^m\./g, 'm.')}
-    `
-    const distRows = await prisma.$queryRawUnsafe<
-      Array<{
-        team_id: number
-        baron_kills: number
-        dragon_kills: number
-        tower_kills: number
-        inhibitor_kills: number
-        rift_herald_kills: number
-        horde_kills: number
-      }>
-    >(distSql)
-    const objKeys = ['baron', 'dragon', 'tower', 'inhibitor', 'riftHerald', 'horde'] as const
-    const killKeys = [
-      'baron_kills',
-      'dragon_kills',
-      'tower_kills',
-      'inhibitor_kills',
-      'rift_herald_kills',
-      'horde_kills',
-    ] as const
-    const buildDist = (teamId: 100 | 200) => {
-      const rows = distRows.filter((r) => r.team_id === teamId)
-      const out: Record<string, Record<string, number>> = {}
-      for (let i = 0; i < objKeys.length; i++) {
-        const key = objKeys[i]
-        const col = killKeys[i]
-        const counts: Record<string, number> = {}
-        for (const row of rows) {
-          const k = String((row as Record<string, number>)[col] ?? 0)
-          counts[k] = (counts[k] ?? 0) + 1
-        }
-        out[key] = counts
-      }
-      return out
-    }
-    const distBlue = buildDist(100)
-    const distRed = buildDist(200)
-    const objectivesBySideTable = {
-      firstBlood: {
-        firstByBlue: blueObj.firstBlood,
-        firstByRed: redObj.firstBlood,
-      },
-      baron: {
-        firstByBlue: blueObj.baronFirst,
-        firstByRed: redObj.baronFirst,
-        killsByBlue: blueObj.baronKills,
-        killsByRed: redObj.baronKills,
-        distributionByBlue: distBlue.baron ?? {},
-        distributionByRed: distRed.baron ?? {},
-      },
-      dragon: {
-        firstByBlue: blueObj.dragonFirst,
-        firstByRed: redObj.dragonFirst,
-        killsByBlue: blueObj.dragonKills,
-        killsByRed: redObj.dragonKills,
-        distributionByBlue: distBlue.dragon ?? {},
-        distributionByRed: distRed.dragon ?? {},
-      },
-      tower: {
-        firstByBlue: blueObj.towerFirst,
-        firstByRed: redObj.towerFirst,
-        killsByBlue: blueObj.towerKills,
-        killsByRed: redObj.towerKills,
-        distributionByBlue: distBlue.tower ?? {},
-        distributionByRed: distRed.tower ?? {},
-      },
-      inhibitor: {
-        firstByBlue: blueObj.inhibitorFirst,
-        firstByRed: redObj.inhibitorFirst,
-        killsByBlue: blueObj.inhibitorKills,
-        killsByRed: redObj.inhibitorKills,
-        distributionByBlue: distBlue.inhibitor ?? {},
-        distributionByRed: distRed.inhibitor ?? {},
-      },
-      riftHerald: {
-        firstByBlue: blueObj.riftHeraldFirst,
-        firstByRed: redObj.riftHeraldFirst,
-        killsByBlue: blueObj.riftHeraldKills,
-        killsByRed: redObj.riftHeraldKills,
-        distributionByBlue: distBlue.riftHerald ?? {},
-        distributionByRed: distRed.riftHerald ?? {},
-      },
-      horde: {
-        firstByBlue: blueObj.hordeFirst,
-        firstByRed: redObj.hordeFirst,
-        killsByBlue: blueObj.hordeKills,
-        killsByRed: redObj.hordeKills,
-        distributionByBlue: distBlue.horde ?? {},
-        distributionByRed: distRed.horde ?? {},
-      },
-    }
-
-    // 4) Bans by side from the normalised bans table
-    const bansBySideSql = `
-      WITH ban_rows AS (
-        SELECT mt.team_id, b.champion_id, COUNT(*)::int AS cnt
-        FROM match_teams mt
-        INNER JOIN matches m ON m.id = mt.match_id
-        INNER JOIN bans b ON b.match_team_id = mt.id
-        WHERE mt.team_id IN (100, 200)
-          AND ${matchCond}
-        GROUP BY mt.team_id, b.champion_id
-      )
-      SELECT team_id, champion_id, cnt FROM ban_rows ORDER BY team_id, cnt DESC
-    `
-    const banRows = await prisma.$queryRawUnsafe<
-      Array<{ team_id: number; champion_id: number; cnt: number }>
-    >(bansBySideSql)
-    const blueBans = banRows
-      .filter((r) => r.team_id === 100)
-      .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
-      .sort((a, b) => b.count - a.count)
-    const redBans = banRows
-      .filter((r) => r.team_id === 200)
-      .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
-      .sort((a, b) => b.count - a.count)
+    const blueObjRow = objRows.find((r) => Number(r.team_id) === 100)
+    const redObjRow = objRows.find((r) => Number(r.team_id) === 200)
 
     const result: OverviewSidesStats = {
-      matchCount: totalMatchCount,
-      sideWinrate: {
-        blue: toSide(blueRow),
-        red: toSide(redRow),
+      blue: toSide(blueRow),
+      red: toSide(redRow),
+      totalMatches: Math.round(totalMatchCount / 2),
+      champsByBlue,
+      champsByRed,
+      topObjectivesBlue: toObjSide(blueObjRow),
+      topObjectivesRed: toObjSide(redObjRow),
+      objectiveCountsBySide: {
+        blue: toObjSide(blueObjRow),
+        red: toObjSide(redObjRow),
       },
-      championWinrateBySide: { blue: blueChamps, red: redChamps },
-      championPickBySide: { blue: bluePick, red: redPick },
-      objectivesBySide: { blue: blueObj, red: redObj },
-      objectivesBySideTable,
-      bansBySide: { blue: blueBans, red: redBans },
     }
     overviewSidesCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
     return result

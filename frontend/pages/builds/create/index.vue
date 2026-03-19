@@ -6,10 +6,8 @@ const localePath = useLocalePath()
 const buildStore = useBuildStore()
 
 onMounted(() => {
-  if (!buildStore.currentBuild) {
-    buildStore.createNewBuild()
-  }
-  router.replace(localePath('/builds/create/champion'))
+  buildStore.ensureCurrentBuild()
+  router.replace(localePath(`/builds/create/${buildStore.getLastBuilderStep()}`))
 })
 </script>
 

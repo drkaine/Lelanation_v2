@@ -8,9 +8,20 @@
     "language": "Language"
   },
   "home": {
-    "subtitle": "The go-to platform to create, optimize and share your League of Legends builds",
+    "subtitle": "The go-to platform to create, optimize and share your League of Legends builds. The platform to help you think, create, analyze, organize, learn, or simply explore an idea.",
     "features": "Features",
     "quickActions": "Quick actions",
+    "links": {
+      "discord": "Discord",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "patreon": "Patreon",
+      "youtube": "YouTube",
+      "twitch": "Twitch",
+      "twitter": "Twitter",
+      "tiktok": "TikTok",
+      "website": "Website"
+    },
     "ctaTitle": "Ready to create your first build?",
     "ctaText": "Join the Lelanation community and share your best setups",
     "ctaButton": "Get started"
@@ -25,6 +36,31 @@
     "accept": "Accept",
     "reject": "Reject",
     "learnMore": "Learn more"
+  },
+  "buildsPage": {
+    "visibility": "Visibility:",
+    "all": "All",
+    "private": "Private",
+    "public": "Public"
+  },
+  "buildDiscovery": {
+    "searchPlaceholder": "Search builds by champion or author..."
+  },
+  "createBuild": {
+    "validationState": "Validation state:",
+    "validationChampion": "Champion:",
+    "validationItems": "Items:",
+    "validationRunesPrimary": "Runes (Primary):",
+    "validationRunesSecondary": "Runes (Secondary):",
+    "validationSummonerSpells": "Summoner Spells:",
+    "validationSkillOrder": "Skill order:",
+    "validationSkillOrderSummary": "first 3 + order",
+    "validationSkillOrderSummaryWithHint": "first 3 + order, click the spell slots in the build"
+  },
+  "videosPage": {
+    "loading": "Loading…",
+    "noCreatorsTitle": "No creator configured",
+    "noCreatorsText": "Ask an admin to add channels."
   }
 }
 

@@ -1,0 +1,868 @@
+// Prisma schema for DB "lelanation" — raw match/player data + aggregate stats tables.
+// Datasource: DATABASE_URL_LELANATION. Do not use the main app DATABASE_URL.
+// See plan: nouvelle_db_lelanation_prisma2.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma2"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_LELANATION")
+}
+
+// ─── Raw tables (plan §1 / new-tables) ───────────────────────────────────────
+
+model Player {
+  id              BigInt    @id @default(autoincrement())
+  puuid           String    @unique
+  gameName        String?   @map("game_name")
+  tagName         String?   @map("tag_name")
+  region          String
+  puuidKeyVersion String?   @map("puuid_key_version") // dev | persos | prod
+  lastSeen        DateTime? @map("last_seen")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  matchPlayers MatchPlayer[]
+
+  @@index([region])
+  @@index([lastSeen])
+  @@map("players")
+}
+
+model Match {
+  id                        BigInt   @id @default(autoincrement())
+  riotMatchId               String   @unique @map("riot_match_id")
+  gameVersion               String   @map("game_version")
+  gameDuration              Int      @map("game_duration")
+  rankTier                  String   @map("rank_tier")
+  rankDivision              String   @map("rank_division")
+  gameEndedInSurrender      Boolean  @default(false) @map("game_ended_in_surrender")
+  gameEndedInEarlySurrender Boolean  @default(false) @map("game_ended_in_early_surrender")
+  region                    String
+
+  teams        Team[]
+  drakeDetails DrakeDetail[]
+  matchPlayers MatchPlayer[]
+
+  @@index([gameVersion])
+  @@index([rankTier])
+  @@index([region])
+  @@index([gameVersion, region, rankTier])
+  @@map("matchs")
+}
+
+model Team {
+  id                   BigInt   @id @default(autoincrement())
+  matchId              BigInt   @map("match_id")
+  team                 Int      // 100 | 200
+  win                  Boolean
+  teamEarlySurrendered Boolean  @default(false) @map("team_early_surrendered")
+  baronKills           Int      @default(0) @map("baron_kills")
+  baronFirst           Boolean  @default(false) @map("baron_first")
+  dragonKills          Int      @default(0) @map("dragon_kills")
+  dragonFirst          Boolean  @default(false) @map("dragon_first")
+  towerKills           Int      @default(0) @map("tower_kills")
+  towerFirst           Boolean  @default(false) @map("tower_first")
+  hordeKills           Int      @default(0) @map("horde_kills")
+  hordeFirst           Boolean  @default(false) @map("horde_first")
+  riftHeraldKills      Int      @default(0) @map("rift_herald_kills")
+  riftHeraldFirst      Boolean  @default(false) @map("rift_herald_first")
+  inhibitorKills        Int      @default(0) @map("inhibitor_kills")
+  championKills         Int      @default(0) @map("champion_kills")
+  firstBlood            Boolean  @default(false) @map("first_blood")
+  elderKills            Int      @default(0) @map("elder_kills")
+
+  match    Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  bans     Ban[]
+  drakeDetails DrakeDetail[]
+  matchPlayers MatchPlayer[]
+
+  @@unique([matchId, team])
+  @@index([matchId])
+  @@map("teams")
+}
+
+model Ban {
+  id         BigInt @id @default(autoincrement())
+  teamId     BigInt @map("team_id")
+  matchId    BigInt @map("match_id")
+  championId Int    @map("champion_id")
+  pickOrder  Int    @map("pick_order") // 1-5
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([matchId])
+  @@index([championId])
+  @@map("bans")
+}
+
+model DrakeDetail {
+  id        BigInt @id @default(autoincrement())
+  matchId   BigInt @map("match_id")
+  teamId    BigInt @map("team_id")
+  drakeType String @map("drake_type") // earth, water, wind, fire, hextech, chemtech, elder
+  order     Int    @map("order")
+  soul      String
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team  Team  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([teamId])
+  @@map("drake_details")
+}
+
+model MatchPlayer {
+  id             BigInt  @id @default(autoincrement())
+  matchId        BigInt  @map("match_id")
+  playerId       BigInt  @map("player_id")
+  teamId         BigInt  @map("team_id")
+  championId     Int     @map("champion_id")
+  role           String  // TOP, JUNGLE, MID, ADC, SUPPORT
+  rankTier       String  @default("UNRANKED") @map("rank_tier")
+  rankDivision   String? @map("rank_division")
+  rankLp         Int?    @map("rank_lp")
+  participantId  Int     @map("participant_id")
+
+  match   Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player  Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team    Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  core    MatchPlayerCore?
+  visions MatchPlayerVisions?
+  matchup MatchPlayerMatchup?
+  objectives MatchPlayerObjectives?
+  combats MatchPlayerCombats?
+  challenges MatchPlayerChallenges?
+  items   MatchPlayerItem[]
+  runes   MatchPlayerRune[]
+  summonerSpells MatchPlayerSummonerSpell[]
+  shards  MatchPlayerShard[]
+  spellOrders MatchPlayerSpellOrder[]
+  buckets MatchPlayerBucket[]
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([championId])
+  @@index([championId, role, rankTier])
+  @@map("match_players")
+}
+
+model MatchPlayerCore {
+  matchPlayerId       BigInt @id @map("match_player_id")
+  kills               Int    @default(0)
+  deaths              Int    @default(0)
+  assists             Int    @default(0)
+  champLevel          Int    @default(0) @map("champ_level")
+  champExperience     Int    @default(0) @map("champ_experience")
+  goldEarned          Int    @default(0) @map("gold_earned")
+  goldSpent           Int    @default(0) @map("gold_spent")
+  itemsPurchased      Int    @default(0) @map("items_purchased")
+  consumablesPurchased Int   @default(0) @map("consumables_purchased")
+  totalMinionsKilled  Int    @default(0) @map("total_minions_killed")
+  roleBoundItem       Int    @default(0) @map("role_bound_item")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_core")
+}
+
+model MatchPlayerVisions {
+  matchPlayerId                    BigInt @id @map("match_player_id")
+  detectorWardsPlaced              Int    @default(0) @map("detector_wards_placed")
+  visionScore                       Int    @default(0) @map("vision_score")
+  visionWardsBoughtInGame           Int    @default(0) @map("vision_wards_bought_in_game")
+  wardsKilled                       Int    @default(0) @map("wards_killed")
+  wardsPlaced                       Int    @default(0) @map("wards_placed")
+  controlWardsPlaced                Int    @default(0) @map("control_wards_placed")
+  unseenRecalls                     Int    @default(0) @map("unseen_recalls")
+  visionScoreAdvantageLaneOpponent   Int    @default(0) @map("vision_score_advantage_lane_opponent")
+  wardTakedowns                     Int    @default(0) @map("ward_takedowns")
+  wardTakedownsBefore20M            Int    @default(0) @map("ward_takedowns_before_20_m")
+  wardsGuarded                      Int    @default(0) @map("wards_guarded")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_visions")
+}
+
+model MatchPlayerMatchup {
+  matchPlayerId                            BigInt @id @map("match_player_id")
+  bountyGold                               Int    @default(0) @map("bounty_gold")
+  completeSupportQuestInTime               Int    @default(0) @map("complete_support_quest_in_time")
+  deathsByEnemyChamps                      Int    @default(0) @map("deaths_by_enemy_champs")
+  earlyLaningPhaseGoldExpAdvantage         Int    @default(0) @map("early_laning_phase_gold_exp_advantage")
+  initialCrabCount                         Int    @default(0) @map("initial_crab_count")
+  jungleCsBefore10Minutes                  Int    @default(0) @map("jungle_cs_before_10_minutes")
+  killsNearEnemyTurret                     Int    @default(0) @map("kills_near_enemy_turret")
+  killsOnOtherLanesEarlyJungleAsLaner      Int    @default(0) @map("kills_on_other_lanes_early_jungle_as_laner")
+  killsUnderOwnTurret                      Int    @default(0) @map("kills_under_own_turret")
+  landSkillShotsEarlyGame                  Int    @default(0) @map("land_skill_shots_early_game")
+  laneMinionsFirst10Minutes                Int    @default(0) @map("lane_minions_first_10_minutes")
+  laningPhaseGoldExpAdvantage              Int    @default(0) @map("laning_phase_gold_exp_advantage")
+  maxCsAdvantageOnLaneOpponent             Int    @default(0) @map("max_cs_advantage_on_lane_opponent")
+  maxKillDeficit                           Int    @default(0) @map("max_kill_deficit")
+  maxLevelLeadLaneOpponent                  Int    @default(0) @map("max_level_lead_lane_opponent")
+  outnumberedKills                         Int    @default(0) @map("outnumbered_kills")
+  quickSoloKills                           Int    @default(0) @map("quick_solo_kills")
+  soloKills                                Int    @default(0) @map("solo_kills")
+  takedownsAfterGainingLevelAdvantage       Int    @default(0) @map("takedowns_after_gaining_level_advantage")
+  moreEnemyJungleThanOpponent              Int    @default(0) @map("more_enemy_jungle_than_opponent")
+  totalAllyJungleMinionsKilled             Int    @default(0) @map("total_ally_jungle_minions_killed")
+  totalEnemyJungleMinionsKilled            Int    @default(0) @map("total_enemy_jungle_minions_killed")
+  neutralMinionsKilled                     Int    @default(0) @map("neutral_minions_killed")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_matchup")
+}
+
+model MatchPlayerObjectives {
+  matchPlayerId                              BigInt @id @map("match_player_id")
+  dragonKills                                Int    @default(0) @map("dragon_kills")
+  firstBloodKill                             Boolean @default(false) @map("first_blood_kill")
+  firstBloodAssist                           Boolean @default(false) @map("first_blood_assist")
+  firstTowerKill                             Boolean @default(false) @map("first_tower_kill")
+  firstTowerAssist                           Boolean @default(false) @map("first_tower_assist")
+  inhibitorKills                              Int    @default(0) @map("inhibitor_kills")
+  inhibitorTakedowns                         Int    @default(0) @map("inhibitor_takedowns")
+  inhibitorsLost                             Int    @default(0) @map("inhibitors_lost")
+  objectivesStolen                            Int    @default(0) @map("objectives_stolen")
+  objectivesStolenAssists                     Int    @default(0) @map("objectives_stolen_assists")
+  turretKills                                Int    @default(0) @map("turret_kills")
+  turretTakedowns                            Int    @default(0) @map("turret_takedowns")
+  turretsLost                                Int    @default(0) @map("turrets_lost")
+  dragonTakedowns                            Int    @default(0) @map("dragon_takedowns")
+  earliestBaron                              Int    @default(0) @map("earliest_baron")
+  elderDragonKillsWithOpposingSoul            Int    @default(0) @map("elder_dragon_kills_with_opposing_soul")
+  elderDragonMultikills                      Int    @default(0) @map("elder_dragon_multikills")
+  epicMonsterKillsNearEnemyJungler            Int    @default(0) @map("epic_monster_kills_near_enemy_jungler")
+  epicMonsterKillsWithin30SecondsOfSpawn      Int    @default(0) @map("epic_monster_kills_within_30_seconds_of_spawn")
+  epicMonsterSteals                          Int    @default(0) @map("epic_monster_steals")
+  epicMonsterStolenWithoutSmite              Int    @default(0) @map("epic_monster_stolen_without_smite")
+  firstTurretKilledTime                      Int    @default(0) @map("first_turret_killed_time")
+  riftHeraldTakedowns                        Int    @default(0) @map("rift_herald_takedowns")
+  turretPlatesTaken                          Int    @default(0) @map("turret_plates_taken")
+  turretsTakenWithRiftHerald                  Int    @default(0) @map("turrets_taken_with_rift_herald")
+  baronTakedowns                             Int    @default(0) @map("baron_takedowns")
+  quickFirstTurret                           Int    @default(0) @map("quick_first_turret")
+  soloBaronKills                             Int    @default(0) @map("solo_baron_kills")
+  soloTurretsLategame                        Int    @default(0) @map("solo_turrets_lategame")
+  takedownOnFirstTurret                      Int    @default(0) @map("takedown_on_first_turret")
+  multiTurretRiftHeraldCount                 Int    @default(0) @map("multi_turret_rift_herald_count")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_objectives")
+}
+
+model MatchPlayerCombats {
+  matchPlayerId                     BigInt @id @map("match_player_id")
+  damageDealtToBuildings            Int    @default(0) @map("damage_dealt_to_buildings")
+  damageDealtToEpicMonsters         Int    @default(0) @map("damage_dealt_to_epic_monsters")
+  damageDealtToObjectives           Int    @default(0) @map("damage_dealt_to_objectives")
+  damageDealtToTurrets              Int    @default(0) @map("damage_dealt_to_turrets")
+  damageSelfMitigated               Int    @default(0) @map("damage_self_mitigated")
+  doubleKills                       Int    @default(0) @map("double_kills")
+  killingSprees                     Int    @default(0) @map("killing_sprees")
+  largestCriticalStrike             Int    @default(0) @map("largest_critical_strike")
+  largestKillingSpree               Int    @default(0) @map("largest_killing_spree")
+  longestTimeSpentLiving            Int    @default(0) @map("longest_time_spent_living")
+  magicDamageDealt                  Int    @default(0) @map("magic_damage_dealt")
+  magicDamageDealtToChampions       Int    @default(0) @map("magic_damage_dealt_to_champions")
+  magicDamageTaken                  Int    @default(0) @map("magic_damage_taken")
+  pentaKills                        Int    @default(0) @map("penta_kills")
+  physicalDamageDealt               Int    @default(0) @map("physical_damage_dealt")
+  physicalDamageDealtToChampions    Int    @default(0) @map("physical_damage_dealt_to_champions")
+  physicalDamageTaken              Int    @default(0) @map("physical_damage_taken")
+  quadraKills                       Int    @default(0) @map("quadra_kills")
+  totalDamageShieldedOnTeammates    Int    @default(0) @map("total_damage_shielded_on_teammates")
+  totalDamageTaken                  Int    @default(0) @map("total_damage_taken")
+  totalHeal                         Int    @default(0) @map("total_heal")
+  totalHealsOnTeammates             Int    @default(0) @map("total_heals_on_teammates")
+  totalTimeCcDealt                  Int    @default(0) @map("total_time_cc_dealt")
+  totalUnitsHealed                  Int    @default(0) @map("total_units_healed")
+  tripleKills                       Int    @default(0) @map("triple_kills")
+  trueDamageDealt                   Int    @default(0) @map("true_damage_dealt")
+  trueDamageDealtToChampions        Int    @default(0) @map("true_damage_dealt_to_champions")
+  trueDamageTaken                   Int    @default(0) @map("true_damage_taken")
+  effectiveHealAndShielding         Int    @default(0) @map("effective_heal_and_shielding")
+  timeCcingOthers                   Int    @default(0) @map("time_ccing_others")
+  enemyChampionImmobilizations      Int    @default(0) @map("enemy_champion_immobilizations")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_combats")
+}
+
+model MatchPlayerChallenges {
+  matchPlayerId                                BigInt @id @map("match_player_id")
+  healFromMapSources                           Int    @default(0) @map("heal_from_map_sources")
+  buffsStolen                                  Int    @default(0) @map("buffs_stolen")
+  dodgeSkillShotsSmallWindow                    Int    @default(0) @map("dodge_skill_shots_small_window")
+  hadOpenNexus                                 Int    @default(0) @map("had_open_nexus")
+  immobilizeAndKillWithAlly                     Int    @default(0) @map("immobilize_and_kill_with_ally")
+  junglerTakedownsNearDamagedEpicMonster        Int    @default(0) @map("jungler_takedowns_near_damaged_epic_monster")
+  killAfterHiddenWithAlly                       Int    @default(0) @map("kill_after_hidden_with_ally")
+  killedChampTookFullTeamDamageSurvived         Int    @default(0) @map("killed_champ_took_full_team_damage_survived")
+  killsWithHelpFromEpicMonster                  Int    @default(0) @map("kills_with_help_from_epic_monster")
+  knockEnemyIntoTeamAndKill                     Int    @default(0) @map("knock_enemy_into_team_and_kill")
+  mejaisFullStackInTime                         Int    @default(0) @map("mejais_full_stack_in_time")
+  multikillsAfterAggressiveFlash                Int    @default(0) @map("multikills_after_aggressive_flash")
+  quickCleanse                                  Int    @default(0) @map("quick_cleanse")
+  saveAllyFromDeath                             Int    @default(0) @map("save_ally_from_death")
+  scuttleCrabKills                              Int    @default(0) @map("scuttle_crab_kills")
+  skillshotsDodged                              Int    @default(0) @map("skillshots_dodged")
+  skillshotsHit                                 Int    @default(0) @map("skillshots_hit")
+  stealthWardsPlaced                            Int    @default(0) @map("stealth_wards_placed")
+  survivedSingleDigitHpCount                    Int    @default(0) @map("survived_single_digit_hp_count")
+  survivedThreeImmobilizesInFight              Int    @default(0) @map("survived_three_immobilizes_in_fight")
+  takedownsBeforeJungleMinionSpawn              Int    @default(0) @map("takedowns_before_jungle_minion_spawn")
+  takedownsInAlcove                             Int    @default(0) @map("takedowns_in_alcove")
+  takedownsInEnemyFountain                      Int    @default(0) @map("takedowns_in_enemy_fountain")
+  tookLargeDamageSurvived                       Int    @default(0) @map("took_large_damage_survived")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@map("match_player_challenges")
+}
+
+model MatchPlayerItem {
+  id            BigInt  @id @default(autoincrement())
+  matchPlayerId BigInt  @map("match_player_id")
+  itemId        Int     @map("item_id")
+  starter       Boolean @default(false)
+  core          Boolean @default(false)
+  order         Int     @map("order")
+  timestampMs   Int     @default(0) @map("timestamp_ms")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchPlayerId, itemId, order])
+  @@index([matchPlayerId])
+  @@index([itemId])
+  @@map("match_player_items")
+}
+
+model MatchPlayerRune {
+  id            BigInt @id @default(autoincrement())
+  matchPlayerId BigInt @map("match_player_id")
+  perkId        Int    @map("perk_id")
+  style         Int
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@index([matchPlayerId])
+  @@map("match_player_runes")
+}
+
+model MatchPlayerSummonerSpell {
+  id            BigInt @id @default(autoincrement())
+  matchPlayerId BigInt @map("match_player_id")
+  spellId       Int    @map("spell_id")
+  spellSlot     Int    @map("spell_slot") // 0 | 1
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchPlayerId, spellSlot])
+  @@index([matchPlayerId])
+  @@map("match_player_summoner_spells")
+}
+
+model MatchPlayerShard {
+  id            BigInt @id @default(autoincrement())
+  matchPlayerId BigInt @map("match_player_id")
+  shardId       Int    @map("shard_id")
+  slot          Int    // 0 | 1 | 2
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchPlayerId, slot])
+  @@index([matchPlayerId])
+  @@map("match_player_shards")
+}
+
+model MatchPlayerSpellOrder {
+  id            BigInt @id @default(autoincrement())
+  matchPlayerId BigInt @map("match_player_id")
+  spellSlot     Int    @map("spell_slot") // 1-4
+  order         Int    @map("order")
+  timestampMs   Int    @default(0) @map("timestamp_ms")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@index([matchPlayerId])
+  @@map("match_player_spell_orders")
+}
+
+model MatchPlayerBucket {
+  id                          BigInt @id @default(autoincrement())
+  matchPlayerId               BigInt @map("match_player_id")
+  durationBucket              Int    @map("duration_bucket")
+  currentGold                 Int    @default(0) @map("current_gold")
+  magicDamageDone             Int    @default(0) @map("magic_damage_done")
+  magicDamageDoneToChampion   Int    @default(0) @map("magic_damage_done_to_champion")
+  magicDamageTaken            Int    @default(0) @map("magic_damage_taken")
+  physicalDamageDone          Int    @default(0) @map("physical_damage_done")
+  physicalDamageDoneToChampion Int   @default(0) @map("physical_damage_done_to_champion")
+  physicalDamageTaken         Int    @default(0) @map("physical_damage_taken")
+  totalDamageDone             Int    @default(0) @map("total_damage_done")
+  totalDamageDoneToChampion   Int    @default(0) @map("total_damage_done_to_champion")
+  totalDamageTaken            Int    @default(0) @map("total_damage_taken")
+  trueDamageDone              Int    @default(0) @map("true_damage_done")
+  trueDamageDoneToChampion    Int    @default(0) @map("true_damage_done_to_champion")
+  trueDamageTaken             Int    @default(0) @map("true_damage_taken")
+  goldPerSecond               Int    @default(0) @map("gold_per_second")
+  jungleMinionsKilled         Int    @default(0) @map("jungle_minions_killed")
+  level                       Int    @default(0) @map("level")
+  minionsKilled               Int    @default(0) @map("minions_killed")
+  timeEnemySpentControlled    Int    @default(0) @map("time_enemy_spent_controlled")
+  totalGold                   Int    @default(0) @map("total_gold")
+  xp                          Int    @default(0) @map("xp")
+
+  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([matchPlayerId, durationBucket])
+  @@index([matchPlayerId])
+  @@map("match_player_bucket")
+}
+
+// ─── Aggregate tables (plan §2 + new-views) — filled by ingestion jobs, not by API ───
+
+model ChampionCoreStat {
+  id                              BigInt   @id @default(autoincrement())
+  championId                      Int      @map("champion_id")
+  rankTier                        String   @map("rank_tier")
+  rankDivision                    String?  @map("rank_division")
+  gameVersion                     String   @map("game_version")
+  role                            String   // TOP, JUNGLE, MID, ADC, SUPPORT
+  region                          String
+  countWin                        Int      @default(0) @map("count_win")
+  countGame                       Int      @default(0) @map("count_game")
+  sumGameDuration                 BigInt   @default(0) @map("sum_game_duration")
+  countTeam100                    Int      @default(0) @map("count_team_100")
+  countTeam200                    Int      @default(0) @map("count_team_200")
+  countGameEndedInSurrender       Int      @default(0) @map("count_game_ended_in_surrender")
+  countGameEndedInEarlySurrender  Int      @default(0) @map("count_game_ended_in_early_surrender")
+  countTeamEarlySurrendered       Int      @default(0) @map("count_team_early_surrendered")
+  countBan                        Int      @default(0) @map("count_ban")
+  sumKills                        BigInt   @default(0) @map("sum_kills")
+  sumDeaths                       BigInt   @default(0) @map("sum_deaths")
+  sumAssists                      BigInt   @default(0) @map("sum_assists")
+  sumChampLevel                   BigInt   @default(0) @map("sum_champ_level")
+  sumChampExperience              BigInt   @default(0) @map("sum_champ_experience")
+  sumGoldEarned                   BigInt   @default(0) @map("sum_gold_earned")
+  sumGoldSpent                    BigInt   @default(0) @map("sum_gold_spent")
+  sumTotalMinionsKilled           BigInt   @default(0) @map("sum_total_minions_killed")
+  sumConsumablesPurchased         BigInt   @default(0) @map("sum_consumables_purchased")
+  sumItemsPurchased               BigInt   @default(0) @map("sum_items_purchased")
+
+  championVsStats             ChampionVsStat[]
+  championFirstObjectifStats  ChampionFirstObjectifStat?
+  championObjectifStats       ChampionObjectifStat?
+  championVisionStats         ChampionVisionStat?
+  championCombatStats         ChampionCombatStat?
+  championMatchupStats        ChampionMatchupStat?
+  championChallengeStats      ChampionChallengeStat?
+  championShardSoloStats      ChampionShardSoloStat[]
+  championRunesSoloStats      ChampionRunesSoloStat[]
+  championShardStats          ChampionShardStat[]
+  championRunesStats          ChampionRunesStat[]
+  championItemSoloStats       ChampionItemSoloStat[]
+  championItemStats           ChampionItemStat[]
+  championSpellSoloStats      ChampionSpellSoloStat[]
+  championSummonerSpells      ChampionSummonerSpellAgg[]
+  championBuckets             ChampionBucket[]
+
+  @@unique([championId, rankTier, rankDivision, gameVersion, role, region])
+  @@index([championId, gameVersion, rankTier, role, region])
+  @@index([gameVersion])
+  @@map("champion_core_stats")
+}
+
+model ChampionVsStat {
+  championStatId       BigInt @map("champion_stat_id")
+  opponentChampionId   Int    @map("opponent_champion_id")
+  countWin             Int    @default(0) @map("count_win")
+  countGame            Int    @default(0) @map("count_game")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, opponentChampionId])
+  @@index([championStatId])
+  @@index([opponentChampionId])
+  @@map("champion_vs_stats")
+}
+
+model TeamCoreStat {
+  id                        BigInt   @id @default(autoincrement())
+  team                      Int      // 100 | 200
+  rankTier                  String   @map("rank_tier")
+  rankDivision              String?  @map("rank_division")
+  gameVersion               String   @map("game_version")
+  region                    String
+  countWin                  Int      @default(0) @map("count_win")
+  countGame                 Int      @default(0) @map("count_game")
+  countTeamEarlySurrendered Int      @default(0) @map("count_team_early_surrendered")
+  sumBaronKills             Int      @default(0) @map("sum_baron_kills")
+  countBaronFirst           Int      @default(0) @map("count_baron_first")
+  sumDragonKills            Int      @default(0) @map("sum_dragon_kills")
+  countDragonFirst          Int      @default(0) @map("count_dragon_first")
+  sumTowerKills             Int      @default(0) @map("sum_tower_kills")
+  countTowerFirst           Int      @default(0) @map("count_tower_first")
+  sumHordeKills             Int      @default(0) @map("sum_horde_kills")
+  countHordeFirst           Int      @default(0) @map("count_horde_first")
+  sumRiftHeraldKills        Int      @default(0) @map("sum_rift_herald_kills")
+  countRiftHeraldFirst      Int      @default(0) @map("count_rift_herald_first")
+  sumInhibitorKills         Int      @default(0) @map("sum_inhibitor_kills")
+  sumChampionKills         Int      @default(0) @map("sum_champion_kills")
+  countFirstBlood           Int      @default(0) @map("count_first_blood")
+  sumElderKills            Int      @default(0) @map("sum_elder_kills")
+
+  @@unique([team, rankTier, rankDivision, gameVersion, region])
+  @@index([team, gameVersion, rankTier, region])
+  @@map("team_core_stats")
+}
+
+model ChampionFirstObjectifStat {
+  championCoreStatId     BigInt @id @map("champion_core_stat_id")
+  countBaronFirst        Int    @default(0) @map("count_baron_first")
+  countDragonFirst       Int    @default(0) @map("count_dragon_first")
+  countTowerFirst        Int    @default(0) @map("count_tower_first")
+  countHordeFirst        Int    @default(0) @map("count_horde_first")
+  countRiftHeraldFirst   Int    @default(0) @map("count_rift_herald_first")
+  countFirstBlood        Int    @default(0) @map("count_first_blood")
+  countFirstBloodKill    Int    @default(0) @map("count_first_blood_kill")
+  countFirstBloodAssist  Int    @default(0) @map("count_first_blood_assist")
+  countFirstTowerKill    Int    @default(0) @map("count_first_tower_kill")
+  countFirstTowerAssist  Int    @default(0) @map("count_first_tower_assist")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_first_objectif_stats")
+}
+
+model ChampionObjectifStat {
+  championCoreStatId                        BigInt @id @map("champion_core_stat_id")
+  sumBaronKills                             Int    @default(0) @map("sum_baron_kills")
+  sumDragonKills                            Int    @default(0) @map("sum_dragon_kills")
+  sumTowerKills                             Int    @default(0) @map("sum_tower_kills")
+  sumHordeKills                             Int    @default(0) @map("sum_horde_kills")
+  countRiftHeraldKills                      Int    @default(0) @map("count_rift_herald_kills")
+  sumInhibitorKills                         Int    @default(0) @map("sum_inhibitor_kills")
+  sumChampionKills                          Int    @default(0) @map("sum_champion_kills")
+  sumElderKills                             Int    @default(0) @map("sum_elder_kills")
+  sumInhibitorTakedowns                     Int    @default(0) @map("sum_inhibitor_takedowns")
+  sumInhibitorsLost                         Int    @default(0) @map("sum_inhibitors_lost")
+  sumObjectivesStolen                       Int    @default(0) @map("sum_objectives_stolen")
+  sumObjectivesStolenAssists                 Int    @default(0) @map("sum_objectives_stolen_assists")
+  sumTurretKills                            Int    @default(0) @map("sum_turret_kills")
+  sumTurretTakedowns                        Int    @default(0) @map("sum_turret_takedowns")
+  sumTurretsLost                            Int    @default(0) @map("sum_turrets_lost")
+  countEarthDrake                           Int    @default(0) @map("count_earth_drake")
+  countWaterDrake                           Int    @default(0) @map("count_water_drake")
+  countWindDrake                            Int    @default(0) @map("count_wind_drake")
+  countFireDrake                            Int    @default(0) @map("count_fire_drake")
+  countHextecDrake                          Int    @default(0) @map("count_hextec_drake")
+  countChemDrake                            Int    @default(0) @map("count_chem_drake")
+  countEarthDrakeSoul                       Int    @default(0) @map("count_earth_drake_soul")
+  countWaterDrakeSoul                        Int    @default(0) @map("count_water_drake_soul")
+  countWindDrakeSoul                         Int    @default(0) @map("count_wind_drake_soul")
+  countFireDrakeSoul                         Int    @default(0) @map("count_fire_drake_soul")
+  countHextecDrakeSoul                       Int    @default(0) @map("count_hextec_drake_soul")
+  countChemDrakeSoul                         Int    @default(0) @map("count_chem_drake_soul")
+  sumDragonTakedowns                        Int    @default(0) @map("sum_dragon_takedowns")
+  sumEarliestBaron                          Int    @default(0) @map("sum_earliest_baron")
+  sumElderDragonKillsWithOpposingSoul        Int    @default(0) @map("sum_elder_dragon_kills_with_opposing_soul")
+  sumElderDragonMultikills                  Int    @default(0) @map("sum_elder_dragon_multikills")
+  sumEpicMonsterKillsNearEnemyJungler       Int    @default(0) @map("sum_epic_monster_kills_near_enemy_jungler")
+  sumEpicMonsterKillsWithin30SecondsOfSpawn  Int    @default(0) @map("sum_epic_monster_kills_within_30_seconds_of_spawn")
+  sumEpicMonsterSteals                      Int    @default(0) @map("sum_epic_monster_steals")
+  sumEpicMonsterStolenWithoutSmite          Int    @default(0) @map("sum_epic_monster_stolen_without_smite")
+  sumFirstTurretKilledTime                  Int    @default(0) @map("sum_first_turret_killed_time")
+  sumMultiTurretRiftHeraldCount             Int    @default(0) @map("sum_multi_turret_rift_herald_count")
+  sumQuickFirstTurret                       Int    @default(0) @map("sum_quick_first_turret")
+  sumRiftHeraldTakedowns                    Int    @default(0) @map("sum_rift_herald_takedowns")
+  sumSoloBaronKills                         Int    @default(0) @map("sum_solo_baron_kills")
+  sumSoloKills                              Int    @default(0) @map("sum_solo_kills")
+  sumSoloTurretsLategame                    Int    @default(0) @map("sum_solo_turrets_lategame")
+  sumTakedownOnFirstTurret                   Int    @default(0) @map("sum_takedown_on_first_turret")
+  sumTurretsTakenWithRiftHerald             Int    @default(0) @map("sum_turrets_taken_with_rift_herald")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_objectif_stats")
+}
+
+model ChampionVisionStat {
+  championCoreStatId                    BigInt @id @map("champion_core_stat_id")
+  sumDetectorWardsPlaced                Int    @default(0) @map("sum_detector_wards_placed")
+  sumVisionScore                        Int    @default(0) @map("sum_vision_score")
+  sumVisionWardsBoughtInGame            Int    @default(0) @map("sum_vision_wards_bought_in_game")
+  sumWardsKilled                        Int    @default(0) @map("sum_wards_killed")
+  sumWardsPlaced                        Int    @default(0) @map("sum_wards_placed")
+  sumControlWardsPlaced                 Int    @default(0) @map("sum_control_wards_placed")
+  sumStealthWardsPlaced                 Int    @default(0) @map("sum_stealth_wards_placed")
+  sumUnseenRecalls                      Int    @default(0) @map("sum_unseen_recalls")
+  sumVisionScoreAdvantageLaneOpponent   Int    @default(0) @map("sum_vision_score_advantage_lane_opponent")
+  sumWardTakedowns                      Int    @default(0) @map("sum_ward_takedowns")
+  sumWardTakedownsBefore20M              Int    @default(0) @map("sum_ward_takedowns_before_20_m")
+  sumWardsGuarded                       Int    @default(0) @map("sum_wards_guarded")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_vision_stats")
+}
+
+model ChampionCombatStat {
+  championCoreStatId                    BigInt @id @map("champion_core_stat_id")
+  sumDamageDealtToBuildings             Int    @default(0) @map("sum_damage_dealt_to_buildings")
+  sumDamageDealtToEpicMonsters          Int    @default(0) @map("sum_damage_dealt_to_epic_monsters")
+  sumDamageDealtToObjectives             Int    @default(0) @map("sum_damage_dealt_to_objectives")
+  sumDamageDealtToTurrets                Int    @default(0) @map("sum_damage_dealt_to_turrets")
+  sumDamageSelfMitigated                Int    @default(0) @map("sum_damage_self_mitigated")
+  sumDoubleKills                        Int    @default(0) @map("sum_double_kills")
+  sumKillingSprees                      Int    @default(0) @map("sum_killing_sprees")
+  sumLargestCriticalStrike              Int    @default(0) @map("sum_largest_critical_strike")
+  sumLargestKillingSpree                Int    @default(0) @map("sum_largest_killing_spree")
+  sumLongestTimeSpentLiving              Int    @default(0) @map("sum_longest_time_spent_living")
+  sumMagicDamageDealt                   Int    @default(0) @map("sum_magic_damage_dealt")
+  sumMagicDamageDealtToChampions        Int    @default(0) @map("sum_magic_damage_dealt_to_champions")
+  sumMagicDamageTaken                   Int    @default(0) @map("sum_magic_damage_taken")
+  sumPentaKills                         Int    @default(0) @map("sum_penta_kills")
+  sumPhysicalDamageDealt                Int    @default(0) @map("sum_physical_damage_dealt")
+  sumPhysicalDamageDealtToChampions     Int    @default(0) @map("sum_physical_damage_dealt_to_champions")
+  sumPhysicalDamageTaken                Int    @default(0) @map("sum_physical_damage_taken")
+  sumQuadraKills                        Int    @default(0) @map("sum_quadra_kills")
+  sumTimeCcingOthers                    Int    @default(0) @map("sum_time_ccing_others")
+  sumTotalDamageShieldedOnTeammates     Int    @default(0) @map("sum_total_damage_shielded_on_teammates")
+  sumTotalDamageTaken                   Int    @default(0) @map("sum_total_damage_taken")
+  sumTotalHeal                          Int    @default(0) @map("sum_total_heal")
+  sumTotalHealsOnTeammates              Int    @default(0) @map("sum_total_heals_on_teammates")
+  sumTotalTimeCcDealt                   Int    @default(0) @map("sum_total_time_cc_dealt")
+  sumTotalUnitsHealed                   Int    @default(0) @map("sum_total_units_healed")
+  sumTripleKills                        Int    @default(0) @map("sum_triple_kills")
+  sumTrueDamageDealt                    Int    @default(0) @map("sum_true_damage_dealt")
+  sumTrueDamageDealtToChampions         Int    @default(0) @map("sum_true_damage_dealt_to_champions")
+  sumTrueDamageTaken                    Int    @default(0) @map("sum_true_damage_taken")
+  sumEffectiveHealAndShielding          Int    @default(0) @map("sum_effective_heal_and_shielding")
+  sumImmobilizeAndKillWithAlly          Int    @default(0) @map("sum_immobilize_and_kill_with_ally")
+  sumOutnumberedKills                   Int    @default(0) @map("sum_outnumbered_kills")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_combat_stats")
+}
+
+model ChampionMatchupStat {
+  championCoreStatId                      BigInt @id @map("champion_core_stat_id")
+  sumTotalEnemyJungleMinionsKilled        Int    @default(0) @map("sum_total_enemy_jungle_minions_killed")
+  sumNeutralMinionsKilled                 Int    @default(0) @map("sum_neutral_minions_killed")
+  sumTotalAllyJungleMinionsKilled         Int    @default(0) @map("sum_total_ally_jungle_minions_killed")
+  sumBountyGold                           Int    @default(0) @map("sum_bounty_gold")
+  sumCompleteSupportQuestInTime           Int    @default(0) @map("sum_complete_support_quest_in_time")
+  sumDeathsByEnemyChamps                  Int    @default(0) @map("sum_deaths_by_enemy_champs")
+  sumEarlyLaningPhaseGoldExpAdvantage    Int    @default(0) @map("sum_early_laning_phase_gold_exp_advantage")
+  sumInitialCrabCount                     Int    @default(0) @map("sum_initial_crab_count")
+  sumJungleCsBefore10Minutes              Int    @default(0) @map("sum_jungle_cs_before_10_minutes")
+  sumKillsNearEnemyTurret                 Int    @default(0) @map("sum_kills_near_enemy_turret")
+  sumKillsOnOtherLanesEarlyJungleAsLaner Int    @default(0) @map("sum_kills_on_other_lanes_early_jungle_as_laner")
+  sumKillsUnderOwnTurret                  Int    @default(0) @map("sum_kills_under_own_turret")
+  sumLandSkillShotsEarlyGame             Int    @default(0) @map("sum_land_skill_shots_early_game")
+  sumLaneMinionsFirst10Minutes           Int    @default(0) @map("sum_lane_minions_first_10_minutes")
+  sumLaningPhaseGoldExpAdvantage          Int    @default(0) @map("sum_laning_phase_gold_exp_advantage")
+  sumMaxCsAdvantageOnLaneOpponent        Int    @default(0) @map("sum_max_cs_advantage_on_lane_opponent")
+  sumMaxKillDeficit                       Int    @default(0) @map("sum_max_kill_deficit")
+  sumMaxLevelLeadLaneOpponent             Int    @default(0) @map("sum_max_level_lead_lane_opponent")
+  sumMoreEnemyJungleThanOpponent         Int    @default(0) @map("sum_more_enemy_jungle_than_opponent")
+  sumTurretPlatesTaken                   Int    @default(0) @map("sum_turret_plates_taken")
+  sumTakedownsAfterGainingLevelAdvantage  Int    @default(0) @map("sum_takedowns_after_gaining_level_advantage")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_matchup_stats")
+}
+
+model ChampionChallengeStat {
+  championCoreStatId                           BigInt @id @map("champion_core_stat_id")
+  sumHealFromMapSources                        Int    @default(0) @map("sum_heal_from_map_sources")
+  sumBaronTakedowns                            Int    @default(0) @map("sum_baron_takedowns")
+  sumBuffsStolen                              Int    @default(0) @map("sum_buffs_stolen")
+  sumDodgeSkillShotsSmallWindow                Int    @default(0) @map("sum_dodge_skill_shots_small_window")
+  sumGetTakedownsInAllLanesEarlyJungleAsLaner Int    @default(0) @map("sum_get_takedowns_in_all_lanes_early_jungle_as_laner")
+  countHadOpenNexus                           Int    @default(0) @map("count_had_open_nexus")
+  sumJunglerTakedownsNearDamagedEpicMonster   Int    @default(0) @map("sum_jungler_takedowns_near_damaged_epic_monster")
+  sumKillAfterHiddenWithAlly                  Int    @default(0) @map("sum_kill_after_hidden_with_ally")
+  sumKilledChampTookFullTeamDamageSurvived   Int    @default(0) @map("sum_killed_champ_took_full_team_damage_survived")
+  sumKillsWithHelpFromEpicMonster             Int    @default(0) @map("sum_kills_with_help_from_epic_monster")
+  sumKnockEnemyIntoTeamAndKill                Int    @default(0) @map("sum_knock_enemy_into_team_and_kill")
+  sumMejaisFullStackInTime                    Int    @default(0) @map("sum_mejais_full_stack_in_time")
+  sumMultikillsAfterAggressiveFlash          Int    @default(0) @map("sum_multikills_after_aggressive_flash")
+  sumQuickCleanse                             Int    @default(0) @map("sum_quick_cleanse")
+  sumQuickSoloKills                           Int    @default(0) @map("sum_quick_solo_kills")
+  sumSaveAllyFromDeath                        Int    @default(0) @map("sum_save_ally_from_death")
+  sumScuttleCrabKills                         Int    @default(0) @map("sum_scuttle_crab_kills")
+  sumSkillshotsDodged                         Int    @default(0) @map("sum_skillshots_dodged")
+  sumSkillshotsHit                            Int    @default(0) @map("sum_skillshots_hit")
+  sumSurvivedSingleDigitHpCount               Int    @default(0) @map("sum_survived_single_digit_hp_count")
+  sumSurvivedThreeImmobilizesInFight         Int    @default(0) @map("sum_survived_three_immobilizes_in_fight")
+  sumTakedownsBeforeJungleMinionSpawn        Int    @default(0) @map("sum_takedowns_before_jungle_minion_spawn")
+  sumTakedownsInAlcove                        Int    @default(0) @map("sum_takedowns_in_alcove")
+  sumTakedownsInEnemyFountain                 Int    @default(0) @map("sum_takedowns_in_enemy_fountain")
+  sumTookLargeDamageSurvived                 Int    @default(0) @map("sum_took_large_damage_survived")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championCoreStatId], references: [id], onDelete: Cascade)
+
+  @@map("champion_challenge_stats")
+}
+
+model ChampionShardSoloStat {
+  championStatId BigInt @map("champion_stat_id")
+  shardId        Int    @map("shard_id")
+  slot          Int
+  countWin      Int    @default(0) @map("count_win")
+  countGame     Int    @default(0) @map("count_game")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, shardId, slot])
+  @@index([championStatId])
+  @@map("champion_shard_solo_stats")
+}
+
+model ChampionRunesSoloStat {
+  championStatId BigInt @map("champion_stat_id")
+  perkId         Int    @map("perk_id")
+  style         Int
+  countWin      Int    @default(0) @map("count_win")
+  countGame     Int    @default(0) @map("count_game")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, perkId, style])
+  @@index([championStatId])
+  @@map("champion_runes_solo_stats")
+}
+
+model ChampionShardStat {
+  championStatId BigInt @map("champion_stat_id")
+  shardList      String @map("shard_list")
+  countWin       Int    @default(0) @map("count_win")
+  countGame      Int    @default(0) @map("count_game")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, shardList])
+  @@index([championStatId])
+  @@map("champion_shard_stats")
+}
+
+model ChampionRunesStat {
+  championStatId BigInt @map("champion_stat_id")
+  runeList       String @map("rune_list")
+  countWin       Int    @default(0) @map("count_win")
+  countGame      Int    @default(0) @map("count_game")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, runeList])
+  @@index([championStatId])
+  @@map("champion_runes_stats")
+}
+
+model ChampionItemSoloStat {
+  championStatId  BigInt @map("champion_stat_id")
+  itemId          Int    @map("item_id")
+  countStarter    Int    @default(0) @map("count_starter")
+  countCore       Int    @default(0) @map("count_core")
+  countWin        Int    @default(0) @map("count_win")
+  countGame       Int    @default(0) @map("count_game")
+  sumTimestampMs  Int    @default(0) @map("sum_timestamp_ms")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, itemId])
+  @@index([championStatId])
+  @@map("champion_item_solo_stats")
+}
+
+model ChampionItemStat {
+  championStatId  BigInt @map("champion_stat_id")
+  itemList        String @map("item_list")
+  countWin        Int    @default(0) @map("count_win")
+  countGame       Int    @default(0) @map("count_game")
+  sumTimestampMs  Int    @default(0) @map("sum_timestamp_ms")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, itemList])
+  @@index([championStatId])
+  @@map("champion_item_stats")
+}
+
+model ChampionSpellSoloStat {
+  championStatId BigInt @map("champion_stat_id")
+  spellSlot      Int    @map("spell_slot")
+  countWin       Int    @default(0) @map("count_win")
+  countGame      Int    @default(0) @map("count_game")
+  firstUpOrder   Int    @default(0) @map("first_up_order")
+  maxOrder       Int    @default(0) @map("max_order")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, spellSlot])
+  @@index([championStatId])
+  @@map("champion_spell_solo_stats")
+}
+
+model ChampionSummonerSpellAgg {
+  championStatId BigInt @map("champion_stat_id")
+  spellId        Int    @map("spell_id")
+  countWin       Int    @default(0) @map("count_win")
+  countGame      Int    @default(0) @map("count_game")
+  countSlot0     Int    @default(0) @map("count_slot0")
+  countSlot1     Int    @default(0) @map("count_slot1")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, spellId])
+  @@index([championStatId])
+  @@map("champion_summoner_spells")
+}
+
+model ChampionBucket {
+  championStatId               BigInt @map("champion_stat_id")
+  durationBucket               Int    @map("duration_bucket")
+  countWin                     Int    @default(0) @map("count_win")
+  countGame                    Int    @default(0) @map("count_game")
+  sumCurrentGold               Int    @default(0) @map("sum_current_gold")
+  sumMagicDamageDone           Int    @default(0) @map("sum_magic_damage_done")
+  sumMagicDamageDoneToChampion Int    @default(0) @map("sum_magic_damage_done_to_champion")
+  sumMagicDamageTaken          Int    @default(0) @map("sum_magic_damage_taken")
+  sumPhysicalDamageDone        Int    @default(0) @map("sum_physical_damage_done")
+  sumPhysicalDamageDoneToChampion Int @default(0) @map("sum_physical_damage_done_to_champion")
+  sumPhysicalDamageTaken       Int    @default(0) @map("sum_physical_damage_taken")
+  sumTotalDamageDone           Int    @default(0) @map("sum_total_damage_done")
+  sumTotalDamageDoneToChampion Int    @default(0) @map("sum_total_damage_done_to_champion")
+  sumTotalDamageTaken          Int    @default(0) @map("sum_total_damage_taken")
+  sumTrueDamageDone            Int    @default(0) @map("sum_true_damage_done")
+  sumTrueDamageDoneToChampion  Int    @default(0) @map("sum_true_damage_done_to_champion")
+  sumTrueDamageTaken           Int    @default(0) @map("sum_true_damage_taken")
+  sumGoldPerSecond             Int    @default(0) @map("sum_gold_per_second")
+  sumJungleMinionsKilled       Int    @default(0) @map("sum_jungle_minions_killed")
+  sumLevel                     Int    @default(0) @map("sum_level")
+  sumMinionsKilled             Int    @default(0) @map("sum_minions_killed")
+  sumTimeEnemySpentControlled  Int    @default(0) @map("sum_time_enemy_spent_controlled")
+  sumTotalGold                 Int    @default(0) @map("sum_total_gold")
+  sumXp                        Int    @default(0) @map("sum_xp")
+
+  championCoreStat ChampionCoreStat @relation(fields: [championStatId], references: [id], onDelete: Cascade)
+
+  @@id([championStatId, durationBucket])
+  @@index([championStatId])
+  @@map("champion_bucket")
+}

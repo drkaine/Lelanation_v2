@@ -3581,9 +3581,9 @@ async function loadOverview() {
       timeout: STATS_FETCH_TIMEOUT_MS,
     })
     overviewData.value = overviewRes as typeof overviewData.value
+    await loadOverviewProgression()
     loadOverviewTeams()
     loadOverviewDurationWinrate()
-    loadOverviewProgression()
   } catch (err) {
     overviewData.value = null
     const errData =
@@ -3916,6 +3916,14 @@ const overviewTeamsData = ref<{
       distributionByWin: Record<string, number>
       distributionByLoss: Record<string, number>
     }
+    elder?: {
+      firstByWin: number
+      firstByLoss: number
+      killsByWin: number
+      killsByLoss: number
+      distributionByWin: Record<string, number>
+      distributionByLoss: Record<string, number>
+    }
     tower: {
       firstByWin: number
       firstByLoss: number
@@ -3998,7 +4006,15 @@ const sidesExpandPickBlue = ref(false)
 const sidesExpandPickRed = ref(false)
 const sidesExpandBansBlue = ref(false)
 const sidesExpandBansRed = ref(false)
-const sidesObjectiveKeysWithKills = ['baron', 'dragon', 'tower', 'inhibitor', 'horde'] as const
+const sidesObjectiveKeysWithKills = [
+  'baron',
+  'dragon',
+  'elder',
+  'tower',
+  'inhibitor',
+  'riftHerald',
+  'horde',
+] as const
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {
   const next = new Set(openSidesObjectiveKeys.value)
@@ -4051,9 +4067,20 @@ function sidesObjectiveDistributionPercentages(
   const dist = byBlue ? obj.distributionByBlue : obj.distributionByRed
   if (!dist) return []
   const total = data.matchCount
-  return Object.entries(dist)
-    .map(([k, n]) => ({
-      count: parseInt(k, 10) || 0,
+  const capHorde = key === 'horde'
+  const capRiftHerald = key === 'riftHerald'
+  const aggregated: Record<number, number> = {}
+  for (const [k, n] of Object.entries(dist)) {
+    const count = parseInt(k, 10) || 0
+    let displayCount = count
+    if (capHorde && count > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
+    else if (capRiftHerald && count > RIFT_HERALD_DISPLAY_MAX)
+      displayCount = RIFT_HERALD_DISPLAY_MAX
+    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
+  }
+  return Object.entries(aggregated)
+    .map(([countStr, n]) => ({
+      count: parseInt(countStr, 10) || 0,
       percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
     .filter(({ percent }) => percent > 0)
@@ -4063,7 +4090,10 @@ function sidesObjectiveCounts(key: string): number[] {
   const blue = sidesObjectiveDistributionPercentages(key, true)
   const red = sidesObjectiveDistributionPercentages(key, false)
   const set = new Set<number>([...blue.map(r => r.count), ...red.map(r => r.count)])
-  return [...set].sort((a, b) => a - b)
+  const sorted = [...set].sort((a, b) => a - b)
+  if (key === 'horde') return sorted.filter(c => c <= HORDE_DISPLAY_MAX)
+  if (key === 'riftHerald') return sorted.filter(c => c <= RIFT_HERALD_DISPLAY_MAX)
+  return sorted
 }
 function percentForCountSides(key: string, count: number, byBlue: boolean): string {
   const rows = sidesObjectiveDistributionPercentages(key, byBlue)
@@ -4183,7 +4213,12 @@ function firstPercentByTeam(
   const lossPct = (firstByLoss / matchCount) * 100
   return { win: Number(winPct).toFixed(2) + '%', loss: Number(lossPct).toFixed(2) + '%' }
 }
-/** Distribution as % of matches, sorted by count (number then percent). */
+/** Max count for horde (void grubs) in distribution: 3 (fold 4+ into 3). */
+const HORDE_DISPLAY_MAX = 3
+/** Max count for Rift Herald: 1 per team per game. */
+const RIFT_HERALD_DISPLAY_MAX = 1
+
+/** Distribution as % of matches, sorted by count. For horde cap 3, for riftHerald cap 1. */
 function objectiveDistributionPercentages(
   key: string,
   byWin: boolean
@@ -4196,20 +4231,34 @@ function objectiveDistributionPercentages(
     ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
     : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
   const total = data.matchCount
-  return Object.entries(dist)
-    .map(([k, n]) => ({
-      count: parseInt(k, 10) || 0,
+  const capHorde = key === 'horde'
+  const capRiftHerald = key === 'riftHerald'
+  const aggregated: Record<number, number> = {}
+  for (const [k, n] of Object.entries(dist)) {
+    const count = parseInt(k, 10) || 0
+    let displayCount = count
+    if (capHorde && count > HORDE_DISPLAY_MAX) displayCount = HORDE_DISPLAY_MAX
+    else if (capRiftHerald && count > RIFT_HERALD_DISPLAY_MAX)
+      displayCount = RIFT_HERALD_DISPLAY_MAX
+    aggregated[displayCount] = (aggregated[displayCount] ?? 0) + Number(n)
+  }
+  return Object.entries(aggregated)
+    .map(([countStr, n]) => ({
+      count: parseInt(countStr, 10) || 0,
       percent: Math.round((Number(n) / total) * 10000) / 100,
     }))
     .filter(({ percent }) => percent > 0)
     .sort((a, b) => a.count - b.count)
 }
-/** All counts (0, 1, 2, …) for an objective, from both teams, sorted. */
+/** All counts for an objective. For horde 0–3, for riftHerald 0–1. */
 function objectiveCounts(key: string): number[] {
   const win = objectiveDistributionPercentages(key, true)
   const loss = objectiveDistributionPercentages(key, false)
   const set = new Set<number>([...win.map(r => r.count), ...loss.map(r => r.count)])
-  return [...set].sort((a, b) => a - b)
+  const sorted = [...set].sort((a, b) => a - b)
+  if (key === 'horde') return sorted.filter(c => c <= HORDE_DISPLAY_MAX)
+  if (key === 'riftHerald') return sorted.filter(c => c <= RIFT_HERALD_DISPLAY_MAX)
+  return sorted
 }
 /** Percent for a given count and team (for dropdown content). */
 function percentForCount(key: string, count: number, byWin: boolean): string {
@@ -4217,7 +4266,15 @@ function percentForCount(key: string, count: number, byWin: boolean): string {
   const row = rows.find(r => r.count === count)
   return row ? Number(row.percent).toFixed(2) + '%' : '—'
 }
-const objectiveKeysWithKills = ['baron', 'dragon', 'tower', 'inhibitor', 'horde'] as const
+const objectiveKeysWithKills = [
+  'baron',
+  'dragon',
+  'elder',
+  'tower',
+  'inhibitor',
+  'riftHerald',
+  'horde',
+] as const
 const openObjectiveKeys = ref<Set<string>>(new Set())
 function toggleObjective(key: string) {
   const next = new Set(openObjectiveKeys.value)
@@ -4522,26 +4579,17 @@ onMounted(async () => {
   const versionPromise = versionStore.currentVersion
     ? Promise.resolve()
     : versionStore.loadCurrentVersion()
-  // Priorité: overview + champions (noms dans les cartes). Les stores runes/items/sorts
-  // et la liste des champions (onglet) partent en arrière-plan pour ne pas saturer l’API.
-  const tPage = statsPerfStart('page mount (version + overview + championsStore)')
+  const tPage = statsPerfStart('page mount')
   const tVersion = statsPerfStart('version')
   await versionPromise
   statsPerfEnd('version', tVersion)
-  const tChampionsStore = statsPerfStart('championsStore.loadChampions')
-  const tOverview = statsPerfStart('loadOverview')
-  await Promise.all([
-    championsStore
-      .loadChampions(riotLocale.value)
-      .then(() => statsPerfEnd('championsStore.loadChampions', tChampionsStore)),
-    loadOverview().then(() => statsPerfEnd('loadOverview (initial)', tOverview)),
-  ])
+  await loadOverview()
   statsPerfEnd('page mount', tPage)
-  // Chargement en arrière-plan (sans bloquer le rendu)
+  championsStore.loadChampions(riotLocale.value)
   itemsStore.loadItems(riotLocale.value)
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
-  // Champions chargés à la demande à l’ouverture des onglets Champions / Tier list
+  loadOverviewSides()
   loadTierList()
 })
 </script>

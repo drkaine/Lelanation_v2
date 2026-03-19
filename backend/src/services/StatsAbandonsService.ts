@@ -1,5 +1,5 @@
 /**
- * Stats d'abandon : remake (participants sans items = non connectés), surrender (early / normal).
+ * Stats d'abandon : surrender (early / normal) from the matchs table.
  * Remake = match où au moins un participant n'a aucun item (déco / non connecté).
  * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */
@@ -22,10 +22,6 @@ export interface OverviewAbandonsResult {
   surrenderRate: number
 }
 
-/**
- * Pure calculation of abandon rates from counts (for testing and reuse).
- * rate = 100 * count / totalMatches when totalMatches > 0.
- */
 export function computeAbandonRates(
   totalMatches: number,
   remakeCount: number,
@@ -52,10 +48,6 @@ function normalizeParam(value: string | string[] | null | undefined): string | n
   return s
 }
 
-/**
- * Get abandon stats (remake = match with ≥1 participant without items, early surrender, surrender).
- * Version: prefix match on game_version (e.g. "16.1"). Rank: participant.rank_tier (e.g. "GOLD").
- */
 export async function getOverviewAbandons(
   version?: string | string[] | null,
   rankTier?: string | string[] | null
@@ -69,18 +61,12 @@ export async function getOverviewAbandons(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const versionPrefix = pVersion ? `${pVersion}%` : '%'
-    const rankFilter = pRankTier ? 'AND p.rank_tier = $2' : ''
-    const params = pRankTier ? [versionPrefix, pRankTier] : [versionPrefix]
+    // Build match filter
+    const matchWhere: Record<string, unknown> = {}
+    if (pVersion) matchWhere.gameVersion = { startsWith: pVersion }
+    if (pRankTier) matchWhere.rankTier = pRankTier
 
-    const totalResult = await prisma.$queryRawUnsafe<[{ count: string }]>(
-      `SELECT COUNT(DISTINCT m.id)::text AS count
-       FROM matches m
-       INNER JOIN participants p ON p.match_id = m.id
-       WHERE m.game_version LIKE $1 ${rankFilter}`,
-      ...params
-    )
-    const totalMatches = Number(totalResult[0]?.count ?? 0)
+    const totalMatches = await prisma.match.count({ where: matchWhere })
     if (totalMatches === 0) {
       return {
         totalMatches: 0,
@@ -93,38 +79,30 @@ export async function getOverviewAbandons(
       }
     }
 
-    /* Remake = match où au moins un participant a 0 item (non connecté / AFK → remake). */
-    const remakeResult = await prisma.$queryRawUnsafe<[{ count: string }]>(
-      `SELECT COUNT(DISTINCT m.id)::text AS count
-       FROM matches m
-       INNER JOIN participants p ON p.match_id = m.id
-       WHERE m.game_version LIKE $1 ${rankFilter}
-         AND EXISTS (
-           SELECT 1 FROM participants p2
-           WHERE p2.match_id = m.id
-             AND (p2.items IS NULL OR COALESCE(jsonb_array_length(p2.items), 0) = 0)
-         )`,
-      ...params
-    )
-    const remakeCount = Number(remakeResult[0]?.count ?? 0)
+    const [earlySurrenderCount, surrenderCount] = await Promise.all([
+      prisma.match.count({ where: { ...matchWhere, gameEndedInEarlySurrender: true } }),
+      prisma.match.count({ where: { ...matchWhere, gameEndedInSurrender: true } }),
+    ])
 
-    const earlyResult = await prisma.$queryRawUnsafe<[{ count: string }]>(
-      `SELECT COUNT(DISTINCT m.id)::text AS count
-       FROM matches m
-       INNER JOIN participants p ON p.match_id = m.id
-       WHERE m.game_version LIKE $1 AND p.game_ended_in_early_surrender = true ${rankFilter}`,
-      ...params
-    )
-    const earlySurrenderCount = Number(earlyResult[0]?.count ?? 0)
+    // Remake = match where at least one player has 0 items
+    // Check match_player_items count grouped by match_player
+    const remakeCandidates = await prisma.matchPlayer.findMany({
+      where: {
+        match: matchWhere,
+      },
+      select: {
+        matchId: true,
+        _count: { select: { items: true } },
+      },
+    })
 
-    const surrenderResult = await prisma.$queryRawUnsafe<[{ count: string }]>(
-      `SELECT COUNT(DISTINCT m.id)::text AS count
-       FROM matches m
-       INNER JOIN participants p ON p.match_id = m.id
-       WHERE m.game_version LIKE $1 AND p.game_ended_in_surrender = true ${rankFilter}`,
-      ...params
-    )
-    const surrenderCount = Number(surrenderResult[0]?.count ?? 0)
+    const remakeMatchIds = new Set<bigint>()
+    for (const mp of remakeCandidates) {
+      if (mp._count.items === 0) {
+        remakeMatchIds.add(mp.matchId)
+      }
+    }
+    const remakeCount = remakeMatchIds.size
 
     const rates = computeAbandonRates(totalMatches, remakeCount, earlySurrenderCount, surrenderCount)
     const result: OverviewAbandonsResult = {

@@ -23,10 +23,10 @@ import {
   type RiotTimelineEventItemPurchased,
 } from '../services/RiotHttpClient.js'
 import { Prisma } from '../generated/prisma/index.js'
-import { rankToScore, scoreToRank, formatRankString } from '../utils/rankScore.js'
-import { partitionChallenges, handleUnknownChallengeKeys, allowedToParticipantChallengeData } from '../services/ChallengeNormalisationService.js'
+import { rankToScore, scoreToRank } from '../utils/rankScore.js'
+import { partitionChallenges, handleUnknownChallengeKeys } from '../services/ChallengeNormalisationService.js'
+import { aggregatePendingMatches, runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 
-const BATCH_FIX_NULLS = 50
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
 /** Max matches per run for timeline backfill (drakes, skill order, starter, jungle first clear). */
@@ -37,9 +37,6 @@ const BATCH_RUNE_BACKFILL = 20
 const INGEST_QUEUE_SIZE = 50
 /** Number of concurrent DB writers in Phase 4 (consumers). */
 const INGEST_CONSUMER_COUNT = 2
-// Maximum number of jungle camp kills tracked per player (first clear only).
-// A standard first clear is 6 camps for most paths (up to 8 with scuttle/leash).
-const JUNGLE_FIRST_CLEAR_MAX_CAMPS = 10
 
 /**
  * Run async tasks with a bounded concurrency (like p-limit but inline).
@@ -185,35 +182,21 @@ export type RiotPollerInit = {
 
 /**
  * Returns true if backfill (phase 3) is needed.
- * rankTier=null means "never processed" (needs backfill).
- * rankTier='UNRANKED' means "processed, player has no Solo/Duo rank" — not a missing value.
- * Match.rank is recomputed only when at least one participant has a real tier (not null/UNRANKED).
+ * The new schema stores rankTier directly on MatchPlayer (default 'UNRANKED').
+ * We only check for players needing PUUID sync — rank/role are now always set at ingestion time.
  */
 async function hasMissingBackfillData(clefType: string | null): Promise<boolean> {
-  const playerFilter = clefType ? { player: { puuidKeyVersion: clefType } } : {}
-  const [playersToSync, nullRole, nullRank, matchesNullRank] = await Promise.all([
-    clefType
-      ? prisma.player.count({
-          where: {
-            OR: [
-              { puuidKeyVersion: null },
-              { puuidKeyVersion: { notIn: ['perdu', clefType] } },
-              { gameName: null, puuidKeyVersion: clefType },
-            ],
-          },
-        })
-      : Promise.resolve(0),
-    prisma.participant.count({ where: { role: null, ...playerFilter } }),
-    // null only = never processed; UNRANKED = processed, no rank → skip
-    prisma.participant.count({ where: { rankTier: null, ...playerFilter } }),
-    prisma.match.count({
-      where: {
-        rank: null,
-        participants: { some: { rankTier: { not: null, notIn: ['UNRANKED'] } } },
-      },
-    }),
-  ])
-  return playersToSync > 0 || nullRole > 0 || nullRank > 0 || matchesNullRank > 0
+  if (!clefType) return false
+  const playersToSync = await prisma.player.count({
+    where: {
+      OR: [
+        { puuidKeyVersion: null },
+        { puuidKeyVersion: { notIn: ['perdu', clefType] } },
+        { gameName: null, puuidKeyVersion: clefType },
+      ],
+    },
+  })
+  return playersToSync > 0
 }
 
 
@@ -246,18 +229,22 @@ function participantNames(part: RiotParticipantDto): { gn: string; tl: string } 
  * No fallback API calls (getAccountByRiotId etc.). Players with no match history
  * or whose PUUID conflicts with an existing row get puuid = String(player.id)
  * as a placeholder (will be overwritten on their next real match in Phase 4).
+ *
+ * Accepts an optional shouldStop function (defaults to the module-level state flag).
+ * This allows the puuid migration script to call this function with its own stop control.
  */
-async function runPhase2(
+export async function runPhase2(
   client: RiotHttpClient,
   logger: ReturnType<typeof createRiotPollerLogger>,
-  clefType: string | null
+  clefType: string | null,
+  shouldStop: () => boolean = () => state.shouldStop
 ): Promise<void> {
   if (!clefType) return
   await logger.step('Phase 2 start: sync players to current key (positional match-based)', { clefType })
   let totalSynced = 0
   let totalPlaceholder = 0
 
-  while (!state.shouldStop) {
+  while (!shouldStop()) {
     // Include 'erreur' players and players with missing gameName (Match-v5 replaces Account-v1)
     const batch: { id: bigint; puuidKeyVersion: string | null }[] = await prisma.player.findMany({
       where: {
@@ -277,7 +264,7 @@ async function runPhase2(
     const pendingIds = new Set(playerIds)
 
     // Find matches where these players participated, prioritise highest coverage
-    const partRows = await prisma.participant.findMany({
+    const partRows = await prisma.matchPlayer.findMany({
       where: { playerId: { in: playerIds } },
       select: { matchId: true },
     })
@@ -292,12 +279,12 @@ async function runPhase2(
     if (sortedInternalIds.length > 0) {
       const matchRows = await prisma.match.findMany({
         where: { id: { in: sortedInternalIds } },
-        select: { id: true, matchId: true },
+        select: { id: true, riotMatchId: true },
       })
-      const internalToRiot = new Map(matchRows.map(m => [m.id, m.matchId]))
+      const internalToRiot = new Map(matchRows.map(m => [m.id, m.riotMatchId]))
 
       for (const internalId of sortedInternalIds) {
-        if (state.shouldStop || pendingIds.size === 0) break
+        if (shouldStop() || pendingIds.size === 0) break
         const riotMatchId = internalToRiot.get(internalId)
         if (!riotMatchId) continue
 
@@ -308,17 +295,17 @@ async function runPhase2(
           continue
         }
 
-        // Positional matching: DB participants ordered by id == Riot insertion order
-        const dbParticipants = await prisma.participant.findMany({
+        // Positional matching: DB match_players ordered by id == Riot insertion order
+        const dbMatchPlayers = await prisma.matchPlayer.findMany({
           where: { matchId: internalId },
           select: { id: true, playerId: true },
           orderBy: { id: 'asc' },
         })
         const riotParticipants = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
-        if (dbParticipants.length !== riotParticipants.length) continue
+        if (dbMatchPlayers.length !== riotParticipants.length) continue
 
-        for (let i = 0; i < dbParticipants.length; i++) {
-          const dbPart = dbParticipants[i]
+        for (let i = 0; i < dbMatchPlayers.length; i++) {
+          const dbPart = dbMatchPlayers[i]
           const riotPart = riotParticipants[i]
           const playerId = dbPart.playerId
           if (!pendingIds.has(playerId) || !riotPart.puuid) continue
@@ -349,9 +336,6 @@ async function runPhase2(
               throw e
             }
           }
-
-          // Opportunistic backfill: role, challenges, runes for this participant
-          await backfillParticipantFromMatchDto(dbPart.id, internalId, riotPart)
         }
       }
     }
@@ -376,98 +360,13 @@ async function runPhase2(
 
 
 async function runStep3FixNulls(
-  client: RiotHttpClient,
+  _client: RiotHttpClient,
   logger: ReturnType<typeof createRiotPollerLogger>,
   counters: { matchesRankFixed: number; participantsRankFixed: number; participantsRoleFixed: number },
-  clefType: string | null
+  _clefType: string | null
 ): Promise<void> {
   await logger.step('Step 3 start', {})
-
-  const playerFilter = clefType ? { player: { puuidKeyVersion: clefType } } : {}
-
-  const participantsNullRole = await prisma.participant.findMany({
-    where: { role: null, ...playerFilter },
-    include: { match: true, player: true },
-    take: BATCH_FIX_NULLS,
-  })
-  for (const p of participantsNullRole) {
-    const platform = p.match.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
-    client.setPlatform(platform)
-    const matchRes = await client.getMatch(p.match.matchId)
-    setState({ requestCount: state.requestCount + 1 })
-    if (!matchRes.ok) continue
-    const part = matchRes.data.info?.participants?.find((x) => x.puuid === p.player.puuid)
-    if (part) {
-      const role = roleFromPosition(part.teamPosition, part.individualPosition)
-      if (role) {
-        await prisma.participant.update({ where: { id: p.id }, data: { role } })
-        counters.participantsRoleFixed++
-        await logger.info('DB: participant updated (role)', { participantId: String(p.id) })
-      }
-    }
-  }
-
-  const participantsNullRank = await prisma.participant.findMany({
-    where: { rankTier: null, ...playerFilter },
-    include: { player: true },
-    take: BATCH_FIX_NULLS,
-  })
-  for (const p of participantsNullRank) {
-    client.setPlatform(p.player.region)
-    const summonerRes = await client.getSummonerByPuuid(p.player.puuid)
-    setState({ requestCount: state.requestCount + 1 })
-    if (!summonerRes.ok) continue
-    const leagueRes = await client.getLeagueEntriesBySummonerId(summonerRes.data.id)
-    setState({ requestCount: state.requestCount + 1 })
-    if (!leagueRes.ok) continue
-    const solo = leagueRes.data.find((e) => e.queueType === 'RANKED_SOLO_5x5')
-    if (solo) {
-      await prisma.participant.update({
-        where: { id: p.id },
-        data: {
-          rankTier: solo.tier,
-          rankDivision: solo.rank,
-          rankLp: solo.leaguePoints ?? null,
-        },
-      })
-    } else {
-      // Player has no Solo/Duo rank entry → explicitly unranked (not just missing)
-      await prisma.participant.update({
-        where: { id: p.id },
-        data: { rankTier: 'UNRANKED', rankDivision: null, rankLp: null },
-      })
-    }
-    counters.participantsRankFixed++
-    await logger.info('DB: participant updated (rank)', {
-      participantId: String(p.id),
-      tier: solo?.tier ?? 'UNRANKED',
-    })
-  }
-
-  const matchesNullRank = await prisma.match.findMany({
-    where: {
-      rank: null,
-      participants: { some: { rankTier: { not: null, notIn: ['UNRANKED'] } } },
-    },
-    include: { participants: { include: { player: true } } },
-    take: BATCH_FIX_NULLS,
-  })
-  for (const m of matchesNullRank) {
-    // Exclude UNRANKED participants from the average — they have no meaningful rank score
-    const parts = m.participants.filter((p) => p.rankTier != null && p.rankTier !== 'UNRANKED')
-    if (parts.length === 0) continue
-    let totalScore = 0
-    for (const p of parts) {
-      totalScore += rankToScore(p.rankTier!, p.rankDivision ?? '', p.rankLp)
-    }
-    const avg = totalScore / parts.length
-    const { tier, division } = scoreToRank(avg)
-    const rankStr = formatRankString(tier, division)
-    await prisma.match.update({ where: { id: m.id }, data: { rank: rankStr } })
-    counters.matchesRankFixed++
-    await logger.info('DB: match updated (rank)', { matchId: m.matchId })
-  }
-
+  // In new schema, rank/role are always set at ingestion time — nothing to backfill.
   await logger.step('Step 3 end', { ...counters })
 }
 
@@ -480,45 +379,38 @@ function buildMatchTeamData(
 ): Array<{
   teamRow: {
     matchId: bigint
-    teamId: number
+    team: number
     win: boolean
-    rankTier: string | null
     teamEarlySurrendered: boolean
-    ban1: number | null
-    ban2: number | null
-    ban3: number | null
-    ban4: number | null
-    ban5: number | null
     baronKills: number
+    baronFirst: boolean
     dragonKills: number
+    dragonFirst: boolean
     towerKills: number
+    towerFirst: boolean
     hordeKills: number
+    hordeFirst: boolean
     riftHeraldKills: number
+    riftHeraldFirst: boolean
     inhibitorKills: number
     championKills: number
+    firstBlood: boolean
+    elderKills: number
   }
-  firstObjectives: Array<{ objectiveType: string }> // baron, dragon, tower, horde, rift_herald, inhibitor (champion/tower from participants)
   bans: Array<{ championId: number; pickOrder: number }>
 }> {
   if (!info?.teams || info.teams.length === 0) return []
-  const toBan = (team: { bans?: Array<{ championId?: number }> }, idx: number): number | null => {
-    const champId = team.bans?.[idx]?.championId
-    return typeof champId === 'number' && champId > 0 ? champId : null
-  }
   const toFirst = (value: unknown): boolean => value === true
   const toKills = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
 
-  // Pre-compute per-team aggregates from participants
+  // Pre-compute per-team teamEarlySurrendered from participants
   const teamEarlySurrendered = new Map<number, boolean>()
-  const teamRankTier = new Map<number, string | null>()
   for (const p of participantDtos) {
     const tid = p.teamId ?? 0
     if (!tid) continue
     if ((p as { teamEarlySurrendered?: boolean }).teamEarlySurrendered === true) {
       teamEarlySurrendered.set(tid, true)
     }
-    const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? null
-    if (tier && !teamRankTier.has(tid)) teamRankTier.set(tid, tier)
   }
 
   return info.teams
@@ -532,6 +424,7 @@ function buildMatchTeamData(
       const hordeObj = (obj['horde'] ?? {}) as { first?: unknown; kills?: unknown }
       const riftHeraldObj = (obj['riftHerald'] ?? {}) as { first?: unknown; kills?: unknown }
       const inhibitorObj = (obj['inhibitor'] ?? {}) as { first?: unknown; kills?: unknown }
+      const elderObj = (obj['elder'] ?? {}) as { first?: unknown; kills?: unknown }
 
       const teamBans = (t.bans ?? [])
         .filter((b, idx) => {
@@ -540,65 +433,54 @@ function buildMatchTeamData(
         })
         .map((b, idx) => ({ championId: b.championId as number, pickOrder: idx + 1 }))
 
-      const firstObjectives: Array<{ objectiveType: string }> = []
-      if (toFirst(baronObj.first)) firstObjectives.push({ objectiveType: 'baron' })
-      if (toFirst(dragonObj.first)) firstObjectives.push({ objectiveType: 'dragon' })
-      if (toFirst(towerObj.first)) firstObjectives.push({ objectiveType: 'tower' })
-      if (toFirst(hordeObj.first)) firstObjectives.push({ objectiveType: 'horde' })
-      if (toFirst(riftHeraldObj.first)) firstObjectives.push({ objectiveType: 'rift_herald' })
-      if (toFirst(inhibitorObj.first)) firstObjectives.push({ objectiveType: 'inhibitor' })
-      if (toFirst(championObj.first)) firstObjectives.push({ objectiveType: 'champion' })
-
       return {
         teamRow: {
           matchId,
-          teamId: t.teamId ?? 0,
+          team: t.teamId ?? 0,
           win: t.win === true,
-          rankTier: teamRankTier.get(t.teamId ?? 0) ?? null,
           teamEarlySurrendered: teamEarlySurrendered.get(t.teamId ?? 0) === true,
-          ban1: toBan(t, 0),
-          ban2: toBan(t, 1),
-          ban3: toBan(t, 2),
-          ban4: toBan(t, 3),
-          ban5: toBan(t, 4),
           baronKills: toKills(baronObj.kills),
+          baronFirst: toFirst(baronObj.first),
           dragonKills: toKills(dragonObj.kills),
+          dragonFirst: toFirst(dragonObj.first),
           towerKills: toKills(towerObj.kills),
+          towerFirst: toFirst(towerObj.first),
           hordeKills: toKills(hordeObj.kills),
+          hordeFirst: toFirst(hordeObj.first),
           riftHeraldKills: toKills(riftHeraldObj.kills),
+          riftHeraldFirst: toFirst(riftHeraldObj.first),
           inhibitorKills: toKills(inhibitorObj.kills),
           championKills: toKills(championObj.kills),
+          firstBlood: toFirst(championObj.first),
+          elderKills: toKills(elderObj.kills),
         },
         bans: teamBans,
-        firstObjectives,
       }
     })
 }
 
-/** Build normalised participant_items rows from JSON items array [itemId, ...]. */
+/** Build normalised match_player_items rows from JSON items array [itemId, ...]. */
 function buildItemRows(
-  participantId: bigint,
-  matchId: bigint,
+  matchPlayerId: bigint,
   items: unknown
-): Array<{ participantId: bigint; matchId: bigint; itemId: number; itemSlot: number }> {
+): Array<{ matchPlayerId: bigint; itemId: number; order: number }> {
   if (!Array.isArray(items)) return []
-  const rows: Array<{ participantId: bigint; matchId: bigint; itemId: number; itemSlot: number }> = []
+  const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
   for (let slot = 0; slot < items.length && slot <= 6; slot++) {
     const itemId = Number(items[slot])
     if (Number.isFinite(itemId) && itemId > 0) {
-      rows.push({ participantId, matchId, itemId, itemSlot: slot })
+      rows.push({ matchPlayerId, itemId, order: slot })
     }
   }
   return rows
 }
 
-/** Build normalised participant_runes rows from perks.styles array. */
+/** Build normalised match_player_runes rows from perks.styles array. */
 function buildRuneRows(
-  participantId: bigint,
-  matchId: bigint,
+  matchPlayerId: bigint,
   runes: unknown
-): Array<{ participantId: bigint; matchId: bigint; perkId: number; slot: number; styleId: number; var1: number | null; var2: number | null; var3: number | null }> {
-  const rows: Array<{ participantId: bigint; matchId: bigint; perkId: number; slot: number; styleId: number; var1: number | null; var2: number | null; var3: number | null }> = []
+): Array<{ matchPlayerId: bigint; perkId: number; style: number }> {
+  const rows: Array<{ matchPlayerId: bigint; perkId: number; style: number }> = []
   const styles = (() => {
     if (!runes || typeof runes !== 'object') return []
     const r = runes as Record<string, unknown>
@@ -612,64 +494,41 @@ function buildRuneRows(
     const styleId = Number(s['id'])
     if (!Number.isFinite(styleId)) continue
     const selections = Array.isArray(s['selections']) ? s['selections'] : []
-    for (let slot = 0; slot < selections.length; slot++) {
-      const sel = selections[slot] as Record<string, unknown>
-      if (!sel) continue
-      const perkId = Number(sel['perk'])
+    for (const sel of selections) {
+      const selObj = sel as Record<string, unknown>
+      if (!selObj) continue
+      const perkId = Number(selObj['perk'])
       if (!Number.isFinite(perkId)) continue
-      rows.push({
-        participantId,
-        matchId,
-        perkId,
-        slot,
-        styleId,
-        var1: Number.isFinite(Number(sel['var1'])) ? Number(sel['var1']) : null,
-        var2: Number.isFinite(Number(sel['var2'])) ? Number(sel['var2']) : null,
-        var3: Number.isFinite(Number(sel['var3'])) ? Number(sel['var3']) : null,
-      })
+      rows.push({ matchPlayerId, perkId, style: styleId })
     }
   }
   return rows
 }
 
-/** Build normalised participant_summoner_spells rows. */
+/** Build normalised match_player_summoner_spells rows (slot 0 and 1). */
 function buildSummonerSpellRows(
-  participantId: bigint,
-  matchId: bigint,
-  spells: unknown,
-  summoner1Casts: number,
-  summoner2Casts: number
-): Array<{ participantId: bigint; matchId: bigint; spellId: number; spellSlot: number; casts: number }> {
-  if (!Array.isArray(spells) || spells.length < 2) return []
-  const rows: Array<{ participantId: bigint; matchId: bigint; spellId: number; spellSlot: number; casts: number }> = []
-  const id1 = Number(spells[0])
-  const id2 = Number(spells[1])
-  if (Number.isFinite(id1) && id1 > 0) rows.push({ participantId, matchId, spellId: id1, spellSlot: 1, casts: summoner1Casts })
-  if (Number.isFinite(id2) && id2 > 0) rows.push({ participantId, matchId, spellId: id2, spellSlot: 2, casts: summoner2Casts })
+  matchPlayerId: bigint,
+  summoner1Id: number | null,
+  summoner2Id: number | null
+): Array<{ matchPlayerId: bigint; spellId: number; spellSlot: number }> {
+  const rows: Array<{ matchPlayerId: bigint; spellId: number; spellSlot: number }> = []
+  if (summoner1Id != null && summoner1Id > 0) rows.push({ matchPlayerId, spellId: summoner1Id, spellSlot: 0 })
+  if (summoner2Id != null && summoner2Id > 0) rows.push({ matchPlayerId, spellId: summoner2Id, spellSlot: 1 })
   return rows
 }
 
-/** Build normalised participant_spells rows (Q/W/E/R cast counts). */
-function buildSpellRows(
-  participantId: bigint,
-  matchId: bigint,
-  casts: [number, number, number, number]
-): Array<{ participantId: bigint; matchId: bigint; spellSlot: number; casts: number }> {
-  return casts.map((c, i) => ({ participantId, matchId, spellSlot: i + 1, casts: c }))
-}
-
-/** Build normalised participant_perks rows from stat_perks { defense, flex, offense }. */
-function buildPerkRows(
-  participantId: bigint,
-  matchId: bigint,
+/** Build normalised match_player_shards rows from stat_perks { defense, flex, offense }. Slots: 0=offense, 1=flex, 2=defense. */
+function buildShardRows(
+  matchPlayerId: bigint,
   statPerks: unknown
-): Array<{ participantId: bigint; matchId: bigint; perkId: number }> {
+): Array<{ matchPlayerId: bigint; shardId: number; slot: number }> {
   if (!statPerks || typeof statPerks !== 'object') return []
   const sp = statPerks as Record<string, unknown>
-  const rows: Array<{ participantId: bigint; matchId: bigint; perkId: number }> = []
-  for (const key of ['defense', 'flex', 'offense'] as const) {
-    const id = Number(sp[key])
-    if (Number.isFinite(id) && id > 0) rows.push({ participantId, matchId, perkId: id })
+  const rows: Array<{ matchPlayerId: bigint; shardId: number; slot: number }> = []
+  const keys = ['offense', 'flex', 'defense'] as const
+  for (let slot = 0; slot < keys.length; slot++) {
+    const id = Number(sp[keys[slot]])
+    if (Number.isFinite(id) && id > 0) rows.push({ matchPlayerId, shardId: id, slot })
   }
   return rows
 }
@@ -681,17 +540,17 @@ export async function upsertMatchAndParticipants(
   counters: { matchesFetched: number; participantsFetched: number; playersFetched: number },
   logger?: ReturnType<typeof createRiotPollerLogger>
 ): Promise<void> {
-  const matchId = dto.metadata?.matchId ?? dto.info?.gameId?.toString()
-  if (!matchId) return
+  const riotMatchId = dto.metadata?.matchId ?? dto.info?.gameId?.toString()
+  if (!riotMatchId) return
   const info = dto.info
   if (!info?.participants?.length) return
   if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') return
 
-  const existing = await prisma.match.findUnique({ where: { matchId }, select: { id: true } })
+  const existing = await prisma.match.findUnique({ where: { riotMatchId }, select: { id: true } })
   if (existing) return
 
-  const gameVersion = info.gameVersion ?? null
-  const gameDuration = info.gameDuration ?? null
+  const gameVersion = info.gameVersion ?? ''
+  const gameDuration = info.gameDuration ?? 0
   const participantDtos = info.participants as RiotParticipantDto[]
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
   const existingPlayers = await prisma.player.findMany({
@@ -700,7 +559,7 @@ export async function upsertMatchAndParticipants(
   })
   const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
-  // Compute match-level rank from all participants (exclude UNRANKED)
+  // Compute match-level rank from all participants (exclude UNRANKED/null)
   const rankScores: number[] = []
   for (const p of participantDtos) {
     const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier
@@ -710,14 +569,16 @@ export async function upsertMatchAndParticipants(
       rankScores.push(rankToScore(tier, div, lp))
     }
   }
-  let matchRank: string | null = null
-  if (rankScores.length >= 10) {
+  let matchRankTier = 'UNRANKED'
+  let matchRankDivision = ''
+  if (rankScores.length > 0) {
     const avg = rankScores.reduce((a, b) => a + b, 0) / rankScores.length
     const { tier, division } = scoreToRank(avg)
-    matchRank = formatRankString(tier, division)
+    matchRankTier = tier
+    matchRankDivision = division
   }
 
-  // Aggregate surrender flags (BOOL_OR)
+  // Aggregate surrender flags
   const gameEndedInSurrender = participantDtos.some(
     (p) => (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender === true
   )
@@ -727,43 +588,33 @@ export async function upsertMatchAndParticipants(
 
   const match = await prisma.match.create({
     data: {
-      matchId,
+      riotMatchId,
       gameVersion,
       gameDuration,
-      rank: matchRank,
+      rankTier: matchRankTier,
+      rankDivision: matchRankDivision,
       gameEndedInSurrender,
       gameEndedInEarlySurrender,
+      region,
     },
   })
   counters.matchesFetched++
-  if (logger) await logger.info('DB: match created', { matchId })
+  if (logger) await logger.info('DB: match created', { riotMatchId })
 
-  // Build match_teams + bans + first objectives (single source of truth in match_team_first_objectives)
+  // Build teams + bans
   const teamDataItems = buildMatchTeamData(match.id, info, participantDtos)
-  const matchTeamIdByTeamId = new Map<number, bigint>()
-  for (const { teamRow, bans, firstObjectives } of teamDataItems) {
-    const created = await prisma.matchTeam.create({ data: teamRow })
-    matchTeamIdByTeamId.set(teamRow.teamId, created.id)
+  const teamIdByRiotTeam = new Map<number, bigint>()
+  for (const { teamRow, bans } of teamDataItems) {
+    const created = await prisma.team.create({ data: teamRow })
+    teamIdByRiotTeam.set(teamRow.team, created.id)
     if (bans.length > 0) {
       await prisma.ban.createMany({
         data: bans.map((b) => ({
-          matchTeamId: created.id,
+          teamId: created.id,
           matchId: match.id,
           championId: b.championId,
           pickOrder: b.pickOrder,
         })),
-      })
-    }
-    // Insert "team got first" rows (participant_id null); champion/tower may get participant rows below from first blood/first tower
-    if (firstObjectives.length > 0) {
-      await prisma.matchTeamFirstObjective.createMany({
-        data: firstObjectives.map((obj) => ({
-          matchTeamId: created.id,
-          objectiveType: obj.objectiveType,
-          participantId: null,
-          isKill: true,
-        })),
-        skipDuplicates: true,
       })
     }
   }
@@ -771,7 +622,8 @@ export async function upsertMatchAndParticipants(
   // Collect unknown challenge keys seen across all participants (de-duped)
   const allUnknownKeys: Record<string, unknown> = {}
 
-  for (const p of participantDtos) {
+  for (let pIdx = 0; pIdx < participantDtos.length; pIdx++) {
+    const p = participantDtos[pIdx]
     const puuid = p.puuid
     if (!puuid) continue
     const { gn: partGameName, tl: partTagName } = participantNames(p)
@@ -798,7 +650,6 @@ export async function upsertMatchAndParticipants(
         playerUpdates['puuidKeyVersion'] = puuidKeyVersion
         existingPlayer.puuidKeyVersion = puuidKeyVersion
       }
-      // Populate gameName/tagName from match participant if missing
       if (!existingPlayer.gameName && partGameName) {
         playerUpdates['gameName'] = partGameName
         playerUpdates['tagName'] = partTagName || null
@@ -809,227 +660,253 @@ export async function upsertMatchAndParticipants(
       }
     }
 
-    const role = roleFromPosition(p.teamPosition, p.individualPosition)
-    const rankTier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? null
+    const role = roleFromPosition(p.teamPosition, p.individualPosition) ?? 'FILL'
+    const rankTier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
     const rankDivision = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
     const rankLp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
+    const riotTeamId = p.teamId ?? 100
+    const teamDbId = teamIdByRiotTeam.get(riotTeamId) ?? teamIdByRiotTeam.values().next().value!
 
-    // Legacy JSON blobs (kept for transition)
     const items = (p as { items?: unknown }).items ?? null
     const runes = (p as { perks?: unknown }).perks ?? (p as { runes?: unknown }).runes ?? null
     const summoner1Id = (p as { summoner1Id?: number }).summoner1Id ?? null
     const summoner2Id = (p as { summoner2Id?: number }).summoner2Id ?? null
-    const summonerSpells = summoner1Id != null && summoner2Id != null ? [summoner1Id, summoner2Id] : null
     const statPerks = (() => {
       const perks = (p as { perks?: Record<string, unknown> }).perks
       if (perks && typeof perks === 'object' && 'statPerks' in perks) return perks['statPerks'] ?? null
       return (p as { statPerks?: unknown }).statPerks ?? null
     })()
     const challenges = (p as { challenges?: unknown }).challenges ?? null
-    const summoner1Casts = (p as { summoner1Casts?: number }).summoner1Casts ?? 0
-    const summoner2Casts = (p as { summoner2Casts?: number }).summoner2Casts ?? 0
-    const spell1Casts = (p as { spell1Casts?: number }).spell1Casts ?? null
-    const spell2Casts = (p as { spell2Casts?: number }).spell2Casts ?? null
-    const spell3Casts = (p as { spell3Casts?: number }).spell3Casts ?? null
-    const spell4Casts = (p as { spell4Casts?: number }).spell4Casts ?? null
+    const ch = (challenges && typeof challenges === 'object' && !Array.isArray(challenges))
+      ? challenges as Record<string, unknown>
+      : {}
 
-    const participant = await prisma.participant.create({
+    const n = (key: string, fallback = 0): number => {
+      const v = (p as Record<string, unknown>)[key] ?? ch[key]
+      return typeof v === 'number' && Number.isFinite(v) ? v : fallback
+    }
+    const b = (key: string): boolean => (p as Record<string, unknown>)[key] === true
+
+    const matchPlayer = await prisma.matchPlayer.create({
       data: {
-        playerId,
         matchId: match.id,
-        teamId: p.teamId ?? null,
+        playerId,
+        teamId: teamDbId,
         championId: p.championId ?? 0,
         role,
         rankTier,
         rankDivision,
         rankLp,
-        kills: p.kills ?? 0,
-        deaths: p.deaths ?? 0,
-        assists: p.assists ?? 0,
-        champLevel: p.champLevel ?? null,
-        goldEarned: p.goldEarned ?? null,
-        totalDamageDealtToChampions: p.totalDamageDealtToChampions ?? null,
-        totalMinionsKilled: p.totalMinionsKilled ?? null,
-        visionScore: p.visionScore ?? null,
-        baronKills: (p as { baronKills?: number }).baronKills ?? null,
-        consumablesPurchased: (p as { consumablesPurchased?: number }).consumablesPurchased ?? null,
-        damageDealtToBuildings: (p as { damageDealtToBuildings?: number }).damageDealtToBuildings ?? null,
-        damageDealtToEpicMonsters: (p as { damageDealtToEpicMonsters?: number }).damageDealtToEpicMonsters ?? null,
-        damageDealtToObjectives: (p as { damageDealtToObjectives?: number }).damageDealtToObjectives ?? null,
-        damageDealtToTurrets: (p as { damageDealtToTurrets?: number }).damageDealtToTurrets ?? null,
-        damageSelfMitigated: (p as { damageSelfMitigated?: number }).damageSelfMitigated ?? null,
-        doubleKills: (p as { doubleKills?: number }).doubleKills ?? null,
-        dragonKills: (p as { dragonKills?: number }).dragonKills ?? null,
-        goldSpent: (p as { goldSpent?: number }).goldSpent ?? null,
-        inhibitorKills: (p as { inhibitorKills?: number }).inhibitorKills ?? null,
-        inhibitorTakedowns: (p as { inhibitorTakedowns?: number }).inhibitorTakedowns ?? null,
-        inhibitorsLost: (p as { inhibitorsLost?: number }).inhibitorsLost ?? null,
-        itemsPurchased: (p as { itemsPurchased?: number }).itemsPurchased ?? null,
-        killingSprees: (p as { killingSprees?: number }).killingSprees ?? null,
-        largestCriticalStrike: (p as { largestCriticalStrike?: number }).largestCriticalStrike ?? null,
-        largestKillingSpree: (p as { largestKillingSpree?: number }).largestKillingSpree ?? null,
-        largestMultiKill: (p as { largestMultiKill?: number }).largestMultiKill ?? null,
-        longestTimeSpentLiving: (p as { longestTimeSpentLiving?: number }).longestTimeSpentLiving ?? null,
-        magicDamageDealt: (p as { magicDamageDealt?: number }).magicDamageDealt ?? null,
-        magicDamageDealtToChampions: (p as { magicDamageDealtToChampions?: number }).magicDamageDealtToChampions ?? null,
-        magicDamageTaken: (p as { magicDamageTaken?: number }).magicDamageTaken ?? null,
-        neutralMinionsKilled: (p as { neutralMinionsKilled?: number }).neutralMinionsKilled ?? null,
-        objectivesStolen: (p as { objectivesStolen?: number }).objectivesStolen ?? null,
-        objectivesStolenAssists: (p as { objectivesStolenAssists?: number }).objectivesStolenAssists ?? null,
-        pentaKills: (p as { pentaKills?: number }).pentaKills ?? null,
-        physicalDamageDealt: (p as { physicalDamageDealt?: number }).physicalDamageDealt ?? null,
-        physicalDamageDealtToChampions: (p as { physicalDamageDealtToChampions?: number }).physicalDamageDealtToChampions ?? null,
-        physicalDamageTaken: (p as { physicalDamageTaken?: number }).physicalDamageTaken ?? null,
-        placement: (p as { placement?: number }).placement ?? null,
-        quadraKills: (p as { quadraKills?: number }).quadraKills ?? null,
-        roleBoundItem: (p as { roleBoundItem?: number }).roleBoundItem ?? null,
-        sightWardsBoughtInGame: (p as { sightWardsBoughtInGame?: number }).sightWardsBoughtInGame ?? null,
-        timeCCingOthers: (p as { timeCCingOthers?: number }).timeCCingOthers ?? null,
-        totalAllyJungleMinionsKilled: (p as { totalAllyJungleMinionsKilled?: number }).totalAllyJungleMinionsKilled ?? null,
-        totalDamageDealt: (p as { totalDamageDealt?: number }).totalDamageDealt ?? null,
-        totalDamageShieldedOnTeammates: (p as { totalDamageShieldedOnTeammates?: number }).totalDamageShieldedOnTeammates ?? null,
-        totalDamageTaken: (p as { totalDamageTaken?: number }).totalDamageTaken ?? null,
-        totalEnemyJungleMinionsKilled: (p as { totalEnemyJungleMinionsKilled?: number }).totalEnemyJungleMinionsKilled ?? null,
-        totalHeal: (p as { totalHeal?: number }).totalHeal ?? null,
-        totalHealsOnTeammates: (p as { totalHealsOnTeammates?: number }).totalHealsOnTeammates ?? null,
-        totalTimeCCDealt: (p as { totalTimeCCDealt?: number }).totalTimeCCDealt ?? null,
-        totalTimeSpentDead: (p as { totalTimeSpentDead?: number }).totalTimeSpentDead ?? null,
-        totalUnitsHealed: (p as { totalUnitsHealed?: number }).totalUnitsHealed ?? null,
-        tripleKills: (p as { tripleKills?: number }).tripleKills ?? null,
-        trueDamageDealt: (p as { trueDamageDealt?: number }).trueDamageDealt ?? null,
-        trueDamageDealtToChampions: (p as { trueDamageDealtToChampions?: number }).trueDamageDealtToChampions ?? null,
-        trueDamageTaken: (p as { trueDamageTaken?: number }).trueDamageTaken ?? null,
-        turretKills: (p as { turretKills?: number }).turretKills ?? null,
-        turretTakedowns: (p as { turretTakedowns?: number }).turretTakedowns ?? null,
-        turretsLost: (p as { turretsLost?: number }).turretsLost ?? null,
-        unrealKills: (p as { unrealKills?: number }).unrealKills ?? null,
-        visionWardsBoughtInGame: (p as { visionWardsBoughtInGame?: number }).visionWardsBoughtInGame ?? null,
-        wardsKilled: (p as { wardsKilled?: number }).wardsKilled ?? null,
-        wardsPlaced: (p as { wardsPlaced?: number }).wardsPlaced ?? null,
-        summoner1Casts,
-        summoner2Casts,
-        spell1Casts,
-        spell2Casts,
-        spell3Casts,
-        spell4Casts,
-        // Legacy JSON blobs — also written to normalised tables below
-        items: items as Prisma.InputJsonValue ?? Prisma.JsonNull,
-        runes: runes as Prisma.InputJsonValue ?? Prisma.JsonNull,
-        summonerSpells: summonerSpells as Prisma.InputJsonValue ?? Prisma.JsonNull,
-        statPerks: statPerks as Prisma.InputJsonValue ?? Prisma.JsonNull,
-        challenges: challenges as Prisma.InputJsonValue ?? Prisma.JsonNull,
+        participantId: pIdx + 1,
       },
     })
     counters.participantsFetched++
 
-    // First blood / first tower: single source of truth in match_team_first_objectives
-    const teamId = p.teamId ?? 0
-    const matchTeamId = teamId ? matchTeamIdByTeamId.get(teamId) : undefined
-    if (matchTeamId) {
-      const firstObjRows: Array<{
-        matchTeamId: bigint
-        objectiveType: string
-        participantId: bigint
-        isKill: boolean
-      }> = []
-      const px = p as {
-        firstBloodKill?: boolean
-        firstBloodAssist?: boolean
-        firstTowerKill?: boolean
-        firstTowerAssist?: boolean
-      }
-      if (px.firstBloodKill)
-        firstObjRows.push({
-          matchTeamId,
-          objectiveType: 'champion',
-          participantId: participant.id,
-          isKill: true,
-        })
-      if (px.firstBloodAssist)
-        firstObjRows.push({
-          matchTeamId,
-          objectiveType: 'champion',
-          participantId: participant.id,
-          isKill: false,
-        })
-      if (px.firstTowerKill)
-        firstObjRows.push({
-          matchTeamId,
-          objectiveType: 'tower',
-          participantId: participant.id,
-          isKill: true,
-        })
-      if (px.firstTowerAssist)
-        firstObjRows.push({
-          matchTeamId,
-          objectiveType: 'tower',
-          participantId: participant.id,
-          isKill: false,
-        })
-      if (firstObjRows.length > 0) {
-        await prisma.matchTeamFirstObjective.createMany({ data: firstObjRows, skipDuplicates: true })
-      }
+    const mpId = matchPlayer.id
+
+    // ── Sub-table writes ───────────────────────────────────────────────────────
+
+    await prisma.matchPlayerCore.create({
+      data: {
+        matchPlayerId: mpId,
+        kills: n('kills'),
+        deaths: n('deaths'),
+        assists: n('assists'),
+        champLevel: n('champLevel'),
+        champExperience: n('champExperience'),
+        goldEarned: n('goldEarned'),
+        goldSpent: n('goldSpent'),
+        itemsPurchased: n('itemsPurchased'),
+        consumablesPurchased: n('consumablesPurchased'),
+        totalMinionsKilled: n('totalMinionsKilled'),
+        roleBoundItem: n('roleBoundItem'),
+      },
+    })
+
+    await prisma.matchPlayerVisions.create({
+      data: {
+        matchPlayerId: mpId,
+        visionScore: n('visionScore'),
+        wardsKilled: n('wardsKilled'),
+        wardsPlaced: n('wardsPlaced'),
+        visionWardsBoughtInGame: n('visionWardsBoughtInGame'),
+        detectorWardsPlaced: n('detectorWardsPlaced'),
+        controlWardsPlaced: n('sightWardsBoughtInGame'),
+        unseenRecalls: n('unseenRecalls'),
+        visionScoreAdvantageLaneOpponent: n('visionScoreAdvantageLaneOpponent'),
+        wardTakedowns: n('wardTakedowns'),
+        wardTakedownsBefore20M: n('wardTakedownsBefore20M'),
+        wardsGuarded: n('wardsGuarded'),
+      },
+    })
+
+    await prisma.matchPlayerMatchup.create({
+      data: {
+        matchPlayerId: mpId,
+        bountyGold: n('bountyGold'),
+        completeSupportQuestInTime: n('completeSupportQuestInTime'),
+        deathsByEnemyChamps: n('deathsByEnemyChamps'),
+        earlyLaningPhaseGoldExpAdvantage: n('earlyLaningPhaseGoldExpAdvantage'),
+        initialCrabCount: n('initialCrabCount'),
+        jungleCsBefore10Minutes: n('jungleCsBefore10Minutes'),
+        killsNearEnemyTurret: n('killsNearEnemyTurret'),
+        killsOnOtherLanesEarlyJungleAsLaner: n('killsOnOtherLanesEarlyJungleAsLaner'),
+        killsUnderOwnTurret: n('killsUnderOwnTurret'),
+        landSkillShotsEarlyGame: n('landSkillShotsEarlyGame'),
+        laneMinionsFirst10Minutes: n('laneMinionsFirst10Minutes'),
+        laningPhaseGoldExpAdvantage: n('laningPhaseGoldExpAdvantage'),
+        maxCsAdvantageOnLaneOpponent: n('maxCsAdvantageOnLaneOpponent'),
+        maxKillDeficit: n('maxKillDeficit'),
+        maxLevelLeadLaneOpponent: n('maxLevelLeadLaneOpponent'),
+        outnumberedKills: n('outnumberedKills'),
+        quickSoloKills: n('quickSoloKills'),
+        soloKills: n('soloKills'),
+        takedownsAfterGainingLevelAdvantage: n('takedownsAfterGainingLevelAdvantage'),
+        moreEnemyJungleThanOpponent: n('moreEnemyJungleThanOpponent'),
+        totalAllyJungleMinionsKilled: n('totalAllyJungleMinionsKilled'),
+        totalEnemyJungleMinionsKilled: n('totalEnemyJungleMinionsKilled'),
+        neutralMinionsKilled: n('neutralMinionsKilled'),
+      },
+    })
+
+    await prisma.matchPlayerObjectives.create({
+      data: {
+        matchPlayerId: mpId,
+        dragonKills: n('dragonKills'),
+        firstBloodKill: b('firstBloodKill'),
+        firstBloodAssist: b('firstBloodAssist'),
+        firstTowerKill: b('firstTowerKill'),
+        firstTowerAssist: b('firstTowerAssist'),
+        inhibitorKills: n('inhibitorKills'),
+        inhibitorTakedowns: n('inhibitorTakedowns'),
+        inhibitorsLost: n('inhibitorsLost'),
+        objectivesStolen: n('objectivesStolen'),
+        objectivesStolenAssists: n('objectivesStolenAssists'),
+        turretKills: n('turretKills'),
+        turretTakedowns: n('turretTakedowns'),
+        turretsLost: n('turretsLost'),
+        dragonTakedowns: n('dragonTakedowns'),
+        earliestBaron: n('earliestBaron'),
+        elderDragonKillsWithOpposingSoul: n('elderDragonKillsWithOpposingSoul'),
+        elderDragonMultikills: n('elderDragonMultikills'),
+        epicMonsterKillsNearEnemyJungler: n('epicMonsterKillsNearEnemyJungler'),
+        epicMonsterKillsWithin30SecondsOfSpawn: n('epicMonsterKillsWithin30SecondsOfSpawn'),
+        epicMonsterSteals: n('epicMonsterSteals'),
+        epicMonsterStolenWithoutSmite: n('epicMonsterStolenWithoutSmite'),
+        firstTurretKilledTime: n('firstTurretKilledTime'),
+        riftHeraldTakedowns: n('riftHeraldTakedowns'),
+        turretPlatesTaken: n('turretPlatesTaken'),
+        turretsTakenWithRiftHerald: n('turretsTakenWithRiftHerald'),
+        baronTakedowns: n('baronTakedowns'),
+        quickFirstTurret: n('quickFirstTurret'),
+        soloBaronKills: n('soloBaronKills'),
+        soloTurretsLategame: n('soloTurretsLategame'),
+        takedownOnFirstTurret: n('takedownOnFirstTurret'),
+        multiTurretRiftHeraldCount: n('multiTurretRiftHeraldCount'),
+      },
+    })
+
+    await prisma.matchPlayerCombats.create({
+      data: {
+        matchPlayerId: mpId,
+        damageDealtToBuildings: n('damageDealtToBuildings'),
+        damageDealtToEpicMonsters: n('damageDealtToEpicMonsters'),
+        damageDealtToObjectives: n('damageDealtToObjectives'),
+        damageDealtToTurrets: n('damageDealtToTurrets'),
+        damageSelfMitigated: n('damageSelfMitigated'),
+        doubleKills: n('doubleKills'),
+        killingSprees: n('killingSprees'),
+        largestCriticalStrike: n('largestCriticalStrike'),
+        largestKillingSpree: n('largestKillingSpree'),
+        longestTimeSpentLiving: n('longestTimeSpentLiving'),
+        magicDamageDealt: n('magicDamageDealt'),
+        magicDamageDealtToChampions: n('magicDamageDealtToChampions'),
+        magicDamageTaken: n('magicDamageTaken'),
+        pentaKills: n('pentaKills'),
+        physicalDamageDealt: n('physicalDamageDealt'),
+        physicalDamageDealtToChampions: n('physicalDamageDealtToChampions'),
+        physicalDamageTaken: n('physicalDamageTaken'),
+        quadraKills: n('quadraKills'),
+        totalDamageShieldedOnTeammates: n('totalDamageShieldedOnTeammates'),
+        totalDamageTaken: n('totalDamageTaken'),
+        totalHeal: n('totalHeal'),
+        totalHealsOnTeammates: n('totalHealsOnTeammates'),
+        totalTimeCcDealt: n('totalTimeCCDealt') || n('timeCCingOthers'),
+        totalUnitsHealed: n('totalUnitsHealed'),
+        tripleKills: n('tripleKills'),
+        trueDamageDealt: n('trueDamageDealt'),
+        trueDamageDealtToChampions: n('trueDamageDealtToChampions'),
+        trueDamageTaken: n('trueDamageTaken'),
+        effectiveHealAndShielding: n('effectiveHealAndShielding'),
+        timeCcingOthers: n('timeCCingOthers'),
+        enemyChampionImmobilizations: n('enemyChampionImmobilizations'),
+      },
+    })
+
+    if (ch && Object.keys(ch).length > 0) {
+      await prisma.matchPlayerChallenges.create({
+        data: {
+          matchPlayerId: mpId,
+          healFromMapSources: n('HealFromMapSources'),
+          buffsStolen: n('buffsStolen'),
+          dodgeSkillShotsSmallWindow: n('dodgeSkillShotsSmallWindow'),
+          hadOpenNexus: n('hadOpenNexus'),
+          immobilizeAndKillWithAlly: n('immobilizeAndKillWithAlly'),
+          junglerTakedownsNearDamagedEpicMonster: n('junglerTakedownsNearDamagedEpicMonster'),
+          killAfterHiddenWithAlly: n('killAfterHiddenWithAlly'),
+          killedChampTookFullTeamDamageSurvived: n('killedChampTookFullTeamDamageSurvived'),
+          killsWithHelpFromEpicMonster: n('killsWithHelpFromEpicMonster'),
+          knockEnemyIntoTeamAndKill: n('knockEnemyIntoTeamAndKill'),
+          mejaisFullStackInTime: n('mejaisFullStackInTime'),
+          multikillsAfterAggressiveFlash: n('multikillsAfterAggressiveFlash'),
+          quickCleanse: n('quickCleanse'),
+          saveAllyFromDeath: n('saveAllyFromDeath'),
+          scuttleCrabKills: n('scuttleCrabKills'),
+          skillshotsDodged: n('skillshotsDodged'),
+          skillshotsHit: n('skillshotsHit'),
+          stealthWardsPlaced: n('stealthWardsPlaced'),
+          survivedSingleDigitHpCount: n('survivedSingleDigitHpCount'),
+          survivedThreeImmobilizesInFight: n('survivedThreeImmobilizesInFight'),
+          takedownsBeforeJungleMinionSpawn: n('takedownsBeforeJungleMinionSpawn'),
+          takedownsInAlcove: n('takedownsInAlcove'),
+          takedownsInEnemyFountain: n('takedownsInEnemyFountain'),
+          tookLargeDamageSurvived: n('tookLargeDamageSurvived'),
+        },
+      })
     }
 
-    // ── Normalised double-writes ─────────────────────────────────────────────
+    // match_player_items
+    const itemRows = buildItemRows(mpId, items)
+    if (itemRows.length > 0) await prisma.matchPlayerItem.createMany({ data: itemRows })
 
-    const pid = participant.id
-    const mid = match.id
+    // match_player_runes
+    const runeRows = buildRuneRows(mpId, runes)
+    if (runeRows.length > 0) await prisma.matchPlayerRune.createMany({ data: runeRows })
 
-    // participant_items
-    const itemRows = buildItemRows(pid, mid, items)
-    if (itemRows.length > 0) await prisma.participantItem.createMany({ data: itemRows })
-
-    // participant_runes
-    const runeRows = buildRuneRows(pid, mid, runes)
-    if (runeRows.length > 0) await prisma.participantRune.createMany({ data: runeRows })
-
-    // participant_summoner_spells
-    const ssRows = buildSummonerSpellRows(pid, mid, summonerSpells, summoner1Casts, summoner2Casts)
+    // match_player_summoner_spells
+    const ssRows = buildSummonerSpellRows(mpId, summoner1Id, summoner2Id)
     if (ssRows.length > 0) {
-      await prisma.participantSummonerSpell.createMany({ data: ssRows, skipDuplicates: true })
+      await prisma.matchPlayerSummonerSpell.createMany({ data: ssRows, skipDuplicates: true })
     }
 
-    // participant_spells (Q/W/E/R)
-    if (spell1Casts != null || spell2Casts != null || spell3Casts != null || spell4Casts != null) {
-      const spellRows = buildSpellRows(pid, mid, [
-        spell1Casts ?? 0,
-        spell2Casts ?? 0,
-        spell3Casts ?? 0,
-        spell4Casts ?? 0,
-      ])
-      await prisma.participantSpell.createMany({ data: spellRows, skipDuplicates: true })
+    // match_player_shards (stat perks: offense=0, flex=1, defense=2)
+    const shardRows = buildShardRows(mpId, statPerks)
+    if (shardRows.length > 0) {
+      await prisma.matchPlayerShard.createMany({ data: shardRows, skipDuplicates: true })
     }
 
-    // participant_perks
-    const perkRows = buildPerkRows(pid, mid, statPerks)
-    if (perkRows.length > 0) await prisma.participantPerk.createMany({ data: perkRows })
-
-    // challenge columns on participant (filtered by allowlist); skip if DB missing columns (schema drift)
-    if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
-      const { allowed, unknown } = partitionChallenges(challenges as Record<string, unknown>)
-      if (allowed.length > 0) {
-        const challengeData = allowedToParticipantChallengeData(allowed)
-        try {
-          await prisma.participant.update({
-            where: { id: pid },
-            data: challengeData,
-          })
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err)
-          if (!msg.includes('does not exist')) throw err
-          // DB missing challenge columns: participant already created, continue
-        }
-      }
+    // Collect unknown challenge keys
+    if (ch) {
+      const { unknown } = partitionChallenges(ch)
       for (const [k, v] of Object.entries(unknown)) {
         allUnknownKeys[k] = v
       }
     }
   }
 
-  if (logger) await logger.info('DB: participants created', { matchId, count: participantDtos.length })
+  if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
 
-  // Fire-and-forget: register unknown challenge keys + Discord notify
+  // Fire-and-forget: notify of unknown challenge keys
   void handleUnknownChallengeKeys(allUnknownKeys)
 }
 
@@ -1048,85 +925,8 @@ async function extractAndInsertJungleFirstClear(
   timeline: RiotMatchTimelineDto,
   logger?: ReturnType<typeof createRiotPollerLogger>
 ): Promise<void> {
-  const frames = timeline.info?.frames
-  if (!frames?.length) return
-
-  // Find participants with role JUNGLE for this match (DB id mapped from Riot participantId 1–10).
-  const dbParticipants = await prisma.participant.findMany({
-    where: { matchId: matchDbId, role: 'JUNGLE' },
-    select: { id: true, matchId: true },
-  })
-  if (dbParticipants.length === 0) return
-
-  // Build a map riotParticipantId (1–10) → DB participantId.
-  // The Riot timeline lists participants in metadata in order (index 0 = riotPid 1, …).
-  // We resolve via participantFrames key which IS the riotParticipantId as a string.
-  // We match DB participants by join order: participants are stored in insertion order
-  // (participantId 1-5 = team 100, 6-10 = team 200). Query by matchId ordered by id.
-  const allMatchParticipants = await prisma.participant.findMany({
-    where: { matchId: matchDbId },
-    select: { id: true, role: true },
-    orderBy: { id: 'asc' },
-  })
-  // riotParticipantId is 1-indexed; map index (0-based) + 1 → DB id
-  const riotPidToDbId = new Map<number, bigint>()
-  for (let i = 0; i < allMatchParticipants.length; i++) {
-    riotPidToDbId.set(i + 1, allMatchParticipants[i].id)
-  }
-
-  // Build set of riotPids that are junglers
-  const junglerDbIds = new Set(dbParticipants.map((p) => p.id))
-  const junglerRiotPids = new Set<number>()
-  for (const [riotPid, dbId] of riotPidToDbId) {
-    if (junglerDbIds.has(dbId)) junglerRiotPids.add(riotPid)
-  }
-  if (junglerRiotPids.size === 0) return
-
-  // Per-jungler state: previous jungleMinionsKilled and current orderIndex
-  const prevKills = new Map<number, number>()
-  const orderIdx = new Map<number, number>()
-  const done = new Set<number>()
-  for (const riotPid of junglerRiotPids) {
-    prevKills.set(riotPid, 0)
-    orderIdx.set(riotPid, 0)
-  }
-
-  const rows: Array<{ participantId: bigint; matchId: bigint; orderIndex: number; timestampMs: number }> = []
-
-  for (const frame of frames) {
-    const ts = frame.timestamp ?? 0
-    for (const riotPid of junglerRiotPids) {
-      if (done.has(riotPid)) continue
-      const frameData = frame.participantFrames?.[String(riotPid)]
-      if (!frameData) continue
-      const curr = frameData.jungleMinionsKilled ?? 0
-      const prev = prevKills.get(riotPid) ?? 0
-      if (curr > prev) {
-        const dbId = riotPidToDbId.get(riotPid)
-        if (dbId == null) continue
-        const newKills = curr - prev
-        for (let k = 0; k < newKills; k++) {
-          const idx = (orderIdx.get(riotPid) ?? 0)
-          rows.push({ participantId: dbId, matchId: matchDbId, orderIndex: idx, timestampMs: ts })
-          orderIdx.set(riotPid, idx + 1)
-          if ((orderIdx.get(riotPid) ?? 0) >= JUNGLE_FIRST_CLEAR_MAX_CAMPS) {
-            done.add(riotPid)
-            break
-          }
-        }
-        prevKills.set(riotPid, curr)
-      }
-    }
-    // Stop early if all junglers have reached the cap
-    if (done.size === junglerRiotPids.size) break
-  }
-
-  if (rows.length === 0) return
-
-  await prisma.participantJungleFirstClear.createMany({ data: rows, skipDuplicates: true })
-  if (logger) {
-    await logger.info('DB: jungle first clear inserted', { matchId: riotMatchId, rows: rows.length })
-  }
+  // Jungle first clear table was removed from the new schema — nothing to do.
+  void matchDbId; void riotMatchId; void timeline; void logger
 }
 
 /** Ward and trinket item IDs excluded when detecting the starter item purchase. */
@@ -1146,24 +946,24 @@ async function extractAndInsertTimelineExtras(
   const frames = timeline.info?.frames
   if (!frames?.length) return
 
-  // Build riotParticipantId (1–10) → DB participant.id
-  const allMatchParticipants = await prisma.participant.findMany({
+  // Build Riot participantId (1-10) → DB matchPlayer.id
+  const allMatchPlayers2 = await prisma.matchPlayer.findMany({
     where: { matchId: matchDbId },
-    select: { id: true },
-    orderBy: { id: 'asc' },
+    select: { id: true, participantId: true },
+    orderBy: { participantId: 'asc' },
   })
   const riotPidToDbId = new Map<number, bigint>()
-  for (let i = 0; i < allMatchParticipants.length; i++) {
-    riotPidToDbId.set(i + 1, allMatchParticipants[i].id)
+  for (const mp of allMatchPlayers2) {
+    riotPidToDbId.set(mp.participantId, mp.id)
   }
 
-  // Build Riot teamId (100/200) → DB match_team.id
-  const matchTeams = await prisma.matchTeam.findMany({
+  // Build Riot teamId (100/200) → DB team.id
+  const teams = await prisma.team.findMany({
     where: { matchId: matchDbId },
-    select: { id: true, teamId: true },
+    select: { id: true, team: true },
   })
   const matchTeamIdByTeamId = new Map<number, bigint>()
-  for (const t of matchTeams) matchTeamIdByTeamId.set(t.teamId, t.id)
+  for (const t of teams) matchTeamIdByTeamId.set(t.team, t.id)
 
   // Collect all events in chronological order
   const allEvents: Array<{ type: string; [key: string]: unknown }> = []
@@ -1203,21 +1003,21 @@ async function extractAndInsertTimelineExtras(
   }
 
   const drakeInsertRows: Array<{
-    matchId: bigint; matchTeamId: bigint; drakeType: string; order: number; soul: string | null
+    matchId: bigint; teamId: bigint; drakeType: string; order: number; soul: string
   }> = []
   for (const rows of drakesByTeam.values()) {
     for (const r of rows) {
-      drakeInsertRows.push({ matchId: matchDbId, matchTeamId: r.matchTeamId, drakeType: r.drakeType, order: r.order, soul: r.soul })
+      drakeInsertRows.push({ matchId: matchDbId, teamId: r.matchTeamId, drakeType: r.drakeType, order: r.order, soul: r.soul ?? 'none' })
     }
   }
   if (drakeInsertRows.length > 0) {
-    await prisma.matchTeamDrake.createMany({ data: drakeInsertRows, skipDuplicates: true })
+    await prisma.drakeDetail.createMany({ data: drakeInsertRows, skipDuplicates: true })
   }
 
   // ── 3. Skill level-up order (SKILL_LEVEL_UP) ────────────────────────────────
   const skillOrderCounters = new Map<bigint, number>() // dbParticipantId → next 1-based order
   const spellOrderRows: Array<{
-    participantId: bigint; matchId: bigint; spellSlot: number; order: number; timestampMs: number
+    matchPlayerId: bigint; spellSlot: number; order: number; timestampMs: number
   }> = []
 
   for (const ev of allEvents) {
@@ -1227,10 +1027,10 @@ async function extractAndInsertTimelineExtras(
     if (!dbId) continue
     const order = (skillOrderCounters.get(dbId) ?? 0) + 1
     skillOrderCounters.set(dbId, order)
-    spellOrderRows.push({ participantId: dbId, matchId: matchDbId, spellSlot: e.skillSlot, order, timestampMs: e.timestamp })
+    spellOrderRows.push({ matchPlayerId: dbId, spellSlot: e.skillSlot, order, timestampMs: e.timestamp })
   }
   if (spellOrderRows.length > 0) {
-    await prisma.participantSpellOrder.createMany({ data: spellOrderRows, skipDuplicates: true })
+    await prisma.matchPlayerSpellOrder.createMany({ data: spellOrderRows, skipDuplicates: true })
   }
 
   // ── 4. Starter item: first non-ward/trinket ITEM_PURCHASED per participant ──
@@ -1246,9 +1046,9 @@ async function extractAndInsertTimelineExtras(
     starterItemByPid.set(dbId, e.itemId)
   }
 
-  for (const [dbParticipantId, itemId] of starterItemByPid) {
-    await prisma.participantItem.updateMany({
-      where: { participantId: dbParticipantId, itemId },
+  for (const [dbMatchPlayerId, itemId] of starterItemByPid) {
+    await prisma.matchPlayerItem.updateMany({
+      where: { matchPlayerId: dbMatchPlayerId, itemId },
       data: { starter: true },
     })
   }
@@ -1264,37 +1064,18 @@ async function extractAndInsertTimelineExtras(
 }
 
 /**
- * Backfill participant data from a Match v5 participant DTO.
- * Updates role (teamPosition, UTILITY→SUPPORT via roleFromPosition), challenges columns,
- * and participant_runes if none exist yet.
+ * Backfill match_player runes from a Match v5 participant DTO if none exist yet.
  */
-async function backfillParticipantFromMatchDto(
-  participantId: bigint,
-  matchDbId: bigint,
+async function backfillMatchPlayerRunes(
+  matchPlayerId: bigint,
   riotPart: RiotParticipantDto
 ): Promise<void> {
-  const role = roleFromPosition(riotPart.teamPosition, riotPart.individualPosition)
-
-  // Register unknown challenge keys for Discord; do not update challenge columns here:
-  // Prisma + @prisma/adapter-pg can raise "column (not available) does not exist" even when all ch_* exist in DB.
-  const challenges = (riotPart as { challenges?: unknown }).challenges ?? null
-  if (challenges && typeof challenges === 'object' && !Array.isArray(challenges)) {
-    const { unknown } = partitionChallenges(challenges as Record<string, unknown>)
-    void handleUnknownChallengeKeys(unknown)
-  }
-
-  if (role) {
-    await prisma.$executeRaw(Prisma.sql`UPDATE participants SET role = ${role} WHERE id = ${participantId}`)
-  }
-
-  // Runes: backfill only if none exist yet for this participant
   const runes = (riotPart as { perks?: unknown }).perks ?? (riotPart as { runes?: unknown }).runes ?? null
-  if (runes) {
-    const existing = await prisma.participantRune.count({ where: { participantId } })
-    if (existing === 0) {
-      const rows = buildRuneRows(participantId, matchDbId, runes)
-      if (rows.length > 0) await prisma.participantRune.createMany({ data: rows, skipDuplicates: true })
-    }
+  if (!runes) return
+  const existing = await prisma.matchPlayerRune.count({ where: { matchPlayerId } })
+  if (existing === 0) {
+    const rows = buildRuneRows(matchPlayerId, runes)
+    if (rows.length > 0) await prisma.matchPlayerRune.createMany({ data: rows, skipDuplicates: true })
   }
 }
 
@@ -1340,40 +1121,33 @@ async function runStep4ForPlayer(
           logger
         )
         const matchRow = await prisma.match.findUnique({
-          where: { matchId: item.matchId },
-          select: { id: true, createdAt: true },
+          where: { riotMatchId: item.matchId },
+          select: { id: true },
         })
-        if (matchRow) {
-          if (item.timelineDto) {
-            try {
-              await extractAndInsertJungleFirstClear(
-                matchRow.id,
-                item.matchId,
-                item.timelineDto,
-                logger
-              )
-              await extractAndInsertTimelineExtras(
-                matchRow.id,
-                item.matchId,
-                item.timelineDto,
-                logger
-              )
-            } catch {
-              // Non-fatal: timeline parse error
+          if (matchRow) {
+            if (item.timelineDto) {
+              try {
+                await extractAndInsertJungleFirstClear(
+                  matchRow.id,
+                  item.matchId,
+                  item.timelineDto,
+                  logger
+                )
+                await extractAndInsertTimelineExtras(
+                  matchRow.id,
+                  item.matchId,
+                  item.timelineDto,
+                  logger
+                )
+              } catch {
+                // Non-fatal: timeline parse error
+              }
             }
+            await prisma.player.update({
+              where: { id: item.playerId },
+              data: { lastSeen: new Date() },
+            })
           }
-          const player = await prisma.player.findUnique({
-            where: { id: item.playerId },
-            select: { lastSeen: true },
-          })
-          const candidate = matchRow.createdAt
-          const next =
-            !player?.lastSeen || candidate > player.lastSeen ? candidate : player.lastSeen
-          await prisma.player.update({
-            where: { id: item.playerId },
-            data: { lastSeen: next },
-          })
-        }
       } catch (err) {
         await logger.error('Prisma error upserting match', err)
         flags.foundPrismaError = true
@@ -1410,10 +1184,10 @@ async function runStep4ForPlayer(
 
     const matchIds = Array.isArray(matchIdsRes.data) ? matchIdsRes.data : []
     const existing = await prisma.match.findMany({
-      where: { matchId: { in: matchIds } },
-      select: { matchId: true },
+      where: { riotMatchId: { in: matchIds } },
+      select: { riotMatchId: true },
     })
-    const existingSet = new Set(existing.map((m) => m.matchId))
+    const existingSet = new Set(existing.map((m) => m.riotMatchId))
     const toFetch = matchIds.filter((id) => !existingSet.has(id))
 
     let found400Decrypt = false
@@ -1557,35 +1331,35 @@ async function runStep3bBackfillTimeline(
 ): Promise<number> {
   const matches = await prisma.match.findMany({
     where: {
-      matchTeams: { some: {} },
+      teams: { some: {} },
       OR: [
-        { matchTeams: { every: { drakes: { none: {} } } } },
-        { participants: { every: { participantSpellOrders: { none: {} } } } },
+        { drakeDetails: { none: {} } },
+        { matchPlayers: { every: { spellOrders: { none: {} } } } },
       ],
     },
     take: BATCH_TIMELINE_BACKFILL,
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, matchId: true },
+    orderBy: { id: 'desc' },
+    select: { id: true, riotMatchId: true },
   })
   if (matches.length === 0) return 0
 
   let done = 0
   for (const m of matches) {
     if (state.shouldStop) break
-    const platform = m.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
+    const platform = m.riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
     client.setPlatform(platform)
-    const timelineRes = await client.getMatchTimeline(m.matchId)
+    const timelineRes = await client.getMatchTimeline(m.riotMatchId)
     setState({ requestCount: state.requestCount + 1 })
     if (!timelineRes.ok) {
       if (timelineRes.status === 429) setState({ error429Count: state.error429Count + 1 })
       continue
     }
     try {
-      await extractAndInsertJungleFirstClear(m.id, m.matchId, timelineRes.data, logger)
-      await extractAndInsertTimelineExtras(m.id, m.matchId, timelineRes.data, logger)
+      await extractAndInsertJungleFirstClear(m.id, m.riotMatchId, timelineRes.data, logger)
+      await extractAndInsertTimelineExtras(m.id, m.riotMatchId, timelineRes.data, logger)
       done++
     } catch (err) {
-      void logger.error('Timeline backfill failed', err, { matchId: m.matchId })
+      void logger.error('Timeline backfill failed', err, { matchId: m.riotMatchId })
     }
   }
   if (done > 0) {
@@ -1622,21 +1396,21 @@ async function runStep3cBackfillRunes(
 ): Promise<number> {
   const matches = await prisma.match.findMany({
     where: {
-      matchTeams: { some: {} },
-      participants: { some: {}, every: { participantRunes: { none: {} } } },
+      teams: { some: {} },
+      matchPlayers: { some: {}, every: { runes: { none: {} } } },
     },
     take: BATCH_RUNE_BACKFILL,
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, matchId: true },
+    orderBy: { id: 'desc' },
+    select: { id: true, riotMatchId: true },
   })
   if (matches.length === 0) return 0
 
   let done = 0
   for (const m of matches) {
     if (state.shouldStop) break
-    const platform = m.matchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
+    const platform = m.riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1'
     client.setPlatform(platform)
-    const matchRes = await client.getMatch(m.matchId)
+    const matchRes = await client.getMatch(m.riotMatchId)
     setState({ requestCount: state.requestCount + 1 })
     if (!matchRes.ok) {
       if (matchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
@@ -1645,21 +1419,15 @@ async function runStep3cBackfillRunes(
     const participantDtos = (matchRes.data.info?.participants ?? []) as RiotParticipantDto[]
     if (participantDtos.length === 0) continue
 
-    const dbParticipants = await prisma.participant.findMany({
+    const dbMatchPlayers = await prisma.matchPlayer.findMany({
       where: { matchId: m.id },
-      select: { id: true },
-      orderBy: { id: 'asc' },
+      select: { id: true, participantId: true },
+      orderBy: { participantId: 'asc' },
     })
-    if (dbParticipants.length !== participantDtos.length) continue
+    if (dbMatchPlayers.length !== participantDtos.length) continue
 
-    await prisma.participantRune.deleteMany({ where: { matchId: m.id } })
-
-    for (let i = 0; i < dbParticipants.length; i++) {
-      const runes = (participantDtos[i] as { perks?: unknown }).perks ?? (participantDtos[i] as { runes?: unknown }).runes ?? null
-      const rows = buildRuneRows(dbParticipants[i].id, m.id, runes)
-      if (rows.length > 0) {
-        await prisma.participantRune.createMany({ data: rows })
-      }
+    for (let i = 0; i < dbMatchPlayers.length; i++) {
+      await backfillMatchPlayerRunes(dbMatchPlayers[i].id, participantDtos[i])
     }
     done++
   }
@@ -1731,7 +1499,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     await logger.step('Initialization phases complete, entering collection loop', {})
 
     // ── Phase 4: main collection loop ─────────────────────────────────────────
+    let loopIteration = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
+      loopIteration++
       // Fix any new null data produced by step 4 (newly collected matches)
       const missing = await hasMissingBackfillData(clefType)
       if (missing) {
@@ -1780,6 +1550,27 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         continue
       }
       if (resultEun === 'prisma_error') await logger.alerte('Prisma error in step 4 (eun1), continuing')
+
+      // ── Aggregate pending matches into stats tables ─────────────────────
+      try {
+        const aggregated = await aggregatePendingMatches(logger)
+        if (aggregated > 0) {
+          await logger.step('Aggregation: matches aggregated', { count: aggregated })
+        }
+      } catch (err) {
+        await logger.alerte('Aggregation error (non-fatal)')
+        void err
+      }
+
+      // ── Old patch raw data cleanup (every 20 loops) ─────────────────────
+      if (loopIteration % 20 === 0) {
+        try {
+          await runPatchCleanupFromConfig(logger)
+        } catch (err) {
+          await logger.alerte('Patch cleanup error (non-fatal)')
+          void err
+        }
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -1821,6 +1612,11 @@ export function startRiotPoller(): void {
     await runLoop(init)
   })()
   loopPromise.catch((err) => console.error('[RiotPoller] runLoop failed:', err))
+}
+
+/** Returns the active loop promise so the orchestrator can await its completion. */
+export function getPollerLoopPromise(): Promise<void> | null {
+  return loopPromise
 }
 
 export function isRiotPollerRunning(): boolean {

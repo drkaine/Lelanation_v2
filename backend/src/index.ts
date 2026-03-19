@@ -19,7 +19,7 @@ import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 // import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
-import { startRiotPoller, requestStopRiotPoller, isRiotPollerRunning } from './worker/riotPoller.js'
+import { startDefaultScript, requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -73,15 +73,15 @@ try {
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
 function gracefulShutdown(signal: string): void {
-  console.log(`[Server] ${signal} received — stopping poller and shutting down…`)
-  requestStopRiotPoller()
+  console.log(`[Server] ${signal} received — stopping active script and shutting down…`)
+  requestStop()
 
   const deadline = Date.now() + SHUTDOWN_TIMEOUT_MS
   const wait = setInterval(() => {
-    if (!isRiotPollerRunning() || Date.now() >= deadline) {
+    if (!isAnyScriptRunning() || Date.now() >= deadline) {
       clearInterval(wait)
       if (Date.now() >= deadline) console.warn('[Server] Shutdown timeout — forcing exit')
-      else console.log('[Server] Poller stopped — exiting cleanly')
+      else console.log('[Server] Script stopped — exiting cleanly')
       process.exit(0)
     }
   }, 300)
@@ -114,7 +114,7 @@ app.listen(PORT, () => {
   //   (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
   //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   // )
-  startRiotPoller()
+  startDefaultScript()
 })
 
 export default app

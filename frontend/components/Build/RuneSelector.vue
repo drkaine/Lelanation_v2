@@ -41,7 +41,7 @@
           </div>
 
           <!-- Primary Runes Grid -->
-          <div v-if="selectedPrimaryPath" class="runes" :style="{ '--rune-size': '48px' }">
+          <div v-if="selectedPrimaryPath" class="runes">
             <div
               v-for="(slot, slotIndex) in selectedPrimaryPath.slots"
               :key="`slot-${slotIndex}`"
@@ -84,7 +84,7 @@
                 :class="[
                   'summoner-button',
                   isSummonerSpellSelected(spell) ? 'selected' : '',
-                  selectedSummonerSpells.length < 2 ? 'bright' : '',
+                  selectedSummonerSpellsCount === 0 ? 'bright' : '',
                 ]"
                 @click="selectSummonerSpell(spell)"
                 @mouseenter="e => handleSpellHover(spell, e)"
@@ -133,7 +133,7 @@
           </div>
 
           <!-- Secondary Runes Grid -->
-          <div v-if="selectedSecondaryPath" class="runes" :style="{ '--rune-size': '48px' }">
+          <div v-if="selectedSecondaryPath" class="runes">
             <!-- Ligne 1 vide (keystone) -->
             <div class="rune-slot empty-slot">
               <!-- Ligne vide pour le miroir -->
@@ -153,8 +153,8 @@
                   'row',
                   'rune-button',
                   isSecondaryRuneSelected(rune.id) ? 'selected' : '',
-                  // Brillant seulement si aucune rune n'est sélectionnée OU si cette rune est sélectionnée
-                  selectedSecondaryRunes.length === 0 || isSecondaryRuneSelected(rune.id)
+                  isSecondaryRuneSelected(rune.id) ||
+                  (!secondarySelectionComplete && !secondaryRowHasSelection(slot.runes))
                     ? 'bright'
                     : '',
                 ]"
@@ -241,7 +241,7 @@
 
     <!-- Tooltip -->
     <div
-      v-if="hoveredItem"
+      v-if="hoveredItem && tooltipsEnabled"
       ref="tooltipRef"
       class="rune-tooltip pointer-events-none fixed z-50 rounded-lg border border-accent bg-background shadow-lg"
       :style="tooltipStyle"
@@ -273,9 +273,11 @@ import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import type { RuneSelection, SummonerSpell, ShardSelection } from '~/types/build'
 import { getRunePathImageUrl, getRuneImageUrl, getSpellImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
+const { tooltipsEnabled } = useTooltipsPreference()
 
 const runesStore = useRunesStore()
 const buildStore = useBuildStore()
@@ -304,6 +306,10 @@ const selectedSecondaryPath = computed(() => {
   if (!selectedSecondaryPathId.value) return null
   return runesStore.getRunePathById(selectedSecondaryPathId.value)
 })
+
+const selectedSummonerSpellsCount = computed(
+  () => selectedSummonerSpells.value.filter(Boolean).length
+)
 
 const availableSecondaryPaths = computed(() => {
   // Secondary path cannot be the same as primary
@@ -350,6 +356,12 @@ const selectSecondaryPath = (pathId: number) => {
 const isSecondaryRuneSelected = (runeId: number): boolean => {
   return selectedSecondaryRunes.value.includes(runeId)
 }
+
+const secondaryRowHasSelection = (runes: Array<{ id: number }>): boolean => {
+  return runes.some(rune => selectedSecondaryRunes.value.includes(rune.id))
+}
+
+const secondarySelectionComplete = computed(() => selectedSecondaryRunes.value.length >= 2)
 
 const selectSecondaryRune = (runeId: number) => {
   const index = selectedSecondaryRunes.value.indexOf(runeId)
@@ -592,6 +604,7 @@ const tooltipPosition = ref({ x: 0, y: 0 })
 const tooltipOffset = 15
 
 const handlePathHover = (path: { name: string }, event: MouseEvent) => {
+  if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: path.name,
     description: undefined,
@@ -606,6 +619,7 @@ const handleRuneHover = (
   rune: { name: string; shortDesc?: string; longDesc?: string },
   event: MouseEvent
 ) => {
+  if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: rune.name,
     description: rune.longDesc || rune.shortDesc,
@@ -619,6 +633,7 @@ const handleRuneHover = (
 }
 
 const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
+  if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: spell.name,
     description: spell.description || spell.tooltip,
@@ -630,6 +645,7 @@ const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
 }
 
 const handleShardHover = (shard: ShardOption, event: MouseEvent) => {
+  if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: shard.name,
     description: shard.description,
@@ -645,6 +661,7 @@ const handleRuneLeave = () => {
 }
 
 const handleMouseMove = (event: MouseEvent) => {
+  if (!tooltipsEnabled.value) return
   if (hoveredItem.value) {
     tooltipPosition.value = { x: event.clientX, y: event.clientY }
     nextTick(() => {
@@ -709,6 +726,12 @@ watch(hoveredItem, async newValue => {
   }
 })
 
+watch(tooltipsEnabled, enabled => {
+  if (!enabled) {
+    hoveredItem.value = null
+  }
+})
+
 onUnmounted(() => {
   window.removeEventListener('scroll', updateTooltipPosition, true)
   window.removeEventListener('resize', updateTooltipPosition)
@@ -738,9 +761,14 @@ watch(locale, () => {
   font-size: 16px;
   color: rgb(var(--rgb-primary-light));
   box-sizing: border-box;
-  max-width: min-content;
+  width: 100%;
+  max-width: 100%;
   margin: 0.5em auto 1em;
   text-align: center;
+  --path-size: var(--selector-path-size, clamp(44px, calc(28px + 1.6vw), 72px));
+  --rune-size: var(--selector-rune-size, clamp(48px, calc(30px + 1.8vw), 72px));
+  --square-size: var(--selector-square-size, clamp(48px, calc(30px + 1.7vw), 68px));
+  --selector-gap: var(--selector-gap-size, clamp(0.2rem, 0.2rem + 0.2vw, 0.45rem));
 }
 
 .wrap {
@@ -748,6 +776,8 @@ watch(locale, () => {
   flex-direction: column;
   gap: 1rem;
   align-items: center;
+  height: 100%;
+  width: 100%;
 }
 
 .paths-container {
@@ -757,19 +787,22 @@ watch(locale, () => {
   align-items: center;
   justify-content: center;
   width: 100%;
+  height: 100%;
 }
 
 /* Sur grand écran, les runes primaires et secondaires sont côte à côte */
 @media (min-width: 768px) {
   .paths-container {
     flex-direction: row;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 3rem;
   }
 
   .path-section {
     flex: 1;
     max-width: 50%;
+    height: 100%;
+    justify-content: space-between;
   }
 }
 
@@ -785,15 +818,15 @@ watch(locale, () => {
 /* Path Selection Rows */
 .path {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--selector-gap);
   justify-content: center;
   margin-bottom: 0.5rem;
 }
 
 .path button.rune {
-  width: 52px;
-  height: 52px;
-  border: 2px solid var(--color-gold-300);
+  width: var(--path-size);
+  height: var(--path-size);
+  border: 1.5px solid var(--color-gold-500);
   background: rgba(0, 0, 0, 0.4);
   padding: 0;
   cursor: pointer;
@@ -828,7 +861,6 @@ watch(locale, () => {
 }
 
 .path button.rune.row:hover {
-  transform: scale(1.1);
   opacity: 1;
 }
 
@@ -842,13 +874,17 @@ watch(locale, () => {
 }
 
 .path button.rune .path.img {
-  width: 90%;
-  height: 90%;
+  width: 82%;
+  height: 82%;
   border-radius: 50%;
   background-image: var(--img);
-  background-size: cover;
-  background-position: center;
+  background-size: contain;
+  background-position: center center;
   background-repeat: no-repeat;
+}
+
+.path button.rune:not(.Domination) .path.img {
+  transform: translateY(5px);
 }
 
 /* Runes Grid - Layout horizontal (côte à côte) */
@@ -863,7 +899,7 @@ watch(locale, () => {
 .rune-slot {
   display: flex;
   flex-direction: row;
-  gap: 0.5rem;
+  gap: var(--selector-gap);
   justify-content: center;
   align-items: center;
 }
@@ -876,7 +912,7 @@ watch(locale, () => {
 .runes .rune-button {
   width: var(--rune-size, 48px);
   height: var(--rune-size, 48px);
-  border: 2px solid var(--color-gold-300);
+  border: 1.5px solid var(--color-gold-500);
   background: rgba(0, 0, 0, 0.4);
   padding: 0;
   cursor: pointer;
@@ -904,7 +940,6 @@ watch(locale, () => {
 }
 
 .runes .rune-button.row:hover {
-  transform: scale(1.1);
   opacity: 1;
 }
 
@@ -927,6 +962,14 @@ watch(locale, () => {
   background-repeat: no-repeat;
 }
 
+.runes .rune-button:not(.selected):not(.bright) .img {
+  filter: grayscale(1) brightness(0.7);
+}
+
+.runes .rune-button:hover .img {
+  filter: none;
+}
+
 /* Summoner Spells Section */
 .summoners-section {
   margin-top: 1rem;
@@ -935,18 +978,18 @@ watch(locale, () => {
 
 .summoners-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(48px, 1fr));
-  gap: 0.5rem;
-  max-width: 160px;
+  grid-template-columns: repeat(3, minmax(var(--square-size), 1fr));
+  gap: var(--selector-gap);
+  max-width: calc((var(--square-size) * 3) + (var(--selector-gap) * 2));
   margin: 0 auto;
 }
 
 .summoner-button {
-  min-width: 48px;
-  min-height: 48px;
+  min-width: var(--square-size);
+  min-height: var(--square-size);
   width: 100%;
   aspect-ratio: 1;
-  border: 2px solid var(--color-gold-300);
+  border: 1.5px solid var(--color-gold-500);
   background: rgba(0, 0, 0, 0.4);
   padding: 0;
   cursor: pointer;
@@ -969,7 +1012,6 @@ watch(locale, () => {
 }
 
 .summoner-button:hover {
-  transform: scale(1.1);
   opacity: 1;
 }
 
@@ -980,6 +1022,18 @@ watch(locale, () => {
   border-radius: 2px;
 }
 
+.summoner-button:not(.selected):not(.bright) .summoner-icon {
+  filter: grayscale(1) brightness(0.7);
+}
+
+.summoner-button:hover .summoner-icon {
+  filter: none;
+}
+
+.summoner-button:not(.selected):hover .summoner-icon {
+  filter: none;
+}
+
 /* Shards Section - Ronds, alignés avec summoners, taille réduite de moitié */
 .shards-section {
   margin-top: 1rem;
@@ -988,18 +1042,18 @@ watch(locale, () => {
 
 .shards-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(48px, 1fr));
-  gap: 0.5rem;
-  max-width: 160px;
+  grid-template-columns: repeat(3, minmax(var(--square-size), 1fr));
+  gap: var(--selector-gap);
+  max-width: calc((var(--square-size) * 3) + (var(--selector-gap) * 2));
   margin: 0 auto;
 }
 
 .shard-button {
-  min-width: 48px;
-  min-height: 48px;
+  min-width: var(--square-size);
+  min-height: var(--square-size);
   width: 100%;
   aspect-ratio: 1;
-  border: 2px solid var(--color-gold-300);
+  border: 1.5px solid var(--color-gold-500);
   background: rgba(0, 0, 0, 0.4);
   padding: 0;
   cursor: pointer;
@@ -1018,7 +1072,6 @@ watch(locale, () => {
 }
 
 .shard-button:hover {
-  transform: scale(1.1);
   opacity: 1;
 }
 
@@ -1027,6 +1080,14 @@ watch(locale, () => {
   height: 100%;
   object-fit: cover;
   border-radius: 50%; /* Ronds */
+}
+
+.shard-button:not(.selected) .shard-icon {
+  filter: grayscale(1) brightness(0.7);
+}
+
+.shard-button:hover .shard-icon {
+  filter: none;
 }
 
 /* Tooltip Styles */

@@ -1,7 +1,7 @@
 <template>
-  <div class="home-page min-h-screen text-text-primary">
+  <div class="home-page text-text-primary">
     <!-- Hero Section -->
-    <section class="profil pb-8 pt-4">
+    <section class="profil pb-4 pt-4">
       <div class="max-w-8xl mx-auto px-2">
         <h1 class="title text-text-accent">Lelanation</h1>
         <!-- LCP image: preload + fetchpriority high. WebP responsive when npm run generate:webp was run. -->
@@ -23,7 +23,7 @@
           />
         </picture>
         <h2 class="subtitle text-text-secondary">
-          {{ t('home.subtitle') }}
+          {{ homeSubtitle }}
         </h2>
 
         <!-- Social Links Section -->
@@ -49,9 +49,17 @@
 
 <script setup lang="ts">
 // Page d'accueil - Landing page pour Lelanation
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const config = useRuntimeConfig().public
 const siteUrl = (config.siteUrl as string) || 'https://lelanation.fr'
+const homeSubtitle = computed(() => {
+  const translated = t('home.subtitle')
+  if (translated !== 'home.subtitle') return translated
+
+  return locale.value === 'fr'
+    ? 'La plateforme de référence pour créer, optimiser et partager vos builds League of Legends. La plateforme pour t’aider à réfléchir, créer, analyser, organiser, apprendre ou simplement explorer une idée.'
+    : 'The go-to platform to create, optimize and share your League of Legends builds. The platform to help you think, create, analyze, organize, learn, or simply explore an idea.'
+})
 // Preload LCP image so it's discoverable from initial HTML (Lighthouse)
 useHead({
   title: () => t('seo.homeTitle'),
@@ -89,6 +97,16 @@ const socialLinks: SocialLink[] = [
     href: 'https://discord.com/invite/RrXCpsFGrw',
     icon: 'mdi:discord',
     text: t('home.links.discord'),
+  },
+  {
+    href: 'https://www.instagram.com/lelariva_fr/',
+    icon: 'mdi:instagram',
+    text: t('home.links.instagram'),
+  },
+  {
+    href: 'https://www.facebook.com/lelariva/',
+    icon: 'mdi:facebook',
+    text: t('home.links.facebook'),
   },
   {
     href: 'https://www.patreon.com/c/Lelariva/posts',
@@ -155,6 +173,10 @@ useHead({
   text-align: center;
 }
 
+.home-page {
+  color: var(--color-blue-50);
+}
+
 .title {
   margin-bottom: 1.5rem;
   font-size: 3rem;
@@ -179,7 +201,6 @@ useHead({
   height: 20rem;
   object-fit: cover;
   border-radius: 50%;
-  border: 3px solid var(--color-gold-300);
   box-shadow: 0 0 10px rgba(200, 155, 60, 0.3);
 }
 
@@ -192,8 +213,9 @@ useHead({
 
 .subtitle {
   margin: 0 auto;
-  max-width: 42rem;
+  max-width: 72rem;
   font-size: 1.25rem;
+  color: var(--color-blue-50);
 }
 
 @media (min-width: 768px) {
@@ -204,7 +226,7 @@ useHead({
 
 .social-links-section {
   text-align: center;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
 .social-links {
@@ -222,7 +244,7 @@ useHead({
   padding: 0.8rem 1.5rem;
   border: var(--border-size, 2px) solid var(--color-gold-400);
   border-radius: 4px;
-  color: var(--color-gold-200);
+  color: var(--color-blue-50);
   text-decoration: none;
   transition: all 0.2s ease;
 }

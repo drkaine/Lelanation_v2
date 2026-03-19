@@ -1,1 +1,0 @@
--- No-op: stats via SQL functions only (get_stats_overview). MVs removed to avoid slow/failing migrations.

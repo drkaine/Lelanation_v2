@@ -1,28 +1,34 @@
 <template>
-  <div class="builds-page min-h-screen p-4 text-text">
-    <div class="max-w-8xl mx-auto px-2">
-      <!-- Tabs -->
-      <div v-if="tabs.length > 0" class="mb-6 border-b-2 border-accent/70">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div class="flex gap-2 overflow-x-auto pb-2 sm:gap-4 sm:overflow-visible sm:pb-0">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              :class="[
-                'flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold transition-colors sm:px-6 sm:py-3 sm:text-base',
-                activeTab === tab.id
-                  ? 'border-b-2 border-accent text-accent'
-                  : 'text-text-secondary hover:text-text-primary',
-              ]"
-              @click="handleTabClick(tab.id)"
-            >
-              {{ tab.label }}
-            </button>
-          </div>
-          <NuxtLink
-            :to="localePath('/builds/create')"
-            class="flex-shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm text-background transition-colors hover:bg-accent-dark sm:ml-4"
+  <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
+    <div class="max-w-8xl mx-auto px-0">
+      <div class="mb-3 flex justify-center">
+        <div class="streamer-tabs">
+          <button
+            type="button"
+            class="streamer-tab-button"
+            :class="{ 'is-active': activeTab === 'discover' }"
+            @click="activeTab = 'discover'"
           >
+            {{ t('buildsPage.discover') }}
+          </button>
+          <button
+            type="button"
+            class="streamer-tab-button"
+            :class="{ 'is-active': activeTab === 'my-builds' }"
+            @click="activeTab = 'my-builds'"
+          >
+            {{ t('buildsPage.myBuilds') }}
+          </button>
+          <button
+            v-if="favoriteBuilds.length > 0"
+            type="button"
+            class="streamer-tab-button"
+            :class="{ 'is-active': activeTab === 'favoris' }"
+            @click="activeTab = 'favoris'"
+          >
+            {{ t('buildsPage.myFavorites') }}
+          </button>
+          <NuxtLink :to="localePath('/builds/create')" class="streamer-tab-button">
             {{ t('buildsPage.createBuild') }}
           </NuxtLink>
         </div>
@@ -31,8 +37,8 @@
       <!-- Tab Content: Discover -->
       <div v-if="activeTab === 'discover'" class="tab-content">
         <!-- Search and Filters -->
-        <div class="mb-6 space-y-4">
-          <div class="flex flex-wrap items-center gap-4">
+        <div class="mb-3">
+          <div class="flex flex-wrap items-center gap-2">
             <BuildSearch />
             <BuildFilters />
           </div>
@@ -77,9 +83,22 @@
 
       <!-- Tab Content: My Builds -->
       <div v-if="activeTab === 'my-builds'" class="tab-content">
-        <div class="mb-4 flex flex-wrap items-center gap-2">
-          <span class="text-sm text-text-secondary">{{ t('buildsPage.visibility') }}</span>
-          <div class="flex rounded-lg border border-accent/50 bg-surface/50 p-0.5">
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <BuildSearch />
+          <BuildFilters />
+          <span class="text-sm text-text-secondary">
+            {{ t('buildsPage.visibility') }}
+          </span>
+          <select
+            v-model="myBuildsVisibilityFilter"
+            class="rounded-lg border border-accent/50 bg-surface/50 px-3 py-2 text-sm text-text md:hidden"
+            :aria-label="t('buildsPage.visibility')"
+          >
+            <option v-for="opt in visibilityFilterOptions" :key="opt.value" :value="opt.value">
+              {{ opt.label }}
+            </option>
+          </select>
+          <div class="hidden rounded-lg border border-accent/50 bg-surface/50 p-0.5 md:flex">
             <button
               v-for="opt in visibilityFilterOptions"
               :key="opt.value"
@@ -95,6 +114,7 @@
             </button>
           </div>
           <button
+            v-if="adminMode"
             class="ml-auto flex items-center gap-1.5 rounded-lg border border-accent/60 bg-surface px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/15"
             :disabled="shareLoading"
             @click="shareBuilds"
@@ -116,13 +136,6 @@
             {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
           </button>
         </div>
-        <!-- Search and Filters -->
-        <div class="mb-6 space-y-4">
-          <div class="flex flex-wrap items-center gap-4">
-            <BuildSearch />
-            <BuildFilters />
-          </div>
-        </div>
 
         <!-- Build Grid avec les builds de l'utilisateur -->
         <BuildGrid
@@ -134,9 +147,11 @@
 
       <!-- Tab Content: Mes favoris -->
       <div v-if="activeTab === 'favoris'" class="tab-content">
-        <div class="mb-6 space-y-4">
-          <BuildSearch />
-          <BuildFilters />
+        <div class="mb-3">
+          <div class="flex flex-wrap items-center gap-2">
+            <BuildSearch />
+            <BuildFilters />
+          </div>
         </div>
         <BuildGrid :custom-builds="favoriteBuilds" :show-favorite-toggle="true" />
       </div>
@@ -257,8 +272,9 @@ import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
 import type { Build } from '~/types/build'
 import { serializeBuild } from '~/utils/buildSerialize'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 
 const buildStore = useBuildStore()
 const discoveryStore = useBuildDiscoveryStore()
@@ -266,8 +282,9 @@ const voteStore = useVoteStore()
 const favoritesStore = useFavoritesStore()
 const route = useRoute()
 const localePath = useLocalePath()
-const { isStreamerMode } = useStreamerMode()
+const { isLoggedIn: adminMode } = useAdminAuth()
 const { hydrated } = useClientHydrated()
+const { isStreamerMode } = useStreamerMode()
 
 const buildToDelete = ref<string | null>(null)
 const shareCode = ref<string | null>(null)
@@ -323,30 +340,9 @@ const favoriteBuilds = computed(() => {
 })
 
 // Check if there are Lelariva builds (placeholder for now)
-const hasLelarivaBuilds = computed(() => {
+const _hasLelarivaBuilds = computed(() => {
   // TODO: Implement check for Lelariva builds when available
   return false
-})
-
-const tabs = computed(() => {
-  if (isStreamerMode.value) {
-    return [{ id: 'my-builds', label: t('buildsPage.myBuilds') }]
-  }
-
-  const availableTabs = [
-    { id: 'discover', label: t('buildsPage.discover') },
-    { id: 'my-builds', label: t('buildsPage.myBuilds') },
-  ]
-
-  if (favoritesStore.favoriteBuildIds.length > 0) {
-    availableTabs.push({ id: 'favoris', label: t('buildsPage.myFavorites') })
-  }
-
-  if (hasLelarivaBuilds.value) {
-    availableTabs.push({ id: 'lelariva', label: t('buildsPage.lelarivaBuilds') })
-  }
-
-  return availableTabs
 })
 
 // SSR-safe initial tab: only route query (no localStorage before hydration)
@@ -357,7 +353,6 @@ const getInitialTabFromRoute = (): string => {
 
 // Client-only initial tab: route -> localStorage fallback (after hydration)
 const getInitialTabFromClient = (): string => {
-  if (isStreamerMode.value) return 'my-builds'
   if (route.query.tab && typeof route.query.tab === 'string') return route.query.tab
   try {
     const savedTab = localStorage.getItem('lelanation_active_tab')
@@ -372,16 +367,6 @@ const getInitialTabFromClient = (): string => {
 
 const activeTab = ref(getInitialTabFromRoute())
 
-// Gérer le clic sur un onglet (désélectionner si déjà actif)
-const handleTabClick = (tabId: string) => {
-  if (activeTab.value === tabId) {
-    // Si l'onglet est déjà actif, le désélectionner en revenant à 'discover'
-    activeTab.value = 'discover'
-  } else {
-    activeTab.value = tabId
-  }
-}
-
 if (import.meta.client) {
   // Sauvegarder l'onglet actif dans localStorage et mettre à jour l'URL
   watch(activeTab, async newTab => {
@@ -394,33 +379,24 @@ if (import.meta.client) {
   })
 }
 
-watch(
-  isStreamerMode,
-  async enabled => {
-    if (enabled && activeTab.value !== 'my-builds') {
-      activeTab.value = 'my-builds'
-      await navigateTo({ query: { tab: 'my-builds' } }, { replace: true })
-    }
-  },
-  { immediate: true }
-)
-
 // Mettre à jour activeTab quand l'URL change (pour les liens directs)
 watch(
   () => route.query.tab,
-  async newTab => {
-    if (isStreamerMode.value) {
-      if (newTab !== 'my-builds') {
-        activeTab.value = 'my-builds'
-        await navigateTo({ query: { tab: 'my-builds' } }, { replace: true })
-      }
-      return
-    }
-
+  newTab => {
     if (newTab && typeof newTab === 'string' && newTab !== activeTab.value) {
       activeTab.value = newTab
     }
   }
+)
+
+watch(
+  isStreamerMode,
+  enabled => {
+    if (enabled && !['discover', 'my-builds'].includes(activeTab.value)) {
+      activeTab.value = 'discover'
+    }
+  },
+  { immediate: true }
 )
 
 const shareBuilds = async () => {
@@ -487,19 +463,10 @@ const clearComparison = () => {
   discoveryStore.clearComparison()
 }
 
-// Watch for changes in tabs to update active tab if current tab becomes unavailable
-watch(
-  () => tabs.value.map(t => t.id),
-  availableTabIds => {
-    if (!availableTabIds.includes(activeTab.value)) {
-      activeTab.value = isStreamerMode.value ? 'my-builds' : 'discover'
-    }
-  }
-)
-
 onMounted(() => {
   favoritesStore.init()
   voteStore.init()
+  discoveryStore.restorePaginationFromStorage()
   discoveryStore.loadBuilds()
   // Apply client-side tab preference after hydration to avoid SSR/CSR mismatch
   activeTab.value = getInitialTabFromClient()
@@ -509,6 +476,42 @@ onMounted(() => {
 <style scoped>
 .tab-content {
   animation: fadeIn 0.3s ease-in;
+}
+
+.builds-page {
+  padding-top: var(--build-page-padding-top, 6px);
+}
+
+.streamer-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.2);
+  border-radius: 9999px;
+  background: rgb(var(--rgb-background) / 0.22);
+  padding: 3px;
+  max-width: 100%;
+}
+
+.streamer-tab-button {
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: rgb(var(--rgb-text) / 0.75);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.streamer-tab-button.is-active {
+  background: rgb(var(--rgb-accent) / 0.2);
+  color: var(--color-accent);
 }
 
 @keyframes fadeIn {

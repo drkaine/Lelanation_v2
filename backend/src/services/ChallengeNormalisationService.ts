@@ -5,7 +5,6 @@
  * - Detects unknown keys and stores them in challenge_keys_registry.
  * - Sends a Discord notification exactly once per new unknown key.
  */
-import { prisma } from '../db.js'
 import { DiscordService } from './DiscordService.js'
 
 // ─── Allowlist ────────────────────────────────────────────────────────────────
@@ -20,7 +19,7 @@ export const CHALLENGE_ALLOWLIST = new Set<string>([
   'saveAllyFromDeath', 'takedownsInAlcove', 'turretPlatesTaken', 'HealFromMapSources',
   '12AssistStreakCount', 'InfernalScalePickup', 'acesBefore15Minutes',
   'deathsByEnemyChamps', 'killsUnderOwnTurret', 'riftHeraldTakedowns',
-  'teamRiftHeraldKills', 'killsNearEnemyTurret', 'teamElderDragonKills',
+  'teamRiftHeraldKills', 'killsNearEnemyTurret',
   'elderDragonMultikills', 'firstTurretKilledTime', 'fistBumpParticipation',
   'mejaisFullStackInTime', 'takedownOnFirstTurret', 'takedownsFirstXMinutes',
   'wardTakedownsBefore20M', 'jungleCsBefore10Minutes', 'killAfterHiddenWithAlly',
@@ -88,45 +87,27 @@ export function partitionChallenges(raw: Record<string, unknown>): {
 
 const discord = new DiscordService()
 
+/** In-memory set to avoid sending duplicate Discord alerts for unknown challenge keys in the same process lifetime. */
+const notifiedUnknownKeys = new Set<string>()
+
 /**
- * Persists unknown challenge keys to challenge_keys_registry and sends a
- * Discord notification the first time each new key is detected.
- *
- * This function is fire-and-forget (called without await from the hot path).
+ * Sends a Discord notification for unknown challenge keys (fire-and-forget).
+ * No DB persistence — uses an in-memory set to avoid duplicate notifications.
  */
 export async function handleUnknownChallengeKeys(
   unknownKeys: Record<string, unknown>
 ): Promise<void> {
   if (Object.keys(unknownKeys).length === 0) return
 
-  const newKeyEntries: string[] = []
-
-  for (const [key, val] of Object.entries(unknownKeys)) {
-    // Upsert: only write sampleValue if the row doesn't exist yet
-    const existing = await prisma.challengeKeyRegistry.findUnique({
-      where: { key },
-      select: { key: true, isNew: true, notifiedAt: true },
-    })
-    if (!existing) {
-      await prisma.challengeKeyRegistry.create({
-        data: { key, sampleValue: JSON.stringify(val) as never, isNew: true },
-      })
-      newKeyEntries.push(key)
-    }
-    // If exists but never notified, queue for notification below
-    else if (existing.isNew && !existing.notifiedAt) {
-      newKeyEntries.push(key)
-    }
-  }
-
+  const newKeyEntries = Object.keys(unknownKeys).filter((k) => !notifiedUnknownKeys.has(k))
   if (newKeyEntries.length === 0) return
 
-  // Send Discord notification for all new keys in a single message
+  for (const k of newKeyEntries) notifiedUnknownKeys.add(k)
+
   const fieldLines = newKeyEntries.map((k) => {
     const v = unknownKeys[k]
     return `\`${k}\`: \`${JSON.stringify(v)}\``
   })
-
   const context: Record<string, unknown> = {
     count: newKeyEntries.length,
     keys: fieldLines.slice(0, 20).join('\n'),
@@ -134,14 +115,8 @@ export async function handleUnknownChallengeKeys(
 
   await discord.sendAlert(
     '🆕 Nouvelles clés challenges détectées',
-    `${newKeyEntries.length} clé(s) inconnue(s) hors allowlist trouvée(s) dans les données Riot. Elles ne seront pas stockées dans les colonnes challenge du participant.`,
+    `${newKeyEntries.length} clé(s) inconnue(s) hors allowlist trouvée(s) dans les données Riot.`,
     undefined,
     context
   )
-
-  // Mark as notified
-  await prisma.challengeKeyRegistry.updateMany({
-    where: { key: { in: newKeyEntries } },
-    data: { isNew: false, notifiedAt: new Date() },
-  })
 }

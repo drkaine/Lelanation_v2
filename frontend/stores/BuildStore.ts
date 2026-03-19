@@ -17,6 +17,9 @@ import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerial
 import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
 
+const CURRENT_BUILD_STORAGE_KEY = 'lelanation_current_build'
+const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
+
 interface BuildState {
   currentBuild: Build | null
   status: 'idle' | 'loading' | 'success' | 'error'
@@ -250,6 +253,71 @@ export const useBuildStore = defineStore('build', {
       this.pendingChampionChange = null
       this.status = 'idle'
       this.error = null
+      this.setLastBuilderStep('champion')
+    },
+
+    loadCurrentBuildDraft(): boolean {
+      if (import.meta.server) return false
+      try {
+        const saved = localStorage.getItem(CURRENT_BUILD_STORAGE_KEY)
+        if (!saved) return false
+        const build = JSON.parse(saved) as Build
+        this.setCurrentBuild(build)
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    ensureCurrentBuild() {
+      if (this.currentBuild) return
+      if (!this.loadCurrentBuildDraft()) {
+        this.createNewBuild()
+      }
+    },
+
+    setLastBuilderStep(step: 'champion' | 'rune' | 'item' | 'info') {
+      if (import.meta.server) return
+      try {
+        localStorage.setItem(BUILDER_STEP_STORAGE_KEY, step)
+      } catch {
+        // ignore
+      }
+    },
+
+    getLastBuilderStep(): 'champion' | 'rune' | 'item' | 'info' {
+      const build = this.currentBuild
+      if (!build?.champion) return 'champion'
+      if (
+        !build.runes?.primary?.pathId ||
+        !build.runes?.primary?.keystone ||
+        !build.runes?.secondary?.pathId
+      ) {
+        return 'rune'
+      }
+      if (!build.items?.length) return 'item'
+      if (
+        !build.skillOrder?.firstThreeUps?.length ||
+        build.skillOrder.firstThreeUps.some(up => !up) ||
+        !build.skillOrder?.skillUpOrder?.length ||
+        build.skillOrder.skillUpOrder.some(up => !up)
+      ) {
+        return 'item'
+      }
+      if (import.meta.client) {
+        try {
+          const saved = localStorage.getItem(BUILDER_STEP_STORAGE_KEY)
+          if (saved === 'champion' || saved === 'rune' || saved === 'item' || saved === 'info') {
+            return saved
+          }
+          if (saved === 'skill-order') {
+            return 'item'
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return 'info'
     },
 
     /** Crée une nouvelle variante (sous-build) en dupliquant le build principal. */
@@ -534,8 +602,8 @@ export const useBuildStore = defineStore('build', {
     },
 
     /**
-     * Copie les champs sélectionnés depuis une source vers une destination
-     * (build principal ou variante). Ne change pas la variante affichée.
+     * Copie les champs sélectionnés depuis une source vers une destination.
+     * firstThreeUps / skillUpOrder permettent de copier une partie du skillOrder.
      */
     copyVariantFieldsTo(
       source: 'main' | number,
@@ -546,6 +614,8 @@ export const useBuildStore = defineStore('build', {
         shards?: boolean
         summonerSpells?: boolean
         skillOrder?: boolean
+        firstThreeUps?: boolean
+        skillUpOrder?: boolean
         description?: boolean
       }
     ) {
@@ -553,25 +623,34 @@ export const useBuildStore = defineStore('build', {
       if (!data || !this.currentBuild) return
       const b = this.currentBuild
       const subs = (b.subBuilds as SubBuild[] | undefined) ?? []
+      const destBuild = destination === 'main' ? b : subs[destination]
+      if (!destBuild) return
 
-      if (destination === 'main') {
-        if (fields.items) b.items = [...data.items]
-        if (fields.runes && data.runes) b.runes = data.runes
-        if (fields.shards && data.shards) b.shards = data.shards
-        if (fields.summonerSpells)
-          b.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
-        if (fields.skillOrder && data.skillOrder) b.skillOrder = data.skillOrder
-        if (fields.description) b.description = data.description
-      } else {
-        const sub = subs[destination]
-        if (!sub) return
-        if (fields.items) sub.items = [...data.items]
-        if (fields.runes && data.runes) sub.runes = data.runes
-        if (fields.shards && data.shards) sub.shards = data.shards
-        if (fields.summonerSpells)
-          sub.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
-        if (fields.skillOrder && data.skillOrder) sub.skillOrder = data.skillOrder
-        if (fields.description) sub.description = data.description
+      if (fields.items) destBuild.items = [...data.items]
+      if (fields.runes && data.runes) destBuild.runes = data.runes
+      if (fields.shards && data.shards) destBuild.shards = data.shards
+      if (fields.summonerSpells)
+        destBuild.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
+      if (fields.description) destBuild.description = data.description
+
+      if (fields.skillOrder && data.skillOrder) {
+        destBuild.skillOrder = data.skillOrder
+      } else if (fields.firstThreeUps || fields.skillUpOrder) {
+        const src = data.skillOrder
+        const dest = destBuild.skillOrder
+        const pad3 = <T>(arr: T[] | null | undefined): [T | null, T | null, T | null] =>
+          arr && arr.length >= 3 ? [arr[0], arr[1], arr[2]] : [null, null, null]
+        const merged: SkillOrder = {
+          firstThreeUps:
+            fields.firstThreeUps && src?.firstThreeUps
+              ? (src.firstThreeUps as SkillOrder['firstThreeUps'])
+              : (pad3(dest?.firstThreeUps) as SkillOrder['firstThreeUps']),
+          skillUpOrder:
+            fields.skillUpOrder && src?.skillUpOrder
+              ? (src.skillUpOrder as SkillOrder['skillUpOrder'])
+              : (pad3(dest?.skillUpOrder) as SkillOrder['skillUpOrder']),
+        }
+        destBuild.skillOrder = merged
       }
 
       b.updatedAt = new Date().toISOString()

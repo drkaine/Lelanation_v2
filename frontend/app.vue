@@ -1,60 +1,93 @@
 <template>
-  <div class="flex min-h-screen flex-col">
+  <div class="flex min-h-screen flex-col" :style="appShellVars">
     <a
       href="#main"
       class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-surface focus:px-4 focus:py-2 focus:text-text"
     >
       Skip to content
     </a>
-    <template v-if="!isStreamerMode">
-      <AppNavbar />
-      <div class="tooltips-toggle-bar">
-        <label class="tooltips-toggle-label">
-          <input
-            type="checkbox"
-            :checked="tooltipsDisabled"
-            class="tooltips-toggle-checkbox"
-            @change="toggleTooltipsDisabled()"
-          />
-          <span>{{ t('nav.disableTooltips') }}</span>
-        </label>
-        <span class="tooltips-toggle-shortcut">Alt + T</span>
-      </div>
-    </template>
-    <template v-else>
-      <div class="streamer-panel streamer-panel-top" :class="{ 'is-open': streamerNavOpen }">
-        <AppNavbar />
-      </div>
+    <AppNavbar v-show="!isStreamerMode" />
+    <div v-show="!isStreamerMode && !commandBarHiddenByScroll" class="command-bar-fixed-wrapper">
       <button
+        v-show="commandsCollapsed"
         type="button"
-        class="streamer-toggle streamer-toggle-top"
-        :class="{ 'streamer-toggle-top-open': streamerNavOpen }"
-        :title="streamerNavOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
-        @click="streamerNavOpen = !streamerNavOpen"
+        class="command-collapse-floating"
+        title="Afficher les commandes"
+        :aria-expanded="false"
+        @click="commandsCollapsed = false"
       >
-        {{ streamerNavOpen ? '▴' : '▾' }}
+        ▾
       </button>
-    </template>
-    <main id="main" tabindex="-1">
+      <div v-show="!commandsCollapsed" ref="commandBarRef" class="command-bar-overlay">
+        <div class="command-bar" :class="{ 'command-bar-collapsed': commandsCollapsed }">
+          <button
+            type="button"
+            class="command-collapse-button"
+            :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
+            :aria-expanded="!commandsCollapsed"
+            @click="commandsCollapsed = !commandsCollapsed"
+          >
+            {{ commandsCollapsed ? '▾' : '▴' }}
+          </button>
+          <div v-show="!commandsCollapsed" class="command-bar-content">
+            <label class="command-toggle">
+              <input
+                type="checkbox"
+                :checked="tooltipsDisabled"
+                class="command-toggle-checkbox"
+                @change="toggleTooltipsDisabled()"
+              />
+              <span class="command-toggle-track" :class="{ active: tooltipsDisabled }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('nav.disableTooltips') }}</span>
+              <span class="command-shortcut">Alt + T</span>
+            </label>
+            <button
+              type="button"
+              class="command-toggle command-toggle-button"
+              :aria-pressed="isStreamerMode"
+              @click="toggleStreamerMode()"
+            >
+              <span class="command-toggle-track" :class="{ active: isStreamerMode }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('footer.presentationMode') }}</span>
+              <span class="command-shortcut">Alt + P</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-show="!isStreamerMode" class="command-bar-spacer" aria-hidden="true"></div>
+    <div
+      v-show="isStreamerMode"
+      class="streamer-panel streamer-panel-top"
+      :class="{ 'is-open': streamerPanelsOpen }"
+    >
+      <AppNavbar />
+    </div>
+    <button
+      v-show="isStreamerMode"
+      type="button"
+      class="streamer-toggle streamer-toggle-top"
+      :class="{ 'streamer-toggle-top-open': streamerPanelsOpen }"
+      :title="streamerPanelsOpen ? 'Masquer la navigation' : 'Afficher la navigation'"
+      @click="toggleStreamerPanels()"
+    >
+      {{ streamerPanelsOpen ? '▴' : '▾' }}
+    </button>
+    <main id="main" tabindex="-1" class="app-main flex-1">
       <NuxtPage />
     </main>
-    <template v-if="!isStreamerMode && !isAdminRoute">
+    <AppFooter v-show="!isStreamerMode && !isAdminRoute" />
+    <div
+      v-show="isStreamerMode"
+      class="streamer-panel streamer-panel-bottom"
+      :class="{ 'is-open': streamerPanelsOpen }"
+    >
       <AppFooter />
-    </template>
-    <template v-else-if="isStreamerMode">
-      <div class="streamer-panel streamer-panel-bottom" :class="{ 'is-open': streamerFooterOpen }">
-        <AppFooter />
-      </div>
-      <button
-        type="button"
-        class="streamer-toggle streamer-toggle-bottom"
-        :class="{ 'streamer-toggle-bottom-open': streamerFooterOpen }"
-        :title="streamerFooterOpen ? 'Masquer le footer' : 'Afficher le footer'"
-        @click="streamerFooterOpen = !streamerFooterOpen"
-      >
-        {{ streamerFooterOpen ? '▾' : '▴' }}
-      </button>
-    </template>
+    </div>
     <CookieConsentBanner />
   </div>
 </template>
@@ -70,10 +103,22 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 const { t } = useI18n()
 const route = useRoute()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
-const { isStreamerMode } = useStreamerMode()
-const { tooltipsDisabled, tooltipsEnabled, toggleTooltipsDisabled } = useTooltipsPreference()
+const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
+const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
+  useTooltipsPreference()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
+const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
+const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
+const commandBarRef = ref<HTMLElement | null>(null)
+const commandBarHiddenByScroll = ref(false)
+const COMMAND_BAR_SCROLL_THRESHOLD = 80
+const appShellVars = computed(() => ({
+  '--build-create-page-padding-top': !isStreamerMode.value ? '6px' : '1rem',
+  '--build-create-card-top-gap': '11px',
+  '--build-create-page-lift': '0px',
+  '--build-page-padding-top': !isStreamerMode.value ? '6px' : '1rem',
+}))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
 
@@ -90,22 +135,54 @@ watch(isStreamerMode, enabled => {
     // In streamer mode, nav and footer are hidden by default.
     streamerNavOpen.value = false
     streamerFooterOpen.value = false
+    setTooltipsDisabled(true)
   }
 })
 
+const toggleStreamerPanels = () => {
+  const nextState = !streamerPanelsOpen.value
+  streamerNavOpen.value = nextState
+  streamerFooterOpen.value = nextState
+}
+
 const onKeyDown = (event: KeyboardEvent) => {
-  if (event.altKey && event.key === 't' && !isStreamerMode.value) {
+  const key = event.key.toLowerCase()
+
+  if (event.altKey && key === 'p') {
+    event.preventDefault()
+    toggleStreamerMode()
+    return
+  }
+
+  if (event.altKey && key === 't') {
     event.preventDefault()
     toggleTooltipsDisabled()
   }
 }
 
+const onDocumentPointerDown = (event: MouseEvent) => {
+  if (commandsCollapsed.value) return
+  const target = event.target as Node | null
+  if (!target) return
+  if (commandBarRef.value?.contains(target)) return
+  commandsCollapsed.value = true
+}
+
+function onWindowScroll() {
+  commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
+}
+
 if (import.meta.client) {
   onMounted(() => {
     window.addEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onDocumentPointerDown)
+    window.addEventListener('scroll', onWindowScroll, { passive: true })
+    onWindowScroll()
   })
   onUnmounted(() => {
     window.removeEventListener('keydown', onKeyDown)
+    document.removeEventListener('mousedown', onDocumentPointerDown)
+    window.removeEventListener('scroll', onWindowScroll)
   })
 }
 </script>
@@ -185,81 +262,227 @@ if (import.meta.client) {
   position: fixed;
   left: 6px;
   z-index: 70;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  border: 1px solid rgb(var(--rgb-accent) / 0.6);
-  background: rgb(var(--rgb-background) / 0.55);
-  color: rgb(var(--rgb-accent) / 0.9);
-  font-size: 20px;
-  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  background: rgb(var(--rgb-background) / 0.18);
+  color: var(--color-blue-50);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 4px 10px rgb(0 0 0 / 35%);
   transition:
     bottom 0.25s ease,
     top 0.25s ease,
     background-color 0.2s ease,
-    transform 0.2s ease;
+    border-color 0.2s ease;
 }
 
 .streamer-toggle:hover {
-  background: rgb(var(--rgb-background) / 0.75);
-  transform: scale(1.04);
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
 }
 
 .streamer-toggle-top {
   top: 0;
 }
 
-.streamer-toggle-bottom {
-  bottom: 0;
-}
-
 .streamer-toggle-top-open {
-  top: 66px;
+  top: 50px;
 }
 
-.streamer-toggle-bottom-open {
-  bottom: 66px;
+.command-bar-fixed-wrapper {
+  position: fixed;
+  top: 50px;
+  left: 0;
+  right: 0;
+  z-index: 55;
+  min-height: 24px;
+  pointer-events: none;
 }
 
-.tooltips-toggle-bar {
+.command-bar-fixed-wrapper > * {
+  pointer-events: auto;
+}
+
+.command-bar-spacer {
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.command-bar-overlay {
+  left: 0;
+  right: 0;
+  display: flex;
+  padding: 0 6px;
+  pointer-events: none;
+}
+
+.command-bar {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 3px 16px;
-  background: rgb(var(--rgb-background) / 0.85);
+  gap: 12px;
+  width: 100%;
+  padding: 6px 16px;
+  background: #08101f;
   border-bottom: 1px solid rgb(var(--rgb-accent) / 0.15);
   font-size: 11px;
   color: rgb(var(--rgb-text) / 0.6);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
 }
 
-.tooltips-toggle-label {
+.command-bar.command-bar-collapsed {
+  width: auto;
+  justify-content: flex-start;
+  padding: 2px 0 0;
+  background: transparent;
+  border-bottom: none;
+  backdrop-filter: none;
+}
+
+.command-bar-content {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1;
+}
+
+.command-collapse-button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 4px;
+  background: rgb(var(--rgb-background) / 0.18);
+  color: var(--color-blue-50);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.command-collapse-button:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
+}
+
+.command-bar.command-bar-collapsed .command-collapse-button {
+  background: #08101f;
+}
+
+.command-collapse-floating {
+  position: absolute;
+  top: 0;
+  left: 6px;
+  z-index: 56;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 4px;
+  background: #08101f;
+  color: var(--color-blue-50);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.command-collapse-floating:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
+}
+
+.command-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   user-select: none;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 9999px;
+  padding: 4px 8px;
+  background: rgb(var(--rgb-background) / 0.18);
+  color: var(--color-blue-50);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.tooltips-toggle-checkbox {
+.command-toggle:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
+}
+
+.command-toggle.is-disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.command-toggle-button {
+  font: inherit;
+}
+
+.command-toggle-checkbox {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.command-toggle-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.command-toggle-track {
+  width: 30px;
+  height: 16px;
+  border-radius: 9999px;
+  background: rgb(var(--rgb-text) / 0.35);
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.command-toggle-track.active {
+  background: rgb(var(--rgb-accent) / 0.7);
+}
+
+.command-toggle-thumb {
   width: 12px;
   height: 12px;
-  cursor: pointer;
-  accent-color: rgb(var(--rgb-accent));
+  border-radius: 9999px;
+  background: rgb(var(--rgb-background));
+  transition: transform 0.2s ease;
 }
 
-.tooltips-toggle-shortcut {
+.command-toggle-track.active .command-toggle-thumb {
+  transform: translateX(14px);
+}
+
+.command-shortcut {
   font-size: 10px;
   color: rgb(var(--rgb-accent) / 0.5);
   border: 1px solid rgb(var(--rgb-accent) / 0.3);
   border-radius: 3px;
   padding: 1px 4px;
   font-family: monospace;
+}
+
+.app-main > .min-h-screen {
+  min-height: 100% !important;
 }
 </style>

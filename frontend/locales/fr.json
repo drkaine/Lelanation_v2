@@ -8,9 +8,20 @@
     "language": "Langue"
   },
   "home": {
-    "subtitle": "La plateforme de référence pour créer, optimiser et partager vos builds League of Legends",
+    "subtitle": "La plateforme de référence pour créer, optimiser et partager vos builds League of Legends. La plateforme pour t’aider à réfléchir, créer, analyser, organiser, apprendre ou simplement explorer une idée.",
     "features": "Fonctionnalités",
     "quickActions": "Actions Rapides",
+    "links": {
+      "discord": "Discord",
+      "instagram": "Instagram",
+      "facebook": "Facebook",
+      "patreon": "Patreon",
+      "youtube": "YouTube",
+      "twitch": "Twitch",
+      "twitter": "Twitter",
+      "tiktok": "TikTok",
+      "website": "Site Web"
+    },
     "ctaTitle": "Prêt à créer votre premier build ?",
     "ctaText": "Rejoignez la communauté Lelanation et partagez vos meilleures configurations",
     "ctaButton": "Commencer Maintenant"
@@ -25,6 +36,31 @@
     "accept": "Accepter",
     "reject": "Refuser",
     "learnMore": "En savoir plus"
+  },
+  "buildsPage": {
+    "visibility": "Visibilité :",
+    "all": "Tous",
+    "private": "Privé",
+    "public": "Public"
+  },
+  "buildDiscovery": {
+    "searchPlaceholder": "Rechercher un build par champion ou auteur..."
+  },
+  "createBuild": {
+    "validationState": "État de validation :",
+    "validationChampion": "Champion:",
+    "validationItems": "Items:",
+    "validationRunesPrimary": "Runes (Primary):",
+    "validationRunesSecondary": "Runes (Secondary):",
+    "validationSummonerSpells": "Summoner Spells:",
+    "validationSkillOrder": "Skill order:",
+    "validationSkillOrderSummary": "first 3 + order",
+    "validationSkillOrderSummaryWithHint": "first 3 + order, clique sur les cases des spells dans le build"
+  },
+  "videosPage": {
+    "loading": "Chargement…",
+    "noCreatorsTitle": "Aucun créateur configuré",
+    "noCreatorsText": "Demande à un admin d’ajouter des chaînes."
   }
 }
 

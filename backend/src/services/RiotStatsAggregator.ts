@@ -1,5 +1,5 @@
 /**
- * Aggregates LoL stats from PostgreSQL via get_stats_champions() (single round-trip).
+ * Aggregates LoL champion stats from champion_core_stats aggregate table.
  * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
 import { prisma } from '../db.js'
@@ -38,84 +38,119 @@ export interface AggregatedStats {
 export interface LoadStatsOptions {
   rankTier?: string | null
   role?: string | null
-}
-
-type ChampionsRow = Array<{ get_stats_champions: RawChampionsResult | null }>
-interface RawChampionsResult {
-  totalGames: number
-  totalMatches: number
-  champions: Array<{
-    championId: number
-    games: number
-    wins: number
-    winrate: number
-    pickrate: number
-    banrate?: number
-    presence?: number
-    byRole?: Record<string, { games: number; wins: number; winrate: number; pickrate?: number }>
-  }>
-  generatedAt: string | null
+  version?: string | null
+  region?: string | null
 }
 
 export class RiotStatsAggregator {
-  /**
-   * Load stats from DB via get_stats_champions(). Returns null if DB not configured or no data.
-   */
   async load(options: LoadStatsOptions = {}): Promise<AggregatedStats | null> {
     if (!isDatabaseConfigured()) return null
     try {
-      const { rankTier, role } = options
+      const { rankTier, role, version, region } = options
       const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
       const pRole = role != null && role !== '' ? role : null
+      const pVersion = version != null && version !== '' ? version : null
+      const pRegion = region != null && region !== '' ? region : null
 
       const now = Date.now()
       const cacheKey = championsCacheKey(pRankTier, pRole)
       const cached = championsCache.get(cacheKey)
       if (cached && cached.expiresAt > now) return cached.data
 
-      const rows = await prisma.$queryRaw<ChampionsRow>`
-        SELECT get_stats_champions(${pRankTier}, ${pRole}) AS get_stats_champions
-      `
-      const raw = rows[0]?.get_stats_champions ?? null
-      if (!raw) return null
+      const where: Record<string, unknown> = {}
+      if (pRankTier) where.rankTier = pRankTier
+      if (pRole) where.role = pRole
+      if (pVersion) where.gameVersion = pVersion
+      if (pRegion) where.region = pRegion
 
-      const champions: ChampionStats[] = (raw.champions ?? []).map((c) => {
-        let byRole: ChampionStats['byRole'] = undefined
-        if (c.byRole && typeof c.byRole === 'object' && Object.keys(c.byRole).length > 0) {
-          byRole = {}
-          for (const [role, val] of Object.entries(c.byRole)) {
-            byRole[role] = {
-              games: Number(val.games),
-              wins: Number(val.wins),
-              winrate: Number(val.winrate),
-              ...(val.pickrate != null && { pickrate: Number(val.pickrate) }),
-            }
-          }
-        }
-        return {
-          championId: Number(c.championId),
-          games: Number(c.games),
-          wins: Number(c.wins),
-          winrate: Number(c.winrate),
-          pickrate: Number(c.pickrate),
-          ...(c.banrate != null && { banrate: Number(c.banrate) }),
-          ...(c.presence != null && { presence: Number(c.presence) }),
-          ...(byRole && { byRole }),
-        }
+      const rows = await prisma.championCoreStat.findMany({
+        where,
+        select: {
+          championId: true,
+          role: true,
+          countWin: true,
+          countGame: true,
+          countBan: true,
+        },
       })
 
-      const generatedAt =
-        raw.generatedAt == null
-          ? null
-          : typeof raw.generatedAt === 'string'
-            ? raw.generatedAt
-            : (raw.generatedAt as unknown as Date)?.toISOString?.() ?? String(raw.generatedAt)
+      if (rows.length === 0) {
+        return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
+      }
+
+      // Aggregate by championId
+      const byChampion = new Map<
+        number,
+        {
+          games: number
+          wins: number
+          bans: number
+          byRole: Record<string, { games: number; wins: number }>
+        }
+      >()
+
+      let totalGames = 0
+      let totalBans = 0
+
+      for (const row of rows) {
+        const cid = row.championId
+        const games = row.countGame
+        const wins = row.countWin
+        const bans = row.countBan
+        totalGames += games
+        totalBans += bans
+        let entry = byChampion.get(cid)
+        if (!entry) {
+          entry = { games: 0, wins: 0, bans: 0, byRole: {} }
+          byChampion.set(cid, entry)
+        }
+        entry.games += games
+        entry.wins += wins
+        entry.bans += bans
+        const roleKey = row.role
+        if (!entry.byRole[roleKey]) entry.byRole[roleKey] = { games: 0, wins: 0 }
+        entry.byRole[roleKey].games += games
+        entry.byRole[roleKey].wins += wins
+      }
+
+      // Total matches ≈ totalGames / 10 (10 players per match)
+      const totalMatches = Math.round(totalGames / 10)
+
+      const champions: ChampionStats[] = []
+      for (const [cid, entry] of byChampion.entries()) {
+        if (entry.games === 0) continue
+        const winrate = entry.games > 0 ? (entry.wins / entry.games) * 100 : 0
+        const pickrate = totalGames > 0 ? (entry.games / totalGames) * 100 : 0
+        const banrate = totalMatches > 0 ? (entry.bans / totalMatches) * 100 : 0
+        const presence = totalMatches > 0 ? ((entry.games + entry.bans) / totalMatches) * 100 : 0
+
+        const byRole: ChampionStats['byRole'] = {}
+        for (const [r, rv] of Object.entries(entry.byRole)) {
+          byRole[r] = {
+            games: rv.games,
+            wins: rv.wins,
+            winrate: rv.games > 0 ? (rv.wins / rv.games) * 100 : 0,
+            pickrate: totalGames > 0 ? (rv.games / totalGames) * 100 : 0,
+          }
+        }
+
+        champions.push({
+          championId: cid,
+          games: entry.games,
+          wins: entry.wins,
+          winrate: Math.round(winrate * 100) / 100,
+          pickrate: Math.round(pickrate * 100) / 100,
+          banrate: Math.round(banrate * 100) / 100,
+          presence: Math.round(presence * 100) / 100,
+          byRole: Object.keys(byRole).length > 0 ? byRole : undefined,
+        })
+      }
 
       const result: AggregatedStats = {
-        totalGames: Number(raw.totalGames) ?? 0,
-        totalMatches: Number(raw.totalMatches) ?? 0,
+        totalGames,
+        totalMatches,
         champions,
-        generatedAt,
+        generatedAt: new Date().toISOString(),
       }
       championsCache.set(cacheKey, { data: result, expiresAt: now + CHAMPIONS_CACHE_TTL_MS })
       return result
@@ -124,9 +159,6 @@ export class RiotStatsAggregator {
     }
   }
 
-  /**
-   * Compute and return aggregated stats (no separate save in MVP; load() computes on the fly).
-   */
   async computeAndSave(): Promise<AggregatedStats> {
     const result = await this.load()
     if (result) return result

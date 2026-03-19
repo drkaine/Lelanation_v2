@@ -41,7 +41,11 @@
       <button
         v-for="champion in allChampions"
         :key="champion.id"
-        :class="['champ', !isFiltered(champion) ? 'hide' : '']"
+        :class="[
+          'champ',
+          !isFiltered(champion) ? 'hide' : '',
+          hasSelectedChampion && !isSelected(champion) ? 'champ-dimmed' : '',
+        ]"
         @click="selectChampion(champion)"
       >
         <img
@@ -133,6 +137,8 @@ const isSelected = (champion: Champion): boolean => {
   return buildStore.currentBuild?.champion?.id === champion.id
 }
 
+const hasSelectedChampion = computed(() => Boolean(buildStore.currentBuild?.champion?.id))
+
 const selectChampion = (champion: Champion) => {
   buildStore.setChampion(champion)
 }
@@ -176,7 +182,7 @@ watch(locale, () => {
 }
 
 .champions-list {
-  --champSizeButton: 51px;
+  --champSizeButton: 59px;
   display: grid;
   grid-template-columns: repeat(auto-fit, var(--champSizeButton));
   place-content: center;
@@ -200,16 +206,20 @@ watch(locale, () => {
   transition: border-color 0.2s;
 }
 
-.champ.hide img {
-  filter: grayscale(1) brightness(0.4);
-}
-
 .champ img {
   display: block;
   height: 100%;
   width: 100%;
   object-fit: cover;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+}
+
+.champ.hide img {
+  filter: grayscale(1) brightness(0.4);
+}
+
+.champ-dimmed img {
+  filter: grayscale(1) brightness(0.45);
 }
 
 .champ-selected {
@@ -224,11 +234,15 @@ watch(locale, () => {
     border-color: rgb(var(--rgb-accent));
     z-index: 1;
   }
+
+  .champ-dimmed:hover img {
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+  }
 }
 
 @media (max-width: 700px) {
   .champions-list {
-    --champSizeButton: 43px;
+    --champSizeButton: 48px;
   }
 }
 </style>

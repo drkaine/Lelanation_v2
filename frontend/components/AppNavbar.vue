@@ -26,6 +26,57 @@
       </button>
 
       <div class="mobile-nav" :class="{ 'is-open': isMenuOpen }">
+        <div class="mobile-builds-menu">
+          <button
+            type="button"
+            class="version mobile-builds-trigger"
+            :class="{ 'is-active': isBuildsSectionActive }"
+            @click="toggleMobileBuildsMenu"
+          >
+            <span>{{ t('nav.builds') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isMobileBuildsMenuOpen }"
+              >▾</span
+            >
+          </button>
+          <div v-if="isMobileBuildsMenuOpen" class="mobile-builds-dropdown">
+            <NuxtLink
+              :to="discoverBuildsLink"
+              :title="t('buildsPage.discover')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isDiscoverBuildsActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('buildsPage.discover') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="myBuildsLink"
+              :title="t('buildsPage.myBuilds')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isMyBuildsActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('buildsPage.myBuilds') }}
+            </NuxtLink>
+            <NuxtLink
+              v-if="hasFavorites"
+              :to="favoriteBuildsLink"
+              :title="t('buildsPage.myFavorites')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isFavoriteBuildsActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('buildsPage.myFavorites') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="localePath('/builds/create')"
+              :title="t('buildsPage.createBuild')"
+              class="version builds-submenu-link"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('buildsPage.createBuild') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           :to="localePath('/videos')"
           :title="t('nav.videos')"
@@ -42,22 +93,6 @@
           @click="toggleMenu"
         >
           {{ t('nav.statistics') }}
-        </NuxtLink>
-        <NuxtLink
-          :to="localePath('/builds/create')"
-          :title="t('nav.build')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.build') }}
-        </NuxtLink>
-        <NuxtLink
-          :to="localePath('/builds')"
-          :title="t('nav.builds')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.builds') }}
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
@@ -98,12 +133,58 @@
       </div>
 
       <div class="right-header">
-        <NuxtLink :to="localePath('/builds')" :title="t('nav.builds')" class="version">
-          {{ t('nav.builds') }}
-        </NuxtLink>
-        <NuxtLink :to="localePath('/builds/create')" :title="t('nav.build')" class="version">
-          {{ t('nav.build') }}
-        </NuxtLink>
+        <div
+          class="builds-menu"
+          @mouseenter="isBuildsMenuOpen = true"
+          @mouseleave="isBuildsMenuOpen = false"
+        >
+          <NuxtLink
+            :to="discoverBuildsLink"
+            class="version builds-menu-trigger"
+            :class="{ 'is-active': isBuildsSectionActive }"
+          >
+            <span>{{ t('nav.builds') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isBuildsMenuOpen }">▾</span>
+          </NuxtLink>
+          <div v-show="isBuildsMenuOpen" class="builds-menu-dropdown">
+            <NuxtLink
+              :to="discoverBuildsLink"
+              :title="t('buildsPage.discover')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isDiscoverBuildsActive }"
+              @click="closeBuildsMenu"
+            >
+              {{ t('buildsPage.discover') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="myBuildsLink"
+              :title="t('buildsPage.myBuilds')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isMyBuildsActive }"
+              @click="closeBuildsMenu"
+            >
+              {{ t('buildsPage.myBuilds') }}
+            </NuxtLink>
+            <NuxtLink
+              v-if="hasFavorites"
+              :to="favoriteBuildsLink"
+              :title="t('buildsPage.myFavorites')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isFavoriteBuildsActive }"
+              @click="closeBuildsMenu"
+            >
+              {{ t('buildsPage.myFavorites') }}
+            </NuxtLink>
+            <NuxtLink
+              :to="localePath('/builds/create')"
+              :title="t('buildsPage.createBuild')"
+              class="builds-submenu-link"
+              @click="closeBuildsMenu"
+            >
+              {{ t('buildsPage.createBuild') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/theorycraft')"
@@ -155,17 +236,41 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import LanguageSwitcher from '~/components/LanguageSwitcher.vue'
 import { getFallbackGameVersion } from '~/config/version'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useAdminAuth } from '~/composables/useAdminAuth'
+import { useFavoritesStore } from '~/stores/FavoritesStore'
 
 const isMenuOpen = ref(false)
+const isBuildsMenuOpen = ref(false)
+const isMobileBuildsMenuOpen = ref(false)
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
+const route = useRoute()
 const versionStore = useVersionStore()
 const gameVersion = computed(() => versionStore.currentVersion || getFallbackGameVersion())
+const discoverBuildsLink = computed(() => ({
+  path: localePath('/builds'),
+  query: { tab: 'discover' },
+}))
+const myBuildsLink = computed(() => ({ path: localePath('/builds'), query: { tab: 'my-builds' } }))
+const favoriteBuildsLink = computed(() => ({
+  path: localePath('/builds'),
+  query: { tab: 'favoris' },
+}))
+const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
+const currentBuildsTab = computed(() => {
+  if (!route.path.includes('/builds') || route.path.includes('/builds/create')) return null
+  return typeof route.query.tab === 'string' ? route.query.tab : 'discover'
+})
+const isDiscoverBuildsActive = computed(() => currentBuildsTab.value === 'discover')
+const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
+const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
+const favoritesStore = useFavoritesStore()
+const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
 
 // Map i18n locale to Riot Games locale code
 const getRiotLocale = (locale: string): string => {
@@ -187,22 +292,36 @@ const patchNotesUrl = computed(() => {
 
   if (Number.isFinite(gameMajor) && Number.isFinite(gameMinor)) {
     const patchMajor = gameMajor + 10
-    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/patch-${patchMajor}-${gameMinor}-notes/`
+    return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${patchMajor}-${gameMinor}-notes/`
   }
 
   // Fallback: best-effort formatting
   const slug = v.replace(/\./g, '-')
-  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/patch-${slug}-notes/`
+  return `https://www.leagueoflegends.com/${riotLocale}/news/game-updates/league-of-legends-patch-${slug}-notes/`
 })
 
 onMounted(() => {
   if (!versionStore.currentVersion && versionStore.status === 'idle') {
     versionStore.loadCurrentVersion()
   }
+  favoritesStore.init()
 })
 
 const toggleMenu = () => {
   isMenuOpen.value = !isMenuOpen.value
+}
+
+const closeBuildsMenu = () => {
+  isBuildsMenuOpen.value = false
+}
+
+const toggleMobileBuildsMenu = () => {
+  isMobileBuildsMenuOpen.value = !isMobileBuildsMenuOpen.value
+}
+
+const handleBuildsNavigation = () => {
+  isMobileBuildsMenuOpen.value = false
+  isMenuOpen.value = false
 }
 </script>
 
@@ -214,10 +333,11 @@ const toggleMenu = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  height: 50px;
   padding: 0 15px;
   backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--color-blue-600), transparent 65%);
+  background: #08101f;
+  margin-bottom: -5px;
 }
 
 .left-header .link {
@@ -235,6 +355,12 @@ const toggleMenu = () => {
   display: flex;
   align-items: center;
   gap: 18px;
+}
+
+.builds-menu {
+  position: relative;
+  padding-bottom: 8px;
+  margin-bottom: -8px;
 }
 
 .header a {
@@ -256,6 +382,75 @@ const toggleMenu = () => {
   color: var(--color-blue-50);
 }
 
+.builds-menu-trigger,
+.mobile-builds-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.builds-menu-trigger.is-active,
+.mobile-builds-trigger.is-active {
+  color: var(--color-accent);
+}
+
+.builds-menu-chevron {
+  display: inline-flex;
+  transition: transform 0.2s ease;
+}
+
+.builds-menu-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.builds-menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  min-width: 180px;
+  flex-direction: column;
+  gap: 4px;
+  transform: translateX(-50%);
+  border: 1px solid rgb(var(--rgb-accent) / 0.35);
+  border-radius: 10px;
+  background: #08101f;
+  padding: 8px;
+  box-shadow: 0 12px 24px rgb(0 0 0 / 0.28);
+}
+
+.builds-submenu-link {
+  display: block;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--color-blue-50);
+  text-align: left;
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.builds-submenu-link:hover,
+.builds-submenu-link.is-active {
+  background: rgb(var(--rgb-accent) / 0.14);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.builds-submenu-link.router-link-active:not(.is-active),
+.builds-submenu-link.router-link-exact-active:not(.is-active) {
+  background: transparent;
+  color: var(--color-blue-50);
+}
+
 .menu-mobile {
   display: none;
   cursor: pointer;
@@ -270,7 +465,7 @@ const toggleMenu = () => {
   top: 64px;
   left: 0;
   right: 0;
-  background: var(--gradient-secondary);
+  background: #08101f;
   padding: 14px 15px;
   flex-direction: column;
   gap: 12px;
@@ -287,8 +482,31 @@ const toggleMenu = () => {
   display: block;
 }
 
+.mobile-builds-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mobile-builds-trigger {
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+}
+
+.mobile-builds-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 12px;
+}
+
 @media (hover: hover) {
   .header a:hover {
+    text-decoration: underline;
+  }
+
+  .builds-menu-trigger:hover {
     text-decoration: underline;
   }
 }

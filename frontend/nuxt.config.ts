@@ -26,6 +26,9 @@ function getFallbackGameVersionFromBackend(): string {
   return '16.3.1'
 }
 
+const defaultSiteUrl = process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr'
+const defaultApiBase = process.env.NUXT_PUBLIC_API_BASE || defaultSiteUrl
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -46,9 +49,7 @@ export default defineNuxtConfig({
         },
         { name: 'robots', content: 'index, follow' },
       ],
-      link: [
-        { rel: 'canonical', href: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr' },
-      ],
+      link: [{ rel: 'canonical', href: defaultSiteUrl }],
     },
   },
   modules: [
@@ -62,6 +63,19 @@ export default defineNuxtConfig({
   icon: {
     clientBundle: {
       scan: true,
+      icons: [
+        'mdi:close',
+        'mdi:refresh',
+        'mdi:discord',
+        'mdi:instagram',
+        'mdi:facebook',
+        'mdi:patreon',
+        'mdi:youtube',
+        'mdi:twitch',
+        'mdi:twitter',
+        'mdi:music-note',
+        'mdi:web',
+      ],
       sizeLimitKb: 512,
     },
   },
@@ -78,7 +92,7 @@ export default defineNuxtConfig({
       // Prefer same-origin `/api` in production. In dev you can still set
       // NUXT_PUBLIC_API_BASE=http://localhost:4001 if needed.
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '',
-      siteUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+      siteUrl: defaultSiteUrl,
       companionAppDownloadUrl: process.env.NUXT_PUBLIC_COMPANION_APP_DOWNLOAD_URL || '',
       // Matomo: set NUXT_PUBLIC_MATOMO_HOST and NUXT_PUBLIC_MATOMO_SITE_ID to enable
       matomoHost: process.env.NUXT_PUBLIC_MATOMO_HOST || '',
@@ -88,10 +102,10 @@ export default defineNuxtConfig({
     },
   },
   site: {
-    url: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+    url: defaultSiteUrl,
   },
   i18n: {
-    baseUrl: process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr',
+    baseUrl: defaultSiteUrl,
     defaultLocale: 'fr',
     strategy: 'prefix_except_default',
     langDir: 'locales',
@@ -138,7 +152,7 @@ export default defineNuxtConfig({
   nitro: {
     devProxy: {
       '/api': {
-        target: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3500',
+        target: defaultApiBase,
         changeOrigin: true,
       },
     },
@@ -230,7 +244,7 @@ export default defineNuxtConfig({
       // Proxy all other /api/** requests to the backend, but NOT /api/_nuxt_icon/**
       // Note: Nitro strips /api from the path, so target must include /api to rebuild full path.
       '/api/**': {
-        proxy: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3500') + '/api/**',
+        proxy: defaultApiBase + '/api/**',
       },
       // Pages/HTML: no-store would block back/forward cache (bfcache). Use no-cache
       // so the doc can be bfcached while still revalidating on return.

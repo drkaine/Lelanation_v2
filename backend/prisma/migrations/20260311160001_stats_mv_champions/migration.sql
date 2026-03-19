@@ -1,1 +1,0 @@
--- No-op: stats via SQL functions only (get_stats_champions). MVs removed to avoid slow/failing migrations.

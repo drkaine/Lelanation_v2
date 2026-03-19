@@ -8,13 +8,51 @@ import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
+export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
+
+const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
+
+function readPaginationFromStorage(): { pageSize: PageSizeOption; currentPage: number } | null {
+  if (typeof document === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(PAGINATION_STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as { pageSize?: number | string; currentPage?: number }
+    const validSizes: PageSizeOption[] = [20, 30, 40, 50, 'all']
+    const pageSize =
+      data.pageSize !== undefined && validSizes.includes(data.pageSize as PageSizeOption)
+        ? (data.pageSize as PageSizeOption)
+        : null
+    const currentPage =
+      typeof data.currentPage === 'number' && data.currentPage >= 1
+        ? Math.floor(data.currentPage)
+        : null
+    if (pageSize !== null && currentPage !== null) {
+      return { pageSize, currentPage }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function writePaginationToStorage(pageSize: PageSizeOption, currentPage: number) {
+  if (typeof document === 'undefined') return
+  try {
+    localStorage.setItem(PAGINATION_STORAGE_KEY, JSON.stringify({ pageSize, currentPage }))
+  } catch {
+    // ignore
+  }
+}
 
 interface BuildDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
   selectedRole: FilterRole
-  onlyUpToDate: boolean
+  selectedVersion: string | null
   sortBy: SortOption
+  pageSize: PageSizeOption
+  currentPage: number
   builds: Build[]
   filteredBuilds: Build[]
   comparisonBuilds: string[] // Build IDs
@@ -25,8 +63,10 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     searchQuery: '',
     selectedChampion: null,
     selectedRole: null,
-    onlyUpToDate: false,
+    selectedVersion: null,
     sortBy: 'recent',
+    pageSize: 20,
+    currentPage: 1,
     builds: [],
     filteredBuilds: [],
     comparisonBuilds: [],
@@ -36,15 +76,18 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     searchResults(): Build[] {
       let results = [...this.builds]
 
-      // Search by champion name or author
+      // Search by build name, variant titles, champion name or author
       if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase()
-        results = results.filter(
-          build =>
-            build.champion?.name.toLowerCase().includes(query) ||
-            build.champion?.id.toLowerCase().includes(query) ||
-            (build.author && build.author.toLowerCase().includes(query))
-        )
+        const query = this.searchQuery.toLowerCase().trim()
+        results = results.filter(build => {
+          if (build.name?.toLowerCase().includes(query)) return true
+          if (build.champion?.name?.toLowerCase().includes(query)) return true
+          if (build.champion?.id?.toLowerCase().includes(query)) return true
+          if (build.author?.toLowerCase().includes(query)) return true
+          const subBuilds = build.subBuilds ?? []
+          if (subBuilds.some(sub => sub.title?.toLowerCase().includes(query))) return true
+          return false
+        })
       }
 
       // Filter by champion
@@ -60,13 +103,9 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         })
       }
 
-      // Filter by version (up-to-date)
-      if (this.onlyUpToDate) {
-        const versionStore = useVersionStore()
-        const currentVersion = versionStore.currentVersion
-        if (currentVersion) {
-          results = results.filter(build => build.gameVersion === currentVersion)
-        }
+      // Filter by version
+      if (this.selectedVersion) {
+        results = results.filter(build => build.gameVersion === this.selectedVersion)
       }
 
       // Sort
@@ -102,12 +141,28 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       return sorted
     },
 
+    totalFilteredCount(): number {
+      return this.filteredBuilds.length
+    },
+
+    totalPages(): number {
+      if (this.pageSize === 'all') return 1
+      const total = this.filteredBuilds.length
+      return total === 0 ? 0 : Math.ceil(total / this.pageSize)
+    },
+
+    paginatedBuilds(): Build[] {
+      if (this.pageSize === 'all') return this.filteredBuilds
+      const start = (this.currentPage - 1) * this.pageSize
+      return this.filteredBuilds.slice(start, start + this.pageSize)
+    },
+
     hasActiveFilters(): boolean {
       return (
         this.searchQuery !== '' ||
         this.selectedChampion !== null ||
         this.selectedRole !== null ||
-        this.onlyUpToDate
+        this.selectedVersion !== null
       )
     },
   },
@@ -164,8 +219,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.applyFilters()
     },
 
-    setOnlyUpToDate(only: boolean) {
-      this.onlyUpToDate = only
+    setSelectedVersion(version: string | null) {
+      this.selectedVersion = version
       this.applyFilters()
     },
 
@@ -178,12 +233,47 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.searchQuery = ''
       this.selectedChampion = null
       this.selectedRole = null
-      this.onlyUpToDate = false
+      this.selectedVersion = null
       this.applyFilters()
     },
 
     applyFilters() {
       this.filteredBuilds = this.searchResults
+      this.currentPage = 1
+      writePaginationToStorage(this.pageSize, this.currentPage)
+    },
+
+    setPageSize(size: PageSizeOption) {
+      this.pageSize = size
+      const maxPage = this.totalPages || 1
+      if (this.currentPage > maxPage) {
+        this.currentPage = maxPage
+      }
+      writePaginationToStorage(this.pageSize, this.currentPage)
+    },
+
+    setPage(page: number) {
+      const maxPage = this.totalPages || 1
+      this.currentPage = Math.max(1, Math.min(page, maxPage))
+      writePaginationToStorage(this.pageSize, this.currentPage)
+    },
+
+    /** Restore page and pageSize from localStorage (call on builds page mount, client-only). */
+    restorePaginationFromStorage() {
+      const saved = readPaginationFromStorage()
+      if (saved) {
+        this.pageSize = saved.pageSize
+        this.currentPage = saved.currentPage
+      }
+    },
+
+    /** Clamp currentPage to a given max (e.g. for custom list total pages). */
+    clampPageToMax(maxPage: number) {
+      if (maxPage < 1) return
+      if (this.currentPage > maxPage) {
+        this.currentPage = maxPage
+        writePaginationToStorage(this.pageSize, this.currentPage)
+      }
     },
 
     sortBuilds(builds: Build[]): Build[] {

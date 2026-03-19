@@ -1,5 +1,5 @@
 <template>
-  <footer class="border-t border-primary/30 bg-surface/50 py-3 text-text/60">
+  <footer class="footer-shell border-t border-primary/30 py-3 text-text/60">
     <div class="max-w-8xl mx-auto px-4">
       <div class="flex flex-col items-center justify-center gap-2 text-xs md:flex-row md:gap-4">
         <span class="text-text/50">© {{ currentYear }} Lelanation</span>
@@ -19,8 +19,9 @@
         >
           {{ t('footer.privacy') }}
         </NuxtLink>
-        <span class="hidden md:inline">•</span>
+        <span v-if="adminMode" class="hidden md:inline">•</span>
         <NuxtLink
+          v-if="adminMode"
           :to="localePath('/lelanation-app')"
           class="transition-colors hover:text-accent"
           :title="t('footer.app')"
@@ -35,19 +36,6 @@
           @click="openContactModal"
         >
           {{ t('footer.contact') }}
-        </button>
-        <span class="hidden md:inline">•</span>
-        <button
-          type="button"
-          class="presentation-toggle"
-          :title="t('footer.presentationMode')"
-          :aria-pressed="isStreamerMode"
-          @click="onPresentationModeToggle"
-        >
-          <span class="presentation-toggle-label">{{ t('footer.presentationMode') }}</span>
-          <span class="presentation-toggle-track" :class="{ active: isStreamerMode }">
-            <span class="presentation-toggle-thumb" />
-          </span>
         </button>
       </div>
     </div>
@@ -161,12 +149,12 @@
 
 <script setup lang="ts">
 import { apiUrl } from '~/utils/apiUrl'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useAdminAuth } from '~/composables/useAdminAuth'
 
 const { t } = useI18n()
 const currentYear = new Date().getFullYear()
 const localePath = useLocalePath()
-const { isStreamerMode, setStreamerMode } = useStreamerMode()
+const { isLoggedIn: adminMode } = useAdminAuth()
 
 const contactModalOpen = ref(false)
 const contactSending = ref(false)
@@ -187,10 +175,6 @@ function openContactModal() {
 
 function closeContactModal() {
   contactModalOpen.value = false
-}
-
-function onPresentationModeToggle() {
-  setStreamerMode(!isStreamerMode.value)
 }
 
 async function submitContact() {
@@ -227,51 +211,7 @@ footer {
   margin-top: auto;
 }
 
-.presentation-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgb(var(--rgb-accent) / 0.45);
-  border-radius: 9999px;
-  padding: 3px 8px;
-  color: rgb(var(--rgb-text) / 0.85);
-  background: rgb(var(--rgb-background) / 0.25);
-  transition: background-color 0.2s ease;
-}
-
-.presentation-toggle:hover {
-  background: rgb(var(--rgb-background) / 0.45);
-}
-
-.presentation-toggle-label {
-  font-size: 11px;
-  line-height: 1;
-}
-
-.presentation-toggle-track {
-  width: 30px;
-  height: 16px;
-  border-radius: 9999px;
-  background: rgb(var(--rgb-text) / 0.35);
-  padding: 2px;
-  display: flex;
-  align-items: center;
-  transition: background-color 0.2s ease;
-}
-
-.presentation-toggle-track.active {
-  background: rgb(var(--rgb-accent) / 0.7);
-}
-
-.presentation-toggle-thumb {
-  width: 12px;
-  height: 12px;
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background));
-  transition: transform 0.2s ease;
-}
-
-.presentation-toggle-track.active .presentation-toggle-thumb {
-  transform: translateX(14px);
+.footer-shell {
+  background: #08101f;
 }
 </style>

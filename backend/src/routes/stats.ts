@@ -21,6 +21,7 @@ import {
 } from '../services/StatsPlayersService.js'
 import {
   getOverviewStats,
+  getOverviewMeta,
   getOverviewDetailStats,
   getOverviewTeamsStats,
   getOverviewSidesStats,
@@ -111,7 +112,8 @@ function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): stri
 }
 
 const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
-const OVERVIEW_TIMEOUT_MS = 85_000 // fail fast before nginx 90s to return 503 instead of 504
+/** Keep below typical gateway timeout (often 60s) so we return 503 before gateway returns 504. */
+const OVERVIEW_TIMEOUT_MS = 50_000
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: true; data: T } | { ok: false; timeout: true }> {
   return Promise.race([
@@ -142,14 +144,15 @@ router.get('/overview', async (req: Request, res: Response) => {
 
   if (result.ok === false && result.timeout) {
     console.warn('[GET /overview] timeout after', OVERVIEW_TIMEOUT_MS, 'ms (version=%s rankTier=%s)', version, rankTier)
+    res.set('Retry-After', '60')
     return res.status(503).json({
       error: 'Stats overview calculation timeout',
       message: 'Les statistiques prennent trop de temps. Essayez sans filtre version/division, ou réessayez plus tard.',
     })
   }
 
-  const data = result.ok ? result.data : null
-  if (!data) {
+  const raw = result.ok ? result.data : null
+  if (!raw || typeof raw !== 'object') {
     const reason = !isDatabaseConfigured()
       ? 'DATABASE_URL not configured'
       : 'Query failed or no data'
@@ -165,6 +168,23 @@ router.get('/overview', async (req: Request, res: Response) => {
       playerCount: 0,
       message: 'No stats yet. Run match collection first.',
     })
+  }
+  const data = raw as {
+    totalMatches: number
+    lastUpdate?: string | null
+    playerCount?: number
+    [key: string]: unknown
+  }
+  // Fill missing lastUpdate / playerCount when we have matches (e.g. precomputed data or stale cache)
+  if (
+    data.totalMatches > 0 &&
+    (data.lastUpdate == null || data.lastUpdate === '' || data.playerCount === 0)
+  ) {
+    const meta = await getOverviewMeta(version ?? null, rankTier ?? null)
+    if (meta) {
+      data.lastUpdate = meta.lastUpdate ?? data.lastUpdate ?? null
+      data.playerCount = meta.playerCount
+    }
   }
   return res.json(data)
 })
@@ -279,6 +299,7 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
         firstBlood: { firstByWin: 0, firstByLoss: 0 },
         baron: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
         dragon: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
+        elder: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
         tower: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
         inhibitor: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
         riftHerald: { firstByWin: 0, firstByLoss: 0, killsByWin: 0, killsByLoss: 0 },
@@ -306,6 +327,7 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
       firstBlood: { firstByBlue: 0, firstByRed: 0 },
       baron: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
       dragon: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
+      elder: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
       tower: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
       inhibitor: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
       riftHerald: { firstByBlue: 0, firstByRed: 0, killsByBlue: 0, killsByRed: 0, distributionByBlue: {}, distributionByRed: {} },
@@ -319,11 +341,13 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
       objectivesBySide: {
         blue: {
           firstBlood: 0, baronFirst: 0, baronKills: 0, dragonFirst: 0, dragonKills: 0,
+          elderFirst: 0, elderKills: 0,
           towerFirst: 0, towerKills: 0, inhibitorFirst: 0, inhibitorKills: 0,
           riftHeraldFirst: 0, riftHeraldKills: 0, hordeFirst: 0, hordeKills: 0,
         },
         red: {
           firstBlood: 0, baronFirst: 0, baronKills: 0, dragonFirst: 0, dragonKills: 0,
+          elderFirst: 0, elderKills: 0,
           towerFirst: 0, towerKills: 0, inhibitorFirst: 0, inhibitorKills: 0,
           riftHeraldFirst: 0, riftHeraldKills: 0, hordeFirst: 0, hordeKills: 0,
         },
