@@ -16,3 +16,24 @@
     background-color: rgb(var(--rgb-primary-light) / 1) !important;
   }
 }
+
+/* Global tooltip visual system:
+   - Same background tone as nav/command filters
+   - Light blue frame for every tooltip surface
+*/
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  ) {
+  background: rgb(var(--rgb-background) / 0.25) !important;
+  border: 1px solid rgb(125 211 252 / 0.75) !important;
+  color: rgb(var(--rgb-text)) !important;
+}

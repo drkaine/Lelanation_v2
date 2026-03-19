@@ -241,6 +241,23 @@ body {
     color-mix(in srgb, var(--gradient-middle), var(--gradient-end) 40%) 85%,
     var(--gradient-end) 100%
   );
+
+  /* Mirrored version of the site background gradient (for cards/panels). */
+  --gradient-primary-mirror: linear-gradient(
+    225deg,
+    var(--gradient-end) 0%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-end) 40%) 15%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-bright) 2%) 20%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-accent) 14%) 25%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-end) 20%) 35%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-bright) 4%) 45%,
+    color-mix(in srgb, var(--gradient-middle), var(--gradient-accent) 10%) 50%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-middle) 40%) 60%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-bright) 2%) 75%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-accent) 6%) 80%,
+    color-mix(in srgb, var(--gradient-start), var(--gradient-middle) 20%) 85%,
+    var(--gradient-start) 100%
+  );
   
   --color-background-gradient: var(--gradient-primary);
   --color-text: var(--color-gold-50);

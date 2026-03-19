@@ -14,8 +14,31 @@
         <!-- Step Content (Top on mobile, Left on desktop) -->
         <div class="w-full flex-1 md:order-2">
           <div class="info-toolbar mb-6">
-            <div class="info-toolbar-tab">
-              {{ t('createBuild.stats') }}
+            <div class="stats-tabs info-toolbar-category-tabs">
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': statsCategory === 'basic' }"
+                @click="statsCategory = 'basic'"
+              >
+                {{ t('stats.categories.basic') }}
+              </button>
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': statsCategory === 'advanced' }"
+                @click="statsCategory = 'advanced'"
+              >
+                {{ t('stats.categories.advanced') }}
+              </button>
+              <button
+                type="button"
+                class="stats-tab"
+                :class="{ 'stats-tab--active': statsCategory === 'economic' }"
+                @click="statsCategory = 'economic'"
+              >
+                {{ t('stats.categories.economic') }}
+              </button>
             </div>
             <div
               class="save-button-wrapper"
@@ -50,8 +73,7 @@
           </div>
 
           <div class="tab-content">
-            <div class="border-t border-primary/20 pt-6"></div>
-            <StatsTable />
+            <StatsTable v-model:category="statsCategory" hide-category-tabs />
           </div>
         </div>
 
@@ -127,6 +149,7 @@ let saveHintsTimer: ReturnType<typeof setTimeout> | null = null
 
 const showNotification = ref(false)
 const notificationMessage = ref('')
+const statsCategory = ref<'basic' | 'advanced' | 'economic'>('basic')
 
 const missingValidationMessages = computed(() => {
   if (buildStore.isBuildValid) return []
@@ -177,7 +200,13 @@ const saveBuild = async () => {
 }
 
 onMounted(() => {
-  buildStore.ensureCurrentBuild()
+  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
+  if (editId && buildStore.editSourceBuildId !== editId) {
+    const loaded = buildStore.startEditingBuildAsCopy(editId)
+    if (!loaded) buildStore.ensureCurrentBuild()
+  } else {
+    buildStore.ensureCurrentBuild()
+  }
   buildStore.setLastBuilderStep('info')
 
   // Initialiser les rôles si nécessaire
@@ -195,7 +224,9 @@ watch(
   () => buildStore.currentBuild?.champion,
   champion => {
     if (!champion && route.path.includes('/builds/create/info')) {
-      router.replace(localePath('/builds/create/champion'))
+      const id = buildStore.editSourceBuildId
+      const suffix = id ? `?editId=${encodeURIComponent(id)}` : ''
+      router.replace(localePath(`/builds/create/champion${suffix}`))
     }
   },
   { immediate: true }
@@ -236,19 +267,51 @@ watch(isStreamerMode, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 0;
   flex-wrap: wrap;
 }
 
-.info-toolbar-tab {
+/* Onglets catégories stats (même style que StatsTable) */
+.info-toolbar-category-tabs {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.info-toolbar-category-tabs.stats-tabs {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  padding: 0 16px;
-  border-bottom: 2px solid var(--color-gold-300, #c89b3c);
-  color: var(--color-gold-300, #c89b3c);
-  font-size: 0.9rem;
-  font-weight: 700;
+  gap: 0.2rem;
+  min-height: 36px;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  border-radius: 0.5rem;
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.2rem;
+}
+
+.info-toolbar-category-tabs .stats-tab {
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: rgb(var(--rgb-text) / 0.75);
+  min-height: 30px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.info-toolbar-category-tabs .stats-tab:hover {
+  background: rgb(var(--rgb-primary) / 0.16);
+  color: rgb(var(--rgb-text));
+}
+
+.info-toolbar-category-tabs .stats-tab--active {
+  background: rgb(var(--rgb-primary) / 0.3);
+  color: rgb(var(--rgb-text));
 }
 
 .save-button-wrapper {

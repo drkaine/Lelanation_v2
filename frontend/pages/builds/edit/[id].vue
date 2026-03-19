@@ -7,33 +7,15 @@
 
       <div v-else-if="buildStore.status === 'error'" class="py-12 text-center">
         <p class="text-error">{{ buildStore.error }}</p>
-        <NuxtLink
-          :to="localePath('/builds')"
-          class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
-        >
-          Back to Builds
-        </NuxtLink>
       </div>
 
       <div v-else-if="!buildStore.currentBuild" class="py-12 text-center">
         <p class="text-text">Build not found</p>
-        <NuxtLink
-          :to="localePath('/builds')"
-          class="mt-4 inline-block rounded bg-primary px-6 py-2 text-white hover:bg-primary-dark"
-        >
-          Back to Builds
-        </NuxtLink>
       </div>
 
       <div v-else>
-        <div class="mb-6 flex items-center justify-between">
-          <h1 class="text-3xl font-bold">Edit Build</h1>
-          <NuxtLink
-            :to="localePath('/builds')"
-            class="rounded border border-primary bg-surface px-4 py-2 text-text hover:bg-primary hover:text-white"
-          >
-            Back to Builds
-          </NuxtLink>
+        <div class="mb-6 flex items-center">
+          <h1 class="text-3xl font-bold">{{ buildStore.currentBuild?.name || 'Build' }}</h1>
         </div>
 
         <OutdatedBuildBanner
@@ -204,7 +186,7 @@ const updateToCurrentVersion = async () => {
   const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
   const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
   if (newId) {
-    navigateTo(localePath(`/builds/edit/${newId}`))
+    navigateTo(localePath(`/builds/create/rune?editId=${newId}`))
   }
 }
 
@@ -221,18 +203,10 @@ watch(
 onMounted(async () => {
   const buildId = route.params.id as string
   if (buildId) {
-    // Load build from localStorage
-    const ok = buildStore.loadBuild(buildId)
-    if (ok && buildStore.currentBuild) {
-      // Migrate the build to ensure it has the correct structure
-      try {
-        const { migrated } = await migrateBuildToCurrent(buildStore.currentBuild)
-        buildStore.setCurrentBuild(migrated)
-      } catch {
-        // Migration failed for edit build
-      }
-    }
+    await navigateTo(localePath(`/builds/create/rune?editId=${buildId}`), { replace: true })
+    return
   }
+  await navigateTo(localePath('/builds/create/champion'), { replace: true })
 })
 </script>
 

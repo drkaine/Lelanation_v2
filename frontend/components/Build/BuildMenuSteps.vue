@@ -1,19 +1,19 @@
 <template>
   <div class="menu-build" role="navigation" aria-label="Build steps">
-    <NuxtLink :to="localePath('/builds/create/champion')" :class="linkClass('champion')">
+    <NuxtLink :to="localePath(stepHref('champion'))" :class="linkClass('champion')">
       {{ t('menu-build.champion') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <NuxtLink :to="localePath('/builds/create/rune')" :class="linkClass('rune')">
+    <NuxtLink :to="localePath(stepHref('rune'))" :class="linkClass('rune')">
       {{ t('menu-build.rune') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
-    <NuxtLink :to="localePath('/builds/create/item')" :class="linkClass('item')">
+    <NuxtLink :to="localePath(stepHref('item'))" :class="linkClass('item')">
       {{ t('menu-build.item') }}
     </NuxtLink>
     <span class="arrow" aria-hidden="true"></span>
     <NuxtLink
-      :to="hasChampion ? localePath('/builds/create/info') : '#'"
+      :to="hasChampion ? localePath(stepHref('info')) : '#'"
       :class="[linkClass('info'), !hasChampion ? 'disabled' : '']"
     >
       {{ t('menu-build.info') }}
@@ -22,6 +22,8 @@
 </template>
 
 <script setup lang="ts">
+import { useBuildStore } from '~/stores/BuildStore'
+
 const props = defineProps<{
   currentStep: string
   hasChampion: boolean
@@ -30,6 +32,14 @@ const props = defineProps<{
 const { t } = useI18n()
 const route = useRoute()
 const localePath = useLocalePath()
+const buildStore = useBuildStore()
+
+/** Garde ?editId= sur toutes les étapes tant qu'on édite une copie d'un build existant */
+function stepHref(step: 'champion' | 'rune' | 'item' | 'info'): string {
+  const id = buildStore.editSourceBuildId
+  const base = `/builds/create/${step}`
+  return id ? `${base}?editId=${encodeURIComponent(id)}` : base
+}
 
 const stepMap = {
   champion: 'champion',
@@ -63,7 +73,7 @@ const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  padding: 0.75rem 0.5rem;
+  padding: 0.75rem 0.5rem 0;
   justify-content: center;
 }
 
@@ -106,7 +116,7 @@ const linkClass = (key: keyof typeof stepMap) => (isActive(key) ? 'active' : '')
   .menu-build {
     width: var(--width-all, 100%);
     gap: 0.25rem;
-    padding: 0.5rem;
+    padding: 0.5rem 0.5rem 0;
   }
 }
 

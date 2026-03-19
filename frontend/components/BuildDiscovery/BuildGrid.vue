@@ -21,8 +21,9 @@
     <div v-else class="build-grid-list">
       <div v-for="build in builds" :key="build.id" class="build-grid-item">
         <div class="mb-[3px] flex w-full items-center gap-2">
-          <div v-if="hasBuildDescription(build)" class="build-grid-top-icon-slot">
+          <div class="build-grid-top-icon-slot">
             <button
+              v-if="hasBuildDescription(build)"
               type="button"
               class="build-grid-top-icon-button"
               :title="localFlippedMap[build.id] ? 'Voir le build' : 'Voir la description'"
@@ -46,50 +47,59 @@
                 <path d="M8 16H3v5" />
               </svg>
             </button>
+            <div v-else class="build-grid-top-icon-spacer"></div>
           </div>
-          <div v-else class="build-grid-top-icon-slot"></div>
           <div class="build-grid-author-row">
             <span class="truncate font-semibold">
               {{ build.author || t('buildDiscovery.anonymous') }}
             </span>
-            <span
+            <button
               v-if="props.showUserActions"
-              class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide"
+              type="button"
+              class="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide transition-colors"
               :class="
                 (build.visibility ?? 'public') === 'private'
-                  ? 'border border-rose-500/50 bg-rose-500/15 text-rose-400'
-                  : 'border border-emerald-500/50 bg-emerald-500/15 text-emerald-400'
+                  ? 'border border-rose-500/50 bg-rose-500/15 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-300'
+                  : 'border border-emerald-500/50 bg-emerald-500/15 text-emerald-400 hover:bg-rose-500/20 hover:text-rose-300'
               "
+              :title="
+                (build.visibility ?? 'public') === 'private'
+                  ? t('buildsPage.public')
+                  : t('buildsPage.private')
+              "
+              @click.stop="$emit('toggle-visibility', build.id)"
             >
               {{
                 (build.visibility ?? 'public') === 'private'
                   ? t('buildsPage.private')
                   : t('buildsPage.public')
               }}
-            </span>
+            </button>
           </div>
-          <button
-            type="button"
-            class="build-grid-top-icon-button"
-            :title="t('buildDiscovery.viewBuild')"
-            :aria-label="t('buildDiscovery.viewBuild')"
-            @click="navigateToBuild(build.id)"
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="build-grid-top-icon-button"
+              :title="t('buildDiscovery.viewBuild')"
+              :aria-label="t('buildDiscovery.viewBuild')"
+              @click="navigateToBuild(build.id)"
             >
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <!-- BuildCard Sheet -->
@@ -110,28 +120,6 @@
                 }
               "
             />
-          </div>
-          <!-- Boutons d'action utilisateur (supprimer/modifier) -->
-          <div
-            v-if="props.showUserActions"
-            class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5"
-          >
-            <!-- Bouton Supprimer -->
-            <button
-              class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
-              :title="t('buildDiscovery.deleteBuild')"
-              @click.stop="$emit('delete-build', build.id)"
-            >
-              ✕
-            </button>
-            <NuxtLink
-              :to="localePath(`/builds/edit/${build.id}`)"
-              class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
-              :title="t('buildDiscovery.editBuild')"
-              @click.stop
-            >
-              ✎
-            </NuxtLink>
           </div>
         </div>
 
@@ -244,29 +232,51 @@
           </div>
           <!-- Bouton Partager avec dropdown -->
           <div v-if="props.showComparisonButtons" class="relative flex-1">
-            <button
-              class="build-grid-action-button build-grid-action-button--icon w-full"
-              :title="t('buildDiscovery.share')"
-              :aria-label="t('buildDiscovery.share')"
-              @click.stop="toggleShareDropdown(build.id)"
-            >
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
+            <div class="flex items-stretch gap-1.5">
+              <button
+                v-if="props.showUserActions"
+                type="button"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--delete"
+                :title="t('buildDiscovery.deleteBuild')"
+                :aria-label="t('buildDiscovery.deleteBuild')"
+                @click.stop="$emit('delete-build', build.id)"
               >
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
-              </svg>
-            </button>
+                ✕
+              </button>
+              <button
+                class="build-grid-action-button build-grid-action-button--icon flex-1"
+                :title="t('buildDiscovery.share')"
+                :aria-label="t('buildDiscovery.share')"
+                @click.stop="toggleShareDropdown(build.id)"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
+                </svg>
+              </button>
+              <NuxtLink
+                v-if="props.showUserActions && !isStreamerMode"
+                :to="localePath(`/builds/create/rune?editId=${build.id}`)"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--edit"
+                :title="t('buildDiscovery.editBuild')"
+                :aria-label="t('buildDiscovery.editBuild')"
+                @click.stop
+              >
+                ✎
+              </NuxtLink>
+            </div>
             <!-- Dropdown -->
             <div
               v-if="openShareDropdown === build.id"
@@ -275,6 +285,7 @@
               @click.stop
             >
               <button
+                v-if="!isPrivateBuild(build)"
                 class="flex w-full items-center gap-2 rounded-t-lg px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                 @click="copyBuildLink(build.id)"
               >
@@ -282,7 +293,8 @@
                 <span>{{ t('buildDiscovery.copyLink') }}</span>
               </button>
               <button
-                class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
+                :class="!isPrivateBuild(build) ? 'border-t border-primary' : 'rounded-t-lg'"
                 @click="downloadBuildImage(build.id)"
               >
                 <span class="text-base">⬇️</span>
@@ -426,6 +438,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{
   'delete-build': [buildId: string]
+  'toggle-visibility': [buildId: string]
 }>()
 
 const discoveryStore = useBuildDiscoveryStore()
@@ -577,6 +590,8 @@ const isUserBuild = (buildId: string): boolean => {
   const savedBuilds = buildStore.getSavedBuilds()
   return savedBuilds.some(b => b.id === buildId)
 }
+
+const isPrivateBuild = (build: Build): boolean => (build.visibility ?? 'public') === 'private'
 
 const setBuildCardRef = (buildId: string, el: unknown) => {
   if (el && el instanceof HTMLElement) {
@@ -1040,6 +1055,7 @@ onUnmounted(() => {
 }
 
 .build-grid-item {
+  padding-bottom: 15px;
   display: flex;
   width: min(100%, var(--build-grid-card-width));
   flex-direction: column;
@@ -1055,9 +1071,9 @@ onUnmounted(() => {
 
 .build-grid-top-icon-button {
   display: inline-flex;
-  height: 28px;
-  width: 28px;
-  flex: 0 0 28px;
+  height: 30px;
+  width: 30px;
+  flex: 0 0 30px;
   align-items: center;
   justify-content: center;
   border: 1px solid rgb(var(--rgb-accent) / 0.55);
@@ -1068,6 +1084,39 @@ onUnmounted(() => {
     background-color 0.2s ease,
     border-color 0.2s ease,
     color 0.2s ease;
+}
+
+.build-grid-top-icon-spacer {
+  width: 30px;
+  height: 30px;
+}
+
+.build-grid-top-icon-button--delete {
+  border-color: rgb(127 29 29 / 0.85);
+  background: rgb(127 29 29 / 0.28);
+  color: rgb(254 202 202);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-grid-top-icon-button--delete:hover {
+  border-color: rgb(153 27 27 / 1);
+  background: rgb(153 27 27 / 0.5);
+  color: rgb(254 226 226);
+}
+
+.build-grid-top-icon-button--edit {
+  border-color: rgb(56 189 248 / 0.85);
+  background: rgb(56 189 248 / 0.24);
+  color: rgb(186 230 253);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-grid-top-icon-button--edit:hover {
+  border-color: rgb(14 165 233 / 1);
+  background: rgb(14 165 233 / 0.42);
+  color: rgb(224 242 254);
 }
 
 .build-grid-top-icon-button:hover {
@@ -1119,6 +1168,34 @@ onUnmounted(() => {
 
 .build-grid-action-button--vote {
   flex: 1 1 0;
+}
+
+.build-grid-action-button--delete {
+  border-color: rgb(127 29 29 / 0.85);
+  background: rgb(127 29 29 / 0.28);
+  color: rgb(254 202 202);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-grid-action-button--delete:hover {
+  border-color: rgb(153 27 27 / 1);
+  background: rgb(153 27 27 / 0.5);
+  color: rgb(254 226 226);
+}
+
+.build-grid-action-button--edit {
+  border-color: rgb(56 189 248 / 0.85);
+  background: rgb(56 189 248 / 0.24);
+  color: rgb(186 230 253);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-grid-action-button--edit:hover {
+  border-color: rgb(14 165 233 / 1);
+  background: rgb(14 165 233 / 0.42);
+  color: rgb(224 242 254);
 }
 
 .pagination-btn {

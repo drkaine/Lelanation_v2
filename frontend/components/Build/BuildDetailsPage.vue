@@ -16,20 +16,15 @@
       </div>
 
       <div v-else-if="build" class="space-y-6">
-        <!-- Header avec retour à gauche et nom du build centré -->
         <div class="relative flex w-full items-center">
-          <!-- Bouton retour à gauche -->
           <NuxtLink
             :to="localePath('/builds')"
             class="absolute left-0 flex-shrink-0 rounded bg-surface px-4 py-2 text-text transition-colors hover:bg-primary hover:text-white"
           >
             ← Retour
           </NuxtLink>
-          <!-- Nom du build centré -->
           <div class="mx-auto flex flex-col text-center">
-            <!-- Nom du build / variante affichée -->
             <h3 class="text-lg font-semibold text-text">{{ activeTitle }}</h3>
-            <!-- Auteur -->
             <div class="text-sm text-text/70">
               <span class="ml-1">{{ build.author || t('buildDiscovery.anonymous') }}</span>
             </div>
@@ -43,9 +38,7 @@
           :on-update="updateToCurrentVersion"
         />
 
-        <!-- Layout principal: Sheet à gauche, Onglets à droite -->
         <div class="flex flex-col gap-6 lg:flex-row">
-          <!-- Colonne gauche: BuildCard Sheet -->
           <div class="flex-shrink-0 lg:w-auto">
             <div class="relative">
               <div ref="buildCardRef" :data-build-id="build.id">
@@ -53,6 +46,7 @@
                   :build="detailDisplayedBuild || build"
                   :readonly="true"
                   :sheet-tooltips="true"
+                  :hide-top-actions="true"
                   @variant-change="
                     idx => {
                       detailDisplayedSubIndex = idx
@@ -60,44 +54,64 @@
                   "
                 />
               </div>
-              <!-- Boutons d'action utilisateur (supprimer/modifier) -->
-              <div v-if="isUserBuild" class="absolute -right-5 top-0 z-50 flex flex-col gap-1.5">
-                <!-- Bouton Supprimer -->
-                <button
-                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-error text-[10px] font-bold text-white shadow-md transition-colors hover:bg-error/80"
-                  title="Supprimer le build"
-                  @click.stop="confirmDelete"
-                >
-                  ✕
-                </button>
-                <!-- Bouton Modifier (symbole crayon) -->
-                <NuxtLink
-                  :to="localePath(`/builds/edit/${build.id}`)"
-                  class="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[10px] text-white shadow-md transition-colors hover:bg-accent-dark"
-                  title="Modifier le build"
-                  @click.stop
-                >
-                  ✎
-                </NuxtLink>
-              </div>
             </div>
 
-            <!-- Informations en dessous de la sheet (votes, partager) -->
-            <div class="mt-4 w-full max-w-[300px] space-y-2">
-              <div class="flex items-center justify-end gap-2">
-                <!-- Bouton Theorycraft (visible pour tous) -->
-                <!-- <button
-                  class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
-                  :title="t('theorycraft.testBuild')"
-                  @click.stop="goToTheorycraft"
+            <div class="mt-4 w-full max-w-[380px]">
+              <div class="build-details-actions flex flex-wrap items-stretch gap-1.5">
+                <button
+                  v-if="build && !isUserBuild"
+                  type="button"
+                  class="details-action-btn details-action-btn--icon"
+                  :class="
+                    favoritesStore.isFavorite(build.id)
+                      ? 'border-amber-500 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25'
+                      : 'border-amber-500/70 bg-surface text-amber-500/70 hover:bg-amber-500/15 hover:text-amber-500'
+                  "
+                  :title="
+                    favoritesStore.isFavorite(build.id)
+                      ? t('buildDiscovery.removeFavorite')
+                      : t('buildDiscovery.addFavorite')
+                  "
+                  :aria-label="
+                    favoritesStore.isFavorite(build.id)
+                      ? t('buildDiscovery.removeFavorite')
+                      : t('buildDiscovery.addFavorite')
+                  "
+                  @click.stop="favoritesStore.toggleFavorite(build.id)"
                 >
-                  <span>{{ t('theorycraft.testBuild') }}</span>
-                </button> -->
-                <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
-                <div v-if="!isUserBuild" class="flex items-center gap-1">
-                  <!-- Bouton Upvote -->
+                  <svg
+                    v-if="favoritesStore.isFavorite(build.id)"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    class="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z"
+                    />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z"
+                    />
+                  </svg>
+                </button>
+                <div v-if="!isUserBuild" class="flex min-w-0 flex-[2] items-stretch gap-1.5">
                   <button
-                    class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+                    type="button"
+                    class="details-action-btn details-action-btn--vote"
                     :class="
                       userVote === 'up'
                         ? 'bg-green-600 text-white hover:bg-green-700'
@@ -109,9 +123,9 @@
                     <span>👍</span>
                     <span>{{ upvoteCount }}</span>
                   </button>
-                  <!-- Bouton Downvote -->
                   <button
-                    class="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors"
+                    type="button"
+                    class="details-action-btn details-action-btn--vote"
                     :class="
                       userVote === 'down'
                         ? 'bg-red-600 text-white hover:bg-red-700'
@@ -125,15 +139,43 @@
                   </button>
                 </div>
 
-                <!-- Bouton Partager avec dropdown -->
-                <div class="relative">
+                <button
+                  v-if="isUserBuild"
+                  type="button"
+                  class="details-action-btn details-action-btn--icon details-action-btn--delete"
+                  :title="t('buildDiscovery.deleteBuild')"
+                  :aria-label="t('buildDiscovery.deleteBuild')"
+                  @click.stop="confirmDelete"
+                >
+                  ✕
+                </button>
+
+                <div class="relative min-w-0 flex-1">
                   <button
-                    class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
+                    type="button"
+                    class="details-action-btn details-action-btn--icon w-full min-w-[88px]"
+                    :title="t('buildDiscovery.share')"
+                    :aria-label="t('buildDiscovery.share')"
                     @click.stop="toggleShareDropdown"
                   >
-                    Partager
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="shrink-0"
+                      aria-hidden="true"
+                    >
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
+                    </svg>
                   </button>
-                  <!-- Dropdown -->
                   <div
                     v-if="openShareDropdown"
                     class="absolute right-0 top-full z-50 mt-1 max-h-[min(80vh,320px)] w-52 overflow-y-auto rounded-lg border border-primary shadow-lg"
@@ -170,68 +212,74 @@
                     </button>
                   </div>
                 </div>
+
+                <NuxtLink
+                  v-if="isUserBuild && !isStreamerMode"
+                  :to="localePath(`/builds/create/rune?editId=${build.id}`)"
+                  class="details-action-btn details-action-btn--icon details-action-btn--edit"
+                  :title="t('buildDiscovery.editBuild')"
+                  :aria-label="t('buildDiscovery.editBuild')"
+                  @click.stop
+                >
+                  ✎
+                </NuxtLink>
               </div>
             </div>
           </div>
 
-          <!-- Colonne droite: Description / Statistiques -->
           <div class="flex-1">
-            <!-- Onglets -->
-            <div class="mb-4 flex gap-2 border-b border-primary/20">
-              <button
-                v-if="hasDescriptionTab"
-                type="button"
-                class="px-4 py-2 text-sm font-semibold transition-colors"
-                :class="
-                  activeTab === 'description'
-                    ? 'border-b-2 border-accent text-accent'
-                    : 'text-text/60 hover:text-text'
-                "
-                @click="activeTab = 'description'"
-              >
-                Description
-              </button>
-              <button
-                type="button"
-                class="px-4 py-2 text-sm font-semibold transition-colors"
-                :class="
-                  activeTab === 'stats'
-                    ? 'border-b-2 border-accent text-accent'
-                    : 'text-text/60 hover:text-text'
-                "
-                @click="activeTab = 'stats'"
-              >
-                Statistiques
-              </button>
-            </div>
+            <div class="space-y-4">
+              <div v-if="hasDescriptionTab" class="detail-page-tabs stats-tabs">
+                <button
+                  type="button"
+                  class="stats-tab"
+                  :class="{ 'stats-tab--active': activeDetailTab === 'description' }"
+                  @click="activeDetailTab = 'description'"
+                >
+                  {{ t('createBuild.description') }}
+                </button>
+                <button
+                  type="button"
+                  class="stats-tab"
+                  :class="{ 'stats-tab--active': activeDetailTab === 'statistics' }"
+                  @click="activeDetailTab = 'statistics'"
+                >
+                  {{ t('createBuild.stats') }}
+                </button>
+              </div>
 
-            <!-- Contenu onglet Description -->
-            <div v-if="hasDescriptionTab && activeTab === 'description'" class="space-y-3">
-              <div class="text-sm text-text/80">
-                <template v-if="activeDescription">
-                  <!-- eslint-disable vue/no-v-html -->
-                  <p class="whitespace-pre-wrap" v-html="linkifyDescription(activeDescription)" />
-                  <!-- eslint-enable vue/no-v-html -->
-                </template>
+              <div
+                v-show="hasDescriptionTab && activeDetailTab === 'description'"
+                class="space-y-4"
+              >
+                <div
+                  v-for="(section, sidx) in descriptionTabSections"
+                  :key="`desc-${sidx}-${section.title}`"
+                  class="rounded-lg border border-primary/25 bg-surface/40 p-4"
+                >
+                  <h2 class="mb-2 text-base font-semibold text-text">{{ section.title }}</h2>
+                  <div class="text-base text-text/85">
+                    <!-- eslint-disable vue/no-v-html -->
+                    <p class="whitespace-pre-wrap" v-html="linkifyDescription(section.text)" />
+                    <!-- eslint-enable vue/no-v-html -->
+                  </div>
+                </div>
+              </div>
+
+              <div
+                v-show="!hasDescriptionTab || activeDetailTab === 'statistics'"
+                class="space-y-2 rounded-lg border border-primary/30 p-4"
+              >
+                <h2 class="text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
+                <StatsTable
+                  v-if="detailDisplayedBuild && detailDisplayedBuild.champion"
+                  :build="detailDisplayedBuild"
+                />
               </div>
 
               <p v-if="build.createdAt && hydrated" class="text-xs text-text/50">
                 Créé le : {{ formatDate(build.createdAt) }}
               </p>
-            </div>
-
-            <!-- Contenu onglet Statistiques -->
-            <div v-else class="tab-content">
-              <h2 class="mb-3 text-lg font-semibold text-text">{{ t('stats.title') }}</h2>
-              <StatsTable
-                v-if="detailDisplayedBuild && detailDisplayedBuild.champion"
-                :build="detailDisplayedBuild"
-              />
-              <div v-else class="py-8 text-center">
-                <p class="text-text/70">
-                  {{ build ? 'Chargement du build...' : 'Aucun build chargé' }}
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -275,9 +323,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import type { CalculatedStats } from '@lelanation/shared-types'
+import { calculateStats, filterItemsForStats } from '@lelanation/builds-stats'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
+import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
@@ -286,16 +337,19 @@ import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
+import { useStreamerMode } from '~/composables/useStreamerMode'
 
 const props = defineProps<{ buildId: string }>()
 
 const buildStore = useBuildStore()
 const voteStore = useVoteStore()
 const discoveryStore = useBuildDiscoveryStore()
+const favoritesStore = useFavoritesStore()
 const localePath = useLocalePath()
 const { t } = useI18n()
 const route = useRoute()
 const { hydrated } = useClientHydrated()
+const { isStreamerMode } = useStreamerMode()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
@@ -305,9 +359,8 @@ const openShareDropdown = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
 const buildToDelete = ref<string | null>(null)
 
-/** Variante sélectionnée localement sur la page détail (null = principale). */
+/** Variante affichée sur la BuildCard (null = principale). */
 const detailDisplayedSubIndex = ref<number | null>(null)
-const activeTab = ref<'description' | 'stats'>('description')
 
 const detailDisplayedBuild = computed<Build | null>(() => {
   if (!build.value) return null
@@ -337,26 +390,138 @@ const activeTitle = computed(() => {
   return sub?.title || b.name || b.author || 'Sans nom'
 })
 
-const activeDescription = computed(() => {
-  const b = build.value
-  if (!b) return ''
-  const mode = b.descriptionMode ?? 'single'
-  if (mode === 'single' || detailDisplayedSubIndex.value === null) {
-    return b.description || ''
-  }
-  const subs = b.subBuilds as SubBuild[] | undefined
-  const sub = subs?.[detailDisplayedSubIndex.value]
-  return sub?.description ?? b.description ?? ''
+const activeDetailTab = ref<'description' | 'statistics'>('statistics')
+
+const createEmptyStats = (): CalculatedStats => ({
+  health: 0,
+  mana: 0,
+  attackDamage: 0,
+  abilityPower: 0,
+  armor: 0,
+  magicResist: 0,
+  attackSpeed: 0,
+  critChance: 0,
+  critDamage: 1.75,
+  lifeSteal: 0,
+  spellVamp: 0,
+  cooldownReduction: 0,
+  movementSpeed: 0,
+  healthRegen: 0,
+  manaRegen: 0,
+  armorPenetration: 0,
+  magicPenetration: 0,
+  tenacity: 0,
+  lethality: 0,
+  percentLethality: 0,
+  omnivamp: 0,
+  shield: 0,
+  attackRange: 0,
 })
 
-const hasDescriptionTab = computed(() => {
+function buildStatsFor(buildToCompute: Build): CalculatedStats {
+  const stats = calculateStats(
+    buildToCompute.champion ?? null,
+    filterItemsForStats(buildToCompute.items ?? []),
+    buildToCompute.runes,
+    buildToCompute.shards,
+    18
+  )
+  return stats ?? createEmptyStats()
+}
+
+type VariantEntry = {
+  key: string
+  index: number | null
+  title: string
+  description: string
+  build: Build
+  stats: CalculatedStats
+}
+
+const variantEntries = computed<VariantEntry[]>(() => {
   const b = build.value
-  if (!b) return false
-  const baseDesc = (b.description || '').trim()
-  const subDescs = (b.subBuilds as SubBuild[] | undefined) ?? []
-  const anySubDesc = subDescs.some(sub => (sub.description || '').trim().length > 0)
-  return baseDesc.length > 0 || anySubDesc
+  if (!b) return []
+  const mode = b.descriptionMode ?? 'single'
+  const baseEntryBuild = b as Build
+  const entries: VariantEntry[] = [
+    {
+      key: 'main',
+      index: null,
+      title: b.name || b.author || 'Build principal',
+      description: mode === 'multiple' ? (b.description ?? '').trim() : '',
+      build: baseEntryBuild,
+      stats: buildStatsFor(baseEntryBuild),
+    },
+  ]
+  const subs = (b.subBuilds as SubBuild[] | undefined) ?? []
+  for (let i = 0; i < subs.length; i += 1) {
+    const sub = subs[i]
+    if (!sub) continue
+    const merged = {
+      ...b,
+      items: sub.items,
+      runes: sub.runes,
+      shards: sub.shards,
+      summonerSpells: sub.summonerSpells,
+      skillOrder: sub.skillOrder,
+      roles: sub.roles,
+      description: sub.description ?? b.description,
+      gameVersion: sub.gameVersion || b.gameVersion,
+    } as Build
+    entries.push({
+      key: `sub-${i}`,
+      index: i,
+      title: sub.title || `Variante ${i + 1}`,
+      description: mode === 'multiple' ? (sub.description ?? '').trim() : '',
+      build: merged,
+      stats: buildStatsFor(merged),
+    })
+  }
+  return entries
 })
+
+/** Textes description pour l’onglet (mode single = une section ; multiple = une par variante avec texte). */
+const descriptionTabSections = computed(() => {
+  const b = build.value
+  if (!b) return [] as { title: string; text: string }[]
+  const mode = b.descriptionMode ?? 'single'
+  if (mode === 'single') {
+    const text = (b.description ?? '').trim()
+    if (!text) return []
+    return [{ title: b.name || b.author || t('buildDiscovery.anonymous'), text }]
+  }
+  const out: { title: string; text: string }[] = []
+  for (const e of variantEntries.value) {
+    const text = (e.description ?? '').trim()
+    if (!text) continue
+    out.push({ title: e.title, text })
+  }
+  return out
+})
+
+const hasDescriptionTab = computed(() => descriptionTabSections.value.length > 0)
+
+/** Agrégé pour l’image « auteur + description ». */
+const activeDescription = computed(() => {
+  const sections = descriptionTabSections.value
+  if (sections.length === 0) return ''
+  if (sections.length === 1) return sections[0]?.text ?? ''
+  return sections.map(s => `${s.title}: ${s.text}`).join('\n\n')
+})
+
+watch(
+  () => [build.value?.id, hasDescriptionTab.value, route.query.sub] as const,
+  () => {
+    const subQ = route.query.sub
+    if (subQ !== undefined && subQ !== null && String(subQ).trim() !== '') {
+      activeDetailTab.value = 'statistics'
+      return
+    }
+    if (hasDescriptionTab.value) activeDetailTab.value = 'description'
+    else activeDetailTab.value = 'statistics'
+  },
+  { immediate: true }
+)
 
 const upvoteCount = computed(() => (build.value ? voteStore.getUpvoteCount(build.value.id) : 0))
 const downvoteCount = computed(() => (build.value ? voteStore.getDownvoteCount(build.value.id) : 0))
@@ -757,7 +922,7 @@ const updateToCurrentVersion = async () => {
   try {
     const { migrated } = await migrateBuildToCurrent(build.value)
     const newId = buildStore.importBuild(migrated, { nameSuffix: ' (maj)' })
-    if (newId) navigateTo(localePath(`/builds/edit/${newId}`))
+    if (newId) navigateTo(localePath(`/builds/create/rune?editId=${newId}`))
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Migration failed'
   }
@@ -817,15 +982,6 @@ watch(
   { immediate: true }
 )
 
-// Onglet par défaut : description si le build en a une, sinon stats
-watch(
-  hasDescriptionTab,
-  hasDesc => {
-    activeTab.value = hasDesc ? 'description' : 'stats'
-  },
-  { immediate: true }
-)
-
 const formatDate = (dateString: string): string => {
   if (!hydrated.value) return ''
   return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -837,5 +993,106 @@ const formatDate = (dateString: string): string => {
 
 onMounted(() => {
   voteStore.init()
+  favoritesStore.init()
 })
 </script>
+
+<style scoped>
+/* Aligné sur BuildGrid : barre d’actions sous la carte */
+.build-details-actions .details-action-btn {
+  display: inline-flex;
+  height: 32px;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.55);
+  border-radius: 8px;
+  background: rgb(var(--rgb-background) / 0.22);
+  padding: 0.35rem 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(var(--rgb-text));
+  text-decoration: none;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+  box-sizing: border-box;
+}
+
+.build-details-actions .details-action-btn--vote {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.build-details-actions .details-action-btn--icon {
+  flex: 1;
+  min-width: 36px;
+}
+
+.build-details-actions .details-action-btn--delete {
+  border-color: rgb(127 29 29 / 0.85);
+  background: rgb(127 29 29 / 0.28);
+  color: rgb(254 202 202);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-details-actions .details-action-btn--delete:hover {
+  border-color: rgb(153 27 27 / 1);
+  background: rgb(153 27 27 / 0.5);
+  color: rgb(254 226 226);
+}
+
+.build-details-actions .details-action-btn--edit {
+  border-color: rgb(56 189 248 / 0.85);
+  background: rgb(56 189 248 / 0.24);
+  color: rgb(186 230 253);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.build-details-actions .details-action-btn--edit:hover {
+  border-color: rgb(14 165 233 / 1);
+  background: rgb(14 165 233 / 0.42);
+  color: rgb(224 242 254);
+}
+
+.detail-page-tabs.stats-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 36px;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  border-radius: 0.5rem;
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.2rem;
+}
+
+.detail-page-tabs .stats-tab {
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: rgb(var(--rgb-text) / 0.75);
+  min-height: 30px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.detail-page-tabs .stats-tab:hover {
+  background: rgb(var(--rgb-primary) / 0.16);
+  color: rgb(var(--rgb-text));
+}
+
+.detail-page-tabs .stats-tab--active {
+  background: rgb(var(--rgb-primary) / 0.3);
+  color: rgb(var(--rgb-text));
+}
+</style>

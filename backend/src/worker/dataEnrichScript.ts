@@ -4,7 +4,7 @@
  * Fills missing derived/raw participant data for already-ingested matches:
  * - match_player_items
  * - match_player_runes
- * - match_player_bucket (from timeline participantFrames)
+ * - match_player_bucket (timeline ; uniquement si game_duration >= 5 min — pas de boucle infinie sur FF/remakes courts)
  * - match_players.rank_division / rank_lp (from league-v4 by PUUID)
  *
  * Runs until no missing rows remain (or stop requested).
@@ -22,6 +22,11 @@ import {
   type RiotParticipantDto,
   type RiotMatchTimelineDto,
 } from '../services/RiotHttpClient.js'
+import {
+  isKeptMatchPlayerDurationBucket,
+  MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS,
+  timelineTimestampMsToGameMinute,
+} from './matchPlayerBucketPolicy.js'
 
 const BATCH_MATCHES = 30
 
@@ -141,6 +146,7 @@ function normalizeDivision(raw: unknown): string | null {
 }
 
 async function getMissingMatchIds(limit: number): Promise<string[]> {
+  const minDur = MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS
   const rows = await prisma.$queryRaw<Array<{ riot_match_id: string }>>(Prisma.sql`
     SELECT DISTINCT m.riot_match_id
     FROM matchs m
@@ -153,7 +159,7 @@ async function getMissingMatchIds(limit: number): Promise<string[]> {
        OR mp.rank_lp IS NULL
        OR mpi.match_player_id IS NULL
        OR mpr.match_player_id IS NULL
-       OR mpb.match_player_id IS NULL
+       OR (mpb.match_player_id IS NULL AND m.game_duration >= ${minDur})
     ORDER BY m.riot_match_id ASC
     LIMIT ${limit}
   `)
@@ -161,6 +167,7 @@ async function getMissingMatchIds(limit: number): Promise<string[]> {
 }
 
 async function countMissingMatches(): Promise<number> {
+  const minDur = MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS
   const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
     SELECT COUNT(*)::bigint AS count
     FROM (
@@ -175,7 +182,7 @@ async function countMissingMatches(): Promise<number> {
          OR mp.rank_lp IS NULL
          OR mpi.match_player_id IS NULL
          OR mpr.match_player_id IS NULL
-         OR mpb.match_player_id IS NULL
+         OR (mpb.match_player_id IS NULL AND m.game_duration >= ${minDur})
     ) t
   `)
   const raw = rows[0]?.count ?? 0
@@ -195,9 +202,10 @@ async function enrichOneMatch(
 }> {
   const match = await prisma.match.findUnique({
     where: { riotMatchId },
-    select: { id: true },
+    select: { id: true, gameDuration: true },
   })
   if (!match) return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
+  const bucketsExpectedForMatch = match.gameDuration >= MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS
 
   const mps = await prisma.matchPlayer.findMany({
     where: { matchId: match.id },
@@ -233,9 +241,11 @@ async function enrichOneMatch(
   const participants = (dto.info?.participants ?? []) as RiotParticipantDto[]
   if (participants.length === 0) return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
 
-  // Timeline only needed for bucket backfill
+  // Timeline seulement si des buckets manquent ET la partie peut en avoir (≥ 5 min in-game).
   let timeline: RiotMatchTimelineDto | null = null
-  if (mps.some((x) => !hasBuckets.has(x.id.toString()))) {
+  const needsBucketTimeline =
+    bucketsExpectedForMatch && mps.some((x) => !hasBuckets.has(x.id.toString()))
+  if (needsBucketTimeline) {
     const tlRes = await client.getMatchTimeline(riotMatchId)
     _status.requestCount++
     if (tlRes.ok) timeline = tlRes.data
@@ -301,7 +311,7 @@ async function enrichOneMatch(
     }
   }
 
-  if (timeline && mps.some((x) => !hasBuckets.has(x.id.toString()))) {
+  if (timeline && needsBucketTimeline) {
     const pfRows: Array<{
       matchPlayerId: bigint
       durationBucket: number
@@ -329,7 +339,8 @@ async function enrichOneMatch(
     const byPid = new Map<number, bigint>(mps.map((x) => [x.participantId, x.id]))
     const frames = timeline.info?.frames ?? []
     for (const frame of frames) {
-      const durationBucket = Math.floor(toIntOr0(frame.timestamp) / 60000)
+      const durationBucket = timelineTimestampMsToGameMinute(toIntOr0(frame.timestamp))
+      if (!isKeptMatchPlayerDurationBucket(durationBucket)) continue
       const pfs = frame.participantFrames ?? {}
       for (const [pidRaw, raw] of Object.entries(pfs)) {
         const pid = Number(pidRaw)

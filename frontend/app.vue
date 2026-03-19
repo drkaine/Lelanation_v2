@@ -309,7 +309,7 @@ if (import.meta.client) {
 }
 
 .command-bar-spacer {
-  height: 44px;
+  height: 0;
   flex-shrink: 0;
 }
 

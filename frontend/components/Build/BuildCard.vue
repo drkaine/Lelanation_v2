@@ -2423,7 +2423,7 @@ watch(
       // Sauvegarder automatiquement dans localStorage seulement si on utilise currentBuild
       try {
         const buildData = JSON.stringify(newBuild)
-        localStorage.setItem('lelanation_current_build', buildData)
+        localStorage.setItem(buildStore.getCurrentDraftStorageKey(), buildData)
       } catch (error) {
         // Ignore storage errors
       }
@@ -2834,7 +2834,7 @@ defineExpose({
   left: 0;
   width: 300px;
   height: 450px;
-  background: var(--gradient-primary);
+  background: var(--gradient-primary-mirror);
   border: 2px solid var(--color-gold-300);
   border-radius: 6px;
   padding: 16px;
@@ -3076,7 +3076,7 @@ defineExpose({
   position: relative;
   width: 300px;
   height: 450px;
-  background: var(--gradient-primary);
+  background: var(--gradient-primary-mirror);
   background-attachment: fixed;
   border: 2px solid var(--color-gold-300);
   border-radius: 6px;
@@ -4074,6 +4074,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow: visible;
+  background: #08101f !important;
+  border: 1px solid rgb(125 211 252 / 0.75) !important;
 }
 
 @media (max-width: 768px) {
@@ -4287,6 +4289,11 @@ defineExpose({
 }
 
 /* Sheet element tooltips (item / rune / spell) — même rendu que ItemSelector / RuneSelector */
+.sheet-element-tooltip-wrapper {
+  background: #08101f !important;
+  border: 1px solid rgb(125 211 252 / 0.75) !important;
+}
+
 .sheet-element-tooltip-wrapper :deep(.item-tooltip) {
   width: min(320px, calc(100vw - 2rem));
   max-width: min(320px, calc(100vw - 2rem));
@@ -4295,6 +4302,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   overflow: visible;
+  background: transparent !important;
+  border: none !important;
 }
 
 .sheet-element-tooltip-wrapper :deep(.item-tooltip-content) {
@@ -4359,6 +4368,8 @@ defineExpose({
   max-width: 300px;
   padding: 0.75rem;
   pointer-events: none;
+  background: transparent !important;
+  border: none !important;
 }
 
 .sheet-element-tooltip-wrapper :deep(.rune-tooltip-content) {

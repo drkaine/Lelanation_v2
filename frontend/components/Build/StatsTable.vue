@@ -5,96 +5,114 @@
     </div>
 
     <div v-else class="space-y-4">
-      <!-- Level Selector -->
-      <div class="flex items-center justify-between">
-        <label class="text-sm font-semibold text-text">{{ t('stats.championLevel') }}</label>
-        <select
-          v-model.number="selectedLevel"
-          class="rounded-lg border border-primary/50 bg-surface px-3 py-1.5 text-sm text-text focus:border-accent focus:outline-none"
-        >
-          <option v-for="level in 18" :key="level" :value="level">
-            {{ t('stats.level') }} {{ level }}
-          </option>
-        </select>
-      </div>
+      <div class="stats-infobox rounded-lg border border-primary/40 bg-surface/40 p-3">
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-semibold text-text">Level:</label>
+            <select
+              v-model.number="selectedLevel"
+              class="rounded-lg border border-primary/60 bg-background/40 px-2 py-1 text-sm text-text focus:border-accent focus:outline-none"
+            >
+              <option v-for="level in 20" :key="level" :value="level">
+                {{ level }}
+              </option>
+            </select>
+          </div>
+          <div class="text-sm font-semibold text-text/90">Base statistics</div>
+          <div v-if="!hideCategoryTabs" class="stats-tabs">
+            <button
+              type="button"
+              class="stats-tab"
+              :class="{ 'stats-tab--active': activeCategory === 'basic' }"
+              @click="setStatsCategory('basic')"
+            >
+              {{ t('stats.categories.basic') }}
+            </button>
+            <button
+              type="button"
+              class="stats-tab"
+              :class="{ 'stats-tab--active': activeCategory === 'advanced' }"
+              @click="setStatsCategory('advanced')"
+            >
+              {{ t('stats.categories.advanced') }}
+            </button>
+            <button
+              type="button"
+              class="stats-tab"
+              :class="{ 'stats-tab--active': activeCategory === 'economic' }"
+              @click="setStatsCategory('economic')"
+            >
+              {{ t('stats.categories.economic') }}
+            </button>
+          </div>
+        </div>
 
-      <!-- Stats Table -->
-      <div v-if="baseStatsAtLevel && totalStats" class="overflow-x-auto">
-        <table class="w-full border-collapse">
-          <thead>
-            <tr class="border-b border-primary/30">
-              <th class="px-4 py-2 text-left text-sm font-semibold text-text">
-                <div class="flex items-center gap-2">
-                  <span>{{ t('stats.statColumn') }}</span>
-                  <div class="info-icon-wrapper relative">
-                    <div class="info-icon">
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                      >
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <path d="M12 16v-4"></path>
-                        <path d="M12 8h.01"></path>
-                      </svg>
-                    </div>
-                    <div class="info-tooltip">
-                      <p class="text-xs leading-relaxed">{{ t('stats.disclaimer') }}</p>
+        <!-- Stats Table -->
+        <div v-if="baseStatsAtLevel && totalStats" class="overflow-x-auto">
+          <table class="w-full border-collapse">
+            <thead>
+              <tr class="border-b border-primary/30">
+                <th class="px-4 py-2 text-left text-sm font-semibold text-text">
+                  <div class="flex items-center gap-2">
+                    <span>{{ t('stats.statColumn') }}</span>
+                    <div class="info-icon-wrapper relative">
+                      <div class="info-icon">
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M12 16v-4"></path>
+                          <path d="M12 8h.01"></path>
+                        </svg>
+                      </div>
+                      <div class="info-tooltip">
+                        <p class="text-xs leading-relaxed">{{ t('stats.disclaimer') }}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
-                {{ t('stats.base') }}
-              </th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
-                {{ t('stats.itemsColumn') }}
-              </th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
-                {{ t('stats.shards') }}
-              </th>
-              <th class="px-4 py-2 text-center text-sm font-semibold text-text">
-                {{ t('stats.total') }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Basic Stats Category -->
-            <tr
-              v-if="basicStats.length > 0"
-              class="stat-category-separator cursor-pointer hover:bg-primary/10"
-              @click="showBasicStats = !showBasicStats"
-            >
-              <td colspan="5" class="stat-category-title">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-amber-600 dark:text-amber-500">{{
-                    t('stats.categories.basic')
-                  }}</span>
-                  <span class="toggle-icon text-text/60" :class="{ open: showBasicStats }">▼</span>
-                </div>
-              </td>
-            </tr>
-
-            <template v-if="showBasicStats">
-              <template v-for="stat in basicStats" :key="stat.key">
-                <!-- Main stat row -->
+                </th>
+                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                  {{ t('stats.base') }}
+                </th>
+                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                  {{ t('stats.itemsColumn') }}
+                </th>
+                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                  {{ t('stats.shards') }}
+                </th>
+                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                  {{ t('stats.total') }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="stat in currentCategoryStats" :key="stat.key">
                 <tr
                   :class="[
                     'border-b border-primary/20',
-                    hasDerivedStats(stat.key)
+                    activeCategory === 'basic' && hasDerivedStats(stat.key)
                       ? 'cursor-pointer hover:bg-primary/10'
                       : 'hover:bg-primary/5',
                   ]"
-                  @click="hasDerivedStats(stat.key) && toggleDerivedStats(stat.key)"
+                  @click="
+                    activeCategory === 'basic' &&
+                    hasDerivedStats(stat.key) &&
+                    toggleDerivedStats(stat.key)
+                  "
                 >
                   <td class="px-4 py-2 text-sm text-text">
                     <div class="flex items-center gap-2">
+                      <span class="stat-inline-icon" aria-hidden="true">{{
+                        getStatIcon(stat.key)
+                      }}</span>
                       <span>{{ stat.label }}</span>
                       <span
-                        v-if="hasDerivedStats(stat.key)"
+                        v-if="activeCategory === 'basic' && hasDerivedStats(stat.key)"
                         class="toggle-icon text-xs text-text/60"
                         :class="{ open: expandedDerivedStats[stat.key] }"
                       >
@@ -127,15 +145,25 @@
                     }}
                   </td>
                 </tr>
-                <!-- Derived stats dropdown -->
-                <template v-if="hasDerivedStats(stat.key) && expandedDerivedStats[stat.key]">
+                <template
+                  v-if="
+                    activeCategory === 'basic' &&
+                    hasDerivedStats(stat.key) &&
+                    expandedDerivedStats[stat.key]
+                  "
+                >
                   <tr
                     v-for="derivedStat in getDerivedStats(stat.key)"
                     :key="derivedStat.key"
                     class="border-b border-primary/10 bg-primary/5"
                   >
                     <td class="px-8 py-2 text-sm italic text-text/80">
-                      {{ derivedStat.label }}
+                      <span class="inline-flex items-center gap-2">
+                        <span class="stat-inline-icon" aria-hidden="true">{{
+                          getStatIcon(derivedStat.key)
+                        }}</span>
+                        <span>{{ derivedStat.label }}</span>
+                      </span>
                     </td>
                     <td class="px-4 py-2 text-center text-sm text-text/70">
                       {{ formatValue(derivedStat.baseValue, derivedStat.format) }}
@@ -152,114 +180,22 @@
                   </tr>
                 </template>
               </template>
-            </template>
-
-            <!-- Advanced Stats Category -->
-            <tr
-              v-if="advancedStats.length > 0"
-              class="stat-category-separator cursor-pointer hover:bg-primary/10"
-              @click="showAdvancedStats = !showAdvancedStats"
-            >
-              <td colspan="5" class="stat-category-title">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-amber-600 dark:text-amber-500">{{
-                    t('stats.categories.advanced')
-                  }}</span>
-                  <span class="toggle-icon text-text/60" :class="{ open: showAdvancedStats }"
-                    >▼</span
-                  >
-                </div>
-              </td>
-            </tr>
-
-            <template v-if="showAdvancedStats">
-              <tr
-                v-for="stat in advancedStats"
-                :key="stat.key"
-                class="border-b border-primary/20 hover:bg-primary/5"
-              >
-                <td class="px-4 py-2 text-sm text-text">{{ stat.label }}</td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.baseValue, stat.format) }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{
-                    formatValue(
-                      stat.itemValue,
-                      stat.format,
-                      (stat as { itemPercentLethality?: number }).itemPercentLethality
-                    )
-                  }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.shardValue, stat.format) }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm font-semibold text-text">
-                  {{
-                    formatValue(
-                      stat.totalValue,
-                      stat.format,
-                      (stat as { totalPercentLethality?: number }).totalPercentLethality
-                    )
-                  }}
-                </td>
-              </tr>
-            </template>
-
-            <!-- Economic Stats Category -->
-            <tr
-              v-if="economicStats.length > 0"
-              class="stat-category-separator cursor-pointer hover:bg-primary/10"
-              @click="showEconomicStats = !showEconomicStats"
-            >
-              <td colspan="5" class="stat-category-title">
-                <div class="flex items-center justify-between">
-                  <span class="font-semibold text-amber-600 dark:text-amber-500">{{
-                    t('stats.categories.economic')
-                  }}</span>
-                  <span class="toggle-icon text-text/60" :class="{ open: showEconomicStats }"
-                    >▼</span
-                  >
-                </div>
-              </td>
-            </tr>
-
-            <template v-if="showEconomicStats">
-              <tr
-                v-for="stat in economicStats"
-                :key="stat.key"
-                class="border-b border-primary/20 hover:bg-primary/5"
-              >
-                <td class="px-4 py-2 text-sm text-text">{{ stat.label }}</td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.baseValue, stat.format) }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.itemValue, stat.format) }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm text-text/80">
-                  {{ formatValue(stat.shardValue, stat.format) }}
-                </td>
-                <td class="px-4 py-2 text-center text-sm font-semibold text-text">
-                  {{ formatValue(stat.totalValue, stat.format) }}
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-      <div v-else class="py-8 text-center text-text/70">
-        <p>
-          Aucune statistique à afficher. Vérifiez que le build contient un champion, des items, des
-          runes et des shards.
-        </p>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="py-8 text-center text-text/70">
+          <p>
+            Aucune statistique à afficher. Vérifiez que le build contient un champion, des items,
+            des runes et des shards.
+          </p>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   calculateStats,
@@ -270,16 +206,39 @@ import { formatLethality } from '~/utils/formatItemStats'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { Build } from '~/types/build'
 
-const props = defineProps<{
-  build?: Build | null
+const props = withDefaults(
+  defineProps<{
+    build?: Build | null
+    /** Masquer les onglets dans l’infobox (ex. onglets dans la toolbar de la page info) */
+    hideCategoryTabs?: boolean
+    category?: 'basic' | 'advanced' | 'economic'
+  }>(),
+  {
+    hideCategoryTabs: false,
+  }
+)
+
+const emit = defineEmits<{
+  'update:category': [value: 'basic' | 'advanced' | 'economic']
 }>()
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
 const selectedLevel = ref(1)
-const showBasicStats = ref(true) // Always visible by default
-const showAdvancedStats = ref(false) // Condensed by default
-const showEconomicStats = ref(false) // Condensed by default
+const activeCategory = ref<'basic' | 'advanced' | 'economic'>('basic')
+
+watch(
+  () => props.category,
+  c => {
+    if (c !== undefined) activeCategory.value = c
+  },
+  { immediate: true }
+)
+
+function setStatsCategory(c: 'basic' | 'advanced' | 'economic') {
+  activeCategory.value = c
+  emit('update:category', c)
+}
 
 // Derived stats dropdowns state
 const expandedDerivedStats = ref<Record<string, boolean>>({
@@ -886,6 +845,47 @@ const economicStats = computed(() => {
   ]
 })
 
+const currentCategoryStats = computed(() => {
+  if (activeCategory.value === 'advanced') return advancedStats.value
+  if (activeCategory.value === 'economic') return economicStats.value
+  return basicStats.value
+})
+
+const statIconByKey: Record<string, string> = {
+  health: '❤️',
+  mana: '💧',
+  attackDamage: '🗡️',
+  abilityPower: '✨',
+  armor: '🛡️',
+  magicResist: '🔮',
+  movementSpeed: '👟',
+  attackSpeed: '⚡',
+  critChance: '🎯',
+  critDamage: '💥',
+  lifeSteal: '🩸',
+  spellVamp: '🧪',
+  omnivamp: '🌀',
+  cooldownReduction: '⏱️',
+  armorPenetration: '🪓',
+  magicPenetration: '🪄',
+  lethality: '☠️',
+  tenacity: '🧱',
+  healthRegen: '💚',
+  manaRegen: '🔷',
+  attackRange: '🏹',
+  shield: '🛡️',
+  goldValue: '🪙',
+  goldCost: '💰',
+  goldEfficiency: '📈',
+  totalEffectiveHealth: '🏰',
+  physicalEffectiveHealth: '🧿',
+  armorDamageReductionPercent: '🧲',
+  magicalEffectiveHealth: '🛡️',
+  magicDamageReductionPercent: '🧠',
+}
+
+const getStatIcon = (key: string): string => statIconByKey[key] ?? '•'
+
 const formatValue = (
   value: number | string,
   format: 'number' | 'decimal' | 'percent' | 'lethality',
@@ -916,6 +916,48 @@ const formatValue = (
   background-color: rgba(var(--color-primary-rgb), 0.1);
   border-top: 2px solid rgba(var(--color-primary-rgb), 0.3);
   border-bottom: 2px solid rgba(var(--color-primary-rgb), 0.3);
+}
+
+.stats-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  min-height: 36px;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  border-radius: 0.5rem;
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.2rem;
+}
+
+.stats-tab {
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: rgb(var(--rgb-text) / 0.75);
+  min-height: 30px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.1;
+  transition: all 0.2s ease;
+}
+
+.stats-tab:hover {
+  background: rgb(var(--rgb-primary) / 0.16);
+  color: rgb(var(--rgb-text));
+}
+
+.stats-tab--active {
+  background: rgb(var(--rgb-primary) / 0.3);
+  color: rgb(var(--rgb-text));
+}
+
+.stat-inline-icon {
+  display: inline-flex;
+  width: 1rem;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
 }
 
 .stat-category-title {
@@ -958,7 +1000,7 @@ const formatValue = (
   left: 50%;
   transform: translateX(-50%);
   padding: 12px 16px;
-  background-color: rgb(var(--rgb-surface));
+  background: rgb(var(--rgb-background) / 0.25);
   border: 1px solid rgb(var(--rgb-primary) / 0.4);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
@@ -1008,7 +1050,7 @@ const formatValue = (
   left: 50%;
   transform: translateX(-50%);
   border: 5px solid transparent;
-  border-top-color: rgb(var(--rgb-surface));
+  border-top-color: rgb(var(--rgb-background) / 0.25);
   margin-top: 0;
   z-index: 1;
 }

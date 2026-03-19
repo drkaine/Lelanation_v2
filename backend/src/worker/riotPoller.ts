@@ -26,6 +26,10 @@ import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches, refreshAllMaterializedViews } from '../services/MaterializedViewService.js'
+import {
+  isKeptMatchPlayerDurationBucket,
+  timelineTimestampMsToGameMinute,
+} from './matchPlayerBucketPolicy.js'
 
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
@@ -616,6 +620,7 @@ function buildBucketRows(
     const br = b as Record<string, unknown>
     const durationBucket = durationBucketFromRaw(br.duration ?? br.time ?? br.timestamp)
     if (durationBucket == null) continue
+    if (!isKeptMatchPlayerDurationBucket(durationBucket)) continue
 
     out.push({
       matchPlayerId,
@@ -1302,7 +1307,8 @@ async function extractAndInsertTimelineExtras(
     xp: number
   }> = []
   for (const frame of frames) {
-    const durationBucket = Math.floor((toInt(frame.timestamp) / 1000) / 60)
+    const durationBucket = timelineTimestampMsToGameMinute(toInt(frame.timestamp))
+    if (!isKeptMatchPlayerDurationBucket(durationBucket)) continue
     const pf = frame.participantFrames ?? {}
     for (const [riotPidRaw, pfRaw] of Object.entries(pf)) {
       const riotPid = Number(riotPidRaw)

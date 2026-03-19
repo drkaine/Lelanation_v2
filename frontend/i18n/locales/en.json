@@ -581,6 +581,7 @@
     "mostPopular": "Most Popular",
     "nameAZ": "Name (A-Z)",
     "buildsPerPage": "Builds per page",
+    "show": "Show",
     "all": "All",
     "pageXOfY": "Page {current} of {total}",
     "previousPage": "Previous",

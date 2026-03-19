@@ -76,12 +76,20 @@ const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 
 watch(hasChampion, newValue => {
   if (newValue && route.path.includes('/builds/create/champion')) {
-    router.push(localePath('/builds/create/rune'))
+    const id = buildStore.editSourceBuildId
+    const suffix = id ? `?editId=${encodeURIComponent(id)}` : ''
+    router.push(localePath(`/builds/create/rune${suffix}`))
   }
 })
 
 onMounted(() => {
-  buildStore.ensureCurrentBuild()
+  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
+  if (editId && buildStore.editSourceBuildId !== editId) {
+    const loaded = buildStore.startEditingBuildAsCopy(editId)
+    if (!loaded) buildStore.ensureCurrentBuild()
+  } else {
+    buildStore.ensureCurrentBuild()
+  }
   buildStore.setLastBuilderStep('champion')
 })
 </script>

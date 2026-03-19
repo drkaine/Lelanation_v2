@@ -40,18 +40,21 @@
       <option value="name">{{ t('buildDiscovery.nameAZ') }}</option>
     </select>
 
-    <select
-      id="build-discovery-per-page"
-      v-model="pageSize"
-      class="filter-select"
-      :aria-label="t('buildDiscovery.buildsPerPage')"
-    >
-      <option :value="20">20</option>
-      <option :value="30">30</option>
-      <option :value="40">40</option>
-      <option :value="50">50</option>
-      <option value="all">{{ t('buildDiscovery.all') }}</option>
-    </select>
+    <div class="filter-inline-label">
+      <span class="filter-inline-label-text">{{ t('buildDiscovery.show') }}</span>
+      <select
+        id="build-discovery-per-page"
+        v-model="pageSize"
+        class="filter-select"
+        :aria-label="t('buildDiscovery.buildsPerPage')"
+      >
+        <option :value="20">20</option>
+        <option :value="30">30</option>
+        <option :value="40">40</option>
+        <option :value="50">50</option>
+        <option value="all">{{ t('buildDiscovery.all') }}</option>
+      </select>
+    </div>
 
     <button v-if="hasActiveFilters" class="filter-clear" @click="clearFilters">
       {{ t('buildDiscovery.clearFilters') }}
@@ -216,5 +219,16 @@ watch(locale, () => {
 
 .filter-clear:hover {
   background: rgb(var(--rgb-primary) / 0.2);
+}
+
+.filter-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.filter-inline-label-text {
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text) / 0.8);
 }
 </style>

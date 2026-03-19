@@ -6,7 +6,11 @@ const localePath = useLocalePath()
 const buildStore = useBuildStore()
 
 onMounted(() => {
-  buildStore.ensureCurrentBuild()
+  if (buildStore.editSourceBuildId) {
+    buildStore.leaveEditSessionAndRestoreCreateDraft()
+  } else {
+    buildStore.ensureCurrentBuild()
+  }
   router.replace(localePath(`/builds/create/${buildStore.getLastBuilderStep()}`))
 })
 </script>

@@ -18,6 +18,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useVoteStore } from '~/stores/VoteStore'
 
 const CURRENT_BUILD_STORAGE_KEY = 'lelanation_current_build'
+const EDIT_BUILD_STORAGE_KEY = 'lelanation_current_build_edit'
 const BUILDER_STEP_STORAGE_KEY = 'lelanation_builder_step'
 
 interface BuildState {
@@ -31,6 +32,8 @@ interface BuildState {
   displayedVariant: 'main' | number
   /** Champion en attente de changement (si des variantes existent — confirmation requise). */
   pendingChampionChange: Champion | null
+  /** Build source utilisé pour une édition en copie (ne doit pas être écrasé). */
+  editSourceBuildId: string | null
 }
 
 export const useBuildStore = defineStore('build', {
@@ -42,6 +45,7 @@ export const useBuildStore = defineStore('build', {
     savedBuildsVersion: 0,
     displayedVariant: 'main',
     pendingChampionChange: null,
+    editSourceBuildId: null,
   }),
 
   getters: {
@@ -189,6 +193,7 @@ export const useBuildStore = defineStore('build', {
       }
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
+      this.editSourceBuildId = null
       this.status = 'success'
       this.error = null
       this.recalculateStats()
@@ -251,6 +256,7 @@ export const useBuildStore = defineStore('build', {
       }
       this.displayedVariant = 'main'
       this.pendingChampionChange = null
+      this.editSourceBuildId = null
       this.status = 'idle'
       this.error = null
       this.setLastBuilderStep('champion')
@@ -267,6 +273,54 @@ export const useBuildStore = defineStore('build', {
       } catch {
         return false
       }
+    },
+
+    /**
+     * Charge un build existant dans le builder comme COPIE éditable.
+     * Le build source n'est jamais écrasé à la sauvegarde.
+     */
+    startEditingBuildAsCopy(buildId: string): boolean {
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const source = savedBuilds.find(b => b.id === buildId)
+        if (!source) return false
+        const now = new Date().toISOString()
+        const copy: Build = {
+          ...source,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now,
+        }
+        this.currentBuild = {
+          ...copy,
+          subBuilds: copy.subBuilds ?? [],
+          descriptionMode: copy.descriptionMode ?? 'single',
+        }
+        this.displayedVariant = 'main'
+        this.pendingChampionChange = null
+        this.editSourceBuildId = buildId
+        this.status = 'idle'
+        this.error = null
+        this.recalculateStats()
+        return true
+      } catch {
+        return false
+      }
+    },
+
+    getCurrentDraftStorageKey(): string {
+      return this.editSourceBuildId ? EDIT_BUILD_STORAGE_KEY : CURRENT_BUILD_STORAGE_KEY
+    },
+
+    leaveEditSessionAndRestoreCreateDraft() {
+      this.editSourceBuildId = null
+      this.currentBuild = null
+      this.displayedVariant = 'main'
+      this.pendingChampionChange = null
+      this.status = 'idle'
+      this.error = null
+      this.recalculateStats()
+      this.ensureCurrentBuild()
     },
 
     ensureCurrentBuild() {
@@ -639,7 +693,9 @@ export const useBuildStore = defineStore('build', {
         const src = data.skillOrder
         const dest = destBuild.skillOrder
         const pad3 = <T>(arr: T[] | null | undefined): [T | null, T | null, T | null] =>
-          arr && arr.length >= 3 ? [arr[0], arr[1], arr[2]] : [null, null, null]
+          arr && arr.length >= 3
+            ? [arr[0] ?? null, arr[1] ?? null, arr[2] ?? null]
+            : [null, null, null]
         const merged: SkillOrder = {
           firstThreeUps:
             fields.firstThreeUps && src?.firstThreeUps
@@ -923,6 +979,62 @@ export const useBuildStore = defineStore('build', {
         return true
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to delete build'
+        this.status = 'error'
+        return false
+      }
+    },
+
+    async setSavedBuildVisibility(
+      buildId: string,
+      visibility: 'public' | 'private'
+    ): Promise<boolean> {
+      if (import.meta.server) return false
+      try {
+        const savedBuilds = this.getSavedBuilds()
+        const index = savedBuilds.findIndex(b => b.id === buildId)
+        if (index < 0) return false
+        const existing = savedBuilds[index]
+        if (!existing) return false
+
+        const updated: Build = {
+          ...existing,
+          visibility,
+          updatedAt: new Date().toISOString(),
+        }
+        savedBuilds[index] = updated
+        localStorage.setItem(
+          'lelanation_builds',
+          JSON.stringify(savedBuilds.map(b => serializeBuild(b)))
+        )
+        this.savedBuildsVersion++
+
+        if (this.currentBuild?.id === buildId) {
+          this.currentBuild.visibility = visibility
+          this.currentBuild.updatedAt = updated.updatedAt
+        }
+
+        try {
+          if (visibility === 'private') {
+            const delResponse = await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}`), {
+              method: 'DELETE',
+            })
+            if (!delResponse.ok && delResponse.status !== 404) {
+              // keep local update even if server delete fails
+            }
+          } else {
+            await fetch(apiUrl('/api/builds'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(serializeBuild(updated)),
+            })
+          }
+        } catch {
+          // keep local update even if API is unreachable
+        }
+
+        return true
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to update build visibility'
         this.status = 'error'
         return false
       }

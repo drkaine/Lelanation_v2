@@ -48,11 +48,18 @@ useHead({
 })
 
 const buildStore = useBuildStore()
+const route = useRoute()
 const { isStreamerMode } = useStreamerMode()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 
 onMounted(() => {
-  buildStore.ensureCurrentBuild()
+  const editId = typeof route.query.editId === 'string' ? route.query.editId : null
+  if (editId && buildStore.editSourceBuildId !== editId) {
+    const loaded = buildStore.startEditingBuildAsCopy(editId)
+    if (!loaded) buildStore.ensureCurrentBuild()
+  } else {
+    buildStore.ensureCurrentBuild()
+  }
   buildStore.setLastBuilderStep('item')
 })
 </script>

@@ -1,7 +1,7 @@
 <template>
   <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
     <div class="max-w-8xl mx-auto px-0">
-      <div class="mb-3 flex justify-center">
+      <div class="flex justify-center">
         <div class="streamer-tabs">
           <button
             type="button"
@@ -91,22 +91,22 @@
           </span>
           <select
             v-model="myBuildsVisibilityFilter"
-            class="rounded-lg border border-accent/50 bg-surface/50 px-3 py-2 text-sm text-text md:hidden"
+            class="filter-like-select md:hidden"
             :aria-label="t('buildsPage.visibility')"
           >
             <option v-for="opt in visibilityFilterOptions" :key="opt.value" :value="opt.value">
               {{ opt.label }}
             </option>
           </select>
-          <div class="hidden rounded-lg border border-accent/50 bg-surface/50 p-0.5 md:flex">
+          <div class="filter-like-segmented hidden p-0.5 md:flex">
             <button
               v-for="opt in visibilityFilterOptions"
               :key="opt.value"
               :class="[
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 myBuildsVisibilityFilter === opt.value
-                  ? 'bg-accent text-background'
-                  : 'text-text-secondary hover:bg-accent/20 hover:text-text',
+                  ? 'bg-primary/30 text-text'
+                  : 'text-text-secondary hover:bg-primary/20 hover:text-text',
               ]"
               @click="myBuildsVisibilityFilter = opt.value"
             >
@@ -115,7 +115,7 @@
           </div>
           <button
             v-if="adminMode"
-            class="ml-auto flex items-center gap-1.5 rounded-lg border border-accent/60 bg-surface px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/15"
+            class="ml-auto flex min-h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 py-2 text-sm text-text transition-colors hover:bg-primary/20"
             :disabled="shareLoading"
             @click="shareBuilds"
           >
@@ -129,11 +129,11 @@
               stroke-linecap="round"
               stroke-linejoin="round"
             >
-              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-              <polyline points="16 6 12 2 8 6" />
-              <line x1="12" y1="2" x2="12" y2="15" />
+              <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+              <path d="M13 5v5h5" />
+              <path d="m8 14 3 3 5-5" />
             </svg>
-            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
+            {{ shareLoading ? 'Import en cours...' : "Importer dans l'app" }}
           </button>
         </div>
 
@@ -142,6 +142,7 @@
           :custom-builds="buildsFilteredByVisibility"
           :show-user-actions="true"
           @delete-build="confirmDelete"
+          @toggle-visibility="toggleBuildVisibility"
         />
       </div>
 
@@ -459,6 +460,18 @@ const deleteBuild = async () => {
   }
 }
 
+const toggleBuildVisibility = async (buildId: string) => {
+  if (!hydrated.value) return
+  const target = buildStore.getSavedBuilds().find(b => b.id === buildId)
+  if (!target) return
+  const nextVisibility: 'public' | 'private' =
+    (target.visibility ?? 'public') === 'private' ? 'public' : 'private'
+  const success = await buildStore.setSavedBuildVisibility(buildId, nextVisibility)
+  if (success) {
+    await discoveryStore.loadBuilds()
+  }
+}
+
 const clearComparison = () => {
   discoveryStore.clearComparison()
 }
@@ -479,7 +492,7 @@ onMounted(() => {
 }
 
 .builds-page {
-  padding-top: var(--build-page-padding-top, 6px);
+  padding-top: 10px;
 }
 
 .streamer-tabs {
@@ -487,11 +500,11 @@ onMounted(() => {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 0.25rem;
   border: 1px solid rgb(var(--rgb-accent) / 0.2);
   border-radius: 9999px;
   background: rgb(var(--rgb-background) / 0.22);
-  padding: 3px;
+  padding: 0.2rem;
   max-width: 100%;
 }
 
@@ -499,8 +512,9 @@ onMounted(() => {
   border: none;
   border-radius: 9999px;
   background: transparent;
-  padding: 4px 8px;
-  font-size: 11px;
+  min-height: 36px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.1;
   color: rgb(var(--rgb-text) / 0.75);
@@ -512,6 +526,21 @@ onMounted(() => {
 .streamer-tab-button.is-active {
   background: rgb(var(--rgb-accent) / 0.2);
   color: var(--color-accent);
+}
+
+.filter-like-select {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text));
+}
+
+.filter-like-segmented {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  background: rgb(var(--rgb-background) / 0.25);
 }
 
 @keyframes fadeIn {
