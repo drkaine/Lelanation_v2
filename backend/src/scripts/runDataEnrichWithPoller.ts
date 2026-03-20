@@ -88,17 +88,56 @@ async function main(): Promise<void> {
   const baseUrl = await resolveReachableBaseUrl()
   console.log(`[data-enrich-cycle] Base admin API: ${baseUrl}`)
 
-  const startRes = await requestJsonWithRetry<{ success?: boolean; error?: string; message?: string }>(
-    `${baseUrl}/riot-script/start`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ script: 'data-enrich' }),
+  let startAccepted = false
+  try {
+    const startRes = await requestJsonWithRetry<{ success?: boolean; error?: string; message?: string }>(
+      `${baseUrl}/riot-script/start`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ script: 'data-enrich' }),
+      }
+    )
+    if (startRes?.error) {
+      throw new Error(startRes.error)
     }
-  )
-  if (startRes?.error) {
-    throw new Error(startRes.error)
+    startAccepted = true
+    console.log(`[data-enrich-cycle] ${startRes.message ?? 'data-enrich started'}`)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (!/HTTP 409\b/i.test(msg) || !/already running/i.test(msg)) {
+      throw err
+    }
+
+    // Robustness: after reboot/redeploy, orchestrator state can be stale for a short time.
+    // If data-enrich is really running, we attach to it; otherwise request stop then retry start.
+    const status = await requestJsonWithRetry<ScriptStatusResponse>(`${baseUrl}/riot-script/status`)
+    const runningDataEnrich = status.activeScript === 'data-enrich' && status.isRunning
+    if (runningDataEnrich) {
+      console.log('[data-enrich-cycle] data-enrich already running, attaching to existing run.')
+    } else {
+      console.log('[data-enrich-cycle] stale running state detected, requesting stop then retrying start.')
+      await requestJsonWithRetry<{ success?: boolean; message?: string }>(`${baseUrl}/riot-script/stop`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      await sleep(1500)
+      const retryRes = await requestJsonWithRetry<{ success?: boolean; error?: string; message?: string }>(
+        `${baseUrl}/riot-script/start`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ script: 'data-enrich' }),
+        }
+      )
+      if (retryRes?.error) {
+        throw new Error(retryRes.error)
+      }
+      startAccepted = true
+      console.log(`[data-enrich-cycle] ${retryRes.message ?? 'data-enrich started after recovery'}`)
+    }
   }
-  console.log(`[data-enrich-cycle] ${startRes.message ?? 'data-enrich started'}`)
+  if (!startAccepted) {
+    console.log('[data-enrich-cycle] start not needed, monitoring current data-enrich run.')
+  }
 
   let spin = 0
   for (;;) {
@@ -122,10 +161,12 @@ async function main(): Promise<void> {
         const rowsBuckets = s.counters?.rowsBuckets ?? 0
         const rowsRanks = s.counters?.rowsRanks ?? 0
         const missingMatches = s.counters?.missingMatches ?? 0
+        const missingMatchRanks = s.counters?.missingMatchRanks ?? 0
+        const missingTeamRanks = s.counters?.missingTeamRanks ?? 0
         const scanned = s.counters?.matchesScanned ?? 0
         const enriched = s.counters?.matchesEnriched ?? 0
         console.log(
-          `[data-enrich-cycle] running missingMatches=${String(missingMatches)} scanned=${String(scanned)} enriched=${String(enriched)} items=${String(rowsItems)} runes=${String(rowsRunes)} buckets=${String(rowsBuckets)} ranks=${String(rowsRanks)}`
+          `[data-enrich-cycle] running missingMatches=${String(missingMatches)} missingMatchRanks=${String(missingMatchRanks)} missingTeamRanks=${String(missingTeamRanks)} scanned=${String(scanned)} enriched=${String(enriched)} items=${String(rowsItems)} runes=${String(rowsRunes)} buckets=${String(rowsBuckets)} ranks=${String(rowsRanks)}`
         )
       }
       await sleep(2000)

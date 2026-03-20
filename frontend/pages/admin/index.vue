@@ -109,55 +109,71 @@
           <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-xl font-bold text-text">
-                {{ dataStats?.playersNotMigrated ?? '—' }}
+                {{ dataStats?.totalPlayers ?? '—' }}
               </div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersNotMigrated') }}</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">{{ dataStats?.playersErreur ?? '—' }}</div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersErreur') }}</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">{{ dataStats?.playersPerdu ?? '—' }}</div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.playersPerdu') }}</div>
+              <div class="text-xs text-text/70">Nombre de players</div>
             </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-xl font-bold text-text">
-                {{ dataStats?.matchesWithoutRank ?? '—' }}
+                {{ dataStats?.playersWrongKeyVersion ?? '—' }}
               </div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.matchesWithoutRank') }}</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">
-                {{ dataStats?.participantsWithoutRole ?? '—' }}
-              </div>
-              <div class="text-xs text-text/70">
-                {{ t('admin.data.stats.participantsWithoutRole') }}
-              </div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">
-                {{ dataStats?.participantsWithoutRank ?? '—' }}
-              </div>
-              <div class="text-xs text-text/70">
-                {{ t('admin.data.stats.participantsWithoutRank') }}
-              </div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">{{ dataStats?.totalPlayers ?? '—' }}</div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.totalPlayers') }}</div>
+              <div class="text-xs text-text/70">Players clé/version différente de la config</div>
             </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-xl font-bold text-text">{{ dataStats?.totalMatches ?? '—' }}</div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.totalMatches') }}</div>
+              <div class="text-xs text-text/70">Nombre de matchs total</div>
+            </div>
+            <div class="rounded border border-primary/20 bg-background/30 p-3">
+              <div class="text-xl font-bold text-text">{{ dataStats?.missingMatches ?? '—' }}</div>
+              <div class="text-xs text-text/70">Matchs avec data manquantes</div>
             </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-base font-semibold text-text">
                 {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
               </div>
-              <div class="text-xs text-text/70">{{ t('admin.data.stats.lastNewPlayerAt') }}</div>
+              <div class="text-xs text-text/70">Temps depuis ajout dernier joueur</div>
             </div>
           </div>
+        </div>
+
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-3 text-lg font-semibold text-text">Active patches</h2>
+          <div class="grid gap-2 sm:grid-cols-3">
+            <select
+              v-model="selectedActivePatch"
+              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+            >
+              <option value="" disabled>Sélectionner un patch</option>
+              <option v-for="p in activePatches" :key="p.gameVersion" :value="p.gameVersion">
+                {{ p.gameVersion }} ({{ p.gamesNumber }} / {{ p.gameNumberMax }})
+              </option>
+            </select>
+            <input
+              v-model.number="activePatchMaxInput"
+              type="number"
+              min="1"
+              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+              placeholder="Nouveau game_number_max"
+            />
+            <button
+              type="button"
+              class="rounded bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+              :disabled="activePatchSaveBusy || !selectedActivePatch || !(activePatchMaxInput > 0)"
+              @click="saveActivePatchMax"
+            >
+              {{ activePatchSaveBusy ? '…' : 'Mettre à jour game_number_max' }}
+            </button>
+          </div>
+          <p
+            v-if="activePatchMessage"
+            :class="
+              activePatchError
+                ? 'mt-2 text-sm text-error'
+                : 'mt-2 text-sm text-green-600 dark:text-green-400'
+            "
+          >
+            {{ activePatchMessage }}
+          </p>
         </div>
 
         <!-- Section 2: Statut des crons -->
@@ -289,11 +305,11 @@
                 <div class="font-medium text-text">{{ riotPollerStatus?.requestCount ?? '—' }}</div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Requêtes / min</span>
+                <span class="text-text/70">Requêtes / 2 min</span>
                 <div class="font-medium text-text">
                   {{
-                    riotPollerStatus?.requestsPerMinute != null
-                      ? riotPollerStatus.requestsPerMinute
+                    riotPollerStatus?.requestsPer2Min != null
+                      ? riotPollerStatus.requestsPer2Min
                       : '—'
                   }}
                 </div>
@@ -317,15 +333,9 @@
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Participants</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.participantsFetched ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
                 <span class="text-text/70">Dernière boucle</span>
                 <div class="font-medium text-text">
-                  {{ formatRiotDate(riotPollerStatus?.lastLoopFinishedAt ?? null) }}
+                  {{ formatRiotDate(riotPollerStatus?.latestPlayerLastSeenAt ?? null) }}
                 </div>
               </div>
             </div>
@@ -366,6 +376,109 @@
               {{ riotPollerActionMessage }}
             </p>
           </div>
+        </div>
+
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-4 text-lg font-semibold text-text">Scripts Riot</h2>
+          <div class="space-y-3">
+            <div
+              v-for="row in riotScriptStatusRows"
+              :key="row.id"
+              class="rounded border border-primary/20 bg-background/30 p-3"
+            >
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div class="font-medium text-text">{{ row.label }}</div>
+                <span
+                  :class="_riotStatusClass(row.status)"
+                  class="rounded px-2 py-0.5 text-xs font-medium"
+                >
+                  {{ _riotStatusLabel(row.status) }}
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                  :disabled="scriptSwitchBusy[row.id]"
+                  @click="
+                    row.id === 'league-xp'
+                      ? switchScript('league-xp', leagueXpForm)
+                      : switchScript(row.id as 'poller' | 'data-enrich' | 'puuid-migration')
+                  "
+                >
+                  {{ scriptSwitchBusy[row.id] ? '…' : 'Lancer' }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+                  :disabled="scriptStopBusy[row.id]"
+                  @click="
+                    stopScript(row.id as 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp')
+                  "
+                >
+                  {{ scriptStopBusy[row.id] ? '…' : 'Arrêter' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
+            <h3 class="mb-2 text-sm font-semibold text-text">Paramètres League XP</h3>
+            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              <input
+                v-model="leagueXpForm.queue"
+                type="text"
+                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="Queue"
+              />
+              <input
+                v-model="leagueXpForm.tier"
+                type="text"
+                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="Tier"
+              />
+              <input
+                v-model="leagueXpForm.division"
+                type="text"
+                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="Division"
+              />
+              <input
+                v-model="leagueXpForm.region"
+                type="text"
+                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="Région"
+              />
+              <input
+                v-model.number="leagueXpForm.maxPages"
+                type="number"
+                min="1"
+                max="100"
+                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+                placeholder="Pages"
+              />
+            </div>
+            <div class="mt-3">
+              <button
+                type="button"
+                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                :disabled="scriptSwitchBusy['league-xp']"
+                @click="switchScript('league-xp', leagueXpForm)"
+              >
+                {{ scriptSwitchBusy['league-xp'] ? '…' : 'Lancer League XP avec ce formulaire' }}
+              </button>
+            </div>
+          </div>
+          <p
+            v-if="scriptActionMessage"
+            :class="
+              scriptActionError
+                ? 'mt-2 text-sm text-error'
+                : 'mt-2 text-sm text-green-600 dark:text-green-400'
+            "
+          >
+            {{ scriptActionMessage }}
+          </p>
         </div>
 
         <!-- Modal: Riot Poller logs -->
@@ -1209,17 +1322,21 @@ const riotApiStats = ref<{
 const dataSectionCrons = ref(true)
 const dataSectionPoller = ref(true)
 const dataStats = ref<{
-  matchesWithoutRank: number
-  lastNewPlayerAt: string | null
-  playersNotMigrated: number
-  playersErreur: number
-  playersPerdu: number
-  participantsWithoutRole: number
-  participantsWithoutRank: number
   totalPlayers: number
+  playersWrongKeyVersion: number
+  lastNewPlayerAt: string | null
   totalMatches: number
+  missingMatches: number
 } | null>(null)
 const dataStatsLoading = ref(false)
+const activePatches = ref<
+  Array<{ gameVersion: string; gamesNumber: number; gameNumberMax: number; isCurrent: boolean }>
+>([])
+const selectedActivePatch = ref('')
+const activePatchMaxInput = ref<number>(1000000)
+const activePatchSaveBusy = ref(false)
+const activePatchMessage = ref('')
+const activePatchError = ref(false)
 const riotScriptsStatusCrons = ref<
   Array<{
     script: string
@@ -1239,6 +1356,7 @@ const riotPollerStatus = ref<{
   requestCount: number
   error429Count: number
   requestsPerMinute: number | null
+  requestsPer2Min?: number | null
   error400Count: number
   matchesFetched: number
   playersFetched: number
@@ -1246,7 +1364,36 @@ const riotPollerStatus = ref<{
   matchesRankFixed: number
   participantsRankFixed: number
   participantsRoleFixed: number
+  latestPlayerLastSeenAt?: string | null
 } | null>(null)
+const riotScriptStatusRows = computed(() => {
+  const s = riotScriptsStatus.value
+  return [
+    { id: 'poller', label: 'Riot Poller', status: s?.poller?.status ?? 'stopped' },
+    {
+      id: 'data-enrich',
+      label: 'Data Enrich Cycle',
+      status: s?.['data-enrich']?.status ?? 'stopped',
+    },
+    {
+      id: 'puuid-migration',
+      label: 'Migration players (PUUID)',
+      status: s?.['puuid-migration']?.status ?? 'stopped',
+    },
+    { id: 'league-xp', label: 'League XP', status: s?.['league-xp']?.status ?? 'stopped' },
+  ]
+})
+const scriptSwitchBusy = ref<Record<string, boolean>>({})
+const scriptStopBusy = ref<Record<string, boolean>>({})
+const scriptActionMessage = ref('')
+const scriptActionError = ref(false)
+const leagueXpForm = ref({
+  queue: 'RANKED_SOLO_5x5',
+  tier: 'GOLD',
+  division: 'I',
+  region: 'euw1',
+  maxPages: 3,
+})
 const riotPollerLogsOpen = ref(false)
 const riotPollerLogs = ref<string[]>([])
 const riotPollerLogsLoading = ref(false)
@@ -1287,6 +1434,68 @@ async function loadDataStats() {
   }
 }
 
+async function loadActivePatches() {
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/active-patches'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    activePatches.value = Array.isArray(data?.patches) ? data.patches : []
+    if (!selectedActivePatch.value && activePatches.value.length > 0) {
+      const first = activePatches.value[0]
+      if (first) {
+        selectedActivePatch.value = first.gameVersion
+        activePatchMaxInput.value = first.gameNumberMax
+      }
+    }
+  } catch {
+    activePatches.value = []
+  }
+}
+
+watch(selectedActivePatch, patch => {
+  const row = activePatches.value.find(p => p.gameVersion === patch)
+  if (row) activePatchMaxInput.value = row.gameNumberMax
+})
+
+async function saveActivePatchMax() {
+  if (!selectedActivePatch.value || !(activePatchMaxInput.value > 0)) return
+  activePatchMessage.value = ''
+  activePatchError.value = false
+  activePatchSaveBusy.value = true
+  try {
+    const res = await fetchWithAuth(
+      apiUrl(`/api/admin/active-patches/${encodeURIComponent(selectedActivePatch.value)}/max`),
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameNumberMax: activePatchMaxInput.value }),
+      }
+    )
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      activePatchMessage.value = 'Patch mis à jour.'
+      await loadActivePatches()
+    } else {
+      activePatchError.value = true
+      activePatchMessage.value = data?.error ?? 'Erreur'
+    }
+  } catch {
+    activePatchError.value = true
+    activePatchMessage.value = 'Erreur réseau'
+  } finally {
+    activePatchSaveBusy.value = false
+  }
+}
+
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
@@ -1297,8 +1506,6 @@ const riotScriptBusy = ref<Record<string, boolean>>({})
 const riotScriptStopBusy = ref<Record<string, boolean>>({})
 const riotScriptsStatus = ref<Record<string, any>>({})
 const riotDataStats = ref<{
-  participantsWithoutRank?: number
-  participantsWithoutRole?: number
   matchesWithoutRank?: number
   lastNewPlayerAt?: string | null
   playersNotMigrated?: number
@@ -1808,7 +2015,7 @@ async function openRiotPollerLogs() {
   riotPollerLogsError.value = null
   riotPollerLogs.value = []
   try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/logs?lines=300'))
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/logs?lines=300&sort=desc'))
     if (res.status === 401) {
       clearAuth()
       await navigateTo(localePath('/admin/login'))
@@ -1824,6 +2031,76 @@ async function openRiotPollerLogs() {
     riotPollerLogsError.value = e instanceof Error ? e.message : 'Impossible de charger les logs'
   } finally {
     riotPollerLogsLoading.value = false
+  }
+}
+
+async function switchScript(
+  script: 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp',
+  options?: Record<string, unknown>
+) {
+  scriptActionMessage.value = ''
+  scriptActionError.value = false
+  scriptSwitchBusy.value = { ...scriptSwitchBusy.value, [script]: true }
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script/switch'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script, options }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      scriptActionMessage.value = data?.message ?? 'Script lancé.'
+      await loadRiotScriptsStatus()
+    } else {
+      scriptActionError.value = true
+      scriptActionMessage.value = data?.error ?? 'Erreur script'
+    }
+  } catch {
+    scriptActionError.value = true
+    scriptActionMessage.value = 'Erreur réseau'
+  } finally {
+    scriptSwitchBusy.value = { ...scriptSwitchBusy.value, [script]: false }
+  }
+}
+
+async function stopScript(script: 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp') {
+  scriptActionMessage.value = ''
+  scriptActionError.value = false
+  scriptStopBusy.value = { ...scriptStopBusy.value, [script]: true }
+  try {
+    const activeScript =
+      riotScriptsStatus.value?.poller?.status === 'running'
+        ? 'poller'
+        : riotScriptsStatus.value?.['data-enrich']?.status === 'running'
+          ? 'data-enrich'
+          : riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
+            ? 'puuid-migration'
+            : riotScriptsStatus.value?.['league-xp']?.status === 'running'
+              ? 'league-xp'
+              : null
+    if (activeScript !== script) {
+      scriptActionMessage.value = 'Ce script n’est pas actif.'
+      return
+    }
+    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script/stop'), { method: 'POST' })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok) {
+      scriptActionMessage.value = data?.message ?? 'Arrêt demandé.'
+      await loadRiotScriptsStatus()
+    } else {
+      scriptActionError.value = true
+      scriptActionMessage.value = data?.error ?? 'Erreur arrêt'
+    }
+  } catch {
+    scriptActionError.value = true
+    scriptActionMessage.value = 'Erreur réseau'
+  } finally {
+    scriptStopBusy.value = { ...scriptStopBusy.value, [script]: false }
   }
 }
 
@@ -2303,6 +2580,7 @@ onMounted(async () => {
     loadRiotApikey(),
     loadRiotApiStats(),
     loadDataStats(),
+    loadActivePatches(),
     loadSeedPlayers(),
   ])
 })
@@ -2326,6 +2604,7 @@ watch(activeTab, (tab, prevTab) => {
     // Riot API key UI removed
     loadRiotApiStats()
     loadDataStats()
+    loadActivePatches()
     // Seed players UI removed
     dataTabPollTimer = setInterval(() => {
       loadRiotScriptsStatus()

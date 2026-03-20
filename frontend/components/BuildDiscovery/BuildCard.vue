@@ -45,9 +45,23 @@
       <div class="flex items-center gap-2">
         <img
           v-if="primaryRunePath"
-          :src="getRunePathImageUrl(version, primaryRunePath.icon)"
+          :src="
+            getRunePathImageUrl(
+              version,
+              primaryRunePath.icon,
+              primaryRunePath.id,
+              primaryRunePath.name
+            )
+          "
           :alt="primaryRunePath.name"
-          class="h-6 w-6 rounded"
+          class="h-6 w-6 rounded-full p-0.5"
+          :style="{
+            backgroundColor: getRunePathColor(
+              primaryRunePath.icon,
+              primaryRunePath.id,
+              primaryRunePath.name
+            ),
+          }"
         />
         <span class="text-xs text-text">{{ primaryRunePath?.name || 'No runes' }}</span>
       </div>
@@ -94,7 +108,12 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import type { Build } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { getChampionImageUrl, getItemImageUrl, getRunePathImageUrl } from '~/utils/imageUrl'
+import {
+  getChampionImageUrl,
+  getItemImageUrl,
+  getRunePathColor,
+  getRunePathImageUrl,
+} from '~/utils/imageUrl'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 
 interface Props {

@@ -6,6 +6,7 @@ import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { createCronLogger } from '../utils/cronLogger.js'
+import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/MaterializedViewService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -52,6 +53,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
     // If no new version and we already have data, skip sync
     if (!versionInfo.hasNew && versionInfo.current) {
+      await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
       await log.info('No new version available. Current:', versionInfo.current)
       await cronStatus.markSuccess('dataDragonSync')
       return { ok: true }
@@ -91,6 +93,12 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     }
 
     const syncData = syncResult.unwrap()
+    const patch = syncData.version.split('.').slice(0, 2).join('.')
+    if (patch) {
+      await ensureActivePatchVersion(patch).catch(() => undefined)
+      await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
+      await log.info('Active patches synced after Data Dragon update', { patch })
+    }
 
     // Update version info
     const updateResult = await versionService.updateVersion(syncData.version)

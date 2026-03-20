@@ -37,6 +37,7 @@ model Match {
   riotMatchId               String    @unique @map("riot_match_id")
   gameVersion               String    @map("game_version")
   gameDuration              Int       @map("game_duration")
+  gameDate                  DateTime? @map("game_date")
   rankTier                  String    @map("rank_tier")
   rankDivision              String    @map("rank_division")
   gameEndedInSurrender      Boolean   @default(false) @map("game_ended_in_surrender")
@@ -55,6 +56,7 @@ model Match {
   @@index([gameVersion, region, rankTier])
   @@index([aggregatedAt])
   @@index([ingestedAt])
+  @@index([gameDate])
   @@map("matchs")
 }
 
@@ -62,6 +64,8 @@ model Team {
   id                   BigInt   @id @default(autoincrement())
   matchId              BigInt   @map("match_id")
   team                 Int      // 100 | 200
+  rankTier             String   @default("UNRANKED") @map("rank_tier")
+  rankDivision         String   @default("") @map("rank_division")
   win                  Boolean
   teamEarlySurrendered Boolean  @default(false) @map("team_early_surrendered")
   baronKills           Int      @default(0) @map("baron_kills")
@@ -469,6 +473,8 @@ model ActivePatch {
   gameVersion String   @map("game_version")
   activatedAt DateTime @default(now()) @map("activated_at")
   isCurrent   Boolean  @default(true) @map("is_current")
+  gamesNumber Int      @default(0) @map("games_number")
+  gameNumberMax Int    @default(1000000) @map("game_number_max")
 
   @@id([gameVersion])
   @@map("active_patches")

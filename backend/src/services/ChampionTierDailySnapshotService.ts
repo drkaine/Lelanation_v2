@@ -1,17 +1,17 @@
 /**
  * Daily UTC snapshots of champion stats per rank tier (no role/division split).
  * One row per (snapshot_for_date, rank_tier, champion): games, wins, WR, bans, pick rate.
- * Window: previous UTC calendar day [D 00:00, D+1 00:00), keyed by ingested_at on matchs.
+ * Window: previous UTC calendar day [D 00:00, D+1 00:00), keyed by game_date on matchs.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { loadCurrentGameVersion } from './RiotConfigService.js'
+import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
 
 function parseUtcSchedule(): { hour: number; minute: number } {
   const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
-  const minute = Math.min(59, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_MINUTE ?? '5', 10) || 0))
+  const minute = Math.min(59, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_MINUTE ?? '0', 10) || 0))
   return { hour, minute }
 }
 
@@ -42,23 +42,11 @@ export async function runChampionTierSnapshotForWindow(params: {
   if (!isDatabaseConfigured()) return { insertedEstimate: 0 }
 
   const { windowStart, windowEnd, snapshotForDate, logger } = params
-  const currentVersionRes = await loadCurrentGameVersion()
-  if (currentVersionRes.isErr()) {
-    if (logger) void logger.alerte('Champion tier snapshot: cannot read version.json', { error: currentVersionRes.unwrapErr().message })
-    return { insertedEstimate: 0 }
-  }
-  const currentVersion = currentVersionRes.unwrap()?.currentVersion?.trim() ?? ''
-  if (!currentVersion) {
-    if (logger) void logger.alerte('Champion tier snapshot: currentVersion missing in version.json')
-    return { insertedEstimate: 0 }
-  }
-
   const result = await prisma.$executeRaw`
     WITH window_params AS (
       SELECT ${windowStart}::timestamptz AS w_start,
              ${windowEnd}::timestamptz AS w_end,
-             ${snapshotForDate}::date AS snap_date,
-             ${currentVersion}::text AS current_version
+             ${snapshotForDate}::date AS snap_date
     ),
     picks AS (
       SELECT
@@ -70,9 +58,8 @@ export async function runChampionTierSnapshotForWindow(params: {
       INNER JOIN matchs m ON m.id = mp.match_id
       INNER JOIN teams t ON t.id = mp.team_id
       CROSS JOIN window_params wp
-      WHERE m.ingested_at >= wp.w_start
-        AND m.ingested_at < wp.w_end
-        AND m.game_version LIKE (wp.current_version || '%')
+      WHERE m.game_date >= wp.w_start
+        AND m.game_date < wp.w_end
       GROUP BY 1, 2
     ),
     bans AS (
@@ -83,9 +70,8 @@ export async function runChampionTierSnapshotForWindow(params: {
       FROM bans b
       INNER JOIN matchs m ON m.id = b.match_id
       CROSS JOIN window_params wp
-      WHERE m.ingested_at >= wp.w_start
-        AND m.ingested_at < wp.w_end
-        AND m.game_version LIKE (wp.current_version || '%')
+      WHERE m.game_date >= wp.w_start
+        AND m.game_date < wp.w_end
       GROUP BY 1, 2
     ),
     merged AS (
@@ -142,6 +128,41 @@ export async function runChampionTierSnapshotForWindow(params: {
   return { insertedEstimate }
 }
 
+async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<void> {
+  // Archive daily snapshots whose date belongs to a completed patch.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
+    (LIKE champion_tier_daily_snapshots INCLUDING ALL)
+  `)
+  const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
+    SELECT DISTINCT c.snapshot_for_date::date AS d
+    FROM champion_tier_daily_snapshots c
+    JOIN matchs m
+      ON m.game_date >= c.snapshot_for_date
+     AND m.game_date < (c.snapshot_for_date + INTERVAL '1 day')
+    JOIN active_patches ap
+      ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
+    WHERE ap.game_number_max > 0
+      AND ap.games_number >= ap.game_number_max
+  `
+  if (rows.length === 0) return
+  for (const r of rows) {
+    const date = r.d
+    await prisma.$executeRaw`
+      INSERT INTO champion_tier_daily_snapshots_archive
+      SELECT *
+      FROM champion_tier_daily_snapshots
+      WHERE snapshot_for_date = ${date}::date
+      ON CONFLICT DO NOTHING
+    `
+    await prisma.$executeRaw`
+      DELETE FROM champion_tier_daily_snapshots
+      WHERE snapshot_for_date = ${date}::date
+    `
+  }
+  if (logger) void logger.step('Champion tier snapshot archive completed', { daysArchived: rows.length })
+}
+
 /**
  * If UTC clock is past the configured schedule and we have not snapshotted the previous UTC day yet, run once.
  * Call from poller each loop (cheap check).
@@ -172,6 +193,8 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
       snapshotForDate,
       logger,
     })
+    await refreshAllMaterializedViews().catch(() => undefined)
+    await archiveSnapshotsForCompletedPatches(logger)
     await prisma.championTierSnapshotRun.upsert({
       where: { snapshotForDate },
       create: { snapshotForDate, rowsInserted: insertedEstimate },

@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join, resolve, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
+import { Prisma } from '../generated/prisma/index.js'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
@@ -20,6 +21,7 @@ import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
   startScript,
+  switchToScript,
   requestStop,
   isAnyScriptRunning,
   getOrchestratorStatus,
@@ -28,7 +30,7 @@ import {
   type LeagueXpOptions,
 } from '../worker/scriptOrchestrator.js'
 import { getRiotPollerStatus } from '../worker/riotPoller.js'
-import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
+import { resolveRiotApiKey, getClefTypeFromFile } from '../services/RiotHttpClient.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -238,70 +240,94 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
 /** GET /api/admin/data-stats - stats for Data tab (collecte: players, matches, participants, migration, etc.). */
 router.get('/data-stats', async (_req, res) => {
   let dataStats: {
-    matchesUnranked: number
-    lastNewPlayerAt: string | null
-    playersNotMigrated: number
-    playersErreur: number
-    playersPerdu: number
-    participantsWithoutRole: number
-    participantsWithoutRank: number
     totalPlayers: number
+    playersWrongKeyVersion: number
+    lastNewPlayerAt: string | null
     totalMatches: number
+    missingMatches: number
   } = {
-    matchesUnranked: 0,
-    lastNewPlayerAt: null,
-    playersNotMigrated: 0,
-    playersErreur: 0,
-    playersPerdu: 0,
-    participantsWithoutRole: 0,
-    participantsWithoutRank: 0,
     totalPlayers: 0,
+    playersWrongKeyVersion: 0,
+    lastNewPlayerAt: null,
     totalMatches: 0,
+    missingMatches: 0,
   }
   try {
-    const [
-      matchesUnranked,
-      lastPlayer,
-      playersNotMigrated,
-      playersErreur,
-      playersPerdu,
-      participantsWithoutRole,
-      participantsWithoutRank,
-      totalPlayers,
-      totalMatches,
-    ] = await Promise.all([
-      prisma.match.count({ where: { rankTier: 'UNRANKED' } }),
+    const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
+    const [lastPlayer, totalPlayers, totalMatches, missingMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.player.count({
-      where: {
-          OR: [
-            { puuidKeyVersion: null },
-            { puuidKeyVersion: { notIn: ['perso', 'erreur', 'perdu'] } },
-          ],
-        },
-      }),
-      prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
-      prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
-      prisma.matchPlayer.count({ where: { role: 'FILL' } }),
-      prisma.matchPlayer.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.count(),
       prisma.match.count(),
+      getMissingMatchesCount(),
+      configuredKeyVersion
+        ? prisma.player.count({
+            where: {
+              OR: [{ puuidKeyVersion: null }, { puuidKeyVersion: { not: configuredKeyVersion } }],
+            },
+          })
+        : prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {
-      matchesUnranked,
-      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      playersNotMigrated,
-      playersErreur,
-      playersPerdu,
-      participantsWithoutRole,
-      participantsWithoutRank,
       totalPlayers,
+      playersWrongKeyVersion,
+      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       totalMatches,
+      missingMatches,
     }
   } catch {
     // ignore
   }
   return res.json(dataStats)
+})
+
+router.get('/active-patches', async (_req, res) => {
+  try {
+    const patches = await prisma.activePatch.findMany({
+      orderBy: { gameVersion: 'asc' },
+      select: {
+        gameVersion: true,
+        gamesNumber: true,
+        gameNumberMax: true,
+        isCurrent: true,
+      },
+    })
+    return res.json({ patches })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.put('/active-patches/:patch/max', async (req, res) => {
+  const patch = typeof req.params.patch === 'string' ? req.params.patch.trim() : ''
+  const gameNumberMaxRaw = Number(req.body?.gameNumberMax)
+  if (!patch) return res.status(400).json({ error: 'patch is required' })
+  if (!Number.isFinite(gameNumberMaxRaw) || gameNumberMaxRaw < 1) {
+    return res.status(400).json({ error: 'gameNumberMax must be a positive integer' })
+  }
+  const gameNumberMax = Math.trunc(gameNumberMaxRaw)
+  try {
+    const existing = await prisma.activePatch.findUnique({
+      where: { gameVersion: patch },
+      select: { gamesNumber: true },
+    })
+    if (!existing) return res.status(404).json({ error: 'Patch not found in active_patches' })
+    const updated = await prisma.activePatch.update({
+      where: { gameVersion: patch },
+      data: {
+        gameNumberMax,
+        isCurrent: existing.gamesNumber < gameNumberMax,
+      },
+      select: {
+        gameVersion: true,
+        gamesNumber: true,
+        gameNumberMax: true,
+        isCurrent: true,
+      },
+    })
+    return res.json({ success: true, patch: updated })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
 })
 
 const CRON_JOBS: Array<{ key: string; label: string }> = [
@@ -333,65 +359,39 @@ router.get('/riot-scripts-status', async (_req, res) => {
   })
 
   let dataStats: {
-    matchesUnranked: number
-    lastNewPlayerAt: string | null
-    playersNotMigrated: number
-    playersErreur: number
-    playersPerdu: number
-    participantsWithoutRole: number
-    participantsWithoutRank: number
     totalPlayers: number
+    playersWrongKeyVersion: number
+    lastNewPlayerAt: string | null
     totalMatches: number
+    missingMatches: number
   } = {
-    matchesUnranked: 0,
-    lastNewPlayerAt: null,
-    playersNotMigrated: 0,
-    playersErreur: 0,
-    playersPerdu: 0,
-    participantsWithoutRole: 0,
-    participantsWithoutRank: 0,
     totalPlayers: 0,
+    playersWrongKeyVersion: 0,
+    lastNewPlayerAt: null,
     totalMatches: 0,
+    missingMatches: 0,
   }
   try {
-    const [
-      matchesUnranked,
-      lastPlayer,
-      playersNotMigrated,
-      playersErreur,
-      playersPerdu,
-      participantsWithoutRole,
-      participantsWithoutRank,
-      totalPlayers,
-      totalMatches,
-    ] = await Promise.all([
-      prisma.match.count({ where: { rankTier: 'UNRANKED' } }),
+    const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
+    const [lastPlayer, totalPlayers, totalMatches, missingMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.player.count({
-        where: {
-          OR: [
-            { puuidKeyVersion: null },
-            { puuidKeyVersion: { notIn: ['perso', 'erreur', 'perdu'] } },
-          ],
-        },
-      }),
-      prisma.player.count({ where: { puuidKeyVersion: 'erreur' } }),
-      prisma.player.count({ where: { puuidKeyVersion: 'perdu' } }),
-      prisma.matchPlayer.count({ where: { role: 'FILL' } }),
-      prisma.matchPlayer.count({ where: { rankTier: 'UNRANKED' } }),
       prisma.player.count(),
       prisma.match.count(),
+      getMissingMatchesCount(),
+      configuredKeyVersion
+        ? prisma.player.count({
+            where: {
+              OR: [{ puuidKeyVersion: null }, { puuidKeyVersion: { not: configuredKeyVersion } }],
+            },
+          })
+        : prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {
-      matchesUnranked,
-      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      playersNotMigrated,
-      playersErreur,
-      playersPerdu,
-      participantsWithoutRole,
-      participantsWithoutRank,
       totalPlayers,
+      playersWrongKeyVersion,
+      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       totalMatches,
+      missingMatches,
     }
   } catch {
     // ignore
@@ -400,10 +400,16 @@ router.get('/riot-scripts-status', async (_req, res) => {
   const orchestratorStatus = getOrchestratorStatus()
   const lastFinished = getLastFinishedInfo()
   const pollerStatus = getRiotPollerStatus()
+  const latestPlayerSeen = await prisma.player.findFirst({
+    where: { lastSeen: { not: null } },
+    orderBy: { lastSeen: 'desc' },
+    select: { lastSeen: true },
+  }).catch(() => null)
   const startedAt = pollerStatus.lastLoopStartedAt ? new Date(pollerStatus.lastLoopStartedAt).getTime() : 0
   const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
   const requestsPerMinute =
     elapsedMin >= 1 / 60 ? Math.round((pollerStatus.requestCount / elapsedMin) * 10) / 10 : null
+  const requestsPer2Min = requestsPerMinute != null ? Math.round(requestsPerMinute * 2 * 10) / 10 : null
 
   const riotPoller = {
     isRunning: pollerStatus.isRunning,
@@ -414,6 +420,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     requestCount: pollerStatus.requestCount,
     error429Count: pollerStatus.error429Count,
     requestsPerMinute,
+    requestsPer2Min,
     error400Count: pollerStatus.error400Count,
     matchesFetched: pollerStatus.matchesFetched,
     playersFetched: pollerStatus.playersFetched,
@@ -421,6 +428,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     matchesRankFixed: pollerStatus.matchesRankFixed,
     participantsRankFixed: pollerStatus.participantsRankFixed,
     participantsRoleFixed: pollerStatus.participantsRoleFixed,
+    latestPlayerLastSeenAt: latestPlayerSeen?.lastSeen?.toISOString() ?? null,
   }
 
   const orchestrator = {
@@ -435,7 +443,35 @@ router.get('/riot-scripts-status', async (_req, res) => {
     lastFinishedAt: lastFinished.finishedAt,
   }
 
-  return res.json({ scripts: [], crons, dataStats, riotPoller, orchestrator })
+  const scripts = [
+    {
+      script: 'poller',
+      status: orchestratorStatus.activeScript === 'poller' && orchestratorStatus.isRunning ? 'running' : 'stopped',
+    },
+    {
+      script: 'data-enrich',
+      status:
+        orchestratorStatus.activeScript === 'data-enrich' && orchestratorStatus.isRunning
+          ? 'running'
+          : 'stopped',
+    },
+    {
+      script: 'puuid-migration',
+      status:
+        orchestratorStatus.activeScript === 'puuid-migration' && orchestratorStatus.isRunning
+          ? 'running'
+          : 'stopped',
+    },
+    {
+      script: 'league-xp',
+      status:
+        orchestratorStatus.activeScript === 'league-xp' && orchestratorStatus.isRunning
+          ? 'running'
+          : 'stopped',
+    },
+  ]
+
+  return res.json({ scripts, crons, dataStats, riotPoller, orchestrator })
 })
 
 const ROOT_LOGS_DIR = resolve(backendRoot, '..', 'logs')
@@ -444,12 +480,56 @@ const RIOT_POLLER_LOG_PATH = join(ROOT_LOGS_DIR, 'riot-poller.log')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
 
-router.get('/riot-poller/status', (_req, res) => {
+async function getMissingMatchesCount(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS count
+    FROM (
+      SELECT DISTINCT m.riot_match_id
+      FROM matchs m
+      JOIN match_players mp ON mp.match_id = m.id
+      LEFT JOIN match_player_items mpi ON mpi.match_player_id = mp.id
+      LEFT JOIN match_player_runes mpr ON mpr.match_player_id = mp.id
+      LEFT JOIN match_player_bucket mpb ON mpb.match_player_id = mp.id
+      LEFT JOIN teams t ON t.id = mp.team_id
+      WHERE mp.rank_division IS NULL
+         OR mp.rank_division = ''
+         OR mp.rank_lp IS NULL
+         OR mpi.match_player_id IS NULL
+         OR mpr.match_player_id IS NULL
+         OR (mpb.match_player_id IS NULL AND m.game_duration >= 300)
+         OR (
+           t.rank_tier = 'UNRANKED'
+           AND mp.rank_tier IS NOT NULL
+           AND mp.rank_tier <> 'UNRANKED'
+         )
+         OR (
+           t.rank_division = ''
+           AND mp.rank_tier IS NOT NULL
+           AND mp.rank_tier <> 'UNRANKED'
+         )
+    ) t
+  `)
+  const raw = rows[0]?.count ?? 0
+  return typeof raw === 'bigint' ? Number(raw) : Number(raw)
+}
+
+router.get('/riot-poller/status', async (_req, res) => {
   const s = getRiotPollerStatus()
   const startedAt = s.lastLoopStartedAt ? new Date(s.lastLoopStartedAt).getTime() : 0
   const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
   const requestsPerMinute = elapsedMin >= 1 / 60 ? Math.round((s.requestCount / elapsedMin) * 10) / 10 : null
-  return res.json({ ...s, requestsPerMinute })
+  const requestsPer2Min = requestsPerMinute != null ? Math.round(requestsPerMinute * 2 * 10) / 10 : null
+  const latestPlayerSeen = await prisma.player.findFirst({
+    where: { lastSeen: { not: null } },
+    orderBy: { lastSeen: 'desc' },
+    select: { lastSeen: true },
+  }).catch(() => null)
+  return res.json({
+    ...s,
+    requestsPerMinute,
+    requestsPer2Min,
+    latestPlayerLastSeenAt: latestPlayerSeen?.lastSeen?.toISOString() ?? null,
+  })
 })
 
 /** GET /api/admin/riot-script/status — unified orchestrator status (all scripts). */
@@ -577,6 +657,37 @@ router.post('/riot-script/start', async (req, res) => {
 })
 
 /**
+ * POST /api/admin/riot-script/switch
+ * Body: { script, options? } - stops previous running script (if any), then starts requested one.
+ */
+router.post('/riot-script/switch', async (req, res) => {
+  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp', 'data-enrich']
+  const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
+  if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
+    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
+  }
+
+  const options: LeagueXpOptions = {}
+  if (scriptName === 'league-xp' && req.body?.options && typeof req.body.options === 'object') {
+    const o = req.body.options as Record<string, unknown>
+    if (typeof o['queue'] === 'string') options.queue = o['queue']
+    if (typeof o['tier'] === 'string') options.tier = o['tier'].toUpperCase()
+    if (typeof o['division'] === 'string') options.division = o['division'].toUpperCase()
+    if (typeof o['region'] === 'string') options.region = o['region'].toLowerCase()
+    if (typeof o['maxPages'] === 'number') options.maxPages = Math.max(1, Math.min(100, Math.trunc(o['maxPages'])))
+  }
+
+  const result = await switchToScript(scriptName, options)
+  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
+  return res.status(202).json({
+    success: true,
+    message: result.previousScript
+      ? `Script '${result.previousScript}' stopped, '${scriptName}' started.`
+      : `Script '${scriptName}' started.`,
+  })
+})
+
+/**
  * POST /api/admin/riot-script/stop
  * Gracefully stops the currently running script.
  */
@@ -597,6 +708,7 @@ router.get('/riot-poller/logs', async (req, res) => {
   const lines = Number.isFinite(linesParam) && linesParam > 0
     ? Math.min(linesParam, RIOT_POLLER_LOGS_MAX_LINES)
     : 200
+  const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
   const pathsToTry = [
     RIOT_POLLER_LOG_PATH,
     resolve(process.cwd(), 'logs', 'riot-poller.log'),
@@ -605,7 +717,7 @@ router.get('/riot-poller/logs', async (req, res) => {
     try {
       const content = await fs.readFile(logPath, 'utf-8')
       const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-      const log = all.slice(-lines)
+      const log = sort === 'asc' ? all.slice(-lines) : all.slice(-lines).reverse()
       return res.json({ log, logDir: 'logs' })
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {

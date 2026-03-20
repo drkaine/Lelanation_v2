@@ -1089,6 +1089,7 @@
                       v-for="{ path, cells } in overviewRunesByPath"
                       :key="path.id"
                       class="runes overview-runes-grid"
+                      :style="runePathPanelStyle(path.icon)"
                     >
                       <button
                         v-for="(cell, idx) in cells"
@@ -3102,6 +3103,7 @@ import { useGameVersion } from '~/composables/useGameVersion'
 import {
   getChampionImageUrl,
   getItemImageUrl,
+  getRunePathColor,
   getRuneImageUrl,
   getSpellImageUrl,
 } from '~/utils/imageUrl'
@@ -4516,6 +4518,14 @@ const overviewRunesByPath = computed(() => {
     return { path, cells }
   })
 })
+
+function runePathPanelStyle(icon: string): Record<string, string> {
+  const color = getRunePathColor(icon)
+  return {
+    borderColor: `${color}66`,
+    boxShadow: `inset 0 0 0 1px ${color}22`,
+  }
+}
 
 /** Extract perk ids from participant runes JSON (styles[].selections[].perk). */
 function runeIdsFromSet(runesUnknown: unknown): number[] {

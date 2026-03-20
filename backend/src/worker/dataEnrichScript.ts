@@ -22,6 +22,7 @@ import {
   type RiotParticipantDto,
   type RiotMatchTimelineDto,
 } from '../services/RiotHttpClient.js'
+import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import {
   isKeptMatchPlayerDurationBucket,
   MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS,
@@ -44,6 +45,8 @@ export interface DataEnrichStatus {
   rowsBuckets: number
   rowsRanks: number
   missingMatches: number
+  missingMatchRanks: number
+  missingTeamRanks: number
 }
 
 let _status: DataEnrichStatus = {
@@ -60,6 +63,8 @@ let _status: DataEnrichStatus = {
   rowsBuckets: 0,
   rowsRanks: 0,
   missingMatches: 0,
+  missingMatchRanks: 0,
+  missingTeamRanks: 0,
 }
 
 export function getDataEnrichStatus(): DataEnrichStatus {
@@ -145,6 +150,42 @@ function normalizeDivision(raw: unknown): string | null {
   return d
 }
 
+function averageRankFromScores(scores: number[]): { tier: string; division: string } {
+  if (scores.length === 0) return { tier: 'UNRANKED', division: '' }
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+  return scoreToRank(avg)
+}
+
+async function recomputeTeamAndMatchRanksFromDb(matchId: bigint): Promise<void> {
+  const freshMps = await prisma.matchPlayer.findMany({
+    where: { matchId },
+    select: { teamId: true, rankTier: true, rankDivision: true, rankLp: true },
+  })
+  const matchScores: number[] = []
+  const teamScores = new Map<string, number[]>()
+  for (const row of freshMps) {
+    if (!row.rankTier || row.rankTier === 'UNRANKED') continue
+    const score = rankToScore(row.rankTier, row.rankDivision ?? '', row.rankLp ?? null)
+    matchScores.push(score)
+    const key = row.teamId.toString()
+    const list = teamScores.get(key) ?? []
+    list.push(score)
+    teamScores.set(key, list)
+  }
+  const avgMatch = averageRankFromScores(matchScores)
+  await prisma.match.update({
+    where: { id: matchId },
+    data: { rankTier: avgMatch.tier, rankDivision: avgMatch.division },
+  })
+  for (const [teamId, scores] of teamScores.entries()) {
+    const avg = averageRankFromScores(scores)
+    await prisma.team.update({
+      where: { id: BigInt(teamId) },
+      data: { rankTier: avg.tier, rankDivision: avg.division },
+    })
+  }
+}
+
 async function getMissingMatchIds(limit: number): Promise<string[]> {
   const minDur = MATCH_PLAYER_BUCKET_MIN_GAME_DURATION_SECONDS
   const rows = await prisma.$queryRaw<Array<{ riot_match_id: string }>>(Prisma.sql`
@@ -177,16 +218,65 @@ async function countMissingMatches(): Promise<number> {
       LEFT JOIN match_player_items mpi ON mpi.match_player_id = mp.id
       LEFT JOIN match_player_runes mpr ON mpr.match_player_id = mp.id
       LEFT JOIN match_player_bucket mpb ON mpb.match_player_id = mp.id
+      LEFT JOIN teams t ON t.id = mp.team_id
       WHERE mp.rank_division IS NULL
          OR mp.rank_division = ''
          OR mp.rank_lp IS NULL
          OR mpi.match_player_id IS NULL
          OR mpr.match_player_id IS NULL
          OR (mpb.match_player_id IS NULL AND m.game_duration >= ${minDur})
+         OR (
+           t.rank_tier = 'UNRANKED'
+           AND mp.rank_tier IS NOT NULL
+           AND mp.rank_tier <> 'UNRANKED'
+         )
+         OR (
+           t.rank_division = ''
+           AND mp.rank_tier IS NOT NULL
+           AND mp.rank_tier <> 'UNRANKED'
+         )
     ) t
   `)
   const raw = rows[0]?.count ?? 0
   return typeof raw === 'bigint' ? Number(raw) : Number(raw)
+}
+
+async function countMissingMatchRanks(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS count
+    FROM matchs
+    WHERE rank_tier = 'UNRANKED' OR rank_division = ''
+  `)
+  const raw = rows[0]?.count ?? 0
+  return typeof raw === 'bigint' ? Number(raw) : Number(raw)
+}
+
+async function countMissingTeamRanks(): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+    SELECT COUNT(*)::bigint AS count
+    FROM teams
+    WHERE rank_tier = 'UNRANKED' OR rank_division = ''
+  `)
+  const raw = rows[0]?.count ?? 0
+  return typeof raw === 'bigint' ? Number(raw) : Number(raw)
+}
+
+async function getMatchesNeedingTeamRankBackfill(limit: number): Promise<string[]> {
+  const rows = await prisma.$queryRaw<Array<{ riot_match_id: string }>>(Prisma.sql`
+    SELECT DISTINCT m.riot_match_id
+    FROM matchs m
+    JOIN teams t ON t.match_id = m.id
+    JOIN match_players mp ON mp.match_id = m.id
+    WHERE (
+        t.rank_tier = 'UNRANKED'
+        OR t.rank_division = ''
+      )
+      AND mp.rank_tier IS NOT NULL
+      AND mp.rank_tier <> 'UNRANKED'
+    ORDER BY m.riot_match_id ASC
+    LIMIT ${limit}
+  `)
+  return rows.map(r => r.riot_match_id)
 }
 
 async function enrichOneMatch(
@@ -211,6 +301,7 @@ async function enrichOneMatch(
     where: { matchId: match.id },
     select: {
       id: true,
+      teamId: true,
       participantId: true,
       rankTier: true,
       rankDivision: true,
@@ -238,6 +329,16 @@ async function enrichOneMatch(
     return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
   }
   const dto = detailRes.data as RiotMatchDto
+  const infoAny = (dto.info ?? {}) as Record<string, unknown>
+  const gameStartRaw =
+    (typeof infoAny['gameStartTimestamp'] === 'number' ? (infoAny['gameStartTimestamp'] as number) : null) ??
+    (typeof dto.info?.gameCreation === 'number' ? dto.info.gameCreation : null)
+  if (gameStartRaw != null) {
+    await prisma.match.update({
+      where: { id: match.id },
+      data: { gameDate: new Date(gameStartRaw) },
+    })
+  }
   const participants = (dto.info?.participants ?? []) as RiotParticipantDto[]
   if (participants.length === 0) return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
 
@@ -385,6 +486,9 @@ async function enrichOneMatch(
     }
   }
 
+  // Recompute team and match average rank after potential rank updates.
+  await recomputeTeamAndMatchRanksFromDb(match.id)
+
   const changed = itemsInserted > 0 || runesInserted > 0 || bucketsInserted > 0 || ranksUpdated > 0
   return { changed, items: itemsInserted, runes: runesInserted, buckets: bucketsInserted, ranks: ranksUpdated }
 }
@@ -418,6 +522,8 @@ export async function runDataEnrichScript(
     rowsBuckets: 0,
     rowsRanks: 0,
     missingMatches: 0,
+    missingMatchRanks: 0,
+    missingTeamRanks: 0,
   }
   onUpdate?.(_status)
 
@@ -435,23 +541,59 @@ export async function runDataEnrichScript(
     const leagueCache = new Map<string, { tier: string | null; division: string | null; lp: number | null }>()
 
     while (!isShouldStop()) {
-      _status.missingMatches = await countMissingMatches()
+      const [missingMatches, missingMatchRanks, missingTeamRanks] = await Promise.all([
+        countMissingMatches(),
+        countMissingMatchRanks(),
+        countMissingTeamRanks(),
+      ])
+      _status.missingMatches = missingMatches
+      _status.missingMatchRanks = missingMatchRanks
+      _status.missingTeamRanks = missingTeamRanks
       onUpdate?.(_status)
       const batch = await getMissingMatchIds(BATCH_MATCHES)
       if (batch.length === 0) break
+      let batchProgress = 0
       for (const riotMatchId of batch) {
         if (isShouldStop()) break
         _status.matchesScanned++
         client.setPlatform(riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1')
         const res = await enrichOneMatch(client, leagueCache, riotMatchId)
         if (res.changed) _status.matchesEnriched++
+        batchProgress += res.items + res.runes + res.buckets + res.ranks + (res.changed ? 1 : 0)
         _status.rowsItems += res.items
         _status.rowsRunes += res.runes
         _status.rowsBuckets += res.buckets
         _status.rowsRanks += res.ranks
-        _status.missingMatches = Math.max(0, _status.missingMatches - 1)
         onUpdate?.(_status)
       }
+      if (batchProgress === 0) {
+        await logger.info(
+          '[data-enrich] no progress on primary pass batch; switching to team-rank backfill pass'
+        )
+        break
+      }
+    }
+
+  // Dedicated pass: backfill team.rank_tier/rank_division for matches not covered by missing enrich criteria.
+    while (!isShouldStop()) {
+      const batch = await getMatchesNeedingTeamRankBackfill(BATCH_MATCHES)
+      if (batch.length === 0) break
+      for (const riotMatchId of batch) {
+        if (isShouldStop()) break
+        const match = await prisma.match.findUnique({
+          where: { riotMatchId },
+          select: { id: true },
+        })
+        if (!match) continue
+        await recomputeTeamAndMatchRanksFromDb(match.id)
+      }
+      const [missingMatchRanks, missingTeamRanks] = await Promise.all([
+        countMissingMatchRanks(),
+        countMissingTeamRanks(),
+      ])
+      _status.missingMatchRanks = missingMatchRanks
+      _status.missingTeamRanks = missingTeamRanks
+      onUpdate?.(_status)
     }
 
     _status = { ..._status, phase: 'done', finishedAt: new Date().toISOString() }

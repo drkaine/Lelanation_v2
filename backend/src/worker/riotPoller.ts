@@ -37,6 +37,11 @@ const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
 const INGEST_QUEUE_SIZE = 50
 /** Number of concurrent DB writers in Phase 4 (consumers). */
 const INGEST_CONSUMER_COUNT = 2
+const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
+let lastMvRefreshAt = 0
+
+const MIN_ALLOWED_MAJOR = 16
+const MIN_ALLOWED_MINOR = 1
 
 /**
  * Run async tasks with a bounded concurrency (like p-limit but inline).
@@ -183,6 +188,24 @@ function roleFromPosition(individualPosition?: string, teamPosition?: string): s
   if (/^BOTTOM|^ADC/i.test(p)) return 'BOTTOM'
   if (/^UTILITY|^SUPPORT/i.test(p)) return 'SUPPORT'
   return p || null
+}
+
+function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolean {
+  const gameVersion = (gameVersionRaw ?? '').trim()
+  if (!gameVersion) return false
+  const [majorRaw, minorRaw] = gameVersion.split('.')
+  const major = Number(majorRaw)
+  const minor = Number(minorRaw)
+  if (!Number.isFinite(major) || !Number.isFinite(minor)) return false
+  if (major > MIN_ALLOWED_MAJOR) return true
+  if (major < MIN_ALLOWED_MAJOR) return false
+  return minor >= MIN_ALLOWED_MINOR
+}
+
+function averageRankFromScores(scores: number[]): { tier: string; division: string } {
+  if (scores.length === 0) return { tier: 'UNRANKED', division: '' }
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+  return scoreToRank(avg)
 }
 
 
@@ -681,7 +704,13 @@ export async function upsertMatchAndParticipants(
   if (existing) return
 
   const gameVersion = info.gameVersion ?? ''
+  if (!isAllowedGameVersion(gameVersion)) return
   const gameDuration = info.gameDuration ?? 0
+  const infoAny = info as Record<string, unknown>
+  const rawGameStartTs =
+    (typeof infoAny['gameStartTimestamp'] === 'number' ? (infoAny['gameStartTimestamp'] as number) : null) ??
+    (typeof info.gameCreation === 'number' ? info.gameCreation : null)
+  const gameDate = rawGameStartTs != null ? new Date(rawGameStartTs) : null
   const participantDtos = info.participants as RiotParticipantDto[]
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
   const existingPlayers = await prisma.player.findMany({
@@ -757,25 +786,6 @@ export async function upsertMatchAndParticipants(
     return out
   }
 
-  // Compute match-level rank from all participants (exclude UNRANKED/null)
-  const rankScores: number[] = []
-  for (const p of participantDtos) {
-    const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier
-    if (tier && tier !== 'UNRANKED') {
-      const div = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? ''
-      const lp = (p as { leaguePoints?: number }).leaguePoints ?? null
-      rankScores.push(rankToScore(tier, div, lp))
-    }
-  }
-  let matchRankTier = 'UNRANKED'
-  let matchRankDivision = ''
-  if (rankScores.length > 0) {
-    const avg = rankScores.reduce((a, b) => a + b, 0) / rankScores.length
-    const { tier, division } = scoreToRank(avg)
-    matchRankTier = tier
-    matchRankDivision = division
-  }
-
   // Aggregate surrender flags
   const gameEndedInSurrender = participantDtos.some(
     (p) => (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender === true
@@ -789,8 +799,9 @@ export async function upsertMatchAndParticipants(
       riotMatchId,
       gameVersion,
       gameDuration,
-      rankTier: matchRankTier,
-      rankDivision: matchRankDivision,
+      gameDate,
+      rankTier: 'UNRANKED',
+      rankDivision: '',
       gameEndedInSurrender,
       gameEndedInEarlySurrender,
       region,
@@ -803,6 +814,8 @@ export async function upsertMatchAndParticipants(
   // Build teams + bans
   const teamDataItems = buildMatchTeamData(match.id, info, participantDtos)
   const teamIdByRiotTeam = new Map<number, bigint>()
+  const teamRankScoresByRiotTeam = new Map<number, number[]>()
+  const matchRankScores: number[] = []
   for (const { teamRow, bans } of teamDataItems) {
     const created = await prisma.team.create({ data: teamRow })
     teamIdByRiotTeam.set(teamRow.team, created.id)
@@ -826,19 +839,42 @@ export async function upsertMatchAndParticipants(
     const existingPlayer = existingByPuuid.get(puuid)
     let playerId: bigint
     if (existingPlayer == null) {
-      const newPlayer = await prisma.player.create({
-        data: {
-          puuid,
-          region,
-          puuidKeyVersion,
-          gameName: partGameName || null,
-          tagName: partTagName || null,
-          lastSeen: null,
-        },
+      let createdNow = false
+      let playerRow:
+        | { id: bigint; puuid: string; puuidKeyVersion: string | null; gameName: string | null }
+        | null = null
+      try {
+        const newPlayer = await prisma.player.create({
+          data: {
+            puuid,
+            region,
+            puuidKeyVersion,
+            gameName: partGameName || null,
+            tagName: partTagName || null,
+            lastSeen: null,
+          },
+          select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
+        })
+        playerRow = newPlayer
+        createdNow = true
+      } catch (e) {
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') throw e
+        // Race-safe fallback: another worker created this player between read and insert.
+        const existing = await prisma.player.findUnique({
+          where: { puuid },
+          select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
+        })
+        if (!existing) throw e
+        playerRow = existing
+      }
+      playerId = playerRow.id
+      existingByPuuid.set(puuid, {
+        id: playerRow.id,
+        puuid: playerRow.puuid,
+        puuidKeyVersion: playerRow.puuidKeyVersion,
+        gameName: playerRow.gameName,
       })
-      playerId = newPlayer.id
-      existingByPuuid.set(puuid, { id: playerId, puuid, puuidKeyVersion, gameName: partGameName || null })
-      counters.playersFetched++
+      if (createdNow) counters.playersFetched++
     } else {
       playerId = existingPlayer.id
       const playerUpdates: Record<string, unknown> = {}
@@ -909,6 +945,14 @@ export async function upsertMatchAndParticipants(
       },
     })
     counters.participantsFetched++
+
+    if (finalRankTier && finalRankTier !== 'UNRANKED') {
+      const score = rankToScore(finalRankTier, finalRankDivision ?? '', finalRankLp ?? null)
+      matchRankScores.push(score)
+      const list = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
+      list.push(score)
+      teamRankScoresByRiotTeam.set(riotTeamId, list)
+    }
 
     const mpId = matchPlayer.id
 
@@ -1146,6 +1190,23 @@ export async function upsertMatchAndParticipants(
     }
 
   }
+
+  // Update team rank_tier/rank_division as average of team participants.
+  for (const [riotTeamId, teamDbId] of teamIdByRiotTeam.entries()) {
+    const scores = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
+    const avg = averageRankFromScores(scores)
+    await prisma.team.update({
+      where: { id: teamDbId },
+      data: { rankTier: avg.tier, rankDivision: avg.division },
+    })
+  }
+
+  // Update match rank_tier/rank_division from averaged participant ranks.
+  const avgMatch = averageRankFromScores(matchRankScores)
+  await prisma.match.update({
+    where: { id: match.id },
+    data: { rankTier: avgMatch.tier, rankDivision: avgMatch.division },
+  })
 
   if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
 }
@@ -1520,6 +1581,9 @@ async function runStep4ForPlayer(
         }
         return
       }
+      if (!isAllowedGameVersion(matchRes.data?.info?.gameVersion)) {
+        return
+      }
       let timelineDto: RiotMatchTimelineDto | undefined
       try {
         const timelineRes = await client.getMatchTimeline(matchId)
@@ -1678,11 +1742,12 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
       if (resultEun === 'prisma_error') await logger.alerte('Prisma error in step 4 (eun1), continuing')
 
-      // ── Sync active_patches puis refresh vues matérialisées (toutes les 400 boucles, ~toutes les 4h) ──
-      if (loopIteration % 400 === 0) {
+      // ── Sync active_patches puis refresh vues matérialisées (cadence réelle: 4h) ──
+      if (Date.now() - lastMvRefreshAt >= MV_REFRESH_EVERY_MS) {
         try {
           await syncActivePatches()
           await refreshAllMaterializedViews()
+          lastMvRefreshAt = Date.now()
         } catch (err) {
           await logger.alerte('Refresh MVs error (non-fatal)')
           void err

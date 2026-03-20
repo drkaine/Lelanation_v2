@@ -811,6 +811,7 @@
                       v-for="{ path, cells } in championRunesByPath"
                       :key="path.id"
                       class="runes champion-overview-runes-grid"
+                      :style="runePathPanelStyle(path.icon)"
                     >
                       <button
                         v-for="(cell, idx) in cells"
@@ -1377,6 +1378,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import {
   getChampionImageUrl,
   getItemImageUrl,
+  getRunePathColor,
   getRuneImageUrl,
   getSpellImageUrl,
 } from '~/utils/imageUrl'
@@ -1502,6 +1504,14 @@ const championRunesByPath = computed(() => {
     return { path, cells }
   })
 })
+
+function runePathPanelStyle(icon: string): Record<string, string> {
+  const color = getRunePathColor(icon)
+  return {
+    borderColor: `${color}66`,
+    boxShadow: `inset 0 0 0 1px ${color}22`,
+  }
+}
 
 /** Top 3 matchups (highest winrate vs), worst 3 (lowest winrate vs). API returns sorted by winrate DESC. */
 const bestMatchups = computed(() => (matchupsData.value?.matchups ?? []).slice(0, 3))

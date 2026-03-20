@@ -34,7 +34,10 @@
               <div class="rune">
                 <div
                   class="path img"
-                  :style="{ '--img': `url(${getRunePathImageUrl(version, path.icon)})` }"
+                  :style="{
+                    '--img': `url(${getRunePathImageUrl(version, path.icon)})`,
+                    '--path-color': getRunePathColor(path.icon, path.id, path.name),
+                  }"
                 ></div>
               </div>
             </button>
@@ -126,7 +129,10 @@
               <div class="rune">
                 <div
                   class="path img"
-                  :style="{ '--img': `url(${getRunePathImageUrl(version, path.icon)})` }"
+                  :style="{
+                    '--img': `url(${getRunePathImageUrl(version, path.icon)})`,
+                    '--path-color': getRunePathColor(path.icon, path.id, path.name),
+                  }"
                 ></div>
               </div>
             </button>
@@ -271,7 +277,12 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import type { RuneSelection, SummonerSpell, ShardSelection } from '~/types/build'
-import { getRunePathImageUrl, getRuneImageUrl, getSpellImageUrl } from '~/utils/imageUrl'
+import {
+  getRunePathImageUrl,
+  getRunePathColor,
+  getRuneImageUrl,
+  getSpellImageUrl,
+} from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
@@ -877,10 +888,15 @@ watch(locale, () => {
   width: 82%;
   height: 82%;
   border-radius: 50%;
-  background-image: var(--img);
-  background-size: contain;
-  background-position: center center;
-  background-repeat: no-repeat;
+  background-color: var(--path-color, #eab308);
+  -webkit-mask-image: var(--img);
+  mask-image: var(--img);
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center center;
+  mask-position: center center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 .path button.rune:not(.Domination) .path.img {

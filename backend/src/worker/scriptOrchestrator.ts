@@ -177,6 +177,8 @@ export function getOrchestratorStatus(): OrchestratorStatus {
         rowsBuckets: s.rowsBuckets,
         rowsRanks: s.rowsRanks,
         missingMatches: s.missingMatches,
+        missingMatchRanks: s.missingMatchRanks,
+        missingTeamRanks: s.missingTeamRanks,
       },
     }
   }
@@ -262,18 +264,28 @@ export async function startScript(
     void runPuuidMigrationScript(
       () => ctx.shouldStop
     )
-      .then(() => {
+      .then(async () => {
         lastFinishedScript = 'puuid-migration'
         lastFinishedAt = new Date().toISOString()
         lastError = getPuuidMigrationStatus().lastError
         activeNonPoller = null
+        // Requested behavior: restart poller automatically when migration is finished.
+        if (!isAnyScriptRunning()) {
+          const r = await startScript('poller')
+          if (!r.ok) lastError = r.error
+        }
       })
-      .catch((err: unknown) => {
+      .catch(async (err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         lastFinishedScript = 'puuid-migration'
         lastFinishedAt = new Date().toISOString()
         lastError = msg
         activeNonPoller = null
+        // Even on error, restart poller automatically unless another script was started.
+        if (!isAnyScriptRunning()) {
+          const r = await startScript('poller')
+          if (!r.ok) lastError = r.error
+        }
       })
     return { ok: true }
   }
@@ -342,6 +354,30 @@ export async function startScript(
   }
 
   return { ok: false, error: `Unknown script: ${name as string}` }
+}
+
+/**
+ * Stop any running script gracefully, wait until idle, then start target script.
+ * This is used by admin actions where a new script should replace current one.
+ */
+export async function switchToScript(
+  name: ScriptName,
+  options?: LeagueXpOptions
+): Promise<{ ok: true; previousScript: ScriptName | null } | { ok: false; error: string }> {
+  const previousScript = getActiveScriptName()
+  if (isAnyScriptRunning()) {
+    requestStop()
+    const deadline = Date.now() + 10 * 60 * 1000
+    while (isAnyScriptRunning()) {
+      if (Date.now() >= deadline) {
+        return { ok: false, error: 'Timed out waiting for running script to stop.' }
+      }
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+  }
+  const started = await startScript(name, options)
+  if (!started.ok) return started
+  return { ok: true, previousScript }
 }
 
 /**

@@ -11,6 +11,29 @@ interface ImageDownloadTask {
   type: 'champion' | 'item' | 'rune' | 'spell' | 'champion-spell'
 }
 
+const RUNE_PATH_SVG_SOURCES: Array<{ name: string; url: string }> = [
+  {
+    name: 'domination_icon.svg',
+    url: 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/domination/domination_icon.svg'
+  },
+  {
+    name: 'inspiration_icon.svg',
+    url: 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/inspiration/inspiration_icon.svg'
+  },
+  {
+    name: 'precision_icon.svg',
+    url: 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/precision/precision_icon.svg'
+  },
+  {
+    name: 'resolve_icon.svg',
+    url: 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/resolve/resolve_icon.svg'
+  },
+  {
+    name: 'sorcery_icon.svg',
+    url: 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/perk-images/styles/sorcery/sorcery_icon.svg'
+  }
+]
+
 export class ImageService {
   private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
@@ -158,14 +181,16 @@ export class ImageService {
     void version
     const tasks: ImageDownloadTask[] = []
     const versionDir = join(this.imagesDir, this.latestDirName, 'rune')
+    const pathDir = join(versionDir, 'paths')
+
+    // Drop legacy PNG path icons so consumers use the new local SVG set.
+    await this.removeLegacyRunePathPngs(pathDir)
 
     // Download path icons
+    for (const icon of RUNE_PATH_SVG_SOURCES) {
+      tasks.push({ url: icon.url, localPath: join(pathDir, icon.name), type: 'rune' })
+    }
     for (const path of runePaths) {
-      if (path.icon) {
-        const url = `${this.baseUrl}/img/${path.icon}`
-        const localPath = join(versionDir, 'paths', path.icon.split('/').pop() || path.icon)
-        tasks.push({ url, localPath, type: 'rune' })
-      }
 
       // Download rune icons
       for (const slot of path.slots || []) {
@@ -380,6 +405,21 @@ export class ImageService {
           error
         )
       )
+    }
+  }
+
+  private async removeLegacyRunePathPngs(pathDir: string): Promise<void> {
+    try {
+      const dirResult = await FileManager.ensureDir(pathDir)
+      if (dirResult.isErr()) return
+      const entries = await fs.readdir(pathDir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (!entry.isFile()) continue
+        if (!entry.name.toLowerCase().endsWith('.png')) continue
+        await fs.unlink(join(pathDir, entry.name))
+      }
+    } catch {
+      // Non-fatal cleanup: keep sync resilient.
     }
   }
 }

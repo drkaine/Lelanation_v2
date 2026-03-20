@@ -41,6 +41,12 @@ export function getChampionPassiveImageUrl(_version: string, imageName: string):
 }
 
 export function getRunePathImageUrl(_version: string, icon: string): string {
+  const iconLower = (icon ?? '').toLowerCase()
+  if (iconLower.includes('domination') || iconLower.includes('8100')) return `${base()}/rune/paths/domination_icon.svg`
+  if (iconLower.includes('inspiration') || iconLower.includes('whimsy') || iconLower.includes('8300')) return `${base()}/rune/paths/inspiration_icon.svg`
+  if (iconLower.includes('precision') || iconLower.includes('8000')) return `${base()}/rune/paths/precision_icon.svg`
+  if (iconLower.includes('resolve') || iconLower.includes('8400')) return `${base()}/rune/paths/resolve_icon.svg`
+  if (iconLower.includes('sorcery') || iconLower.includes('8200')) return `${base()}/rune/paths/sorcery_icon.svg`
   const filename = icon.split('/').pop() || icon
   return `${base()}/rune/paths/${filename}`
 }

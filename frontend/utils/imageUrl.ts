@@ -60,10 +60,84 @@ export function getChampionPassiveImageUrl(version: string, imageName: string): 
  * Icon format: "perk-images/Styles/7200_Domination.png"
  * Stored as: /images/game/{version}/rune/paths/7200_Domination.png
  */
-export function getRunePathImageUrl(version: string, icon: string): string {
-  // Extract filename from icon path (e.g., "perk-images/Styles/7200_Domination.png" -> "7200_Domination.png")
+type RunePathRef = { icon: string; pathId?: number | null; pathName?: string | null }
+
+function detectRunePathKind(
+  ref: RunePathRef
+): 'domination' | 'inspiration' | 'precision' | 'resolve' | 'sorcery' | null {
+  const iconLower = (ref.icon ?? '').toLowerCase()
+  const nameLower = (ref.pathName ?? '').toLowerCase()
+  const id = Number(ref.pathId ?? 0)
+
+  if (
+    iconLower.includes('domination') ||
+    nameLower.includes('domination') ||
+    id === 8100 ||
+    iconLower.includes('8100')
+  )
+    return 'domination'
+  if (
+    iconLower.includes('inspiration') ||
+    iconLower.includes('whimsy') ||
+    nameLower.includes('inspiration') ||
+    nameLower.includes('whimsy') ||
+    id === 8300 ||
+    iconLower.includes('8300')
+  )
+    return 'inspiration'
+  if (
+    iconLower.includes('precision') ||
+    nameLower.includes('precision') ||
+    id === 8000 ||
+    iconLower.includes('8000')
+  )
+    return 'precision'
+  if (
+    iconLower.includes('resolve') ||
+    nameLower.includes('resolve') ||
+    id === 8400 ||
+    iconLower.includes('8400')
+  )
+    return 'resolve'
+  if (
+    iconLower.includes('sorcery') ||
+    nameLower.includes('sorcery') ||
+    id === 8200 ||
+    iconLower.includes('8200')
+  )
+    return 'sorcery'
+  return null
+}
+
+export function getRunePathImageUrl(
+  version: string,
+  icon: string,
+  pathId?: number | null,
+  pathName?: string | null
+): string {
+  const kind = detectRunePathKind({ icon, pathId, pathName })
+  if (kind === 'domination') return getImageUrl('rune', version, 'domination_icon.svg', 'paths')
+  if (kind === 'inspiration') return getImageUrl('rune', version, 'inspiration_icon.svg', 'paths')
+  if (kind === 'precision') return getImageUrl('rune', version, 'precision_icon.svg', 'paths')
+  if (kind === 'resolve') return getImageUrl('rune', version, 'resolve_icon.svg', 'paths')
+  if (kind === 'sorcery') return getImageUrl('rune', version, 'sorcery_icon.svg', 'paths')
+  // Fallback to local static files for unknown path formats.
   const filename = icon.split('/').pop() || icon
   return getImageUrl('rune', version, filename, 'paths')
+}
+
+export function getRunePathColor(
+  icon: string,
+  pathId?: number | null,
+  pathName?: string | null
+): string {
+  const kind = detectRunePathKind({ icon, pathId, pathName })
+  if (kind === 'domination') return '#dc2626'
+  if (kind === 'inspiration') return '#38bdf8'
+  if (kind === 'precision') return '#eab308'
+  if (kind === 'resolve') return '#16a34a'
+  if (kind === 'sorcery') return '#4f46e5'
+  return '#eab308'
 }
 
 /**

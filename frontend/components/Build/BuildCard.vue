@@ -407,6 +407,7 @@
                   :src="secondaryPathIcon"
                   :alt="secondaryPathName"
                   class="secondary-path-icon"
+                  :style="{ backgroundColor: secondaryPathColor }"
                   :title="sheetTooltip(secondaryPathName, 'Secondary Path')"
                   @mouseenter="
                     onSheetElementEnter($event, 'path', secondaryPathId ?? 0, 'Secondary Path')
@@ -1286,6 +1287,7 @@ import {
   getChampionSpellImageUrl,
   getChampionPassiveImageUrl,
   getSpellImageUrl,
+  getRunePathColor,
   getRunePathImageUrl,
   getRuneImageUrl,
   getItemImageUrl,
@@ -2118,8 +2120,18 @@ const secondaryPath = computed(() =>
 
 const secondaryPathIcon = computed(() => {
   if (!secondaryPath.value) return null
-  return getRunePathImageUrl(versionForImages.value, secondaryPath.value.icon)
+  return getRunePathImageUrl(
+    versionForImages.value,
+    secondaryPath.value.icon,
+    secondaryPath.value.id,
+    secondaryPath.value.name
+  )
 })
+const secondaryPathColor = computed(() =>
+  secondaryPath.value
+    ? getRunePathColor(secondaryPath.value.icon, secondaryPath.value.id, secondaryPath.value.name)
+    : 'transparent'
+)
 
 const secondaryPathName = computed(() => secondaryPath.value?.name ?? '')
 

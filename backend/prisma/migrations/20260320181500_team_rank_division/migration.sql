@@ -1,0 +1,3 @@
+ALTER TABLE teams
+  ADD COLUMN IF NOT EXISTS rank_division text NOT NULL DEFAULT '';
+
