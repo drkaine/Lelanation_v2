@@ -463,15 +463,18 @@ export class StaticAssetsService {
    * This rebuilds the frontend to include new static assets
    */
   async buildFrontend(): Promise<Result<void, AppError>> {
+    const frontendDir = join(process.cwd(), '..', 'frontend')
+    const runBuild = async (): Promise<{ stdout: string; stderr: string }> =>
+      execAsync('npm run build', {
+        cwd: frontendDir,
+        timeout: 300000, // 5 minutes timeout for build
+      })
+
     try {
-      const frontendDir = join(process.cwd(), '..', 'frontend')
       console.log(`[StaticAssets] Building frontend in: ${frontendDir}`)
 
       // Execute npm run build in frontend directory
-      const { stdout, stderr } = await execAsync('npm run build', {
-        cwd: frontendDir,
-        timeout: 300000 // 5 minutes timeout for build
-      })
+      let { stdout, stderr } = await runBuild()
 
       if (stderr && !stderr.includes('built')) {
         // Some warnings might go to stderr, but check for actual errors
@@ -486,7 +489,39 @@ export class StaticAssetsService {
       return Result.ok(undefined)
     } catch (error: any) {
       const errorMessage = error.message || String(error)
+      const stderr = typeof error?.stderr === 'string' ? error.stderr : ''
+      const interrupted =
+        errorMessage.includes('SIGINT') ||
+        errorMessage.includes('SIGTERM') ||
+        stderr.includes('SIGINT') ||
+        stderr.includes('SIGTERM')
+      if (interrupted) {
+        try {
+          console.warn('[StaticAssets] Frontend build interrupted; retrying once...')
+          const retry = await runBuild()
+          if (retry.stderr && !retry.stderr.includes('built')) {
+            console.warn(`[StaticAssets] Frontend build warning (retry): ${retry.stderr}`)
+          }
+          console.log('[StaticAssets] Frontend built successfully (retry)')
+          return Result.ok(undefined)
+        } catch (retryError: any) {
+          const retryMsg = retryError?.message || String(retryError)
+          const retryStderr = typeof retryError?.stderr === 'string' ? retryError.stderr : ''
+          console.error(`[StaticAssets] Failed to build frontend after retry: ${retryMsg}`)
+          if (retryStderr) console.error(`[StaticAssets] Frontend build stderr (retry): ${retryStderr}`)
+          return Result.err(
+            new AppError(
+              `Failed to build frontend after retry: ${retryMsg}`,
+              'EXTERNAL_ERROR',
+              retryError
+            )
+          )
+        }
+      }
       console.error(`[StaticAssets] Failed to build frontend: ${errorMessage}`)
+      if (stderr) {
+        console.error(`[StaticAssets] Frontend build stderr: ${stderr}`)
+      }
       return Result.err(
         new AppError(
           `Failed to build frontend: ${errorMessage}`,

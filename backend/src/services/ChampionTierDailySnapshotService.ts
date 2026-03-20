@@ -8,6 +8,7 @@ import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
+let lastActiveRefreshAtMs = 0
 
 function parseUtcSchedule(): { hour: number; minute: number } {
   const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
@@ -115,7 +116,16 @@ export async function runChampionTierSnapshotForWindow(params: {
     FROM merged m
     INNER JOIN tier_totals tt ON tt.rank_tier = m.rank_tier
     CROSS JOIN window_params wp
-    ON CONFLICT (snapshot_for_date, rank_tier, champion_id) DO NOTHING
+    ON CONFLICT (snapshot_for_date, rank_tier, champion_id) DO UPDATE
+    SET
+      window_start = EXCLUDED.window_start,
+      window_end = EXCLUDED.window_end,
+      games = EXCLUDED.games,
+      wins = EXCLUDED.wins,
+      bans = EXCLUDED.bans,
+      pick_rate_pct = EXCLUDED.pick_rate_pct,
+      win_rate_pct = EXCLUDED.win_rate_pct,
+      created_at = NOW()
   `
 
   const insertedEstimate = typeof result === 'number' ? result : 0
@@ -126,6 +136,29 @@ export async function runChampionTierSnapshotForWindow(params: {
     })
   }
   return { insertedEstimate }
+}
+
+function getUtcDateWindowForDay(snapshotForDate: Date): { windowStart: Date; windowEnd: Date } {
+  const y = snapshotForDate.getUTCFullYear()
+  const mon = snapshotForDate.getUTCMonth()
+  const d = snapshotForDate.getUTCDate()
+  const windowStart = new Date(Date.UTC(y, mon, d, 0, 0, 0, 0))
+  const windowEnd = new Date(Date.UTC(y, mon, d + 1, 0, 0, 0, 0))
+  return { windowStart, windowEnd }
+}
+
+async function getActiveSnapshotDates(): Promise<Date[]> {
+  const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
+  const dates = await prisma.$queryRaw<Array<{ d: Date }>>`
+    SELECT DISTINCT (m.game_date AT TIME ZONE 'UTC')::date AS d
+    FROM matchs m
+    JOIN active_patches ap
+      ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
+    WHERE m.game_date IS NOT NULL
+    ORDER BY d DESC
+    LIMIT ${limit}
+  `
+  return dates.map((r) => new Date(`${r.d.toISOString().slice(0, 10)}T00:00:00.000Z`))
 }
 
 async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<void> {
@@ -164,42 +197,55 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
 }
 
 /**
- * If UTC clock is past the configured schedule and we have not snapshotted the previous UTC day yet, run once.
- * Call from poller each loop (cheap check).
+ * Regularly refresh daily champion-tier snapshots for dates that still belong to active patches.
+ * Old dates become naturally frozen once their patch is closed/removed from active_patches.
  */
 export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<void> {
   if (!isDatabaseConfigured()) return
   if (process.env.CHAMPION_TIER_SNAPSHOT_DISABLED === '1') return
 
-  const { hour, minute } = parseUtcSchedule()
   const now = new Date()
+  const refreshMinutes = Math.max(
+    1,
+    Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_REFRESH_MINUTES ?? '30', 10) || 30,
+  )
+  if (lastActiveRefreshAtMs > 0 && now.getTime() - lastActiveRefreshAtMs < refreshMinutes * 60_000) return
+
+  const { hour, minute } = parseUtcSchedule()
   const utcH = now.getUTCHours()
   const utcM = now.getUTCMinutes()
   const pastSlot = utcH > hour || (utcH === hour && utcM >= minute)
   if (!pastSlot) return
 
-  const { windowStart, windowEnd, snapshotForDate } = getPreviousUtcCalendarDayWindow(now)
-
-  const alreadyRun = await prisma.championTierSnapshotRun.findUnique({
-    where: { snapshotForDate },
-    select: { snapshotForDate: true },
-  })
-  if (alreadyRun) return
-
   try {
-    const { insertedEstimate } = await runChampionTierSnapshotForWindow({
-      windowStart,
-      windowEnd,
-      snapshotForDate,
-      logger,
-    })
+    const snapshotDates = await getActiveSnapshotDates()
+    if (snapshotDates.length === 0) return
+    let totalRowsTouched = 0
+    for (const snapshotForDate of snapshotDates) {
+      const { windowStart, windowEnd } = getUtcDateWindowForDay(snapshotForDate)
+      const { insertedEstimate } = await runChampionTierSnapshotForWindow({
+        windowStart,
+        windowEnd,
+        snapshotForDate,
+        logger,
+      })
+      totalRowsTouched += insertedEstimate
+      await prisma.championTierSnapshotRun.upsert({
+        where: { snapshotForDate },
+        create: { snapshotForDate, rowsInserted: insertedEstimate },
+        update: { rowsInserted: insertedEstimate },
+      })
+    }
+
     await refreshAllMaterializedViews().catch(() => undefined)
     await archiveSnapshotsForCompletedPatches(logger)
-    await prisma.championTierSnapshotRun.upsert({
-      where: { snapshotForDate },
-      create: { snapshotForDate, rowsInserted: insertedEstimate },
-      update: {},
-    })
+    lastActiveRefreshAtMs = Date.now()
+    if (logger) {
+      void logger.step('Champion tier snapshots refreshed for active patch dates', {
+        days: snapshotDates.length,
+        rowsTouched: totalRowsTouched,
+      })
+    }
   } catch (err) {
     if (logger) void logger.alerte('Champion tier daily snapshot failed', { error: String(err) })
   }

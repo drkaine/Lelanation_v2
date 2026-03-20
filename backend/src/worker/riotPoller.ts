@@ -21,7 +21,6 @@ import {
   type RiotTimelineEventEliteMonsterKill,
   type RiotTimelineEventDragonSoulGiven,
   type RiotTimelineEventSkillLevelUp,
-  type RiotTimelineEventItemPurchased,
 } from '../services/RiotHttpClient.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
@@ -32,6 +31,7 @@ import {
   isKeptMatchPlayerDurationBucket,
   timelineTimestampMsToGameMinute,
 } from './matchPlayerBucketPolicy.js'
+import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
 const PLAYERS_PER_LOOP = 20
 const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
@@ -481,42 +481,6 @@ function buildMatchTeamData(
         bans: teamBans,
       }
     })
-}
-
-/** Build normalised match_player_items rows from JSON items array [itemId, ...]. */
-function buildItemRows(
-  matchPlayerId: bigint,
-  items: unknown
-): Array<{ matchPlayerId: bigint; itemId: number; order: number }> {
-  // match-v5: can be either:
-  // - participants[].items = number[] (expected)
-  // - participants[].item0..item6 = number (sometimes)
-  if (Array.isArray(items)) {
-    const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
-    for (let slot = 0; slot < items.length && slot <= 6; slot++) {
-      const itemId = Number(items[slot])
-      if (Number.isFinite(itemId) && itemId > 0) {
-        rows.push({ matchPlayerId, itemId, order: slot })
-      }
-    }
-    return rows
-  }
-
-  if (items == null || typeof items !== 'object') return []
-
-  const obj = items as Record<string, unknown>
-  const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
-  for (let slot = 0; slot <= 6; slot++) {
-    const v =
-      obj[`item${slot}`] ??
-      obj[`item_${slot}`] ??
-      obj[`itemId${slot}`] ??
-      obj[`item_id_${slot}`] ??
-      null
-    const itemId = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
-    if (Number.isFinite(itemId) && itemId > 0) rows.push({ matchPlayerId, itemId, order: slot })
-  }
-  return rows
 }
 
 /** Build normalised match_player_runes rows from perks.styles array. */
@@ -1160,7 +1124,21 @@ export async function upsertMatchAndParticipants(
         sampleItem0: anyObj['item0'] ?? null,
       })
     }
-    const itemRows = buildItemRows(mpId, itemsSource)
+    const itemRows = Array.isArray(itemsSource)
+      ? itemsSource
+          .map((raw, slot) => ({ itemId: Number(raw), order: slot }))
+          .filter((x) => Number.isFinite(x.itemId) && x.itemId > 0 && x.order <= 6)
+          .map((x) => ({ matchPlayerId: mpId, itemId: x.itemId, order: x.order }))
+      : (() => {
+          const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
+          const obj = itemsSource as Record<string, unknown>
+          for (let slot = 0; slot <= 6; slot++) {
+            const raw = obj[`item${slot}`] ?? obj[`item_${slot}`] ?? null
+            const itemId = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+            if (Number.isFinite(itemId) && itemId > 0) rows.push({ matchPlayerId: mpId, itemId, order: slot })
+          }
+          return rows
+        })()
     if (itemRows.length > 0) await prisma.matchPlayerItem.createMany({ data: itemRows })
 
     // match_player_runes
@@ -1249,9 +1227,6 @@ async function extractAndInsertJungleFirstClear(
   void matchDbId; void riotMatchId; void timeline; void logger
 }
 
-/** Ward and trinket item IDs excluded when detecting the starter item purchase. */
-const WARD_ITEM_IDS = new Set([2055, 3340, 3363, 3364])
-
 /**
  * Extract and persist drake kills, dragon soul, skill level-up order, and starter items
  * from a match timeline.
@@ -1261,6 +1236,7 @@ async function extractAndInsertTimelineExtras(
   matchDbId: bigint,
   riotMatchId: string,
   timeline: RiotMatchTimelineDto,
+  participantDtos: RiotParticipantDto[],
   logger?: ReturnType<typeof createRiotPollerLogger>
 ): Promise<void> {
   const frames = timeline.info?.frames
@@ -1447,24 +1423,32 @@ async function extractAndInsertTimelineExtras(
     await prisma.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
   }
 
-  // ── 4. Starter item: first non-ward/trinket ITEM_PURCHASED per participant ──
-  const starterItemByPid = new Map<bigint, number>() // dbParticipantId → first item id
-
-  for (const ev of allEvents) {
-    if (ev.type !== 'ITEM_PURCHASED') continue
-    const e = ev as unknown as RiotTimelineEventItemPurchased
-    const dbId = riotPidToDbId.get(e.participantId)
-    if (!dbId) continue
-    if (starterItemByPid.has(dbId)) continue
-    if (WARD_ITEM_IDS.has(e.itemId)) continue
-    starterItemByPid.set(dbId, e.itemId)
-  }
-
-  for (const [dbMatchPlayerId, itemId] of starterItemByPid) {
-    await prisma.matchPlayerItem.updateMany({
-      where: { matchPlayerId: dbMatchPlayerId, itemId },
-      data: { starter: true },
+  // ── 4. Build items from timeline + final inventory (starter/boots/core/timestamps) ──
+  let itemsRowsUpserted = 0
+  for (let idx = 0; idx < participantDtos.length; idx++) {
+    const p = participantDtos[idx] as unknown as Record<string, unknown>
+    const participantId = idx + 1
+    const dbMatchPlayerId = riotPidToDbId.get(participantId)
+    if (!dbMatchPlayerId) continue
+    const selected = await selectMatchPlayerItems({
+      participant: p,
+      participantId,
+      events: allEvents,
     })
+    await prisma.matchPlayerItem.deleteMany({ where: { matchPlayerId: dbMatchPlayerId } })
+    if (selected.length > 0) {
+      const inserted = await prisma.matchPlayerItem.createMany({
+        data: selected.map((row) => ({
+          matchPlayerId: dbMatchPlayerId,
+          itemId: row.itemId,
+          starter: row.starter,
+          core: row.core,
+          order: row.order,
+          timestampMs: row.timestampMs,
+        })),
+      })
+      itemsRowsUpserted += inserted.count
+    }
   }
 
   if (logger) {
@@ -1473,7 +1457,7 @@ async function extractAndInsertTimelineExtras(
       drakes: drakeInsertRows.length,
       spellOrders: spellOrderRows.length,
       buckets: bucketRows.length,
-      starters: starterItemByPid.size,
+      itemsRowsUpserted,
     })
   }
 }
@@ -1530,6 +1514,7 @@ async function runStep4ForPlayer(
                   matchRow.id,
                   item.matchId,
                   item.timelineDto,
+                  item.matchDto.info?.participants ?? [],
                   logger
                 )
               } catch {

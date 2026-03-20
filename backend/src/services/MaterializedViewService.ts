@@ -5,6 +5,70 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { loadMatchFilters } from './RiotConfigService.js'
 
+const MV_NAMES = [
+  'mv_champion_core_stats',
+  'mv_champion_vs_stats',
+  'mv_team_core_stats',
+  'mv_champion_first_objectif_stats',
+  'mv_champion_objectif_stats',
+  'mv_champion_vision_stats',
+  'mv_champion_combat_stats',
+  'mv_champion_matchup_stats',
+  'mv_champion_challenge_stats',
+  'mv_champion_shard_solo_stats',
+  'mv_champion_runes_solo_stats',
+  'mv_champion_shard_stats',
+  'mv_champion_runes_stats',
+  'mv_champion_item_solo_stats',
+  'mv_champion_item_stats',
+  'mv_champion_spell_solo_stats',
+  'mv_champion_summoner_spells',
+  'mv_champion_bucket',
+] as const
+
+async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {
+  for (const mvName of MV_NAMES) {
+    try {
+      await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      // Historical data may produce duplicate rows for some MV unique keys.
+      // Skip only that MV and continue refreshing the others.
+      if (message.includes('23505') || message.includes('could not create unique index')) {
+        continue
+      }
+      throw err
+    }
+  }
+}
+
+async function getUnpopulatedMaterializedViews(): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw<Array<{ matviewname: string; ispopulated: boolean }>>`
+    SELECT matviewname, ispopulated
+    FROM pg_matviews
+    WHERE schemaname = 'public' AND matviewname LIKE 'mv_%'
+  `
+  return new Set(rows.filter((r) => !r.ispopulated).map((r) => r.matviewname))
+}
+
+async function ensureMaterializedViewsPopulated(): Promise<void> {
+  const unpopulated = await getUnpopulatedMaterializedViews()
+  if (unpopulated.size === 0) return
+  // Core must be populated first because many satellite MVs depend on its key mapping.
+  if (unpopulated.has('mv_champion_core_stats')) {
+    await prisma.$executeRawUnsafe('REFRESH MATERIALIZED VIEW mv_champion_core_stats')
+    unpopulated.delete('mv_champion_core_stats')
+  }
+  for (const mvName of MV_NAMES) {
+    if (!unpopulated.has(mvName)) continue
+    try {
+      await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
+    } catch {
+      // Keep non-fatal behavior; next cycle will retry automatically.
+    }
+  }
+}
+
 /**
  * Extrait le patch (2 premiers segments) d'une game_version ex. "15.1.123.456" -> "15.1"
  */
@@ -110,7 +174,8 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
  */
 export async function refreshAllMaterializedViews(): Promise<void> {
   if (!isDatabaseConfigured()) return
-  await prisma.$executeRawUnsafe('SELECT refresh_all_materialized_views()')
+  await refreshAllMaterializedViewsWithoutConcurrently()
+  await ensureMaterializedViewsPopulated()
 }
 
 /**

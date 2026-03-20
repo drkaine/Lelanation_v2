@@ -13,14 +13,14 @@
         :loading="fetchPriority === 'high' ? 'eager' : 'lazy'"
         :fetchpriority="fetchPriority"
       />
-      <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/5" />
+      <div class="pointer-events-none absolute inset-0 ring-1 ring-inset ring-sky-200/20" />
     </div>
 
     <div class="p-3">
-      <p class="title-2l text-sm font-semibold text-text">
+      <p class="title-2l text-sm font-semibold text-yellow-500">
         {{ video.title }}
       </p>
-      <p class="mt-1 text-xs text-text/60">{{ formatDate(video.publishedAt) }}</p>
+      <p class="mt-1 text-xs text-sky-200">{{ formatDate(video.publishedAt) }}</p>
     </div>
   </a>
 </template>

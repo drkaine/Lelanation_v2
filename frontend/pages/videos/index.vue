@@ -1,5 +1,5 @@
 <template>
-  <div class="videos-page min-h-screen px-[15px] py-4 text-text">
+  <div class="videos-page min-h-screen px-[15px] py-4 text-sky-200">
     <div class="mx-auto max-w-none px-0">
       <div
         v-if="youtube.error"
@@ -8,34 +8,31 @@
         {{ youtube.error }}
       </div>
 
-      <div
-        v-if="youtube.loadingStatus || isLoadingAll"
-        class="py-8 text-center text-text-secondary"
-      >
+      <div v-if="youtube.loadingStatus || isLoadingAll" class="py-8 text-center text-sky-200">
         {{ t('videosPage.loading') }}
       </div>
 
       <div v-else-if="creators.length === 0" class="py-12 text-center">
-        <p class="text-lg text-text">{{ t('videosPage.noCreatorsTitle') }}</p>
-        <p class="mt-2 text-sm text-text/70">{{ t('videosPage.noCreatorsText') }}</p>
+        <p class="text-lg text-sky-200">{{ t('videosPage.noCreatorsTitle') }}</p>
+        <p class="mt-2 text-sm text-sky-200">{{ t('videosPage.noCreatorsText') }}</p>
       </div>
 
-      <div v-else class="space-y-4">
-        <!-- Search (centered) -->
+      <div v-else class="space-y-2.5">
+        <!-- Search and channel -->
         <div class="mx-auto max-w-5xl">
-          <div class="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_260px]">
+          <div class="flex flex-wrap items-center gap-2">
             <input
               v-model="query"
               type="search"
               placeholder="Rechercher une vidéo..."
-              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-text shadow-sm placeholder:text-text/50 focus:border-accent focus:outline-none"
+              class="w-full rounded-lg border border-accent/70 bg-surface/70 px-4 py-2 text-sm text-sky-200 shadow-sm placeholder:text-sky-200/70 focus:border-accent focus:outline-none sm:w-1/2"
             />
 
             <label for="videos-channel-filter" class="sr-only">Chaîne</label>
             <select
               id="videos-channel-filter"
               v-model="selectedChannelId"
-              class="w-full rounded-lg border border-accent/70 bg-black px-4 py-2 text-sm text-text focus:border-accent focus:outline-none"
+              class="w-full rounded-lg border border-accent/70 bg-black px-4 py-2 text-sm text-sky-200 focus:border-accent focus:outline-none sm:w-[260px]"
               aria-label="Filtrer par chaîne"
             >
               <option value="all">Toutes les chaînes</option>
@@ -43,6 +40,9 @@
                 {{ c.channelName || c.channelId }}
               </option>
             </select>
+            <div class="text-sm text-sky-200">
+              {{ filteredVideos.length }} vidéo{{ filteredVideos.length > 1 ? 's' : '' }}
+            </div>
           </div>
         </div>
 
@@ -51,6 +51,17 @@
           <div
             class="no-scrollbar flex w-full max-w-5xl flex-wrap items-center justify-center gap-2 py-1"
           >
+            <button
+              type="button"
+              class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-accent/10 disabled:opacity-40"
+              :disabled="youtube.loadingStatus || isLoadingAll"
+              @click="refresh"
+            >
+              Actualiser
+            </button>
+
+            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
+
             <div class="flex flex-wrap items-center justify-center gap-2">
               <button
                 v-for="opt in typeOptions"
@@ -76,40 +87,31 @@
                 {{ opt.label }}
               </button>
             </div>
+
+            <div class="h-5 w-px shrink-0 bg-accent/30" aria-hidden="true"></div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <label for="videos-per-page" class="sr-only">Résultats par page</label>
+              <select
+                id="videos-per-page"
+                :value="String(perPage)"
+                class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-sky-200 focus:border-accent focus:outline-none"
+                aria-label="Résultats par page"
+                @change="onPerPageChange"
+              >
+                <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
+                  {{ o.label }}
+                </option>
+              </select>
+            </div>
           </div>
         </div>
 
         <!-- Pagination controls -->
         <div
-          class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          class="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-end"
         >
-          <button
-            type="button"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-accent/10 disabled:opacity-40"
-            :disabled="youtube.loadingStatus || isLoadingAll"
-            @click="refresh"
-          >
-            Actualiser
-          </button>
-
-          <div class="text-sm text-text/70">
-            {{ filteredVideos.length }} résultat{{ filteredVideos.length > 1 ? 's' : '' }}
-          </div>
-
           <div class="flex flex-wrap items-center gap-2">
-            <label for="videos-per-page" class="sr-only">Résultats par page</label>
-            <select
-              id="videos-per-page"
-              :value="String(perPage)"
-              class="rounded-lg border border-accent/70 bg-black px-2 py-1.5 text-xs text-text focus:border-accent focus:outline-none"
-              aria-label="Résultats par page"
-              @change="onPerPageChange"
-            >
-              <option v-for="o in perPageOptions" :key="o.value" :value="o.value">
-                {{ o.label }}
-              </option>
-            </select>
-
             <button
               v-if="
                 query ||
@@ -128,7 +130,7 @@
 
         <!-- Results grid -->
         <div class="videos-results">
-          <div v-if="paginatedVideos.length === 0" class="py-10 text-center text-text/70">
+          <div v-if="paginatedVideos.length === 0" class="py-10 text-center text-sky-200">
             Aucun résultat.
           </div>
 
@@ -150,16 +152,16 @@
           <button
             type="button"
             :disabled="page === 1"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-sky-200 disabled:opacity-40"
             @click="page = Math.max(1, page - 1)"
           >
             ←
           </button>
-          <span class="px-2 text-sm text-text/70">Page {{ page }} / {{ totalPages }}</span>
+          <span class="px-2 text-sm text-sky-200">Page {{ page }} / {{ totalPages }}</span>
           <button
             type="button"
             :disabled="page === totalPages"
-            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-text disabled:opacity-40"
+            class="rounded-lg border border-accent/70 bg-surface/70 px-3 py-2 text-sm text-sky-200 disabled:opacity-40"
             @click="page = Math.min(totalPages, page + 1)"
           >
             →
@@ -327,13 +329,15 @@ const perPageOptions = [
   { value: 30, label: '30' },
   { value: 0, label: 'Toutes' },
 ]
-const perPage = ref<number>(20)
+const perPage = ref<number>(youtube.videosPerPage)
 const page = ref<number>(1)
 
 const onPerPageChange = (e: Event) => {
   const target = e.target as HTMLSelectElement | null
   const next = target ? Number(target.value) : 20
-  perPage.value = Number.isFinite(next) ? next : 20
+  const normalized = Number.isFinite(next) ? next : 20
+  perPage.value = normalized
+  youtube.setVideosPerPage(normalized)
 }
 
 watch([query, selectedChannelId, selectedType, selectedFormat, perPage], () => {
@@ -418,6 +422,8 @@ await useAsyncData('youtube-status', async () => {
 // Force reload on client side to ensure static files are loaded
 // (SSR doesn't have access to static files in public/)
 onMounted(async () => {
+  youtube.initializeVideoPreferences()
+  perPage.value = youtube.videosPerPage
   // Always reload on client side to ensure static files are loaded
   // (SSR can't access public/ files)
   isLoadingAll.value = true

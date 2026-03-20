@@ -21,6 +21,7 @@ export const useYouTubeStore = defineStore('youtube', {
     loadingChannelIds: new Set<string>(),
     error: null as string | null,
     lastSyncTriggerResult: null as { syncedChannels: number; totalVideos: number } | null,
+    videosPerPage: 20,
   }),
 
   getters: {
@@ -33,6 +34,25 @@ export const useYouTubeStore = defineStore('youtube', {
   },
 
   actions: {
+    initializeVideoPreferences() {
+      if (!process.client) return
+      const raw = window.localStorage.getItem('youtube.videosPerPage')
+      const value = raw == null ? NaN : Number(raw)
+      if (!Number.isFinite(value)) return
+      if (value !== 0 && value !== 10 && value !== 20 && value !== 30) return
+      this.videosPerPage = value
+    },
+
+    setVideosPerPage(value: number) {
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      if (next !== 0 && next !== 10 && next !== 20 && next !== 30) return
+      this.videosPerPage = next
+      if (process.client) {
+        window.localStorage.setItem('youtube.videosPerPage', String(next))
+      }
+    },
+
     clearChannelCache() {
       this.channelDataById = {}
       this.loadingChannelIds = new Set<string>()

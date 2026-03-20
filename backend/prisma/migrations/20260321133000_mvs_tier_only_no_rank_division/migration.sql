@@ -109,7 +109,13 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_players opp ON opp.match_id = mp.match_id AND opp.team_id != mp.team_id AND opp.role = mp.role
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, opp.champion_id
+GROUP BY
+  mp.champion_id,
+  COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier),
+  m.game_version,
+  mp.role,
+  m.region,
+  opp.champion_id
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_vs_stats (champion_stat_id, opponent_champion_id);
@@ -132,7 +138,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 LEFT JOIN match_player_objectives o ON o.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_first_objectif_stats (champion_core_stat_id);
@@ -176,7 +182,7 @@ FROM match_players mp
 JOIN matchs m ON m.id = mp.match_id
 LEFT JOIN match_player_objectives o ON o.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_objectif_stats (champion_core_stat_id);
@@ -200,7 +206,7 @@ FROM match_players mp
 JOIN matchs m ON m.id = mp.match_id
 LEFT JOIN match_player_visions v ON v.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_vision_stats (champion_core_stat_id);
@@ -244,7 +250,7 @@ FROM match_players mp
 JOIN matchs m ON m.id = mp.match_id
 LEFT JOIN match_player_combats c ON c.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_combat_stats (champion_core_stat_id);
@@ -278,7 +284,7 @@ JOIN matchs m ON m.id = mp.match_id
 LEFT JOIN match_player_matchup u ON u.match_player_id = mp.id
 LEFT JOIN match_player_objectives obj ON obj.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_matchup_stats (champion_core_stat_id);
@@ -317,7 +323,7 @@ LEFT JOIN match_player_challenges ch ON ch.match_player_id = mp.id
 LEFT JOIN match_player_objectives obj_ch ON obj_ch.match_player_id = mp.id
 LEFT JOIN match_player_matchup u_ch ON u_ch.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_challenge_stats (champion_core_stat_id);
@@ -334,7 +340,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_player_shards s ON s.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, s.shard_id, s.slot
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, s.shard_id, s.slot
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_shard_solo_stats (champion_stat_id, shard_id, slot);
@@ -351,7 +357,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_player_runes r ON r.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, r.perk_id, r.style
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, r.perk_id, r.style
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_runes_solo_stats (champion_stat_id, perk_id, style);
@@ -372,7 +378,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 LEFT JOIN shard_lists sl ON sl.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, COALESCE(sl.shard_list, '')
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, COALESCE(sl.shard_list, '')
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_shard_stats (champion_stat_id, shard_list);
@@ -393,7 +399,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 LEFT JOIN rune_lists rl ON rl.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, COALESCE(rl.rune_list, '')
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, COALESCE(rl.rune_list, '')
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_runes_stats (champion_stat_id, rune_list);
@@ -412,7 +418,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_player_items i ON i.match_player_id = mp.id AND i.order < 6
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, i.item_id
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, i.item_id
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_item_solo_stats (champion_stat_id, item_id);
@@ -442,7 +448,7 @@ JOIN teams t ON t.id = mp.team_id
 LEFT JOIN item_lists il ON il.match_player_id = mp.id
 LEFT JOIN item_ts its ON its.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, COALESCE(il.item_list, '[]')
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, COALESCE(il.item_list, '[]')
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_item_stats (champion_stat_id, item_list);
@@ -460,7 +466,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN (SELECT match_player_id, spell_slot, MIN("order") AS "order" FROM match_player_spell_orders GROUP BY match_player_id, spell_slot) so ON so.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, so.spell_slot
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, so.spell_slot
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_spell_solo_stats (champion_stat_id, spell_slot);
@@ -478,7 +484,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_player_summoner_spells ss ON ss.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, ss.spell_id
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, ss.spell_id
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_summoner_spells (champion_stat_id, spell_id);
@@ -514,7 +520,7 @@ JOIN matchs m ON m.id = mp.match_id
 JOIN teams t ON t.id = mp.team_id
 JOIN match_player_bucket b ON b.match_player_id = mp.id
 WHERE (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2)) IN (SELECT game_version FROM active_patches)
-GROUP BY mp.champion_id, mp.rank_tier, m.game_version, mp.role, m.region, m.rank_tier, b.duration_bucket
+GROUP BY mp.champion_id, COALESCE(NULLIF(trim(mp.rank_tier), ''), m.rank_tier), m.game_version, mp.role, m.region, b.duration_bucket
 WITH NO DATA;
 
 CREATE UNIQUE INDEX ON mv_champion_bucket (champion_stat_id, duration_bucket);
@@ -582,7 +588,7 @@ BEGIN
     BEGIN
       EXECUTE format('REFRESH MATERIALIZED VIEW CONCURRENTLY %I', mv_name);
     EXCEPTION
-      WHEN object_not_in_prerequisite_state THEN
+      WHEN OTHERS THEN
         EXECUTE format('REFRESH MATERIALIZED VIEW %I', mv_name);
     END;
   END LOOP;
