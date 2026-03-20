@@ -43,26 +43,31 @@
     <div v-if="build.runes" class="mb-3">
       <p class="mb-2 text-xs font-semibold text-text/70">Runes</p>
       <div class="flex items-center gap-2">
-        <img
+        <div
           v-if="primaryRunePath"
-          :src="
-            getRunePathImageUrl(
-              version,
-              primaryRunePath.icon,
-              primaryRunePath.id,
-              primaryRunePath.name
-            )
-          "
-          :alt="primaryRunePath.name"
-          class="h-6 w-6 rounded-full p-0.5"
-          :style="{
-            backgroundColor: getRunePathColor(
-              primaryRunePath.icon,
-              primaryRunePath.id,
-              primaryRunePath.name
-            ),
-          }"
-        />
+          class="h-6 w-6 rounded-full"
+          role="img"
+          :aria-label="primaryRunePath.name"
+        >
+          <span
+            class="block h-full w-full"
+            :style="{
+              backgroundColor: getRunePathColor(
+                primaryRunePath.icon,
+                primaryRunePath.id,
+                primaryRunePath.name
+              ),
+              WebkitMaskImage: `url(${getRunePathImageUrl(version, primaryRunePath.icon, primaryRunePath.id, primaryRunePath.name)})`,
+              maskImage: `url(${getRunePathImageUrl(version, primaryRunePath.icon, primaryRunePath.id, primaryRunePath.name)})`,
+              WebkitMaskSize: 'contain',
+              maskSize: 'contain',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+              WebkitMaskPosition: 'center',
+              maskPosition: 'center',
+            }"
+          />
+        </div>
         <span class="text-xs text-text">{{ primaryRunePath?.name || 'No runes' }}</span>
       </div>
     </div>

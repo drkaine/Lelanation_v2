@@ -5,10 +5,12 @@
  * Logs to logs/riot-poller.log; exposes status for admin API.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
+import { statfs } from 'node:fs/promises'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { loadMatchFilters, loadCurrentGameVersion, loadRateLimitConfig } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
+import { DiscordService } from '../services/DiscordService.js'
 import {
   RiotHttpClient,
   resolveRiotApiKey,
@@ -42,6 +44,10 @@ let lastMvRefreshAt = 0
 
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
+const DISK_ALERT_THRESHOLDS = [85, 90, 95] as const
+const DISK_STOP_THRESHOLD = 98
+const diskAlertedThresholds = new Set<number>()
+let diskStopAlertSent = false
 
 /**
  * Run async tasks with a bounded concurrency (like p-limit but inline).
@@ -206,6 +212,19 @@ function averageRankFromScores(scores: number[]): { tier: string; division: stri
   if (scores.length === 0) return { tier: 'UNRANKED', division: '' }
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length
   return scoreToRank(avg)
+}
+
+async function getDiskUsagePercent(path: string): Promise<number | null> {
+  try {
+    const s = await statfs(path)
+    const total = Number(s.blocks) * Number(s.bsize)
+    const available = Number(s.bavail) * Number(s.bsize)
+    if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(available) || available < 0) return null
+    const used = Math.max(0, total - available)
+    return (used / total) * 100
+  } catch {
+    return null
+  }
 }
 
 
@@ -1680,6 +1699,7 @@ async function runStep4Counters() {
 
 async function runLoop(init: RiotPollerInit): Promise<void> {
   const { client, logger, filters, clefType } = init
+  const discord = new DiscordService()
   setState({
     isRunning: true,
     shouldStop: false,
@@ -1703,6 +1723,37 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let loopIteration = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
+
+      const diskUsage = await getDiskUsagePercent(process.cwd())
+      if (diskUsage != null) {
+        const roundedUsage = Math.round(diskUsage * 10) / 10
+        for (const threshold of DISK_ALERT_THRESHOLDS) {
+          if (diskUsage >= threshold && !diskAlertedThresholds.has(threshold)) {
+            diskAlertedThresholds.add(threshold)
+            await logger.alerte(
+              `Disk usage alert: ${roundedUsage}% used (threshold ${threshold}%)`
+            )
+            await discord.sendAlert(
+              'Riot Poller disk usage alert',
+              `Disk usage reached ${roundedUsage}% (threshold ${threshold}%).`
+            )
+          }
+        }
+        if (diskUsage >= DISK_STOP_THRESHOLD) {
+          if (!diskStopAlertSent) {
+            diskStopAlertSent = true
+            await logger.alerte(
+              `Disk usage critical: ${roundedUsage}% used. Stopping poller to protect server.`
+            )
+            await discord.sendAlert(
+              'Riot Poller stopped: critical disk usage',
+              `Disk usage reached ${roundedUsage}% (>= ${DISK_STOP_THRESHOLD}%). Poller stopped automatically to prevent server crash.`
+            )
+          }
+          requestStopRiotPoller()
+          continue
+        }
+      }
 
       // EUW1 collection
       client.setPlatform('euw1')
@@ -1802,6 +1853,8 @@ export function startRiotPoller(): void {
     console.warn('[RiotPoller] DATABASE_URL not set, poller not started')
     return
   }
+  diskAlertedThresholds.clear()
+  diskStopAlertSent = false
   setState({ shouldStop: false })
   loopPromise = (async () => {
     const init = await initRiotPoller()

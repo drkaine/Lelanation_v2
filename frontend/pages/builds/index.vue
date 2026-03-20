@@ -115,7 +115,7 @@
           </div>
           <button
             v-if="adminMode"
-            class="ml-auto flex min-h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 py-2 text-sm text-text transition-colors hover:bg-primary/20"
+            class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
             :disabled="shareLoading"
             @click="shareBuilds"
           >

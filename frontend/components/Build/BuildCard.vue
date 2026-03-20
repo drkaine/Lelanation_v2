@@ -402,18 +402,26 @@
                 }"
               >
                 <!-- Icône du path secondaire -->
-                <img
+                <div
                   v-if="secondaryPathIcon"
-                  :src="secondaryPathIcon"
-                  :alt="secondaryPathName"
                   class="secondary-path-icon"
-                  :style="{ backgroundColor: secondaryPathColor }"
+                  role="img"
+                  :aria-label="secondaryPathName"
                   :title="sheetTooltip(secondaryPathName, 'Secondary Path')"
                   @mouseenter="
                     onSheetElementEnter($event, 'path', secondaryPathId ?? 0, 'Secondary Path')
                   "
                   @mouseleave="onSheetElementLeave"
-                />
+                >
+                  <span
+                    class="secondary-path-icon-mask"
+                    :style="{
+                      backgroundColor: secondaryPathColor,
+                      WebkitMaskImage: `url(${secondaryPathIcon})`,
+                      maskImage: `url(${secondaryPathIcon})`,
+                    }"
+                  />
+                </div>
                 <div v-else class="secondary-path-placeholder"></div>
                 <!-- Runes secondaires -->
                 <img
@@ -3509,10 +3517,23 @@ defineExpose({
   max-height: 35px;
   border-radius: 50%;
   border: none;
-  object-fit: cover;
   transform: translateY(1px);
   flex: 0 0 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.secondary-runes-row > .secondary-path-icon > .secondary-path-icon-mask {
+  width: 100%;
+  height: 100%;
   display: block;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
 }
 
 .secondary-runes-row > .secondary-path-placeholder {
