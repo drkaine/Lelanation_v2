@@ -13,6 +13,11 @@
     "language": "Language",
     "disableTooltips": "Disable tooltips"
   },
+  "commandBar": {
+    "builderLabel": "Builder",
+    "previousStep": "previous step",
+    "nextStep": "next step"
+  },
   "home": {
     "subtitle": "The go-to platform to create, optimize and share your League of Legends builds. The platform to help you think, create, analyze, organize, learn, or simply explore an idea.",
     "features": "Features",

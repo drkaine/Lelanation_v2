@@ -30,6 +30,12 @@
             {{ commandsCollapsed ? '▾' : '▴' }}
           </button>
           <div v-show="!commandsCollapsed" class="command-bar-content">
+            <p class="command-help" aria-live="polite">
+              {{ t('commandBar.builderLabel') }}: <span class="command-shortcut">Ctrl + ←</span>
+              {{ t('commandBar.previousStep') }}, <span class="command-shortcut">Ctrl + →</span>
+              {{ t('commandBar.nextStep') }}
+              <span class="command-help-separator">|</span>
+            </p>
             <label class="command-toggle">
               <input
                 type="checkbox"
@@ -102,6 +108,8 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
+const localePath = useLocalePath()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
 const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
@@ -157,7 +165,36 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (event.altKey && key === 't') {
     event.preventDefault()
     toggleTooltipsDisabled()
+    return
   }
+
+  if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+  const target = event.target as HTMLElement | null
+  const tagName = target?.tagName?.toUpperCase()
+  const isEditableTarget =
+    !!target &&
+    (target.isContentEditable ||
+      tagName === 'INPUT' ||
+      tagName === 'TEXTAREA' ||
+      tagName === 'SELECT')
+  if (isEditableTarget) return
+
+  const match = String(route.path).match(/\/builds\/create\/(champion|rune|item|info)(?:\/|$)/)
+  if (!match) return
+
+  const stepOrder = ['champion', 'rune', 'item', 'info'] as const
+  const currentStep = match[1] as (typeof stepOrder)[number]
+  const currentStepIndex = stepOrder.indexOf(currentStep)
+  const nextIndex = event.key === 'ArrowLeft' ? currentStepIndex - 1 : currentStepIndex + 1
+  if (nextIndex < 0 || nextIndex >= stepOrder.length) return
+
+  event.preventDefault()
+  const nextStep = stepOrder[nextIndex]
+  const editId = route.query.editId
+  const query = typeof editId === 'string' && editId.length > 0 ? { editId } : undefined
+  router.push(localePath({ path: `/builds/create/${nextStep}`, query }))
 }
 
 const onDocumentPointerDown = (event: MouseEvent) => {
@@ -353,6 +390,20 @@ if (import.meta.client) {
   flex: 1;
 }
 
+.command-help {
+  margin: 0;
+  font-size: 10px;
+  color: rgb(var(--rgb-text) / 0.75);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.command-help-separator {
+  opacity: 0.55;
+}
+
 .command-collapse-button {
   width: 24px;
   height: 24px;
@@ -475,8 +526,9 @@ if (import.meta.client) {
 
 .command-shortcut {
   font-size: 10px;
-  color: rgb(var(--rgb-accent) / 0.5);
+  color: var(--color-blue-50);
   border: 1px solid rgb(var(--rgb-accent) / 0.3);
+  background: rgb(var(--rgb-primary-light) / 0.12);
   border-radius: 3px;
   padding: 1px 4px;
   font-family: monospace;
