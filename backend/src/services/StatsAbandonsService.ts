@@ -92,13 +92,14 @@ export async function getOverviewAbandons(
       },
       select: {
         matchId: true,
-        _count: { select: { items: true } },
+        items: true,
       },
     })
 
     const remakeMatchIds = new Set<bigint>()
     for (const mp of remakeCandidates) {
-      if (mp._count.items === 0) {
+      const itemCount = Array.isArray(mp.items) ? mp.items.length : 0
+      if (itemCount === 0) {
         remakeMatchIds.add(mp.matchId)
       }
     }

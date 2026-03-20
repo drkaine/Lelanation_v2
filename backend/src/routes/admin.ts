@@ -488,29 +488,32 @@ async function getMissingMatchesCount(): Promise<number> {
       SELECT DISTINCT m.riot_match_id
       FROM matchs m
       JOIN match_players mp ON mp.match_id = m.id
+      JOIN players p ON p.id = mp.player_id
       LEFT JOIN teams t ON t.id = mp.team_id
       WHERE mp.rank_division IS NULL
          OR m.game_date IS NULL
+         OR p.puuid IS NULL
+         OR btrim(p.puuid) = ''
+         OR p.puuid ~ '^[0-9]+$'
+         OR length(btrim(p.puuid)) < 30
          OR (
            mp.rank_division = ''
            AND COALESCE(mp.rank_tier, 'UNRANKED') NOT IN (${apexRankTiers}, 'UNRANKED')
          )
          OR mp.rank_lp IS NULL
-         OR NOT EXISTS (SELECT 1 FROM match_player_items i WHERE i.match_player_id = mp.id)
-         OR EXISTS (
-           SELECT 1
-           FROM match_player_items i
-           WHERE i.match_player_id = mp.id
-             AND i.timestamp_ms <= 0
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM match_player_items i
-           WHERE i.match_player_id = mp.id
-           GROUP BY i.match_player_id
-           HAVING MIN(i."order") <> 0 OR MAX(i."order") <> COUNT(*) - 1
-         )
-         OR NOT EXISTS (SELECT 1 FROM match_player_runes r WHERE r.match_player_id = mp.id)
+        OR jsonb_array_length(COALESCE(mp.items::jsonb, '[]'::jsonb)) = 0
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) AS elem
+          WHERE COALESCE((elem ->> 'timestampMs')::int, 0) <= 0
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) WITH ORDINALITY AS elem(value, ord)
+          WHERE COALESCE((value ->> 'order')::int, -1) <> (ord - 1)
+        )
+        OR cardinality(mp.runes) = 0
+        OR cardinality(mp.shards) = 0
          OR (
            m.game_duration >= 300
            AND NOT EXISTS (SELECT 1 FROM match_player_bucket b WHERE b.match_player_id = mp.id)

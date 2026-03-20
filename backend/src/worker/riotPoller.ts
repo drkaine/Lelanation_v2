@@ -34,7 +34,7 @@ import {
 import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
 const PLAYERS_PER_LOOP = 20
-const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
+const MATCH_FETCH_CONCURRENCY = 1 // strict sequential fetches per player
 /** Bounded queue size for Phase 4: API producer pushes, DB consumers pop. */
 const INGEST_QUEUE_SIZE = 50
 /** Number of concurrent DB writers in Phase 4 (consumers). */
@@ -42,6 +42,8 @@ const INGEST_CONSUMER_COUNT = 2
 const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
 const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
 const TIMELINE_RETRY_MAX_ATTEMPTS = 8
+const MATCH_FETCH_RETRY_DELAY_MS = 2_000
+const MATCH_FETCH_MAX_ATTEMPTS = 40
 const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
 let lastMvRefreshAt = 0
 
@@ -201,6 +203,14 @@ function roleFromPosition(individualPosition?: string, teamPosition?: string): s
   return p || null
 }
 
+function isLikelyRiotPuuid(value: string | null | undefined): boolean {
+  const v = (value ?? '').trim()
+  if (!v) return false
+  // Guard against synthetic placeholders like "12345".
+  if (/^\d+$/.test(v)) return false
+  return v.length >= 30
+}
+
 function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolean {
   const gameVersion = (gameVersionRaw ?? '').trim()
   if (!gameVersion) return false
@@ -290,8 +300,8 @@ function participantNames(part: RiotParticipantDto): { gn: string; tl: string } 
  * resolves up to 10 players and also backfills role, challenges, and runes.
  *
  * No fallback API calls (getAccountByRiotId etc.). Players with no match history
- * or whose PUUID conflicts with an existing row get puuid = String(player.id)
- * as a placeholder (will be overwritten on their next real match in Phase 4).
+ * or unresolved conflicts are marked as "perdu" for the current key version,
+ * without overwriting puuid with synthetic placeholders.
  *
  * Accepts an optional shouldStop function (defaults to the module-level state flag).
  * This allows the puuid migration script to call this function with its own stop control.
@@ -388,10 +398,10 @@ export async function runPhase2(
             totalSynced++
           } catch (e) {
             if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-              // PUUID already taken by another player row — use id as placeholder
+              // PUUID already taken by another player row — mark unresolved for this key.
               await prisma.player.update({
                 where: { id: playerId },
-                data: { puuid: String(playerId), puuidKeyVersion: clefType },
+                data: { puuidKeyVersion: 'perdu' },
               })
               pendingIds.delete(playerId)
               totalPlaceholder++
@@ -410,7 +420,7 @@ export async function runPhase2(
       if (player.puuidKeyVersion !== clefType) {
         await prisma.player.update({
           where: { id: playerId },
-          data: { puuid: String(playerId), puuidKeyVersion: clefType },
+          data: { puuidKeyVersion: 'perdu' },
         })
         totalPlaceholder++
       }
@@ -510,12 +520,10 @@ function buildMatchTeamData(
     })
 }
 
-/** Build normalised match_player_runes rows from perks.styles array. */
-function buildRuneRows(
-  matchPlayerId: bigint,
-  runes: unknown
-): Array<{ matchPlayerId: bigint; perkId: number; style: number }> {
-  const rows: Array<{ matchPlayerId: bigint; perkId: number; style: number }> = []
+/** Build rune ID list preserving Riot JSON order (styles then perks). */
+function buildRunePayload(runes: unknown): { runes: number[] } {
+  const perkIds: number[] = []
+  const styleIds: number[] = []
   const styles = (() => {
     if (!runes || typeof runes !== 'object') return []
     const r = runes as Record<string, unknown>
@@ -529,11 +537,12 @@ function buildRuneRows(
     const styleIdRaw = s['id'] ?? s['styleId'] ?? s['style_id'] ?? s['style']
     const styleId = Number(styleIdRaw)
     if (!Number.isFinite(styleId)) continue
+    styleIds.push(styleId)
     const selections =
       Array.isArray(s['selections']) ? s['selections'] : Array.isArray(s['selection']) ? s['selection'] : []
     for (const sel of selections) {
       if (typeof sel === 'number' && Number.isFinite(sel)) {
-        rows.push({ matchPlayerId, perkId: sel, style: styleId })
+        perkIds.push(sel)
         continue
       }
       const selObj = sel as Record<string, unknown>
@@ -541,10 +550,10 @@ function buildRuneRows(
       const perkIdRaw = selObj['perk'] ?? selObj['perkId'] ?? selObj['perk_id'] ?? selObj['id']
       const perkId = Number(perkIdRaw)
       if (!Number.isFinite(perkId)) continue
-      rows.push({ matchPlayerId, perkId, style: styleId })
+      perkIds.push(perkId)
     }
   }
-  return rows
+  return { runes: [...styleIds, ...perkIds] }
 }
 
 /** Build normalised match_player_summoner_spells rows (slot 0 and 1). */
@@ -559,20 +568,17 @@ function buildSummonerSpellRows(
   return rows
 }
 
-/** Build normalised match_player_shards rows from stat_perks { defense, flex, offense }. Slots: 0=offense, 1=flex, 2=defense. */
-function buildShardRows(
-  matchPlayerId: bigint,
-  statPerks: unknown
-): Array<{ matchPlayerId: bigint; shardId: number; slot: number }> {
+/** Build shard list from stat_perks in Riot order: offense, flex, defense. */
+function buildShardList(statPerks: unknown): number[] {
   if (!statPerks || typeof statPerks !== 'object') return []
   const sp = statPerks as Record<string, unknown>
-  const rows: Array<{ matchPlayerId: bigint; shardId: number; slot: number }> = []
+  const shards: number[] = []
   const keys = ['offense', 'flex', 'defense'] as const
   for (let slot = 0; slot < keys.length; slot++) {
     const id = Number(sp[keys[slot]])
-    if (Number.isFinite(id) && id > 0) rows.push({ matchPlayerId, shardId: id, slot })
+    if (Number.isFinite(id) && id > 0) shards.push(id)
   }
-  return rows
+  return shards
 }
 
 function durationBucketFromRaw(raw: unknown): number | null {
@@ -892,7 +898,7 @@ export async function upsertMatchAndParticipants(
         playerUpdates['puuidKeyVersion'] = puuidKeyVersion
         existingPlayer.puuidKeyVersion = puuidKeyVersion
       }
-      if (!existingPlayer.gameName && partGameName) {
+      if (partGameName && existingPlayer.gameName !== partGameName) {
         playerUpdates['gameName'] = partGameName
         playerUpdates['tagName'] = partTagName || null
         existingPlayer.gameName = partGameName
@@ -909,8 +915,6 @@ export async function upsertMatchAndParticipants(
     const riotTeamId = p.teamId ?? 100
     const teamDbId = teamIdByRiotTeam.get(riotTeamId) ?? teamIdByRiotTeam.values().next().value!
 
-    // Items can be provided as an array `items` or as item0..item6 scalars.
-    const itemsSource = (p as Record<string, unknown>).items ?? p
     const runes = (p as { perks?: unknown }).perks ?? (p as { runes?: unknown }).runes ?? null
     const summoner1Id = (p as { summoner1Id?: number }).summoner1Id ?? null
     const summoner2Id = (p as { summoner2Id?: number }).summoner2Id ?? null
@@ -919,6 +923,8 @@ export async function upsertMatchAndParticipants(
       if (perks && typeof perks === 'object' && 'statPerks' in perks) return perks['statPerks'] ?? null
       return (p as { statPerks?: unknown }).statPerks ?? null
     })()
+    const runePayload = buildRunePayload(runes)
+    const shardList = buildShardList(statPerks)
     const challenges = (p as { challenges?: unknown }).challenges ?? null
     const ch = (challenges && typeof challenges === 'object' && !Array.isArray(challenges))
       ? challenges as Record<string, unknown>
@@ -952,6 +958,8 @@ export async function upsertMatchAndParticipants(
         rankDivision: finalRankDivision,
         rankLp: finalRankLp,
         participantId: pIdx + 1,
+        runes: runePayload.runes,
+        shards: shardList,
       },
     })
     counters.participantsFetched++
@@ -1137,7 +1145,8 @@ export async function upsertMatchAndParticipants(
       })
     }
 
-    // match_player_items
+    // Items are persisted from timeline reconstruction in extractAndInsertTimelineExtras().
+    // Avoid writing placeholder starter/core=false rows here.
     if (debugItemIngest && !itemDebugLogged && logger) {
       itemDebugLogged = true
       const anyObj = p as Record<string, unknown>
@@ -1151,37 +1160,11 @@ export async function upsertMatchAndParticipants(
         sampleItem0: anyObj['item0'] ?? null,
       })
     }
-    const itemRows = Array.isArray(itemsSource)
-      ? itemsSource
-          .map((raw, slot) => ({ itemId: Number(raw), order: slot }))
-          .filter((x) => Number.isFinite(x.itemId) && x.itemId > 0 && x.order <= 6)
-          .map((x) => ({ matchPlayerId: mpId, itemId: x.itemId, order: x.order }))
-      : (() => {
-          const rows: Array<{ matchPlayerId: bigint; itemId: number; order: number }> = []
-          const obj = itemsSource as Record<string, unknown>
-          for (let slot = 0; slot <= 6; slot++) {
-            const raw = obj[`item${slot}`] ?? obj[`item_${slot}`] ?? null
-            const itemId = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
-            if (Number.isFinite(itemId) && itemId > 0) rows.push({ matchPlayerId: mpId, itemId, order: slot })
-          }
-          return rows
-        })()
-    if (itemRows.length > 0) await prisma.matchPlayerItem.createMany({ data: itemRows })
-
-    // match_player_runes
-    const runeRows = buildRuneRows(mpId, runes)
-    if (runeRows.length > 0) await prisma.matchPlayerRune.createMany({ data: runeRows })
 
     // match_player_summoner_spells
     const ssRows = buildSummonerSpellRows(mpId, summoner1Id, summoner2Id)
     if (ssRows.length > 0) {
       await prisma.matchPlayerSummonerSpell.createMany({ data: ssRows, skipDuplicates: true })
-    }
-
-    // match_player_shards (stat perks: offense=0, flex=1, defense=2)
-    const shardRows = buildShardRows(mpId, statPerks)
-    if (shardRows.length > 0) {
-      await prisma.matchPlayerShard.createMany({ data: shardRows, skipDuplicates: true })
     }
 
     // match_player_bucket (duration buckets of gold/damage/time stats)
@@ -1255,8 +1238,8 @@ async function extractAndInsertJungleFirstClear(
 }
 
 /**
- * Extract and persist drake kills, dragon soul, skill level-up order, and starter items
- * from a match timeline.
+ * Extract and persist drake kills, dragon soul, skill level-up order, and
+ * match_players.items payload (starter/core/timestamps) from a match timeline.
  * Idempotent via skipDuplicates / updateMany.
  */
 async function extractAndInsertTimelineExtras(
@@ -1462,20 +1445,19 @@ async function extractAndInsertTimelineExtras(
       participantId,
       events: allEvents,
     })
-    await prisma.matchPlayerItem.deleteMany({ where: { matchPlayerId: dbMatchPlayerId } })
-    if (selected.length > 0) {
-      const inserted = await prisma.matchPlayerItem.createMany({
-        data: selected.map((row) => ({
-          matchPlayerId: dbMatchPlayerId,
+    await prisma.matchPlayer.update({
+      where: { id: dbMatchPlayerId },
+      data: {
+        items: selected.map((row) => ({
           itemId: row.itemId,
           starter: row.starter,
           core: row.core,
           order: row.order,
           timestampMs: row.timestampMs,
         })),
-      })
-      itemsRowsUpserted += inserted.count
-    }
+      },
+    })
+    itemsRowsUpserted += selected.length
   }
 
   if (logger) {
@@ -1504,6 +1486,55 @@ async function runStep4ForPlayer(
     participantsFetched: number
   }
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+  const fetchMatchAndTimelineStrict = async (
+    matchId: string
+  ): Promise<{ ok: true; matchDto: RiotMatchDto; timelineDto: RiotMatchTimelineDto } | { ok: false; reason: 'skip' | '400_decrypt' }> => {
+    let attempts = 0
+    while (!state.shouldStop && attempts < MATCH_FETCH_MAX_ATTEMPTS) {
+      attempts++
+
+      const matchRes = await client.getMatch(matchId)
+      counters.requestCount++
+      if (!matchRes.ok && matchRes.status === 429) counters.error429Count++
+      if (!matchRes.ok) {
+        if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
+          counters.error400Count++
+          await logger.error('400 decrypt on match', matchRes.body)
+          return { ok: false, reason: '400_decrypt' }
+        }
+        await logger.info('Retry match detail fetch', { matchId, attempt: attempts, status: matchRes.status })
+        await sleep(MATCH_FETCH_RETRY_DELAY_MS)
+        continue
+      }
+      if (!isAllowedGameVersion(matchRes.data?.info?.gameVersion)) {
+        return { ok: false, reason: 'skip' }
+      }
+
+      const timelineRes = await client.getMatchTimeline(matchId)
+      counters.requestCount++
+      if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
+      if (!timelineRes.ok) {
+        const retry = scheduleTimelineRetry(matchId)
+        await logger.info('Retry timeline fetch', {
+          matchId,
+          attempt: attempts,
+          status: timelineRes.status,
+          retryAttempts: retry.attempts,
+        })
+        await sleep(MATCH_FETCH_RETRY_DELAY_MS)
+        continue
+      }
+      clearTimelineRetry(matchId)
+      return { ok: true, matchDto: matchRes.data, timelineDto: timelineRes.data }
+    }
+
+    scheduleTimelineRetry(matchId)
+    await logger.info('Skip match ingest after retry exhaustion', { matchId, maxAttempts: MATCH_FETCH_MAX_ATTEMPTS })
+    return { ok: false, reason: 'skip' }
+  }
+
   const players = await prisma.player.findMany({
     where: {
       region,
@@ -1577,6 +1608,17 @@ async function runStep4ForPlayer(
     }
 
     const playersFetchedBefore = counters.playersFetched
+    if (!isLikelyRiotPuuid(player.puuid)) {
+      await logger.info('Skip player with invalid puuid format', {
+        playerId: player.id.toString(),
+        puuid: player.puuid,
+      })
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { puuidKeyVersion: 'perdu' },
+      }).catch(() => undefined)
+      continue
+    }
 
     const matchIdsRes = await client.getMatchIdsByPuuid(player.puuid, {
       queue: filters.queue,
@@ -1605,66 +1647,33 @@ async function runStep4ForPlayer(
     const nowMs = Date.now()
     const toFetch = matchIds.filter((id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs))
 
-    let found400Decrypt = false
     const fetchTasks = toFetch.map((matchId) => async () => {
-      if (state.shouldStop || found400Decrypt) return
-      const matchRes = await client.getMatch(matchId)
-      counters.requestCount++
-      if (!matchRes.ok && matchRes.status === 429) counters.error429Count++
-      if (!matchRes.ok) {
-        if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
-          counters.error400Count++
-          await logger.error('400 decrypt on match', matchRes.body)
-          found400Decrypt = true
-          return
-        }
+      if (state.shouldStop) return
+      const strict = await fetchMatchAndTimelineStrict(matchId)
+      if (!strict.ok) {
+        if (strict.reason === '400_decrypt') throw new Error('400_decrypt')
         return
       }
-      if (!isAllowedGameVersion(matchRes.data?.info?.gameVersion)) {
-        return
-      }
-      let timelineDto: RiotMatchTimelineDto | undefined
-      try {
-        const timelineRes = await client.getMatchTimeline(matchId)
-        counters.requestCount++
-        if (!timelineRes.ok) {
-          if (timelineRes.status === 429) counters.error429Count++
-          const retry = scheduleTimelineRetry(matchId)
-          if (logger) {
-            await logger.info('Skip match ingest: timeline unavailable', {
-              matchId,
-              status: timelineRes.status,
-              retryAttempts: retry.attempts,
-              retryInSec: Math.max(1, Math.round((retry.nextRetryAtMs - Date.now()) / 1000)),
-            })
-          }
-          return
-        }
-        timelineDto = timelineRes.data
-        clearTimelineRetry(matchId)
-      } catch {
-        const retry = scheduleTimelineRetry(matchId)
-        if (logger) {
-          await logger.info('Skip match ingest: timeline fetch error', {
-            matchId,
-            retryAttempts: retry.attempts,
-            retryInSec: Math.max(1, Math.round((retry.nextRetryAtMs - Date.now()) / 1000)),
-          })
-        }
-        return
-      }
-      if (!timelineDto) return
       await queue.push({
         matchId,
         region,
-        matchDto: matchRes.data,
-        timelineDto,
+        matchDto: strict.matchDto,
+        timelineDto: strict.timelineDto,
         puuidKeyVersion,
         playerId: player.id,
       })
     })
 
-    await runWithConcurrency(fetchTasks, MATCH_FETCH_CONCURRENCY)
+    try {
+      await runWithConcurrency(fetchTasks, MATCH_FETCH_CONCURRENCY)
+    } catch (err) {
+      if (String(err).includes('400_decrypt')) {
+        queue.pushPoison(INGEST_CONSUMER_COUNT)
+        await Promise.all(consumerPromises)
+        return '400_decrypt'
+      }
+      throw err
+    }
     const newPlayersFromPlayer = counters.playersFetched - playersFetchedBefore
     await logger.step('Player matches fetched', {
       playerId: player.id.toString(),
@@ -1672,11 +1681,6 @@ async function runStep4ForPlayer(
       matchesCount: matchIds.length,
       newPlayersCount: newPlayersFromPlayer,
     })
-    if (found400Decrypt) {
-      queue.pushPoison(INGEST_CONSUMER_COUNT)
-      await Promise.all(consumerPromises)
-      return '400_decrypt'
-    }
   }
 
   queue.pushPoison(INGEST_CONSUMER_COUNT)

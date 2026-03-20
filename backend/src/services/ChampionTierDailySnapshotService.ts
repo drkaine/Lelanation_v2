@@ -1,6 +1,6 @@
 /**
  * Daily UTC snapshots of champion stats per rank tier and role.
- * One row per (snapshot_for_date, rank_tier, role, champion): games, wins, WR, bans, pick rate.
+ * One row per (date_of_game, rank_tier, role, champion): games, wins, WR, bans, pick rate.
  * Window: previous UTC calendar day [D 00:00, D+1 00:00), keyed by game_date on matchs.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
@@ -20,15 +20,15 @@ function parseUtcSchedule(): { hour: number; minute: number } {
 export function getPreviousUtcCalendarDayWindow(now: Date = new Date()): {
   windowStart: Date
   windowEnd: Date
-  snapshotForDate: Date
+  dateOfGame: Date
 } {
   const y = now.getUTCFullYear()
   const mon = now.getUTCMonth()
   const d = now.getUTCDate()
   const windowEnd = new Date(Date.UTC(y, mon, d, 0, 0, 0, 0))
   const windowStart = new Date(Date.UTC(y, mon, d - 1, 0, 0, 0, 0))
-  const snapshotForDate = new Date(Date.UTC(y, mon, d - 1, 0, 0, 0, 0))
-  return { windowStart, windowEnd, snapshotForDate }
+  const dateOfGame = new Date(Date.UTC(y, mon, d - 1, 0, 0, 0, 0))
+  return { windowStart, windowEnd, dateOfGame }
 }
 
 /**
@@ -37,17 +37,17 @@ export function getPreviousUtcCalendarDayWindow(now: Date = new Date()): {
 export async function runChampionTierSnapshotForWindow(params: {
   windowStart: Date
   windowEnd: Date
-  snapshotForDate: Date
+  dateOfGame: Date
   logger?: Logger
 }): Promise<{ insertedEstimate: number }> {
   if (!isDatabaseConfigured()) return { insertedEstimate: 0 }
 
-  const { windowStart, windowEnd, snapshotForDate, logger } = params
+  const { windowStart, windowEnd, dateOfGame, logger } = params
   const result = await prisma.$executeRaw`
     WITH window_params AS (
       SELECT ${windowStart}::timestamptz AS w_start,
              ${windowEnd}::timestamptz AS w_end,
-             ${snapshotForDate}::date AS snap_date
+             ${dateOfGame}::date AS game_date
     ),
     picks AS (
       SELECT
@@ -94,13 +94,11 @@ export async function runChampionTierSnapshotForWindow(params: {
       GROUP BY rank_tier, role
     )
     INSERT INTO champion_tier_daily_snapshots (
-      snapshot_for_date, window_start, window_end, rank_tier, role, champion_id,
-      games, wins, bans, pick_rate_pct, win_rate_pct, created_at
+      date_of_game, rank_tier, role, champion_id,
+      games, wins, bans, pick_rate_pct, win_rate_pct
     )
     SELECT
-      wp.snap_date,
-      wp.w_start,
-      wp.w_end,
+      wp.game_date,
       m.rank_tier,
       m.role,
       m.champion_id,
@@ -114,37 +112,33 @@ export async function runChampionTierSnapshotForWindow(params: {
       CASE WHEN m.games > 0
         THEN ROUND((100.0 * m.wins::float8 / m.games::float8)::numeric, 4)::float8
         ELSE 0::float8
-      END,
-      NOW()
+      END
     FROM merged m
     INNER JOIN tier_totals tt ON tt.rank_tier = m.rank_tier AND tt.role = m.role
     CROSS JOIN window_params wp
-    ON CONFLICT (snapshot_for_date, rank_tier, role, champion_id) DO UPDATE
+    ON CONFLICT (date_of_game, rank_tier, role, champion_id) DO UPDATE
     SET
-      window_start = EXCLUDED.window_start,
-      window_end = EXCLUDED.window_end,
       games = EXCLUDED.games,
       wins = EXCLUDED.wins,
       bans = EXCLUDED.bans,
       pick_rate_pct = EXCLUDED.pick_rate_pct,
-      win_rate_pct = EXCLUDED.win_rate_pct,
-      created_at = NOW()
+      win_rate_pct = EXCLUDED.win_rate_pct
   `
 
   const insertedEstimate = typeof result === 'number' ? result : 0
   if (logger && insertedEstimate > 0) {
     void logger.step('Champion tier daily snapshot', {
-      snapshotForDate: snapshotForDate.toISOString().slice(0, 10),
+      dateOfGame: dateOfGame.toISOString().slice(0, 10),
       rowsTouched: insertedEstimate,
     })
   }
   return { insertedEstimate }
 }
 
-function getUtcDateWindowForDay(snapshotForDate: Date): { windowStart: Date; windowEnd: Date } {
-  const y = snapshotForDate.getUTCFullYear()
-  const mon = snapshotForDate.getUTCMonth()
-  const d = snapshotForDate.getUTCDate()
+function getUtcDateWindowForDay(dateOfGame: Date): { windowStart: Date; windowEnd: Date } {
+  const y = dateOfGame.getUTCFullYear()
+  const mon = dateOfGame.getUTCMonth()
+  const d = dateOfGame.getUTCDate()
   const windowStart = new Date(Date.UTC(y, mon, d, 0, 0, 0, 0))
   const windowEnd = new Date(Date.UTC(y, mon, d + 1, 0, 0, 0, 0))
   return { windowStart, windowEnd }
@@ -175,18 +169,15 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
     ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'ALL'
   `)
   await prisma.$executeRawUnsafe(`
-    DROP INDEX IF EXISTS champion_tier_daily_snapshots_archive_snapshot_for_date_rank_tier_champion_id_key
-  `)
-  await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS champion_tier_daily_snapshots_archive_snapshot_for_date_rank_tier_role_champion_id_key
-    ON champion_tier_daily_snapshots_archive (snapshot_for_date, rank_tier, role, champion_id)
+    CREATE UNIQUE INDEX IF NOT EXISTS champion_tier_daily_snapshots_archive_date_of_game_rank_tier_role_champion_id_key
+    ON champion_tier_daily_snapshots_archive (date_of_game, rank_tier, role, champion_id)
   `)
   const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
-    SELECT DISTINCT c.snapshot_for_date::date AS d
+    SELECT DISTINCT c.date_of_game::date AS d
     FROM champion_tier_daily_snapshots c
     JOIN matchs m
-      ON m.game_date >= c.snapshot_for_date
-     AND m.game_date < (c.snapshot_for_date + INTERVAL '1 day')
+      ON m.game_date >= c.date_of_game
+     AND m.game_date < (c.date_of_game + INTERVAL '1 day')
     JOIN active_patches ap
       ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
     WHERE ap.game_number_max > 0
@@ -199,12 +190,12 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
       INSERT INTO champion_tier_daily_snapshots_archive
       SELECT *
       FROM champion_tier_daily_snapshots
-      WHERE snapshot_for_date = ${date}::date
+      WHERE date_of_game = ${date}::date
       ON CONFLICT DO NOTHING
     `
     await prisma.$executeRaw`
       DELETE FROM champion_tier_daily_snapshots
-      WHERE snapshot_for_date = ${date}::date
+      WHERE date_of_game = ${date}::date
     `
   }
   if (logger) void logger.step('Champion tier snapshot archive completed', { daysArchived: rows.length })
@@ -235,18 +226,18 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
     const snapshotDates = await getActiveSnapshotDates()
     if (snapshotDates.length === 0) return
     let totalRowsTouched = 0
-    for (const snapshotForDate of snapshotDates) {
-      const { windowStart, windowEnd } = getUtcDateWindowForDay(snapshotForDate)
+    for (const dateOfGame of snapshotDates) {
+      const { windowStart, windowEnd } = getUtcDateWindowForDay(dateOfGame)
       const { insertedEstimate } = await runChampionTierSnapshotForWindow({
         windowStart,
         windowEnd,
-        snapshotForDate,
+        dateOfGame,
         logger,
       })
       totalRowsTouched += insertedEstimate
       await prisma.championTierSnapshotRun.upsert({
-        where: { snapshotForDate },
-        create: { snapshotForDate, rowsInserted: insertedEstimate },
+        where: { dateOfGame },
+        create: { dateOfGame, rowsInserted: insertedEstimate },
         update: { rowsInserted: insertedEstimate },
       })
     }
@@ -266,7 +257,7 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
 }
 
 export interface ChampionTierSnapshotRow {
-  snapshotForDate: string
+  dateOfGame: string
   rankTier: string
   role: string
   championId: number
@@ -289,7 +280,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
   if (!isDatabaseConfigured()) return []
   const { championId, rankTier, role, fromDate, toDate, limit = 365 } = options
   const rows = await prisma.$queryRaw<Array<{
-    snapshot_for_date: Date
+    date_of_game: Date
     rank_tier: string
     role: string
     champion_id: number
@@ -300,7 +291,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
     win_rate_pct: number
   }>>`
     SELECT
-      snapshot_for_date,
+      date_of_game,
       rank_tier,
       role,
       champion_id,
@@ -313,16 +304,16 @@ export async function getChampionTierSnapshotsForCharts(options: {
     WHERE champion_id = ${championId}
       AND (${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text IS NULL OR rank_tier = ${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text)
       AND (${role ? role.toUpperCase() : null}::text IS NULL OR role = ${role ? role.toUpperCase() : null}::text)
-      AND (${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz IS NULL OR snapshot_for_date >= ${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz)
-      AND (${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz IS NULL OR snapshot_for_date <= ${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz)
-    ORDER BY snapshot_for_date DESC
+      AND (${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz IS NULL OR date_of_game >= ${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz)
+      AND (${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz IS NULL OR date_of_game <= ${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz)
+    ORDER BY date_of_game DESC
     LIMIT ${limit}
   `
 
   const chronological = [...rows].reverse()
 
   return chronological.map((r) => ({
-    snapshotForDate: r.snapshot_for_date.toISOString().slice(0, 10),
+    dateOfGame: r.date_of_game.toISOString().slice(0, 10),
     rankTier: r.rank_tier,
     role: r.role,
     championId: r.champion_id,

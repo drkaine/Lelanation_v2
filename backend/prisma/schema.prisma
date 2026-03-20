@@ -135,6 +135,9 @@ model MatchPlayer {
   rankDivision  String? @map("rank_division")
   rankLp        Int?    @map("rank_lp")
   participantId Int     @map("participant_id")
+  items         Json    @default("[]")
+  runes         Int[]   @default([])
+  shards        Int[]   @default([])
 
   match          Match                    @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player         Player                   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -145,10 +148,7 @@ model MatchPlayer {
   objectives     MatchPlayerObjectives?
   combats        MatchPlayerCombats?
   challenges     MatchPlayerChallenges?
-  items          MatchPlayerItem[]
-  runes          MatchPlayerRune[]
   summonerSpells MatchPlayerSummonerSpell[]
-  shards         MatchPlayerShard[]
   spellOrders    MatchPlayerSpellOrder[]
   buckets        MatchPlayerBucket[]
 
@@ -340,35 +340,6 @@ model MatchPlayerChallenges {
   @@map("match_player_challenges")
 }
 
-model MatchPlayerItem {
-  id            BigInt  @id @default(autoincrement())
-  matchPlayerId BigInt  @map("match_player_id")
-  itemId        Int     @map("item_id")
-  starter       Boolean @default(false)
-  core          Boolean @default(false)
-  order         Int     @map("order")
-  timestampMs   Int     @default(0) @map("timestamp_ms")
-
-  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
-
-  @@unique([matchPlayerId, itemId, order])
-  @@index([matchPlayerId])
-  @@index([itemId])
-  @@map("match_player_items")
-}
-
-model MatchPlayerRune {
-  id            BigInt @id @default(autoincrement())
-  matchPlayerId BigInt @map("match_player_id")
-  perkId        Int    @map("perk_id")
-  style         Int
-
-  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
-
-  @@index([matchPlayerId])
-  @@map("match_player_runes")
-}
-
 model MatchPlayerSummonerSpell {
   id            BigInt @id @default(autoincrement())
   matchPlayerId BigInt @map("match_player_id")
@@ -380,19 +351,6 @@ model MatchPlayerSummonerSpell {
   @@unique([matchPlayerId, spellSlot])
   @@index([matchPlayerId])
   @@map("match_player_summoner_spells")
-}
-
-model MatchPlayerShard {
-  id            BigInt @id @default(autoincrement())
-  matchPlayerId BigInt @map("match_player_id")
-  shardId       Int    @map("shard_id")
-  slot          Int    // 0 | 1 | 2
-
-  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
-
-  @@unique([matchPlayerId, slot])
-  @@index([matchPlayerId])
-  @@map("match_player_shards")
 }
 
 model MatchPlayerSpellOrder {
@@ -443,9 +401,7 @@ model MatchPlayerBucket {
 /// One row per (UTC day summarized, rank tier without division, champion). Filled daily by poller job.
 model ChampionTierDailySnapshot {
   id              BigInt   @id @default(autoincrement())
-  snapshotForDate DateTime @db.Date @map("snapshot_for_date")
-  windowStart     DateTime @map("window_start")
-  windowEnd       DateTime @map("window_end")
+  dateOfGame      DateTime @db.Date @map("date_of_game")
   rankTier        String   @map("rank_tier")
   role            String   @map("role")
   championId      Int      @map("champion_id")
@@ -454,16 +410,15 @@ model ChampionTierDailySnapshot {
   bans            Int      @default(0)
   pickRatePct     Float    @map("pick_rate_pct")
   winRatePct      Float    @map("win_rate_pct")
-  createdAt       DateTime @default(now()) @map("created_at")
 
-  @@unique([snapshotForDate, rankTier, role, championId])
-  @@index([championId, snapshotForDate(sort: Desc)])
-  @@index([rankTier, role, snapshotForDate(sort: Desc)])
+  @@unique([dateOfGame, rankTier, role, championId])
+  @@index([championId, dateOfGame(sort: Desc)])
+  @@index([rankTier, role, dateOfGame(sort: Desc)])
   @@map("champion_tier_daily_snapshots")
 }
 
 model ChampionTierSnapshotRun {
-  snapshotForDate DateTime @id @db.Date @map("snapshot_for_date")
+  dateOfGame   DateTime @id @db.Date @map("date_of_game")
   rowsInserted    Int      @default(0) @map("rows_inserted")
   createdAt       DateTime @default(now()) @map("created_at")
 

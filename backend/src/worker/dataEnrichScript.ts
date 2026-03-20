@@ -2,8 +2,8 @@
  * Script 3: Data Enrich (one-shot)
  *
  * Fills missing derived/raw participant data for already-ingested matches:
- * - match_player_items
- * - match_player_runes
+ * - match_players.items (JSON payload: itemId/starter/core/order/timestampMs)
+ * - match_players.runes / match_players.shards
  * - match_player_bucket (timeline ; uniquement si game_duration >= 5 min — pas de boucle infinie sur FF/remakes courts)
  * - match_players.rank_division / rank_lp (from league-v4 by PUUID)
  *
@@ -33,6 +33,8 @@ import { selectMatchPlayerItems } from './itemBuildSelection.js'
 const BATCH_MATCHES = 30
 const APEX_RANK_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
 const MAX_STAGNANT_PRIMARY_LOOPS = 12
+const DATA_ENRICH_API_RETRY_DELAY_MS = 2_000
+const DATA_ENRICH_API_MAX_ATTEMPTS = 40
 
 export interface DataEnrichStatus {
   phase: 'init' | 'running' | 'done' | 'error'
@@ -83,38 +85,74 @@ function toIntOr0(raw: unknown): number {
   return 0
 }
 
-function buildRuneRows(matchPlayerId: bigint, participant: Record<string, unknown>): Array<{
-  matchPlayerId: bigint
-  perkId: number
-  style: number
-}> {
+function isLikelyRiotPuuid(value: string | null | undefined): boolean {
+  const v = (value ?? '').trim()
+  if (!v) return false
+  if (/^\d+$/.test(v)) return false
+  return v.length >= 30
+}
+
+function participantNames(participant: Record<string, unknown>): { gameName: string | null; tagName: string | null } {
+  const gameNameRaw =
+    participant['riotIdGameName'] ??
+    participant['riotIdName'] ??
+    null
+  const tagNameRaw =
+    participant['riotIdTagline'] ??
+    participant['riotIdTagLine'] ??
+    null
+  const gameName = typeof gameNameRaw === 'string' && gameNameRaw.trim() ? gameNameRaw.trim().toLowerCase() : null
+  const tagName = typeof tagNameRaw === 'string' && tagNameRaw.trim() ? tagNameRaw.trim().toLowerCase() : null
+  return { gameName, tagName }
+}
+
+function buildRunePayload(participant: Record<string, unknown>): {
+  runes: number[]
+  shards: number[]
+} {
   const runes = participant.perks ?? participant.runes
-  if (!runes || typeof runes !== 'object') return []
-  const styles = Array.isArray((runes as Record<string, unknown>).styles)
-    ? ((runes as Record<string, unknown>).styles as unknown[])
-    : Array.isArray(runes)
-      ? (runes as unknown[])
-      : []
-  const out: Array<{ matchPlayerId: bigint; perkId: number; style: number }> = []
+  const styleIds: number[] = []
+  const perkIds: number[] = []
+  const styles = (() => {
+    if (!runes || typeof runes !== 'object') return []
+    const runesObj = runes as Record<string, unknown>
+    if (Array.isArray(runesObj.styles)) return runesObj.styles as unknown[]
+    if (Array.isArray(runes)) return runes as unknown[]
+    return []
+  })()
   for (const style of styles) {
     if (!style || typeof style !== 'object') continue
     const s = style as Record<string, unknown>
     const styleId = Number(s.id ?? s.styleId ?? s.style_id ?? s.style)
     if (!Number.isFinite(styleId)) continue
+    styleIds.push(styleId)
     const selections = Array.isArray(s.selections) ? s.selections : Array.isArray(s.selection) ? s.selection : []
     for (const sel of selections) {
       if (typeof sel === 'number' && Number.isFinite(sel)) {
-        out.push({ matchPlayerId, perkId: sel, style: styleId })
+        perkIds.push(sel)
         continue
       }
       if (!sel || typeof sel !== 'object') continue
       const so = sel as Record<string, unknown>
       const perkId = Number(so.perk ?? so.perkId ?? so.perk_id ?? so.id)
       if (!Number.isFinite(perkId)) continue
-      out.push({ matchPlayerId, perkId, style: styleId })
+      perkIds.push(perkId)
     }
   }
-  return out
+  const statPerks = (() => {
+    const perksObj = participant.perks as Record<string, unknown> | undefined
+    if (perksObj && typeof perksObj === 'object' && perksObj['statPerks']) return perksObj['statPerks']
+    return participant.statPerks
+  })()
+  const shards: number[] = []
+  if (statPerks && typeof statPerks === 'object') {
+    const sp = statPerks as Record<string, unknown>
+    for (const key of ['offense', 'flex', 'defense'] as const) {
+      const id = Number(sp[key])
+      if (Number.isFinite(id) && id > 0) shards.push(id)
+    }
+  }
+  return { runes: [...styleIds, ...perkIds], shards }
 }
 
 function normalizeTier(raw: unknown): string | null {
@@ -173,28 +211,31 @@ async function getMissingMatchIds(limit: number): Promise<string[]> {
     SELECT DISTINCT m.riot_match_id
     FROM matchs m
     JOIN match_players mp ON mp.match_id = m.id
+    JOIN players p ON p.id = mp.player_id
     WHERE mp.rank_division IS NULL
        OR m.game_date IS NULL
+       OR p.puuid IS NULL
+       OR btrim(p.puuid) = ''
+       OR p.puuid ~ '^[0-9]+$'
+       OR length(btrim(p.puuid)) < 30
        OR (
          mp.rank_division = ''
          AND COALESCE(mp.rank_tier, 'UNRANKED') NOT IN (${apex}, 'UNRANKED')
        )
        OR mp.rank_lp IS NULL
-       OR NOT EXISTS (SELECT 1 FROM match_player_items i WHERE i.match_player_id = mp.id)
-       OR EXISTS (
-         SELECT 1
-         FROM match_player_items i
-         WHERE i.match_player_id = mp.id
-           AND i.timestamp_ms <= 0
-       )
-       OR EXISTS (
-         SELECT 1
-         FROM match_player_items i
-         WHERE i.match_player_id = mp.id
-         GROUP BY i.match_player_id
-         HAVING MIN(i."order") <> 0 OR MAX(i."order") <> COUNT(*) - 1
-       )
-       OR NOT EXISTS (SELECT 1 FROM match_player_runes r WHERE r.match_player_id = mp.id)
+      OR jsonb_array_length(COALESCE(mp.items::jsonb, '[]'::jsonb)) = 0
+      OR EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) AS elem
+        WHERE COALESCE((elem ->> 'timestampMs')::int, 0) <= 0
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) WITH ORDINALITY AS elem(value, ord)
+        WHERE COALESCE((value ->> 'order')::int, -1) <> (ord - 1)
+      )
+      OR cardinality(mp.runes) = 0
+      OR cardinality(mp.shards) = 0
        OR (
          m.game_duration >= ${minDur}
          AND NOT EXISTS (SELECT 1 FROM match_player_bucket b WHERE b.match_player_id = mp.id)
@@ -214,29 +255,32 @@ async function countMissingMatches(): Promise<number> {
       SELECT DISTINCT m.riot_match_id
       FROM matchs m
       JOIN match_players mp ON mp.match_id = m.id
+      JOIN players p ON p.id = mp.player_id
       LEFT JOIN teams t ON t.id = mp.team_id
       WHERE mp.rank_division IS NULL
          OR m.game_date IS NULL
+         OR p.puuid IS NULL
+         OR btrim(p.puuid) = ''
+         OR p.puuid ~ '^[0-9]+$'
+         OR length(btrim(p.puuid)) < 30
          OR (
            mp.rank_division = ''
            AND COALESCE(mp.rank_tier, 'UNRANKED') NOT IN (${apex}, 'UNRANKED')
          )
          OR mp.rank_lp IS NULL
-         OR NOT EXISTS (SELECT 1 FROM match_player_items i WHERE i.match_player_id = mp.id)
-         OR EXISTS (
-           SELECT 1
-           FROM match_player_items i
-           WHERE i.match_player_id = mp.id
-             AND i.timestamp_ms <= 0
-         )
-         OR EXISTS (
-           SELECT 1
-           FROM match_player_items i
-           WHERE i.match_player_id = mp.id
-           GROUP BY i.match_player_id
-           HAVING MIN(i."order") <> 0 OR MAX(i."order") <> COUNT(*) - 1
-         )
-         OR NOT EXISTS (SELECT 1 FROM match_player_runes r WHERE r.match_player_id = mp.id)
+        OR jsonb_array_length(COALESCE(mp.items::jsonb, '[]'::jsonb)) = 0
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) AS elem
+          WHERE COALESCE((elem ->> 'timestampMs')::int, 0) <= 0
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) WITH ORDINALITY AS elem(value, ord)
+          WHERE COALESCE((value ->> 'order')::int, -1) <> (ord - 1)
+        )
+        OR cardinality(mp.runes) = 0
+        OR cardinality(mp.shards) = 0
          OR (
            m.game_duration >= ${minDur}
            AND NOT EXISTS (SELECT 1 FROM match_player_bucket b WHERE b.match_player_id = mp.id)
@@ -315,7 +359,8 @@ async function getMatchesNeedingTeamRankBackfill(limit: number): Promise<string[
 async function enrichOneMatch(
   client: RiotHttpClient,
   leagueCache: Map<string, { tier: string | null; division: string | null; lp: number | null }>,
-  riotMatchId: string
+  riotMatchId: string,
+  shouldStop: () => boolean
 ): Promise<{
   changed: boolean
   items: number
@@ -323,6 +368,47 @@ async function enrichOneMatch(
   buckets: number
   ranks: number
 }> {
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+  const getMatchStrict = async (): Promise<RiotMatchDto> => {
+    let attempts = 0
+    while (!shouldStop() && attempts < DATA_ENRICH_API_MAX_ATTEMPTS) {
+      attempts++
+      const detailRes = await client.getMatch(riotMatchId)
+      _status.requestCount++
+      if (detailRes.ok) return detailRes.data as RiotMatchDto
+      if (detailRes.status === 429) _status.error429Count++
+      await sleep(DATA_ENRICH_API_RETRY_DELAY_MS)
+    }
+    throw new Error(`[data-enrich] getMatch retry exhausted for ${riotMatchId}`)
+  }
+
+  const getTimelineStrict = async (): Promise<RiotMatchTimelineDto> => {
+    let attempts = 0
+    while (!shouldStop() && attempts < DATA_ENRICH_API_MAX_ATTEMPTS) {
+      attempts++
+      const tlRes = await client.getMatchTimeline(riotMatchId)
+      _status.requestCount++
+      if (tlRes.ok) return tlRes.data
+      if (tlRes.status === 429) _status.error429Count++
+      await sleep(DATA_ENRICH_API_RETRY_DELAY_MS)
+    }
+    throw new Error(`[data-enrich] getMatchTimeline retry exhausted for ${riotMatchId}`)
+  }
+
+  const getLeagueEntriesByPuuidStrict = async (puuid: string): Promise<RiotLeagueEntryDto[]> => {
+    let attempts = 0
+    while (!shouldStop() && attempts < DATA_ENRICH_API_MAX_ATTEMPTS) {
+      attempts++
+      const lr = await client.getLeagueEntriesByPuuid(puuid)
+      _status.requestCount++
+      if (lr.ok) return lr.data as RiotLeagueEntryDto[]
+      if (lr.status === 429) _status.error429Count++
+      await sleep(DATA_ENRICH_API_RETRY_DELAY_MS)
+    }
+    throw new Error(`[data-enrich] getLeagueEntriesByPuuid retry exhausted for puuid=${puuid}`)
+  }
+
   const match = await prisma.match.findUnique({
     where: { riotMatchId },
     select: { id: true, gameDuration: true },
@@ -339,32 +425,23 @@ async function enrichOneMatch(
       rankTier: true,
       rankDivision: true,
       rankLp: true,
-      player: { select: { puuid: true } },
+      items: true,
+      runes: true,
+      shards: true,
+      player: { select: { id: true, puuid: true, gameName: true, tagName: true } },
     },
     orderBy: { participantId: 'asc' },
   })
   if (mps.length === 0) return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
 
   const mpIds = mps.map((x) => x.id)
-  const [itemExisting, runeExisting, bucketExisting] = await Promise.all([
-    prisma.matchPlayerItem.findMany({
-      where: { matchPlayerId: { in: mpIds } },
-      select: { matchPlayerId: true, timestampMs: true, core: true, order: true },
-    }),
-    prisma.matchPlayerRune.findMany({ where: { matchPlayerId: { in: mpIds } }, select: { matchPlayerId: true } }),
+  const [bucketExisting] = await Promise.all([
     prisma.matchPlayerBucket.findMany({ where: { matchPlayerId: { in: mpIds } }, select: { matchPlayerId: true } }),
   ])
-  const hasRunes = new Set(runeExisting.map((x) => x.matchPlayerId.toString()))
   const hasBuckets = new Set(bucketExisting.map((x) => x.matchPlayerId.toString()))
   let gameDateUpdated = false
 
-  const detailRes = await client.getMatch(riotMatchId)
-  _status.requestCount++
-  if (!detailRes.ok) {
-    if (detailRes.status === 429) _status.error429Count++
-    return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
-  }
-  const dto = detailRes.data as RiotMatchDto
+  const dto = await getMatchStrict()
   const infoAny = (dto.info ?? {}) as Record<string, unknown>
   const gameStartRaw =
     (typeof infoAny['gameStartTimestamp'] === 'number' ? (infoAny['gameStartTimestamp'] as number) : null) ??
@@ -379,12 +456,23 @@ async function enrichOneMatch(
   const participants = (dto.info?.participants ?? []) as RiotParticipantDto[]
   if (participants.length === 0) return { changed: false, items: 0, runes: 0, buckets: 0, ranks: 0 }
 
-  const itemRowsByMp = new Map<string, Array<{ timestampMs: number; core: boolean; order: number }>>()
-  for (const row of itemExisting) {
-    const key = row.matchPlayerId.toString()
-    const list = itemRowsByMp.get(key) ?? []
-    list.push({ timestampMs: row.timestampMs, core: row.core, order: row.order })
-    itemRowsByMp.set(key, list)
+  const normalizeItems = (raw: unknown): Array<{ timestampMs: number; core: boolean; order: number }> => {
+    if (!Array.isArray(raw)) return []
+    const out: Array<{ timestampMs: number; core: boolean; order: number }> = []
+    for (const it of raw) {
+      if (!it || typeof it !== 'object') continue
+      const io = it as Record<string, unknown>
+      const timestampMs = Number(io['timestampMs'] ?? io['timestamp_ms'] ?? 0)
+      const order = Number(io['order'] ?? -1)
+      const core = io['core'] === true
+      if (!Number.isFinite(order)) continue
+      out.push({
+        timestampMs: Number.isFinite(timestampMs) ? Math.trunc(timestampMs) : 0,
+        core,
+        order: Math.trunc(order),
+      })
+    }
+    return out
   }
   const hasOrderGap = (orders: number[]): boolean => {
     const sorted = [...orders].sort((a, b) => a - b)
@@ -394,7 +482,7 @@ async function enrichOneMatch(
     return false
   }
   const needsItemTimeline = mps.some((x) => {
-    const rows = itemRowsByMp.get(x.id.toString()) ?? []
+    const rows = normalizeItems(x.items)
     if (rows.length === 0) return true
     if (rows.some((r) => r.timestampMs <= 0)) return true
     if (hasOrderGap(rows.map((r) => r.order))) return true
@@ -407,10 +495,7 @@ async function enrichOneMatch(
   const needsBucketTimeline =
     bucketsExpectedForMatch && mps.some((x) => !hasBuckets.has(x.id.toString()))
   if (needsBucketTimeline || needsItemTimeline) {
-    const tlRes = await client.getMatchTimeline(riotMatchId)
-    _status.requestCount++
-    if (tlRes.ok) timeline = tlRes.data
-    else if (tlRes.status === 429) _status.error429Count++
+    timeline = await getTimelineStrict()
   }
 
   let itemsInserted = 0
@@ -423,33 +508,67 @@ async function enrichOneMatch(
     const p = participants[mp.participantId - 1] as unknown as Record<string, unknown> | undefined
     if (!p) continue
     const mpId = mp.id
-    const key = mpId.toString()
 
-    if (!hasRunes.has(key)) {
-      const rows = buildRuneRows(mpId, p)
-      if (rows.length > 0) {
-        const r = await prisma.matchPlayerRune.createMany({ data: rows, skipDuplicates: true })
-        runesInserted += r.count
-      }
+    const needsRunePayload = mp.runes.length === 0 || mp.shards.length === 0
+    if (needsRunePayload) {
+      const payload = buildRunePayload(p)
+      await prisma.matchPlayer.update({
+        where: { id: mpId },
+        data: {
+          runes: payload.runes,
+          shards: payload.shards,
+        },
+      })
+      runesInserted++
     }
 
-    if ((mp.rankDivision == null || mp.rankDivision === '' || mp.rankLp == null) && mp.player?.puuid) {
-      const puuid = mp.player.puuid
+    let effectivePuuid = mp.player?.puuid ?? null
+    const participantPuuidRaw = p['puuid']
+    const participantPuuid = typeof participantPuuidRaw === 'string' ? participantPuuidRaw.trim() : ''
+    if (participantPuuid && (!isLikelyRiotPuuid(effectivePuuid) || effectivePuuid !== participantPuuid)) {
+      const { gameName, tagName } = participantNames(p)
+      const existingByPuuid = await prisma.player.findUnique({
+        where: { puuid: participantPuuid },
+        select: { id: true, gameName: true, tagName: true },
+      })
+      if (existingByPuuid && existingByPuuid.id !== mp.player.id) {
+        await prisma.matchPlayer.update({
+          where: { id: mpId },
+          data: { playerId: existingByPuuid.id },
+        })
+        if ((gameName && existingByPuuid.gameName !== gameName) || (tagName && existingByPuuid.tagName !== tagName)) {
+          await prisma.player.update({
+            where: { id: existingByPuuid.id },
+            data: {
+              ...(gameName ? { gameName } : {}),
+              ...(tagName ? { tagName } : {}),
+            },
+          })
+        }
+      } else {
+        await prisma.player.update({
+          where: { id: mp.player.id },
+          data: {
+            puuid: participantPuuid,
+            ...(gameName ? { gameName } : {}),
+            ...(tagName ? { tagName } : {}),
+          },
+        })
+      }
+      effectivePuuid = participantPuuid
+      ranksUpdated++
+    }
+
+    if ((mp.rankDivision == null || mp.rankDivision === '' || mp.rankLp == null) && effectivePuuid) {
+      const puuid = effectivePuuid
       let cached = leagueCache.get(puuid)
       if (!cached) {
-        const lr = await client.getLeagueEntriesByPuuid(puuid)
-        _status.requestCount++
-        if (!lr.ok) {
-          if (lr.status === 429) _status.error429Count++
-          cached = { tier: null, division: null, lp: null }
-        } else {
-          const entries = lr.data as RiotLeagueEntryDto[]
-          const solo = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? entries[0]
-          cached = {
-            tier: normalizeTier(solo?.tier),
-            division: normalizeDivision(solo?.rank),
-            lp: typeof solo?.leaguePoints === 'number' ? Math.trunc(solo.leaguePoints) : null,
-          }
+        const entries = await getLeagueEntriesByPuuidStrict(puuid)
+        const solo = entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ?? entries[0]
+        cached = {
+          tier: normalizeTier(solo?.tier),
+          division: normalizeDivision(solo?.rank),
+          lp: typeof solo?.leaguePoints === 'number' ? Math.trunc(solo.leaguePoints) : null,
         }
         leagueCache.set(puuid, cached)
       }
@@ -478,20 +597,19 @@ async function enrichOneMatch(
         participantId: mp.participantId,
         events,
       })
-      await prisma.matchPlayerItem.deleteMany({ where: { matchPlayerId: mp.id } })
-      if (selected.length > 0) {
-        const r = await prisma.matchPlayerItem.createMany({
-          data: selected.map((row) => ({
-            matchPlayerId: mp.id,
+      await prisma.matchPlayer.update({
+        where: { id: mp.id },
+        data: {
+          items: selected.map((row) => ({
             itemId: row.itemId,
             starter: row.starter,
             core: row.core,
             order: row.order,
             timestampMs: row.timestampMs,
           })),
-        })
-        itemsInserted += r.count
-      }
+        },
+      })
+      itemsInserted += selected.length
     }
   }
 
@@ -649,7 +767,7 @@ export async function runDataEnrichScript(
         if (isShouldStop()) break
         _status.matchesScanned++
         client.setPlatform(riotMatchId.startsWith('EUN1_') ? 'eun1' : 'euw1')
-        const res = await enrichOneMatch(client, leagueCache, riotMatchId)
+        const res = await enrichOneMatch(client, leagueCache, riotMatchId, isShouldStop)
         if (res.changed) _status.matchesEnriched++
         batchProgress += res.items + res.runes + res.buckets + res.ranks + (res.changed ? 1 : 0)
         _status.rowsItems += res.items
