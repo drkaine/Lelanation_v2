@@ -11,9 +11,8 @@
 import 'dotenv/config'
 import { runPuuidMigrationScript } from './puuidMigrationScript.js'
 import { runLeagueXpScript, type LeagueXpOptions } from './leagueXpScript.js'
-import { runDataEnrichScript } from './dataEnrichScript.js'
 
-const VALID_SCRIPTS = ['puuid-migration', 'league-xp', 'data-enrich'] as const
+const VALID_SCRIPTS = ['puuid-migration', 'league-xp'] as const
 type ScriptName = (typeof VALID_SCRIPTS)[number]
 
 function parseArgs(): ScriptName | null {
@@ -39,7 +38,7 @@ async function main(): Promise<void> {
   const script = parseArgs()
   if (!script) {
     console.error('Usage: tsx src/worker/runScript.ts <script>')
-    console.error('  script: puuid-migration | league-xp | data-enrich')
+    console.error('  script: puuid-migration | league-xp')
     console.error('  League XP env: QUEUE, TIER, DIVISION, REGION, MAX_PAGES')
     process.exit(1)
   }
@@ -62,7 +61,7 @@ async function main(): Promise<void> {
         }
       })
       console.log('[runScript] puuid-migration finished.')
-    } else if (script === 'league-xp') {
+    } else {
       const options = leagueXpOptionsFromEnv()
       await runLeagueXpScript(options, isShouldStop, (s) => {
         if (s.phase === 'running' && s.pagesProcessed > 0) {
@@ -72,15 +71,6 @@ async function main(): Promise<void> {
         }
       })
       console.log('[runScript] league-xp finished.')
-    } else {
-      await runDataEnrichScript(isShouldStop, (s) => {
-        if (s.phase === 'running' && s.matchesScanned > 0 && s.matchesScanned % 20 === 0) {
-          console.log(
-            `[data-enrich] scanned=${s.matchesScanned} enriched=${s.matchesEnriched} missingMatches=${s.missingMatches} items=${s.rowsItems} runes=${s.rowsRunes} buckets=${s.rowsBuckets} ranks=${s.rowsRanks}`
-          )
-        }
-      })
-      console.log('[runScript] data-enrich finished.')
     }
     process.exit(0)
   } catch (err) {

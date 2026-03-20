@@ -1,7 +1,13 @@
 /**
  * Daily UTC snapshots of champion stats per rank tier and role.
- * One row per (date_of_game, rank_tier, role, champion): games, wins, WR, bans, pick rate.
- * Window: previous UTC calendar day [D 00:00, D+1 00:00), keyed by game_date on matchs.
+ * One row per (date_of_game, rank_tier, role, champion): games, wins, ban_rate_pct, pick_rate_pct.
+ * Winrate = wins/games côté consommateur (non persisté).
+ *
+ * Taux **par tier** (pas globaux à toute la base sur la fenêtre) :
+ * - pick_rate_pct : part des *picks* (slots joueurs) du **même rank_tier + role** ce jour UTC que ce champion.
+ * - ban_rate_pct : part des *bans* (slots ban) du **même rank_tier** (match) ce jour UTC pour ce champion.
+ *
+ * Window: calendar UTC day [D 00:00, D+1 00:00), keyed by matchs.game_date.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
@@ -9,6 +15,7 @@ import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
 let lastActiveRefreshAtMs = 0
+const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM'] as const
 
 function parseUtcSchedule(): { hour: number; minute: number } {
   const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
@@ -52,7 +59,12 @@ export async function runChampionTierSnapshotForWindow(params: {
     picks AS (
       SELECT
         split_part(UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.rank_tier), ''), m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
-        UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) AS role_norm,
+        CASE
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
+          ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN')))
+        END AS role_norm,
         mp.champion_id,
         COUNT(*)::int AS games,
         SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
@@ -62,6 +74,14 @@ export async function runChampionTierSnapshotForWindow(params: {
       CROSS JOIN window_params wp
       WHERE m.game_date >= wp.w_start
         AND m.game_date < wp.w_end
+        AND (
+          CASE
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
+            ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN')))
+          END
+        ) IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
       GROUP BY 1, 2, 3
     ),
     bans AS (
@@ -92,10 +112,15 @@ export async function runChampionTierSnapshotForWindow(params: {
       SELECT rank_tier, role, SUM(games)::bigint AS total_picks
       FROM merged
       GROUP BY rank_tier, role
+    ),
+    tier_ban_totals AS (
+      SELECT rank_tier, SUM(bans)::bigint AS total_bans
+      FROM merged
+      GROUP BY rank_tier
     )
     INSERT INTO champion_tier_daily_snapshots (
       date_of_game, rank_tier, role, champion_id,
-      games, wins, bans, pick_rate_pct, win_rate_pct
+      games, wins, ban_rate_pct, pick_rate_pct
     )
     SELECT
       wp.game_date,
@@ -104,25 +129,24 @@ export async function runChampionTierSnapshotForWindow(params: {
       m.champion_id,
       m.games,
       m.wins,
-      m.bans,
-      CASE WHEN tt.total_picks > 0
-        THEN ROUND((100.0 * m.games::float8 / tt.total_picks::float8)::numeric, 4)::float8
+      CASE WHEN tbt.total_bans > 0
+        THEN ROUND((100.0 * m.bans::float8 / tbt.total_bans::float8)::numeric, 3)::float8
         ELSE 0::float8
       END,
-      CASE WHEN m.games > 0
-        THEN ROUND((100.0 * m.wins::float8 / m.games::float8)::numeric, 4)::float8
+      CASE WHEN tt.total_picks > 0
+        THEN ROUND((100.0 * m.games::float8 / tt.total_picks::float8)::numeric, 3)::float8
         ELSE 0::float8
       END
     FROM merged m
     INNER JOIN tier_totals tt ON tt.rank_tier = m.rank_tier AND tt.role = m.role
+    INNER JOIN tier_ban_totals tbt ON tbt.rank_tier = m.rank_tier
     CROSS JOIN window_params wp
     ON CONFLICT (date_of_game, rank_tier, role, champion_id) DO UPDATE
     SET
       games = EXCLUDED.games,
       wins = EXCLUDED.wins,
-      bans = EXCLUDED.bans,
-      pick_rate_pct = EXCLUDED.pick_rate_pct,
-      win_rate_pct = EXCLUDED.win_rate_pct
+      ban_rate_pct = EXCLUDED.ban_rate_pct,
+      pick_rate_pct = EXCLUDED.pick_rate_pct
   `
 
   const insertedEstimate = typeof result === 'number' ? result : 0
@@ -133,6 +157,28 @@ export async function runChampionTierSnapshotForWindow(params: {
     })
   }
   return { insertedEstimate }
+}
+
+async function cleanupInvalidSnapshotRoles(logger?: Logger): Promise<void> {
+  const deletedActive = await prisma.$executeRaw`
+    DELETE FROM champion_tier_daily_snapshots
+    WHERE role NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
+  `
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
+    (LIKE champion_tier_daily_snapshots INCLUDING ALL)
+  `)
+  const deletedArchive = await prisma.$executeRaw`
+    DELETE FROM champion_tier_daily_snapshots_archive
+    WHERE role NOT IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
+  `
+  if (logger && (deletedActive > 0 || deletedArchive > 0)) {
+    void logger.step('Champion tier snapshot role cleanup', {
+      deletedActiveRows: deletedActive,
+      deletedArchiveRows: deletedArchive,
+      allowedRoles: SNAPSHOT_ALLOWED_ROLES.join(','),
+    })
+  }
 }
 
 function getUtcDateWindowForDay(dateOfGame: Date): { windowStart: Date; windowEnd: Date } {
@@ -223,6 +269,7 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
   if (!pastSlot) return
 
   try {
+    await cleanupInvalidSnapshotRoles(logger)
     const snapshotDates = await getActiveSnapshotDates()
     if (snapshotDates.length === 0) return
     let totalRowsTouched = 0
@@ -263,9 +310,8 @@ export interface ChampionTierSnapshotRow {
   championId: number
   games: number
   wins: number
-  bans: number
+  banRatePct: number
   pickRatePct: number
-  winRatePct: number
 }
 
 /** For charts: time series for one champion, optional tier filter. Dates as YYYY-MM-DD. */
@@ -278,7 +324,10 @@ export async function getChampionTierSnapshotsForCharts(options: {
   limit?: number
 }): Promise<ChampionTierSnapshotRow[]> {
   if (!isDatabaseConfigured()) return []
-  const { championId, rankTier, role, fromDate, toDate, limit = 365 } = options
+  const { championId, rankTier, fromDate, toDate, limit = 365 } = options
+  let role = options.role
+  if (role && role.toUpperCase() === 'UTILITY') role = 'SUPPORT'
+
   const rows = await prisma.$queryRaw<Array<{
     date_of_game: Date
     rank_tier: string
@@ -286,9 +335,8 @@ export async function getChampionTierSnapshotsForCharts(options: {
     champion_id: number
     games: number
     wins: number
-    bans: number
+    ban_rate_pct: number
     pick_rate_pct: number
-    win_rate_pct: number
   }>>`
     SELECT
       date_of_game,
@@ -297,9 +345,8 @@ export async function getChampionTierSnapshotsForCharts(options: {
       champion_id,
       games,
       wins,
-      bans,
-      pick_rate_pct,
-      win_rate_pct
+      ban_rate_pct,
+      pick_rate_pct
     FROM champion_tier_daily_snapshots
     WHERE champion_id = ${championId}
       AND (${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text IS NULL OR rank_tier = ${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text)
@@ -319,8 +366,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
     championId: r.champion_id,
     games: r.games,
     wins: r.wins,
-    bans: r.bans,
+    banRatePct: r.ban_rate_pct,
     pickRatePct: r.pick_rate_pct,
-    winRatePct: r.win_rate_pct,
   }))
 }

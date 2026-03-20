@@ -630,7 +630,7 @@ router.get('/tier-list', async (req: Request, res: Response) => {
   }
 })
 
-/** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) WR / pick / bans par tier. Query: ?rankTier=DIAMOND&from=2026-01-01&to=2026-03-01&limit=365 */
+/** GET /api/stats/champions/:championId/tier-trend-snapshots — séries quotidiennes (UTC) games/wins, pick% et ban% par tier+role (winrate = wins/games). Query: ?rankTier=DIAMOND&role=SUPPORT&from=… (role=UTILITY → SUPPORT) */
 router.get('/champions/:championId/tier-trend-snapshots', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const rawR = req.params.championId

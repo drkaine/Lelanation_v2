@@ -1,6 +1,6 @@
 /**
  * Summoner spell stats by champion from champion_summoner_spells_agg aggregate table.
- * Individual spell stats from champion_summoner_spells; duos from raw match_player_summoner_spells.
+ * Individual spell stats from MV; duos from raw match_players.summoner_spells.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -123,8 +123,7 @@ export async function getSummonerSpellsDuosByChampion(
     const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, pRankTier)
     if (statIds.length === 0) return { totalGames: 0, duos: [] }
 
-    // Compute duos from raw match_player_summoner_spells
-    // Join through match_players → champion_core_stats filters
+    // Duos from match_players.summoner_spells (ordered D/F)
     const coreWhere: Record<string, unknown> = { championId }
     if (pVersion) coreWhere.gameVersion = pVersion
     if (pRankTier) coreWhere.rankTier = pRankTier
@@ -141,10 +140,7 @@ export async function getSummonerSpellsDuosByChampion(
       select: {
         id: true,
         team: { select: { win: true } },
-        summonerSpells: {
-          select: { spellId: true, spellSlot: true },
-          orderBy: { spellSlot: 'asc' },
-        },
+        summonerSpells: true,
       },
       take: 50000,
     })
@@ -154,7 +150,7 @@ export async function getSummonerSpellsDuosByChampion(
 
     const duoMap = new Map<string, { id1: number; id2: number; games: number; wins: number }>()
     for (const mp of matchPlayersRows) {
-      const spellIds = mp.summonerSpells.map((s) => s.spellId).sort((a, b) => a - b)
+      const spellIds = [...mp.summonerSpells].sort((a, b) => a - b)
       if (spellIds.length < 2) continue
       const id1 = spellIds[0]
       const id2 = spellIds[1]

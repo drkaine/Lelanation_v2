@@ -124,10 +124,6 @@
               <div class="text-xs text-text/70">Nombre de matchs total</div>
             </div>
             <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">{{ dataStats?.missingMatches ?? '—' }}</div>
-              <div class="text-xs text-text/70">Matchs avec data manquantes</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
               <div class="text-base font-semibold text-text">
                 {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
               </div>
@@ -408,7 +404,7 @@
                   @click="
                     row.id === 'league-xp'
                       ? switchScript('league-xp', leagueXpForm)
-                      : switchScript(row.id as 'poller' | 'data-enrich' | 'puuid-migration')
+                      : switchScript(row.id as 'poller' | 'puuid-migration')
                   "
                 >
                   {{ scriptSwitchBusy[row.id] ? '…' : 'Lancer' }}
@@ -417,9 +413,7 @@
                   type="button"
                   class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
                   :disabled="scriptStopBusy[row.id]"
-                  @click="
-                    stopScript(row.id as 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp')
-                  "
+                  @click="stopScript(row.id as 'poller' | 'puuid-migration' | 'league-xp')"
                 >
                   {{ scriptStopBusy[row.id] ? '…' : 'Arrêter' }}
                 </button>
@@ -1331,7 +1325,6 @@ const dataStats = ref<{
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
   totalMatches: number
-  missingMatches: number
 } | null>(null)
 const dataStatsLoading = ref(false)
 const activePatches = ref<
@@ -1375,11 +1368,6 @@ const riotScriptStatusRows = computed(() => {
   const s = riotScriptsStatus.value
   return [
     { id: 'poller', label: 'Riot Poller', status: s?.poller?.status ?? 'stopped' },
-    {
-      id: 'data-enrich',
-      label: 'Data Enrich Cycle',
-      status: s?.['data-enrich']?.status ?? 'stopped',
-    },
     {
       id: 'puuid-migration',
       label: 'Migration players (PUUID)',
@@ -2040,7 +2028,7 @@ async function openRiotPollerLogs() {
 }
 
 async function switchScript(
-  script: 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp',
+  script: 'poller' | 'puuid-migration' | 'league-xp',
   options?: Record<string, unknown>
 ) {
   scriptActionMessage.value = ''
@@ -2073,7 +2061,7 @@ async function switchScript(
   }
 }
 
-async function stopScript(script: 'poller' | 'data-enrich' | 'puuid-migration' | 'league-xp') {
+async function stopScript(script: 'poller' | 'puuid-migration' | 'league-xp') {
   scriptActionMessage.value = ''
   scriptActionError.value = false
   scriptStopBusy.value = { ...scriptStopBusy.value, [script]: true }
@@ -2081,13 +2069,11 @@ async function stopScript(script: 'poller' | 'data-enrich' | 'puuid-migration' |
     const activeScript =
       riotScriptsStatus.value?.poller?.status === 'running'
         ? 'poller'
-        : riotScriptsStatus.value?.['data-enrich']?.status === 'running'
-          ? 'data-enrich'
-          : riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
-            ? 'puuid-migration'
-            : riotScriptsStatus.value?.['league-xp']?.status === 'running'
-              ? 'league-xp'
-              : null
+        : riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
+          ? 'puuid-migration'
+          : riotScriptsStatus.value?.['league-xp']?.status === 'running'
+            ? 'league-xp'
+            : null
     if (activeScript !== script) {
       scriptActionMessage.value = 'Ce script n’est pas actif.'
       return

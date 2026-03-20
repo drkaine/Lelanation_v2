@@ -558,7 +558,14 @@ export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; er
   overviewProgressionCache.clear()
   overviewProgressionFullCache.clear()
   overviewSidesCache.clear()
-  return { ok: true }
+  try {
+    const { refreshAllMaterializedViews } = await import('./MaterializedViewService.js')
+    await refreshAllMaterializedViews()
+    return { ok: true }
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err)
+    return { ok: false, error }
+  }
 }
 
 // ── getOverviewTeamsStats ────────────────────────────────────────────────────

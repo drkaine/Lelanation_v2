@@ -1,5 +1,5 @@
 -- Ne conserver que les buckets minute 5, 10, 15, … (multiples de 5 à partir de 5).
--- Les ingestions (riotPoller, dataEnrich) appliquent la même règle désormais.
+-- Les ingestions (riotPoller) appliquent la même règle désormais.
 
 DELETE FROM "match_player_bucket"
 WHERE "duration_bucket" < 5

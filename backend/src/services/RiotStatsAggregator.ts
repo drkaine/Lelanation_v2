@@ -4,6 +4,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
@@ -159,7 +160,20 @@ export class RiotStatsAggregator {
     }
   }
 
+  /**
+   * Refresh all materialized views from raw match rows, then return champion rollups from MVs.
+   */
   async computeAndSave(): Promise<AggregatedStats> {
+    if (!isDatabaseConfigured()) {
+      return {
+        totalGames: 0,
+        totalMatches: 0,
+        champions: [],
+        generatedAt: new Date().toISOString(),
+      }
+    }
+    await refreshAllMaterializedViews()
+    championsCache.clear()
     const result = await this.load()
     if (result) return result
     return {

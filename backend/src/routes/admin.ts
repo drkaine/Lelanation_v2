@@ -3,7 +3,6 @@ import { Router } from 'express'
 import { promises as fs } from 'fs'
 import { dirname, join, resolve, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
-import { Prisma } from '../generated/prisma/index.js'
 import { MetricsService } from '../services/MetricsService.js'
 import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
@@ -244,21 +243,18 @@ router.get('/data-stats', async (_req, res) => {
     playersWrongKeyVersion: number
     lastNewPlayerAt: string | null
     totalMatches: number
-    missingMatches: number
   } = {
     totalPlayers: 0,
     playersWrongKeyVersion: 0,
     lastNewPlayerAt: null,
     totalMatches: 0,
-    missingMatches: 0,
   }
   try {
     const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
-    const [lastPlayer, totalPlayers, totalMatches, missingMatches, playersWrongKeyVersion] = await Promise.all([
+    const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
       prisma.match.count(),
-      getMissingMatchesCount(),
       configuredKeyVersion
         ? prisma.player.count({
             where: {
@@ -272,7 +268,6 @@ router.get('/data-stats', async (_req, res) => {
       playersWrongKeyVersion,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       totalMatches,
-      missingMatches,
     }
   } catch {
     // ignore
@@ -363,21 +358,18 @@ router.get('/riot-scripts-status', async (_req, res) => {
     playersWrongKeyVersion: number
     lastNewPlayerAt: string | null
     totalMatches: number
-    missingMatches: number
   } = {
     totalPlayers: 0,
     playersWrongKeyVersion: 0,
     lastNewPlayerAt: null,
     totalMatches: 0,
-    missingMatches: 0,
   }
   try {
     const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
-    const [lastPlayer, totalPlayers, totalMatches, missingMatches, playersWrongKeyVersion] = await Promise.all([
+    const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
       prisma.match.count(),
-      getMissingMatchesCount(),
       configuredKeyVersion
         ? prisma.player.count({
             where: {
@@ -391,7 +383,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
       playersWrongKeyVersion,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       totalMatches,
-      missingMatches,
     }
   } catch {
     // ignore
@@ -449,13 +440,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
       status: orchestratorStatus.activeScript === 'poller' && orchestratorStatus.isRunning ? 'running' : 'stopped',
     },
     {
-      script: 'data-enrich',
-      status:
-        orchestratorStatus.activeScript === 'data-enrich' && orchestratorStatus.isRunning
-          ? 'running'
-          : 'stopped',
-    },
-    {
       script: 'puuid-migration',
       status:
         orchestratorStatus.activeScript === 'puuid-migration' && orchestratorStatus.isRunning
@@ -479,66 +463,6 @@ const SCRIPT_LOGS_DIR = join(ROOT_LOGS_DIR, 'scripts')
 const RIOT_POLLER_LOG_PATH = join(ROOT_LOGS_DIR, 'riot-poller.log')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
-
-async function getMissingMatchesCount(): Promise<number> {
-  const apexRankTiers = Prisma.join(['MASTER', 'GRANDMASTER', 'CHALLENGER'])
-  const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
-    SELECT COUNT(*)::bigint AS count
-    FROM (
-      SELECT DISTINCT m.riot_match_id
-      FROM matchs m
-      JOIN match_players mp ON mp.match_id = m.id
-      JOIN players p ON p.id = mp.player_id
-      LEFT JOIN teams t ON t.id = mp.team_id
-      WHERE mp.rank_division IS NULL
-         OR m.game_date IS NULL
-         OR p.puuid IS NULL
-         OR btrim(p.puuid) = ''
-         OR p.puuid ~ '^[0-9]+$'
-         OR length(btrim(p.puuid)) < 30
-         OR (
-           mp.rank_division = ''
-           AND COALESCE(mp.rank_tier, 'UNRANKED') NOT IN (${apexRankTiers}, 'UNRANKED')
-         )
-         OR mp.rank_lp IS NULL
-        OR jsonb_array_length(COALESCE(mp.items::jsonb, '[]'::jsonb)) = 0
-        OR EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) AS elem
-          WHERE COALESCE((elem ->> 'timestampMs')::int, 0) <= 0
-        )
-        OR EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements(COALESCE(mp.items::jsonb, '[]'::jsonb)) WITH ORDINALITY AS elem(value, ord)
-          WHERE COALESCE((value ->> 'order')::int, -1) <> (ord - 1)
-        )
-        OR cardinality(mp.runes) = 0
-        OR cardinality(mp.shards) = 0
-         OR (
-           m.game_duration >= 300
-           AND NOT EXISTS (SELECT 1 FROM match_player_bucket b WHERE b.match_player_id = mp.id)
-         )
-         OR (
-           t.rank_tier = 'UNRANKED'
-           AND mp.rank_tier IS NOT NULL
-           AND mp.rank_tier <> 'UNRANKED'
-         )
-         OR (
-           t.rank_division = ''
-           AND COALESCE(t.rank_tier, 'UNRANKED') NOT IN (${apexRankTiers}, 'UNRANKED')
-           AND mp.rank_tier IS NOT NULL
-           AND mp.rank_tier <> 'UNRANKED'
-         )
-         OR (
-           t.rank_division IS NULL
-           AND mp.rank_tier IS NOT NULL
-           AND mp.rank_tier <> 'UNRANKED'
-         )
-    ) t
-  `)
-  const raw = rows[0]?.count ?? 0
-  return typeof raw === 'bigint' ? Number(raw) : Number(raw)
-}
 
 router.get('/riot-poller/status', async (_req, res) => {
   const s = getRiotPollerStatus()
@@ -658,11 +582,11 @@ router.post('/riot-poller/start', async (_req, res) => {
 
 /**
  * POST /api/admin/riot-script/start
- * Body: { script: 'poller' | 'puuid-migration' | 'league-xp' | 'data-enrich', options?: { queue, tier, division, region, maxPages } }
+ * Body: { script: 'poller' | 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
  * Starts the specified script. Returns 409 if a script is already running.
  */
 router.post('/riot-script/start', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp', 'data-enrich']
+  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
   const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
   if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
     return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
@@ -688,7 +612,7 @@ router.post('/riot-script/start', async (req, res) => {
  * Body: { script, options? } - stops previous running script (if any), then starts requested one.
  */
 router.post('/riot-script/switch', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp', 'data-enrich']
+  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
   const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
   if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
     return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })

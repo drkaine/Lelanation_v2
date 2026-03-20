@@ -556,16 +556,12 @@ function buildRunePayload(runes: unknown): { runes: number[] } {
   return { runes: [...styleIds, ...perkIds] }
 }
 
-/** Build normalised match_player_summoner_spells rows (slot 0 and 1). */
-function buildSummonerSpellRows(
-  matchPlayerId: bigint,
-  summoner1Id: number | null,
-  summoner2Id: number | null
-): Array<{ matchPlayerId: bigint; spellId: number; spellSlot: number }> {
-  const rows: Array<{ matchPlayerId: bigint; spellId: number; spellSlot: number }> = []
-  if (summoner1Id != null && summoner1Id > 0) rows.push({ matchPlayerId, spellId: summoner1Id, spellSlot: 0 })
-  if (summoner2Id != null && summoner2Id > 0) rows.push({ matchPlayerId, spellId: summoner2Id, spellSlot: 1 })
-  return rows
+/** Summoner spell IDs in D-then-F order (Riot summoner1Id, summoner2Id). */
+function buildSummonerSpellIds(summoner1Id: number | null, summoner2Id: number | null): number[] {
+  const out: number[] = []
+  if (summoner1Id != null && summoner1Id > 0) out.push(summoner1Id)
+  if (summoner2Id != null && summoner2Id > 0) out.push(summoner2Id)
+  return out
 }
 
 /** Build shard list from stat_perks in Riot order: offense, flex, defense. */
@@ -821,7 +817,6 @@ export async function upsertMatchAndParticipants(
       gameEndedInSurrender,
       gameEndedInEarlySurrender,
       region,
-      ingestedAt: new Date(),
     },
   })
   counters.matchesFetched++
@@ -936,7 +931,7 @@ export async function upsertMatchAndParticipants(
     }
     const b = (key: string): boolean => (p as Record<string, unknown>)[key] === true
 
-    // Enrich missing rankDivision / rankLp (and optionally rankTier) from Riot account-by-puuid.
+    // Enrich missing rankDivision (and optionally rankTier) from Riot account-by-puuid; LP stays in-memory for averaging only.
     let finalRankTier = rankTier
     let finalRankDivision = rankDivision
     let finalRankLp = rankLp
@@ -956,10 +951,10 @@ export async function upsertMatchAndParticipants(
         role,
         rankTier: finalRankTier,
         rankDivision: finalRankDivision,
-        rankLp: finalRankLp,
         participantId: pIdx + 1,
         runes: runePayload.runes,
         shards: shardList,
+        summonerSpells: buildSummonerSpellIds(summoner1Id, summoner2Id),
       },
     })
     counters.participantsFetched++
@@ -1161,12 +1156,6 @@ export async function upsertMatchAndParticipants(
       })
     }
 
-    // match_player_summoner_spells
-    const ssRows = buildSummonerSpellRows(mpId, summoner1Id, summoner2Id)
-    if (ssRows.length > 0) {
-      await prisma.matchPlayerSummonerSpell.createMany({ data: ssRows, skipDuplicates: true })
-    }
-
     // match_player_bucket (duration buckets of gold/damage/time stats)
     // Source expected: participants[].buckets from match-v5 detail.
     const bucketsRaw = (p as Record<string, unknown>).buckets ?? (p as Record<string, unknown>).bucket ?? null
@@ -1198,13 +1187,13 @@ export async function upsertMatchAndParticipants(
 
   }
 
-  // Update team rank_tier/rank_division as average of team participants.
+  // Update team rank_tier as average of team participants (tier only on teams row).
   for (const [riotTeamId, teamDbId] of teamIdByRiotTeam.entries()) {
     const scores = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
     const avg = averageRankFromScores(scores)
     await prisma.team.update({
       where: { id: teamDbId },
-      data: { rankTier: avg.tier, rankDivision: avg.division },
+      data: { rankTier: avg.tier },
     })
   }
 
@@ -1445,6 +1434,8 @@ async function extractAndInsertTimelineExtras(
       participantId,
       events: allEvents,
     })
+    const tSummoner1 = (p as { summoner1Id?: number }).summoner1Id ?? null
+    const tSummoner2 = (p as { summoner2Id?: number }).summoner2Id ?? null
     await prisma.matchPlayer.update({
       where: { id: dbMatchPlayerId },
       data: {
@@ -1455,6 +1446,7 @@ async function extractAndInsertTimelineExtras(
           order: row.order,
           timestampMs: row.timestampMs,
         })),
+        summonerSpells: buildSummonerSpellIds(tSummoner1, tSummoner2),
       },
     })
     itemsRowsUpserted += selected.length

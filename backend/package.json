@@ -19,9 +19,7 @@
     "prisma:generate": "cd .. && npx prisma generate --schema=backend/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
-    "script:league-xp": "tsx src/worker/runScript.ts league-xp",
-    "script:data-enrich": "tsx src/worker/runScript.ts data-enrich",
-    "script:data-enrich-cycle": "mkdir -p ../logs && bash -lc 'set -o pipefail; tsx src/scripts/runDataEnrichWithPoller.ts 2>&1 | tee -a ../logs/backend-out.log'"
+    "script:league-xp": "tsx src/worker/runScript.ts league-xp"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

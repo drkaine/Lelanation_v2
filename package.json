@@ -15,7 +15,6 @@
   "scripts": {
     "prepare": "husky",
     "sync:data": "cd backend && npm run sync:data",
-    "data-enrich:cycle": "cd backend && npm run script:data-enrich-cycle",
     "exe-windows": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/exe-windows.ps1"
   },
   "devDependencies": {

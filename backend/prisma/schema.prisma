@@ -43,8 +43,6 @@ model Match {
   gameEndedInSurrender      Boolean   @default(false) @map("game_ended_in_surrender")
   gameEndedInEarlySurrender Boolean   @default(false) @map("game_ended_in_early_surrender")
   region                    String
-  aggregatedAt              DateTime? @map("aggregated_at")
-  ingestedAt                DateTime  @default(now()) @map("ingested_at")
 
   teams        Team[]
   drakeDetails DrakeDetail[]
@@ -54,8 +52,6 @@ model Match {
   @@index([rankTier])
   @@index([region])
   @@index([gameVersion, region, rankTier])
-  @@index([aggregatedAt])
-  @@index([ingestedAt])
   @@index([gameDate])
   @@map("matchs")
 }
@@ -65,7 +61,6 @@ model Team {
   matchId              BigInt   @map("match_id")
   team                 Int      // 100 | 200
   rankTier             String   @default("UNRANKED") @map("rank_tier")
-  rankDivision         String   @default("") @map("rank_division")
   win                  Boolean
   teamEarlySurrendered Boolean  @default(false) @map("team_early_surrendered")
   baronKills           Int      @default(0) @map("baron_kills")
@@ -133,11 +128,12 @@ model MatchPlayer {
   role          String  // TOP, JUNGLE, MID, ADC, SUPPORT
   rankTier      String  @default("UNRANKED") @map("rank_tier")
   rankDivision  String? @map("rank_division")
-  rankLp        Int?    @map("rank_lp")
   participantId Int     @map("participant_id")
   items         Json    @default("[]")
   runes         Int[]   @default([])
   shards        Int[]   @default([])
+  /// Summoner spell IDs in slot order (D then F): [summoner1Id, summoner2Id].
+  summonerSpells Int[]  @default([]) @map("summoner_spells")
 
   match          Match                    @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player         Player                   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -148,7 +144,6 @@ model MatchPlayer {
   objectives     MatchPlayerObjectives?
   combats        MatchPlayerCombats?
   challenges     MatchPlayerChallenges?
-  summonerSpells MatchPlayerSummonerSpell[]
   spellOrders    MatchPlayerSpellOrder[]
   buckets        MatchPlayerBucket[]
 
@@ -340,19 +335,6 @@ model MatchPlayerChallenges {
   @@map("match_player_challenges")
 }
 
-model MatchPlayerSummonerSpell {
-  id            BigInt @id @default(autoincrement())
-  matchPlayerId BigInt @map("match_player_id")
-  spellId       Int    @map("spell_id")
-  spellSlot     Int    @map("spell_slot") // 0 | 1
-
-  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
-
-  @@unique([matchPlayerId, spellSlot])
-  @@index([matchPlayerId])
-  @@map("match_player_summoner_spells")
-}
-
 model MatchPlayerSpellOrder {
   id            BigInt @id @default(autoincrement())
   matchPlayerId BigInt @map("match_player_id")
@@ -407,9 +389,8 @@ model ChampionTierDailySnapshot {
   championId      Int      @map("champion_id")
   games           Int      @default(0)
   wins            Int      @default(0)
-  bans            Int      @default(0)
+  banRatePct      Float    @default(0) @map("ban_rate_pct")
   pickRatePct     Float    @map("pick_rate_pct")
-  winRatePct      Float    @map("win_rate_pct")
 
   @@unique([dateOfGame, rankTier, role, championId])
   @@index([championId, dateOfGame(sort: Desc)])
