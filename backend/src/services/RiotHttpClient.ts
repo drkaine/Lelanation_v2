@@ -3,7 +3,7 @@
  */
 import { join } from 'path'
 import { FileManager } from '../utils/fileManager.js'
-import { RiotRateLimiter } from './RiotRateLimiter.js'
+import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
@@ -32,6 +32,24 @@ function getRegionalBase(platform: string): string {
   return `https://${region}.api.riotgames.com`
 }
 
+/** Riot documents these on every response; use to compare with our local throttle. */
+const RIOT_RATE_LIMIT_HEADER_KEYS = [
+  'x-app-rate-limit',
+  'x-app-rate-limit-count',
+  'x-method-rate-limit',
+  'x-method-rate-limit-count',
+  'retry-after',
+] as const
+
+function pickRiotRateLimitHeaders(h: Headers): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of RIOT_RATE_LIMIT_HEADER_KEYS) {
+    const v = h.get(key)
+    if (v) out[key] = v
+  }
+  return out
+}
+
 export interface RiotHttpResponse<T = unknown> {
   status: number
   data: T
@@ -50,6 +68,17 @@ export interface ActiveKeyInfo {
   key: string
   source: RiotKeySource
   clefType: string | null
+}
+
+/** Returned on `status: 429` when `shouldAbort` is true — ingest must not write partial rows. */
+export const RIOT_INGEST_ABORTED_MESSAGE = 'RIOT_INGEST_ABORTED' as const
+
+export type RiotRequestOptions = {
+  retryCount?: number
+  /** Retry indefinitely on 429 (after each Retry-After window) until success or `shouldAbort`. */
+  infinite429Retry?: boolean
+  /** If set, return ok:false with RIOT_INGEST_ABORTED_MESSAGE instead of retrying when true. */
+  shouldAbort?: () => boolean
 }
 
 /**
@@ -88,12 +117,16 @@ export async function getClefTypeFromFile(): Promise<string | null> {
   return r.unwrap()?.clefType ?? null
 }
 
+const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 20_000
+
 export class RiotHttpClient {
   private key: string = ''
   private keySource: RiotKeySource = 'env'
   private clefType: string | null = null
   private platform: string = 'euw1'
   private onInvalidKey?: () => void
+  /** Throttle INFO logs that include Riot rate-limit headers from successful responses. */
+  private lastRiotRateLimitSnapshotLogMs = 0
 
   constructor(
     private readonly rateLimiter: RiotRateLimiter,
@@ -124,13 +157,10 @@ export class RiotHttpClient {
     method: 'GET',
     bucket: string,
     url: string,
-    options?: { retryCount?: number }
+    options?: RiotRequestOptions
   ): Promise<{ ok: true; data: T; status: number } | { ok: false; status: number; message?: string; body?: unknown }> {
-    // Always acquire the global app rate limit first, then the per-endpoint bucket.
-    // The 'app' bucket tracks total requests across all endpoints, matching Riot's
-    // global App Rate Limit (e.g. 20 req/s and 100 req/2min for personal keys).
+    // Single global throttle (application budget); `bucket` is only for logs on 429.
     await this.rateLimiter.acquire('app')
-    await this.rateLimiter.acquire(bucket)
 
     const headers: Record<string, string> = {
       'X-Riot-Token': this.key,
@@ -147,18 +177,27 @@ export class RiotHttpClient {
       }
 
       if (res.status === 429) {
-        // Honor Riot's Retry-After header: block ALL future requests for that duration.
         const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
-        void this._log.info('Riot API 429 rate limit', {
+        const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+        const cooldownMs = Math.max(RIOT_429_MIN_PENALTY_MS, retryAfterSec * 1000)
+        void this._log.info('Riot API HTTP 429 (response status from Riot, not simulated locally)', {
+          httpStatus: res.status,
+          origin: 'riot_http_response',
           bucket,
-          retryAfterSec,
           url,
+          retryAfterSec,
+          cooldownMs,
+          riotRateLimitHeaders: riotHeaders,
         })
-        this.rateLimiter.penalize((retryAfterSec + 1) * 1000)
-        // Auto-retry up to 2 times — rate limiter will wait out the penalty before proceeding.
+        this.rateLimiter.penalize429(retryAfterSec)
+        if (options?.shouldAbort?.()) {
+          return { ok: false, status: 429, message: RIOT_INGEST_ABORTED_MESSAGE, body: data }
+        }
         const retryCount = options?.retryCount ?? 0
-        if (retryCount < 2) {
-          return this.request<T>(method, bucket, url, { retryCount: retryCount + 1 })
+        const infinite = options?.infinite429Retry === true
+        // Ingest: retry until Riot accepts; other callers: up to 5 attempts per request chain.
+        if (infinite || retryCount < 5) {
+          return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
         }
         return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
       }
@@ -174,6 +213,19 @@ export class RiotHttpClient {
           ? (data as { status: { message: string } }).status.message
           : undefined
         return { ok: false, status: res.status, message: msg, body: data }
+      }
+
+      const now = Date.now()
+      if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
+        this.lastRiotRateLimitSnapshotLogMs = now
+        const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+        if (Object.keys(riotHeaders).length > 0) {
+          void this._log.info('Riot API rate limit headers (OK response)', {
+            httpStatus: res.status,
+            bucket,
+            riotRateLimitHeaders: riotHeaders,
+          })
+        }
       }
 
       return { ok: true, data: data as T, status: res.status }
@@ -193,7 +245,8 @@ export class RiotHttpClient {
 
   async getMatchIdsByPuuid(
     puuid: string,
-    query: { queue?: number; count?: number; start?: number; startTime?: number; endTime?: number }
+    query: { queue?: number; count?: number; start?: number; startTime?: number; endTime?: number },
+    reqOpts?: RiotRequestOptions
   ): Promise<
     { ok: true; data: string[] } | { ok: false; status: number; message?: string; body?: unknown }
   > {
@@ -205,21 +258,27 @@ export class RiotHttpClient {
     if (query.endTime != null) params.set('endTime', String(query.endTime))
     const qs = params.toString()
     const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids${qs ? `?${qs}` : ''}`
-    return this.request<string[]>('GET', 'match-v5-ids', url)
+    return this.request<string[]>('GET', 'match-v5-ids', url, reqOpts)
   }
 
-  async getMatch(matchId: string): Promise<
+  async getMatch(
+    matchId: string,
+    reqOpts?: RiotRequestOptions
+  ): Promise<
     { ok: true; data: RiotMatchDto } | { ok: false; status: number; message?: string; body?: unknown }
   > {
     const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/${encodeURIComponent(matchId)}`
-    return this.request<RiotMatchDto>('GET', 'match-v5-detail', url)
+    return this.request<RiotMatchDto>('GET', 'match-v5-detail', url, reqOpts)
   }
 
-  async getMatchTimeline(matchId: string): Promise<
+  async getMatchTimeline(
+    matchId: string,
+    reqOpts?: RiotRequestOptions
+  ): Promise<
     { ok: true; data: RiotMatchTimelineDto } | { ok: false; status: number; message?: string; body?: unknown }
   > {
     const url = `${getRegionalBase(this.platform)}/lol/match/v5/matches/${encodeURIComponent(matchId)}/timeline`
-    return this.request<RiotMatchTimelineDto>('GET', 'match-v5-timeline', url)
+    return this.request<RiotMatchTimelineDto>('GET', 'match-v5-timeline', url, reqOpts)
   }
 
   async getAccountByRiotId(
@@ -261,12 +320,15 @@ export class RiotHttpClient {
    * League v4: entries by PUUID.
    * Uses platform host: `{platform}.api.riotgames.com/lol/league/v4/entries/by-puuid/{encryptedPUUID}`.
    */
-  async getLeagueEntriesByPuuid(puuid: string): Promise<
+  async getLeagueEntriesByPuuid(
+    puuid: string,
+    reqOpts?: RiotRequestOptions
+  ): Promise<
     { ok: true; data: RiotLeagueEntryDto[] } | { ok: false; status: number; message?: string; body?: unknown }
   > {
     // League-v4 routes on platform host (euw1/eun1), not regional host (europe).
     const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
-    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url)
+    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url, reqOpts)
   }
 
   /**

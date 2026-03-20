@@ -305,14 +305,32 @@ export async function switchToScript(
   return { ok: true, previousScript }
 }
 
+/** Delay before starting the Riot poller after a backend process start (avoids hammering Riot right after deploy). Default 2 min; set to 0 to disable. */
+const RIOT_POLLER_STARTUP_DELAY_MS = Math.max(
+  0,
+  parseInt(process.env.RIOT_POLLER_STARTUP_DELAY_MS ?? '120000', 10) || 120_000
+)
+
 /**
  * Auto-start the default script (poller) at app startup.
- * Idempotent: does nothing if a script is already running.
+ * Waits {@link RIOT_POLLER_STARTUP_DELAY_MS} first (post-restart cooldown); does not apply when the poller is started later from admin or after another script.
+ * Idempotent: does nothing if a script is already running before or after the delay.
  */
 export function startDefaultScript(): void {
-  if (!isAnyScriptRunning()) {
-    void startScript('poller')
-  }
+  if (isAnyScriptRunning()) return
+
+  void (async () => {
+    if (RIOT_POLLER_STARTUP_DELAY_MS > 0) {
+      console.log(
+        `[Orchestrator] Riot poller start delayed by ${RIOT_POLLER_STARTUP_DELAY_MS / 1000}s (RIOT_POLLER_STARTUP_DELAY_MS)`
+      )
+      await new Promise((r) => setTimeout(r, RIOT_POLLER_STARTUP_DELAY_MS))
+    }
+    if (!isAnyScriptRunning()) {
+      const r = await startScript('poller')
+      if (!r.ok) console.warn('[Orchestrator] Default poller did not start:', r.error)
+    }
+  })()
 }
 
 /** Convenience: get last finished script info (for admin panel display). */

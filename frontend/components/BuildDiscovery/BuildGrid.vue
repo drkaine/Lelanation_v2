@@ -233,16 +233,16 @@
           <!-- Bouton Partager avec dropdown -->
           <div v-if="props.showComparisonButtons" class="relative flex-1">
             <div class="flex items-stretch gap-1.5">
-              <button
-                v-if="props.showUserActions"
-                type="button"
-                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--delete"
-                :title="t('buildDiscovery.deleteBuild')"
-                :aria-label="t('buildDiscovery.deleteBuild')"
-                @click.stop="$emit('delete-build', build.id)"
+              <NuxtLink
+                v-if="props.showUserActions && !isStreamerMode"
+                :to="localePath(`/builds/create/rune?editId=${build.id}`)"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--edit"
+                :title="t('buildDiscovery.editBuild')"
+                :aria-label="t('buildDiscovery.editBuild')"
+                @click.stop
               >
-                ✕
-              </button>
+                ✎
+              </NuxtLink>
               <button
                 class="build-grid-action-button build-grid-action-button--icon flex-1"
                 :title="t('buildDiscovery.share')"
@@ -266,16 +266,16 @@
                   <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
                 </svg>
               </button>
-              <NuxtLink
-                v-if="props.showUserActions && !isStreamerMode"
-                :to="localePath(`/builds/create/rune?editId=${build.id}`)"
-                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--edit"
-                :title="t('buildDiscovery.editBuild')"
-                :aria-label="t('buildDiscovery.editBuild')"
-                @click.stop
+              <button
+                v-if="props.showUserActions"
+                type="button"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--delete"
+                :title="t('buildDiscovery.deleteBuild')"
+                :aria-label="t('buildDiscovery.deleteBuild')"
+                @click.stop="$emit('delete-build', build.id)"
               >
-                ✎
-              </NuxtLink>
+                ✕
+              </button>
             </div>
             <!-- Dropdown -->
             <div

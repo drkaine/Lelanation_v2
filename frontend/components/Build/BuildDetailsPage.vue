@@ -139,16 +139,16 @@
                   </button>
                 </div>
 
-                <button
-                  v-if="isUserBuild"
-                  type="button"
-                  class="details-action-btn details-action-btn--icon details-action-btn--delete"
-                  :title="t('buildDiscovery.deleteBuild')"
-                  :aria-label="t('buildDiscovery.deleteBuild')"
-                  @click.stop="confirmDelete"
+                <NuxtLink
+                  v-if="isUserBuild && !isStreamerMode"
+                  :to="localePath(`/builds/create/rune?editId=${build.id}`)"
+                  class="details-action-btn details-action-btn--icon details-action-btn--edit"
+                  :title="t('buildDiscovery.editBuild')"
+                  :aria-label="t('buildDiscovery.editBuild')"
+                  @click.stop
                 >
-                  ✕
-                </button>
+                  ✎
+                </NuxtLink>
 
                 <div class="relative min-w-0 flex-1">
                   <button
@@ -213,16 +213,16 @@
                   </div>
                 </div>
 
-                <NuxtLink
-                  v-if="isUserBuild && !isStreamerMode"
-                  :to="localePath(`/builds/create/rune?editId=${build.id}`)"
-                  class="details-action-btn details-action-btn--icon details-action-btn--edit"
-                  :title="t('buildDiscovery.editBuild')"
-                  :aria-label="t('buildDiscovery.editBuild')"
-                  @click.stop
+                <button
+                  v-if="isUserBuild"
+                  type="button"
+                  class="details-action-btn details-action-btn--icon details-action-btn--delete"
+                  :title="t('buildDiscovery.deleteBuild')"
+                  :aria-label="t('buildDiscovery.deleteBuild')"
+                  @click.stop="confirmDelete"
                 >
-                  ✎
-                </NuxtLink>
+                  ✕
+                </button>
               </div>
             </div>
           </div>

@@ -15,6 +15,7 @@ import {
   RiotHttpClient,
   resolveRiotApiKey,
   getClefTypeFromFile,
+  RIOT_INGEST_ABORTED_MESSAGE,
   type RiotMatchDto,
   type RiotParticipantDto,
   type RiotMatchTimelineDto,
@@ -34,11 +35,7 @@ import {
 import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
 const PLAYERS_PER_LOOP = 20
-const MATCH_FETCH_CONCURRENCY = 1 // strict sequential fetches per player
-/** Bounded queue size for Phase 4: API producer pushes, DB consumers pop. */
-const INGEST_QUEUE_SIZE = 50
-/** Number of concurrent DB writers in Phase 4 (consumers). */
-const INGEST_CONSUMER_COUNT = 2
+
 const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
 const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
 const TIMELINE_RETRY_MAX_ATTEMPTS = 8
@@ -55,80 +52,6 @@ const DISK_ALERT_THRESHOLDS = [85, 90, 95] as const
 const DISK_STOP_THRESHOLD = 98
 const diskAlertedThresholds = new Set<number>()
 let diskStopAlertSent = false
-
-/**
- * Run async tasks with a bounded concurrency (like p-limit but inline).
- * Tasks are executed as soon as a slot is free, up to `limit` at a time.
- */
-async function runWithConcurrency(tasks: (() => Promise<void>)[], limit: number): Promise<void> {
-  const queue = tasks.slice()
-  const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
-    while (queue.length > 0) {
-      const task = queue.shift()
-      if (task) await task()
-    }
-  })
-  await Promise.all(workers)
-}
-
-/** Item pushed by the API producer and consumed for DB writes. */
-export interface MatchIngestItem {
-  matchId: string
-  region: string
-  matchDto: RiotMatchDto
-  timelineDto?: RiotMatchTimelineDto
-  puuidKeyVersion: string | null
-  playerId: bigint
-}
-
-/**
- * Bounded async queue for producer/consumer. push() waits when full; pop() returns null when poisoned.
- * pushPoison(n) pushes n nulls so n consumers can exit.
- */
-function createBoundedQueue<T>(maxSize: number): {
-  push(item: T): Promise<void>
-  pop(): Promise<T | null>
-  pushPoison(consumerCount: number): void
-} {
-  const items: T[] = []
-  const waiters: Array<() => void> = []
-  const pushWaiters: Array<() => void> = []
-  let poisoned = false
-  let poisonToPush = 0
-
-  return {
-    async push(item: T): Promise<void> {
-      if (poisoned) return
-      while (items.length >= maxSize) {
-        await new Promise<void>((r) => pushWaiters.push(r))
-      }
-      if (poisoned) return
-      items.push(item)
-      if (waiters.length > 0) (waiters.shift()!)()
-    },
-    async pop(): Promise<T | null> {
-      for (;;) {
-        if (items.length > 0) {
-          const value = items.shift()!
-          if (pushWaiters.length > 0) (pushWaiters.shift()!)()
-          return value
-        }
-        if (poisonToPush > 0) {
-          poisonToPush--
-          if (pushWaiters.length > 0) (pushWaiters.shift()!)()
-          return null
-        }
-        if (poisoned && poisonToPush === 0) return null
-        await new Promise<void>((r) => waiters.push(r))
-      }
-    },
-    pushPoison(consumerCount: number): void {
-      poisoned = true
-      poisonToPush += consumerCount
-      while (waiters.length > 0) (waiters.shift()!)()
-    },
-  }
-}
 
 export interface RiotPollerStatus {
   isRunning: boolean
@@ -209,6 +132,14 @@ function isLikelyRiotPuuid(value: string | null | undefined): boolean {
   // Guard against synthetic placeholders like "12345".
   if (/^\d+$/.test(v)) return false
   return v.length >= 30
+}
+
+/** Riot calls for match ingest: retry every 429 until success; bail with RIOT_INGEST_ABORTED_MESSAGE if poller stops. */
+function riotIngestRequestOptions(): {
+  infinite429Retry: true
+  shouldAbort: () => boolean
+} {
+  return { infinite429Retry: true, shouldAbort: () => state.shouldStop }
 }
 
 function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolean {
@@ -712,11 +643,6 @@ export async function upsertMatchAndParticipants(
   if (!info?.participants?.length) return
   if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') return
 
-  const existing = await prisma.match.findUnique({ where: { riotMatchId }, select: { id: true } })
-  if (existing) return
-
-  const gameVersion = info.gameVersion ?? ''
-  if (!isAllowedGameVersion(gameVersion)) return
   const gameDuration = info.gameDuration ?? 0
   const infoAny = info as Record<string, unknown>
   const rawGameStartTs =
@@ -725,13 +651,8 @@ export async function upsertMatchAndParticipants(
   const gameDate = rawGameStartTs != null ? new Date(rawGameStartTs) : null
   const participantDtos = info.participants as RiotParticipantDto[]
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
-  const existingPlayers = await prisma.player.findMany({
-    where: { puuid: { in: puuids } },
-    select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
-  })
-  const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
-  // Per-match cache: reduce repeated calls when multiple rows share the same PUUID.
+  // League-v4 rank lookups run outside the DB transaction so we don't hold connections during HTTP / 429 waits.
   const accountRankCache = new Map<
     string,
     { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
@@ -766,39 +687,47 @@ export async function upsertMatchAndParticipants(
     return null
   }
 
-  async function fetchAccountRankIfNeeded(puuid: string): Promise<{
-    rankTier?: string
-    rankDivision?: string | null
-    rankLp?: number | null
-  }> {
-    const cached = accountRankCache.get(puuid)
-    if (cached) return cached
-
-    // Use League v4 entries by PUUID to get tier/rank/LP.
-    // We pick SOLO queue by default, as the rest of the pipeline assumes solo/duo bracket.
-    const entriesRes = await client.getLeagueEntriesByPuuid(puuid)
-    if (!entriesRes.ok || !Array.isArray(entriesRes.data)) {
-      const empty = { rankTier: undefined, rankDivision: null, rankLp: null }
-      accountRankCache.set(puuid, empty)
-      return empty
+  async function fetchAccountRankForParticipant(puuid: string): Promise<void> {
+    if (accountRankCache.has(puuid)) return
+    const entriesRes = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
+    if (!entriesRes.ok) {
+      if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
+        throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
+      }
+      accountRankCache.set(puuid, { rankTier: undefined, rankDivision: null, rankLp: null })
+      return
     }
-
+    if (!Array.isArray(entriesRes.data)) {
+      accountRankCache.set(puuid, { rankTier: undefined, rankDivision: null, rankLp: null })
+      return
+    }
     const entries = entriesRes.data as unknown as Array<Record<string, unknown>>
     const solo =
       entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
       entries.find((e) => String(e.queueType ?? '').toUpperCase().includes('RANKED_SOLO')) ??
       entries[0]
-
     const rankTier = normalizeRankTier(solo?.tier)
     const rankDivision = normalizeRankDivision(solo?.rank)
     const rankLp = normalizeRankLp(solo?.leaguePoints)
-
-    const out = { rankTier: rankTier ?? undefined, rankDivision, rankLp }
-    accountRankCache.set(puuid, out)
-    return out
+    accountRankCache.set(puuid, { rankTier: rankTier ?? undefined, rankDivision, rankLp })
   }
 
-  // Aggregate surrender flags
+  try {
+    for (const p of participantDtos) {
+      const pid = p.puuid
+      if (!pid) continue
+      const rt = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
+      const rd = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
+      const rlp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
+      if (rd == null || rlp == null || rt === 'UNRANKED') {
+        await fetchAccountRankForParticipant(pid)
+      }
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message === RIOT_INGEST_ABORTED_MESSAGE) return
+    throw e
+  }
+
   const gameEndedInSurrender = participantDtos.some(
     (p) => (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender === true
   )
@@ -806,7 +735,21 @@ export async function upsertMatchAndParticipants(
     (p) => (p as { gameEndedInEarlySurrender?: boolean }).gameEndedInEarlySurrender === true
   )
 
-  const match = await prisma.match.create({
+  await prisma.$transaction(
+    async (tx) => {
+      const existing = await tx.match.findUnique({ where: { riotMatchId }, select: { id: true } })
+      if (existing) return
+
+      const gameVersion = info.gameVersion ?? ''
+      if (!isAllowedGameVersion(gameVersion)) return
+
+      const existingPlayers = await tx.player.findMany({
+        where: { puuid: { in: puuids } },
+        select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
+      })
+      const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
+
+      const match = await tx.match.create({
     data: {
       riotMatchId,
       gameVersion,
@@ -828,10 +771,10 @@ export async function upsertMatchAndParticipants(
   const teamRankScoresByRiotTeam = new Map<number, number[]>()
   const matchRankScores: number[] = []
   for (const { teamRow, bans } of teamDataItems) {
-    const created = await prisma.team.create({ data: teamRow })
+    const created = await tx.team.create({ data: teamRow })
     teamIdByRiotTeam.set(teamRow.team, created.id)
     if (bans.length > 0) {
-      await prisma.ban.createMany({
+      await tx.ban.createMany({
         data: bans.map((b) => ({
           teamId: created.id,
           matchId: match.id,
@@ -855,7 +798,7 @@ export async function upsertMatchAndParticipants(
         | { id: bigint; puuid: string; puuidKeyVersion: string | null; gameName: string | null }
         | null = null
       try {
-        const newPlayer = await prisma.player.create({
+        const newPlayer = await tx.player.create({
           data: {
             puuid,
             region,
@@ -871,7 +814,7 @@ export async function upsertMatchAndParticipants(
       } catch (e) {
         if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') throw e
         // Race-safe fallback: another worker created this player between read and insert.
-        const existing = await prisma.player.findUnique({
+        const existing = await tx.player.findUnique({
           where: { puuid },
           select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
         })
@@ -899,7 +842,7 @@ export async function upsertMatchAndParticipants(
         existingPlayer.gameName = partGameName
       }
       if (Object.keys(playerUpdates).length > 0) {
-        await prisma.player.update({ where: { id: existingPlayer.id }, data: playerUpdates })
+        await tx.player.update({ where: { id: existingPlayer.id }, data: playerUpdates })
       }
     }
 
@@ -936,13 +879,17 @@ export async function upsertMatchAndParticipants(
     let finalRankDivision = rankDivision
     let finalRankLp = rankLp
     if (finalRankDivision == null || finalRankLp == null || finalRankTier === 'UNRANKED') {
-      const accountRank = await fetchAccountRankIfNeeded(puuid)
+      const accountRank = accountRankCache.get(puuid) ?? {
+        rankTier: undefined,
+        rankDivision: null,
+        rankLp: null,
+      }
       if (finalRankTier === 'UNRANKED' && accountRank.rankTier) finalRankTier = accountRank.rankTier
       if (finalRankDivision == null && accountRank.rankDivision != null) finalRankDivision = accountRank.rankDivision
       if (finalRankLp == null && accountRank.rankLp != null) finalRankLp = accountRank.rankLp
     }
 
-    const matchPlayer = await prisma.matchPlayer.create({
+    const matchPlayer = await tx.matchPlayer.create({
       data: {
         matchId: match.id,
         playerId,
@@ -971,7 +918,7 @@ export async function upsertMatchAndParticipants(
 
     // ── Sub-table writes ───────────────────────────────────────────────────────
 
-    await prisma.matchPlayerCore.create({
+    await tx.matchPlayerCore.create({
       data: {
         matchPlayerId: mpId,
         kills: n('kills'),
@@ -988,7 +935,7 @@ export async function upsertMatchAndParticipants(
       },
     })
 
-    await prisma.matchPlayerVisions.create({
+    await tx.matchPlayerVisions.create({
       data: {
         matchPlayerId: mpId,
         visionScore: n('visionScore'),
@@ -1005,7 +952,7 @@ export async function upsertMatchAndParticipants(
       },
     })
 
-    await prisma.matchPlayerMatchup.create({
+    await tx.matchPlayerMatchup.create({
       data: {
         matchPlayerId: mpId,
         bountyGold: n('bountyGold'),
@@ -1034,7 +981,7 @@ export async function upsertMatchAndParticipants(
       },
     })
 
-    await prisma.matchPlayerObjectives.create({
+    await tx.matchPlayerObjectives.create({
       data: {
         matchPlayerId: mpId,
         dragonKills: n('dragonKills'),
@@ -1071,7 +1018,7 @@ export async function upsertMatchAndParticipants(
       },
     })
 
-    await prisma.matchPlayerCombats.create({
+    await tx.matchPlayerCombats.create({
       data: {
         matchPlayerId: mpId,
         damageDealtToBuildings: n('damageDealtToBuildings'),
@@ -1109,7 +1056,7 @@ export async function upsertMatchAndParticipants(
     })
 
     if (ch && Object.keys(ch).length > 0) {
-      await prisma.matchPlayerChallenges.create({
+      await tx.matchPlayerChallenges.create({
         data: {
           matchPlayerId: mpId,
           healFromMapSources: n('HealFromMapSources'),
@@ -1182,7 +1129,7 @@ export async function upsertMatchAndParticipants(
     }
     const bucketRows = buildBucketRows(mpId, bucketsRaw)
     if (bucketRows.length > 0) {
-      await prisma.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
+      await tx.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
     }
 
   }
@@ -1191,7 +1138,7 @@ export async function upsertMatchAndParticipants(
   for (const [riotTeamId, teamDbId] of teamIdByRiotTeam.entries()) {
     const scores = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
     const avg = averageRankFromScores(scores)
-    await prisma.team.update({
+    await tx.team.update({
       where: { id: teamDbId },
       data: { rankTier: avg.tier },
     })
@@ -1199,12 +1146,15 @@ export async function upsertMatchAndParticipants(
 
   // Update match rank_tier/rank_division from averaged participant ranks.
   const avgMatch = averageRankFromScores(matchRankScores)
-  await prisma.match.update({
+  await tx.match.update({
     where: { id: match.id },
     data: { rankTier: avgMatch.tier, rankDivision: avgMatch.division },
   })
 
-  if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
+      if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
+    },
+    { maxWait: 15_000, timeout: 180_000 }
+  )
 }
 
 /**
@@ -1480,14 +1430,16 @@ async function runStep4ForPlayer(
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-  const fetchMatchAndTimelineStrict = async (
-    matchId: string
-  ): Promise<{ ok: true; matchDto: RiotMatchDto; timelineDto: RiotMatchTimelineDto } | { ok: false; reason: 'skip' | '400_decrypt' }> => {
+  type StrictFetchResult =
+    | { ok: true; matchDto: RiotMatchDto; timelineDto: RiotMatchTimelineDto }
+    | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'transient' }
+
+  const fetchMatchAndTimelineStrict = async (matchId: string): Promise<StrictFetchResult> => {
     let attempts = 0
     while (!state.shouldStop && attempts < MATCH_FETCH_MAX_ATTEMPTS) {
       attempts++
 
-      const matchRes = await client.getMatch(matchId)
+      const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
       counters.requestCount++
       if (!matchRes.ok && matchRes.status === 429) counters.error429Count++
       if (!matchRes.ok) {
@@ -1496,18 +1448,24 @@ async function runStep4ForPlayer(
           await logger.error('400 decrypt on match', matchRes.body)
           return { ok: false, reason: '400_decrypt' }
         }
+        if (matchRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
+          return { ok: false, reason: 'abort' }
+        }
         await logger.info('Retry match detail fetch', { matchId, attempt: attempts, status: matchRes.status })
         await sleep(MATCH_FETCH_RETRY_DELAY_MS)
         continue
       }
       if (!isAllowedGameVersion(matchRes.data?.info?.gameVersion)) {
-        return { ok: false, reason: 'skip' }
+        return { ok: false, reason: 'version' }
       }
 
-      const timelineRes = await client.getMatchTimeline(matchId)
+      const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
       counters.requestCount++
       if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
       if (!timelineRes.ok) {
+        if (timelineRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
+          return { ok: false, reason: 'abort' }
+        }
         const retry = scheduleTimelineRetry(matchId)
         await logger.info('Retry timeline fetch', {
           matchId,
@@ -1524,7 +1482,7 @@ async function runStep4ForPlayer(
 
     scheduleTimelineRetry(matchId)
     await logger.info('Skip match ingest after retry exhaustion', { matchId, maxAttempts: MATCH_FETCH_MAX_ATTEMPTS })
-    return { ok: false, reason: 'skip' }
+    return { ok: false, reason: 'transient' }
   }
 
   const players = await prisma.player.findMany({
@@ -1538,64 +1496,10 @@ async function runStep4ForPlayer(
     take: PLAYERS_PER_LOOP,
   })
 
-  const queue = createBoundedQueue<MatchIngestItem>(INGEST_QUEUE_SIZE)
   const flags = { foundPrismaError: false }
 
-  const runConsumer = async (): Promise<void> => {
-    for (;;) {
-      const item = await queue.pop()
-      if (item === null) return
-      try {
-        await upsertMatchAndParticipants(client, item.region, item.matchDto, item.puuidKeyVersion, counters, logger)
-        const matchRow = await prisma.match.findUnique({
-          where: { riotMatchId: item.matchId },
-          select: { id: true },
-        })
-        if (matchRow) {
-          if (item.timelineDto) {
-            try {
-              await extractAndInsertJungleFirstClear(
-                matchRow.id,
-                item.matchId,
-                item.timelineDto,
-                logger
-              )
-              await extractAndInsertTimelineExtras(
-                matchRow.id,
-                item.matchId,
-                item.timelineDto,
-                item.matchDto.info?.participants ?? [],
-                logger
-              )
-            } catch (timelineErr) {
-              scheduleTimelineRetry(item.matchId)
-              // Do not keep partial matches if timeline extras fail to persist.
-              await prisma.match.delete({ where: { id: matchRow.id } }).catch(() => undefined)
-              await logger.error('Timeline extraction failed; rolled back match', {
-                matchId: item.matchId,
-                error: timelineErr instanceof Error ? timelineErr.message : String(timelineErr),
-              })
-              continue
-            }
-          }
-            await prisma.player.update({
-              where: { id: item.playerId },
-              data: { lastSeen: new Date() },
-            })
-        }
-      } catch (err) {
-        await logger.error('Prisma error upserting match', err)
-        flags.foundPrismaError = true
-      }
-    }
-  }
-
-  const consumerPromises = Array.from({ length: INGEST_CONSUMER_COUNT }, () => runConsumer())
-
-  for (const player of players) {
+  nextPlayer: for (const player of players) {
     if (state.shouldStop) {
-      queue.pushPoison(INGEST_CONSUMER_COUNT)
-      await Promise.all(consumerPromises)
       return 'ok'
     }
 
@@ -1612,19 +1516,24 @@ async function runStep4ForPlayer(
       continue
     }
 
-    const matchIdsRes = await client.getMatchIdsByPuuid(player.puuid, {
-      queue: filters.queue,
-      count: filters.count,
-      start: 0,
-    })
+    const matchIdsRes = await client.getMatchIdsByPuuid(
+      player.puuid,
+      {
+        queue: filters.queue,
+        count: filters.count,
+        start: 0,
+      },
+      riotIngestRequestOptions()
+    )
     counters.requestCount++
     if (!matchIdsRes.ok && matchIdsRes.status === 429) counters.error429Count++
     if (!matchIdsRes.ok) {
+      if (matchIdsRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
+        return 'ok'
+      }
       if (matchIdsRes.status === 400 && is400Decrypt(matchIdsRes.body)) {
         counters.error400Count++
         await logger.error('400 decrypt', matchIdsRes.body)
-        queue.pushPoison(INGEST_CONSUMER_COUNT)
-        await Promise.all(consumerPromises)
         return '400_decrypt'
       }
       continue
@@ -1639,44 +1548,110 @@ async function runStep4ForPlayer(
     const nowMs = Date.now()
     const toFetch = matchIds.filter((id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs))
 
-    const fetchTasks = toFetch.map((matchId) => async () => {
-      if (state.shouldStop) return
+    if (toFetch.length === 0) {
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { lastSeen: new Date() },
+      })
+      const newPlayersFromPlayer0 = counters.playersFetched - playersFetchedBefore
+      await logger.step('Player matches fetched', {
+        playerId: player.id.toString(),
+        region,
+        matchesCount: matchIds.length,
+        newPlayersCount: newPlayersFromPlayer0,
+      })
+      continue
+    }
+
+    /** Any match still not fully ingested (transient API failure, version filter, or DB error) — do not advance lastSeen. */
+    let pendingTransientIngest = false
+
+    for (const matchId of toFetch) {
+      if (state.shouldStop) {
+        return 'ok'
+      }
+
       const strict = await fetchMatchAndTimelineStrict(matchId)
       if (!strict.ok) {
-        if (strict.reason === '400_decrypt') throw new Error('400_decrypt')
-        return
+        if (strict.reason === '400_decrypt') {
+          return '400_decrypt'
+        }
+        if (strict.reason === 'abort') {
+          return 'ok'
+        }
+        if (strict.reason === 'version') {
+          pendingTransientIngest = true
+          await logger.info('Match skipped (game version not in allowed range)', {
+            playerId: player.id.toString(),
+            matchId,
+          })
+          continue
+        }
+        pendingTransientIngest = true
+        await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
+          playerId: player.id.toString(),
+          matchId,
+        })
+        continue
       }
-      await queue.push({
-        matchId,
-        region,
-        matchDto: strict.matchDto,
-        timelineDto: strict.timelineDto,
-        puuidKeyVersion,
-        playerId: player.id,
-      })
-    })
 
-    try {
-      await runWithConcurrency(fetchTasks, MATCH_FETCH_CONCURRENCY)
-    } catch (err) {
-      if (String(err).includes('400_decrypt')) {
-        queue.pushPoison(INGEST_CONSUMER_COUNT)
-        await Promise.all(consumerPromises)
-        return '400_decrypt'
+      try {
+        await upsertMatchAndParticipants(
+          client,
+          region,
+          strict.matchDto,
+          puuidKeyVersion,
+          counters,
+          logger
+        )
+        const matchRow = await prisma.match.findUnique({
+          where: { riotMatchId: matchId },
+          select: { id: true },
+        })
+        if (!matchRow) {
+          throw new Error(`match missing after upsert: ${matchId}`)
+        }
+        await extractAndInsertJungleFirstClear(matchRow.id, matchId, strict.timelineDto, logger)
+        await extractAndInsertTimelineExtras(
+          matchRow.id,
+          matchId,
+          strict.timelineDto,
+          strict.matchDto.info?.participants ?? [],
+          logger
+        )
+      } catch (err) {
+        await prisma.match.deleteMany({ where: { riotMatchId: matchId } }).catch(() => undefined)
+        if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
+          return 'ok'
+        }
+        pendingTransientIngest = true
+        await logger.error('Player match ingest failed', {
+          playerId: player.id.toString(),
+          matchId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        flags.foundPrismaError = true
+        continue
       }
-      throw err
     }
+
+    if (!pendingTransientIngest && !state.shouldStop) {
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { lastSeen: new Date() },
+      })
+    }
+
     const newPlayersFromPlayer = counters.playersFetched - playersFetchedBefore
     await logger.step('Player matches fetched', {
       playerId: player.id.toString(),
       region,
       matchesCount: matchIds.length,
       newPlayersCount: newPlayersFromPlayer,
+      pendingTransientIngest,
     })
   }
 
-  queue.pushPoison(INGEST_CONSUMER_COUNT)
-  await Promise.all(consumerPromises)
   return flags.foundPrismaError ? 'prisma_error' : 'ok'
 }
 
