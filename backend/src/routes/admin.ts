@@ -481,22 +481,40 @@ const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
 
 async function getMissingMatchesCount(): Promise<number> {
+  const apexRankTiers = Prisma.join(['MASTER', 'GRANDMASTER', 'CHALLENGER'])
   const rows = await prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
     SELECT COUNT(*)::bigint AS count
     FROM (
       SELECT DISTINCT m.riot_match_id
       FROM matchs m
       JOIN match_players mp ON mp.match_id = m.id
-      LEFT JOIN match_player_items mpi ON mpi.match_player_id = mp.id
-      LEFT JOIN match_player_runes mpr ON mpr.match_player_id = mp.id
-      LEFT JOIN match_player_bucket mpb ON mpb.match_player_id = mp.id
       LEFT JOIN teams t ON t.id = mp.team_id
       WHERE mp.rank_division IS NULL
-         OR mp.rank_division = ''
+         OR m.game_date IS NULL
+         OR (
+           mp.rank_division = ''
+           AND COALESCE(mp.rank_tier, 'UNRANKED') NOT IN (${apexRankTiers}, 'UNRANKED')
+         )
          OR mp.rank_lp IS NULL
-         OR mpi.match_player_id IS NULL
-         OR mpr.match_player_id IS NULL
-         OR (mpb.match_player_id IS NULL AND m.game_duration >= 300)
+         OR NOT EXISTS (SELECT 1 FROM match_player_items i WHERE i.match_player_id = mp.id)
+         OR EXISTS (
+           SELECT 1
+           FROM match_player_items i
+           WHERE i.match_player_id = mp.id
+             AND i.timestamp_ms <= 0
+         )
+         OR EXISTS (
+           SELECT 1
+           FROM match_player_items i
+           WHERE i.match_player_id = mp.id
+           GROUP BY i.match_player_id
+           HAVING MIN(i."order") <> 0 OR MAX(i."order") <> COUNT(*) - 1
+         )
+         OR NOT EXISTS (SELECT 1 FROM match_player_runes r WHERE r.match_player_id = mp.id)
+         OR (
+           m.game_duration >= 300
+           AND NOT EXISTS (SELECT 1 FROM match_player_bucket b WHERE b.match_player_id = mp.id)
+         )
          OR (
            t.rank_tier = 'UNRANKED'
            AND mp.rank_tier IS NOT NULL
@@ -504,6 +522,12 @@ async function getMissingMatchesCount(): Promise<number> {
          )
          OR (
            t.rank_division = ''
+           AND COALESCE(t.rank_tier, 'UNRANKED') NOT IN (${apexRankTiers}, 'UNRANKED')
+           AND mp.rank_tier IS NOT NULL
+           AND mp.rank_tier <> 'UNRANKED'
+         )
+         OR (
+           t.rank_division IS NULL
            AND mp.rank_tier IS NOT NULL
            AND mp.rank_tier <> 'UNRANKED'
          )

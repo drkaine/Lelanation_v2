@@ -1782,7 +1782,7 @@
                       </h4>
                       <div class="flex flex-wrap gap-2">
                         <div
-                          v-for="c in overviewSidesData.championWinrateBySide.blue.slice(
+                          v-for="c in overviewSidesChampionWinrateBySide.blue.slice(
                             0,
                             sidesExpandBlue ? 20 : 5
                           )"
@@ -1814,7 +1814,7 @@
                         </div>
                       </div>
                       <button
-                        v-if="overviewSidesData.championWinrateBySide.blue.length > 5"
+                        v-if="overviewSidesChampionWinrateBySide.blue.length > 5"
                         type="button"
                         class="mt-2 text-sm font-medium text-accent hover:underline"
                         @click="sidesExpandBlue = !sidesExpandBlue"
@@ -1832,7 +1832,7 @@
                       </h4>
                       <div class="flex flex-wrap gap-2">
                         <div
-                          v-for="c in overviewSidesData.championWinrateBySide.red.slice(
+                          v-for="c in overviewSidesChampionWinrateBySide.red.slice(
                             0,
                             sidesExpandRed ? 20 : 5
                           )"
@@ -1864,7 +1864,7 @@
                         </div>
                       </div>
                       <button
-                        v-if="overviewSidesData.championWinrateBySide.red.length > 5"
+                        v-if="overviewSidesChampionWinrateBySide.red.length > 5"
                         type="button"
                         class="mt-2 text-sm font-medium text-accent hover:underline"
                         @click="sidesExpandRed = !sidesExpandRed"
@@ -1999,7 +1999,7 @@
                       </h4>
                       <div class="flex flex-wrap gap-2">
                         <div
-                          v-for="b in overviewSidesData.bansBySide.blue.slice(
+                          v-for="b in overviewSidesBansBySide.blue.slice(
                             0,
                             sidesExpandBansBlue ? 20 : 5
                           )"
@@ -2023,7 +2023,7 @@
                         </div>
                       </div>
                       <button
-                        v-if="overviewSidesData.bansBySide.blue.length > 5"
+                        v-if="overviewSidesBansBySide.blue.length > 5"
                         type="button"
                         class="mt-2 text-sm font-medium text-accent hover:underline"
                         @click="sidesExpandBansBlue = !sidesExpandBansBlue"
@@ -2041,7 +2041,7 @@
                       </h4>
                       <div class="flex flex-wrap gap-2">
                         <div
-                          v-for="b in overviewSidesData.bansBySide.red.slice(
+                          v-for="b in overviewSidesBansBySide.red.slice(
                             0,
                             sidesExpandBansRed ? 20 : 5
                           )"
@@ -2065,7 +2065,7 @@
                         </div>
                       </div>
                       <button
-                        v-if="overviewSidesData.bansBySide.red.length > 5"
+                        v-if="overviewSidesBansBySide.red.length > 5"
                         type="button"
                         class="mt-2 text-sm font-medium text-accent hover:underline"
                         @click="sidesExpandBansRed = !sidesExpandBansRed"
@@ -3793,7 +3793,15 @@ function durationWinrateChartScaled(
     maxDur: 0,
   }
   if (!buckets.length) return empty
-  const sorted = [...buckets].sort((a, b) => a.durationMin - b.durationMin)
+  const sanitized = buckets
+    .map(b => ({
+      durationMin: Number.isFinite(Number(b.durationMin)) ? Number(b.durationMin) : 0,
+      matchCount: Number.isFinite(Number(b.matchCount)) ? Math.max(0, Number(b.matchCount)) : 0,
+      winrate: Number.isFinite(Number(b.winrate)) ? Number(b.winrate) : 0,
+    }))
+    .filter(b => Number.isFinite(b.durationMin))
+  if (!sanitized.length) return empty
+  const sorted = [...sanitized].sort((a, b) => a.durationMin - b.durationMin)
   const minDur = Math.min(...sorted.map(b => b.durationMin))
   const maxDur = Math.max(...sorted.map(b => b.durationMin + 5))
   const durRange = maxDur - minDur || 1
@@ -3812,6 +3820,7 @@ function durationWinrateChartScaled(
       matchCount: b.matchCount,
     }
   })
+  if (!pts.every(p => Number.isFinite(p.x) && Number.isFinite(p.y))) return empty
   const ptsForCurve = pts.map(p => ({ x: p.x, y: p.y }))
   const linePath = catmullRomToBezier(ptsForCurve)
   const firstX = pts[0]?.x ?? CHART_PAD.left
@@ -4002,6 +4011,18 @@ const overviewSidesData = ref<{
   }
 } | null>(null)
 const overviewSidesPending = ref(false)
+const overviewSidesChampionWinrateBySide = computed(() => ({
+  blue: overviewSidesData.value?.championWinrateBySide?.blue ?? [],
+  red: overviewSidesData.value?.championWinrateBySide?.red ?? [],
+}))
+const overviewSidesBansBySide = computed(() => ({
+  blue: overviewSidesData.value?.bansBySide?.blue ?? [],
+  red: overviewSidesData.value?.bansBySide?.red ?? [],
+}))
+const overviewSidesSideWinrate = computed(() => ({
+  blue: overviewSidesData.value?.sideWinrate?.blue ?? { matches: 0, wins: 0, winrate: 0 },
+  red: overviewSidesData.value?.sideWinrate?.red ?? { matches: 0, wins: 0, winrate: 0 },
+}))
 const sidesExpandBlue = ref(false)
 const sidesExpandRed = ref(false)
 const sidesExpandPickBlue = ref(false)
@@ -4113,37 +4134,32 @@ function sidesQueryParams(): string {
 const sidesDonutCircumference = 2 * Math.PI * 48
 /** Nombre réel de matchs (1 victoire par match, donc blue.wins + red.wins). matchCount côté API = blue.matches + red.matches = 2× matchs. */
 const sidesDonutTotalMatches = computed(() => {
-  const data = overviewSidesData.value
-  if (!data) return 0
-  return data.sideWinrate.blue.wins + data.sideWinrate.red.wins
+  const side = overviewSidesSideWinrate.value
+  return side.blue.wins + side.red.wins
 })
 /** % de matchs gagnés par le côté bleu (bleu + rouge = 100%). */
 const sidesDonutBluePct = computed(() => {
-  const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return '0.00'
-  const pct = (data.sideWinrate.blue.wins / total) * 100
+  if (!total) return '0.00'
+  const pct = (overviewSidesSideWinrate.value.blue.wins / total) * 100
   return Number(pct).toFixed(2)
 })
 const sidesDonutRedPct = computed(() => {
-  const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return '0.00'
-  const pct = (data.sideWinrate.red.wins / total) * 100
+  if (!total) return '0.00'
+  const pct = (overviewSidesSideWinrate.value.red.wins / total) * 100
   return Number(pct).toFixed(2)
 })
 const sidesDonutBlueDash = computed(() => {
-  const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return 0
-  const pct = data.sideWinrate.blue.wins / total
+  if (!total) return 0
+  const pct = overviewSidesSideWinrate.value.blue.wins / total
   return sidesDonutCircumference * pct
 })
 const sidesDonutRedDash = computed(() => {
-  const data = overviewSidesData.value
   const total = sidesDonutTotalMatches.value
-  if (!data || !total) return 0
-  const pct = data.sideWinrate.red.wins / total
+  if (!total) return 0
+  const pct = overviewSidesSideWinrate.value.red.wins / total
   return sidesDonutCircumference * pct
 })
 async function loadOverviewSides() {

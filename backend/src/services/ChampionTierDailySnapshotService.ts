@@ -1,6 +1,6 @@
 /**
- * Daily UTC snapshots of champion stats per rank tier (no role/division split).
- * One row per (snapshot_for_date, rank_tier, champion): games, wins, WR, bans, pick rate.
+ * Daily UTC snapshots of champion stats per rank tier and role.
+ * One row per (snapshot_for_date, rank_tier, role, champion): games, wins, WR, bans, pick rate.
  * Window: previous UTC calendar day [D 00:00, D+1 00:00), keyed by game_date on matchs.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
@@ -52,6 +52,7 @@ export async function runChampionTierSnapshotForWindow(params: {
     picks AS (
       SELECT
         split_part(UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.rank_tier), ''), m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
+        UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) AS role_norm,
         mp.champion_id,
         COUNT(*)::int AS games,
         SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
@@ -61,7 +62,7 @@ export async function runChampionTierSnapshotForWindow(params: {
       CROSS JOIN window_params wp
       WHERE m.game_date >= wp.w_start
         AND m.game_date < wp.w_end
-      GROUP BY 1, 2
+      GROUP BY 1, 2, 3
     ),
     bans AS (
       SELECT
@@ -77,22 +78,23 @@ export async function runChampionTierSnapshotForWindow(params: {
     ),
     merged AS (
       SELECT
-        COALESCE(p.rank_tier_norm, b.rank_tier_norm) AS rank_tier,
-        COALESCE(p.champion_id, b.champion_id) AS champion_id,
-        COALESCE(p.games, 0) AS games,
-        COALESCE(p.wins, 0) AS wins,
+        p.rank_tier_norm AS rank_tier,
+        p.role_norm AS role,
+        p.champion_id AS champion_id,
+        p.games AS games,
+        p.wins AS wins,
         COALESCE(b.ban_count, 0) AS bans
       FROM picks p
-      FULL OUTER JOIN bans b
+      LEFT JOIN bans b
         ON p.rank_tier_norm = b.rank_tier_norm AND p.champion_id = b.champion_id
     ),
     tier_totals AS (
-      SELECT rank_tier, SUM(games)::bigint AS total_picks
+      SELECT rank_tier, role, SUM(games)::bigint AS total_picks
       FROM merged
-      GROUP BY rank_tier
+      GROUP BY rank_tier, role
     )
     INSERT INTO champion_tier_daily_snapshots (
-      snapshot_for_date, window_start, window_end, rank_tier, champion_id,
+      snapshot_for_date, window_start, window_end, rank_tier, role, champion_id,
       games, wins, bans, pick_rate_pct, win_rate_pct, created_at
     )
     SELECT
@@ -100,6 +102,7 @@ export async function runChampionTierSnapshotForWindow(params: {
       wp.w_start,
       wp.w_end,
       m.rank_tier,
+      m.role,
       m.champion_id,
       m.games,
       m.wins,
@@ -114,9 +117,9 @@ export async function runChampionTierSnapshotForWindow(params: {
       END,
       NOW()
     FROM merged m
-    INNER JOIN tier_totals tt ON tt.rank_tier = m.rank_tier
+    INNER JOIN tier_totals tt ON tt.rank_tier = m.rank_tier AND tt.role = m.role
     CROSS JOIN window_params wp
-    ON CONFLICT (snapshot_for_date, rank_tier, champion_id) DO UPDATE
+    ON CONFLICT (snapshot_for_date, rank_tier, role, champion_id) DO UPDATE
     SET
       window_start = EXCLUDED.window_start,
       window_end = EXCLUDED.window_end,
@@ -166,6 +169,17 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
     (LIKE champion_tier_daily_snapshots INCLUDING ALL)
+  `)
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE champion_tier_daily_snapshots_archive
+    ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'ALL'
+  `)
+  await prisma.$executeRawUnsafe(`
+    DROP INDEX IF EXISTS champion_tier_daily_snapshots_archive_snapshot_for_date_rank_tier_champion_id_key
+  `)
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS champion_tier_daily_snapshots_archive_snapshot_for_date_rank_tier_role_champion_id_key
+    ON champion_tier_daily_snapshots_archive (snapshot_for_date, rank_tier, role, champion_id)
   `)
   const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT c.snapshot_for_date::date AS d
@@ -254,6 +268,7 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
 export interface ChampionTierSnapshotRow {
   snapshotForDate: string
   rankTier: string
+  role: string
   championId: number
   games: number
   wins: number
@@ -266,50 +281,55 @@ export interface ChampionTierSnapshotRow {
 export async function getChampionTierSnapshotsForCharts(options: {
   championId: number
   rankTier?: string | null
+  role?: string | null
   fromDate?: string | null
   toDate?: string | null
   limit?: number
 }): Promise<ChampionTierSnapshotRow[]> {
   if (!isDatabaseConfigured()) return []
-  const { championId, rankTier, fromDate, toDate, limit = 365 } = options
-
-  const rows = await prisma.championTierDailySnapshot.findMany({
-    where: {
-      championId,
-      ...(rankTier && rankTier !== '' ? { rankTier: rankTier.toUpperCase().split('_')[0] } : {}),
-      ...(fromDate || toDate
-        ? {
-            snapshotForDate: {
-              ...(fromDate ? { gte: new Date(`${fromDate}T00:00:00.000Z`) } : {}),
-              ...(toDate ? { lte: new Date(`${toDate}T23:59:59.999Z`) } : {}),
-            },
-          }
-        : {}),
-    },
-    orderBy: { snapshotForDate: 'desc' },
-    take: limit,
-    select: {
-      snapshotForDate: true,
-      rankTier: true,
-      championId: true,
-      games: true,
-      wins: true,
-      bans: true,
-      pickRatePct: true,
-      winRatePct: true,
-    },
-  })
+  const { championId, rankTier, role, fromDate, toDate, limit = 365 } = options
+  const rows = await prisma.$queryRaw<Array<{
+    snapshot_for_date: Date
+    rank_tier: string
+    role: string
+    champion_id: number
+    games: number
+    wins: number
+    bans: number
+    pick_rate_pct: number
+    win_rate_pct: number
+  }>>`
+    SELECT
+      snapshot_for_date,
+      rank_tier,
+      role,
+      champion_id,
+      games,
+      wins,
+      bans,
+      pick_rate_pct,
+      win_rate_pct
+    FROM champion_tier_daily_snapshots
+    WHERE champion_id = ${championId}
+      AND (${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text IS NULL OR rank_tier = ${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text)
+      AND (${role ? role.toUpperCase() : null}::text IS NULL OR role = ${role ? role.toUpperCase() : null}::text)
+      AND (${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz IS NULL OR snapshot_for_date >= ${fromDate ? new Date(`${fromDate}T00:00:00.000Z`) : null}::timestamptz)
+      AND (${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz IS NULL OR snapshot_for_date <= ${toDate ? new Date(`${toDate}T23:59:59.999Z`) : null}::timestamptz)
+    ORDER BY snapshot_for_date DESC
+    LIMIT ${limit}
+  `
 
   const chronological = [...rows].reverse()
 
   return chronological.map((r) => ({
-    snapshotForDate: r.snapshotForDate.toISOString().slice(0, 10),
-    rankTier: r.rankTier,
-    championId: r.championId,
+    snapshotForDate: r.snapshot_for_date.toISOString().slice(0, 10),
+    rankTier: r.rank_tier,
+    role: r.role,
+    championId: r.champion_id,
     games: r.games,
     wins: r.wins,
     bans: r.bans,
-    pickRatePct: r.pickRatePct,
-    winRatePct: r.winRatePct,
+    pickRatePct: r.pick_rate_pct,
+    winRatePct: r.win_rate_pct,
   }))
 }

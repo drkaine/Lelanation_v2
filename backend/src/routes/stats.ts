@@ -642,17 +642,26 @@ router.get('/champions/:championId/tier-trend-snapshots', async (req: Request, r
     return res.status(200).json({ championId, points: [], message: 'Database not configured.' })
   }
   const rankTier = queryString(req.query.rankTier)
+  const role = queryString(req.query.role)
   const fromDate = queryString(req.query.from)
   const toDate = queryString(req.query.to)
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 365
   const points = await getChampionTierSnapshotsForCharts({
     championId,
     rankTier: rankTier ?? null,
+    role: role ?? null,
     fromDate: fromDate ?? null,
     toDate: toDate ?? null,
     limit: Number.isFinite(limit) ? Math.min(2000, Math.max(1, limit)) : 365,
   })
-  return res.json({ championId, rankTier: rankTier ?? null, fromDate: fromDate ?? null, toDate: toDate ?? null, points })
+  return res.json({
+    championId,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+    fromDate: fromDate ?? null,
+    toDate: toDate ?? null,
+    points,
+  })
 })
 
 /** GET /api/stats/champions/:championId/summoner-spells - per-spell stats for this champion. Query: ?version=16.1 &rankTier=GOLD */

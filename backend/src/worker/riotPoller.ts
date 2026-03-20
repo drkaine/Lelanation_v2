@@ -39,8 +39,13 @@ const MATCH_FETCH_CONCURRENCY = 5 // parallel match detail fetches per player
 const INGEST_QUEUE_SIZE = 50
 /** Number of concurrent DB writers in Phase 4 (consumers). */
 const INGEST_CONSUMER_COUNT = 2
+const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
+const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
+const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
 let lastMvRefreshAt = 0
+
+const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
@@ -212,6 +217,28 @@ function averageRankFromScores(scores: number[]): { tier: string; division: stri
   if (scores.length === 0) return { tier: 'UNRANKED', division: '' }
   const avg = scores.reduce((a, b) => a + b, 0) / scores.length
   return scoreToRank(avg)
+}
+
+function canAttemptTimelineFetchNow(matchId: string, nowMs: number): boolean {
+  const s = timelineRetryState.get(matchId)
+  return !s || s.nextRetryAtMs <= nowMs
+}
+
+function scheduleTimelineRetry(matchId: string): { attempts: number; nextRetryAtMs: number } {
+  const prev = timelineRetryState.get(matchId)
+  const attempts = Math.min(TIMELINE_RETRY_MAX_ATTEMPTS, (prev?.attempts ?? 0) + 1)
+  const delay = Math.min(
+    TIMELINE_RETRY_MAX_DELAY_MS,
+    TIMELINE_RETRY_BASE_DELAY_MS * Math.max(1, 2 ** (attempts - 1))
+  )
+  const nextRetryAtMs = Date.now() + delay
+  const nextState = { attempts, nextRetryAtMs }
+  timelineRetryState.set(matchId, nextState)
+  return nextState
+}
+
+function clearTimelineRetry(matchId: string): void {
+  timelineRetryState.delete(matchId)
 }
 
 async function getDiskUsagePercent(path: string): Promise<number | null> {
@@ -1501,31 +1528,38 @@ async function runStep4ForPlayer(
           where: { riotMatchId: item.matchId },
           select: { id: true },
         })
-          if (matchRow) {
-            if (item.timelineDto) {
-              try {
-                await extractAndInsertJungleFirstClear(
-                  matchRow.id,
-                  item.matchId,
-                  item.timelineDto,
-                  logger
-                )
-                await extractAndInsertTimelineExtras(
-                  matchRow.id,
-                  item.matchId,
-                  item.timelineDto,
-                  item.matchDto.info?.participants ?? [],
-                  logger
-                )
-              } catch {
-                // Non-fatal: timeline parse error
-              }
+        if (matchRow) {
+          if (item.timelineDto) {
+            try {
+              await extractAndInsertJungleFirstClear(
+                matchRow.id,
+                item.matchId,
+                item.timelineDto,
+                logger
+              )
+              await extractAndInsertTimelineExtras(
+                matchRow.id,
+                item.matchId,
+                item.timelineDto,
+                item.matchDto.info?.participants ?? [],
+                logger
+              )
+            } catch (timelineErr) {
+              scheduleTimelineRetry(item.matchId)
+              // Do not keep partial matches if timeline extras fail to persist.
+              await prisma.match.delete({ where: { id: matchRow.id } }).catch(() => undefined)
+              await logger.error('Timeline extraction failed; rolled back match', {
+                matchId: item.matchId,
+                error: timelineErr instanceof Error ? timelineErr.message : String(timelineErr),
+              })
+              continue
             }
+          }
             await prisma.player.update({
               where: { id: item.playerId },
               data: { lastSeen: new Date() },
             })
-          }
+        }
       } catch (err) {
         await logger.error('Prisma error upserting match', err)
         flags.foundPrismaError = true
@@ -1568,7 +1602,8 @@ async function runStep4ForPlayer(
       select: { riotMatchId: true },
     })
     const existingSet = new Set(existing.map((m) => m.riotMatchId))
-    const toFetch = matchIds.filter((id) => !existingSet.has(id))
+    const nowMs = Date.now()
+    const toFetch = matchIds.filter((id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs))
 
     let found400Decrypt = false
     const fetchTasks = toFetch.map((matchId) => async () => {
@@ -1592,11 +1627,33 @@ async function runStep4ForPlayer(
       try {
         const timelineRes = await client.getMatchTimeline(matchId)
         counters.requestCount++
-        if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
-        if (timelineRes.ok) timelineDto = timelineRes.data
+        if (!timelineRes.ok) {
+          if (timelineRes.status === 429) counters.error429Count++
+          const retry = scheduleTimelineRetry(matchId)
+          if (logger) {
+            await logger.info('Skip match ingest: timeline unavailable', {
+              matchId,
+              status: timelineRes.status,
+              retryAttempts: retry.attempts,
+              retryInSec: Math.max(1, Math.round((retry.nextRetryAtMs - Date.now()) / 1000)),
+            })
+          }
+          return
+        }
+        timelineDto = timelineRes.data
+        clearTimelineRetry(matchId)
       } catch {
-        // Non-fatal: push without timeline
+        const retry = scheduleTimelineRetry(matchId)
+        if (logger) {
+          await logger.info('Skip match ingest: timeline fetch error', {
+            matchId,
+            retryAttempts: retry.attempts,
+            retryInSec: Math.max(1, Math.round((retry.nextRetryAtMs - Date.now()) / 1000)),
+          })
+        }
+        return
       }
+      if (!timelineDto) return
       await queue.push({
         matchId,
         region,

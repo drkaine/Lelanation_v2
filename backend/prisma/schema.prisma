@@ -447,6 +447,7 @@ model ChampionTierDailySnapshot {
   windowStart     DateTime @map("window_start")
   windowEnd       DateTime @map("window_end")
   rankTier        String   @map("rank_tier")
+  role            String   @map("role")
   championId      Int      @map("champion_id")
   games           Int      @default(0)
   wins            Int      @default(0)
@@ -455,9 +456,9 @@ model ChampionTierDailySnapshot {
   winRatePct      Float    @map("win_rate_pct")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  @@unique([snapshotForDate, rankTier, championId])
+  @@unique([snapshotForDate, rankTier, role, championId])
   @@index([championId, snapshotForDate(sort: Desc)])
-  @@index([rankTier, snapshotForDate(sort: Desc)])
+  @@index([rankTier, role, snapshotForDate(sort: Desc)])
   @@map("champion_tier_daily_snapshots")
 }
 

@@ -398,8 +398,13 @@
               <div class="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                  :disabled="scriptSwitchBusy[row.id]"
+                  :class="[
+                    'rounded px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:opacity-50',
+                    isScriptActive(row.id)
+                      ? 'cursor-not-allowed bg-slate-500'
+                      : 'bg-accent hover:opacity-90',
+                  ]"
+                  :disabled="scriptSwitchBusy[row.id] || isScriptActive(row.id)"
                   @click="
                     row.id === 'league-xp'
                       ? switchScript('league-xp', leagueXpForm)
