@@ -509,6 +509,10 @@ onMounted(() => {
 }
 
 .streamer-tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   border: none;
   border-radius: 9999px;
   background: transparent;
@@ -518,6 +522,8 @@ onMounted(() => {
   font-weight: 600;
   line-height: 1.1;
   color: rgb(var(--rgb-text) / 0.75);
+  text-decoration: none;
+  cursor: pointer;
   transition:
     background-color 0.2s ease,
     color 0.2s ease;

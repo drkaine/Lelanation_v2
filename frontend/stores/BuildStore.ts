@@ -32,7 +32,7 @@ interface BuildState {
   displayedVariant: 'main' | number
   /** Champion en attente de changement (si des variantes existent — confirmation requise). */
   pendingChampionChange: Champion | null
-  /** Build source utilisé pour une édition en copie (ne doit pas être écrasé). */
+  /** Build en cours d’édition (même id que `currentBuild` ; sert aux URLs `?editId=` et au brouillon dédié). */
   editSourceBuildId: string | null
 }
 
@@ -276,25 +276,18 @@ export const useBuildStore = defineStore('build', {
     },
 
     /**
-     * Charge un build existant dans le builder comme COPIE éditable.
-     * Le build source n'est jamais écrasé à la sauvegarde.
+     * Charge un build existant dans le builder pour le modifier (même id).
+     * La sauvegarde remplace l’entrée dans `lelanation_builds` au lieu d’en ajouter une nouvelle.
      */
-    startEditingBuildAsCopy(buildId: string): boolean {
+    startEditingBuild(buildId: string): boolean {
       try {
         const savedBuilds = this.getSavedBuilds()
         const source = savedBuilds.find(b => b.id === buildId)
         if (!source) return false
-        const now = new Date().toISOString()
-        const copy: Build = {
-          ...source,
-          id: crypto.randomUUID(),
-          createdAt: now,
-          updatedAt: now,
-        }
         this.currentBuild = {
-          ...copy,
-          subBuilds: copy.subBuilds ?? [],
-          descriptionMode: copy.descriptionMode ?? 'single',
+          ...source,
+          subBuilds: Array.isArray(source.subBuilds) ? [...source.subBuilds] : [],
+          descriptionMode: source.descriptionMode ?? 'single',
         }
         this.displayedVariant = 'main'
         this.pendingChampionChange = null

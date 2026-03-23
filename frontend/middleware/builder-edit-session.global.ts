@@ -1,5 +1,5 @@
 /**
- * Quitte la session d'édition (build existant chargé comme copie) lorsque l'utilisateur
+ * Quitte la session d'édition (build existant en cours de modification) lorsque l'utilisateur
  * quitte entièrement le flux /builds/create/*. Les changements d'étape à l'intérieur du
  * builder ne déclenchent pas ce middleware.
  */

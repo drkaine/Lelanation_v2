@@ -34,7 +34,7 @@ const route = useRoute()
 const localePath = useLocalePath()
 const buildStore = useBuildStore()
 
-/** Garde ?editId= sur toutes les étapes tant qu'on édite une copie d'un build existant */
+/** Garde ?editId= sur toutes les étapes tant qu'on édite un build existant */
 function stepHref(step: 'champion' | 'rune' | 'item' | 'info'): string {
   const id = buildStore.editSourceBuildId
   const base = `/builds/create/${step}`

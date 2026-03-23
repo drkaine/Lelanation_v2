@@ -40,36 +40,6 @@
                 {{ t('stats.categories.economic') }}
               </button>
             </div>
-            <div
-              class="save-button-wrapper"
-              @mouseenter="handleSaveButtonHover"
-              @mouseleave="showSaveTooltip = false"
-            >
-              <button
-                type="button"
-                :aria-disabled="!buildStore.isBuildValid || buildStore.status === 'loading'"
-                :class="[
-                  'save-button rounded-lg px-6 py-2.5 font-semibold transition',
-                  buildStore.isBuildValid && buildStore.status !== 'loading'
-                    ? 'bg-accent text-background hover:bg-accent/90'
-                    : 'cursor-not-allowed bg-surface text-text/50',
-                ]"
-                @click="handleSaveButtonClick"
-              >
-                {{ buildStore.status === 'loading' ? 'Sauvegarde...' : 'Sauvegarder' }}
-              </button>
-              <div
-                v-if="showSaveTooltip && missingValidationMessages.length > 0"
-                class="save-tooltip"
-              >
-                <p class="save-tooltip-title">{{ t('createBuild.buildIncomplete') }}</p>
-                <ul class="save-tooltip-list">
-                  <li v-for="error in missingValidationMessages" :key="error">
-                    {{ error }}
-                  </li>
-                </ul>
-              </div>
-            </div>
           </div>
 
           <div class="tab-content">
@@ -79,6 +49,7 @@
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
         <div class="build-card-column w-full flex-shrink-0 md:order-1">
+          <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
           <BuildCard :sheet-tooltips="true" :highlight-missing-fields="highlightMissingFields" />
         </div>
       </div>
@@ -101,25 +72,17 @@
         </div>
       </div>
     </div>
-
-    <!-- Notification Toast -->
-    <NotificationToast
-      v-if="showNotification"
-      :message="notificationMessage"
-      :type="buildStore.status === 'success' ? 'success' : 'error'"
-      @close="showNotification = false"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
+import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
-import NotificationToast from '~/components/NotificationToast.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 
 definePageMeta({
@@ -143,66 +106,13 @@ const localePath = useLocalePath()
 const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const { isStreamerMode } = useStreamerMode()
-const showSaveTooltip = ref(false)
-const highlightMissingFields = ref(false)
-let saveHintsTimer: ReturnType<typeof setTimeout> | null = null
-
-const showNotification = ref(false)
-const notificationMessage = ref('')
 const statsCategory = ref<'basic' | 'advanced' | 'economic'>('basic')
-
-const missingValidationMessages = computed(() => {
-  if (buildStore.isBuildValid) return []
-  return [...buildStore.validationErrors]
-})
-
-const triggerSaveHints = (showTooltip = false) => {
-  if (buildStore.isBuildValid || buildStore.status === 'loading') return
-  showSaveTooltip.value = showTooltip
-  highlightMissingFields.value = true
-  if (saveHintsTimer) clearTimeout(saveHintsTimer)
-  saveHintsTimer = setTimeout(() => {
-    highlightMissingFields.value = false
-    showSaveTooltip.value = false
-  }, 10000)
-}
-
-const handleSaveButtonHover = () => {
-  triggerSaveHints(true)
-}
-
-const handleSaveButtonClick = () => {
-  if (!buildStore.isBuildValid || buildStore.status === 'loading') {
-    triggerSaveHints(false)
-    return
-  }
-  saveBuild().catch(() => {})
-}
-
-const saveBuild = async () => {
-  const success = await buildStore.saveBuild()
-  if (success && buildStore.status === 'success') {
-    // Afficher la notification verte
-    notificationMessage.value = t('createBuild.buildSavedSuccess')
-    showNotification.value = true
-
-    // Vider le store pour pouvoir créer un nouveau build de zéro
-    buildStore.createNewBuild()
-
-    setTimeout(() => {
-      router.push(localePath('/builds') + '?tab=my-builds')
-    }, 1000)
-  } else {
-    // Afficher une notification d'erreur
-    notificationMessage.value = buildStore.error || 'Erreur lors de la sauvegarde'
-    showNotification.value = true
-  }
-}
+const highlightMissingFields = ref(false)
 
 onMounted(() => {
   const editId = typeof route.query.editId === 'string' ? route.query.editId : null
   if (editId && buildStore.editSourceBuildId !== editId) {
-    const loaded = buildStore.startEditingBuildAsCopy(editId)
+    const loaded = buildStore.startEditingBuild(editId)
     if (!loaded) buildStore.ensureCurrentBuild()
   } else {
     buildStore.ensureCurrentBuild()
@@ -216,10 +126,6 @@ onMounted(() => {
   }
 })
 
-onBeforeUnmount(() => {
-  if (saveHintsTimer) clearTimeout(saveHintsTimer)
-})
-
 watch(
   () => buildStore.currentBuild?.champion,
   champion => {
@@ -231,10 +137,6 @@ watch(
   },
   { immediate: true }
 )
-
-watch(isStreamerMode, () => {
-  showSaveTooltip.value = false
-})
 </script>
 
 <style scoped>
@@ -256,7 +158,7 @@ watch(isStreamerMode, () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: var(--build-create-card-top-gap, 11px);
+  margin-top: 0;
 }
 
 .tab-content {
@@ -312,42 +214,6 @@ watch(isStreamerMode, () => {
 .info-toolbar-category-tabs .stats-tab--active {
   background: rgb(var(--rgb-primary) / 0.3);
   color: rgb(var(--rgb-text));
-}
-
-.save-button-wrapper {
-  position: relative;
-}
-
-.save-button {
-  min-width: 160px;
-}
-
-.save-tooltip {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 20;
-  width: min(320px, 75vw);
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  border-radius: 10px;
-  background: rgba(20, 20, 28, 0.96);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  padding: 10px 12px;
-}
-
-.save-tooltip-title {
-  margin: 0 0 6px;
-  color: rgb(248, 113, 113);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.save-tooltip-list {
-  margin: 0;
-  padding-left: 18px;
-  color: rgba(255, 255, 255, 0.86);
-  font-size: 0.8rem;
-  line-height: 1.45;
 }
 
 /* ── Popup confirmation champion ── */

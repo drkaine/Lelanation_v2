@@ -20,7 +20,8 @@
 
         <!-- Build Card (Bottom on mobile, Right on desktop) -->
         <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
-          <BuildCard :sheet-tooltips="true" />
+          <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
+          <BuildCard :sheet-tooltips="true" :highlight-missing-fields="highlightMissingFields" />
         </div>
       </div>
     </div>
@@ -28,9 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
+import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
@@ -53,11 +55,12 @@ const buildStore = useBuildStore()
 const route = useRoute()
 const { isStreamerMode } = useStreamerMode()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
+const highlightMissingFields = ref(false)
 
 onMounted(() => {
   const editId = typeof route.query.editId === 'string' ? route.query.editId : null
   if (editId && buildStore.editSourceBuildId !== editId) {
-    const loaded = buildStore.startEditingBuildAsCopy(editId)
+    const loaded = buildStore.startEditingBuild(editId)
     if (!loaded) buildStore.ensureCurrentBuild()
   } else {
     buildStore.ensureCurrentBuild()
@@ -87,7 +90,7 @@ onMounted(() => {
 
 .build-card-wrapper {
   width: var(--rune-card-width);
-  margin-top: var(--build-create-card-top-gap, 11px);
+  margin-top: 0;
 }
 
 @media (min-width: 768px) {
