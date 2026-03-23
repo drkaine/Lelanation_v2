@@ -22,6 +22,11 @@ model Player {
   region          String
   puuidKeyVersion String?   @map("puuid_key_version") // dev | persos | prod
   lastSeen        DateTime? @map("last_seen")
+  /// Solo-queue snapshot from League v4 (or match DTO) when ingesting the player’s newest stored game.
+  rankTier             String?   @map("rank_tier")
+  rankDivision         String?   @map("rank_division")
+  rankLp               Int?      @map("rank_lp")
+  rankSnapshotGameDate DateTime? @map("rank_snapshot_game_date")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   matchPlayers MatchPlayer[]
@@ -29,6 +34,7 @@ model Player {
   @@index([region])
   @@index([puuidKeyVersion])
   @@index([lastSeen])
+  @@index([rankTier])
   @@map("players")
 }
 

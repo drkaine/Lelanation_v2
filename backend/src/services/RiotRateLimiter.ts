@@ -1,35 +1,56 @@
 /**
- * Global Riot API throttle: one counter for all endpoints (application limit).
- * - At most N requests per 1s and M per 120s (defaults from `app` bucket in rate-limit.json).
- * - When the 1s cap would be exceeded: wait 1s before the next slot.
- * - When the 120s cap would be exceeded: wait until the oldest request in that window falls out.
+ * Riot API throttle driven by response headers + HTTP 429.
+ * - No local request counting: we send at full speed and read `X-App-Rate-Limit-Count` /
+ *   `X-Method-Rate-Limit-Count` vs the matching limit headers.
+ * - When the 120s application bucket reports ≥99 uses (e.g. 99/100), pause 2 minutes before more calls.
  * - On HTTP 429: block at least 10s, or longer if Riot sends Retry-After (whichever is greater).
  */
 import type { RateLimitConfig } from './RiotConfigService.js'
 
-const WINDOW_1S_MS = 1000
-const WINDOW_120S_MS = 120_000
+/** Pause when a 120s bucket count reaches this usage (Riot app limit is typically 100/120s). */
+export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
+/** Cooldown after hitting near-limit on the 120s bucket (ms). */
+export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 120_000
 /** Minimum pause after a real HTTP 429 from Riot (may extend via `penalize429(retryAfterSec)`). */
 export const RIOT_429_MIN_PENALTY_MS = 10_000
+
 const PENALTY_429_MS = RIOT_429_MIN_PENALTY_MS
-const DEFAULT_PER_SECOND = 19
-const DEFAULT_PER_120S = 99
+
+/** Parse Riot header like `20:1,100:120` → Map<windowSeconds, limitOrCount> */
+function parseRiotLimitPairs(header: string | null): Map<number, number> {
+  const m = new Map<number, number>()
+  if (!header?.trim()) return m
+  for (const part of header.split(',')) {
+    const [a, b] = part.trim().split(':')
+    const v = Number(a)
+    const w = Number(b)
+    if (Number.isFinite(v) && Number.isFinite(w) && w > 0) m.set(w, v)
+  }
+  return m
+}
+
+function applyNearLimitFromBuckets(
+  limitByWin: Map<number, number>,
+  countByWin: Map<number, number>,
+  setPenalty: (ms: number) => void
+): void {
+  for (const [winSec, used] of countByWin) {
+    if (winSec !== 120) continue
+    const lim = limitByWin.get(winSec)
+    if (lim == null || lim <= 0) continue
+    if (used >= RIOT_HEADER_APP_120S_NEAR_LIMIT) {
+      setPenalty(RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS)
+      return
+    }
+  }
+}
 
 export class RiotRateLimiter {
-  private readonly maxPerSecond: number
-  private readonly maxPer120Seconds: number
   private readonly penalty429Ms: number
-
-  private requestTimestamps: number[] = []
   private penaltyUntil = 0
   private chain: Promise<void> = Promise.resolve()
 
-  constructor(config: RateLimitConfig) {
-    const app = config.buckets.find((b) => b.name === 'app')
-    const lim1 = app?.limits.find((l) => l.windowSeconds === 1)
-    const lim120 = app?.limits.find((l) => l.windowSeconds === 120)
-    this.maxPerSecond = lim1?.count ?? DEFAULT_PER_SECOND
-    this.maxPer120Seconds = lim120?.count ?? DEFAULT_PER_120S
+  constructor(_config: RateLimitConfig) {
     this.penalty429Ms = PENALTY_429_MS
   }
 
@@ -52,7 +73,29 @@ export class RiotRateLimiter {
   }
 
   /**
-   * Reserve one global slot before a Riot HTTP call. Bucket name is ignored (single app-wide budget).
+   * Read Riot rate-limit headers on successful responses. If the 120s bucket is at ≥99 uses,
+   * enqueue a 2-minute cooldown (matches manual “wait before 429” behaviour).
+   */
+  syncFromResponseHeaders(headers: { get(name: string): string | null }): void {
+    const appLimit = headers.get('x-app-rate-limit')
+    const appCount = headers.get('x-app-rate-limit-count')
+    if (appLimit && appCount) {
+      applyNearLimitFromBuckets(parseRiotLimitPairs(appLimit), parseRiotLimitPairs(appCount), (ms) => {
+        this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + ms)
+      })
+    }
+    const methodLimit = headers.get('x-method-rate-limit')
+    const methodCount = headers.get('x-method-rate-limit-count')
+    if (methodLimit && methodCount) {
+      applyNearLimitFromBuckets(parseRiotLimitPairs(methodLimit), parseRiotLimitPairs(methodCount), (ms) => {
+        this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + ms)
+      })
+    }
+  }
+
+  /**
+   * Wait until any penalty (429 or header-driven cooldown) expires, then proceed.
+   * Bucket name is ignored (single global gate).
    */
   async acquire(_bucketName?: string): Promise<void> {
     let release!: () => void
@@ -67,40 +110,15 @@ export class RiotRateLimiter {
     try {
       for (;;) {
         const now = Date.now()
-
         const penaltyWait = this.penaltyUntil - now
         if (penaltyWait > 0) {
           await new Promise((r) => setTimeout(r, penaltyWait))
           continue
         }
-
-        this.pruneOld(now)
-
-        const in1s = this.requestTimestamps.filter((t) => t > now - WINDOW_1S_MS)
-        const in120 = this.requestTimestamps.filter((t) => t > now - WINDOW_120S_MS)
-
-        if (in120.length >= this.maxPer120Seconds) {
-          const oldest = Math.min(...in120)
-          const waitMs = oldest + WINDOW_120S_MS - now
-          await new Promise((r) => setTimeout(r, Math.max(0, waitMs)))
-          continue
-        }
-
-        if (in1s.length >= this.maxPerSecond) {
-          await new Promise((r) => setTimeout(r, WINDOW_1S_MS))
-          continue
-        }
-
-        this.requestTimestamps.push(Date.now())
         break
       }
     } finally {
       release()
     }
-  }
-
-  private pruneOld(now: number): void {
-    const cutoff = now - WINDOW_120S_MS
-    this.requestTimestamps = this.requestTimestamps.filter((t) => t >= cutoff)
   }
 }

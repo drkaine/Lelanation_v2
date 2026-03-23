@@ -160,6 +160,64 @@ function averageRankFromScores(scores: number[]): { tier: string; division: stri
   return scoreToRank(avg)
 }
 
+/** Rank fields from match-v5 participant payload (may be incomplete for historical games). */
+function participantRankFromDto(p: RiotParticipantDto): {
+  tier: string
+  division: string | null
+  lp: number | null
+} {
+  const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
+  const division = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
+  const lp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
+  return { tier, division, lp }
+}
+
+function needsLeagueRankApiFromDto(p: RiotParticipantDto): boolean {
+  const { tier, division, lp } = participantRankFromDto(p)
+  return division == null || lp == null || tier === 'UNRANKED'
+}
+
+type ResolvedParticipantRank = { tier: string; division: string | null; lp: number | null }
+
+function mergeDtoWithAccountCache(
+  p: RiotParticipantDto,
+  puuid: string,
+  accountRankCache: Map<
+    string,
+    { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
+  >
+): ResolvedParticipantRank {
+  let { tier, division, lp } = participantRankFromDto(p)
+  if (division == null || lp == null || tier === 'UNRANKED') {
+    const acc = accountRankCache.get(puuid)
+    if (acc?.rankTier && acc.rankTier !== 'UNRANKED') tier = acc.rankTier
+    if (division == null && acc?.rankDivision != null) division = acc.rankDivision
+    if (lp == null && acc?.rankLp != null) lp = acc.rankLp
+  }
+  return { tier, division, lp }
+}
+
+function needsRankPeerFill(r: ResolvedParticipantRank): boolean {
+  return r.division == null || r.lp == null || r.tier === 'UNRANKED'
+}
+
+function fillParticipantRankFromPeers(
+  idx: number,
+  ranks: ResolvedParticipantRank[]
+): ResolvedParticipantRank {
+  const scores: number[] = []
+  for (let i = 0; i < ranks.length; i++) {
+    if (i === idx) continue
+    const b = ranks[i]
+    if (b.tier !== 'UNRANKED') {
+      scores.push(rankToScore(b.tier, b.division ?? '', b.lp))
+    }
+  }
+  if (scores.length === 0) return { tier: 'UNRANKED', division: null, lp: null }
+  const avg = averageRankFromScores(scores)
+  return { tier: avg.tier, division: avg.division || null, lp: null }
+}
+
 function canAttemptTimelineFetchNow(matchId: string, nowMs: number): boolean {
   const s = timelineRetryState.get(matchId)
   return !s || s.nextRetryAtMs <= nowMs
@@ -652,6 +710,28 @@ export async function upsertMatchAndParticipants(
   const participantDtos = info.participants as RiotParticipantDto[]
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
 
+  const maxGameByPuuid = new Map<string, Date>()
+  if (puuids.length > 0) {
+    const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
+      SELECT pl.puuid, MAX(m.game_date) AS max_game
+      FROM players pl
+      INNER JOIN match_players mp ON mp.player_id = pl.id
+      INNER JOIN matchs m ON m.id = mp.match_id
+      WHERE pl.puuid IN (${Prisma.join(puuids)})
+      GROUP BY pl.puuid
+    `
+    for (const r of rows) {
+      if (r.max_game) maxGameByPuuid.set(r.puuid, r.max_game)
+    }
+  }
+
+  function isNewestStoredMatchForPuuid(puuid: string): boolean {
+    if (!gameDate) return false
+    const max = maxGameByPuuid.get(puuid)
+    if (!max) return true
+    return gameDate.getTime() > max.getTime()
+  }
+
   // League-v4 rank lookups run outside the DB transaction so we don't hold connections during HTTP / 429 waits.
   const accountRankCache = new Map<
     string,
@@ -716,16 +796,24 @@ export async function upsertMatchAndParticipants(
     for (const p of participantDtos) {
       const pid = p.puuid
       if (!pid) continue
-      const rt = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
-      const rd = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
-      const rlp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
-      if (rd == null || rlp == null || rt === 'UNRANKED') {
-        await fetchAccountRankForParticipant(pid)
-      }
+      if (!needsLeagueRankApiFromDto(p)) continue
+      if (!isNewestStoredMatchForPuuid(pid)) continue
+      await fetchAccountRankForParticipant(pid)
     }
   } catch (e) {
     if (e instanceof Error && e.message === RIOT_INGEST_ABORTED_MESSAGE) return
     throw e
+  }
+
+  const resolvedRanks: ResolvedParticipantRank[] = participantDtos.map((p) => {
+    const pid = p.puuid
+    if (!pid) return { tier: 'UNRANKED', division: null, lp: null }
+    return mergeDtoWithAccountCache(p, pid, accountRankCache)
+  })
+  for (let ri = 0; ri < resolvedRanks.length; ri++) {
+    if (needsRankPeerFill(resolvedRanks[ri])) {
+      resolvedRanks[ri] = fillParticipantRankFromPeers(ri, resolvedRanks)
+    }
   }
 
   const gameEndedInSurrender = participantDtos.some(
@@ -847,9 +935,10 @@ export async function upsertMatchAndParticipants(
     }
 
     const role = roleFromPosition(p.teamPosition, p.individualPosition) ?? 'FILL'
-    const rankTier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
-    const rankDivision = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
-    const rankLp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
+    const rr = resolvedRanks[pIdx]
+    const finalRankTier = rr.tier
+    const finalRankDivision = rr.division
+    const finalRankLp = rr.lp
     const riotTeamId = p.teamId ?? 100
     const teamDbId = teamIdByRiotTeam.get(riotTeamId) ?? teamIdByRiotTeam.values().next().value!
 
@@ -874,19 +963,16 @@ export async function upsertMatchAndParticipants(
     }
     const b = (key: string): boolean => (p as Record<string, unknown>)[key] === true
 
-    // Enrich missing rankDivision (and optionally rankTier) from Riot account-by-puuid; LP stays in-memory for averaging only.
-    let finalRankTier = rankTier
-    let finalRankDivision = rankDivision
-    let finalRankLp = rankLp
-    if (finalRankDivision == null || finalRankLp == null || finalRankTier === 'UNRANKED') {
-      const accountRank = accountRankCache.get(puuid) ?? {
-        rankTier: undefined,
-        rankDivision: null,
-        rankLp: null,
-      }
-      if (finalRankTier === 'UNRANKED' && accountRank.rankTier) finalRankTier = accountRank.rankTier
-      if (finalRankDivision == null && accountRank.rankDivision != null) finalRankDivision = accountRank.rankDivision
-      if (finalRankLp == null && accountRank.rankLp != null) finalRankLp = accountRank.rankLp
+    if (gameDate && isNewestStoredMatchForPuuid(puuid)) {
+      await tx.player.update({
+        where: { id: playerId },
+        data: {
+          rankTier: finalRankTier === 'UNRANKED' ? null : finalRankTier,
+          rankDivision: finalRankDivision,
+          rankLp: finalRankLp,
+          rankSnapshotGameDate: gameDate,
+        },
+      })
     }
 
     const matchPlayer = await tx.matchPlayer.create({

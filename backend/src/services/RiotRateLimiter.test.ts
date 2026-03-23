@@ -2,53 +2,20 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { RiotRateLimiter } from './RiotRateLimiter.js'
 
-test('RiotRateLimiter: app bucket 2/s waits ~1s before 3rd request', async () => {
-  const config = {
-    buckets: [
-      {
-        name: 'app',
-        limits: [
-          { count: 2, windowSeconds: 1 },
-          { count: 100, windowSeconds: 120 },
-        ],
-      },
-    ],
-  }
-  const limiter = new RiotRateLimiter(config)
-  await limiter.acquire('app')
-  await limiter.acquire('app')
-  const t0 = Date.now()
-  await limiter.acquire('app')
-  const elapsed = Date.now() - t0
-  assert.ok(elapsed >= 900, 'Third acquire should wait ~1s to respect 2/1s limit')
-})
+const dummyConfig = { buckets: [{ name: 'app', limits: [{ count: 99, windowSeconds: 120 }] }] }
 
-test('RiotRateLimiter: any bucket name shares global budget', async () => {
-  const config = {
-    buckets: [
-      {
-        name: 'app',
-        limits: [
-          { count: 2, windowSeconds: 1 },
-          { count: 100, windowSeconds: 120 },
-        ],
-      },
-    ],
-  }
-  const limiter = new RiotRateLimiter(config)
-  await limiter.acquire('match-v5-detail')
-  await limiter.acquire('match-v5-timeline')
+test('RiotRateLimiter: acquire is immediate when no penalty', async () => {
+  const limiter = new RiotRateLimiter(dummyConfig)
   const t0 = Date.now()
-  await limiter.acquire('unknown-label')
+  await limiter.acquire('app')
+  await limiter.acquire('app')
+  await limiter.acquire('app')
   const elapsed = Date.now() - t0
-  assert.ok(elapsed >= 900, 'Third acquire on different label still uses global 2/1s')
+  assert.ok(elapsed < 50, 'No local per-second throttle: bursts allowed until headers say otherwise')
 })
 
 test('RiotRateLimiter: penalize429 blocks ~10s', async () => {
-  const config = {
-    buckets: [{ name: 'app', limits: [{ count: 100, windowSeconds: 1 }, { count: 10000, windowSeconds: 120 }] }],
-  }
-  const limiter = new RiotRateLimiter(config)
+  const limiter = new RiotRateLimiter(dummyConfig)
   limiter.penalize429()
   const t0 = Date.now()
   await limiter.acquire()
@@ -57,13 +24,22 @@ test('RiotRateLimiter: penalize429 blocks ~10s', async () => {
 })
 
 test('RiotRateLimiter: penalize429 uses max(10s, Retry-After)', async () => {
-  const config = {
-    buckets: [{ name: 'app', limits: [{ count: 100, windowSeconds: 1 }, { count: 10000, windowSeconds: 120 }] }],
-  }
-  const limiter = new RiotRateLimiter(config)
+  const limiter = new RiotRateLimiter(dummyConfig)
   limiter.penalize429(15)
   const t0 = Date.now()
   await limiter.acquire()
   const elapsed = Date.now() - t0
   assert.ok(elapsed >= 14_000, 'Retry-After 15s should extend cooldown beyond 10s minimum')
+})
+
+test('RiotRateLimiter: 98/120s does not enqueue long cooldown', async () => {
+  const limiter = new RiotRateLimiter(dummyConfig)
+  const headers = new Headers({
+    'x-app-rate-limit': '20:1,100:120',
+    'x-app-rate-limit-count': '1:1,98:120',
+  })
+  limiter.syncFromResponseHeaders(headers)
+  const t0 = Date.now()
+  await limiter.acquire()
+  assert.ok(Date.now() - t0 < 100)
 })

@@ -215,6 +215,8 @@ export class RiotHttpClient {
         return { ok: false, status: res.status, message: msg, body: data }
       }
 
+      this.rateLimiter.syncFromResponseHeaders(res.headers)
+
       const now = Date.now()
       if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
         this.lastRiotRateLimitSnapshotLogMs = now
