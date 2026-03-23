@@ -144,6 +144,9 @@ export interface OverviewProgressionFullStats {
     pickrateOldest: number
     pickrateSince: number
     deltaPick: number
+    banrateOldest: number
+    banrateSince: number
+    deltaBan: number
   }>
 }
 
@@ -1006,20 +1009,25 @@ export async function getOverviewProgressionFullStats(
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.mvChampionCoreStat.findMany({
         where: oldestWhere,
-        select: { championId: true, countWin: true, countGame: true },
+        select: { championId: true, countWin: true, countGame: true, countBan: true },
       }),
       prisma.mvChampionCoreStat.findMany({
         where: sinceWhere,
-        select: { championId: true, countWin: true, countGame: true },
+        select: { championId: true, countWin: true, countGame: true, countBan: true },
       }),
     ])
 
     const aggByChamp = (rows: typeof oldestRows) => {
-      const m = new Map<number, { wins: number; games: number }>()
+      const m = new Map<number, { wins: number; games: number; bans: number }>()
       for (const r of rows) {
         let e = m.get(r.championId)
-        if (!e) { e = { wins: 0, games: 0 }; m.set(r.championId, e) }
-        e.wins += r.countWin; e.games += r.countGame
+        if (!e) {
+          e = { wins: 0, games: 0, bans: 0 }
+          m.set(r.championId, e)
+        }
+        e.wins += r.countWin
+        e.games += r.countGame
+        e.bans += r.countBan
       }
       return m
     }
@@ -1034,6 +1042,10 @@ export async function getOverviewProgressionFullStats(
       if (oldEntry.games < 20) continue
       const sinceEntry = sinceMap.get(cid)
       if (!sinceEntry || sinceEntry.games < 20) continue
+      const banrateOldest =
+        oldestTotalGames > 0 ? Math.min(100, (oldEntry.bans / (2 * oldestTotalGames)) * 100) : 0
+      const banrateSince =
+        sinceTotalGames > 0 ? Math.min(100, (sinceEntry.bans / (2 * sinceTotalGames)) * 100) : 0
       champions.push({
         championId: cid,
         wrOldest: Math.round((oldEntry.wins / oldEntry.games) * 10000) / 100,
@@ -1044,6 +1056,9 @@ export async function getOverviewProgressionFullStats(
         deltaPick: sinceTotalGames > 0 && oldestTotalGames > 0
           ? Math.round(((sinceEntry.games / sinceTotalGames) - (oldEntry.games / oldestTotalGames)) * 10000) / 100
           : 0,
+        banrateOldest: Math.round(banrateOldest * 100) / 100,
+        banrateSince: Math.round(banrateSince * 100) / 100,
+        deltaBan: Math.round((banrateSince - banrateOldest) * 100) / 100,
       })
     }
 
