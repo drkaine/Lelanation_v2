@@ -85,15 +85,38 @@
         >
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/statistics')"
-          :title="t('nav.statistics')"
-          class="version"
-          @click="toggleMenu"
-        >
-          {{ t('nav.statistics') }}
-        </NuxtLink>
+        <div class="mobile-builds-menu">
+          <button
+            type="button"
+            class="version mobile-builds-trigger"
+            :class="{ 'is-active': isStatisticsSectionActive }"
+            @click="toggleMobileStatisticsMenu"
+          >
+            <span>{{ t('nav.statistics') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isMobileStatisticsMenuOpen }"
+              >▾</span
+            >
+          </button>
+          <div v-if="isMobileStatisticsMenuOpen" class="mobile-builds-dropdown">
+            <NuxtLink
+              :to="statisticsClassicLink"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsClassicActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('statisticsPage.modeClassic') }}
+            </NuxtLink>
+            <NuxtLink
+              v-if="hasCustomStatistics"
+              :to="statisticsCustomLink"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsCustomActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('statisticsPage.modeCustom') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/theorycraft')"
@@ -196,14 +219,39 @@
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
         </NuxtLink>
-        <NuxtLink
-          v-if="isAdminLoggedIn"
-          :to="localePath('/statistics')"
-          :title="t('nav.statistics')"
-          class="version"
+        <div
+          class="builds-menu"
+          @mouseenter="isStatisticsMenuOpen = true"
+          @mouseleave="isStatisticsMenuOpen = false"
         >
-          {{ t('nav.statistics') }}
-        </NuxtLink>
+          <NuxtLink
+            :to="statisticsClassicLink"
+            class="version builds-menu-trigger"
+            :class="{ 'is-active': isStatisticsSectionActive }"
+          >
+            <span>{{ t('nav.statistics') }}</span>
+            <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }">▾</span>
+          </NuxtLink>
+          <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
+            <NuxtLink
+              :to="statisticsClassicLink"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsClassicActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('statisticsPage.modeClassic') }}
+            </NuxtLink>
+            <NuxtLink
+              v-if="hasCustomStatistics"
+              :to="statisticsCustomLink"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsCustomActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('statisticsPage.modeCustom') }}
+            </NuxtLink>
+          </div>
+        </div>
         <NuxtLink
           v-if="isAdminLoggedIn"
           :to="localePath('/admin')"
@@ -242,10 +290,13 @@ import { getFallbackGameVersion } from '~/config/version'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
+import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
 const isMobileBuildsMenuOpen = ref(false)
+const isStatisticsMenuOpen = ref(false)
+const isMobileStatisticsMenuOpen = ref(false)
 const { t, locale } = useI18n()
 const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 const localePath = useLocalePath()
@@ -271,6 +322,15 @@ const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
+const statisticsCustomStore = useStatisticsCustomStore()
+const statisticsClassicLink = computed(() => localePath('/statistics'))
+const statisticsCustomLink = computed(() => localePath('/statistics/custom'))
+const isStatisticsSectionActive = computed(() => route.path.startsWith('/statistics'))
+const isStatisticsClassicActive = computed(
+  () => route.path.startsWith('/statistics') && !route.path.startsWith('/statistics/custom')
+)
+const isStatisticsCustomActive = computed(() => route.path.startsWith('/statistics/custom'))
+const hasCustomStatistics = computed(() => statisticsCustomStore.hasCustomStatistics)
 
 // Map i18n locale to Riot Games locale code
 const getRiotLocale = (locale: string): string => {
@@ -305,6 +365,7 @@ onMounted(() => {
     versionStore.loadCurrentVersion()
   }
   favoritesStore.init()
+  statisticsCustomStore.init()
 })
 
 const toggleMenu = () => {
@@ -321,7 +382,16 @@ const toggleMobileBuildsMenu = () => {
 
 const handleBuildsNavigation = () => {
   isMobileBuildsMenuOpen.value = false
+  isMobileStatisticsMenuOpen.value = false
   isMenuOpen.value = false
+}
+
+const toggleMobileStatisticsMenu = () => {
+  isMobileStatisticsMenuOpen.value = !isMobileStatisticsMenuOpen.value
+}
+
+const closeStatisticsMenu = () => {
+  isStatisticsMenuOpen.value = false
 }
 </script>
 

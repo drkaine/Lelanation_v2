@@ -168,9 +168,9 @@ Région : EUW1 uniquement.
 
 Sans étape d’enrichment, ces colonnes restent donc `NULL`.
 
-### Pourquoi certains participants n’ont pas de rank (rank_tier / rank_division / rank_lp)
+### Pourquoi certains participants n’ont pas de rank (rank_tier / rank_division)
 
-L’API **Match-v5** ne renvoie **jamais** le rang des joueurs dans le payload d’un match. À l’insertion, les participants sont créés avec `rank_tier`, `rank_division`, `rank_lp` à `NULL`, puis le rang est récupéré **immédiatement** pour ce match (League-v4 par PUUID) via `backfillRanksForNewMatch`.
+L’API **Match-v5** ne renvoie **jamais** le rang des joueurs dans le payload d’un match. À l’insertion, les participants sont créés avec `rank_tier` / `rank_division` souvent vides ou `UNRANKED`, puis le rang est récupéré **immédiatement** pour ce match (League-v4 par PUUID) via `backfillRanksForNewMatch`. Les LP ne sont pas stockés en base sur `match_players` (uniquement utiles en mémoire pour la moyenne de rang du match à l’ingestion).
 
 En complément, un backfill en batch (`backfillParticipantRanks`) rattrape les participants restés sans rank (anciens en base ou échec de l’appel immédiat) :
 

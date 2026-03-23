@@ -2,19 +2,19 @@
 
 ## Objectif
 
-Table **`champion_tier_daily_snapshots`** : une ligne par `(jour UTC résumé, rank_tier sans division, champion)` avec :
+Table **`champion_tier_daily_snapshots`** : une ligne par `(date_of_game, rank_tier sans division, role, champion)` avec :
 
-- `games` / `wins` / `win_rate_pct`
-- `bans` (dans la partie, tier du **match** = lobby)
-- `pick_rate_pct` = part des picks du champion dans le tier sur le **total de slots** (10 joueurs / partie) du même tier sur la fenêtre
+- `games` / `wins` — le winrate se déduit : `wins / games`
+- `ban_rate_pct` — part des **bans** du **même rank_tier** (jour UTC) pour ce champion (pas un volume « ban » stocké)
+- `pick_rate_pct` — part des **picks** du **même rank_tier et rôle** (jour UTC) pour ce champion
 
-Pas de split par rôle ni par division (`DIAMOND_I` → `DIAMOND` via `split_part(..., '_', 1)`).
+Rôles normalisés : **TOP**, **JUNGLE**, **MIDDLE**, **BOTTOM**, **SUPPORT** (la réponse Riot *UTILITY* est agrégée en **SUPPORT**). Tier sans division (`DIAMOND_I` → `DIAMOND` via `split_part(..., '_', 1)`).
 
 ## Fenêtre temporelle
 
 - **Jour résumé** : jour calendaire **UTC** précédent.
 - **Fenêtre** : `[J 00:00:00 UTC, J+1 00:00:00 UTC)`.
-- **Filtrage** : `matchs.ingested_at` dans cette fenêtre (moment où le match a été inséré en base par le poller).
+- **Filtrage** : `matchs.game_date` dans cette fenêtre (date/heure de partie côté Riot, alignée sur le calendrier UTC du résumé).
 
 ## Planification
 
@@ -34,4 +34,4 @@ La table **`champion_tier_snapshot_runs`** enregistre les jours déjà traités 
 
 `GET /api/stats/champions/:championId/tier-trend-snapshots?rankTier=DIAMOND&from=2026-01-01&to=2026-03-15&limit=365`
 
-Réponse : `{ championId, rankTier, fromDate, toDate, points: [{ snapshotForDate, rankTier, games, wins, bans, pickRatePct, winRatePct }] }`.
+Réponse : `{ championId, rankTier, fromDate, toDate, points: [{ dateOfGame, rankTier, role, games, wins, banRatePct, pickRatePct }] }` — winrate = `wins/games` côté client.

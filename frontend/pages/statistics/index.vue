@@ -27,6 +27,18 @@
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
     <div class="w-full flex-shrink-0 border-b border-primary/30 bg-surface/30 px-4 pb-2 pt-4">
+      <div class="mb-3 inline-flex rounded-lg border border-primary/30 bg-surface/40 p-1">
+        <NuxtLink :to="localePath('/statistics')" class="stats-mode-btn stats-mode-btn-active">
+          {{ t('statisticsPage.modeClassic') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="statisticsCustomStore.hasCustomStatistics"
+          :to="localePath('/statistics/custom')"
+          class="stats-mode-btn"
+        >
+          {{ t('statisticsPage.modeCustom') }}
+        </NuxtLink>
+      </div>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="tab in tabs"
@@ -40,6 +52,16 @@
           ]"
           @click="activeTab = tab.id"
         >
+          <span
+            class="mr-1 inline-flex cursor-pointer select-none"
+            :title="
+              statisticsCustomStore.isFavorite(tab.widgetId)
+                ? 'Retirer des favoris'
+                : 'Ajouter aux favoris'
+            "
+            @click.stop="toggleFavoriteWidget(tab.widgetId, tab.label)"
+            >{{ statisticsCustomStore.isFavorite(tab.widgetId) ? '★' : '☆' }}</span
+          >
           {{ tab.label }}
         </button>
       </div>
@@ -1047,7 +1069,7 @@
           </div>
 
           <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
-          <div v-show="activeTab === 'detail'" class="space-y-6">
+          <div v-show="activeTab === 'runes'" class="space-y-6">
             <template v-if="overviewDetailPending">
               <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
                 <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
@@ -1405,7 +1427,7 @@
           </div>
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-          <div v-show="activeTab === 'progressions'" class="space-y-6">
+          <div v-show="activeTab === 'trends'" class="space-y-6">
             <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
               <h2 class="mb-4 text-xl font-semibold text-text-accent">
                 {{ t('statisticsPage.progressionsTitle') }}
@@ -1588,7 +1610,7 @@
           </div>
 
           <!-- Tab: Par côté (Blue / Red) -->
-          <div v-show="activeTab === 'sides'" class="space-y-6">
+          <div v-show="activeTab === 'team'" class="space-y-6">
             <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
               <h2 class="mb-4 text-xl font-semibold text-text-accent">
                 {{ t('statisticsPage.sidesTitle') }}
@@ -2087,7 +2109,7 @@
           </div>
 
           <!-- Tab: Champions -->
-          <div v-show="activeTab === 'champions'" class="space-y-2">
+          <div v-show="activeTab === 'infos'" class="space-y-2">
             <div v-if="championsPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
@@ -3099,6 +3121,8 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
+import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import {
   getChampionImageUrl,
@@ -3131,6 +3155,8 @@ const itemsStore = useItemsStore()
 const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 const versionStore = useVersionStore()
+const statisticsUiStore = useStatisticsUiStore()
+const statisticsCustomStore = useStatisticsCustomStore()
 const { version: gameVersion } = useGameVersion()
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
@@ -3138,28 +3164,56 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const activeTab = ref<
   | 'overview'
-  | 'progressions'
-  | 'sides'
-  | 'champions'
   | 'tierlist'
-  | 'duration'
+  | 'trends'
+  | 'team'
+  | 'runes'
   | 'items'
   | 'spells'
-  | 'abandons'
+  | 'infos'
+  | 'champions'
+  | 'progressions'
+  | 'sides'
   | 'detail'
+  | 'duration'
+  | 'abandons'
 >('overview')
 const tabs = computed(() => [
-  { id: 'overview' as const, label: t('statisticsPage.tabOverview') },
-  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList') },
-  { id: 'champions' as const, label: t('statisticsPage.tabChampions') },
-  { id: 'duration' as const, label: t('statisticsPage.tabDuration') },
-  { id: 'items' as const, label: t('statisticsPage.tabItems') },
-  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells') },
-  { id: 'abandons' as const, label: t('statisticsPage.tabAbandons') },
-  { id: 'progressions' as const, label: t('statisticsPage.tabProgressions') },
-  { id: 'sides' as const, label: t('statisticsPage.tabSides') },
-  { id: 'detail' as const, label: t('statisticsPage.tabRunesItemsSpells') },
+  { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
+  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
+  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
+  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
+  { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
+  { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
+  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
+  { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
+
+function normalizeLegacyTab(tab: string): StatisticsMainTab {
+  if (tab === 'champions') return 'infos'
+  if (tab === 'progressions') return 'trends'
+  if (tab === 'sides') return 'team'
+  if (tab === 'detail') return 'runes'
+  if (tab === 'duration') return 'team'
+  if (tab === 'abandons') return 'team'
+  if (
+    tab === 'overview' ||
+    tab === 'tierlist' ||
+    tab === 'trends' ||
+    tab === 'team' ||
+    tab === 'runes' ||
+    tab === 'items' ||
+    tab === 'spells' ||
+    tab === 'infos'
+  ) {
+    return tab
+  }
+  return 'overview'
+}
+
+function toggleFavoriteWidget(widgetId: string, title: string) {
+  statisticsCustomStore.toggleFavorite(widgetId, title)
+}
 
 const championSearchQuery = ref('')
 /** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
@@ -3260,7 +3314,7 @@ function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate' | 'banr
 /** Navigate to Champions tab with sort (filtres déjà partagés). */
 function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
   championsSortOrder.value = sort
-  activeTab.value = 'champions'
+  activeTab.value = 'infos'
 }
 
 /** Tier list: types and sort (3-state: default, asc, desc). */
@@ -3447,7 +3501,24 @@ const overviewPending = ref(true)
 const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
-const filtersOpen = ref(false)
+const filtersOpen = ref(true)
+
+if (import.meta.client) {
+  statisticsUiStore.init()
+  statisticsCustomStore.init()
+  activeTab.value = normalizeLegacyTab(statisticsUiStore.activeTab)
+  filtersOpen.value = statisticsUiStore.filtersOpen
+}
+
+watch(activeTab, value => {
+  if (!import.meta.client) return
+  statisticsUiStore.setActiveTab(normalizeLegacyTab(value))
+})
+
+watch(filtersOpen, value => {
+  if (!import.meta.client) return
+  statisticsUiStore.setFiltersOpen(value)
+})
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const overviewVersionFilter = computed(() => statsVersionFilter.value || null)
 const overviewDivisionFilter = computed<string[] | null>(() =>
@@ -3635,7 +3706,7 @@ const overviewAbandonsData = ref<{
   earlySurrenderRate: number
 } | null>(null)
 const overviewAbandonsPending = ref(false)
-async function loadOverviewAbandons() {
+async function _loadOverviewAbandons() {
   const t = statsPerfStart('loadOverviewAbandons')
   overviewAbandonsPending.value = true
   try {
@@ -4340,6 +4411,7 @@ const roles = [
   { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
   { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
 ]
+const ROLE_OPTIONS = roles
 
 // Champions
 const championsData = ref<{
@@ -4432,8 +4504,30 @@ async function loadTierList() {
     const data = await statsFetch<{
       patch: string
       rankTier: string
-      rows: unknown[]
-      highEloRows?: unknown[]
+      rows: Array<{
+        rank: number
+        championId: number
+        tier: string
+        mainRole: string
+        mainRolePct: number
+        winrate: number
+        pickrate: number
+        banrate: number
+        pbi: number
+        games: number
+      }>
+      highEloRows?: Array<{
+        rank: number
+        championId: number
+        tier: string
+        mainRole: string
+        mainRolePct: number
+        winrate: number
+        pickrate: number
+        banrate: number
+        pbi: number
+        games: number
+      }>
       error?: string
       message?: string
     }>(apiUrl(`/api/stats/tier-list?${params.toString()}`))
@@ -4451,7 +4545,7 @@ async function loadTierList() {
   }
 }
 watch([statsDivisionFilter, statsRoleFilter], () => {
-  if (activeTab.value === 'champions' || activeTab.value === 'tierlist') loadChampions()
+  if (activeTab.value === 'infos' || activeTab.value === 'tierlist') loadChampions()
   if (activeTab.value === 'tierlist') loadTierList()
 })
 watch(effectiveTierListPatch, (patch, oldPatch) => {
@@ -4581,24 +4675,22 @@ function sortedItemsBySlot(
 
 watch(activeTab, async tab => {
   if (tab === 'overview') loadOverview()
-  if (tab === 'progressions') {
+  if (tab === 'trends') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
     if (!oldestVersionForProgression.value && !versionStore.currentVersion)
       await versionStore.loadCurrentVersion()
     loadProgressionsFull()
   }
-  if (tab === 'sides') loadOverviewSides()
-  if (tab === 'tierlist' || tab === 'champions') loadChampions()
+  if (tab === 'team') loadOverviewSides()
+  if (tab === 'tierlist' || tab === 'infos') loadChampions()
   if (tab === 'tierlist') loadTierList()
-  if (tab === 'duration') loadOverviewDurationWinrate()
-  if (tab === 'items' || tab === 'spells' || tab === 'detail') {
+  if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
   }
-  if (tab === 'abandons') loadOverviewAbandons()
 })
 watch([statsVersionFilter, statsDivisionFilter], () => {
-  if (activeTab.value === 'sides') loadOverviewSides()
-  if (activeTab.value === 'progressions') loadProgressionsFull()
+  if (activeTab.value === 'team') loadOverviewSides()
+  if (activeTab.value === 'trends') loadProgressionsFull()
 })
 
 onMounted(async () => {
@@ -4628,6 +4720,19 @@ onMounted(async () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.stats-mode-btn {
+  border-radius: 0.375rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: rgb(var(--rgb-text) / 0.8);
+}
+.stats-mode-btn-active {
+  background: rgb(var(--rgb-accent) / 0.2);
+  color: var(--color-accent);
 }
 
 /* Fast Stats cards - style LeagueOfGraphs */

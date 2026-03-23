@@ -2,7 +2,7 @@
  * Riot poller: runs inside the backend process.
  * - Init: resolves API key (any subsequent 401/403 stops the poller automatically).
  * - Loop: take players, fetch match lists, fetch full match + timeline (fill DB). Sync PUUID / key is optional via `runPhase2` (script puuid-migration only).
- * Logs to logs/riot-poller.log; exposes status for admin API.
+ * Logs to backend output (minimal mode); exposes status for admin API.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { statfs } from 'node:fs/promises'
@@ -64,6 +64,7 @@ export interface RiotPollerStatus {
   error400Count: number
   matchesFetched: number
   playersFetched: number
+  playersPolled: number
   participantsFetched: number
   matchesRankFixed: number
   participantsRankFixed: number
@@ -81,6 +82,7 @@ const defaultStatus: RiotPollerStatus = {
   error400Count: 0,
   matchesFetched: 0,
   playersFetched: 0,
+  playersPolled: 0,
   participantsFetched: 0,
   matchesRankFixed: 0,
   participantsRankFixed: 0,
@@ -1511,6 +1513,7 @@ async function runStep4ForPlayer(
     error400Count: number
     matchesFetched: number
     playersFetched: number
+    playersPolled: number
     participantsFetched: number
   }
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
@@ -1585,6 +1588,7 @@ async function runStep4ForPlayer(
   const flags = { foundPrismaError: false }
 
   nextPlayer: for (const player of players) {
+    counters.playersPolled++
     if (state.shouldStop) {
       return 'ok'
     }
@@ -1792,6 +1796,7 @@ async function runStep4Counters() {
     error400Count: state.error400Count,
     matchesFetched: state.matchesFetched,
     playersFetched: state.playersFetched,
+    playersPolled: state.playersPolled,
     participantsFetched: state.participantsFetched,
   }
 }
@@ -1809,6 +1814,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     error400Count: 0,
     matchesFetched: 0,
     playersFetched: 0,
+    playersPolled: 0,
     participantsFetched: 0,
     matchesRankFixed: 0,
     participantsRankFixed: 0,
@@ -1816,10 +1822,14 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   })
 
   try {
-    await logger.step('Poller start: entering match collection loop', {})
+    console.log('[RiotPoller] Poller started: entering match collection loop')
 
     // ── Main collection loop ──────────────────────────────────────────────────
     let loopIteration = 0
+    let heartbeatAtMs = Date.now()
+    let heartbeatPlayersPolled = 0
+    let heartbeatPlayersFetched = 0
+    let heartbeatMatchesFetched = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
 
@@ -1864,6 +1874,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         error400Count: countersEuw.error400Count,
         matchesFetched: countersEuw.matchesFetched,
         playersFetched: countersEuw.playersFetched,
+        playersPolled: countersEuw.playersPolled,
         participantsFetched: countersEuw.participantsFetched,
       })
       if (resultEuw === '400_decrypt') {
@@ -1883,6 +1894,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         error400Count: countersEun.error400Count,
         matchesFetched: countersEun.matchesFetched,
         playersFetched: countersEun.playersFetched,
+        playersPolled: countersEun.playersPolled,
         participantsFetched: countersEun.participantsFetched,
       })
       if (resultEun === '400_decrypt') {
@@ -1921,6 +1933,30 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         await logger.alerte('Champion tier snapshot check error (non-fatal)')
         void err
       }
+
+      const now = Date.now()
+      if (now - heartbeatAtMs >= 60_000) {
+        const deltaPlayersPolled = state.playersPolled - heartbeatPlayersPolled
+        const deltaPlayersFetched = state.playersFetched - heartbeatPlayersFetched
+        const deltaMatchesFetched = state.matchesFetched - heartbeatMatchesFetched
+        console.log(
+          '[RiotPoller] Ping 60s',
+          JSON.stringify({
+            playersPolled: deltaPlayersPolled,
+            newPlayersAdded: deltaPlayersFetched,
+            newMatches: deltaMatchesFetched,
+            totals: {
+              playersPolled: state.playersPolled,
+              newPlayersAdded: state.playersFetched,
+              newMatches: state.matchesFetched,
+            },
+          })
+        )
+        heartbeatPlayersPolled = state.playersPolled
+        heartbeatPlayersFetched = state.playersFetched
+        heartbeatMatchesFetched = state.matchesFetched
+        heartbeatAtMs = now
+      }
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -1928,13 +1964,17 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     setState({ lastError: msg })
   } finally {
     setState({ isRunning: false, shouldStop: false, lastLoopFinishedAt: new Date().toISOString() })
-    await logger.step('Loop end', {
-      requestCount: state.requestCount,
-      error429: state.error429Count,
-      matchesFetched: state.matchesFetched,
-      playersFetched: state.playersFetched,
-      participantsFetched: state.participantsFetched,
-    })
+    console.log(
+      '[RiotPoller] Poller stopped',
+      JSON.stringify({
+        requestCount: state.requestCount,
+        error429: state.error429Count,
+        matchesFetched: state.matchesFetched,
+        playersFetched: state.playersFetched,
+        playersPolled: state.playersPolled,
+        participantsFetched: state.participantsFetched,
+      })
+    )
   }
 }
 

@@ -35,7 +35,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 - **puuid** — Identifiant compte Riot (persistant, utilisé par l’API).
 - **champion_id** — ID du champion joué (référence Data Dragon / CDragon).
 - **role** — Position jouée : TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT. Dérivé de `individualPosition` / `teamPosition` (Riot : *teamPosition* = meilleure estimation avec contrainte “un joueur par rôle”).
-- **rank_tier**, **rank_division**, **rank_lp** — Rang Solo/Duo en fin de partie (ex. GOLD, II, 42 LP) ; peut être complété via League v4 en backfill.
+- **rank_tier**, **rank_division** — Rang Solo/Duo (tier + division) ; les **LP** ne sont pas persistés sur `match_players` mais peuvent encore servir en mémoire pour la moyenne `matchs.rank_tier` / `rank_division` à l’ingestion. Complétion possible via League v4 en backfill.
 
 ### Participants – KDA, or, dégâts, vision
 
@@ -119,7 +119,7 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 ### Challenges (colonnes ch_*)
 
-Les **challenges** sont des indicateurs optionnels fournis par Riot (ex. “soloKills”, “takedowns”, “earliestBaron”). Chaque clé de l’allowlist est stockée dans une colonne dédiée (`ch_*`) ; la valeur est en général un nombre (Float). Les noms des clés sont documentés / évoluent avec le jeu ; les clés inconnues sont enregistrées dans `challenge_keys_registry` pour détection et notification.
+Les **challenges** sont des indicateurs optionnels fournis par Riot dans `participants[].challenges`. Les champs persistés sont ceux mappés dans `match_player_challenges` (ingestion poller) ; les autres clés Riot sont ignorées (pas de registre ni d’alerte Discord).
 
 ### Timeline – drakes, ordre des skills, starter
 
@@ -213,7 +213,6 @@ Source unique pour « qui a eu le kill / l’assist » sur les objectifs « firs
 | role | Dérivé de individualPosition / teamPosition (TOP, JUNGLE, MIDDLE, BOTTOM, SUPPORT) |
 | rank_tier | participants[].tier ou rankTier ; ou League v4 (backfill) |
 | rank_division | participants[].rank ou rankDivision ; ou League v4 |
-| rank_lp | participants[].leaguePoints ou rankLp ; ou League v4 |
 
 ### KDA / or / dégâts / vision
 
@@ -334,7 +333,7 @@ Source unique pour « qui a eu le kill / l’assist » sur les objectifs « firs
 | summoner1_casts, summoner2_casts | participants[].summoner1Casts, summoner2Casts |
 | items (JSON) | participants[].items |
 | runes (JSON) | participants[].perks / runes |
-| summoner_spells (JSON) | [summoner1Id, summoner2Id] |
+| summoner_spells (int[] sur match_players) | Ordre D puis F : participants[].summoner1Id, summoner2Id |
 | stat_perks (JSON) | participants[].perks.statPerks |
 | challenges (JSON) | participants[].challenges |
 
@@ -459,14 +458,13 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-### `participant_summoner_spells`
+### `match_players.summoner_spells`
 
-| Colonne | Source Riot |
+Table dédiée supprimée : les deux sorts sont stockés en **tableau d’entiers ordonné** sur `match_players` (pas de colonne casts ici ; casts restent côté stats participant si besoin ailleurs).
+
+| Élément | Source Riot |
 |--------|-------------|
-| participant_id, match_id | — |
-| spell_id | summoner1Id / summoner2Id |
-| spell_slot | 1 ou 2 |
-| casts | summoner1Casts / summoner2Casts |
+| `[0]`, `[1]` | summoner1Id, summoner2Id |
 
 ---
 
@@ -521,12 +519,6 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 
 ---
 
-### `challenge_keys_registry`
+### `challenge_keys_registry` (supprimé)
 
-| Colonne | Source Riot |
-|--------|-------------|
-| key | Clé présente dans participants[].challenges mais hors allowlist |
-| sample_value | Valeur brute (JSON) pour notification Discord |
-| is_new | true à la création ; false après notification |
-| notified_at | Rempli après envoi Discord |
-| poll_value | false par défaut (indique si la clé est candidate à l'allowlist) |
+Cette table n’existe plus dans le schéma actuel ; les clés challenges hors colonnes Prisma ne sont ni stockées ni notifiées.

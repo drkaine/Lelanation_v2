@@ -115,6 +115,11 @@ function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): stri
 const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
 /** Keep below typical gateway timeout (often 60s) so we return 503 before gateway returns 504. */
 const OVERVIEW_TIMEOUT_MS = 50_000
+const STATS_OTP_PICKRATE_THRESHOLD = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
+const STATS_TREND_WR_DELTA_PCT = Number(process.env.STATS_TREND_WR_DELTA_PCT ?? '5')
+const STATS_TREND_PICK_DELTA_PCT = Number(process.env.STATS_TREND_PICK_DELTA_PCT ?? '10')
+const STATS_TREND_GAMES_DELTA_PCT = Number(process.env.STATS_TREND_GAMES_DELTA_PCT ?? '15')
+const STATS_TREND_BAN_DELTA_PCT = Number(process.env.STATS_TREND_BAN_DELTA_PCT ?? '10')
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: true; data: T } | { ok: false; timeout: true }> {
   return Promise.race([
@@ -745,6 +750,244 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
   })
   return res.json({
     players: list.map((p) => ({ ...p, totalGames: p.games })),
+  })
+})
+
+/** New API: /api/stats/overview-cards */
+router.get('/overview-cards', async (req: Request, res: Response) => {
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const fromVersion = queryString(req.query.fromVersion) ?? version
+
+  const [overview, teams] = await Promise.all([
+    getOverviewStats(version, rankTier),
+    getOverviewTeamsStats(version, rankTier),
+  ])
+
+  return res.json({
+    topPickrateChampions: overview?.topPickrateChampions ?? [],
+    topWinrateChampions: overview?.topWinrateChampions ?? [],
+    topBanrateChampions: overview?.topBanrateChampions ?? [],
+    winrateSince: {
+      fromVersion,
+      value:
+        (overview?.topWinrateChampions?.[0]?.winrate as number | undefined) ??
+        null,
+    },
+    objectives: teams?.objectives ?? null,
+  })
+})
+
+/** New API: /api/stats/team-overview */
+router.get('/team-overview', async (req: Request, res: Response) => {
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const sides = await getOverviewSidesStats(
+    version ? [version] : [],
+    rankTier ? rankTier.split(',') : []
+  )
+  return res.json(sides ?? { bySide: { blue: null, red: null } })
+})
+
+/** New API: /api/stats/trends/deltas */
+router.get('/trends/deltas', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const rankTier = rankTierParam(req.query.rankTier)
+  const maxDays = Math.min(14, Math.max(2, Number(req.query.maxDays ?? 14)))
+  const rows = await getChampionTierSnapshotsForCharts({
+    championId,
+    rankTier,
+    limit: maxDays * 8,
+  })
+  const byTier = new Map<string, typeof rows>()
+  for (const row of rows) {
+    const list = byTier.get(row.rankTier) ?? []
+    list.push(row)
+    byTier.set(row.rankTier, list)
+  }
+  const metricsByTier: Array<Record<string, unknown>> = []
+  for (const [tier, list] of byTier.entries()) {
+    if (list.length < 2) continue
+    const a = list[list.length - 1]
+    const b = list[Math.max(0, list.length - 2)]
+    if (!a || !b) continue
+    const aWinrate = a.games > 0 ? (a.wins / a.games) * 100 : 0
+    const bWinrate = b.games > 0 ? (b.wins / b.games) * 100 : 0
+    const wrDelta = aWinrate - bWinrate
+    const prDelta = (a.pickRatePct ?? 0) - (b.pickRatePct ?? 0)
+    const brDelta = (a.banRatePct ?? 0) - (b.banRatePct ?? 0)
+    const gamesDeltaPct =
+      (b.games ?? 0) > 0 ? (((a.games ?? 0) - (b.games ?? 0)) / (b.games ?? 0)) * 100 : 0
+    if (
+      Math.abs(wrDelta) >= STATS_TREND_WR_DELTA_PCT ||
+      Math.abs(prDelta) >= STATS_TREND_PICK_DELTA_PCT ||
+      Math.abs(brDelta) >= STATS_TREND_BAN_DELTA_PCT ||
+      Math.abs(gamesDeltaPct) >= STATS_TREND_GAMES_DELTA_PCT
+    ) {
+      metricsByTier.push({
+        rankTier: tier,
+        wrDelta,
+        prDelta,
+        brDelta,
+        gamesDeltaPct,
+      })
+    }
+  }
+  return res.json({ championId, maxDays, thresholds: {
+    winrateDeltaPct: STATS_TREND_WR_DELTA_PCT,
+    pickrateDeltaPct: STATS_TREND_PICK_DELTA_PCT,
+    banrateDeltaPct: STATS_TREND_BAN_DELTA_PCT,
+    gamesDeltaPct: STATS_TREND_GAMES_DELTA_PCT,
+  }, metricsByTier })
+})
+
+/** New API: /api/stats/runes/table */
+router.get('/runes/table', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getRuneStatsByChampion({
+    championId,
+    version,
+    rankTier,
+    role,
+  })
+  return res.json({ rows: data?.runes ?? [] })
+})
+
+router.get('/runes/all-paths', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getRunesByChampion({
+    championId,
+    patch: version,
+    rankTier,
+    role,
+  })
+  return res.json({ trees: data?.runes ?? [] })
+})
+
+/** New API: /api/stats/items/sets */
+router.get('/items/sets', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getBuildsByChampion({
+    championId,
+    patch: version,
+    rankTier,
+    role,
+    limit: 200,
+  })
+  const solo = data?.soloItems ?? []
+  return res.json({
+    totalGames: data?.totalGames ?? 0,
+    sets: data?.builds ?? [],
+    starters: solo.filter((x) => x.countStarter > 0),
+    core: solo.filter((x) => x.countCore > 0),
+    boots: solo.filter((x) => x.itemId >= 1001 && x.itemId <= 3117),
+    finals: solo,
+  })
+})
+
+router.get('/items/solo', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getBuildsByChampion({
+    championId,
+    patch: version,
+    rankTier,
+    role,
+    limit: 200,
+  })
+  return res.json({ totalGames: data?.totalGames ?? 0, rows: data?.soloItems ?? [] })
+})
+
+router.get('/tierlist', async (req: Request, res: Response) => {
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier) ?? 'all'
+  const data = await getTierList({ patch, rankTier })
+  return res.json(data ?? { patch: patch ?? null, rankTier, rows: [], highEloRows: [] })
+})
+
+router.get('/tierlist-graph', async (req: Request, res: Response) => {
+  const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier) ?? 'all'
+  const data = await getTierList({ patch, rankTier })
+  const rows = data?.rows ?? []
+  return res.json({
+    patch: data?.patch ?? patch ?? null,
+    points: rows.map((r) => ({
+      championId: r.championId,
+      tier: r.tier,
+      pbi: r.pbi,
+      pickrate: r.pickrate,
+      winrate: r.winrate,
+    })),
+  })
+})
+
+/** New API: /api/stats/summoners/duos and /solo */
+router.get('/summoners/duos', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  void role
+  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
+  return res.json({ totalGames: data?.totalGames ?? 0, rows: data?.duos ?? [] })
+})
+router.get('/summoners/solo', async (req: Request, res: Response) => {
+  const championId = req.query.championId != null ? Number(req.query.championId) : null
+  if (!championId || !Number.isFinite(championId)) {
+    return res.status(400).json({ error: 'championId is required' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  void role
+  const data = await getSummonerSpellsByChampion(championId, version, rankTier)
+  return res.json({ totalGames: data?.totalGames ?? 0, rows: data?.spells ?? [] })
+})
+
+/** New API: /api/stats/infos/meta */
+router.get('/infos/meta', async (req: Request, res: Response) => {
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const [overview, meta] = await Promise.all([
+    getOverviewStats(version, rankTier),
+    getOverviewMeta(version, rankTier),
+  ])
+  return res.json({
+    totalGames: overview?.totalMatches ?? 0,
+    playerCount: meta?.playerCount ?? overview?.playerCount ?? 0,
+    matchesByDivision: overview?.matchesByDivision ?? [],
+    matchesByVersion: overview?.matchesByVersion ?? [],
+    otpPickrateThreshold: STATS_OTP_PICKRATE_THRESHOLD,
   })
 })
 
