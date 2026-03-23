@@ -4,6 +4,7 @@
  * tier from tier_score percentiles; PBI = (winrate - 50) * 100 * pickrate / (100 - banrate).
  */
 import { prisma } from '../db.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 import { isDatabaseConfigured } from '../db.js'
 
 const MIN_GAMES = 10
@@ -190,21 +191,15 @@ async function fetchRoleRows(
   rankFilter: 'all' | 'high_elo' | string | null
 ): Promise<RoleRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
-  const rankValue: string | null =
-    highEloOnly
-      ? null
-      : rankFilter === 'all' || rankFilter === null
-        ? null
-        : rankFilter
 
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
 
   // Build where filter for mv_champion_core_stats
   const where: Record<string, unknown> = {}
-  if (rankValue) {
-    where.rankTier = rankValue
-  } else if (highEloOnly) {
+  if (highEloOnly) {
     where.rankTier = { in: HIGH_ELO_TIERS }
+  } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
+    applyRankTierWhere(where, rankFilter)
   }
   // Filter by patch prefix (game_version starts with "major.minor")
   if (patch) {

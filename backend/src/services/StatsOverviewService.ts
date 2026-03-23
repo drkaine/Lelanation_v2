@@ -7,6 +7,11 @@
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import {
+  applyRankTierWhere,
+  rankTierCacheKey,
+  toQueryStringArrayParam,
+} from '../utils/statsFilters.js'
 
 export interface OverviewStats {
   totalMatches: number
@@ -33,6 +38,7 @@ export interface OverviewStats {
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
   matchesByVersion: Array<{ version: string; matchCount: number }>
   playerCount: number
+  _championPool?: Array<{ championId: number; pickrate: number }>
 }
 
 export interface OverviewDetailStats {
@@ -183,15 +189,20 @@ const overviewDetailCache = new Map<string, { data: OverviewDetailStats; expires
 function overviewCacheKey(v: string | null, r: string | null): string {
   return `${v ?? ''}|${r ?? ''}`
 }
-function overviewDetailCacheKey(v: string | null, r: string | null, s: boolean): string {
-  return `${v ?? ''}|${r ?? ''}|${s}`
+function overviewDetailCacheKey(
+  v: string | null,
+  rankTier: string | string[] | null | undefined,
+  role: string | null,
+  s: boolean
+): string {
+  return `${v ?? ''}|${rankTierCacheKey(rankTier) ?? ''}|${role ?? ''}|${s}`
 }
 function sidesCacheKey(
   version: string | string[] | null | undefined,
   rankTier: string | string[] | null | undefined
 ): string {
   const v = Array.isArray(version) ? version.join(',') : version ?? ''
-  const r = Array.isArray(rankTier) ? rankTier.join(',') : rankTier ?? ''
+  const r = rankTierCacheKey(rankTier) ?? ''
   return `${v}|${r}`
 }
 
@@ -212,23 +223,14 @@ function normalizeOverviewParam(
   return s
 }
 
-function toParamArray(value: string | string[] | null | undefined): string[] {
-  if (value == null) return []
-  if (Array.isArray(value)) {
-    return value.filter((s): s is string => typeof s === 'string' && s !== '' && !s.startsWith('['))
-  }
-  if (typeof value === 'string' && value !== '' && !value.startsWith('[')) return [value]
-  return []
-}
-
 /** Build Prisma where for matchs table given version + rankTier filters. */
 function buildMatchWhere(
   version?: string | string[] | null,
   rankTier?: string | string[] | null
 ): Record<string, unknown> {
   const where: Record<string, unknown> = {}
-  const versions = toParamArray(version)
-  const ranks = toParamArray(rankTier)
+  const versions = toQueryStringArrayParam(version)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (versions.length === 1) where.gameVersion = { startsWith: versions[0] }
   else if (versions.length > 1) where.gameVersion = { in: versions.flatMap(v => [v]) }
   if (ranks.length === 1) where.rankTier = ranks[0]
@@ -240,20 +242,23 @@ function buildMatchWhere(
 
 export async function getOverviewStats(
   version?: string | string[] | null,
-  rankTier?: string | string[] | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = normalizeOverviewParam(version)
-  const pRankTier = normalizeOverviewParam(rankTier)
+  const pRole = role != null && role !== '' ? role : null
+  const pRankTierKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cacheKey = `${overviewCacheKey(pVersion, pRankTierKey)}|${pRole ?? ''}`
   const cached = overviewStatsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
+    if (pRole) coreWhere.role = pRole
 
     const matchWhere = buildMatchWhere(version, rankTier)
 
@@ -306,7 +311,8 @@ export async function getOverviewStats(
         wins: e.wins,
         winrate: e.games > 0 ? (e.wins / e.games) * 100 : 0,
         pickrate: totalParticipants > 0 ? (e.games / totalParticipants) * 100 : 0,
-        banrate: totalMatches > 0 ? (e.bans / totalMatches) * 100 : 0,
+        banrate:
+          totalMatches > 0 ? Math.min(100, (e.bans / (2 * totalMatches)) * 100) : 0,
         bans: e.bans,
       }))
 
@@ -359,6 +365,7 @@ export async function getOverviewStats(
       matchesByDivision,
       matchesByVersion,
       playerCount,
+      _championPool: champList.map((c) => ({ championId: c.championId, pickrate: c.pickrate })),
     }
 
     overviewStatsCache.set(cacheKey, { data: result, expiresAt: now + OVERVIEW_CACHE_TTL_MS })
@@ -375,13 +382,14 @@ const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
 
 export async function getOverviewDetailStats(
   version?: string | null,
-  rankTier?: string | null,
-  includeSmite?: boolean
+  rankTier?: string | string[] | null,
+  includeSmite?: boolean,
+  role?: string | null
 ): Promise<OverviewDetailStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
-  const key = overviewDetailCacheKey(pVersion, pRankTier, includeSmite ?? false)
+  const pRole = role != null && role !== '' ? role : null
+  const key = overviewDetailCacheKey(pVersion, rankTier, pRole, includeSmite ?? false)
   const now = Date.now()
   const cached = overviewDetailCache.get(key)
   if (cached && cached.expiresAt > now) return cached.data
@@ -389,7 +397,8 @@ export async function getOverviewDetailStats(
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
+    if (pRole) coreWhere.role = pRole
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
@@ -572,20 +581,23 @@ export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; er
 
 export async function getOverviewTeamsStats(
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewTeamsStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const pRole = role != null && role !== '' ? role : null
+  const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${pRole ?? ''}`
   const cached = overviewTeamsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const teamWhere: Record<string, unknown> = {}
     if (pVersion) teamWhere.gameVersion = { startsWith: pVersion }
-    if (pRankTier) teamWhere.rankTier = pRankTier
+    applyRankTierWhere(teamWhere, rankTier)
+    // mv_team_core_stats n'a pas de colonne role (agrégat match / équipe).
 
     const teamStats = await prisma.mvTeamCoreStat.findMany({
       where: teamWhere,
@@ -640,7 +652,12 @@ export async function getOverviewTeamsStats(
     const coreStatsBan = await prisma.mvChampionCoreStat.findMany({
       where: {
         ...(pVersion ? { gameVersion: { startsWith: pVersion } } : {}),
-        ...(pRankTier ? { rankTier: pRankTier } : {}),
+        ...(() => {
+          const w: Record<string, unknown> = {}
+          applyRankTierWhere(w, rankTier)
+          if (pRole) w.role = pRole
+          return w
+        })(),
       },
       select: { championId: true, countBan: true, countWin: true, countGame: true },
     })
@@ -680,13 +697,64 @@ export async function getOverviewTeamsStats(
       banRatePercent: totalBansAll > 0 ? (Math.round((b.total / totalBansAll) * 1000) / 10).toFixed(1) + '%' : '—',
     }))
 
-    const objData = (win: { first: number; kills: number }, loss: { first: number; kills: number }): ObjectiveWithDistribution => ({
+    const matchWhere = buildMatchWhere(version, rankTier)
+    const teamDistributionWhere: Record<string, unknown> = { match: matchWhere }
+    type TeamObjectiveKey =
+      | 'baronKills'
+      | 'dragonKills'
+      | 'elderKills'
+      | 'towerKills'
+      | 'inhibitorKills'
+      | 'riftHeraldKills'
+      | 'hordeKills'
+    async function loadObjectiveDistribution(
+      key: TeamObjectiveKey
+    ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
+      const rows = await prisma.team.groupBy({
+        by: [key, 'win'],
+        where: teamDistributionWhere,
+        _count: { _all: true },
+      })
+      const win: Record<string, number> = {}
+      const loss: Record<string, number> = {}
+      for (const r of rows as Array<Record<string, unknown> & { win: boolean; _count: { _all: number } }>) {
+        const count = Number(r[key] ?? 0)
+        const bucket = String(Number.isFinite(count) ? count : 0)
+        const n = Number(r._count?._all ?? 0)
+        if (r.win) win[bucket] = (win[bucket] ?? 0) + n
+        else loss[bucket] = (loss[bucket] ?? 0) + n
+      }
+      return { win, loss }
+    }
+    const [
+      distBaron,
+      distDragon,
+      distElder,
+      distTower,
+      distInhibitor,
+      distRiftHerald,
+      distHorde,
+    ] = await Promise.all([
+      loadObjectiveDistribution('baronKills'),
+      loadObjectiveDistribution('dragonKills'),
+      loadObjectiveDistribution('elderKills'),
+      loadObjectiveDistribution('towerKills'),
+      loadObjectiveDistribution('inhibitorKills'),
+      loadObjectiveDistribution('riftHeraldKills'),
+      loadObjectiveDistribution('hordeKills'),
+    ])
+
+    const objData = (
+      win: { first: number; kills: number },
+      loss: { first: number; kills: number },
+      dist: { win: Record<string, number>; loss: Record<string, number> }
+    ): ObjectiveWithDistribution => ({
       firstByWin: win.first,
       firstByLoss: loss.first,
       killsByWin: win.kills,
       killsByLoss: loss.kills,
-      distributionByWin: {},
-      distributionByLoss: {},
+      distributionByWin: dist.win,
+      distributionByLoss: dist.loss,
     })
 
     const result: OverviewTeamsStats = {
@@ -698,13 +766,13 @@ export async function getOverviewTeamsStats(
       },
   objectives: {
         firstBlood: { firstByWin: winAgg.firstBlood.first, firstByLoss: lossAgg.firstBlood.first },
-        baron: objData(winAgg.baron, lossAgg.baron),
-        dragon: objData(winAgg.dragon, lossAgg.dragon),
-        elder: objData(winAgg.elder, lossAgg.elder),
-        tower: objData(winAgg.tower, lossAgg.tower),
-        inhibitor: objData(winAgg.inhibitor, lossAgg.inhibitor),
-        riftHerald: objData(winAgg.riftHerald, lossAgg.riftHerald),
-        horde: objData(winAgg.horde, lossAgg.horde),
+        baron: objData(winAgg.baron, lossAgg.baron, distBaron),
+        dragon: objData(winAgg.dragon, lossAgg.dragon, distDragon),
+        elder: objData(winAgg.elder, lossAgg.elder, distElder),
+        tower: objData(winAgg.tower, lossAgg.tower, distTower),
+        inhibitor: objData(winAgg.inhibitor, lossAgg.inhibitor, distInhibitor),
+        riftHerald: objData(winAgg.riftHerald, lossAgg.riftHerald, distRiftHerald),
+        horde: objData(winAgg.horde, lossAgg.horde, distHorde),
       },
     }
 
@@ -720,20 +788,23 @@ export async function getOverviewTeamsStats(
 
 export async function getOverviewDurationWinrateStats(
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const pRole = role != null && role !== '' ? role : null
+  const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = overviewCacheKey(pVersion, pRankTier)
+  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${pRole ?? ''}`
   const cached = overviewDurationWinrateCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
+    if (pRole) coreWhere.role = pRole
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
@@ -778,13 +849,13 @@ export async function getOverviewDurationWinrateStats(
 export async function getDurationWinrateByChampion(
   championId: number,
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
     const coreWhere: Record<string, unknown> = { championId }
     if (version) coreWhere.gameVersion = { startsWith: version }
-    if (rankTier) coreWhere.rankTier = rankTier
+    applyRankTierWhere(coreWhere, rankTier)
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
@@ -824,24 +895,28 @@ export async function getDurationWinrateByChampion(
 
 export async function getOverviewProgressionStats(
   versionOldest?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewProgressionStats | null> {
   if (!isDatabaseConfigured()) return null
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, gainers: [], losers: [] }
   }
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const pRole = role != null && role !== '' ? role : null
+  const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = overviewCacheKey(versionOldest, pRankTier)
+  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${pRole ?? ''}`
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    if (pRankTier) oldestWhere.rankTier = pRankTier
+    applyRankTierWhere(oldestWhere, rankTier)
+    if (pRole) oldestWhere.role = pRole
 
     const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    if (pRankTier) sinceWhere.rankTier = pRankTier
+    applyRankTierWhere(sinceWhere, rankTier)
+    if (pRole) sinceWhere.role = pRole
 
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.mvChampionCoreStat.findMany({
@@ -906,23 +981,27 @@ export async function getOverviewProgressionStats(
 
 export async function getOverviewProgressionFullStats(
   versionOldest?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewProgressionFullStats | null> {
   if (!isDatabaseConfigured()) return null
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, champions: [] }
   }
-  const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
+  const pRole = role != null && role !== '' ? role : null
+  const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = overviewCacheKey(versionOldest, pRankTier)
+  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${pRole ?? ''}`
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
     const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    if (pRankTier) oldestWhere.rankTier = pRankTier
+    applyRankTierWhere(oldestWhere, rankTier)
+    if (pRole) oldestWhere.role = pRole
     const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    if (pRankTier) sinceWhere.rankTier = pRankTier
+    applyRankTierWhere(sinceWhere, rankTier)
+    if (pRole) sinceWhere.role = pRole
 
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.mvChampionCoreStat.findMany({
@@ -1003,8 +1082,8 @@ function buildRawMatchCond(
   rankTier?: string | string[] | null
 ): string {
   const parts: string[] = []
-  const versions = toParamArray(version)
-  const ranks = toParamArray(rankTier)
+  const versions = toQueryStringArrayParam(version)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (versions.length === 1) parts.push(`m.game_version LIKE '${versions[0]}%'`)
   else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v}'`).join(',')})`)
   if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)

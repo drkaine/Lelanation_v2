@@ -25,6 +25,7 @@ import {
 } from '../services/RiotHttpClient.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
+import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches, refreshAllMaterializedViews } from '../services/MaterializedViewService.js'
@@ -830,7 +831,7 @@ export async function upsertMatchAndParticipants(
       const existing = await tx.match.findUnique({ where: { riotMatchId }, select: { id: true } })
       if (existing) return
 
-      const gameVersion = info.gameVersion ?? ''
+      const gameVersion = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(info))
       if (!isAllowedGameVersion(gameVersion)) return
 
       const existingPlayers = await tx.player.findMany({
@@ -1544,7 +1545,11 @@ async function runStep4ForPlayer(
         await sleep(MATCH_FETCH_RETRY_DELAY_MS)
         continue
       }
-      if (!isAllowedGameVersion(matchRes.data?.info?.gameVersion)) {
+      if (
+        !isAllowedGameVersion(
+          normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
+        )
+      ) {
         return { ok: false, reason: 'version' }
       }
 

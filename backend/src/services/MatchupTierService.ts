@@ -23,7 +23,7 @@ interface MatchParticipantForMatchup {
 export interface TierListOptions {
   patch: string
   lane?: string | null
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   limit?: number
   minGames?: number
 }
@@ -32,7 +32,7 @@ export interface MatchupDetailsOptions {
   patch: string
   championId: number
   lane?: string | null
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   minGames?: number
   limit?: number
 }

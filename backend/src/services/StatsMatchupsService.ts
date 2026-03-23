@@ -3,6 +3,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 
 export interface MatchupRow {
   opponentChampionId: number
@@ -14,7 +15,7 @@ export interface MatchupRow {
 export interface MatchupsByChampionOptions {
   championId: number
   version?: string | null
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   region?: string | null
   minGames?: number
@@ -27,13 +28,12 @@ export async function getMatchupsByChampion(
   const { championId, version, rankTier, role, region, minGames = 10 } = options
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
     // Get all champion_core_stat IDs from MV for this champion matching filters
     const coreWhere: Record<string, unknown> = { championId }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
     if (pRole) coreWhere.role = pRole
     if (pVersion) coreWhere.gameVersion = pVersion
     if (pRegion) coreWhere.region = pRegion

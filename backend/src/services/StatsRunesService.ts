@@ -4,6 +4,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 
 export interface RuneRow {
   runes: unknown
@@ -15,7 +16,7 @@ export interface RuneRow {
 
 export interface RunesByChampionOptions {
   championId: number
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   patch?: string | null
   role?: string | null
   region?: string | null
@@ -29,13 +30,12 @@ export async function getRunesByChampion(
   if (!isDatabaseConfigured()) return null
   const { championId, rankTier, patch, role, region, minGames = 10, limit = 20 } = options
   try {
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const pPatch = patch != null && patch !== '' ? patch : null
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
     const coreWhere: Record<string, unknown> = { championId }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
     if (pPatch) coreWhere.gameVersion = pPatch
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
@@ -108,7 +108,7 @@ export interface RuneStatRow {
 export interface RuneStatsByChampionOptions {
   championId: number
   version?: string | null
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   region?: string | null
   minGames?: number
@@ -121,13 +121,12 @@ export async function getRuneStatsByChampion(
   const { championId, version, rankTier, role, region, minGames = 10 } = options
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
     const coreWhere: Record<string, unknown> = { championId }
     if (pVersion) coreWhere.gameVersion = pVersion
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
 
@@ -195,7 +194,7 @@ export interface ShardStatRow {
 export async function getShardStatsByChampion(options: {
   championId: number
   version?: string | null
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   region?: string | null
   minGames?: number
@@ -204,13 +203,12 @@ export async function getShardStatsByChampion(options: {
   const { championId, version, rankTier, role, region, minGames = 10 } = options
   try {
     const pVersion = version != null && version !== '' ? version : null
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
     const coreWhere: Record<string, unknown> = { championId }
     if (pVersion) coreWhere.gameVersion = pVersion
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
     if (pRole) coreWhere.role = pRole
     if (pRegion) coreWhere.region = pRegion
 

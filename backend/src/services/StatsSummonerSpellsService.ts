@@ -4,6 +4,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 
 export interface SummonerSpellRow {
   spellId: number
@@ -33,11 +34,11 @@ function norm(value: string | string[] | null | undefined): string | null {
 async function getChampionStatIds(
   championId: number,
   pVersion: string | null,
-  pRankTier: string | null
+  rankTier: string | string[] | null
 ): Promise<{ statIds: bigint[]; totalGames: number }> {
   const coreWhere: Record<string, unknown> = { championId }
   if (pVersion) coreWhere.gameVersion = pVersion
-  if (pRankTier) coreWhere.rankTier = pRankTier
+  applyRankTierWhere(coreWhere, rankTier)
 
   const coreStats = await prisma.mvChampionCoreStat.findMany({
     where: coreWhere,
@@ -51,14 +52,13 @@ async function getChampionStatIds(
 export async function getSummonerSpellsByChampion(
   championId: number,
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null
 ): Promise<{ totalGames: number; spells: SummonerSpellRow[] } | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = norm(version)
-  const pRankTier = norm(rankTier)
 
   try {
-    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, pRankTier)
+    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     if (statIds.length === 0) return { totalGames: 0, spells: [] }
 
     const spellRows = await prisma.mvChampionSummonerSpellAgg.findMany({
@@ -113,29 +113,25 @@ export async function getSummonerSpellsByChampion(
 export async function getSummonerSpellsDuosByChampion(
   championId: number,
   version?: string | null,
-  rankTier?: string | null
+  rankTier?: string | string[] | null
 ): Promise<{ totalGames: number; duos: SummonerSpellDuoRow[] } | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = norm(version)
-  const pRankTier = norm(rankTier)
 
   try {
-    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, pRankTier)
+    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     if (statIds.length === 0) return { totalGames: 0, duos: [] }
 
     // Duos from match_players.summoner_spells (ordered D/F)
-    const coreWhere: Record<string, unknown> = { championId }
-    if (pVersion) coreWhere.gameVersion = pVersion
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    const matchRankWhere: Record<string, unknown> = {}
+    if (pVersion) matchRankWhere.gameVersion = pVersion
+    applyRankTierWhere(matchRankWhere, rankTier)
 
     // Get match_player IDs for this champion with filters
     const matchPlayersRows = await prisma.matchPlayer.findMany({
       where: {
         championId,
-        match: {
-          ...(pVersion ? { gameVersion: pVersion } : {}),
-          ...(pRankTier ? { rankTier: pRankTier } : {}),
-        },
+        match: matchRankWhere,
       },
       select: {
         id: true,

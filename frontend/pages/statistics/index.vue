@@ -27,18 +27,6 @@
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
     <div class="w-full flex-shrink-0 border-b border-primary/30 bg-surface/30 px-4 pb-2 pt-4">
-      <div class="mb-3 inline-flex rounded-lg border border-primary/30 bg-surface/40 p-1">
-        <NuxtLink :to="localePath('/statistics')" class="stats-mode-btn stats-mode-btn-active">
-          {{ t('statisticsPage.modeClassic') }}
-        </NuxtLink>
-        <NuxtLink
-          v-if="statisticsCustomStore.hasCustomStatistics"
-          :to="localePath('/statistics/custom')"
-          class="stats-mode-btn"
-        >
-          {{ t('statisticsPage.modeCustom') }}
-        </NuxtLink>
-      </div>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="tab in tabs"
@@ -52,34 +40,58 @@
           ]"
           @click="activeTab = tab.id"
         >
-          <span
-            class="mr-1 inline-flex cursor-pointer select-none"
-            :title="
-              statisticsCustomStore.isFavorite(tab.widgetId)
-                ? 'Retirer des favoris'
-                : 'Ajouter aux favoris'
-            "
-            @click.stop="toggleFavoriteWidget(tab.widgetId, tab.label)"
-            >{{ statisticsCustomStore.isFavorite(tab.widgetId) ? '★' : '☆' }}</span
-          >
           {{ tab.label }}
         </button>
       </div>
     </div>
 
-    <!-- Filtres + contenu : même hauteur, bord aligné -->
+    <!-- Filtres + contenu : même hauteur -->
     <div class="flex min-h-0 flex-1 pt-4">
+      <button
+        type="button"
+        class="filters-collapse-floating hidden lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
+        :aria-label="
+          filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+        "
+        @click="filtersOpen = !filtersOpen"
+      >
+        <svg
+          class="h-4 w-4 transition-transform duration-200"
+          :class="filtersOpen ? 'rotate-180' : ''"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </button>
       <aside
         :class="[
-          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200',
-          'lg:static lg:sticky lg:top-4 lg:z-0 lg:ml-3 lg:max-h-[calc(100vh-2rem)] lg:translate-x-0 lg:self-start lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
-          filtersOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
+          'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
+          filtersOpen
+            ? 'translate-x-0 lg:w-64 lg:opacity-100'
+            : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
         ]"
       >
-        <div class="flex items-center justify-between border-b border-primary/30 p-2 lg:border-0">
+        <div class="flex items-center justify-between p-2">
           <h2 class="text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            @click="resetStatsFilters"
+          >
+            <span class="iconify i-mdi:refresh" aria-hidden="true" />
+            Reset
+          </button>
           <button
             type="button"
             class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
@@ -123,14 +135,26 @@
             </div>
             <div class="flex flex-wrap gap-1">
               <button
+                type="button"
+                class="stats-division-btn rounded px-2 py-0.5 text-xs font-semibold transition-colors"
+                :class="
+                  statsDivisionFilter.length === 0
+                    ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 text-text/85 hover:bg-white/10'
+                "
+                @click="selectAllDivisions()"
+              >
+                All
+              </button>
+              <button
                 v-for="tier in rankTiers"
                 :key="tier"
                 type="button"
-                class="stats-division-btn rounded border p-0.5 transition-colors"
+                class="stats-division-btn rounded p-0.5 transition-colors"
                 :class="
                   statsDivisionFilter.includes(tier)
-                    ? 'border-accent bg-accent/20'
-                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 hover:bg-white/10'
                 "
                 :title="formatDivisionLabel(tier)"
                 @click="toggleDivisionFilter(tier)"
@@ -140,6 +164,11 @@
                   :src="getRankedEmblemUrl(tier)!"
                   :alt="tier"
                   class="h-3 w-3 object-contain"
+                  :class="
+                    statsDivisionFilter.includes(tier)
+                      ? 'saturate-110 opacity-100'
+                      : 'brightness-125 grayscale'
+                  "
                   width="12"
                   height="12"
                 />
@@ -152,14 +181,24 @@
             </div>
             <div class="flex flex-wrap gap-1">
               <button
+                type="button"
+                class="stats-role-btn rounded px-2 py-0.5 text-xs font-semibold transition-colors"
+                :class="
+                  !statsRoleFilter
+                    ? 'bg-blue-500/20 text-blue-200'
+                    : 'bg-black/20 text-text/85 hover:bg-white/10'
+                "
+                @click="selectAllRoles()"
+              >
+                All
+              </button>
+              <button
                 v-for="r in roles"
                 :key="r.value"
                 type="button"
-                class="stats-role-btn rounded border p-0.5 transition-colors"
+                class="stats-role-btn rounded p-0.5 transition-colors"
                 :class="
-                  statsRoleFilter === r.value
-                    ? 'border-accent bg-accent/20'
-                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                  statsRoleFilter === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'
                 "
                 :title="r.label"
                 @click="toggleRoleFilter(r)"
@@ -168,6 +207,11 @@
                   :src="r.icon"
                   :alt="r.label"
                   class="h-3 w-3 object-contain"
+                  :class="
+                    statsRoleFilter === r.value
+                      ? 'saturate-110 opacity-100'
+                      : 'brightness-125 grayscale'
+                  "
                   width="12"
                   height="12"
                 />
@@ -175,19 +219,18 @@
             </div>
           </div>
           <div>
-            <label for="champion-sort" class="mb-1 block text-sm font-medium text-text">{{
-              t('statisticsPage.championsSortBy')
-            }}</label>
+            <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
+              {{ t('statisticsPage.filterOtp') }}
+            </label>
             <select
-              id="champion-sort"
-              v-model="championsSortOrder"
+              id="otp-filter"
+              v-model="statsOtpFilter"
               class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+              @change="onStatsFilterChange"
             >
-              <option value="winrate">{{ t('statisticsPage.championsSortWinrate') }}</option>
-              <option value="pickrate">{{ t('statisticsPage.championsSortPickrate') }}</option>
-              <option value="banrate">{{ t('statisticsPage.championsSortBanrate') }}</option>
-              <option value="games">{{ t('statisticsPage.championsSortGames') }}</option>
-              <option value="wins">{{ t('statisticsPage.wins') }}</option>
+              <option value="non">{{ t('statisticsPage.filterOtpNo') }}</option>
+              <option value="oui">{{ t('statisticsPage.filterOtpYes') }}</option>
+              <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
             </select>
           </div>
           <div>
@@ -206,7 +249,7 @@
       </aside>
 
       <!-- Contenu principal : à côté des filtres, même hauteur -->
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-4 lg:pb-4 lg:pt-0">
+      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-0">
         <div class="w-full">
           <div v-if="!overviewData" class="mb-6 text-text/80">
             <p>{{ t('statisticsPage.description') }}</p>
@@ -214,7 +257,7 @@
 
           <!-- Tab: Overview (default) -->
           <div v-show="activeTab === 'overview'" class="space-y-6">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+            <div class="rounded-lg">
               <h2 class="mb-4 text-xl font-semibold text-text-accent">
                 {{ t('statisticsPage.overviewTitle') }}
               </h2>
@@ -236,23 +279,49 @@
               </div>
               <div v-else-if="overviewData" class="space-y-3">
                 <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
-                <div class="flex flex-wrap gap-6">
+                <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
                   <!-- Champions les plus choisis -->
                   <div
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.fastStatsMostPicked') }}
-                      <span
-                        class="relative ml-1 inline-flex cursor-help text-text/50"
-                        aria-hidden="true"
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.mostPicked')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.mostPicked')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.mostPicked',
+                            t('statisticsPage.fastStatsMostPicked')
+                          )
+                        "
                       >
-                        ⓘ
+                        {{ cardIsFavorite('overview.mostPicked') ? '★' : '☆' }}
+                      </button>
+                      <span class="flex-1">
+                        {{ t('statisticsPage.fastStatsMostPicked') }}
                         <span
-                          role="tooltip"
-                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
                         >
-                          {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
+                          </span>
                         </span>
                       </span>
                     </h3>
@@ -326,7 +395,7 @@
                       <button
                         type="button"
                         class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionsWithSort('pickrate')"
+                        @click="goToTierListWithSort('pickrate')"
                       >
                         {{ t('statisticsPage.fastStatsSeeMore') }}
                       </button>
@@ -335,20 +404,46 @@
 
                   <!-- Meilleurs champions -->
                   <div
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.fastStatsBestWinrate') }}
-                      <span
-                        class="relative ml-1 inline-flex cursor-help text-text/50"
-                        aria-hidden="true"
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.bestWinrate')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.bestWinrate')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.bestWinrate',
+                            t('statisticsPage.fastStatsBestWinrate')
+                          )
+                        "
                       >
-                        ⓘ
+                        {{ cardIsFavorite('overview.bestWinrate') ? '★' : '☆' }}
+                      </button>
+                      <span class="inline-flex flex-1 items-center">
+                        {{ t('statisticsPage.fastStatsBestWinrate') }}
                         <span
-                          role="tooltip"
-                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
                         >
-                          {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
+                          </span>
                         </span>
                       </span>
                     </h3>
@@ -419,7 +514,7 @@
                       <button
                         type="button"
                         class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionsWithSort('winrate')"
+                        @click="goToTierListWithSort('winrate')"
                       >
                         {{ t('statisticsPage.fastStatsSeeMore') }}
                       </button>
@@ -428,20 +523,46 @@
 
                   <!-- Champions les plus bannis -->
                   <div
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.fastStatsMostBanned') }}
-                      <span
-                        class="relative ml-1 inline-flex cursor-help text-text/50"
-                        aria-hidden="true"
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.mostBanned')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.mostBanned')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.mostBanned',
+                            t('statisticsPage.fastStatsMostBanned')
+                          )
+                        "
                       >
-                        ⓘ
+                        {{ cardIsFavorite('overview.mostBanned') ? '★' : '☆' }}
+                      </button>
+                      <span class="inline-flex flex-1 items-center">
+                        {{ t('statisticsPage.fastStatsMostBanned') }}
                         <span
-                          role="tooltip"
-                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
                         >
-                          {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
+                          </span>
                         </span>
                       </span>
                     </h3>
@@ -512,7 +633,7 @@
                       <button
                         type="button"
                         class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionsWithSort('banrate')"
+                        @click="goToTierListWithSort('banrate')"
                       >
                         {{ t('statisticsPage.fastStatsSeeMore') }}
                       </button>
@@ -521,26 +642,52 @@
 
                   <!-- Winrates depuis X -->
                   <div
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{
-                        oldestVersionForProgression
-                          ? t('statisticsPage.fastStatsWinrateSince', {
-                              version: oldestVersionForProgression,
-                            })
-                          : t('statisticsPage.fastStatsWinrateProgression')
-                      }}
-                      <span
-                        class="relative ml-1 inline-flex cursor-help text-text/50"
-                        aria-hidden="true"
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.winrateSince')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.winrateSince')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.winrateSince',
+                            t('statisticsPage.fastStatsWinrateProgression')
+                          )
+                        "
                       >
-                        ⓘ
+                        {{ cardIsFavorite('overview.winrateSince') ? '★' : '☆' }}
+                      </button>
+                      <span class="flex-1">
+                        {{
+                          oldestVersionForProgression
+                            ? t('statisticsPage.fastStatsWinrateSince', {
+                                version: oldestVersionForProgression,
+                              })
+                            : t('statisticsPage.fastStatsWinrateProgression')
+                        }}
                         <span
-                          role="tooltip"
-                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
                         >
-                          {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
+                          </span>
                         </span>
                       </span>
                     </h3>
@@ -690,13 +837,88 @@
                     </div>
                   </div>
 
+                  <!-- Répartition des parties (surrender early / surrender / reste) -->
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      Repartition des parties
+                    </h3>
+                    <div v-if="overviewAbandonsPending" class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div v-else-if="overviewMatchOutcomeTotal > 0" class="flex items-center gap-3">
+                      <div
+                        class="overview-match-outcome-bagel h-24 w-24 shrink-0 rounded-full"
+                        :style="{ background: overviewMatchOutcomeDonutBg }"
+                        aria-hidden="true"
+                      >
+                        <div
+                          class="flex h-full w-full items-center justify-center rounded-full text-[10px] font-semibold text-text/85"
+                        >
+                          {{ overviewPlayedPct.toFixed(0) }}%
+                        </div>
+                      </div>
+                      <div class="space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ overviewMatchOutcomeTotal.toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
+                          Early surrender: {{ overviewEarlySurrenderCount.toLocaleString() }} ({{
+                            overviewEarlySurrenderPct.toFixed(2)
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-violet-400" />
+                          Surrender: {{ overviewSurrenderOnlyCount.toLocaleString() }} ({{
+                            overviewSurrenderOnlyPct.toFixed(2)
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                          Jouees: {{ overviewPlayedCount.toLocaleString() }} ({{
+                            overviewPlayedPct.toFixed(2)
+                          }}%)
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
+                    </div>
+                  </div>
+
                   <!-- Bans par équipe gagnante -->
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.overviewTeamsBansByWin') }}
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.bansByWin')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.bansByWin')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.bansByWin',
+                            t('statisticsPage.overviewTeamsBansByWin')
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('overview.bansByWin') ? '★' : '☆' }}
+                      </button>
+                      <span class="flex-1">{{ t('statisticsPage.overviewTeamsBansByWin') }}</span>
                     </h3>
                     <table
                       v-if="(overviewTeamsData.bans.byWin ?? []).length"
@@ -798,10 +1020,34 @@
                   <!-- Bans par équipe perdante -->
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card w-fit max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.overviewTeamsBansByLoss') }}
+                    <h3
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                    >
+                      <button
+                        type="button"
+                        class="text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.bansByLoss')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.bansByLoss')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.bansByLoss',
+                            t('statisticsPage.overviewTeamsBansByLoss')
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('overview.bansByLoss') ? '★' : '☆' }}
+                      </button>
+                      <span class="flex-1">{{ t('statisticsPage.overviewTeamsBansByLoss') }}</span>
                     </h3>
                     <table
                       v-if="(overviewTeamsData.bans.byLoss ?? []).length"
@@ -1023,55 +1269,12 @@
               </div>
               <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
             </div>
-
-            <!-- Dernière mise à jour, filtrer par version et par division (en bas de la vue d'ensemble) -->
-            <div
-              v-if="overviewData"
-              class="rounded-lg border border-primary/30 bg-surface/30 p-4 text-sm text-text/80"
-            >
-              <p>
-                {{
-                  t('statisticsPage.overviewDescriptionSummary', {
-                    lastUpdate: overviewData.lastUpdate
-                      ? formatGeneratedAt(overviewData.lastUpdate)
-                      : '—',
-                    total: overviewEffectiveTotalMatches,
-                    count: overviewData.playerCount ?? 0,
-                  })
-                }}
-              </p>
-              <p v-if="overviewDescriptionVersionsSummary" class="mt-1">
-                {{ t('statisticsPage.overviewNumberByVersion') }} :
-                {{ overviewDescriptionVersionsSummary }}
-              </p>
-              <p
-                v-if="overviewDivisionsForDescription.length"
-                class="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1"
-              >
-                <span class="text-text/80"
-                  >{{ t('statisticsPage.overviewNumberByDivision') }} :</span
-                >
-                <template v-for="(d, idx) in overviewDivisionsForDescription" :key="d.rankTier">
-                  <span v-if="idx > 0" class="text-text/40" aria-hidden="true">·</span>
-                  <span class="inline-flex items-center gap-1.5 text-sky-400">
-                    <img
-                      v-if="getRankedEmblemUrl(d.rankTier)"
-                      :src="getRankedEmblemUrl(d.rankTier)!"
-                      :alt="d.rankTier"
-                      class="inline-block h-[1.5em] w-[1.5em] shrink-0 object-contain align-middle"
-                    />
-                    <span v-else>{{ d.rankTier }}</span>
-                    <span>({{ d.matchCount }}, {{ divisionPercent(d) }}%)</span>
-                  </span>
-                </template>
-              </p>
-            </div>
           </div>
 
           <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
           <div v-show="activeTab === 'runes'" class="space-y-6">
             <template v-if="overviewDetailPending">
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+              <div class="rounded-lg">
                 <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
               </div>
             </template>
@@ -1221,7 +1424,7 @@
 
                 <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <!-- Rune sets -->
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                  <div class="rounded-lg">
                     <h3 class="mb-3 text-lg font-medium text-text">
                       {{ t('statisticsPage.overviewDetailRuneSets') }}
                     </h3>
@@ -1275,7 +1478,7 @@
                   </div>
 
                   <!-- Items -->
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                  <div class="rounded-lg">
                     <h3 class="mb-3 text-lg font-medium text-text">
                       {{ t('statisticsPage.overviewDetailItems') }}
                     </h3>
@@ -1319,7 +1522,7 @@
                   </div>
 
                   <!-- Item sets -->
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                  <div class="rounded-lg">
                     <h3 class="mb-3 text-lg font-medium text-text">
                       {{ t('statisticsPage.overviewDetailItemSets') }}
                     </h3>
@@ -1363,7 +1566,7 @@
                   </div>
 
                   <!-- Items by order -->
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                  <div class="rounded-lg">
                     <h3 class="mb-3 text-lg font-medium text-text">
                       {{ t('statisticsPage.overviewDetailItemsByOrder') }}
                     </h3>
@@ -1428,7 +1631,7 @@
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
           <div v-show="activeTab === 'trends'" class="space-y-6">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+            <div class="rounded-lg">
               <h2 class="mb-4 text-xl font-semibold text-text-accent">
                 {{ t('statisticsPage.progressionsTitle') }}
               </h2>
@@ -1611,7 +1814,7 @@
 
           <!-- Tab: Par côté (Blue / Red) -->
           <div v-show="activeTab === 'team'" class="space-y-6">
-            <div class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+            <div class="rounded-lg">
               <h2 class="mb-4 text-xl font-semibold text-text-accent">
                 {{ t('statisticsPage.sidesTitle') }}
               </h2>
@@ -2541,10 +2744,19 @@
                         </span>
                       </td>
                       <td class="px-4 py-2 text-text/90">
-                        {{
-                          ROLE_OPTIONS.find(r => r.value === row.mainRole)?.label ?? row.mainRole
-                        }}
-                        {{ Number(row.mainRolePct).toFixed(0) }}%
+                        <div class="flex items-center gap-1.5">
+                          <img
+                            v-if="mainRoleIconSrc(row.mainRole)"
+                            :src="mainRoleIconSrc(row.mainRole)!"
+                            :alt="mainRoleLabel(row.mainRole)"
+                            :title="mainRoleLabel(row.mainRole)"
+                            class="h-5 w-5 shrink-0 object-contain"
+                            width="20"
+                            height="20"
+                          />
+                          <span v-else class="text-xs">{{ row.mainRole }}</span>
+                          <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
+                        </div>
                       </td>
                       <td class="px-4 py-2 text-text/90">{{ (row.winrate * 100).toFixed(2) }}%</td>
                       <td class="px-4 py-2 text-text/90">{{ (row.pickrate * 100).toFixed(2) }}%</td>
@@ -3189,6 +3401,14 @@ const tabs = computed(() => [
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
 
+function cardIsFavorite(cardId: string): boolean {
+  return statisticsCustomStore.isFavorite(cardId)
+}
+
+function toggleFavoriteCard(cardId: string, title: string): void {
+  statisticsCustomStore.toggleFavorite(cardId, title)
+}
+
 function normalizeLegacyTab(tab: string): StatisticsMainTab {
   if (tab === 'champions') return 'infos'
   if (tab === 'progressions') return 'trends'
@@ -3209,10 +3429,6 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     return tab
   }
   return 'overview'
-}
-
-function toggleFavoriteWidget(widgetId: string, title: string) {
-  statisticsCustomStore.toggleFavorite(widgetId, title)
 }
 
 const championSearchQuery = ref('')
@@ -3311,10 +3527,12 @@ function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate' | 'banr
     championsSortDir.value = 'desc'
   }
 }
-/** Navigate to Champions tab with sort (filtres déjà partagés). */
-function goToChampionsWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
-  championsSortOrder.value = sort
-  activeTab.value = 'infos'
+/** Vue d'ensemble → Tier list avec la même logique de tri que la colonne correspondante. */
+function goToTierListWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
+  tierListSortColumn.value = sort
+  tierListSortDir.value = 'desc'
+  tierListViewModel.value = 'table'
+  activeTab.value = 'tierlist'
 }
 
 /** Tier list: types and sort (3-state: default, asc, desc). */
@@ -3456,7 +3674,7 @@ watch([tierListSortColumn, tierListSortDir, championsPageSize], () => {
   tierListPage.value = 1
 })
 
-function formatGeneratedAt(value: string | null | undefined): string {
+function _formatGeneratedAt(value: string | null | undefined): string {
   if (!value) return '—'
   try {
     const d = new Date(value)
@@ -3501,6 +3719,7 @@ const overviewPending = ref(true)
 const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
+const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const filtersOpen = ref(true)
 
 if (import.meta.client) {
@@ -3525,13 +3744,13 @@ const overviewDivisionFilter = computed<string[] | null>(() =>
   statsDivisionFilter.value.length > 0 ? statsDivisionFilter.value : null
 )
 /** Résumé versions (version + nb parties) pour la description en haut de page. */
-const overviewDescriptionVersionsSummary = computed(() => {
+const _overviewDescriptionVersionsSummary = computed(() => {
   const list = overviewData.value?.matchesByVersion ?? []
   if (!list.length) return ''
   return list.map(v => `${v.version} (${v.matchCount})`).join(', ')
 })
 /** Divisions à afficher dans la description (sans UNRANKED). */
-const overviewDivisionsForDescription = computed(() => {
+const _overviewDivisionsForDescription = computed(() => {
   const list = overviewData.value?.matchesByDivision ?? []
   return list.filter(d => d.rankTier !== 'UNRANKED')
 })
@@ -3539,7 +3758,7 @@ const overviewDivisionsForDescription = computed(() => {
 function formatDivisionLabel(tier: string): string {
   return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()
 }
-function divisionPercent(d: { matchCount: number }): string {
+function _divisionPercent(d: { matchCount: number }): string {
   const divisions = overviewData.value?.matchesByDivision ?? []
   const total = divisions.reduce((s, x) => s + (x.matchCount ?? 0), 0)
   if (!total) return '0'
@@ -3547,6 +3766,10 @@ function divisionPercent(d: { matchCount: number }): string {
 }
 function toggleRoleFilter(r: (typeof roles)[number]) {
   statsRoleFilter.value = statsRoleFilter.value === r.value ? '' : r.value
+  onStatsFilterChange()
+}
+function selectAllRoles() {
+  statsRoleFilter.value = ''
   onStatsFilterChange()
 }
 function toggleDivisionFilter(tier: string) {
@@ -3559,6 +3782,10 @@ function toggleDivisionFilter(tier: string) {
   }
   onStatsFilterChange()
 }
+function selectAllDivisions() {
+  statsDivisionFilter.value = []
+  onStatsFilterChange()
+}
 function onStatsFilterChange() {
   overviewDetailData.value = null
   overviewDetailError.value = false
@@ -3566,6 +3793,21 @@ function onStatsFilterChange() {
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
   if (activeTab.value === 'detail') loadOverviewDetail()
+  if (activeTab.value === 'team') {
+    loadOverviewSides()
+    loadOverviewTeams()
+  }
+  if (activeTab.value === 'trends') loadProgressionsFull()
+  if (activeTab.value === 'abandons') loadOverviewAbandons()
+}
+
+function resetStatsFilters() {
+  statsVersionFilter.value = ''
+  statsDivisionFilter.value = []
+  statsRoleFilter.value = ''
+  statsOtpFilter.value = 'non'
+  championSearchQuery.value = ''
+  onStatsFilterChange()
 }
 /** Overview detail (runes, items, spells) from GET /api/stats/overview-detail */
 const detailExpand = ref({
@@ -3610,6 +3852,8 @@ function overviewQueryParams(): string {
   const params = new URLSearchParams()
   if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  params.set('otp', statsOtpFilter.value)
   const q = params.toString()
   return q ? '?' + q : ''
 }
@@ -3655,6 +3899,7 @@ async function loadOverview() {
     })
     overviewData.value = overviewRes as typeof overviewData.value
     await loadOverviewProgression()
+    loadOverviewAbandons()
     loadOverviewTeams()
     loadOverviewDurationWinrate()
   } catch (err) {
@@ -3706,7 +3951,7 @@ const overviewAbandonsData = ref<{
   earlySurrenderRate: number
 } | null>(null)
 const overviewAbandonsPending = ref(false)
-async function _loadOverviewAbandons() {
+async function loadOverviewAbandons() {
   const t = statsPerfStart('loadOverviewAbandons')
   overviewAbandonsPending.value = true
   try {
@@ -3720,6 +3965,50 @@ async function _loadOverviewAbandons() {
     statsPerfEnd('loadOverviewAbandons', t)
   }
 }
+const overviewMatchOutcomeTotal = computed(() =>
+  Number(overviewAbandonsData.value?.totalMatches ?? 0)
+)
+const overviewEarlySurrenderCount = computed(() =>
+  Math.max(0, Number(overviewAbandonsData.value?.earlySurrenderCount ?? 0))
+)
+const overviewSurrenderOnlyCount = computed(() => {
+  const surrender = Math.max(0, Number(overviewAbandonsData.value?.surrenderCount ?? 0))
+  return Math.max(0, surrender - overviewEarlySurrenderCount.value)
+})
+const overviewPlayedCount = computed(() => {
+  return Math.max(
+    0,
+    overviewMatchOutcomeTotal.value -
+      overviewEarlySurrenderCount.value -
+      overviewSurrenderOnlyCount.value
+  )
+})
+const overviewEarlySurrenderPct = computed(() =>
+  overviewMatchOutcomeTotal.value > 0
+    ? (overviewEarlySurrenderCount.value / overviewMatchOutcomeTotal.value) * 100
+    : 0
+)
+const overviewSurrenderOnlyPct = computed(() =>
+  overviewMatchOutcomeTotal.value > 0
+    ? (overviewSurrenderOnlyCount.value / overviewMatchOutcomeTotal.value) * 100
+    : 0
+)
+const overviewPlayedPct = computed(() =>
+  overviewMatchOutcomeTotal.value > 0
+    ? (overviewPlayedCount.value / overviewMatchOutcomeTotal.value) * 100
+    : 0
+)
+const overviewMatchOutcomeDonutBg = computed(() => {
+  const e = overviewEarlySurrenderPct.value
+  const s = overviewSurrenderOnlyPct.value
+  const p = Math.max(0, 100 - e - s)
+  return `conic-gradient(
+    rgb(59 130 246) 0% ${e}%,
+    rgb(167 139 250) ${e}% ${e + s}%,
+    rgb(34 211 238) ${e + s}% ${e + s + p}%,
+    rgb(var(--rgb-primary) / 0.2) ${e + s + p}% 100%
+  )`
+})
 /** Progression: WR delta from oldest version to all since. For "Winrate depuis X" encart. */
 const overviewProgressionData = ref<{
   oldestVersion: string | null
@@ -3738,6 +4027,7 @@ async function loadOverviewProgression() {
   if (overviewDivisionFilter.value) {
     for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
   }
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   const q = params.toString() ? '?' + params.toString() : ''
   try {
     overviewProgressionData.value = await statsFetch(apiUrl('/api/stats/overview-progression' + q))
@@ -3793,6 +4083,7 @@ async function loadProgressionsFull() {
   if (overviewDivisionFilter.value) {
     for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
   }
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   const q = params.toString() ? '?' + params.toString() : ''
   try {
     progressionFullData.value = await statsFetch(apiUrl('/api/stats/overview-progression-full' + q))
@@ -4198,6 +4489,7 @@ function sidesQueryParams(): string {
   const params = new URLSearchParams()
   if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   const s = params.toString()
   return s ? '?' + s : ''
 }
@@ -4270,7 +4562,7 @@ const overviewHasAnyStats = computed(
     (overviewData.value?.totalMatches ?? 0) > 0 || (overviewTeamsData.value?.matchCount ?? 0) > 0
 )
 /** Total parties: use overview when > 0, else teams matchCount (when overview fails but teams has data, 0 would be wrong). */
-const overviewEffectiveTotalMatches = computed(() => {
+const _overviewEffectiveTotalMatches = computed(() => {
   const total = overviewData.value?.totalMatches ?? 0
   if (total > 0) return total
   return overviewTeamsData.value?.matchCount ?? 0
@@ -4413,6 +4705,20 @@ const roles = [
 ]
 const ROLE_OPTIONS = roles
 
+function mainRoleIconSrc(mainRole: string | null | undefined): string | null {
+  const raw = (mainRole ?? '').trim().toUpperCase()
+  if (!raw) return null
+  const key = raw === 'UTILITY' ? 'SUPPORT' : raw
+  return ROLE_OPTIONS.find(r => r.value === key)?.icon ?? null
+}
+
+function mainRoleLabel(mainRole: string | null | undefined): string {
+  const raw = (mainRole ?? '').trim().toUpperCase()
+  if (!raw) return String(mainRole ?? '—')
+  const key = raw === 'UTILITY' ? 'SUPPORT' : raw
+  return ROLE_OPTIONS.find(r => r.value === key)?.label ?? String(mainRole)
+}
+
 // Champions
 const championsData = ref<{
   totalGames: number
@@ -4463,6 +4769,7 @@ const queryString = computed(() => {
   const params = new URLSearchParams()
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  params.set('otp', statsOtpFilter.value)
   return params.toString() ? `?${params.toString()}` : ''
 })
 async function loadChampions() {
@@ -4501,6 +4808,7 @@ async function loadTierList() {
     const patch = effectiveTierListPatch.value
     if (patch) params.set('patch', patch)
     params.set('rankTier', 'all')
+    params.set('otp', statsOtpFilter.value)
     const data = await statsFetch<{
       patch: string
       rankTier: string
@@ -4544,7 +4852,7 @@ async function loadTierList() {
     tierListPending.value = false
   }
 }
-watch([statsDivisionFilter, statsRoleFilter], () => {
+watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'infos' || activeTab.value === 'tierlist') loadChampions()
   if (activeTab.value === 'tierlist') loadTierList()
 })
@@ -4687,9 +4995,13 @@ watch(activeTab, async tab => {
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
   }
+  if (tab === 'abandons') loadOverviewAbandons()
 })
-watch([statsVersionFilter, statsDivisionFilter], () => {
-  if (activeTab.value === 'team') loadOverviewSides()
+watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+  if (activeTab.value === 'team') {
+    loadOverviewSides()
+    loadOverviewTeams()
+  }
   if (activeTab.value === 'trends') loadProgressionsFull()
 })
 
@@ -4758,6 +5070,18 @@ onMounted(async () => {
   font-weight: 500;
 }
 
+.overview-match-outcome-bagel {
+  padding: 11px;
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--rgb-primary) / 0.28),
+    0 0 18px rgb(var(--rgb-primary) / 0.14);
+}
+
+.overview-match-outcome-bagel > div {
+  background: rgb(var(--rgb-surface) / 0.95);
+  box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / 0.22);
+}
+
 /* Overview runes (shyv.net style): grid per path, pickrate bar + winrate % */
 .overview-runes-fieldset .blocks {
   display: flex;
@@ -4817,6 +5141,25 @@ onMounted(async () => {
 .stats-role-btn:focus {
   outline: 2px solid rgb(var(--rgb-accent));
   outline-offset: 1px;
+}
+.filters-collapse-floating {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 4px;
+  background: #08101f;
+  color: var(--color-blue-50);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+.filters-collapse-floating:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
 }
 .overview-rune-no-stat {
   color: rgb(var(--rgb-text) / 0.5);

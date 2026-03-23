@@ -4,6 +4,7 @@
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 export interface PlayerRow {
   puuid: string
@@ -43,8 +44,22 @@ function maskPuuid(puuid: string): string {
 }
 
 
+function rankTierMatchPlayerSql(
+  rankTier: string | string[] | null | undefined,
+  highRankOnly: boolean
+): Prisma.Sql {
+  const tiers = toQueryStringArrayParam(rankTier).map((t) => t.toUpperCase())
+  if (tiers.length === 1) return Prisma.sql`AND mp.rank_tier = ${tiers[0]}`
+  if (tiers.length > 1) {
+    return Prisma.sql`AND mp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
+  }
+  return highRankOnly
+    ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
+    : Prisma.sql``
+}
+
 export async function getTopPlayers(options: {
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   highRankOnly?: boolean
   minGames?: number
   limit?: number
@@ -62,12 +77,7 @@ export async function getTopPlayers(options: {
       total_wins: bigint
     }
 
-    const rankTierFilter =
-      rankTier != null && rankTier !== ''
-        ? Prisma.sql`AND mp.rank_tier = ${rankTier}`
-        : highRankOnly
-          ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
-          : Prisma.sql``
+    const rankTierFilter = rankTierMatchPlayerSql(rankTier, highRankOnly)
 
     const rows = await prisma.$queryRaw<StatsRow[]>(
       Prisma.sql`
@@ -203,7 +213,7 @@ export async function getChampionStatsForPlayer(
 
 export async function getTopPlayersByChampion(options: {
   championId: number
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   highRankOnly?: boolean
   minGames?: number
   limit?: number
@@ -225,13 +235,15 @@ export async function getTopPlayersByChampion(options: {
       avg_assists: number | null
     }
 
-    const highRankFilter = highRankOnly
-      ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
-      : Prisma.sql``
+    const tiers = toQueryStringArrayParam(rankTier).map((t) => t.toUpperCase())
     const rankTierFilter =
-      rankTier != null && rankTier !== ''
-        ? Prisma.sql`AND mp.rank_tier = ${rankTier}`
-        : Prisma.sql``
+      tiers.length === 1
+        ? Prisma.sql`AND mp.rank_tier = ${tiers[0]}`
+        : tiers.length > 1
+          ? Prisma.sql`AND mp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
+          : highRankOnly
+            ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
+            : Prisma.sql``
 
     const rows = await prisma.$queryRaw<Row[]>(
       Prisma.sql`
@@ -260,7 +272,6 @@ export async function getTopPlayersByChampion(options: {
         LEFT JOIN latest_rank lr ON lr.player_id = mp.player_id
         WHERE mp.champion_id = ${championId}
           ${rankTierFilter}
-          ${highRankFilter}
         GROUP BY pl.puuid, pl.game_name, pl.tag_name, pl.region
         HAVING COUNT(mp.id) >= ${minGames}
         ORDER BY winrate DESC, games DESC

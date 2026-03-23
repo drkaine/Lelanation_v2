@@ -3,6 +3,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 
 export interface BuildRow {
   items: number[]
@@ -25,7 +26,7 @@ export interface ItemSoloRow {
 
 export interface BuildsByChampionOptions {
   championId: number
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   patch?: string | null
   region?: string | null
@@ -39,13 +40,12 @@ export async function getBuildsByChampion(
   if (!isDatabaseConfigured()) return null
   const { championId, rankTier, role, patch, region, minGames = 10, limit = 20 } = options
   try {
-    const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
     const pRole = role != null && role !== '' ? role : null
     const pPatch = patch != null && patch !== '' ? patch : null
     const pRegion = region != null && region !== '' ? region : null
 
     const coreWhere: Record<string, unknown> = { championId }
-    if (pRankTier) coreWhere.rankTier = pRankTier
+    applyRankTierWhere(coreWhere, rankTier)
     if (pRole) coreWhere.role = pRole
     if (pPatch) coreWhere.gameVersion = pPatch
     if (pRegion) coreWhere.region = pRegion

@@ -5,14 +5,16 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { refreshAllMaterializedViews } from './MaterializedViewService.js'
+import { applyRankTierWhere } from '../utils/statsFilters.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
   string,
   { data: AggregatedStats; expiresAt: number }
 >()
-function championsCacheKey(pRankTier: string | null, pRole: string | null): string {
-  return `${pRankTier ?? ''}|${pRole ?? ''}`
+function championsCacheKey(rankTier: string | string[] | null, pRole: string | null): string {
+  const rt = Array.isArray(rankTier) ? [...rankTier].sort().join(',') : rankTier ?? ''
+  return `${rt}|${pRole ?? ''}`
 }
 
 export interface ChampionStats {
@@ -37,7 +39,7 @@ export interface AggregatedStats {
 }
 
 export interface LoadStatsOptions {
-  rankTier?: string | null
+  rankTier?: string | string[] | null
   role?: string | null
   version?: string | null
   region?: string | null
@@ -48,18 +50,17 @@ export class RiotStatsAggregator {
     if (!isDatabaseConfigured()) return null
     try {
       const { rankTier, role, version, region } = options
-      const pRankTier = rankTier != null && rankTier !== '' ? rankTier : null
       const pRole = role != null && role !== '' ? role : null
       const pVersion = version != null && version !== '' ? version : null
       const pRegion = region != null && region !== '' ? region : null
 
       const now = Date.now()
-      const cacheKey = championsCacheKey(pRankTier, pRole)
+      const cacheKey = championsCacheKey(rankTier ?? null, pRole)
       const cached = championsCache.get(cacheKey)
       if (cached && cached.expiresAt > now) return cached.data
 
       const where: Record<string, unknown> = {}
-      if (pRankTier) where.rankTier = pRankTier
+      applyRankTierWhere(where, rankTier)
       if (pRole) where.role = pRole
       if (pVersion) where.gameVersion = pVersion
       if (pRegion) where.region = pRegion

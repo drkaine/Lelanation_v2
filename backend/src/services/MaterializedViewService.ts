@@ -3,6 +3,7 @@
  * Plan: ne refresh que les patches actifs (en cours ou pas encore à max match).
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
+import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { loadMatchFilters } from './RiotConfigService.js'
 
 const MV_NAMES = [
@@ -73,9 +74,8 @@ async function ensureMaterializedViewsPopulated(): Promise<void> {
  * Extrait le patch (2 premiers segments) d'une game_version ex. "15.1.123.456" -> "15.1"
  */
 export function patchFromGameVersion(gameVersion: string): string {
-  const parts = gameVersion.split('.')
-  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
-  return gameVersion
+  const p = normalizeGameVersionToMajorMinor(gameVersion)
+  return p || gameVersion
 }
 
 /**

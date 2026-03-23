@@ -12,9 +12,24 @@
         </div>
         <button
           type="button"
-          class="rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
+          class="inline-flex items-center gap-1.5 rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
+          :title="t('statisticsPage.customModeBuildTooltip')"
           @click="store.setConstructionMode(!store.constructionMode)"
         >
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M14.7 6.3l3 3m-9.9 9.9l3-3m-5.8 1.2l3.5-3.5 2.5 2.5-3.5 3.5H5v-2.2zm9.2-13.7l2.8-2.8 3.2 3.2-2.8 2.8-3.2-3.2z"
+            />
+          </svg>
           {{
             store.constructionMode
               ? t('statisticsPage.customModeView')

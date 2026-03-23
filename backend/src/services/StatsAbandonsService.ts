@@ -5,11 +5,15 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
+import { applyRankTierWhere, rankTierCacheKey } from '../utils/statsFilters.js'
 
 const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
 const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
-function abandonsCacheKey(pVersion: string | null, pRankTier: string | null): string {
-  return `${pVersion ?? ''}|${pRankTier ?? ''}`
+function abandonsCacheKey(
+  pVersion: string | null,
+  rankTier: string | string[] | null | undefined
+): string {
+  return `${pVersion ?? ''}|${rankTierCacheKey(rankTier) ?? ''}`
 }
 
 export interface OverviewAbandonsResult {
@@ -54,9 +58,8 @@ export async function getOverviewAbandons(
 ): Promise<OverviewAbandonsResult | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = normalizeParam(version)
-  const pRankTier = normalizeParam(rankTier)
   const now = Date.now()
-  const cacheKey = abandonsCacheKey(pVersion, pRankTier)
+  const cacheKey = abandonsCacheKey(pVersion, rankTier)
   const cached = abandonsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -64,7 +67,7 @@ export async function getOverviewAbandons(
     // Build match filter
     const matchWhere: Record<string, unknown> = {}
     if (pVersion) matchWhere.gameVersion = { startsWith: pVersion }
-    if (pRankTier) matchWhere.rankTier = pRankTier
+    applyRankTierWhere(matchWhere, rankTier)
 
     const totalMatches = await prisma.match.count({ where: matchWhere })
     if (totalMatches === 0) {

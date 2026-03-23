@@ -97,11 +97,22 @@ function queryStringArray(value: unknown): string[] {
   return []
 }
 
-/** rankTier: single string or multiple (rankTier=GOLD&rankTier=PLAT) → comma-separated for SQL, or null. */
-function rankTierParam(value: unknown): string | null {
+/** rankTier répété ou liste : ex. rankTier=GOLD&rankTier=PLATINUM → ['GOLD','PLATINUM']. */
+function rankTierParam(value: unknown): string[] | null {
   const arr = queryStringArray(value)
   if (arr.length === 0) return null
-  return arr.map((s) => s.trim().toUpperCase()).filter(Boolean).join(',')
+  const tiers = arr
+    .flatMap((s) => (s.includes(',') ? s.split(',').map((x) => x.trim()) : [s.trim()]))
+    .map((s) => s.toUpperCase())
+    .filter(Boolean)
+  return tiers.length ? tiers : null
+}
+
+/** Clé pour tables pré-calculées (une seule ligue ou toutes). */
+function rankTierForPrecomputed(rankTier: string[] | null): string | null {
+  if (rankTier == null || rankTier.length === 0) return null
+  if (rankTier.length === 1) return rankTier[0]
+  return null
 }
 
 function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): string | null {
@@ -130,19 +141,44 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<{ ok: true; data: T 
   ])
 }
 
+type OtpMode = 'oui' | 'non' | 'solo'
+
+function otpModeFromQuery(value: unknown): OtpMode {
+  const raw = (queryString(value) ?? '').trim().toLowerCase()
+  if (raw === 'oui' || raw === 'yes' || raw === 'true' || raw === '1') return 'oui'
+  if (raw === 'solo' || raw === 'all') return 'solo'
+  return 'non'
+}
+
+function keepByOtpPickratePercent(pickratePercent: number, mode: OtpMode): boolean {
+  if (mode === 'solo') return true
+  if (mode === 'oui') return pickratePercent < STATS_OTP_PICKRATE_THRESHOLD
+  return pickratePercent >= STATS_OTP_PICKRATE_THRESHOLD
+}
+
+function keepByOtpPickrateRatio(pickrateRatio: number, mode: OtpMode): boolean {
+  return keepByOtpPickratePercent(pickrateRatio * 100, mode)
+}
+
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD or &rankTier=GOLD&rankTier=PLATINUM */
 router.get('/overview', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
 
   const runOverview = async () => {
-    if (version == null) {
-      const pre = await getPrecomputedOverview(rankTier ?? null)
+    if (
+      version == null &&
+      (rankTier == null || rankTier.length <= 1) &&
+      !role
+    ) {
+      const pre = await getPrecomputedOverview(rankTierForPrecomputed(rankTier))
       if (pre?.data) return pre.data
     }
-    return getOverviewStats(version, rankTier)
+    return getOverviewStats(version, rankTier, role)
   }
 
   const result = await withTimeout(runOverview(), OVERVIEW_TIMEOUT_MS)
@@ -179,6 +215,10 @@ router.get('/overview', async (req: Request, res: Response) => {
     totalMatches: number
     lastUpdate?: string | null
     playerCount?: number
+    topWinrateChampions?: Array<{ championId: number; pickrate: number }>
+    topPickrateChampions?: Array<{ championId: number; pickrate: number }>
+    topBanrateChampions?: Array<{ championId: number }>
+    _championPool?: Array<{ championId: number; pickrate: number }>
     [key: string]: unknown
   }
   // Fill missing lastUpdate / playerCount when we have matches (e.g. precomputed data or stale cache)
@@ -192,6 +232,32 @@ router.get('/overview', async (req: Request, res: Response) => {
       data.playerCount = meta.playerCount
     }
   }
+
+  const championPool = Array.isArray(data._championPool) ? data._championPool : []
+  const allowedChampionIds = new Set(
+    championPool
+      .filter((c) => keepByOtpPickratePercent(Number(c.pickrate) || 0, otpMode))
+      .map((c) => c.championId)
+  )
+  const hasOtpFilterPool = championPool.length > 0
+  if (hasOtpFilterPool) {
+    if (Array.isArray(data.topWinrateChampions)) {
+      data.topWinrateChampions = data.topWinrateChampions.filter((c) =>
+        allowedChampionIds.has((c as { championId: number }).championId)
+      )
+    }
+    if (Array.isArray(data.topPickrateChampions)) {
+      data.topPickrateChampions = data.topPickrateChampions.filter((c) =>
+        allowedChampionIds.has((c as { championId: number }).championId)
+      )
+    }
+    if (Array.isArray(data.topBanrateChampions)) {
+      data.topBanrateChampions = data.topBanrateChampions.filter((c) =>
+        allowedChampionIds.has((c as { championId: number }).championId)
+      )
+    }
+  }
+
   return res.json(data)
 })
 
@@ -200,16 +266,17 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
   const sqlStart = Date.now()
-  if (version == null) {
-    const pre = await getPrecomputedOverviewDetail(rankTier ?? null, includeSmite)
+  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
+    const pre = await getPrecomputedOverviewDetail(rankTierForPrecomputed(rankTier), includeSmite)
     if (pre?.data) {
       ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
       return res.json(pre.data)
     }
   }
-  const data = await getOverviewDetailStats(version, rankTier, includeSmite)
+  const data = await getOverviewDetailStats(version, rankTier, includeSmite, role)
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
     console.warn('[GET /overview-detail] no data (version=%s rankTier=%s)', version ?? 'null', rankTier ?? 'null')
@@ -231,11 +298,12 @@ router.get('/overview-duration-winrate', async (req: Request, res: Response) => 
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  if (version == null) {
-    const pre = await getPrecomputedDurationWinrate(rankTier ?? null)
+  const role = queryString(req.query.role)
+  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
+    const pre = await getPrecomputedDurationWinrate(rankTierForPrecomputed(rankTier))
     if (pre?.data) return res.json(pre.data)
   }
-  const data = await getOverviewDurationWinrateStats(version, rankTier)
+  const data = await getOverviewDurationWinrateStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({ buckets: [] })
   }
@@ -247,8 +315,8 @@ router.get('/overview-abandons', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  if (version == null) {
-    const pre = await getPrecomputedAbandons(rankTier ?? null)
+  if (version == null && (rankTier == null || rankTier.length <= 1)) {
+    const pre = await getPrecomputedAbandons(rankTierForPrecomputed(rankTier))
     if (pre?.data) return res.json(pre.data)
   }
   const data = await getOverviewAbandons(version, rankTier)
@@ -270,7 +338,8 @@ router.get('/overview-abandons', async (req: Request, res: Response) => {
 router.get('/overview-progression', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  const data = await getOverviewProgressionStats(version, rankTier)
+  const role = queryString(req.query.role)
+  const data = await getOverviewProgressionStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, gainers: [], losers: [] })
   }
@@ -281,7 +350,8 @@ router.get('/overview-progression', async (req: Request, res: Response) => {
 router.get('/overview-progression-full', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  const data = await getOverviewProgressionFullStats(version, rankTier)
+  const role = queryString(req.query.role)
+  const data = await getOverviewProgressionFullStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({ oldestVersion: null, champions: [] })
   }
@@ -292,11 +362,12 @@ router.get('/overview-progression-full', async (req: Request, res: Response) => 
 router.get('/overview-teams', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  if (version == null) {
-    const pre = await getPrecomputedOverviewTeams(rankTier ?? null)
+  const role = queryString(req.query.role)
+  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
+    const pre = await getPrecomputedOverviewTeams(rankTierForPrecomputed(rankTier))
     if (pre?.data) return res.json(pre.data)
   }
-  const data = await getOverviewTeamsStats(version, rankTier)
+  const data = await getOverviewTeamsStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({
       matchCount: 0,
@@ -368,21 +439,28 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
 /** GET /api/stats/champions - lit précalculé si disponible (version implicite null), sinon calcul live. */
 router.get('/champions', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const role = (req.query.role as string) || undefined
+  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
-  const pre = await getPrecomputedChampions(rankTier ?? null, role ?? null)
+  const pre =
+    rankTier == null || rankTier.length <= 1
+      ? await getPrecomputedChampions(rankTierForPrecomputed(rankTier), role ?? null)
+      : null
   if (pre?.data) {
     const d = pre.data as { totalGames?: number; totalMatches?: number; champions?: unknown[]; generatedAt?: string | null }
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+    const champions = (d.champions ?? []).filter((row) =>
+      keepByOtpPickratePercent(Number((row as { pickrate?: number }).pickrate ?? 0), otpMode)
+    )
     return res.json({
       totalGames: d.totalGames ?? 0,
       totalMatches: d.totalMatches ?? 0,
-      champions: d.champions ?? [],
+      champions,
       generatedAt: d.generatedAt ?? null
     })
   }
-  const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
+  const data = await aggregator.load({ rankTier, role: role ?? null })
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
     return res.status(200).json({
@@ -393,10 +471,13 @@ router.get('/champions', async (req: Request, res: Response) => {
       message: 'No stats yet. Run match collection and aggregation first.'
     })
   }
+  const champions = (data.champions ?? []).filter((row) =>
+    keepByOtpPickratePercent(Number((row as { pickrate?: number }).pickrate ?? 0), otpMode)
+  )
   return res.json({
     totalGames: data.totalGames,
     totalMatches: data.totalMatches,
-    champions: data.champions,
+    champions,
     generatedAt: data.generatedAt
   })
 })
@@ -410,9 +491,9 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const role = (req.query.role as string) || undefined
-  const data = await aggregator.load({ rankTier: rankTier ?? null, role: role ?? null })
+  const data = await aggregator.load({ rankTier, role: role ?? null })
   if (!data) {
     return res.status(404).json({ error: 'No stats available' })
   }
@@ -456,7 +537,7 @@ router.get('/champions/:championId/builds', async (req: Request, res: Response) 
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const role = (req.query.role as string) || undefined
   const patch = (req.query.patch as string) || undefined
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
@@ -482,7 +563,7 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const patch = (req.query.patch as string) || undefined
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20
@@ -605,6 +686,7 @@ router.get('/tier-list', async (req: Request, res: Response) => {
   const platformId = queryString(req.query.platformId) ?? null
   const rankTierRaw = queryString(req.query.rankTier)
   const rankTier = rankTierRaw === 'all' || !rankTierRaw ? 'all' : rankTierRaw
+  const otpMode = otpModeFromQuery(req.query.otp)
   try {
     const data = await getTierList({ patch: patch || undefined, platformId, rankTier })
     if (!data) {
@@ -615,11 +697,15 @@ router.get('/tier-list', async (req: Request, res: Response) => {
         message: 'Database not configured or no stats yet.',
       })
     }
+    const rows = data.rows.filter((row) => keepByOtpPickrateRatio(row.pickrate, otpMode))
+    const highEloRows = (data.highEloRows ?? []).filter((row) =>
+      keepByOtpPickrateRatio(row.pickrate, otpMode)
+    )
     return res.json({
       patch: data.patch,
       rankTier: data.rankTier,
-      rows: data.rows,
-      highEloRows: data.highEloRows ?? undefined,
+      rows,
+      highEloRows: highEloRows.length > 0 ? highEloRows : undefined,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
@@ -717,12 +803,12 @@ router.get('/players/search', async (req: Request, res: Response) => {
 
 /** GET /api/stats/players - meilleurs joueurs (classement général). Par défaut Master → Challenger uniquement (stats globale). */
 router.get('/players', async (req: Request, res: Response) => {
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const highRankOnly = req.query.highRankOnly !== '0' && req.query.highRankOnly !== 'false'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 50
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 100
   const list = await getTopPlayers({
-    rankTier: rankTier ?? null,
+    rankTier,
     highRankOnly,
     minGames,
     limit,
@@ -737,13 +823,13 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
   if (Number.isNaN(championId)) {
     return res.status(400).json({ error: 'Invalid champion ID' })
   }
-  const rankTier = rankTierParam(req.query.rankTier) ?? undefined
+  const rankTier = rankTierParam(req.query.rankTier)
   const highRankOnly = req.query.highRankOnly === '1' || req.query.highRankOnly === 'true'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50
   const list = await getTopPlayersByChampion({
     championId,
-    rankTier: rankTier ?? null,
+    rankTier,
     highRankOnly,
     minGames,
     limit,
@@ -757,17 +843,28 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
 router.get('/overview-cards', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const fromVersion = queryString(req.query.fromVersion) ?? version
 
   const [overview, teams] = await Promise.all([
-    getOverviewStats(version, rankTier),
-    getOverviewTeamsStats(version, rankTier),
+    getOverviewStats(version, rankTier, role),
+    getOverviewTeamsStats(version, rankTier, role),
   ])
 
+  const pool = overview?._championPool ?? []
+  const allowedChampionIds = new Set(
+    pool
+      .filter((c) => keepByOtpPickratePercent(Number(c.pickrate) || 0, otpMode))
+      .map((c) => c.championId)
+  )
+  const filterByOtp = <T extends { championId: number }>(rows: T[]): T[] =>
+    pool.length === 0 ? rows : rows.filter((r) => allowedChampionIds.has(r.championId))
+
   return res.json({
-    topPickrateChampions: overview?.topPickrateChampions ?? [],
-    topWinrateChampions: overview?.topWinrateChampions ?? [],
-    topBanrateChampions: overview?.topBanrateChampions ?? [],
+    topPickrateChampions: filterByOtp(overview?.topPickrateChampions ?? []),
+    topWinrateChampions: filterByOtp(overview?.topWinrateChampions ?? []),
+    topBanrateChampions: filterByOtp(overview?.topBanrateChampions ?? []),
     winrateSince: {
       fromVersion,
       value:
@@ -784,7 +881,7 @@ router.get('/team-overview', async (req: Request, res: Response) => {
   const rankTier = rankTierParam(req.query.rankTier)
   const sides = await getOverviewSidesStats(
     version ? [version] : [],
-    rankTier ? rankTier.split(',') : []
+    rankTier ?? null
   )
   return res.json(sides ?? { bySide: { blue: null, red: null } })
 })
@@ -795,11 +892,11 @@ router.get('/trends/deltas', async (req: Request, res: Response) => {
   if (!championId || !Number.isFinite(championId)) {
     return res.status(400).json({ error: 'championId is required' })
   }
-  const rankTier = rankTierParam(req.query.rankTier)
+  const rankTierArr = rankTierParam(req.query.rankTier)
   const maxDays = Math.min(14, Math.max(2, Number(req.query.maxDays ?? 14)))
   const rows = await getChampionTierSnapshotsForCharts({
     championId,
-    rankTier,
+    rankTier: rankTierArr && rankTierArr.length ? rankTierArr[0] : null,
     limit: maxDays * 8,
   })
   const byTier = new Map<string, typeof rows>()
@@ -926,14 +1023,18 @@ router.get('/items/solo', async (req: Request, res: Response) => {
 
 router.get('/tierlist', async (req: Request, res: Response) => {
   const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
-  const rankTier = rankTierParam(req.query.rankTier) ?? 'all'
+  const rt = rankTierParam(req.query.rankTier)
+  const rankTier =
+    rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
   const data = await getTierList({ patch, rankTier })
   return res.json(data ?? { patch: patch ?? null, rankTier, rows: [], highEloRows: [] })
 })
 
 router.get('/tierlist-graph', async (req: Request, res: Response) => {
   const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
-  const rankTier = rankTierParam(req.query.rankTier) ?? 'all'
+  const rt = rankTierParam(req.query.rankTier)
+  const rankTier =
+    rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
   const data = await getTierList({ patch, rankTier })
   const rows = data?.rows ?? []
   return res.json({
@@ -978,8 +1079,9 @@ router.get('/summoners/solo', async (req: Request, res: Response) => {
 router.get('/infos/meta', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
   const [overview, meta] = await Promise.all([
-    getOverviewStats(version, rankTier),
+    getOverviewStats(version, rankTier, role),
     getOverviewMeta(version, rankTier),
   ])
   return res.json({
