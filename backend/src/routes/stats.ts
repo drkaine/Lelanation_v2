@@ -66,15 +66,6 @@ router.use((req: Request, res: Response, next) => {
     }
     return originalJson(body)
   }
-  res.on('finish', () => {
-    const ms = Date.now() - start
-    const sqlMs = (res as Response & { locals: { sqlMs?: number } }).locals?.sqlMs
-    if (typeof sqlMs === 'number') {
-      console.log('[Stats backend]', req.method, path, ms + 'ms', '(SQL', sqlMs + 'ms)')
-    } else {
-      console.log('[Stats backend]', req.method, path, ms + 'ms')
-    }
-  })
   next()
 })
 

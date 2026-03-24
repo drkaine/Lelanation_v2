@@ -234,7 +234,7 @@
           <div v-if="props.showComparisonButtons" class="relative flex-1">
             <div class="flex items-stretch gap-1.5">
               <NuxtLink
-                v-if="props.showUserActions && !isStreamerMode"
+                v-if="props.showUserActions"
                 :to="localePath(`/builds/create/rune?editId=${build.id}`)"
                 class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--edit"
                 :title="t('buildDiscovery.editBuild')"

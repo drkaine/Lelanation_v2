@@ -140,7 +140,7 @@
                 </div>
 
                 <NuxtLink
-                  v-if="isUserBuild && !isStreamerMode"
+                  v-if="isUserBuild"
                   :to="localePath(`/builds/create/rune?editId=${build.id}`)"
                   class="details-action-btn details-action-btn--icon details-action-btn--edit"
                   :title="t('buildDiscovery.editBuild')"
@@ -337,7 +337,6 @@ import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
-import { useStreamerMode } from '~/composables/useStreamerMode'
 
 const props = defineProps<{ buildId: string }>()
 
@@ -349,7 +348,6 @@ const localePath = useLocalePath()
 const { t } = useI18n()
 const route = useRoute()
 const { hydrated } = useClientHydrated()
-const { isStreamerMode } = useStreamerMode()
 
 const loading = ref(true)
 const error = ref<string | null>(null)

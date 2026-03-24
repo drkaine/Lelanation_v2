@@ -221,6 +221,18 @@ const translateTag = (tag: string): string => {
 const searchQuery = ref('')
 const selectedTags = ref<string[]>([])
 
+const TAG_ALIASES: Record<string, string[]> = {
+  // Data Dragon may expose AP as AbilityPower or SpellDamage depending on version/source.
+  AbilityPower: ['AbilityPower', 'SpellDamage'],
+}
+
+const getTagVariants = (tag: string): string[] => TAG_ALIASES[tag] ?? [tag]
+
+const itemHasTag = (item: Item, tag: string): boolean => {
+  if (!item.tags || item.tags.length === 0) return false
+  return getTagVariants(tag).some(tagVariant => item.tags!.includes(tagVariant))
+}
+
 // Allowed tags to display
 const allowedTags = [
   'Damage', // Attack Damage
@@ -244,7 +256,7 @@ const allowedTags = [
 const availableTags = computed(() => {
   return allowedTags.filter(tag => {
     // Check if at least one item has this tag
-    return itemsStore.items.some(item => item.tags && item.tags.includes(tag))
+    return itemsStore.items.some(item => itemHasTag(item, tag))
   })
 })
 
@@ -263,9 +275,8 @@ const filteredItems = computed<Item[]>(() => {
   // Filter by tags (if any selected)
   if (selectedTags.value.length > 0) {
     filtered = filtered.filter((item: Item) => {
-      if (!item.tags || item.tags.length === 0) return false
       // L'item doit contenir TOUS les tags sélectionnés (ET logique)
-      return selectedTags.value.every(tag => item.tags!.includes(tag))
+      return selectedTags.value.every(tag => itemHasTag(item, tag))
     })
   }
 
@@ -529,12 +540,8 @@ const isItemFiltered = (item: Item): boolean => {
   // Check if item matches tag filters
   let matchesTags = true
   if (selectedTags.value.length > 0) {
-    if (!item.tags || item.tags.length === 0) {
-      matchesTags = false
-    } else {
-      // L'item doit contenir TOUS les tags sélectionnés (ET logique)
-      matchesTags = selectedTags.value.every(tag => item.tags!.includes(tag))
-    }
+    // L'item doit contenir TOUS les tags sélectionnés (ET logique)
+    matchesTags = selectedTags.value.every(tag => itemHasTag(item, tag))
   }
 
   // Check if item matches search query
