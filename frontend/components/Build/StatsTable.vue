@@ -107,9 +107,19 @@
                 >
                   <td class="px-4 py-2 text-sm text-text">
                     <div class="flex items-center gap-2">
-                      <span class="stat-inline-icon" aria-hidden="true">{{
-                        getStatIcon(stat.key)
-                      }}</span>
+                      <span
+                        class="stat-inline-icon"
+                        :class="getStatIconToneClass(stat.key)"
+                        aria-hidden="true"
+                      >
+                        <img
+                          v-if="getStatIconSrc(stat.key)"
+                          :src="getStatIconSrc(stat.key) || undefined"
+                          alt=""
+                          :class="['stat-inline-icon-image', getStatIconImageClass(stat.key)]"
+                        />
+                        <span v-else>•</span>
+                      </span>
                       <span>{{ stat.label }}</span>
                       <span
                         v-if="activeCategory === 'basic' && hasDerivedStats(stat.key)"
@@ -159,9 +169,22 @@
                   >
                     <td class="px-8 py-2 text-sm italic text-text/80">
                       <span class="inline-flex items-center gap-2">
-                        <span class="stat-inline-icon" aria-hidden="true">{{
-                          getStatIcon(derivedStat.key)
-                        }}</span>
+                        <span
+                          class="stat-inline-icon"
+                          :class="getStatIconToneClass(derivedStat.key)"
+                          aria-hidden="true"
+                        >
+                          <img
+                            v-if="getStatIconSrc(derivedStat.key)"
+                            :src="getStatIconSrc(derivedStat.key) || undefined"
+                            alt=""
+                            :class="[
+                              'stat-inline-icon-image',
+                              getStatIconImageClass(derivedStat.key),
+                            ]"
+                          />
+                          <span v-else>•</span>
+                        </span>
                         <span>{{ derivedStat.label }}</span>
                       </span>
                     </td>
@@ -852,39 +875,83 @@ const currentCategoryStats = computed(() => {
 })
 
 const statIconByKey: Record<string, string> = {
-  health: '❤️',
-  mana: '💧',
-  attackDamage: '🗡️',
-  abilityPower: '✨',
-  armor: '🛡️',
-  magicResist: '🔮',
-  movementSpeed: '👟',
-  attackSpeed: '⚡',
-  critChance: '🎯',
-  critDamage: '💥',
-  lifeSteal: '🩸',
-  spellVamp: '🧪',
-  omnivamp: '🌀',
-  cooldownReduction: '⏱️',
-  armorPenetration: '🪓',
-  magicPenetration: '🪄',
-  lethality: '☠️',
-  tenacity: '🧱',
-  healthRegen: '💚',
-  manaRegen: '🔷',
-  attackRange: '🏹',
-  shield: '🛡️',
-  goldValue: '🪙',
-  goldCost: '💰',
-  goldEfficiency: '📈',
-  totalEffectiveHealth: '🏰',
-  physicalEffectiveHealth: '🧿',
-  armorDamageReductionPercent: '🧲',
-  magicalEffectiveHealth: '🛡️',
-  magicDamageReductionPercent: '🧠',
+  health: '/icons/statsicon/Health.svg',
+  mana: '/icons/statsicon/Mana.svg',
+  attackDamage: '/icons/statsicon/AD.png',
+  abilityPower: '/icons/statsicon/ap.png',
+  armor: '/icons/statsicon/Armor.png',
+  magicResist: '/icons/statsicon/Magic_resistance.png',
+  movementSpeed: '/icons/statsicon/Movement_speed.png',
+  healthRegen: '/icons/statsicon/Health_regeneration.svg',
+  attackSpeed: '/icons/statsicon/AS.png',
+  critChance: '/icons/statsicon/Critical_strike_damage.png',
+  critDamage: '/icons/statsicon/Critical_strike.png',
+  manaRegen: '/icons/statsicon/Mana_regeneration.svg',
+  attackRange: '/icons/statsicon/Range.png',
+  totalEffectiveHealth: '/icons/statsicon/Health.svg',
+  physicalEffectiveHealth: '/icons/statsicon/Armor.png',
+  magicalEffectiveHealth: '/icons/statsicon/Magic_resistance.png',
+  armorDamageReductionPercent: '/icons/statsicon/Armor.png',
+  magicDamageReductionPercent: '/icons/statsicon/Magic_resistance.png',
+  cooldownReduction: '/icons/statsicon/Cooldown_reduction.png',
+  goldValue: '/icons/statsicon/Gold.svg',
+  goldCost: '/icons/statsicon/Gold.svg',
+  goldEfficiency: '/icons/statsicon/Gold.svg',
+  lifeSteal: '/icons/statsicon/Life_steal.svg',
+  spellVamp: '/icons/statsicon/Spell_vamp.png',
+  omnivamp: '/icons/statsicon/Omnivamp.svg',
+  tenacity: '/icons/statsicon/Tenacity.png',
+  lethality: '/icons/statsicon/Armor_penetration.png',
+  armorPenetration: '/icons/statsicon/Armor_penetration.png',
+  magicPenetration: '/icons/statsicon/Magic_penetration.png',
+  shield: '/icons/statsicon/Heal_and_shield_power.png',
 }
 
-const getStatIcon = (key: string): string => statIconByKey[key] ?? '•'
+const getStatIconSrc = (key: string): string | null => statIconByKey[key] ?? null
+
+const getStatIconImageClass = (key: string): string => {
+  const compactKeys = new Set([
+    'tenacity',
+    'shield',
+    'abilityHaste',
+    'cooldownReduction',
+    'movementSpeed',
+    'attackSpeed',
+    'armor',
+  ])
+  return compactKeys.has(key) ? 'stat-inline-icon-image--compact' : ''
+}
+
+const getStatIconToneClass = (key: string): string => {
+  const hpKeys = new Set(['health', 'healthRegen', 'totalEffectiveHealth'])
+  const armorKeys = new Set(['armor', 'physicalEffectiveHealth', 'armorDamageReductionPercent'])
+  const manaKeys = new Set(['mana', 'manaRegen'])
+  const apKeys = new Set(['abilityPower'])
+  const hasteKeys = new Set(['abilityHaste', 'cooldownReduction'])
+  const critKeys = new Set(['critChance'])
+  const vampKeys = new Set(['lifeSteal', 'spellVamp', 'omnivamp'])
+  const adKeys = new Set(['attackDamage'])
+  const asKeys = new Set(['attackSpeed'])
+  const arpenKeys = new Set(['armorPenetration', 'lethality'])
+  const shieldKeys = new Set(['shield'])
+  const tenacityKeys = new Set(['tenacity'])
+  const mrKeys = new Set(['magicResist', 'magicalEffectiveHealth', 'magicDamageReductionPercent'])
+
+  if (hpKeys.has(key)) return 'stat-inline-icon--hp'
+  if (armorKeys.has(key)) return 'stat-inline-icon--armor'
+  if (manaKeys.has(key)) return 'stat-inline-icon--mana'
+  if (apKeys.has(key)) return 'stat-inline-icon--ap'
+  if (hasteKeys.has(key)) return 'stat-inline-icon--haste'
+  if (critKeys.has(key)) return 'stat-inline-icon--crit'
+  if (vampKeys.has(key)) return 'stat-inline-icon--vamp'
+  if (adKeys.has(key)) return 'stat-inline-icon--ad'
+  if (asKeys.has(key)) return 'stat-inline-icon--as'
+  if (arpenKeys.has(key)) return 'stat-inline-icon--arpen'
+  if (shieldKeys.has(key)) return 'stat-inline-icon--shield'
+  if (tenacityKeys.has(key)) return 'stat-inline-icon--tenacity'
+  if (mrKeys.has(key)) return 'stat-inline-icon--mr'
+  return 'stat-inline-icon--default'
+}
 
 const formatValue = (
   value: number | string,
@@ -955,9 +1022,89 @@ const formatValue = (
 .stat-inline-icon {
   display: inline-flex;
   width: 1rem;
+  height: 1rem;
+  overflow: visible;
   align-items: center;
   justify-content: center;
-  opacity: 0.95;
+  opacity: 1;
+  border-radius: 9999px;
+  transform: scale(2);
+  transform-origin: center;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.24),
+    0 0 8px rgb(255 255 255 / 0.14);
+}
+
+.stat-inline-icon-image {
+  width: 0.85rem;
+  height: 0.85rem;
+  object-fit: contain;
+  filter: saturate(1.25) brightness(1.08) contrast(1.08);
+}
+
+.stat-inline-icon-image--compact {
+  width: calc(0.85rem - 2px);
+  height: calc(0.85rem - 2px);
+}
+
+.stat-inline-icon--hp {
+  background: rgb(22 255 117 / 0.52);
+}
+
+.stat-inline-icon--armor {
+  background: rgb(191 107 28 / 0.54);
+}
+
+.stat-inline-icon--mana {
+  background: rgb(66 220 255 / 0.52);
+}
+
+.stat-inline-icon--ap {
+  background: rgb(182 77 255 / 0.52);
+}
+
+.stat-inline-icon--haste {
+  background: rgb(255 255 255 / 0.5);
+}
+
+.stat-inline-icon--crit {
+  background: rgb(255 44 44 / 0.56);
+}
+
+.stat-inline-icon--vamp {
+  background: rgb(255 0 0 / 0.72);
+}
+
+.stat-inline-icon--ad {
+  background: rgb(255 132 0 / 0.58);
+}
+
+.stat-inline-icon--as {
+  background: rgb(255 231 43 / 0.62);
+}
+
+.stat-inline-icon--gold {
+  background: rgb(255 196 25 / 0.62);
+}
+
+.stat-inline-icon--mr {
+  background: rgb(232 224 255 / 0.62);
+}
+
+.stat-inline-icon--tenacity {
+  background: rgb(88 28 135 / 0.72);
+}
+
+.stat-inline-icon--arpen {
+  background: rgb(127 29 29 / 0.74);
+}
+
+.stat-inline-icon--shield {
+  background: rgb(220 252 231 / 0.62);
+}
+
+.stat-inline-icon--default {
+  background: rgb(148 163 184 / 0.38);
 }
 
 .stat-category-title {
