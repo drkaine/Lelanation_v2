@@ -3,10 +3,28 @@
  * Same stats as in build infos: AD, AP, lethality, armor pen, etc.
  * Lethality: "(X - Y%)" when both flat and percent exist.
  */
-import type { ItemStats } from '@lelanation/shared-types'
-import { calculateItemGoldEfficiency } from '@lelanation/builds-stats'
+import type { Item, ItemStats } from '@lelanation/shared-types'
+import { calculateItemGoldEfficiency, getGoldPer10FromItem } from '@lelanation/builds-stats'
 
 type StatRecord = Record<string, number | undefined>
+
+function normalizePercentStat(value: number | undefined): number {
+  const raw = value ?? 0
+  if (!Number.isFinite(raw)) return 0
+  return Math.abs(raw) <= 1 ? raw * 100 : raw
+}
+
+/** Armor / magic pen: "12.0% / 18" when both % and flat exist. */
+export function formatPenetrationPercentFlat(percentOutOf100: number, flat: number): string {
+  const hasPct = Number.isFinite(percentOutOf100) && Math.abs(percentOutOf100) >= 0.01
+  const hasFlat = Number.isFinite(flat) && Math.abs(flat) >= 0.01
+  if (hasPct && hasFlat) {
+    return `${percentOutOf100.toFixed(1)}% / ${flat.toFixed(0)}`
+  }
+  if (hasPct) return `${percentOutOf100.toFixed(1)}%`
+  if (hasFlat) return `${flat.toFixed(0)}`
+  return ''
+}
 
 /** Format lethality: "X - Y%" when both flat and percent, else "X" or "Y%" */
 export function formatLethality(flat: number, percent: number): string {
@@ -32,7 +50,10 @@ export function getLethalityFromStats(stats: StatRecord): { flat: number; percen
 }
 
 /** Build display string for item stats (same as BuildCard infos). Returns array of "Label: value" */
-export function formatItemStatsForDisplay(stats: ItemStats | undefined): string[] {
+export function formatItemStatsForDisplay(
+  stats: ItemStats | undefined,
+  item?: Item | null
+): string[] {
   if (!stats) return []
   const s = stats as StatRecord
   const rows: string[] = []
@@ -48,16 +69,51 @@ export function formatItemStatsForDisplay(stats: ItemStats | undefined): string[
   add('AP', s.FlatMagicDamageMod ?? 0)
   add('Armure', s.FlatArmorMod ?? 0)
   add('RM', s.FlatSpellBlockMod ?? 0)
-  add("Vitesse d'attaque", s.PercentAttackSpeedMod ?? 0, '%', 1)
+  add("Vitesse d'attaque", normalizePercentStat(s.PercentAttackSpeedMod), '%', 1)
   add('Critique', s.FlatCritChanceMod ?? 0, '%', 1)
-  add('Vol de vie', s.PercentLifeStealMod ?? 0, '%', 1)
-  add('Omnivamp', ((s.FlatOmnivamp ?? 0) + (s.PercentOmnivamp ?? 0)) as number, '%', 1)
+  add('Dégâts critiques', s.FlatCritDamageMod ?? 0, '%', 1)
+  add('Vol de vie', normalizePercentStat(s.PercentLifeStealMod), '%', 1)
+  add(
+    'Vol de sort',
+    normalizePercentStat(
+      s.PercentSpellVampMod ?? (s as { PercentSpellVamp?: number }).PercentSpellVamp
+    ),
+    '%',
+    1
+  )
+  add(
+    'Omnivamp',
+    ((s.FlatOmnivamp ?? 0) + normalizePercentStat(s.PercentOmnivamp)) as number,
+    '%',
+    1
+  )
   add('Vitesse déplacement (flat)', s.FlatMovementSpeedMod ?? 0)
-  add('Vitesse déplacement', s.PercentMovementSpeedMod ?? 0, '%', 1)
+  add('Vitesse déplacement', normalizePercentStat(s.PercentMovementSpeedMod), '%', 1)
   add('Régénération PV', s.FlatHPRegenMod ?? 0, '', 1)
   add('Régénération mana', s.FlatMPRegenMod ?? 0, '', 1)
-  add('Pénétration armure', ((s.rPercentArmorPenetrationMod ?? 0) * 100) as number, '%', 1)
-  add('Pénétration magique', ((s.rPercentSpellPenetrationMod ?? 0) * 100) as number, '%', 1)
+  add('Régén. PV (% base)', normalizePercentStat(s.PercentHPRegenMod), '%', 1)
+  add('Régén. mana (% base)', normalizePercentStat(s.PercentMPRegenMod), '%', 1)
+  add('Soins & boucliers', normalizePercentStat(s.PercentHealShieldPower), '%', 1)
+  add('PO / 10 s', item != null ? getGoldPer10FromItem(item) : (s.GoldPer10 ?? 0), '', 0)
+  {
+    const arPct = normalizePercentStat(s.rPercentArmorPenetrationMod)
+    const arFlat = (s as Record<string, number>).rFlatArmorPenetrationMod ?? 0
+    const arStr = formatPenetrationPercentFlat(arPct, arFlat)
+    if (arStr) rows.push(`Pénétration armure (% / flat): +${arStr}`)
+  }
+  {
+    const mpPct = normalizePercentStat(s.rPercentSpellPenetrationMod)
+    const mpFlat = (s as Record<string, number>).rFlatSpellPenetrationMod ?? 0
+    const mpStr = formatPenetrationPercentFlat(mpPct, mpFlat)
+    if (mpStr) rows.push(`Pénétration magique (% / flat): +${mpStr}`)
+  }
+  add(
+    'Ténacité',
+    normalizePercentStat((s as Record<string, number | undefined>).PercentTenacity) +
+      ((s as Record<string, number | undefined>).FlatTenacity ?? 0),
+    '%',
+    1
+  )
   add('Hâte', s.rFlatCooldownModPerLevel ?? 0)
 
   const { flat: lethFlat, percent: lethPercent } = getLethalityFromStats(s)
@@ -84,7 +140,15 @@ export function formatItemEconomicForDisplay(item: ItemWithGold | undefined): st
   const rows: string[] = []
   rows.push(`Prix: ${item.gold.total}`)
   if (item.gold.sell != null) rows.push(`Revente: ${item.gold.sell}`)
-  const eff = calculateItemGoldEfficiency(item)
+  const eff = calculateItemGoldEfficiency({
+    ...item,
+    gold: {
+      total: item.gold.total,
+      sell: item.gold.sell,
+      base: item.gold.base ?? item.gold.total,
+      purchasable: item.gold.purchasable ?? true,
+    },
+  })
   if (eff != null && Number.isFinite(eff)) rows.push(`Efficacité or: ${eff.toFixed(0)}%`)
   return rows
 }

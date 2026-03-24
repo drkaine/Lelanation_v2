@@ -280,7 +280,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { calculateStats, filterItemsForStats } from '@lelanation/builds-stats'
+import { calculateStats } from '@lelanation/builds-stats'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useTheorycraftStore } from '~/stores/TheorycraftStore'
 import { calculateItemStackStats, isStackableItem, getItemStackFormula } from '~/utils/itemStacks'
@@ -414,8 +414,7 @@ const normalizedPassiveStacks = computed(() => {
 const buildStats = computed(() => {
   const b = theorycraftBuild.value
   if (!b?.champion || !b.items || !b.runes || !b.shards) return null
-  const filteredItems = filterItemsForStats(b.items)
-  return calculateStats(b.champion, filteredItems, b.runes, b.shards, theorycraftLevel.value, {
+  return calculateStats(b.champion, b.items, b.runes, b.shards, theorycraftLevel.value, {
     itemStacks: itemStacks.value,
     passiveStacks: normalizedPassiveStacks.value,
     getItemStackStats: calculateItemStackStats,

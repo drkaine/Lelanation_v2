@@ -145,7 +145,11 @@ export interface ItemStats {
   rFlatEnergyRegenModPerLevel?: number
   PercentLifeStealMod?: number
   PercentSpellVampMod?: number
+  /** Heal & shield power (items); often only in description, enriched by backend. */
+  PercentHealShieldPower?: number
   rFlatCooldownModPerLevel?: number
+  /** Passive gold per 10 s (support items); may be injected from `effect` on sync. */
+  GoldPer10?: number
   [key: string]: number | undefined
 }
 
@@ -373,11 +377,19 @@ export interface CalculatedStats {
   healthRegen: number
   manaRegen: number
   armorPenetration: number
+  /** Flat armor penetration from items (summed). */
+  flatArmorPenetration: number
   magicPenetration: number
+  /** Flat magic penetration from items (summed). */
+  flatMagicPenetration: number
   tenacity: number
   lethality: number
   percentLethality: number
   omnivamp: number
   shield: number
+  /** Heal & shield power from items (0–1, same scale as life steal). */
+  healShieldPower: number
   attackRange: number
+  /** Passive gold per 10 s from items (e.g. support quest line). */
+  goldPer10: number
 }

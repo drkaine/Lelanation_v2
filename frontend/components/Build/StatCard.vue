@@ -15,13 +15,16 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 
 interface StatCardProps {
   label: string
   value: number
   previousValue?: number | null
-  format?: 'number' | 'decimal' | 'percent' | 'lethality'
+  format?: 'number' | 'decimal' | 'percent' | 'lethality' | 'penetration'
   percentValue?: number
+  /** Flat armor / magic pen when format is penetration (value is % as 0–1). */
+  flatValue?: number
   suffix?: string
 }
 
@@ -29,10 +32,14 @@ const props = withDefaults(defineProps<StatCardProps>(), {
   format: 'number',
   previousValue: null,
   percentValue: 0,
+  flatValue: 0,
   suffix: '',
 })
 
 const displayValue = computed(() => {
+  if (props.format === 'penetration') {
+    return formatPenetrationPercentFlat(props.value * 100, props.flatValue ?? 0) || '0'
+  }
   if (props.format === 'lethality') {
     const flat = props.value
     const percent = (props.percentValue ?? 0) / 100
@@ -52,6 +59,7 @@ const displayValue = computed(() => {
 })
 
 const delta = computed(() => {
+  if (props.format === 'penetration') return null
   if (props.previousValue === null || props.previousValue === undefined) return null
   return props.value - props.previousValue
 })

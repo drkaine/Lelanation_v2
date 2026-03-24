@@ -5,10 +5,10 @@
     </div>
 
     <div v-else class="space-y-4">
-      <div class="stats-infobox rounded-lg border border-primary/40 bg-surface/40 p-3">
+      <div class="stats-infobox rounded-lg border border-primary/40 p-3">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <label class="text-sm font-semibold text-text">Level:</label>
+            <label class="stats-gold-text text-sm font-semibold">Level:</label>
             <select
               v-model.number="selectedLevel"
               class="rounded-lg border border-primary/60 bg-background/40 px-2 py-1 text-sm text-text focus:border-accent focus:outline-none"
@@ -48,11 +48,11 @@
         </div>
 
         <!-- Stats Table -->
-        <div v-if="baseStatsAtLevel && totalStats" class="overflow-x-auto">
+        <div v-if="baseStatsAtLevel && totalStats" class="stats-table-scroll">
           <table class="w-full border-collapse">
             <thead>
               <tr class="border-b border-primary/30">
-                <th class="px-4 py-2 text-left text-sm font-semibold text-text">
+                <th class="stats-gold-text px-4 py-2 text-left text-sm font-semibold">
                   <div class="flex items-center gap-2">
                     <span>{{ t('stats.statColumn') }}</span>
                     <div class="info-icon-wrapper relative">
@@ -70,22 +70,22 @@
                           <path d="M12 8h.01"></path>
                         </svg>
                       </div>
-                      <div class="info-tooltip">
-                        <p class="text-xs leading-relaxed">{{ t('stats.disclaimer') }}</p>
+                      <div class="info-tooltip-disclaimer">
+                        <div class="info-tooltip-content">{{ t('stats.disclaimer') }}</div>
                       </div>
                     </div>
                   </div>
                 </th>
-                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                <th class="stats-gold-text px-4 py-2 text-center text-sm font-semibold">
                   {{ t('stats.base') }}
                 </th>
-                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                <th class="stats-gold-text px-4 py-2 text-center text-sm font-semibold">
                   {{ t('stats.itemsColumn') }}
                 </th>
-                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                <th class="stats-gold-text px-4 py-2 text-center text-sm font-semibold">
                   {{ t('stats.shards') }}
                 </th>
-                <th class="px-4 py-2 text-center text-sm font-semibold text-text">
+                <th class="stats-gold-text px-4 py-2 text-center text-sm font-semibold">
                   {{ t('stats.total') }}
                 </th>
               </tr>
@@ -121,6 +121,25 @@
                         <span v-else>•</span>
                       </span>
                       <span>{{ stat.label }}</span>
+                      <div v-if="hasStatFormula(stat.key)" class="info-icon-wrapper relative">
+                        <div class="info-icon">
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          >
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M12 16v-4"></path>
+                            <path d="M12 8h.01"></path>
+                          </svg>
+                        </div>
+                        <div class="info-tooltip">
+                          <div class="info-tooltip-content">{{ getStatFormula(stat.key) }}</div>
+                        </div>
+                      </div>
                       <span
                         v-if="activeCategory === 'basic' && hasDerivedStats(stat.key)"
                         class="toggle-icon text-xs text-text/60"
@@ -130,28 +149,20 @@
                       </span>
                     </div>
                   </td>
-                  <td class="px-4 py-2 text-center text-sm text-text/80">
+                  <td class="px-4 py-2 text-center text-sm text-sky-300">
                     {{ formatValue(stat.baseValue, stat.format) }}
                   </td>
-                  <td class="px-4 py-2 text-center text-sm text-text/80">
+                  <td class="px-4 py-2 text-center text-sm text-sky-300">
                     {{
-                      formatValue(
-                        stat.itemValue,
-                        stat.format,
-                        (stat as { itemPercentLethality?: number }).itemPercentLethality
-                      )
+                      formatValue(stat.itemValue, stat.format, getStatFormatExtra(stat, 'items'))
                     }}
                   </td>
-                  <td class="px-4 py-2 text-center text-sm text-text/80">
+                  <td class="px-4 py-2 text-center text-sm text-sky-300">
                     {{ formatValue(stat.shardValue, stat.format) }}
                   </td>
                   <td class="px-4 py-2 text-center text-sm font-semibold text-text">
                     {{
-                      formatValue(
-                        stat.totalValue,
-                        stat.format,
-                        (stat as { totalPercentLethality?: number }).totalPercentLethality
-                      )
+                      formatValue(stat.totalValue, stat.format, getStatFormatExtra(stat, 'total'))
                     }}
                   </td>
                 </tr>
@@ -186,15 +197,39 @@
                           <span v-else>•</span>
                         </span>
                         <span>{{ derivedStat.label }}</span>
+                        <div
+                          v-if="hasStatFormula(derivedStat.key)"
+                          class="info-icon-wrapper relative"
+                        >
+                          <div class="info-icon">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2"
+                            >
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <path d="M12 16v-4"></path>
+                              <path d="M12 8h.01"></path>
+                            </svg>
+                          </div>
+                          <div class="info-tooltip">
+                            <div class="info-tooltip-content">
+                              {{ getStatFormula(derivedStat.key) }}
+                            </div>
+                          </div>
+                        </div>
                       </span>
                     </td>
-                    <td class="px-4 py-2 text-center text-sm text-text/70">
+                    <td class="px-4 py-2 text-center text-sm text-sky-300/90">
                       {{ formatValue(derivedStat.baseValue, derivedStat.format) }}
                     </td>
-                    <td class="px-4 py-2 text-center text-sm text-text/70">
+                    <td class="px-4 py-2 text-center text-sm text-sky-300/90">
                       {{ formatValue(derivedStat.itemValue, derivedStat.format) }}
                     </td>
-                    <td class="px-4 py-2 text-center text-sm text-text/70">
+                    <td class="px-4 py-2 text-center text-sm text-sky-300/90">
                       {{ formatValue(derivedStat.shardValue, derivedStat.format) }}
                     </td>
                     <td class="px-4 py-2 text-center text-sm font-semibold text-text/80">
@@ -223,10 +258,13 @@ import { useI18n } from 'vue-i18n'
 import {
   calculateStats,
   filterItemsForStats,
+  sumStarterDrainStats,
+  getGoldPer10FromItem,
   calculateBuildGoldEfficiency,
 } from '@lelanation/builds-stats'
-import { formatLethality } from '~/utils/formatItemStats'
+import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { useBuildStore } from '~/stores/BuildStore'
+import { useItemsStore } from '~/stores/ItemsStore'
 import type { Build } from '~/types/build'
 
 const props = withDefaults(
@@ -247,8 +285,27 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
+const itemsStore = useItemsStore()
 const selectedLevel = ref(1)
 const activeCategory = ref<'basic' | 'advanced' | 'economic'>('basic')
+
+const normalizePercentStat = (value: number | undefined): number => {
+  const raw = value ?? 0
+  if (!Number.isFinite(raw)) return 0
+  return Math.abs(raw) <= 1 ? raw * 100 : raw
+}
+
+/** Bonus MS des objets : (base + flat) × (1 + % objets / 100) − base (aligné sur builds-stats). */
+function movementSpeedItemBonus(baseMs: number, itemFlat: number, itemPct: number): number {
+  const f = itemFlat || 0
+  const p = itemPct || 0
+  return (baseMs + f) * (1 + p / 100) - baseMs
+}
+
+/** Bonus MS des shards % sur (base + flat objets), cohérent avec le total. */
+function movementSpeedShardBonus(baseMs: number, itemFlat: number, shardPct: number): number {
+  return (baseMs + (itemFlat || 0)) * ((shardPct || 0) / 100)
+}
 
 watch(
   () => props.category,
@@ -275,7 +332,14 @@ const _activeBuild = computed(
   () => props.build || buildStore.displayedBuild || buildStore.currentBuild
 )
 const champion = computed(() => _activeBuild.value?.champion ?? null)
-const items = computed(() => _activeBuild.value?.items ?? [])
+const items = computed(() => {
+  const buildItems = _activeBuild.value?.items ?? []
+  return buildItems.map(item => {
+    const latest = itemsStore.items.find(i => i.id === item.id)
+    if (!latest?.stats) return item
+    return { ...item, stats: latest.stats }
+  })
+})
 const runes = computed(() => _activeBuild.value?.runes ?? null)
 const shards = computed(() => _activeBuild.value?.shards ?? null)
 
@@ -373,17 +437,24 @@ const itemStats = computed(() => {
     healthRegen: 0,
     manaRegen: 0,
     armorPenetration: 0,
+    armorPenetrationFlat: 0,
     magicPenetration: 0,
+    magicPenetrationFlat: 0,
     tenacity: 0,
     lethality: 0,
     percentLethality: 0,
     omnivamp: 0,
     shield: 0,
     attackRange: 0,
+    hpRegenPercent: 0,
+    mpRegenPercent: 0,
+    healShieldPower: 0,
+    goldPer10: 0,
   }
 
   // Items only (exclude starter items and keep only first boots if 2)
   for (const item of filteredItemsForStats.value) {
+    totals.goldPer10 += getGoldPer10FromItem(item)
     if (!item.stats) continue
 
     totals.health += item.stats.FlatHPPoolMod || 0
@@ -392,28 +463,49 @@ const itemStats = computed(() => {
     totals.abilityPower += item.stats.FlatMagicDamageMod || 0
     totals.armor += item.stats.FlatArmorMod || 0
     totals.magicResist += item.stats.FlatSpellBlockMod || 0
-    totals.attackSpeed += (item.stats.PercentAttackSpeedMod || 0) / 100
+    totals.attackSpeed += normalizePercentStat(item.stats.PercentAttackSpeedMod) / 100
     totals.critChance += item.stats.FlatCritChanceMod || 0
     totals.critDamage += item.stats.FlatCritDamageMod || 0
-    totals.lifeSteal += item.stats.PercentLifeStealMod || 0
-    totals.spellVamp += item.stats.PercentSpellVampMod || 0
+    totals.lifeSteal += normalizePercentStat(item.stats.PercentLifeStealMod)
+    totals.spellVamp += normalizePercentStat(
+      item.stats.PercentSpellVampMod ??
+        (item.stats as { PercentSpellVamp?: number }).PercentSpellVamp
+    )
     totals.cooldownReduction += item.stats.rFlatCooldownModPerLevel || 0
     totals.movementSpeed += item.stats.FlatMovementSpeedMod || 0
-    totals.percentMovementSpeed += item.stats.PercentMovementSpeedMod || 0
+    totals.percentMovementSpeed += normalizePercentStat(item.stats.PercentMovementSpeedMod)
     totals.healthRegen += item.stats.FlatHPRegenMod || 0
     totals.manaRegen += item.stats.FlatMPRegenMod || 0
-    totals.armorPenetration += item.stats.rPercentArmorPenetrationMod || 0
-    totals.magicPenetration += item.stats.rPercentSpellPenetrationMod || 0
+    totals.hpRegenPercent += normalizePercentStat(item.stats.PercentHPRegenMod)
+    totals.mpRegenPercent += normalizePercentStat(item.stats.PercentMPRegenMod)
+    totals.healShieldPower += normalizePercentStat(
+      (item.stats as { PercentHealShieldPower?: number }).PercentHealShieldPower
+    )
+    totals.armorPenetration += normalizePercentStat(item.stats.rPercentArmorPenetrationMod)
+    totals.armorPenetrationFlat +=
+      ((item.stats as Record<string, number | undefined>).rFlatArmorPenetrationMod as number) || 0
+    totals.magicPenetration += normalizePercentStat(item.stats.rPercentSpellPenetrationMod)
+    totals.magicPenetrationFlat +=
+      ((item.stats as Record<string, number | undefined>).rFlatSpellPenetrationMod as number) || 0
+    totals.tenacity +=
+      normalizePercentStat((item.stats as any).PercentTenacity ?? 0) +
+      ((item.stats as any).FlatTenacity || 0)
     totals.lethality += (item.stats as any).FlatLethality || 0
     totals.percentLethality +=
-      ((item.stats as any).rPercentLethalityMod ?? 0) * 100 +
-      ((item.stats as any).PercentLethalityMod ?? 0)
+      normalizePercentStat((item.stats as any).rPercentLethalityMod ?? 0) +
+      normalizePercentStat((item.stats as any).PercentLethalityMod ?? 0)
     totals.omnivamp +=
-      ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
+      ((item.stats as any).FlatOmnivamp || 0) +
+      normalizePercentStat((item.stats as any).PercentOmnivamp || 0)
     totals.shield +=
       ((item.stats as any).FlatShield || 0) + ((item.stats as any).PercentShield || 0)
     totals.attackRange += (item.stats as any).FlatAttackRangeMod || 0
   }
+
+  const drain = sumStarterDrainStats(items.value)
+  totals.lifeSteal += drain.lifeSteal
+  totals.spellVamp += drain.spellVamp
+  totals.omnivamp += drain.omnivamp
 
   return totals
 })
@@ -433,13 +525,7 @@ const filteredItemsForStats = computed(() => filterItemsForStats(items.value))
 // Calculate total stats
 const totalStats = computed(() => {
   if (!champion.value) return null
-  return calculateStats(
-    champion.value,
-    filteredItemsForStats.value,
-    runes.value,
-    shards.value,
-    selectedLevel.value
-  )
+  return calculateStats(champion.value, items.value, runes.value, shards.value, selectedLevel.value)
 })
 
 // Helper to get shard value for a stat
@@ -458,12 +544,6 @@ const getShardValue = (key: string): number => {
       return shard.magicResist
     case 'attackSpeed':
       return shard.attackSpeed
-    case 'movementSpeed': {
-      // Movement speed from shards is percentage-based (2.5%)
-      // Calculate flat value based on base movement speed
-      if (!baseStatsAtLevel.value || shard.percentMovementSpeed === 0) return 0
-      return baseStatsAtLevel.value.movespeed * (shard.percentMovementSpeed / 100)
-    }
     case 'tenacity':
       return shard.tenacity * 100 // Convert to percentage (0.15 -> 15%)
     case 'cooldownReduction': {
@@ -544,8 +624,16 @@ const basicStats = computed(() => {
       key: 'movementSpeed',
       label: t('stats.labels.movementSpeed'),
       baseValue: base.movespeed,
-      itemValue: items.movementSpeed || 0,
-      shardValue: getShardValue('movementSpeed'),
+      itemValue: movementSpeedItemBonus(
+        base.movespeed,
+        items.movementSpeed || 0,
+        items.percentMovementSpeed || 0
+      ),
+      shardValue: movementSpeedShardBonus(
+        base.movespeed,
+        items.movementSpeed || 0,
+        shardStats.value.percentMovementSpeed || 0
+      ),
       totalValue: total.movementSpeed,
       format: 'number' as const,
     },
@@ -557,6 +645,33 @@ const basicStats = computed(() => {
       shardValue: getShardValue('attackSpeed') * 100,
       totalValue: total.attackSpeed,
       format: 'decimal' as const,
+    },
+    {
+      key: 'lifeSteal',
+      label: t('stats.labels.lifeSteal'),
+      baseValue: 0,
+      itemValue: items.lifeSteal || 0,
+      shardValue: 0,
+      totalValue: total.lifeSteal * 100,
+      format: 'percent' as const,
+    },
+    {
+      key: 'spellVamp',
+      label: t('stats.labels.spellVamp'),
+      baseValue: 0,
+      itemValue: items.spellVamp || 0,
+      shardValue: 0,
+      totalValue: total.spellVamp * 100,
+      format: 'percent' as const,
+    },
+    {
+      key: 'omnivamp',
+      label: t('stats.labels.omnivamp'),
+      baseValue: 0,
+      itemValue: items.omnivamp || 0,
+      shardValue: 0,
+      totalValue: total.omnivamp * 100,
+      format: 'percent' as const,
     },
   ]
 })
@@ -589,58 +704,35 @@ const advancedStats = computed(() => {
       format: 'percent' as const,
     },
     {
-      key: 'lifeSteal',
-      label: t('stats.labels.lifeSteal'),
-      baseValue: 0,
-      itemValue: items.lifeSteal || 0,
-      shardValue: 0,
-      totalValue: total.lifeSteal * 100,
-      format: 'percent' as const,
-    },
-    {
-      key: 'spellVamp',
-      label: t('stats.labels.spellVamp'),
-      baseValue: 0,
-      itemValue: items.spellVamp || 0,
-      shardValue: 0,
-      totalValue: total.spellVamp * 100,
-      format: 'percent' as const,
-    },
-    {
-      key: 'omnivamp',
-      label: t('stats.labels.omnivamp'),
-      baseValue: 0,
-      itemValue: items.omnivamp || 0,
-      shardValue: 0,
-      totalValue: total.omnivamp * 100,
-      format: 'percent' as const,
-    },
-    {
       key: 'cooldownReduction',
-      label: t('stats.labels.cooldownReduction'),
+      label: t('stats.labels.abilityHaste'),
       baseValue: 0,
       itemValue: items.cooldownReduction || 0,
-      shardValue: getShardValue('cooldownReduction'),
-      totalValue: total.cooldownReduction * 100,
-      format: 'percent' as const,
+      shardValue: shardStats.value.abilityHaste || 0,
+      totalValue: (items.cooldownReduction || 0) + (shardStats.value.abilityHaste || 0),
+      format: 'number' as const,
     },
     {
       key: 'armorPenetration',
-      label: t('stats.labels.armorPenetration'),
+      label: `${t('stats.labels.armorPenetration')} ${t('stats.penetrationValueLegend')}`,
       baseValue: 0,
       itemValue: items.armorPenetration || 0,
+      itemValueFlat: items.armorPenetrationFlat || 0,
       shardValue: 0,
       totalValue: total.armorPenetration * 100,
-      format: 'percent' as const,
+      totalValueFlat: total.flatArmorPenetration,
+      format: 'penetration' as const,
     },
     {
       key: 'magicPenetration',
-      label: t('stats.labels.magicPenetration'),
+      label: `${t('stats.labels.magicPenetration')} ${t('stats.penetrationValueLegend')}`,
       baseValue: 0,
       itemValue: items.magicPenetration || 0,
+      itemValueFlat: items.magicPenetrationFlat || 0,
       shardValue: 0,
       totalValue: total.magicPenetration * 100,
-      format: 'percent' as const,
+      totalValueFlat: total.flatMagicPenetration,
+      format: 'penetration' as const,
     },
     {
       key: 'lethality',
@@ -666,7 +758,7 @@ const advancedStats = computed(() => {
       key: 'healthRegen',
       label: t('stats.labels.healthRegen'),
       baseValue: base.hpregen,
-      itemValue: items.healthRegen || 0,
+      itemValue: (items.healthRegen || 0) + (base.hpregen * (items.hpRegenPercent || 0)) / 100,
       shardValue: 0,
       totalValue: total.healthRegen,
       format: 'decimal' as const,
@@ -675,10 +767,19 @@ const advancedStats = computed(() => {
       key: 'manaRegen',
       label: t('stats.labels.manaRegen'),
       baseValue: base.mpregen,
-      itemValue: items.manaRegen || 0,
+      itemValue: (items.manaRegen || 0) + (base.mpregen * (items.mpRegenPercent || 0)) / 100,
       shardValue: 0,
       totalValue: total.manaRegen,
       format: 'decimal' as const,
+    },
+    {
+      key: 'healShieldPower',
+      label: t('stats.labels.healShieldPower'),
+      baseValue: 0,
+      itemValue: items.healShieldPower || 0,
+      shardValue: 0,
+      totalValue: total.healShieldPower * 100,
+      format: 'percent' as const,
     },
     {
       key: 'attackRange',
@@ -837,7 +938,18 @@ const getDerivedStats = (key: string) => {
 
 // Economic stats
 const economicStats = computed(() => {
+  const gp10 = totalStats.value?.goldPer10 ?? 0
+  const itemsGp10 = itemStats.value.goldPer10 ?? 0
   return [
+    {
+      key: 'goldPer10',
+      label: t('stats.labels.goldGeneration'),
+      baseValue: 0,
+      itemValue: itemsGp10,
+      shardValue: 0,
+      totalValue: gp10,
+      format: 'number' as const,
+    },
     {
       key: 'goldValue',
       label: t('stats.labels.goldValue'),
@@ -897,6 +1009,7 @@ const statIconByKey: Record<string, string> = {
   goldValue: '/icons/statsicon/Gold.svg',
   goldCost: '/icons/statsicon/Gold.svg',
   goldEfficiency: '/icons/statsicon/Gold.svg',
+  goldPer10: '/icons/statsicon/Gold.svg',
   lifeSteal: '/icons/statsicon/Life_steal.svg',
   spellVamp: '/icons/statsicon/Spell_vamp.png',
   omnivamp: '/icons/statsicon/Omnivamp.svg',
@@ -905,6 +1018,7 @@ const statIconByKey: Record<string, string> = {
   armorPenetration: '/icons/statsicon/Armor_penetration.png',
   magicPenetration: '/icons/statsicon/Magic_penetration.png',
   shield: '/icons/statsicon/Heal_and_shield_power.png',
+  healShieldPower: '/icons/statsicon/Heal_and_shield_power.png',
 }
 
 const getStatIconSrc = (key: string): string | null => statIconByKey[key] ?? null
@@ -913,6 +1027,7 @@ const getStatIconImageClass = (key: string): string => {
   const compactKeys = new Set([
     'tenacity',
     'shield',
+    'healShieldPower',
     'abilityHaste',
     'cooldownReduction',
     'movementSpeed',
@@ -933,7 +1048,7 @@ const getStatIconToneClass = (key: string): string => {
   const adKeys = new Set(['attackDamage'])
   const asKeys = new Set(['attackSpeed'])
   const arpenKeys = new Set(['armorPenetration', 'lethality'])
-  const shieldKeys = new Set(['shield'])
+  const shieldKeys = new Set(['shield', 'healShieldPower'])
   const tenacityKeys = new Set(['tenacity'])
   const mrKeys = new Set(['magicResist', 'magicalEffectiveHealth', 'magicDamageReductionPercent'])
 
@@ -953,16 +1068,66 @@ const getStatIconToneClass = (key: string): string => {
   return 'stat-inline-icon--default'
 }
 
+const statFormulaKeys = new Set([
+  'attackSpeed',
+  'movementSpeed',
+  'cooldownReduction',
+  'totalEffectiveHealth',
+  'physicalEffectiveHealth',
+  'magicalEffectiveHealth',
+  'armorDamageReductionPercent',
+  'magicDamageReductionPercent',
+])
+
+const hasStatFormula = (key: string): boolean => statFormulaKeys.has(key)
+
+function getStatFormatExtra(
+  stat: {
+    format: string
+    itemPercentLethality?: number
+    itemValueFlat?: number
+    totalPercentLethality?: number
+    totalValueFlat?: number
+  },
+  column: 'items' | 'total'
+): number | undefined {
+  if (stat.format === 'lethality') {
+    return column === 'items' ? stat.itemPercentLethality : stat.totalPercentLethality
+  }
+  if (stat.format === 'penetration') {
+    return column === 'items' ? stat.itemValueFlat : stat.totalValueFlat
+  }
+  return undefined
+}
+
+const getStatFormula = (key: string): string => {
+  const map: Record<string, string> = {
+    attackSpeed: 'stats.formulas.attackSpeed',
+    movementSpeed: 'stats.formulas.movementSpeed',
+    cooldownReduction: 'stats.formulas.abilityHaste',
+    totalEffectiveHealth: 'stats.formulas.totalEffectiveHealth',
+    physicalEffectiveHealth: 'stats.formulas.physicalEffectiveHealth',
+    magicalEffectiveHealth: 'stats.formulas.magicalEffectiveHealth',
+    armorDamageReductionPercent: 'stats.formulas.armorDamageReductionPercent',
+    magicDamageReductionPercent: 'stats.formulas.magicDamageReductionPercent',
+  }
+  const i18nKey = map[key]
+  return i18nKey ? t(i18nKey) : ''
+}
+
 const formatValue = (
   value: number | string,
-  format: 'number' | 'decimal' | 'percent' | 'lethality',
-  percentLethality?: number
+  format: 'number' | 'decimal' | 'percent' | 'lethality' | 'penetration',
+  formatExtra?: number
 ): string => {
   if (typeof value === 'string') {
     return value
   }
   if (format === 'lethality') {
-    return formatLethality(value, (percentLethality ?? 0) / 100) || '0'
+    return formatLethality(value, (formatExtra ?? 0) / 100) || '0'
+  }
+  if (format === 'penetration') {
+    return formatPenetrationPercentFlat(value as number, formatExtra ?? 0) || '0'
   }
   if (format === 'percent') {
     return `${value.toFixed(1)}%`
@@ -977,6 +1142,27 @@ const formatValue = (
 <style scoped>
 .stats-table {
   width: 100%;
+}
+
+.stats-infobox {
+  /* Align with items-manager panel background. */
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.stats-table-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  position: relative;
+}
+
+.stats-table-scroll table,
+.stats-table-scroll th,
+.stats-table-scroll td {
+  overflow: visible;
+}
+
+.stats-gold-text {
+  color: rgb(252 211 77 / 1);
 }
 
 .stat-category-separator {
@@ -1124,6 +1310,11 @@ const formatValue = (
   position: relative;
   display: inline-flex;
   align-items: center;
+  z-index: 10;
+}
+
+.info-icon-wrapper:hover {
+  z-index: 20000;
 }
 
 .info-icon {
@@ -1146,15 +1337,19 @@ const formatValue = (
   bottom: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%);
+  display: block;
   padding: 12px 16px;
-  background: rgb(var(--rgb-background) / 0.25);
+  background: rgb(0 0 0 / 0.92);
   border: 1px solid rgb(var(--rgb-primary) / 0.4);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  white-space: normal;
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   width: 320px;
+  min-width: 280px;
   max-width: 90vw;
-  z-index: 10000;
+  z-index: 99999;
   opacity: 0;
   pointer-events: none;
   transition:
@@ -1164,8 +1359,60 @@ const formatValue = (
   transform: translateX(-50%) translateY(8px);
   visibility: hidden;
   color: rgb(var(--rgb-text));
+  color: #fff !important;
   font-size: 0.75rem;
   line-height: 1.5;
+}
+
+.info-tooltip-content {
+  display: block;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  color: #fff;
+}
+
+.info-tooltip-disclaimer {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  display: none;
+  width: min(520px, 92vw);
+  min-width: 320px;
+  padding: 12px 16px;
+  background: rgb(0 0 0 / 0.92);
+  border: 1px solid rgb(var(--rgb-primary) / 0.4);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 99999;
+}
+
+.info-icon-wrapper:hover .info-tooltip-disclaimer {
+  display: block;
+}
+
+.info-tooltip-disclaimer::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgb(var(--rgb-primary) / 0.4);
+  margin-top: -1px;
+}
+
+.info-tooltip-disclaimer::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgb(0 0 0 / 0.92);
+  margin-top: 0;
+  z-index: 1;
 }
 
 .info-icon-wrapper:hover .info-tooltip {
@@ -1197,7 +1444,7 @@ const formatValue = (
   left: 50%;
   transform: translateX(-50%);
   border: 5px solid transparent;
-  border-top-color: rgb(var(--rgb-background) / 0.25);
+  border-top-color: rgb(0 0 0 / 0.92);
   margin-top: 0;
   z-index: 1;
 }

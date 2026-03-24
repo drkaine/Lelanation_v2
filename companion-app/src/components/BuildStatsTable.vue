@@ -55,7 +55,7 @@ const totalStats = computed(() => {
   if (!champion.value) return null;
   return calculateStats(
     champion.value,
-    filteredItemsForStats.value,
+    items.value,
     props.build.runes || null,
     props.build.shards || null,
     selectedLevel.value

@@ -324,7 +324,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { CalculatedStats } from '@lelanation/shared-types'
-import { calculateStats, filterItemsForStats } from '@lelanation/builds-stats'
+import { calculateStats } from '@lelanation/builds-stats'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
@@ -407,19 +407,23 @@ const createEmptyStats = (): CalculatedStats => ({
   healthRegen: 0,
   manaRegen: 0,
   armorPenetration: 0,
+  flatArmorPenetration: 0,
   magicPenetration: 0,
+  flatMagicPenetration: 0,
   tenacity: 0,
   lethality: 0,
   percentLethality: 0,
   omnivamp: 0,
   shield: 0,
+  healShieldPower: 0,
   attackRange: 0,
+  goldPer10: 0,
 })
 
 function buildStatsFor(buildToCompute: Build): CalculatedStats {
   const stats = calculateStats(
     buildToCompute.champion ?? null,
-    filterItemsForStats(buildToCompute.items ?? []),
+    buildToCompute.items ?? [],
     buildToCompute.runes,
     buildToCompute.shards,
     18

@@ -57,7 +57,8 @@ function resolveSpellTemplate(text: string, spell: SpellLike): string {
   )
 }
 
-export function formatSpellTooltipHtml(spell: SpellLike): string {
+export function formatSpellTooltipHtml(spell: SpellLike, options?: { showCost?: boolean }): string {
+  const showCost = options?.showCost ?? true
   const baseRaw = spell.tooltip || spell.description || ''
   const base = resolveSpellTemplate(baseRaw, spell)
   const damage = findFirstEffectBurn(spell)
@@ -67,9 +68,11 @@ export function formatSpellTooltipHtml(spell: SpellLike): string {
 
   const detailsParts = [
     `<span class="tooltip-spell-meta-key">CD:</span> ${cooldown}`,
-    `<span class="tooltip-spell-meta-key">Coût:</span> ${cost}`,
     `<span class="tooltip-spell-meta-key">Portée:</span> ${range}`,
   ]
+  if (showCost) {
+    detailsParts.splice(1, 0, `<span class="tooltip-spell-meta-key">Coût:</span> ${cost}`)
+  }
   if (damage) {
     detailsParts.push(`<span class="tooltip-spell-meta-key">Dégâts:</span> ${damage}`)
   }

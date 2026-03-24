@@ -758,14 +758,13 @@ export const useBuildStore = defineStore('build', {
       }
 
       // Import and use stats calculator
-      import('@lelanation/builds-stats').then(({ calculateStats, filterItemsForStats }) => {
+      import('@lelanation/builds-stats').then(({ calculateStats }) => {
         const b = this.displayedBuild ?? this.currentBuild
         if (!b || !b.champion) {
           this.calculatedStats = null
           return
         }
-        const filteredItems = filterItemsForStats(b.items)
-        const stats = calculateStats(b.champion, filteredItems, b.runes, b.shards, 18)
+        const stats = calculateStats(b.champion, b.items, b.runes, b.shards, 18)
         this.calculatedStats = stats
       })
     },

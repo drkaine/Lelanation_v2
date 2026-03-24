@@ -11,20 +11,19 @@ export interface EnemyTarget {
 }
 
 /**
- * Calcule l'armure effective après pénétration (pourcentage puis lethality).
- * Formule: armor_eff = (1 - pen_pct) * armor - lethality * f(level)
- * f(level) = 0.6 + 0.4 * (level / 18) pour lethality
+ * Calcule l'armure effective après pénétration (pourcentage puis flat + léthalité).
+ * Après % pen: (1 - pen_pct) * armor, puis soustraction des pénétrations plates (léthalité + flat objet).
  */
 function calculateEffectiveArmor(
   armor: number,
   armorPenetrationPercent: number,
   lethality: number,
-  attackerLevel: number
+  attackerLevel: number,
+  flatArmorPenetration: number
 ): number {
   const lethalityFactor = 0.6 + 0.4 * (attackerLevel / 18)
   const afterPercentPen = (1 - armorPenetrationPercent) * armor
-  const afterLethality = Math.max(0, afterPercentPen - lethality * lethalityFactor)
-  return afterLethality
+  return Math.max(0, afterPercentPen - lethality * lethalityFactor - flatArmorPenetration)
 }
 
 /**
@@ -32,9 +31,10 @@ function calculateEffectiveArmor(
  */
 function calculateEffectiveMagicResist(
   magicResist: number,
-  magicPenetrationPercent: number
+  magicPenetrationPercent: number,
+  flatMagicPenetration: number
 ): number {
-  return Math.max(0, (1 - magicPenetrationPercent) * magicResist)
+  return Math.max(0, (1 - magicPenetrationPercent) * magicResist - flatMagicPenetration)
 }
 
 /**
@@ -65,7 +65,8 @@ export function calculatePhysicalDamage(
     target.armor,
     attackerStats.armorPenetration,
     attackerStats.lethality,
-    attackerLevel
+    attackerLevel,
+    attackerStats.flatArmorPenetration
   )
   const factor = getArmorReductionFactor(effectiveArmor)
   return Math.round(rawDamage * factor)
@@ -81,7 +82,8 @@ export function calculateMagicDamage(
 ): number {
   const effectiveMR = calculateEffectiveMagicResist(
     target.magicResist,
-    attackerStats.magicPenetration
+    attackerStats.magicPenetration,
+    attackerStats.flatMagicPenetration
   )
   const factor = getMagicResistReductionFactor(effectiveMR)
   return Math.round(rawDamage * factor)

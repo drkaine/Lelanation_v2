@@ -42,6 +42,7 @@ export function filterItemsForStats(items: Item[]): Item[] {
 /**
  * Calculate final statistics for a build.
  * Takes into account: champion base stats, items, runes, shards, optional item/passive stacks.
+ * @param items Full build item list (starters included). Non-drain stats use the same filter as {@link filterItemsForStats}; life steal / spell vamp / omnivamp also include starters.
  */
 export function calculateStats(
   champion: Champion | null,
@@ -54,7 +55,12 @@ export function calculateStats(
   if (!champion) return null;
 
   const baseStats = calculateChampionStatsAtLevel(champion.stats, level);
-  const itemStats = calculateItemStats(items, options);
+  const filteredItems = filterItemsForStats(items);
+  const itemStats = calculateItemStats(filteredItems, options);
+  const starterDrain = sumStarterDrainStats(items);
+  itemStats.lifeSteal += starterDrain.lifeSteal;
+  itemStats.spellVamp += starterDrain.spellVamp;
+  itemStats.omnivamp += starterDrain.omnivamp;
   const runeStats = calculateRuneStats(runes);
   const shardStats = calculateShardStats(shards, level);
   const passiveStackStats = calculatePassiveStackStats(champion.id, options);
@@ -104,19 +110,27 @@ export function calculateStats(
       (itemStats.percentMovementSpeed || 0) +
         (shardStats.percentMovementSpeed || 0)
     ),
-    healthRegen: baseStats.hpregen + (itemStats.healthRegen || 0),
-    manaRegen: baseStats.mpregen + (itemStats.manaRegen || 0),
+    healthRegen:
+      baseStats.hpregen * (1 + (itemStats.hpRegenPercent || 0) / 100) +
+      (itemStats.healthRegen || 0),
+    manaRegen:
+      baseStats.mpregen * (1 + (itemStats.mpRegenPercent || 0) / 100) +
+      (itemStats.manaRegen || 0),
     armorPenetration: (itemStats.armorPenetration || 0) / 100,
+    flatArmorPenetration: itemStats.armorPenetrationFlat || 0,
     magicPenetration: (itemStats.magicPenetration || 0) / 100,
+    flatMagicPenetration: itemStats.magicPenetrationFlat || 0,
     tenacity: (itemStats.tenacity || 0) / 100 + (shardStats.tenacity || 0),
     lethality: itemStats.lethality || 0,
     percentLethality: (itemStats.percentLethality || 0) / 100,
     omnivamp: (itemStats.omnivamp || 0) / 100,
     shield: itemStats.shield || 0,
+    healShieldPower: (itemStats.healShieldPower || 0) / 100,
     attackRange:
       baseStats.attackrange +
       (itemStats.attackRange || 0) +
       (passiveStackStats.attackRange || 0),
+    goldPer10: itemStats.goldPer10 || 0,
   };
 
   return finalStats;
@@ -179,15 +193,84 @@ type ItemStatsTotals = {
   percentMovementSpeed: number;
   healthRegen: number;
   manaRegen: number;
+  /** Sum of item +% to base HP regen (e.g. 75 = +75 % of champion base). */
+  hpRegenPercent: number;
+  /** Sum of item +% to base mana regen. */
+  mpRegenPercent: number;
+  /** Passive gold per 10 s (support items / GoldPer). */
+  goldPer10: number;
   armorPenetration: number;
+  /** Sum of flat armor pen from items (e.g. Last Whisper line flat part). */
+  armorPenetrationFlat: number;
   magicPenetration: number;
+  magicPenetrationFlat: number;
   tenacity: number;
   lethality: number;
   percentLethality: number;
   omnivamp: number;
   shield: number;
+  healShieldPower: number;
   attackRange: number;
 };
+
+function normalizePercentStat(value: number | undefined): number {
+  const raw = value ?? 0;
+  if (!Number.isFinite(raw)) return 0;
+  return Math.abs(raw) <= 1 ? raw * 100 : raw;
+}
+
+function spellVampPercentFromStats(
+  s: Record<string, number | undefined>
+): number {
+  const ext = s as Record<string, number | undefined> & {
+    PercentSpellVamp?: number;
+  };
+  const raw = s.PercentSpellVampMod ?? ext.PercentSpellVamp;
+  return normalizePercentStat(raw);
+}
+
+function omnivampPercentFromStats(
+  s: Record<string, number | undefined>
+): number {
+  const rec = s as Record<string, number>;
+  return (
+    (rec.FlatOmnivamp || 0) + normalizePercentStat(rec.PercentOmnivamp)
+  );
+}
+
+/** Gold / 10 s from item stats, tag GoldPer, or Data Dragon `effect.Effect1Amount`. */
+export function getGoldPer10FromItem(item: Item): number {
+  const s = item.stats as Record<string, number | undefined> | undefined;
+  const fromStats = s?.GoldPer10 ?? s?.FlatGoldPer10s;
+  if (fromStats != null && Number.isFinite(fromStats)) return fromStats;
+  const tags = item.tags ?? [];
+  if (!tags.includes("GoldPer")) return 0;
+  const eff = (item as Item & { effect?: Record<string, string> }).effect;
+  const raw = eff?.Effect1Amount;
+  if (raw == null) return 0;
+  const n = Number.parseFloat(String(raw).replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Life steal / spell vamp / omnivamp from starter items only (Doran’s, etc.).
+ * Core totals intentionally exclude starters; drain stats are merged separately so lane starters still show vamp in UI.
+ */
+export function sumStarterDrainStats(items: Item[]): {
+  lifeSteal: number;
+  spellVamp: number;
+  omnivamp: number;
+} {
+  const out = { lifeSteal: 0, spellVamp: 0, omnivamp: 0 };
+  for (const item of items) {
+    if (!isStarterItem(item) || !item.stats) continue;
+    const s = item.stats as Record<string, number | undefined>;
+    out.lifeSteal += normalizePercentStat(s.PercentLifeStealMod);
+    out.spellVamp += spellVampPercentFromStats(s);
+    out.omnivamp += omnivampPercentFromStats(s);
+  }
+  return out;
+}
 
 function calculateItemStats(
   items: Item[],
@@ -210,17 +293,24 @@ function calculateItemStats(
     percentMovementSpeed: 0,
     healthRegen: 0,
     manaRegen: 0,
+    hpRegenPercent: 0,
+    mpRegenPercent: 0,
+    goldPer10: 0,
     armorPenetration: 0,
+    armorPenetrationFlat: 0,
     magicPenetration: 0,
+    magicPenetrationFlat: 0,
     tenacity: 0,
     lethality: 0,
     percentLethality: 0,
     omnivamp: 0,
     shield: 0,
+    healShieldPower: 0,
     attackRange: 0,
   };
 
   for (const item of items) {
+    totals.goldPer10 += getGoldPer10FromItem(item);
     if (!item.stats) continue;
     const s = item.stats as Record<string, number | undefined>;
     totals.health += s.FlatHPPoolMod || 0;
@@ -229,28 +319,38 @@ function calculateItemStats(
     totals.abilityPower += s.FlatMagicDamageMod || 0;
     totals.armor += s.FlatArmorMod || 0;
     totals.magicResist += s.FlatSpellBlockMod || 0;
-    totals.attackSpeed += (s.PercentAttackSpeedMod || 0) / 100;
+    totals.attackSpeed += normalizePercentStat(s.PercentAttackSpeedMod) / 100;
     totals.critChance += s.FlatCritChanceMod || 0;
     totals.critDamage += s.FlatCritDamageMod || 0;
-    totals.lifeSteal += s.PercentLifeStealMod || 0;
-    totals.spellVamp += s.PercentSpellVampMod || 0;
+    totals.lifeSteal += normalizePercentStat(s.PercentLifeStealMod);
+    totals.spellVamp += spellVampPercentFromStats(s);
     totals.cooldownReduction += s.rFlatCooldownModPerLevel || 0;
     totals.movementSpeed += s.FlatMovementSpeedMod || 0;
-    totals.percentMovementSpeed += s.PercentMovementSpeedMod || 0;
+    totals.percentMovementSpeed += normalizePercentStat(s.PercentMovementSpeedMod);
     totals.healthRegen += s.FlatHPRegenMod || 0;
     totals.manaRegen += s.FlatMPRegenMod || 0;
-    totals.armorPenetration += s.rPercentArmorPenetrationMod || 0;
-    totals.magicPenetration += s.rPercentSpellPenetrationMod || 0;
+    totals.hpRegenPercent += normalizePercentStat(s.PercentHPRegenMod);
+    totals.mpRegenPercent += normalizePercentStat(s.PercentMPRegenMod);
+    totals.armorPenetration += normalizePercentStat(s.rPercentArmorPenetrationMod);
+    totals.armorPenetrationFlat +=
+      (s as Record<string, number>).rFlatArmorPenetrationMod || 0;
+    totals.magicPenetration += normalizePercentStat(s.rPercentSpellPenetrationMod);
+    totals.magicPenetrationFlat +=
+      (s as Record<string, number>).rFlatSpellPenetrationMod || 0;
+    totals.tenacity +=
+      normalizePercentStat((s as Record<string, number>).PercentTenacity) +
+      ((s as Record<string, number>).FlatTenacity || 0);
     totals.lethality += (s as Record<string, number>).FlatLethality || 0;
     totals.percentLethality +=
-      ((s as Record<string, number>).rPercentLethalityMod ?? 0) * 100 +
-      ((s as Record<string, number>).PercentLethalityMod ?? 0);
-    totals.omnivamp +=
-      ((s as Record<string, number>).FlatOmnivamp || 0) +
-      ((s as Record<string, number>).PercentOmnivamp || 0);
+      normalizePercentStat((s as Record<string, number>).rPercentLethalityMod) +
+      normalizePercentStat((s as Record<string, number>).PercentLethalityMod);
+    totals.omnivamp += omnivampPercentFromStats(s);
     totals.shield +=
       ((s as Record<string, number>).FlatShield || 0) +
       ((s as Record<string, number>).PercentShield || 0);
+    totals.healShieldPower += normalizePercentStat(
+      (s as Record<string, number>).PercentHealShieldPower
+    );
     totals.attackRange += (s as Record<string, number>).FlatAttackRangeMod || 0;
 
     if (

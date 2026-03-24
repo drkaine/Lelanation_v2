@@ -91,8 +91,12 @@
           <p class="text-xl font-bold text-text">{{ formatPercent(stats.lifeSteal) }}</p>
         </div>
         <div class="rounded border border-primary bg-surface p-3">
-          <p class="mb-1 text-xs text-text/70">{{ t('stats.labels.armorPenetration') }}</p>
-          <p class="text-xl font-bold text-text">{{ formatPercent(stats.armorPenetration) }}</p>
+          <p class="mb-1 text-xs text-text/70">
+            {{ t('stats.labels.armorPenetration') }} {{ t('stats.penetrationValueLegend') }}
+          </p>
+          <p class="text-xl font-bold text-text">
+            {{ formatPenetrationStats(stats.armorPenetration, stats.flatArmorPenetration) }}
+          </p>
         </div>
       </div>
 
@@ -147,16 +151,18 @@
               format="percent"
             />
             <StatCard
-              :label="t('stats.labels.armorPenetration')"
+              :label="`${t('stats.labels.armorPenetration')} ${t('stats.penetrationValueLegend')}`"
               :value="stats.armorPenetration"
+              :flat-value="stats.flatArmorPenetration"
               :previous-value="previousStats?.armorPenetration"
-              format="percent"
+              format="penetration"
             />
             <StatCard
-              :label="t('stats.labels.magicPenetration')"
+              :label="`${t('stats.labels.magicPenetration')} ${t('stats.penetrationValueLegend')}`"
               :value="stats.magicPenetration"
+              :flat-value="stats.flatMagicPenetration"
               :previous-value="previousStats?.magicPenetration"
-              format="percent"
+              format="penetration"
             />
             <StatCard
               :label="t('stats.labels.lethality')"
@@ -254,6 +260,7 @@ import { useI18n } from 'vue-i18n'
 import StatCard from './StatCard.vue'
 import { useBuildStore } from '~/stores/BuildStore'
 import type { CalculatedStats } from '~/types/build'
+import { formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
@@ -314,5 +321,9 @@ const formatStat = (value: number, decimals: number = 0): string => {
 
 const formatPercent = (value: number): string => {
   return `${(value * 100).toFixed(1)}%`
+}
+
+function formatPenetrationStats(penPercent01: number, flat: number): string {
+  return formatPenetrationPercentFlat(penPercent01 * 100, flat) || '0'
 }
 </script>

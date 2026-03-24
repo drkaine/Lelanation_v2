@@ -648,7 +648,7 @@ const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: spell.name,
-    description: formatSpellTooltipHtml(spell),
+    description: formatSpellTooltipHtml(spell, { showCost: false }),
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
   nextTick(() => {
@@ -1138,5 +1138,16 @@ watch(locale, () => {
   color: rgb(var(--rgb-text));
   line-height: 1.4;
   opacity: 0.9;
+}
+
+.rune-tooltip-description :deep(.tooltip-spell-meta-key) {
+  color: rgb(252 211 77 / 1) !important;
+  font-weight: 700 !important;
+}
+
+.rune-tooltip-description :deep(.tooltip-spell-meta-line) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 </style>

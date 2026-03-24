@@ -164,7 +164,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { calculateStats, filterItemsForStats } from '@lelanation/builds-stats'
+import { calculateStats } from '@lelanation/builds-stats'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import type { CalculatedStats } from '~/types/build'
 import StatRow from '~/components/Build/StatRow.vue'
@@ -181,14 +181,7 @@ const builds = computed(() => discoveryStore.getComparisonBuilds())
 // Calculate stats for each build
 const buildStats = computed(() => {
   return builds.value.map(build => {
-    const filteredItems = filterItemsForStats(build.items)
-    const stats = calculateStats(
-      build.champion ?? null,
-      filteredItems,
-      build.runes,
-      build.shards,
-      18
-    )
+    const stats = calculateStats(build.champion ?? null, build.items, build.runes, build.shards, 18)
     return {
       buildId: build.id,
       stats: stats || createEmptyStats(),
@@ -243,8 +236,17 @@ const createEmptyStats = (): CalculatedStats => {
     healthRegen: 0,
     manaRegen: 0,
     armorPenetration: 0,
+    flatArmorPenetration: 0,
     magicPenetration: 0,
+    flatMagicPenetration: 0,
     tenacity: 0,
+    lethality: 0,
+    percentLethality: 0,
+    omnivamp: 0,
+    shield: 0,
+    healShieldPower: 0,
+    attackRange: 0,
+    goldPer10: 0,
   }
 }
 

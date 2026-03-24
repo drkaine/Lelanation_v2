@@ -796,17 +796,17 @@
                   :alt="selectedChampion.name"
                   class="tooltip-champion-image"
                 />
+                <div
+                  v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
+                  class="tooltip-tags-container"
+                >
+                  <div class="tooltip-tags">
+                    {{ translatedTags }}
+                  </div>
+                </div>
                 <div class="tooltip-text">
                   <div class="tooltip-champion-name">{{ selectedChampion.name }}</div>
                   <div class="tooltip-champion-title">{{ selectedChampion.title }}</div>
-                </div>
-              </div>
-              <div
-                v-if="selectedChampion.tags && selectedChampion.tags.length > 0"
-                class="tooltip-tags-container"
-              >
-                <div class="tooltip-tags">
-                  {{ translatedTags }}
                 </div>
               </div>
             </div>
@@ -1264,10 +1264,10 @@
       </div>
       <div v-else class="items-manager-stats">
         <p class="items-manager-stats-note">
-          Stats des items (hors starters, et 1 seule botte prise en compte).
+          {{ t('buildCard.itemsStatsNote') }}
         </p>
         <div v-if="itemStatsRows.length === 0" class="items-manager-empty">
-          Aucune stat item détectée
+          {{ t('buildCard.itemsStatsEmpty') }}
         </div>
         <div v-else class="items-manager-stats-grid">
           <div v-for="row in itemStatsRows" :key="row.key" class="items-manager-stats-row">
@@ -1284,6 +1284,7 @@
 import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
+import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
 import type { Build, SubBuild, Item, Role, SkillOrder } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -1303,7 +1304,7 @@ import {
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
-import { formatLethality } from '~/utils/formatItemStats'
+import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
@@ -1703,7 +1704,7 @@ const sheetElementTooltipResolved = computed(() => {
       return spell
         ? {
             type: 'spell' as const,
-            spell: { ...spell, description: formatSpellTooltipHtml(spell) },
+            spell: { ...spell, description: formatSpellTooltipHtml(spell, { showCost: false }) },
           }
         : null
     }
@@ -1825,6 +1826,12 @@ const missingFieldChecks = computed(() => {
   }
 })
 
+const normalizePercentStat = (value: number | undefined): number => {
+  const raw = value ?? 0
+  if (!Number.isFinite(raw)) return 0
+  return Math.abs(raw) <= 1 ? raw * 100 : raw
+}
+
 const selectedChampion = computed(() => {
   const champion = displayBuild.value?.champion || null
   if (!champion) return null
@@ -1920,7 +1927,15 @@ const filteredSummonerSpells = computed(() => {
   return selectedSummonerSpells.value.filter(spell => spell !== null && spell !== undefined)
 })
 const selectedShards = computed(() => displayBuild.value?.shards)
-const buildItems = computed(() => displayBuild.value?.items || [])
+const buildItems = computed(() => {
+  const items = displayBuild.value?.items || []
+  return items.map(item => {
+    const latest = itemsStore.items.find(i => i.id === item.id)
+    // Keep user-facing identity from the build object, but refresh stats payload from latest data.
+    if (!latest?.stats) return item
+    return { ...item, stats: latest.stats }
+  })
+})
 const showItemStats = ref(false)
 const draggingItemIndex = ref<number | null>(null)
 const dragOverItemIndex = ref<number | null>(null)
@@ -2316,7 +2331,9 @@ const itemStatsTotals = computed(() => {
     magicResist: 0,
     attackSpeedPercent: 0,
     critChancePercent: 0,
+    critDamagePercent: 0,
     lifeStealPercent: 0,
+    spellVampPercent: 0,
     omnivampPercent: 0,
     movementSpeedFlat: 0,
     movementSpeedPercent: 0,
@@ -2325,8 +2342,15 @@ const itemStatsTotals = computed(() => {
     lethality: 0,
     percentLethality: 0,
     armorPenPercent: 0,
+    armorPenFlat: 0,
     magicPenPercent: 0,
+    magicPenFlat: 0,
+    tenacityPercent: 0,
     abilityHaste: 0,
+    hpRegenPercent: 0,
+    mpRegenPercent: 0,
+    healShieldPowerPercent: 0,
+    goldPer10: 0,
   }
 
   const nonStarter = buildItems.value.filter(item => !isStarterItem(item))
@@ -2339,6 +2363,7 @@ const itemStatsTotals = computed(() => {
   })
 
   for (const item of itemsForStats) {
+    totals.goldPer10 += getGoldPer10FromItem(item)
     if (!item.stats) continue
     totals.health += item.stats.FlatHPPoolMod || 0
     totals.mana += item.stats.FlatMPPoolMod || 0
@@ -2346,23 +2371,46 @@ const itemStatsTotals = computed(() => {
     totals.abilityPower += item.stats.FlatMagicDamageMod || 0
     totals.armor += item.stats.FlatArmorMod || 0
     totals.magicResist += item.stats.FlatSpellBlockMod || 0
-    totals.attackSpeedPercent += item.stats.PercentAttackSpeedMod || 0
+    totals.attackSpeedPercent += normalizePercentStat(item.stats.PercentAttackSpeedMod)
     totals.critChancePercent += item.stats.FlatCritChanceMod || 0
-    totals.lifeStealPercent += item.stats.PercentLifeStealMod || 0
+    totals.critDamagePercent += item.stats.FlatCritDamageMod || 0
+    totals.lifeStealPercent += normalizePercentStat(item.stats.PercentLifeStealMod)
+    totals.spellVampPercent += normalizePercentStat(
+      item.stats.PercentSpellVampMod ??
+        (item.stats as { PercentSpellVamp?: number }).PercentSpellVamp
+    )
     totals.movementSpeedFlat += item.stats.FlatMovementSpeedMod || 0
-    totals.movementSpeedPercent += item.stats.PercentMovementSpeedMod || 0
+    totals.movementSpeedPercent += normalizePercentStat(item.stats.PercentMovementSpeedMod)
     totals.healthRegen += item.stats.FlatHPRegenMod || 0
     totals.manaRegen += item.stats.FlatMPRegenMod || 0
-    totals.armorPenPercent += (item.stats.rPercentArmorPenetrationMod || 0) * 100
-    totals.magicPenPercent += (item.stats.rPercentSpellPenetrationMod || 0) * 100
+    totals.hpRegenPercent += normalizePercentStat(item.stats.PercentHPRegenMod)
+    totals.mpRegenPercent += normalizePercentStat(item.stats.PercentMPRegenMod)
+    totals.healShieldPowerPercent += normalizePercentStat(
+      (item.stats as { PercentHealShieldPower?: number }).PercentHealShieldPower
+    )
+    totals.armorPenPercent += normalizePercentStat(item.stats.rPercentArmorPenetrationMod)
+    totals.armorPenFlat +=
+      ((item.stats as Record<string, number | undefined>).rFlatArmorPenetrationMod as number) || 0
+    totals.magicPenPercent += normalizePercentStat(item.stats.rPercentSpellPenetrationMod)
+    totals.magicPenFlat +=
+      ((item.stats as Record<string, number | undefined>).rFlatSpellPenetrationMod as number) || 0
+    totals.tenacityPercent +=
+      normalizePercentStat((item.stats as any).PercentTenacity ?? 0) +
+      ((item.stats as any).FlatTenacity || 0)
     totals.abilityHaste += item.stats.rFlatCooldownModPerLevel || 0
     totals.lethality += (item.stats as any).FlatLethality || 0
     totals.percentLethality +=
-      ((item.stats as any).rPercentLethalityMod ?? 0) * 100 +
-      ((item.stats as any).PercentLethalityMod ?? 0)
+      normalizePercentStat((item.stats as any).rPercentLethalityMod ?? 0) +
+      normalizePercentStat((item.stats as any).PercentLethalityMod ?? 0)
     totals.omnivampPercent +=
-      ((item.stats as any).FlatOmnivamp || 0) + ((item.stats as any).PercentOmnivamp || 0)
+      ((item.stats as any).FlatOmnivamp || 0) +
+      normalizePercentStat((item.stats as any).PercentOmnivamp || 0)
   }
+
+  const starterDrain = sumStarterDrainStats(buildItems.value)
+  totals.lifeStealPercent += starterDrain.lifeSteal
+  totals.spellVampPercent += starterDrain.spellVamp
+  totals.omnivampPercent += starterDrain.omnivamp
 
   return totals
 })
@@ -2386,15 +2434,40 @@ const itemStatsRows = computed(() => {
   add('magicResist', 'RM', s.magicResist)
   add('attackSpeedPercent', 'Vitesse d’attaque', s.attackSpeedPercent, '%', 1)
   add('critChancePercent', 'Critique', s.critChancePercent, '%', 1)
+  add('critDamagePercent', 'Dégâts critiques', s.critDamagePercent, '%', 1)
   add('lifeStealPercent', 'Vol de vie', s.lifeStealPercent, '%', 1)
+  add('spellVampPercent', 'Vol de sort', s.spellVampPercent, '%', 1)
   add('omnivampPercent', 'Omnivamp', s.omnivampPercent, '%', 1)
   add('movementSpeedFlat', 'Vitesse déplacement (flat)', s.movementSpeedFlat)
   add('movementSpeedPercent', 'Vitesse déplacement', s.movementSpeedPercent, '%', 1)
   add('healthRegen', 'Régénération PV', s.healthRegen, '', 1)
   add('manaRegen', 'Régénération mana', s.manaRegen, '', 1)
+  add('hpRegenPercent', 'Régén. PV (% base)', s.hpRegenPercent, '%', 1)
+  add('mpRegenPercent', 'Régén. mana (% base)', s.mpRegenPercent, '%', 1)
+  add('healShieldPowerPercent', t('stats.labels.healShieldPower'), s.healShieldPowerPercent, '%', 1)
+  add('goldPer10', 'PO / 10 s', s.goldPer10, '', 0)
   addLethality()
-  add('armorPenPercent', 'Pénétration armure', s.armorPenPercent, '%', 1)
-  add('magicPenPercent', 'Pénétration magique', s.magicPenPercent, '%', 1)
+  {
+    const str = formatPenetrationPercentFlat(s.armorPenPercent, s.armorPenFlat)
+    if (str) {
+      rows.push({
+        key: 'armorPen',
+        label: `${t('stats.labels.armorPenetration')} ${t('stats.penetrationValueLegend')}`,
+        value: `+${str}`,
+      })
+    }
+  }
+  {
+    const str = formatPenetrationPercentFlat(s.magicPenPercent, s.magicPenFlat)
+    if (str) {
+      rows.push({
+        key: 'magicPen',
+        label: `${t('stats.labels.magicPenetration')} ${t('stats.penetrationValueLegend')}`,
+        value: `+${str}`,
+      })
+    }
+  }
+  add('tenacityPercent', 'Ténacité', s.tenacityPercent, '%', 1)
   add('abilityHaste', 'Hâte', s.abilityHaste)
   return rows
 })
@@ -4106,8 +4179,8 @@ defineExpose({
 }
 
 .tooltip-box {
-  width: min(680px, calc(100vw - 2rem));
-  max-width: min(680px, calc(100vw - 2rem));
+  width: min(1020px, calc(100vw - 2rem));
+  max-width: min(1020px, calc(100vw - 2rem));
   min-width: 320px;
   padding: 1.2em;
   display: flex;
@@ -4143,10 +4216,10 @@ defineExpose({
 
 .tooltip-present {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 0.75em;
   width: 100%;
-  margin-bottom: 1em;
 }
 
 .tooltip-champion-image {
@@ -4163,6 +4236,7 @@ defineExpose({
   flex-direction: column;
   text-align: right;
   flex: 1;
+  min-width: 0;
 }
 
 .tooltip-champion-name {
@@ -4179,16 +4253,18 @@ defineExpose({
 }
 
 .tooltip-tags-container {
-  width: 100%;
-  padding-top: 0.5em;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.15em 0.55em;
+  border: 1px solid rgba(125, 211, 252, 0.4);
+  border-radius: 999px;
+  background: rgba(125, 211, 252, 0.1);
   flex-shrink: 0;
 }
 
 .tooltip-tags {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: rgb(var(--rgb-text) / 0.7);
-  line-height: 1.4;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .tooltip-separator {
@@ -4325,6 +4401,18 @@ defineExpose({
   font-size: 0.8rem;
   color: rgb(var(--rgb-text) / 0.7);
   line-height: 1.4;
+}
+
+/* Force meta labels style inside v-html content in scoped component. */
+.tooltip-spell-description :deep(.tooltip-spell-meta-key) {
+  color: rgb(252 211 77 / 1) !important;
+  font-weight: 700 !important;
+}
+
+.tooltip-spell-description :deep(.tooltip-spell-meta-line) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 
 /* Sheet element tooltips (item / rune / spell) — même rendu que ItemSelector / RuneSelector */

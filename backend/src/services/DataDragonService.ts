@@ -172,9 +172,156 @@ export class DataDragonService {
     for (const [itemId, item] of Object.entries(items)) {
       const clone = { ...(item as Record<string, unknown>) }
       delete (clone as { maps?: unknown }).maps
+      this.enrichItemStatsFromDescription(clone)
+      this.enrichGoldPer10FromEffect(clone)
       cleaned[itemId] = clone as ItemData[string]
     }
     return cleaned
+  }
+
+  private enrichItemStatsFromDescription(item: Record<string, unknown>): void {
+    const description = typeof item.description === 'string' ? item.description : ''
+    if (!description) return
+
+    const parsed = this.extractStatsFromItemDescription(description)
+    if (!parsed || Object.keys(parsed).length === 0) return
+
+    const existing =
+      item.stats && typeof item.stats === 'object'
+        ? (item.stats as Record<string, number>)
+        : {}
+
+    // Keep existing source-of-truth values and only fill missing keys.
+    item.stats = {
+      ...parsed,
+      ...existing,
+    }
+  }
+
+  private extractStatsFromItemDescription(description: string): Record<string, number> {
+    const out: Record<string, number> = {}
+    const statsBlocks = Array.from(description.matchAll(/<stats>([\s\S]*?)<\/stats>/gi))
+
+    for (const block of statsBlocks) {
+      const html = block[1] || ''
+      const parts = Array.from(
+        html.matchAll(/<attention>\s*([+-]?\d+(?:[.,]\d+)?)(%)?\s*<\/attention>([^<]*)/gi)
+      )
+      for (const part of parts) {
+        const rawValue = part[1]
+        const percentInValue = Boolean(part[2])
+        const rawLabel = part[3] || ''
+        const numericValue = Number.parseFloat(rawValue.replace(',', '.'))
+        if (!Number.isFinite(numericValue)) continue
+
+        const label = this.normalizeStatLabel(rawLabel)
+        const hasPercent =
+          percentInValue || rawLabel.includes('%') || label.includes('pourcent')
+        const mappedKey = this.mapDescriptionStatLabelToKey(label, hasPercent)
+        if (!mappedKey) continue
+
+        out[mappedKey] = numericValue
+      }
+    }
+
+    return out
+  }
+
+  private normalizeStatLabel(label: string): string {
+    return label
+      .replace(/&nbsp;|&#160;|\u00a0/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+  }
+
+  private mapDescriptionStatLabelToKey(label: string, hasPercent: boolean): string | null {
+    if (!label) return null
+    const compact = label.replace(/[^a-z0-9]/g, '')
+
+    if (compact.includes('degatsdattaque') || compact === 'ad') return 'FlatPhysicalDamageMod'
+    if (compact.includes('puissance') || compact === 'ap') return 'FlatMagicDamageMod'
+    if (compact.includes('degatsdecoupcritique') || compact.includes('degatscritiques')) {
+      return 'FlatCritDamageMod'
+    }
+    if (label.includes('armure')) return 'FlatArmorMod'
+    if (label.includes('resistance magique') || compact === 'rm') return 'FlatSpellBlockMod'
+    if (compact.includes('vitessedattaque')) return 'PercentAttackSpeedMod'
+    if (label.includes('critique')) return 'FlatCritChanceMod'
+    if (label.includes('vol de vie')) return 'PercentLifeStealMod'
+    if (
+      label.includes('vol de sort') ||
+      label.includes('spell vamp') ||
+      label.includes('vampirisme de sort')
+    ) {
+      return 'PercentSpellVampMod'
+    }
+    if (label.includes('tenacite')) return hasPercent ? 'PercentTenacity' : 'FlatTenacity'
+    if (label.includes('lethalite')) return hasPercent ? 'rPercentLethalityMod' : 'FlatLethality'
+    if (label.includes('omnivamp')) return 'PercentOmnivamp'
+    if (
+      label.includes('hate') ||
+      label.includes('acceleration de competence') ||
+      compact.includes('accelerationdecompetence')
+    ) {
+      return 'rFlatCooldownModPerLevel'
+    }
+    if (label.includes('penetration darmure')) {
+      return hasPercent ? 'rPercentArmorPenetrationMod' : 'rFlatArmorPenetrationMod'
+    }
+    if (label.includes('penetration magique')) {
+      return hasPercent ? 'rPercentSpellPenetrationMod' : 'rFlatSpellPenetrationMod'
+    }
+    // Heal & shield power (FR "efficacité des soins et boucliers", EN "Heal and Shield Power")
+    if (
+      compact.includes('efficacitedesoinsetboucliers') ||
+      compact.includes('healandshieldpower') ||
+      (label.includes('soins') && label.includes('boucliers')) ||
+      (label.includes('heal') && label.includes('shield'))
+    ) {
+      return hasPercent ? 'PercentHealShieldPower' : null
+    }
+    // Base mana regen: FR "régénération ... du mana", EN "Base Mana Regen" (no "regeneration" substring)
+    if (label.includes('mana') && (label.includes('regen') || label.includes('regeneration'))) {
+      return hasPercent ? 'PercentMPRegenMod' : 'FlatMPRegenMod'
+    }
+    if (label.includes('regeneration') && (label.includes('pv') || label.includes('sante'))) {
+      return hasPercent ? 'PercentHPRegenMod' : 'FlatHPRegenMod'
+    }
+    if (label.includes('vitesse de deplacement')) {
+      return hasPercent ? 'PercentMovementSpeedMod' : 'FlatMovementSpeedMod'
+    }
+    if (label.includes('mana')) return 'FlatMPPoolMod'
+    if (label.includes('pv') || label.includes('sante')) return 'FlatHPPoolMod'
+    // Support item: FR "PO toutes les 10 sec", EN "gold per 10"
+    if (
+      /\bpo\b/.test(label) &&
+      (label.includes('10') || label.includes('sec'))
+    ) {
+      return 'GoldPer10'
+    }
+    if (label.includes('gold') && label.includes('10')) return 'GoldPer10'
+
+    return null
+  }
+
+  /** Copy passive gold / 10 s from `effect.Effect1Amount` when tag GoldPer is present. */
+  private enrichGoldPer10FromEffect(item: Record<string, unknown>): void {
+    const tags = item.tags as string[] | undefined
+    if (!tags?.includes('GoldPer')) return
+    const effect = item.effect as Record<string, string | undefined> | undefined
+    const raw = effect?.Effect1Amount
+    if (raw == null) return
+    const n = Number.parseFloat(String(raw).replace(',', '.'))
+    if (!Number.isFinite(n)) return
+    const existing =
+      item.stats && typeof item.stats === 'object'
+        ? ({ ...(item.stats as Record<string, number>) } as Record<string, number>)
+        : {}
+    if (existing.GoldPer10 != null) return
+    item.stats = { ...existing, GoldPer10: n }
   }
 
   /**

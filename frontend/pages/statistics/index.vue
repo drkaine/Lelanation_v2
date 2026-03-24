@@ -5384,7 +5384,7 @@ function itemName(itemId: number): string | null {
 
 function itemStatsForItem(itemId: number): string[] {
   const item = itemsStore.items.find(i => i.id === String(itemId))
-  return formatItemStatsForDisplay(item?.stats)
+  return formatItemStatsForDisplay(item?.stats, item)
 }
 
 function itemImageName(itemId: number): string | null {
