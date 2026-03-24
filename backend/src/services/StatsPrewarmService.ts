@@ -27,7 +27,6 @@ export function scheduleStatsPrewarm(): void {
       console.warn('[StatsPrewarm]', e instanceof Error ? e.message : e)
     })
   }, PREWARM_DELAY_MS)
-  console.log('[StatsPrewarm] Scheduled in', PREWARM_DELAY_MS / 1000, 's')
 }
 
 async function runStatsPrewarm(): Promise<void> {
@@ -41,7 +40,6 @@ async function runStatsPrewarm(): Promise<void> {
       const result = await fn()
       if (result != null) {
         done++
-        console.log('[StatsPrewarm]', name, 'ok')
       }
     } catch (e) {
       failed++
@@ -49,8 +47,6 @@ async function runStatsPrewarm(): Promise<void> {
     }
     await delay(PREWARM_STEP_DELAY_MS)
   }
-
-  console.log('[StatsPrewarm] Starting...')
 
   // Overview-detail par rank (évite 504 sur onglet Détail avec filtre)
   for (const rank of RANK_TIERS) {
@@ -74,5 +70,4 @@ async function runStatsPrewarm(): Promise<void> {
   await run('overview-abandons(null)', () => getOverviewAbandons(null, null))
   await run('overview-sides(null)', () => getOverviewSidesStats(null, null))
 
-  console.log('[StatsPrewarm] Done.', done, 'warmed,', failed, 'failed')
 }

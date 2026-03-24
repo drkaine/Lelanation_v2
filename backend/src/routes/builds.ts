@@ -44,7 +44,6 @@ router.post('/', async (req, res) => {
     const fileName = `${buildId}${isPrivate ? '_priv' : ''}.json`
     const filePath = join(buildsDir, fileName)
 
-    console.log(`[Builds API] Saving build: ${fileName} to ${buildsDir}`)
 
     // Ensure builds directory exists
     const dirResult = await FileManager.ensureDir(buildsDir)
@@ -76,7 +75,6 @@ router.post('/', async (req, res) => {
       })
     }
 
-    console.log(`[Builds API] Build saved successfully: ${fileName}`)
     return res.json({ 
       id: buildId,
       fileName,
@@ -180,13 +178,11 @@ router.delete('/:id', async (req, res) => {
     // Delete the file
     try {
       await fs.unlink(filePath)
-      console.log(`[Builds API] Build deleted successfully: ${buildFile}`)
       return res.json({ 
         id: buildId,
         message: 'Build deleted successfully'
       })
     } catch (unlinkError) {
-      console.error(`[Builds API] Failed to delete build file: ${unlinkError}`)
       return res.status(500).json({ 
         error: 'Failed to delete build file',
         details: unlinkError instanceof Error ? unlinkError.message : 'Unknown error'

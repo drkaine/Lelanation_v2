@@ -15,14 +15,12 @@ export async function runStatsPrecomputedRefreshOnce(): Promise<{ ok: boolean; e
 
 export function setupStatsPrecomputedRefresh(): void {
   if (!isDatabaseConfigured()) {
-    console.log('[Cron] Stats precomputed refresh: skipped (no DB)')
     return
   }
   cron.schedule(CRON_SCHEDULE, async () => {
     try {
       const result = await runStatsPrecomputedRefreshOnce()
       if (result.ok && result.refreshed?.length) {
-        console.log('[Cron] Stats precomputed refreshed:', result.refreshed.length, 'entries')
       } else if (!result.ok) {
         console.warn('[Cron] Stats precomputed refresh failed:', result.error)
       }
@@ -30,5 +28,4 @@ export function setupStatsPrecomputedRefresh(): void {
       console.error('[Cron] Stats precomputed refresh error:', err)
     }
   })
-  console.log('[Cron] Stats precomputed refresh scheduled:', CRON_SCHEDULE)
 }

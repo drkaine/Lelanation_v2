@@ -93,10 +93,6 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-  console.log(`Cron jobs initialized`)
-  console.log(`Current time: ${new Date().toISOString()}`)
-  console.log(`Timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`)
   // Précharger le cache overview-detail (sans filtre) pour limiter les 504
   // setTimeout(() => {
   //   Promise.all([

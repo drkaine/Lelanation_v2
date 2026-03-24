@@ -121,10 +121,6 @@ export class DiscordService {
   ): Promise<Result<void, AppError>> {
     if (!this.webhookUrl) {
       // Log to console if no webhook configured (but don't warn for every success)
-      console.log(`[DiscordService] Success: ${title} - ${message}`)
-      if (context) {
-        console.log('[DiscordService] Context:', context)
-      }
       return Result.ok(undefined)
     }
 
@@ -183,7 +179,6 @@ export class DiscordService {
     contact?: string
   ): Promise<Result<void, AppError>> {
     if (!this.contactWebhookUrl) {
-      console.log(`[DiscordService] Contact: ${type} from ${name} (no DISCORD_CONTACT_WEBHOOK_URL)`)
       return Result.ok(undefined)
     }
 

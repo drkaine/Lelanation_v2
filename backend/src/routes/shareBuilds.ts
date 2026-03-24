@@ -114,7 +114,6 @@ router.post('/', async (req, res) => {
       }
     }
 
-    console.log(`[Share] Created share code ${code} with ${builds.length} builds (expires ${expiresAt})`)
 
     // Lazy cleanup in background
     cleanupExpired()
@@ -159,7 +158,6 @@ router.get('/:code', async (req, res) => {
 
     // One-time use: delete shared file first (source of truth for this code)
     await fs.unlink(filePath)
-    console.log(`[Share] Code ${code} consumed and deleted`)
 
     // Delete private builds from private-temp (if any were stored there)
     try {

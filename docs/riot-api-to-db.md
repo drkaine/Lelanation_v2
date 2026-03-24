@@ -4,6 +4,8 @@ Liste exhaustive de toutes les colonnes / champs remplis à partir des réponses
 
 **Sources des explications :** [Riot Developer Portal – Match-v5](https://developer.riotgames.com/apis#match-v5), [changelog match-v5 (RiotTuxedo)](https://gist.github.com/RiotTuxedo/758ee4d88693b768a880ece93cd78663) et références communautaires (ex. RiotNet) lorsque la doc officielle ne détaille pas tous les champs.
 
+Note: ce document couvre la persistance **Riot API vers DB**. Les assets statiques frontend (Data Dragon / Community Dragon) et leur nettoyage sont documentés dans `docs/data-sources-and-versions.md`.
+
 ---
 
 ## Signification des valeurs

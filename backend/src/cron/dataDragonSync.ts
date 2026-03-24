@@ -175,6 +175,4 @@ export function setupDataDragonSync(): void {
   cron.schedule('0 * * * *', () => void runDataDragonSyncOnce(), {
     timezone: 'Etc/UTC'
   })
-
-  console.log('[Cron] Data Dragon sync scheduled: Every hour at :00 UTC')
 }

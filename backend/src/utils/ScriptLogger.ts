@@ -55,12 +55,10 @@ export function createScriptLogger(scriptId: string): ScriptLogger {
   return {
     async start(args: string[]) {
       const msg = `START args=${JSON.stringify(args)}`
-      console.log(`[${scriptId}]`, msg)
       await append(scriptId, 'INFO', msg)
     },
     async info(msg: string, ...rest: unknown[]) {
       const full = format(msg, rest)
-      console.log(`[${scriptId}]`, full)
       await append(scriptId, 'INFO', full)
     },
     async warn(msg: string, ...rest: unknown[]) {
@@ -75,12 +73,10 @@ export function createScriptLogger(scriptId: string): ScriptLogger {
     },
     async jobResult(job: string, details: Record<string, unknown>) {
       const msg = `JOB_RESULT ${job} ${JSON.stringify(details)}`
-      console.log(`[${scriptId}]`, msg)
       await append(scriptId, 'INFO', msg)
     },
     async end(exitCode: number) {
       const msg = `END exit=${exitCode}`
-      console.log(`[${scriptId}]`, msg)
       await append(scriptId, 'INFO', msg)
     },
   }

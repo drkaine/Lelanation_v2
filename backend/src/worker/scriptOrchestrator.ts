@@ -321,9 +321,6 @@ export function startDefaultScript(): void {
 
   void (async () => {
     if (RIOT_POLLER_STARTUP_DELAY_MS > 0) {
-      console.log(
-        `[Orchestrator] Riot poller start delayed by ${RIOT_POLLER_STARTUP_DELAY_MS / 1000}s (RIOT_POLLER_STARTUP_DELAY_MS)`
-      )
       await new Promise((r) => setTimeout(r, RIOT_POLLER_STARTUP_DELAY_MS))
     }
     if (!isAnyScriptRunning()) {

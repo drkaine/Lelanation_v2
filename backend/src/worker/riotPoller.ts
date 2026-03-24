@@ -1827,7 +1827,6 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   })
 
   try {
-    console.log('[RiotPoller] Poller started: entering match collection loop')
 
     // ── Main collection loop ──────────────────────────────────────────────────
     let loopIteration = 0

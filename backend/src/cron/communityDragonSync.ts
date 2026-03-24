@@ -1,6 +1,5 @@
 import cron from 'node-cron'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
-import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
@@ -13,7 +12,6 @@ export async function runCommunityDragonSyncOnce(): Promise<
   { ok: true; synced: number; failed: number; skipped: number } | { ok: false; error: string }
 > {
   const communityDragonService = new CommunityDragonService()
-  const staticAssetsService = new StaticAssetsService()
   const discordService = new DiscordService()
   const cronStatus = new CronStatusService()
   const log = createCronLogger('communityDragonSync')
@@ -67,15 +65,6 @@ export async function runCommunityDragonSyncOnce(): Promise<
     await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
   }
 
-  // Copy to frontend and delete from backend
-  const copyResult = await staticAssetsService.copyCommunityDragonDataToFrontend()
-  if (copyResult.isErr()) {
-    await log.warn('Failed to copy to frontend / delete from backend:', copyResult.unwrapErr())
-  } else {
-    const { copied, deleted } = copyResult.unwrap()
-    await log.info('Community Dragon:', copied, 'files copied to frontend,', deleted, 'deleted from backend')
-  }
-
   await cronStatus.markSuccess('communityDragonSync')
 
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
@@ -124,6 +113,4 @@ export function setupCommunityDragonSync(): void {
   cron.schedule('0 3 * * *', () => void runCommunityDragonSyncOnce(), {
     timezone: 'Etc/UTC'
   })
-
-  console.log('[Cron] Community Dragon sync scheduled: Daily at 03:00 UTC')
 }

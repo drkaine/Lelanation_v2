@@ -46,7 +46,6 @@ async function main(): Promise<void> {
   let shouldStop = false
   const onSignal = (): void => {
     shouldStop = true
-    console.log('[runScript] Stop requested — finishing current task then exiting.')
   }
   process.on('SIGINT', onSignal)
   process.on('SIGTERM', onSignal)
@@ -55,22 +54,10 @@ async function main(): Promise<void> {
 
   try {
     if (script === 'puuid-migration') {
-      await runPuuidMigrationScript(isShouldStop, (s) => {
-        if (s.phase === 'running' && s.requestCount > 0 && s.requestCount % 50 === 0) {
-          console.log(`[puuid-migration] requestCount=${s.requestCount}`)
-        }
-      })
-      console.log('[runScript] puuid-migration finished.')
+      await runPuuidMigrationScript(isShouldStop)
     } else {
       const options = leagueXpOptionsFromEnv()
-      await runLeagueXpScript(options, isShouldStop, (s) => {
-        if (s.phase === 'running' && s.pagesProcessed > 0) {
-          console.log(
-            `[league-xp] pagesProcessed=${s.pagesProcessed} playersFound=${s.playersFound} playersCreated=${s.playersCreated}`
-          )
-        }
-      })
-      console.log('[runScript] league-xp finished.')
+        await runLeagueXpScript(options, isShouldStop)
     }
     process.exit(0)
   } catch (err) {

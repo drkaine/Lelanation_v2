@@ -38,7 +38,6 @@ router.get('/status', async (_req, res) => {
  * Trigger manual sync
  */
 router.post('/trigger', async (_req, res) => {
-  console.log('[Manual Sync] Starting Data Dragon synchronization...')
 
   try {
     // Check for new version first
@@ -55,7 +54,6 @@ router.post('/trigger', async (_req, res) => {
     const versionInfo = versionCheckResult.unwrap()
     const versionToSync = versionInfo.latest
 
-    console.log(`[Manual Sync] Syncing game data for version: ${versionToSync}`)
 
     // Sync with retry logic
     const syncResult = await retryWithBackoff(
@@ -86,10 +84,6 @@ router.post('/trigger', async (_req, res) => {
       // Don't fail the sync if version update fails
     }
 
-    console.log(
-      `[Manual Sync] Data Dragon sync completed successfully. Version: ${syncData.version}, Synced at: ${syncData.syncedAt.toISOString()}`
-    )
-
     return res.json({
       success: true,
       version: syncData.version,
@@ -108,7 +102,6 @@ router.post('/trigger', async (_req, res) => {
  * Trigger manual Community Dragon sync
  */
 router.post('/community-dragon', async (_req, res) => {
-  console.log('[Manual Sync] Starting Community Dragon synchronization...')
 
   try {
     // Sync with retry logic
@@ -132,11 +125,7 @@ router.post('/community-dragon', async (_req, res) => {
     }
 
     const syncData = syncResult.unwrap()
-
-    console.log(
-      `[Manual Sync] Community Dragon sync completed. Synced: ${syncData.synced}, Failed: ${syncData.failed}, Skipped: ${syncData.skipped}`
-    )
-
+    
     return res.json({
       success: true,
       synced: syncData.synced,

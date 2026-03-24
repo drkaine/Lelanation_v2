@@ -2,7 +2,6 @@ import 'dotenv/config'
 import { join } from 'path'
 import { DataDragonService } from '../services/DataDragonService.js'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
-import { ChampionMergeService } from '../services/ChampionMergeService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { DiscordService } from '../services/DiscordService.js'
@@ -20,7 +19,6 @@ type YouTubeChannelsConfigFile = {
 
 async function main(): Promise<void> {
   const startTime = new Date()
-  console.log('[sync:data] Starting manual data synchronization...')
 
   const discordService = new DiscordService()
   // await discordService.sendSuccess(
@@ -32,7 +30,6 @@ async function main(): Promise<void> {
   // )
 
   // --- Data Dragon ---
-  console.log('[sync:data] Checking latest Data Dragon version...')
   const versionService = new VersionService()
   const dataDragonService = new DataDragonService()
 
@@ -55,7 +52,6 @@ async function main(): Promise<void> {
   }
 
   const { latest } = versionCheck.unwrap()
-  console.log(`[sync:data] Syncing Data Dragon data for version: ${latest}`)
 
   const ddSync = await dataDragonService.syncGameData(latest)
   if (ddSync.isErr()) {
@@ -87,12 +83,7 @@ async function main(): Promise<void> {
     return
   }
 
-  console.log(
-    `[sync:data] Data Dragon sync OK. Version: ${ddSyncData.version}, syncedAt: ${ddSyncData.syncedAt.toISOString()}`
-  )
-
   // --- Community Dragon ---
-  console.log('[sync:data] Syncing Community Dragon data...')
   const communityDragonService = new CommunityDragonService()
 
   const cdSync = await communityDragonService.syncAllChampions()
@@ -114,9 +105,6 @@ async function main(): Promise<void> {
   }
 
   const cdSyncData = cdSync.unwrap()
-  console.log(
-    `[sync:data] Community Dragon sync OK. Synced: ${cdSyncData.synced}, Failed: ${cdSyncData.failed}, Skipped: ${cdSyncData.skipped}`
-  )
   if (cdSyncData.errors.length > 0) {
     console.warn(
       `[sync:data] Community Dragon sync completed with ${cdSyncData.errors.length} errors:`
@@ -131,17 +119,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- Merge champions (CD + DDragon) → single championFull (only for CD locale: fr_FR) ---
-  console.log('[sync:data] Merging champion data (Community Dragon + Data Dragon)...')
-  const championMergeService = new ChampionMergeService()
-  const mergeResult = await championMergeService.mergeChampionFull(ddSyncData.version, 'fr_FR')
-  if (mergeResult.isErr()) {
-    console.warn('[sync:data] Merge failed:', mergeResult.unwrapErr().message)
-  } else {
-    const { merged, skipped } = mergeResult.unwrap()
-    console.log(`[sync:data] Champion merge OK (fr_FR): ${merged} merged, ${skipped} skipped`)
-  }
-
   // --- YouTube ---
   const youtubeChannelsFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
   const youtubeService = new YouTubeService()
@@ -153,9 +130,6 @@ async function main(): Promise<void> {
     // If config is missing, create an empty one and finish without error.
     if ((err as { code?: string }).code === 'FILE_NOT_FOUND') {
       await FileManager.writeJson(youtubeChannelsFile, { channels: [] })
-      console.log(
-        `[sync:data] Created missing ${youtubeChannelsFile}. No channels configured, skipping YouTube sync.`
-      )
       return
     }
 
@@ -166,13 +140,9 @@ async function main(): Promise<void> {
 
   const channels = channelsResult.unwrap().channels ?? []
   if (channels.length === 0) {
-    console.log(
-      `[sync:data] No YouTube channels configured in ${youtubeChannelsFile}. Skipping YouTube sync.`
-    )
     return
   }
 
-  console.log(`[sync:data] Syncing YouTube channels: ${channels.length}`)
   const ytSync = await youtubeService.syncChannels(channels)
   if (ytSync.isErr()) {
     const err = ytSync.unwrapErr()
@@ -193,21 +163,14 @@ async function main(): Promise<void> {
   }
 
   const ytSyncData = ytSync.unwrap()
-  console.log(
-    `[sync:data] YouTube sync OK. Synced ${ytSyncData.syncedChannels}/${channels.length} channels, totalVideos: ${ytSyncData.totalVideos}`
-  )
 
   // --- Copy Assets to Frontend ---
-  console.log('[sync:data] Copying assets to frontend...')
   const staticAssets = new StaticAssetsService()
   
   // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)
   const shouldRestartFrontend = process.env.RESTART_FRONTEND === 'true'
   // Always build frontend when restarting to ensure new assets are included
-  const shouldBuildFrontend = shouldRestartFrontend
-  if (shouldRestartFrontend) {
-    console.log('[sync:data] Frontend restart and build enabled (RESTART_FRONTEND=true)')
-  }
+  const shouldBuildFrontend = shouldRestartFrontend 
 
   const copyResult = await staticAssets.copyAllAssetsToFrontend(
     ddSyncData.version,
@@ -235,22 +198,10 @@ async function main(): Promise<void> {
   }
 
   const copyStats = copyResult.unwrap()
-  console.log(
-    `[sync:data] Assets copied to frontend: ${copyStats.dataCopied} data files, ${copyStats.imagesCopied} images (${copyStats.imagesSkipped} skipped)`
-  )
 
   // Also copy YouTube data if it exists
-  console.log('[sync:data] Copying YouTube data to frontend...')
   const youtubeResult = await staticAssets.copyYouTubeAssetsToFrontend(false) // Don't restart twice
-  if (youtubeResult.isOk()) {
-    const youtubeStats = youtubeResult.unwrap()
-    console.log(
-      `[sync:data] YouTube data copied: ${youtubeStats.copied} files, deleted ${youtubeStats.deleted} backend files`
-    )
-  } else {
-    console.warn('[sync:data] Failed to copy YouTube data:', youtubeResult.unwrapErr())
-    // Don't fail if YouTube data doesn't exist yet
-  }
+
 
   // Send success notification with summary
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)

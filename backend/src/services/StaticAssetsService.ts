@@ -73,7 +73,6 @@ export class StaticAssetsService {
         const versionDir = join(frontendDataDir, version)
         await fs.rm(versionDir, { recursive: true, force: true })
         deleted++
-        console.log(`[StaticAssets] Deleted old version data from frontend: ${version}`)
       }
 
       return Result.ok({ deleted })
@@ -107,7 +106,6 @@ export class StaticAssetsService {
       // Recursively delete the entire version directory
       await fs.rm(versionDir, { recursive: true, force: true })
 
-      console.log(`[StaticAssets] Deleted backend game data for version ${version}`)
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(
@@ -136,7 +134,6 @@ export class StaticAssetsService {
         await fs.rm(legacyVersionDir, { recursive: true, force: true })
       }
 
-      console.log(`[StaticAssets] Deleted backend latest images (requested version: ${version})`)
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(
@@ -211,9 +208,6 @@ export class StaticAssetsService {
 
     if (excludedItemsResult.isOk()) {
       const excludedIds = excludedItemsResult.unwrap().excludedIds
-      console.log(
-        `[StaticAssets] Loaded ${excludedIds.length} excluded item IDs from excluded-items.json`
-      )
       return new Set(excludedIds)
     } else {
       console.warn(
@@ -270,7 +264,6 @@ export class StaticAssetsService {
                 continue
               }
               itemJsonPath = frontendPath
-              console.log(`[StaticAssets] Backend data not found, filtering existing frontend file: ${itemJsonPath}`)
             }
 
             const content = await fs.readFile(itemJsonPath, 'utf-8')
@@ -288,9 +281,6 @@ export class StaticAssetsService {
               )
               await fs.writeFile(targetPath, filteredContent, 'utf-8')
               
-              console.log(
-                `[StaticAssets] Filtered item.json: ${Object.keys(filteredItems).length} items (excluded ${excludedItemIds.size} by ID)`
-              )
               copied++
             } else {
               console.warn(`[StaticAssets] Invalid item.json structure in ${itemJsonPath}`)
@@ -372,7 +362,6 @@ export class StaticAssetsService {
         const versionDir = join(frontendImagesDir, version)
         await fs.rm(versionDir, { recursive: true, force: true })
         deleted++
-        console.log(`[StaticAssets] Deleted old version images from frontend: ${version}`)
       }
 
       return Result.ok({ deleted })
@@ -471,19 +460,13 @@ export class StaticAssetsService {
       })
 
     try {
-      console.log(`[StaticAssets] Building frontend in: ${frontendDir}`)
 
       // Execute npm run build in frontend directory
-      let { stdout, stderr } = await runBuild()
+      const { stderr } = await runBuild()
 
       if (stderr && !stderr.includes('built')) {
         // Some warnings might go to stderr, but check for actual errors
         console.warn(`[StaticAssets] Frontend build warning: ${stderr}`)
-      }
-
-      console.log(`[StaticAssets] Frontend built successfully`)
-      if (stdout) {
-        console.log(`[StaticAssets] Build output: ${stdout.slice(-500)}`) // Last 500 chars
       }
 
       return Result.ok(undefined)
@@ -502,7 +485,6 @@ export class StaticAssetsService {
           if (retry.stderr && !retry.stderr.includes('built')) {
             console.warn(`[StaticAssets] Frontend build warning (retry): ${retry.stderr}`)
           }
-          console.log('[StaticAssets] Frontend built successfully (retry)')
           return Result.ok(undefined)
         } catch (retryError: any) {
           const retryMsg = retryError?.message || String(retryError)
@@ -540,7 +522,6 @@ export class StaticAssetsService {
   async restartFrontendPM2(buildFirst: boolean = false): Promise<Result<void, AppError>> {
     // Build frontend first if requested
     if (buildFirst) {
-      console.log(`[StaticAssets] Building frontend before restart...`)
       const buildResult = await this.buildFrontend()
       if (buildResult.isErr()) {
         const buildError = buildResult.unwrapErr()
@@ -568,7 +549,6 @@ export class StaticAssetsService {
         console.warn(`[StaticAssets] PM2 restart warning: ${stderr}`)
       }
 
-      console.log(`[StaticAssets] Frontend PM2 restarted successfully`)
       return Result.ok(undefined)
     } catch (error: any) {
       // If PM2 command fails (not installed, process not found, etc.), log but don't fail
@@ -610,9 +590,6 @@ export class StaticAssetsService {
     if (deleteOldDataResult.isOk()) {
       const deleted = deleteOldDataResult.unwrap()
       if (deleted.deleted > 0) {
-        console.log(
-          `[StaticAssets] Deleted ${deleted.deleted} old version data directories from frontend`
-        )
       }
     } else {
       console.warn(
@@ -625,9 +602,6 @@ export class StaticAssetsService {
     if (deleteOldResult.isOk()) {
       const deleted = deleteOldResult.unwrap()
       if (deleted.deleted > 0) {
-        console.log(
-          `[StaticAssets] Deleted ${deleted.deleted} old version image directories from frontend`
-        )
       }
     } else {
       console.warn(
@@ -661,7 +635,6 @@ export class StaticAssetsService {
     // Delete backend data and images after successful copy to frontend
     // This saves disk space since frontend serves directly from static files
     // We keep version.json in backend (needed to know current version)
-    console.log(`[StaticAssets] Deleting backend data and images for version ${version}...`)
     
     const deleteDataResult = await this.deleteBackendGameData(version)
     if (deleteDataResult.isErr()) {
@@ -782,7 +755,6 @@ export class StaticAssetsService {
         const filePath = join(this.backendYouTubeDir, entry.name)
         await fs.unlink(filePath)
         deleted++
-        console.log(`[StaticAssets] Deleted backend YouTube data: ${entry.name}`)
       }
 
       return Result.ok({ deleted })
@@ -815,7 +787,6 @@ export class StaticAssetsService {
     const copied = copyResult.unwrap().copied
 
     // Delete backend YouTube data after successful copy
-    console.log(`[StaticAssets] Deleting backend YouTube data...`)
     const deleteResult = await this.deleteBackendYouTubeData()
     if (deleteResult.isErr()) {
       console.warn(
@@ -910,10 +881,6 @@ export class StaticAssetsService {
           // Ignore
         }
       }
-
-      console.log(
-        `[StaticAssets] Copied ${copied} Community Dragon files to frontend, deleted ${deleted} from backend`
-      )
 
       return Result.ok({ copied, deleted })
     } catch (error) {

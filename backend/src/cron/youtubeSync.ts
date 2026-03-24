@@ -128,5 +128,4 @@ export function setupYouTubeSync(): void {
     timezone: 'Etc/UTC'
   })
 
-  console.log('[Cron] YouTube sync scheduled: Every hour (0 min UTC)')
 }

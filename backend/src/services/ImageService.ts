@@ -356,8 +356,7 @@ export class ImageService {
       if (await FileManager.exists(legacyVersionDir)) {
         await fs.rm(legacyVersionDir, { recursive: true, force: true })
       }
-
-      console.log(`[ImageService] Deleted previous latest images (requested version: ${version})`)
+      
       return Result.ok(undefined)
     } catch (error) {
       return Result.err(
@@ -393,7 +392,6 @@ export class ImageService {
         const dirPath = join(this.imagesDir, dirName)
         await fs.rm(dirPath, { recursive: true, force: true })
         deleted++
-        console.log(`[ImageService] Deleted legacy image directory: ${dirName}`)
       }
 
       return Result.ok({ deleted })

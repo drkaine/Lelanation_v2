@@ -12,7 +12,6 @@ import { DiscordService } from '../services/DiscordService.js'
  */
 async function main() {
   const startTime = new Date()
-  console.log('[Copy Static Assets] Starting...')
 
   const discordService = new DiscordService()
   // await discordService.sendSuccess(
@@ -61,7 +60,6 @@ async function main() {
   }
 
   const currentVersion = versionInfo.currentVersion
-  console.log(`[Copy Static Assets] Current version: ${currentVersion}`)
 
   // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)
   const shouldRestartFrontend = process.env.RESTART_FRONTEND === 'true'
@@ -72,7 +70,6 @@ async function main() {
   }
 
   // Copy all assets (data + images) in one go
-  console.log('[Copy Static Assets] Copying game data and images...')
   const copyResult = await staticAssets.copyAllAssetsToFrontend(
     currentVersion,
     ['fr_FR', 'en_US'],
@@ -98,12 +95,9 @@ async function main() {
   }
 
   const stats = copyResult.unwrap()
-  console.log(
-    `[Copy Static Assets] Copied ${stats.dataCopied} data files, ${stats.imagesCopied} images (${stats.imagesSkipped} skipped)`
-  )
+
 
   // Also copy YouTube data if it exists
-  console.log('[Copy Static Assets] Copying YouTube data...')
   const youtubeResult = await staticAssets.copyYouTubeAssetsToFrontend(false) // Don't restart twice
   if (youtubeResult.isOk()) {
     const youtubeStats = youtubeResult.unwrap()
@@ -115,9 +109,6 @@ async function main() {
     // Don't fail if YouTube data doesn't exist yet
   }
 
-  if (shouldRestartFrontend) {
-    console.log('[Copy Static Assets] Frontend PM2 restart completed')
-  }
 
   // Send success notification
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
@@ -146,7 +137,6 @@ async function main() {
   //   successContext
   // )
 
-  console.log('[Copy Static Assets] Completed successfully!')
 }
 
 main().catch(async (error) => {

@@ -2,7 +2,7 @@
 
 ## Community Dragon
 
-**Community Dragon** fournit les définitions de sorts des champions (theorycraft), avec les **bonnes valeurs** (coefficients, effectAmounts, cooldown/cost par rang) et les **textes localisés** (noms, descriptions, sorts) selon la locale.
+**Community Dragon** fournit les définitions de sorts des champions (theorycraft), avec les **bonnes valeurs** (coefficients, effectAmounts, cooldown/cost/range par rang) selon la locale.
 
 **Source** : API v1 Riot game data, par **locale** (default = en_US sur CD, on utilise `fr_fr` pour le français) :  
 `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/{locale}/v1/champions/{id}.json`  
@@ -14,15 +14,24 @@ Locales disponibles : `default`, `fr_fr`, `de_de`, `es_es`, `it_it`, `pt_br`, `j
 Le flux :
 
 1. **Sync côté backend** : le cron `communityDragonSync` et le script `syncData` appellent `CommunityDragonService.syncAllChampions()`, qui télécharge les JSON v1 par **clé numérique** (depuis championFull.json) pour la locale configurée, et les enregistre dans `backend/data/community-dragon/` (ex. `266.json`).
-2. **Fusion** : `ChampionMergeService.mergeChampionFull()` fusionne DDragon (stats, images, structure) et CD (noms, descriptions, sorts) dans un seul `championFull.json` (par langue).
+2. **Fusion** : `ChampionMergeService.mergeChampionFull()` fusionne DDragon (stats, images, structure) et CD (valeurs de sorts) dans un seul `championFull.json` (par langue).
 3. **Copie puis suppression** : `StaticAssetsService.copyCommunityDragonDataToFrontend()` copie les JSON CD vers `frontend/public/data/community-dragon/`, puis supprime les fichiers du backend. Les championFull fusionnés sont déjà dans le répertoire game (DDragon) et sont copiés avec le reste des assets.
-4. **Utilisation** : le frontend charge la liste champions via championFull fusionné ; les sorts détaillés (theorycraft) via `/data/community-dragon/{championKey}.json`. Le parser détecte le format v1 (tableau `spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown et coût.
+4. **Utilisation** : le frontend charge la liste champions via championFull fusionné ; les sorts détaillés (theorycraft) via `/data/community-dragon/{championKey}.json`. Le parser lit le format Community nettoyé (`spells` à la racine) et en déduit coefficients, dégâts de base par rang, cooldown, coût et portée.
 
 Le backend ne conserve pas de copie après la copie vers le frontend.
 
 ### Fusion CD + Data Dragon (une seule source)
 
-Après le sync CD, une fusion (ChampionMergeService) combine DDragon (stats de base, images, structure) et CD (noms/titres/descriptions, sorts avec coefficients/coûts/cooldowns) dans un seul championFull.json (ex. fr_FR). Une seule source côté affichage ; champion.json n'est plus produit. L'API sert championFull même si on demande champions sans full=true (fallback).
+Après le sync CD, une fusion (ChampionMergeService) combine DDragon (stats de base, images, structure) et CD (sorts avec coefficients/coûts/cooldowns/range) dans un seul championFull.json (ex. fr_FR). Une seule source côté affichage ; champion.json n'est plus produit. L'API sert championFull même si on demande champions sans full=true (fallback).
+
+### Nettoyage des payloads synchronisés
+
+Pendant le sync:
+- `championFull.json` est réduit aux champs utiles (`id/key/name/title/image/tags/partype/stats/spells/passive`).
+- `runesReforged.json` supprime `shortDesc` sur chaque rune.
+- `summoner.json` supprime `description` sur chaque sort.
+- `item.json` supprime `maps` après filtrage backend.
+- Les fichiers Community champion (`frontend/public/data/community-dragon/{key}.json`) sont nettoyés au format compact centré sur `spells` (pas de dump brut complet du champion).
 
 ---
 

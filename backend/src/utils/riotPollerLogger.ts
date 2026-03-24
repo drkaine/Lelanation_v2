@@ -22,8 +22,7 @@ export function createRiotPollerLogger(): RiotPollerLogger {
   return {
     async info(msg: string, ...rest: unknown[]) {
       if (!verbose) return
-      const full = formatMsg(msg, rest)
-      console.log('[RiotPoller]', full)
+      console.log('[RiotPoller]', formatMsg(msg, rest))
     },
     async alerte(msg: string, ...rest: unknown[]) {
       const full = formatMsg(msg, rest)
@@ -35,8 +34,7 @@ export function createRiotPollerLogger(): RiotPollerLogger {
     },
     async step(step: string, details?: Record<string, unknown>) {
       if (!verbose) return
-      const msg = details ? `${step} | ${JSON.stringify(details)}` : step
-      console.log('[RiotPoller]', msg)
+      console.log('[RiotPoller]', details ? `${step} | ${JSON.stringify(details)}` : step)
     },
   }
 }

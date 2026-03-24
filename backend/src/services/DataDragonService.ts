@@ -40,6 +40,10 @@ interface SummonerSpellData {
   }
 }
 
+type ChampionFullSpell = Record<string, unknown>
+type ChampionFullPassive = Record<string, unknown>
+type ChampionFullChampion = Record<string, unknown>
+
 export class DataDragonService {
   private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
@@ -59,6 +63,118 @@ export class DataDragonService {
         'User-Agent': 'Lelanation/1.0'
       }
     })
+  }
+
+  /**
+   * Keep only championFull fields needed by frontend and merge pipeline.
+   */
+  private cleanChampionFullData(data: Record<string, ChampionFullChampion>): Record<string, ChampionFullChampion> {
+    const cleanedData: Record<string, ChampionFullChampion> = {}
+
+    for (const [championId, championData] of Object.entries(data)) {
+      const champ = championData as ChampionFullChampion
+      const spellsRaw = Array.isArray(champ.spells) ? (champ.spells as ChampionFullSpell[]) : []
+      const passiveRaw =
+        champ.passive && typeof champ.passive === 'object'
+          ? (champ.passive as ChampionFullPassive)
+          : null
+
+      const cleanedSpells = spellsRaw.map(spell => ({
+        id: spell.id,
+        name: spell.name,
+        tooltip: spell.tooltip,
+        leveltip: spell.leveltip,
+        maxrank: spell.maxrank,
+        cooldown: spell.cooldown,
+        cooldownBurn: spell.cooldownBurn,
+        cost: spell.cost,
+        costBurn: spell.costBurn,
+        datavalues: spell.datavalues,
+        effect: spell.effect,
+        effectBurn: spell.effectBurn,
+        vars: spell.vars,
+        costType: spell.costType,
+        maxammo: spell.maxammo,
+        range: spell.range,
+        rangeBurn: spell.rangeBurn,
+        image: {
+          full: (spell.image as Record<string, unknown> | undefined)?.full,
+        },
+        resource: spell.resource,
+      }))
+
+      cleanedData[championId] = {
+        id: champ.id,
+        key: champ.key,
+        name: champ.name,
+        title: champ.title,
+        image: {
+          full: (champ.image as Record<string, unknown> | undefined)?.full,
+          sprite: (champ.image as Record<string, unknown> | undefined)?.sprite,
+          group: (champ.image as Record<string, unknown> | undefined)?.group,
+        },
+        tags: champ.tags,
+        partype: champ.partype,
+        stats: champ.stats,
+        spells: cleanedSpells,
+        passive: passiveRaw
+          ? {
+              name: passiveRaw.name,
+              description: passiveRaw.description,
+              image: {
+                full: (passiveRaw.image as Record<string, unknown> | undefined)?.full,
+              },
+            }
+          : undefined,
+      }
+    }
+
+    return cleanedData
+  }
+
+  /**
+   * Remove shortDesc from each rune recursively.
+   */
+  private cleanRunesData(runes: RuneData[]): RuneData[] {
+    const stripShortDesc = (node: any): any => {
+      if (!node || typeof node !== 'object') return node
+      const out = { ...node }
+      delete out.shortDesc
+      if (Array.isArray(out.slots)) {
+        out.slots = out.slots.map((slot: any) => ({
+          ...slot,
+          runes: Array.isArray(slot.runes) ? slot.runes.map((r: any) => stripShortDesc(r)) : slot.runes,
+        }))
+      }
+      return out
+    }
+    return runes.map((r: any) => stripShortDesc(r))
+  }
+
+  /**
+   * Remove description from summoner spells.
+   */
+  private cleanSummonerSpellsData(spells: SummonerSpellData): SummonerSpellData {
+    const cleaned: SummonerSpellData = {}
+    for (const [spellId, spell] of Object.entries(spells)) {
+      const clone = { ...(spell as Record<string, unknown>) }
+      delete (clone as { description?: unknown }).description
+      cleaned[spellId] = clone as SummonerSpellData[string]
+    }
+    return cleaned
+  }
+
+  /**
+   * Remove maps field from item payload after filtering.
+   */
+  private cleanItemsData(items: ItemData): ItemData {
+    const cleaned: ItemData = {}
+    for (const [itemId, item] of Object.entries(items)) {
+      const clone = { ...(item as Record<string, unknown>) }
+      delete (clone as { maps?: unknown }).maps
+      cleaned[itemId] = clone as ItemData[string]
+    }
+    return cleaned
   }
 
   /**
@@ -173,9 +289,7 @@ export class DataDragonService {
       
       if (excludedItemsResult.isOk()) {
         excludedItemIds = new Set(excludedItemsResult.unwrap().excludedIds)
-        console.log(
-          `[DataDragon] Loaded ${excludedItemIds.size} excluded item IDs from excluded-items.json`
-        )
+       
       } else {
         console.warn(
           `[DataDragon] Could not load excluded-items.json: ${excludedItemsResult.unwrapErr().message}. Continuing without exclusion list.`
@@ -225,11 +339,7 @@ export class DataDragonService {
         }
       }
 
-      console.log(
-        `[DataDragon] Filtered items: ${Object.keys(filteredItems).length} items (excluded ${excludedItemIds.size} by ID)`
-      )
-
-      return Result.ok(filteredItems)
+      return Result.ok(this.cleanItemsData(filteredItems))
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {
@@ -272,7 +382,7 @@ export class DataDragonService {
         )
       }
 
-      return Result.ok(response.data)
+      return Result.ok(this.cleanRunesData(response.data))
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {
@@ -327,7 +437,7 @@ export class DataDragonService {
         }
       }
 
-      return Result.ok(filteredSpells)
+      return Result.ok(this.cleanSummonerSpellsData(filteredSpells))
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {
@@ -508,24 +618,17 @@ export class DataDragonService {
 
       if (added > 0) {
         await FileManager.writeJson(itemsPath, itemJson)
-        console.log(
-          `[DataDragon] Added ${added} Ornn masterwork items to ${language}`
-        )
       }
     }
     if (allIconUrls.length > 0) {
       const dlResult = await ornnService.downloadOrnnIcons(allIconUrls)
       if (dlResult.isOk()) {
-        const stats = dlResult.unwrap()
-        console.log(
-          `[DataDragon] Ornn icons: ${stats.downloaded} downloaded, ${stats.skipped} skipped`
-        )
+        dlResult.unwrap()
       }
     }
 
     // Download images if requested (only once, using primary language data)
     if (downloadImages) {
-      console.log(`[DataDragon] Downloading images for version ${gameVersion}...`)
 
       // Delete existing images for this version to ensure fresh download
       const deleteResult = await this.imageService.deleteVersionImages(gameVersion)
@@ -540,7 +643,7 @@ export class DataDragonService {
       const deleteOldResult = await this.imageService.deleteOldVersionImages(gameVersion)
       if (deleteOldResult.isOk()) {
         const deleted = deleteOldResult.unwrap()
-        if (deleted.deleted > 0) {
+        if (deleted.deleted <= 0) {
           console.log(
             `[DataDragon] Deleted ${deleted.deleted} old version image directories`
           )
@@ -609,12 +712,7 @@ export class DataDragonService {
 
         // Log results (don't fail sync if images fail)
         const logResult = (name: string, result: PromiseSettledResult<any>) => {
-          if (result.status === 'fulfilled' && result.value.isOk()) {
-            const stats = result.value.unwrap()
-            console.log(
-              `[DataDragon] ${name} images: ${stats.downloaded} downloaded, ${stats.skipped} skipped`
-            )
-          } else {
+          if (result.status !== 'fulfilled' || !result.value.isOk()) {
             console.warn(`[DataDragon] ${name} images download failed or had errors`)
           }
         }
@@ -651,20 +749,7 @@ export class DataDragonService {
         )
       }
 
-      // Clean up champions data: remove unnecessary fields
-      const cleanedData: Record<string, any> = {}
-      for (const [championId, championData] of Object.entries(response.data.data)) {
-        const cleaned: any = { ...championData }
-        // Remove fields we don't need
-        delete cleaned.skins
-        delete cleaned.lore
-        delete cleaned.blurb
-        delete cleaned.allytips
-        delete cleaned.enemytips
-        cleanedData[championId] = cleaned
-      }
-
-      return Result.ok(cleanedData)
+      return Result.ok(this.cleanChampionFullData(response.data.data))
     } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 429) {

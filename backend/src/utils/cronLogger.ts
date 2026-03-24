@@ -52,7 +52,6 @@ export function createCronLogger(cron: string): CronLogger {
   return {
     async info(msg: string, ...rest: unknown[]) {
       const full = format(msg, rest)
-      console.log(`[Cron ${cron}]`, full)
       await append('INFO', full)
     },
     async warn(msg: string, ...rest: unknown[]) {
@@ -67,7 +66,6 @@ export function createCronLogger(cron: string): CronLogger {
     },
     async step(step: string, details?: Record<string, unknown>) {
       const msg = details ? `${step} | ${JSON.stringify(details)}` : step
-      console.log(`[Cron ${cron}]`, msg)
       await append('INFO', msg)
     },
   }

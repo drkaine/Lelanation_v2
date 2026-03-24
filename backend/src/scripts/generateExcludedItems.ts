@@ -62,7 +62,6 @@ async function generateExcludedItems(
   itemJsonPath: string,
   outputPath: string
 ): Promise<{ excludedCount: number; allowedCount: number; totalCount: number }> {
-  console.log(`Reading items from: ${itemJsonPath}`)
 
   if (!fs.existsSync(itemJsonPath)) {
     console.error(`File not found: ${itemJsonPath}`)
@@ -79,9 +78,6 @@ async function generateExcludedItems(
 
   const excludedItems: ExcludedItem[] = []
   const allItemIds = Object.keys(data.data)
-
-  console.log(`Total items in item.json: ${allItemIds.length}`)
-  console.log(`Items in whitelist: ${ALLOWED_ITEM_IDS.size}`)
 
   // Find all items that are NOT in the whitelist
   for (const itemId of allItemIds) {
@@ -123,13 +119,6 @@ async function generateExcludedItems(
   // Write output file
   fs.writeFileSync(outputPath, JSON.stringify(output, null, 2), 'utf-8')
 
-  console.log(`\n✓ Generated excluded items file: ${outputPath}`)
-  console.log(`  Excluded items: ${excludedItems.length}`)
-  console.log(`  - Blacklisted: ${excludedItems.filter(i => i.reason === 'blacklist').length}`)
-  console.log(`  - Not in whitelist: ${excludedItems.filter(i => i.reason === 'not_in_whitelist').length}`)
-  console.log(`  Allowed items: ${ALLOWED_ITEM_IDS.size}`)
-  console.log(`  Total items: ${allItemIds.length}`)
-
   return {
     excludedCount: excludedItems.length,
     allowedCount: ALLOWED_ITEM_IDS.size,
@@ -159,7 +148,6 @@ function getCurrentVersionFromFile(): string {
 // Main execution
 async function main() {
   const startTime = new Date()
-  console.log('[Generate Excluded Items] Starting...')
 
   const discordService = new DiscordService()
   // await discordService.sendSuccess(
@@ -171,7 +159,6 @@ async function main() {
   // )
 
   const version = getCurrentVersionFromFile()
-  console.log(`[Generate Excluded Items] Using version from version.json: ${version}`)
   const basePath = join(process.cwd(), '..', 'frontend', 'public', 'data', 'game', version)
 
   const frItemPath = join(basePath, 'fr_FR', 'item.json')
@@ -196,7 +183,7 @@ async function main() {
   }
 
   try {
-    const stats = await generateExcludedItems(frItemPath, outputPath)
+    await generateExcludedItems(frItemPath, outputPath)
 
     // Send success notification
     // const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
@@ -213,7 +200,6 @@ async function main() {
     //   }
     // )
 
-    console.log(`\n✓ Script completed! Excluded items: ${stats.excludedCount}`)
   } catch (error) {
     const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
     await discordService.sendAlert(

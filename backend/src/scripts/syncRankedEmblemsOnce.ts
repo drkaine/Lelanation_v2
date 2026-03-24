@@ -7,7 +7,6 @@ import { StaticAssetsService } from '../services/StaticAssetsService.js'
  * Usage: cd backend && npx tsx src/scripts/syncRankedEmblemsOnce.ts
  */
 async function main(): Promise<void> {
-  console.log('[syncRankedEmblems] Starting...')
   const communityDragonService = new CommunityDragonService()
   const staticAssetsService = new StaticAssetsService()
 
@@ -19,7 +18,6 @@ async function main(): Promise<void> {
   }
 
   const data = result.unwrap()
-  console.log('[syncRankedEmblems] Synced:', data.synced, 'Failed:', data.failed)
   if (data.errors.length > 0) {
     data.errors.forEach(e => console.error('  ', e.file, e.error))
   }
@@ -31,8 +29,6 @@ async function main(): Promise<void> {
     return
   }
 
-  const { copied, deleted } = copyResult.unwrap()
-  console.log('[syncRankedEmblems] Done. Copied:', copied, 'Deleted from backend:', deleted)
 }
 
 main()

@@ -11,6 +11,42 @@ interface ChampionFullData {
   data: Record<string, { key: string; [k: string]: unknown }>
 }
 
+interface CommunityChampionSpellRaw {
+  spellKey?: unknown
+  cost?: unknown
+  cooldown?: unknown
+  range?: unknown
+  costCoefficients?: unknown
+  cooldownCoefficients?: unknown
+  coefficients?: unknown
+  effectAmounts?: unknown
+  ammo?: unknown
+  maxLevel?: unknown
+}
+
+interface CommunityChampionClean {
+  passive?: {
+    name?: string
+    description?: string
+    abilityIconPath?: string
+  }
+  spells: Array<{
+    spellKey?: string
+    cost?: string
+    cooldown?: string
+    range?: number[]
+    costCoefficients?: number[]
+    cooldownCoefficients?: number[]
+    coefficients?: Record<string, number>
+    effectAmounts?: Record<string, number[]>
+    ammo?: {
+      ammoRechargeTime?: number[]
+      maxAmmo?: number[]
+    }
+    maxLevel?: number
+  }>
+}
+
 const CD_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global'
 
@@ -52,7 +88,7 @@ export class CommunityDragonService {
   public readonly locale: string
 
   constructor(
-    dataDir: string = join(process.cwd(), 'data', 'community-dragon'),
+    dataDir: string = join(process.cwd(), '..', 'frontend', 'public', 'data', 'community-dragon'),
     locale: string = getCommunityDragonLocale()
   ) {
     this.dataDir = dataDir
@@ -167,9 +203,82 @@ export class CommunityDragonService {
   private async saveChampionData(key: string, data: unknown): Promise<Result<void, AppError>> {
     try {
       const filePath = join(this.dataDir, `${key}.json`)
-      return await FileManager.writeJson(filePath, data)
+      return await FileManager.writeJson(filePath, this.cleanChampionData(data))
     } catch (error) {
       return Result.err(new AppError(`Failed to save data for ${key}`, 'FILE_ERROR', error))
+    }
+  }
+
+  /**
+   * Keep only fields needed for spells merge/processing.
+   */
+  private cleanChampionData(data: unknown): CommunityChampionClean {
+    const raw = (data && typeof data === 'object' ? data : {}) as {
+      passive?: unknown
+      spells?: unknown
+    }
+    const spells = Array.isArray(raw.spells) ? (raw.spells as CommunityChampionSpellRaw[]) : []
+    const passiveRaw =
+      raw.passive && typeof raw.passive === 'object'
+        ? (raw.passive as Record<string, unknown>)
+        : undefined
+
+    return {
+      passive: passiveRaw
+        ? {
+            name: typeof passiveRaw.name === 'string' ? passiveRaw.name : undefined,
+            description: typeof passiveRaw.description === 'string' ? passiveRaw.description : undefined,
+            abilityIconPath:
+              typeof passiveRaw.abilityIconPath === 'string'
+                ? passiveRaw.abilityIconPath
+                : undefined,
+          }
+        : undefined,
+      spells: spells.map(spell => ({
+        spellKey: typeof spell.spellKey === 'string' ? spell.spellKey : undefined,
+        cost: typeof spell.cost === 'string' ? spell.cost : undefined,
+        cooldown: typeof spell.cooldown === 'string' ? spell.cooldown : undefined,
+        range: Array.isArray(spell.range) ? (spell.range.filter(v => typeof v === 'number') as number[]) : undefined,
+        costCoefficients: Array.isArray(spell.costCoefficients)
+          ? (spell.costCoefficients.filter(v => typeof v === 'number') as number[])
+          : undefined,
+        cooldownCoefficients: Array.isArray(spell.cooldownCoefficients)
+          ? (spell.cooldownCoefficients.filter(v => typeof v === 'number') as number[])
+          : undefined,
+        coefficients:
+          spell.coefficients && typeof spell.coefficients === 'object'
+            ? (Object.fromEntries(
+                Object.entries(spell.coefficients as Record<string, unknown>).filter(
+                  ([, v]) => typeof v === 'number'
+                )
+              ) as Record<string, number>)
+            : undefined,
+        effectAmounts:
+          spell.effectAmounts && typeof spell.effectAmounts === 'object'
+            ? (Object.fromEntries(
+                Object.entries(spell.effectAmounts as Record<string, unknown>).map(([k, arr]) => [
+                  k,
+                  Array.isArray(arr) ? arr.filter(v => typeof v === 'number') : [],
+                ])
+              ) as Record<string, number[]>)
+            : undefined,
+        ammo:
+          spell.ammo && typeof spell.ammo === 'object'
+            ? {
+                ammoRechargeTime: Array.isArray((spell.ammo as Record<string, unknown>).ammoRechargeTime)
+                  ? (((spell.ammo as Record<string, unknown>).ammoRechargeTime as unknown[]).filter(
+                      v => typeof v === 'number'
+                    ) as number[])
+                  : undefined,
+                maxAmmo: Array.isArray((spell.ammo as Record<string, unknown>).maxAmmo)
+                  ? (((spell.ammo as Record<string, unknown>).maxAmmo as unknown[]).filter(
+                      v => typeof v === 'number'
+                    ) as number[])
+                  : undefined,
+              }
+            : undefined,
+        maxLevel: typeof spell.maxLevel === 'number' ? spell.maxLevel : undefined,
+      })),
     }
   }
 
@@ -217,10 +326,6 @@ export class CommunityDragonService {
       let skipped = 0
       const errors: Array<{ champion: string; error: string }> = []
 
-      console.log(
-        `[CommunityDragon] Starting sync for ${championKeys.length} champions (v1 API, locale=${this.locale})...`
-      )
-
       for (const key of championKeys) {
         try {
           const fetchResult = await this.fetchChampionData(key)
@@ -228,12 +333,10 @@ export class CommunityDragonService {
             const error = fetchResult.unwrapErr()
             if (error instanceof ExternalApiError && error.statusCode === 404) {
               skipped++
-              console.log(`[CommunityDragon] Skipped ${key} (not found)`)
               continue
             }
             failed++
             errors.push({ champion: key, error: error.message })
-            console.error(`[CommunityDragon] Failed to fetch ${key}: ${error.message}`)
             continue
           }
 
@@ -242,25 +345,18 @@ export class CommunityDragonService {
           if (saveResult.isErr()) {
             failed++
             errors.push({ champion: key, error: saveResult.unwrapErr().message })
-            console.error(`[CommunityDragon] Failed to save ${key}: ${saveResult.unwrapErr().message}`)
             continue
           }
 
           synced++
-          console.log(`[CommunityDragon] Synced ${key} (${synced}/${championKeys.length})`)
 
           await new Promise(resolve => setTimeout(resolve, 100))
         } catch (error) {
           failed++
           const errorMessage = error instanceof Error ? error.message : String(error)
           errors.push({ champion: key, error: errorMessage })
-          console.error(`[CommunityDragon] Unexpected error for ${key}: ${errorMessage}`)
         }
       }
-
-      console.log(
-        `[CommunityDragon] Sync completed: ${synced} synced, ${failed} failed, ${skipped} skipped`
-      )
 
       return Result.ok({
         synced,
@@ -319,7 +415,6 @@ export class CommunityDragonService {
           .toBuffer()
         await fs.writeFile(targetPath, trimmed)
         synced++
-        console.log(`[CommunityDragon] Ranked emblem synced (trimmed): ${file}`)
       } catch (error) {
         failed++
         const errorMessage = error instanceof Error ? error.message : String(error)
@@ -328,9 +423,6 @@ export class CommunityDragonService {
       }
     }
 
-    console.log(
-      `[CommunityDragon] Ranked emblems: ${synced} synced, ${failed} failed`
-    )
     return Result.ok({ synced, failed, errors })
   }
 }
