@@ -180,8 +180,13 @@ export class StaticAssetsService {
         continue
       }
 
+      // Some pipelines already removed `maps` from item payload.
+      // In that case, consider map filtering as already done upstream.
+      const isOnSummonersRift =
+        itemData.maps == null || itemData.maps?.['11'] === true
+
       if (
-        itemData.maps?.['11'] === true &&
+        isOnSummonersRift &&
         itemData.gold?.purchasable === true &&
         itemData.gold?.total > 0 &&
         !FILTERED_ITEMS.includes(itemData.name)

@@ -37,3 +37,182 @@
   border: 1px solid rgb(125 211 252 / 0.75) !important;
   color: rgb(var(--rgb-text)) !important;
 }
+
+/* Riot-style semantic tags in tooltip HTML (items/runes/spells/summoners). */
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(
+    physicalDamage,
+    magicDamage,
+    trueDamage,
+    healing,
+    shield,
+    status,
+    onHit,
+    scaleAD,
+    scaleLevel,
+    scaleHealth,
+    scaleMana,
+    scaleMR,
+    attention
+  ) {
+  font-weight: 600;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  physicalDamage {
+  color: rgb(255 132 0 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  magicDamage {
+  color: rgb(182 77 255 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  trueDamage {
+  color: rgb(232 224 255 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  healing {
+  color: rgb(22 255 117 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  shield {
+  color: rgb(220 252 231 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  status {
+  color: rgb(66 220 255 / 0.98) !important;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  :is(onHit, scaleAD, scaleLevel, scaleHealth, scaleMana, scaleMR, attention) {
+  color: rgb(255 231 43 / 0.98) !important;
+}
+
+/* Spell tooltip inline metadata row (CD / Cost / Range / Damage). */
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  .tooltip-spell-meta-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+:is(
+    [role='tooltip'],
+    .tooltip,
+    .tooltip-box,
+    .sheet-element-tooltip-wrapper,
+    .item-tooltip,
+    .rune-tooltip,
+    .sheet-tooltip-simple,
+    .info-tooltip,
+    .tippy-box,
+    .v-popper__inner
+  )
+  .tooltip-spell-meta-key {
+  color: rgb(252 211 77 / 1) !important; /* gold-300 */
+  font-weight: 700;
+}

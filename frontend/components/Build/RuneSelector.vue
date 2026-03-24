@@ -285,6 +285,7 @@ import {
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
+import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
@@ -647,7 +648,7 @@ const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: spell.name,
-    description: spell.description || spell.tooltip,
+    description: formatSpellTooltipHtml(spell),
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
   nextTick(() => {

@@ -1306,6 +1306,7 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatLethality } from '~/utils/formatItemStats'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
+import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 
 interface Props {
@@ -1699,7 +1700,12 @@ const sheetElementTooltipResolved = computed(() => {
       const p = tt.payload as { id?: string; key?: string; name?: string }
       const sid = String(p?.id ?? p?.key ?? '')
       const spell = sid ? summonerSpellsStore.getSpellById(sid) : undefined
-      return spell ? { type: 'spell' as const, spell } : null
+      return spell
+        ? {
+            type: 'spell' as const,
+            spell: { ...spell, description: formatSpellTooltipHtml(spell) },
+          }
+        : null
     }
     case 'shard': {
       const id = tt.payload as number
@@ -2216,7 +2222,7 @@ const formattedSpells = computed(() => {
     return []
   return selectedChampion.value.spells.map(spell => ({
     ...spell,
-    description: spell.description || '',
+    description: formatSpellTooltipHtml(spell),
   }))
 })
 
