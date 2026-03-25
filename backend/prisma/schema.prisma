@@ -471,6 +471,21 @@ model MvChampionDuoRoleStat {
   @@map("mv_champion_duo_role_stats")
 }
 
+model MvBotlaneDuoVsDuoStat {
+  adcId          Int    @map("adc_id")
+  supportId      Int    @map("support_id")
+  oppAdcId       Int    @map("opp_adc_id")
+  oppSupportId   Int    @map("opp_support_id")
+  rankTier       String @map("rank_tier")
+  gameVersion    String @map("game_version")
+  region         String
+  countWin       Int    @map("count_win")
+  countGame      Int    @map("count_game")
+
+  @@id([adcId, supportId, oppAdcId, oppSupportId, rankTier, gameVersion, region])
+  @@map("mv_botlane_duo_vs_duo_stats")
+}
+
 model MvTeamCoreStat {
   id                       BigInt  @id
   team                     Int

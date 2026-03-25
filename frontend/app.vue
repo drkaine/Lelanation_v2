@@ -245,6 +245,7 @@ const onDocumentPointerDown = (event: MouseEvent) => {
 }
 
 function onWindowScroll() {
+  if (!import.meta.client) return
   if (isHomeRoute.value) {
     commandBarHiddenByScroll.value = false
     return
@@ -261,7 +262,8 @@ watch(
       return
     }
     commandsCollapsed.value = true
-    onWindowScroll()
+    commandBarHiddenByScroll.value = false
+    if (import.meta.client) onWindowScroll()
   },
   { immediate: true }
 )
