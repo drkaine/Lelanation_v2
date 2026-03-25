@@ -293,15 +293,16 @@
           <div
             class="champion-portrait-container"
             :class="{
+              'is-splash': championSplashEnabled,
               'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.champion,
             }"
           >
             <img
               v-if="selectedChampion"
               ref="championPortraitRef"
-              :src="getChampionImageUrl(versionForImages, selectedChampion.image.full)"
+              :src="championPortraitSrc"
               :alt="selectedChampion.name"
-              class="champion-portrait"
+              :class="['champion-portrait', { 'champion-portrait--splash': championSplashEnabled }]"
               @mouseenter="onChampionMouseEnter"
               @mouseleave="onChampionMouseLeave"
             />
@@ -1293,6 +1294,7 @@ import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import {
   getChampionImageUrl,
+  getChampionSplashImageUrl,
   getChampionSpellImageUrl,
   getChampionPassiveImageUrl,
   getSpellImageUrl,
@@ -1304,6 +1306,7 @@ import {
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
+import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
@@ -1347,6 +1350,7 @@ const hideTopActions = computed(() => props.hideTopActions)
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
+const { championSplashEnabled } = useChampionSplashPreference()
 
 // effectiveSheetTooltips: respect both the prop and the global preference
 const effectiveSheetTooltips = computed(() => props.sheetTooltips && tooltipsEnabled.value)
@@ -1839,6 +1843,15 @@ const selectedChampion = computed(() => {
   return fullChampion ?? champion
 })
 
+const championPortraitSrc = computed(() => {
+  const champion = selectedChampion.value
+  if (!champion) return ''
+  if (championSplashEnabled.value) {
+    return getChampionSplashImageUrl(versionForImages.value, champion.id)
+  }
+  return getChampionImageUrl(versionForImages.value, champion.image.full)
+})
+
 const isDefaultBuildName = (name: string | null | undefined): boolean => {
   if (!name) return true
   const trimmed = name.trim()
@@ -1931,9 +1944,15 @@ const buildItems = computed(() => {
   const items = displayBuild.value?.items || []
   return items.map(item => {
     const latest = itemsStore.items.find(i => i.id === item.id)
-    // Keep user-facing identity from the build object, but refresh stats payload from latest data.
-    if (!latest?.stats) return item
-    return { ...item, stats: latest.stats }
+    if (!latest) return item
+    return {
+      ...latest,
+      ...item,
+      stats: latest.stats ?? item.stats,
+      gold: latest.gold ?? item.gold,
+      image: latest.image ?? item.image,
+      tags: latest.tags ?? item.tags,
+    }
   })
 })
 const showItemStats = ref(false)
@@ -3341,6 +3360,11 @@ defineExpose({
   flex-shrink: 0;
 }
 
+.champion-portrait-container.is-splash {
+  width: 200px;
+  margin-left: 3px;
+}
+
 /* Bordure dorée complète via pseudo-élément avec SVG en data URI */
 .champion-portrait-container::before {
   content: '';
@@ -3358,6 +3382,10 @@ defineExpose({
   pointer-events: none;
 }
 
+.champion-portrait-container.is-splash::before {
+  display: none;
+}
+
 /* Image du champion en losange (88%) */
 .champion-portrait {
   position: absolute;
@@ -3370,6 +3398,15 @@ defineExpose({
   object-fit: cover;
   cursor: pointer;
   z-index: 1;
+}
+
+.champion-portrait--splash {
+  width: 100%;
+  height: 100%;
+  clip-path: none;
+  transform: translate(-50%, -50%);
+  object-fit: contain;
+  image-rendering: auto;
 }
 
 .champion-portrait-placeholder {

@@ -332,12 +332,20 @@ const _activeBuild = computed(
   () => props.build || buildStore.displayedBuild || buildStore.currentBuild
 )
 const champion = computed(() => _activeBuild.value?.champion ?? null)
+/** Enrich build items with catalogue data (gold, tags, stats) — builds/API often store ItemRef-like rows without gold, which breaks gold value / cost / efficiency. */
 const items = computed(() => {
   const buildItems = _activeBuild.value?.items ?? []
   return buildItems.map(item => {
     const latest = itemsStore.items.find(i => i.id === item.id)
-    if (!latest?.stats) return item
-    return { ...item, stats: latest.stats }
+    if (!latest) return item
+    return {
+      ...latest,
+      ...item,
+      stats: latest.stats ?? item.stats,
+      gold: latest.gold ?? item.gold,
+      image: latest.image ?? item.image,
+      tags: latest.tags ?? item.tags,
+    }
   })
 })
 const runes = computed(() => _activeBuild.value?.runes ?? null)

@@ -6,9 +6,9 @@
     <!-- Champion Header -->
     <div v-if="build.champion" class="mb-3 flex items-center gap-3">
       <img
-        :src="getChampionImageUrl(version, build.champion.image.full)"
+        :src="championImageSrc"
         :alt="build.champion.name"
-        class="h-12 w-12 rounded"
+        :class="['h-12 w-12 object-cover', championSplashEnabled ? '' : 'rounded']"
       />
       <div class="flex-1">
         <h3 class="font-bold text-text">{{ build.champion.name }}</h3>
@@ -115,11 +115,13 @@ import type { Build } from '~/types/build'
 import { useGameVersion } from '~/composables/useGameVersion'
 import {
   getChampionImageUrl,
+  getChampionSplashImageUrl,
   getItemImageUrl,
   getRunePathColor,
   getRunePathImageUrl,
 } from '~/utils/imageUrl'
 import { useClientHydrated } from '~/composables/useClientHydrated'
+import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 
 interface Props {
   build: Build
@@ -136,6 +138,16 @@ const voteStore = useVoteStore()
 const router = useRouter()
 const { version } = useGameVersion()
 const { hydrated } = useClientHydrated()
+const { championSplashEnabled } = useChampionSplashPreference()
+
+const championImageSrc = computed(() => {
+  const champion = props.build.champion
+  if (!champion) return ''
+  if (championSplashEnabled.value) {
+    return getChampionSplashImageUrl(version.value, champion.id)
+  }
+  return getChampionImageUrl(version.value, champion.image.full)
+})
 
 const displayItems = computed(() => {
   const items: Array<(typeof props.build.items)[number] | null> = [...props.build.items]

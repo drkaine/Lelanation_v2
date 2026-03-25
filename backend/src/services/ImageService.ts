@@ -8,7 +8,7 @@ import { FileManager } from '../utils/fileManager.js'
 interface ImageDownloadTask {
   url: string
   localPath: string
-  type: 'champion' | 'item' | 'rune' | 'spell' | 'champion-spell'
+  type: 'champion' | 'champion-splash' | 'item' | 'rune' | 'spell' | 'champion-spell'
 }
 
 const RUNE_PATH_SVG_SOURCES: Array<{ name: string; url: string }> = [
@@ -132,6 +132,30 @@ export class ImageService {
         localPath,
         type: 'champion'
       })
+    }
+
+    return this.downloadImagesBatch(tasks)
+  }
+
+  /**
+   * Download base splash art (skin 0) for each champion.
+   * Saved alongside champion square icons as `splash_{ChampionId}.jpg`.
+   *
+   * Example remote: https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Aatrox_0.jpg
+   */
+  async downloadChampionSplashImages(
+    _version: string,
+    champions: Record<string, { id: string }>
+  ): Promise<Result<{ downloaded: number; skipped: number }, AppError>> {
+    void _version
+    const tasks: ImageDownloadTask[] = []
+    const versionDir = join(this.imagesDir, this.latestDirName, 'champion')
+
+    for (const champion of Object.values(champions)) {
+      if (!champion?.id) continue
+      const url = `${this.baseUrl}/img/champion/splash/${champion.id}_0.jpg`
+      const localPath = join(versionDir, `splash_${champion.id}.jpg`)
+      tasks.push({ url, localPath, type: 'champion-splash' })
     }
 
     return this.downloadImagesBatch(tasks)

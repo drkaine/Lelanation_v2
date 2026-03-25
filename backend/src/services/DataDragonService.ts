@@ -842,12 +842,14 @@ export class DataDragonService {
 
         const [
           championsImagesResult,
+          championsSplashImagesResult,
           itemsImagesResult,
           runesImagesResult,
           spellsImagesResult,
           championSpellsImagesResult
         ] = await Promise.allSettled([
           this.imageService.downloadChampionImages(gameVersion, championsData),
+          this.imageService.downloadChampionSplashImages(gameVersion, championsData),
           this.imageService.downloadItemImages(gameVersion, itemsData),
           this.imageService.downloadRuneImages(gameVersion, runesData),
           this.imageService.downloadSummonerSpellImages(gameVersion, spellsData),
@@ -865,6 +867,7 @@ export class DataDragonService {
         }
 
         logResult('Champions', championsImagesResult)
+        logResult('Champion splashes', championsSplashImagesResult)
         logResult('Items', itemsImagesResult)
         logResult('Runes', runesImagesResult)
         logResult('Summoner spells', spellsImagesResult)

@@ -61,6 +61,18 @@
               <span>{{ t('footer.presentationMode') }}</span>
               <span class="command-shortcut">Alt + P</span>
             </button>
+            <button
+              type="button"
+              class="command-toggle command-toggle-button"
+              :aria-pressed="championSplashEnabled"
+              @click="toggleChampionSplashEnabled()"
+            >
+              <span class="command-toggle-track" :class="{ active: championSplashEnabled }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('commandBar.championSplash') }}</span>
+              <span class="command-shortcut">Alt + S</span>
+            </button>
           </div>
         </div>
       </div>
@@ -105,6 +117,7 @@ import CookieConsentBanner from '~/components/CookieConsentBanner.vue'
 import AppFooter from '~/components/AppFooter.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
+import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -114,6 +127,7 @@ const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
 const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
   useTooltipsPreference()
+const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
 const streamerNavOpen = useState<boolean>('streamer-nav-open', () => false)
 const streamerFooterOpen = useState<boolean>('streamer-footer-open', () => false)
 const streamerPanelsOpen = computed(() => streamerNavOpen.value && streamerFooterOpen.value)
@@ -165,6 +179,12 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (event.altKey && key === 't') {
     event.preventDefault()
     toggleTooltipsDisabled()
+    return
+  }
+
+  if (event.altKey && key === 's') {
+    event.preventDefault()
+    toggleChampionSplashEnabled()
     return
   }
 

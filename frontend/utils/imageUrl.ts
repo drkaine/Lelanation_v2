@@ -24,6 +24,14 @@ export function getChampionImageUrl(version: string, imageName: string): string 
 }
 
 /**
+ * Get champion splash image URL (base skin 0).
+ * Stored as: /images/game/{version}/champion/splash_{ChampionId}.jpg
+ */
+export function getChampionSplashImageUrl(version: string, championId: string): string {
+  return getImageUrl('champion', version, `splash_${championId}.jpg`)
+}
+
+/**
  * Get item image URL
  */
 export function getItemImageUrl(version: string, imageName: string): string {

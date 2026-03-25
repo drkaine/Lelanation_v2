@@ -16,7 +16,8 @@
   "commandBar": {
     "builderLabel": "Builder",
     "previousStep": "previous step",
-    "nextStep": "next step"
+    "nextStep": "next step",
+    "championSplash": "Champion splash"
   },
   "home": {
     "subtitle": "The go-to platform to create, optimize and share your League of Legends builds. The platform to help you think, create, analyze, organize, learn, or simply explore an idea.",

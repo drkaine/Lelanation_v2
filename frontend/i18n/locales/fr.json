@@ -16,7 +16,8 @@
   "commandBar": {
     "builderLabel": "Builder",
     "previousStep": "étape précédente",
-    "nextStep": "étape suivante"
+    "nextStep": "étape suivante",
+    "championSplash": "Splash champion"
   },
   "home": {
     "subtitle": "La plateforme de référence pour créer, optimiser et partager vos builds League of Legends. La plateforme pour t’aider à réfléchir, créer, analyser, organiser, apprendre ou simplement explorer une idée.",
