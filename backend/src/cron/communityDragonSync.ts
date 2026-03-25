@@ -65,6 +65,21 @@ export async function runCommunityDragonSyncOnce(): Promise<
     await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
   }
 
+  await log.step('Syncing scoreboard objective icons')
+  const objectiveIconsResult = await communityDragonService.syncScoreboardObjectiveIcons()
+  if (objectiveIconsResult.isErr()) {
+    await log.warn('Scoreboard objective icons sync failed:', objectiveIconsResult.unwrapErr())
+  } else {
+    const objectiveIconsData = objectiveIconsResult.unwrap()
+    await log.info(
+      'Scoreboard objective icons:',
+      objectiveIconsData.synced,
+      'synced,',
+      objectiveIconsData.failed,
+      'failed'
+    )
+  }
+
   await cronStatus.markSuccess('communityDragonSync')
 
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)

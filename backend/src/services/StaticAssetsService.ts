@@ -876,6 +876,28 @@ export class StaticAssetsService {
             deleted++
           }
           await fs.rm(sourceEmblemDir, { recursive: true, force: true }).catch(() => {})
+          continue
+        }
+
+        if (entry.isDirectory() && entry.name === 'scoreboard-objectives') {
+          const sourceObjectivesDir = join(this.backendCommunityDragonDir, 'scoreboard-objectives')
+          const targetObjectivesDir = join(targetCommunityDragonDir, 'scoreboard-objectives')
+          const objectivesDirResult = await FileManager.ensureDir(targetObjectivesDir)
+          if (objectivesDirResult.isErr()) {
+            continue
+          }
+          const objectiveFiles = await fs.readdir(sourceObjectivesDir, { withFileTypes: true })
+          for (const f of objectiveFiles) {
+            if (!f.isFile()) continue
+            const src = join(sourceObjectivesDir, f.name)
+            const tgt = join(targetObjectivesDir, f.name)
+            const buf = await fs.readFile(src)
+            await fs.writeFile(tgt, buf)
+            copied++
+            await fs.unlink(src).catch(() => {})
+            deleted++
+          }
+          await fs.rm(sourceObjectivesDir, { recursive: true, force: true }).catch(() => {})
         }
       }
 

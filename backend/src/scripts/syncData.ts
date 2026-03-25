@@ -119,6 +119,28 @@ async function main(): Promise<void> {
     }
   }
 
+  const emblemSync = await communityDragonService.syncRankedEmblems()
+  if (emblemSync.isErr()) {
+    console.warn('[sync:data] Ranked emblems sync failed:', emblemSync.unwrapErr())
+  } else {
+    const emblemData = emblemSync.unwrap()
+    if (emblemData.failed > 0) {
+      console.warn(`[sync:data] Ranked emblems sync completed with ${emblemData.failed} failures`)
+    }
+  }
+
+  const objectiveIconsSync = await communityDragonService.syncScoreboardObjectiveIcons()
+  if (objectiveIconsSync.isErr()) {
+    console.warn('[sync:data] Scoreboard objective icons sync failed:', objectiveIconsSync.unwrapErr())
+  } else {
+    const objectiveIconsData = objectiveIconsSync.unwrap()
+    if (objectiveIconsData.failed > 0) {
+      console.warn(
+        `[sync:data] Scoreboard objective icons sync completed with ${objectiveIconsData.failed} failures`
+      )
+    }
+  }
+
   // --- YouTube ---
   const youtubeChannelsFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
   const youtubeService = new YouTubeService()
@@ -211,6 +233,9 @@ async function main(): Promise<void> {
     communityDragonSynced: cdSyncData.synced,
     communityDragonFailed: cdSyncData.failed,
     communityDragonSkipped: cdSyncData.skipped,
+    communityDragonObjectiveIconsSynced: objectiveIconsSync.isOk()
+      ? objectiveIconsSync.unwrap().synced
+      : 0,
     youtubeChannels: `${ytSyncData.syncedChannels}/${channels.length}`,
     youtubeVideos: ytSyncData.totalVideos,
     assetsDataFiles: copyStats.dataCopied,

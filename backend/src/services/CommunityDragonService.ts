@@ -53,6 +53,7 @@ const CD_BASE =
 /** Base URL for ranked emblems (static assets). */
 const CD_RANKED_EMBLEM_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem'
+const CD_SCOREBOARD_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/scoreboard'
 
 const RANKED_EMBLEM_FILES = [
   'emblem-iron.png',
@@ -65,6 +66,18 @@ const RANKED_EMBLEM_FILES = [
   'emblem-master.png',
   'emblem-grandmaster.png',
   'emblem-challenger.png',
+]
+const SCOREBOARD_OBJECTIVE_FILES = [
+  '_baronnashor.png',
+  '_dragon.png',
+  '_elderdrake.png',
+  '_riftherald.png',
+  '_mountaindrake.png',
+  '_oceandrake.png',
+  '_clouddrake.png',
+  '_infernaldrake.png',
+  '_hextechdrake.png',
+  '_chemtechdrake.png',
 ]
 
 /**
@@ -420,6 +433,56 @@ export class CommunityDragonService {
         const errorMessage = error instanceof Error ? error.message : String(error)
         errors.push({ file, error: errorMessage })
         console.error(`[CommunityDragon] Failed to sync ranked emblem ${file}: ${errorMessage}`)
+      }
+    }
+
+    return Result.ok({ synced, failed, errors })
+  }
+
+  /**
+   * Sync scoreboard objective icons from Community Dragon.
+   * Saves to {dataDir}/scoreboard-objectives/*.png for frontend usage.
+   */
+  async syncScoreboardObjectiveIcons(): Promise<
+    Result<
+      { synced: number; failed: number; errors: Array<{ file: string; error: string }> },
+      AppError
+    >
+  > {
+    const objectiveDir = join(this.dataDir, 'scoreboard-objectives')
+    const dirResult = await FileManager.ensureDir(objectiveDir)
+    if (dirResult.isErr()) {
+      return Result.err(dirResult.unwrapErr())
+    }
+
+    let synced = 0
+    let failed = 0
+    const errors: Array<{ file: string; error: string }> = []
+
+    const axiosObjective = axios.create({
+      baseURL: CD_SCOREBOARD_BASE,
+      timeout: 30000,
+      responseType: 'arraybuffer',
+      headers: { 'User-Agent': 'Lelanation/1.0' },
+    })
+
+    for (const file of SCOREBOARD_OBJECTIVE_FILES) {
+      try {
+        const response = await axiosObjective.get<ArrayBuffer | Buffer>(`/${file}`)
+        const data = response.data
+        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+          failed++
+          errors.push({ file, error: 'No data returned' })
+          continue
+        }
+        const targetPath = join(objectiveDir, file)
+        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        synced++
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync scoreboard icon ${file}: ${errorMessage}`)
       }
     }
 

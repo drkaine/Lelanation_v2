@@ -5,7 +5,7 @@
       type="button"
       class="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
-      @click="filtersOpen = true"
+      @click="openFilters"
     >
       <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path
@@ -22,7 +22,7 @@
       v-show="filtersOpen"
       class="fixed inset-0 z-30 bg-black/50 lg:hidden"
       aria-hidden="true"
-      @click="filtersOpen = false"
+      @click="closeFilters"
     />
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
@@ -53,7 +53,7 @@
         :aria-label="
           filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
         "
-        @click="filtersOpen = !filtersOpen"
+        @click="toggleFiltersOpen"
       >
         <svg
           class="h-4 w-4 transition-transform duration-200"
@@ -96,7 +96,7 @@
             type="button"
             class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
             :aria-label="t('statisticsPage.closeFilters')"
-            @click="filtersOpen = false"
+            @click="closeFilters"
           >
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
@@ -116,11 +116,32 @@
             <select
               id="stats-filter-version"
               v-model="statsVersionFilter"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
               @change="onStatsFilterChange"
             >
               <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
               <option v-for="v in statsVersionOptions" :key="v.version" :value="v.version">
+                {{ v.version }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label
+              for="stats-filter-progression-version"
+              class="mb-1 block text-sm font-medium text-text"
+            >
+              {{ t('statisticsPage.progressionsReferenceVersion') }}
+            </label>
+            <select
+              id="stats-filter-progression-version"
+              v-model="progressionFromVersionModel"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            >
+              <option
+                v-for="v in progressionSelectableVersions"
+                :key="'delta-from-' + v.version"
+                :value="v.version"
+              >
                 {{ v.version }}
               </option>
             </select>
@@ -221,7 +242,7 @@
             <select
               id="otp-filter"
               v-model="statsOtpFilter"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
               @change="onStatsFilterChange"
             >
               <option value="non">{{ t('statisticsPage.filterOtpNo') }}</option>
@@ -238,7 +259,7 @@
               v-model.trim="championSearchQuery"
               type="text"
               :placeholder="t('statisticsPage.searchChampionPlaceholder')"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
             />
           </div>
         </div>
@@ -275,7 +296,9 @@
               </div>
               <div v-else-if="overviewData" class="space-y-3">
                 <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
-                <div class="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                <div
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
+                >
                   <!-- Champions les plus choisis -->
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
@@ -670,25 +693,11 @@
                           {{
                             progressionFromVersion
                               ? t('statisticsPage.fastStatsWinrateSince', {
-                                  version: progressionFromVersion,
+                                  version: progressionFromVersion ?? undefined,
                                 })
                               : t('statisticsPage.fastStatsWinrateProgression')
                           }}
                         </span>
-                        <select
-                          v-model="progressionFromVersionOverride"
-                          class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
-                          :aria-label="t('statisticsPage.overviewFilterByVersion')"
-                        >
-                          <option value="">Default (latest - 1)</option>
-                          <option
-                            v-for="v in statsVersionOptions"
-                            :key="'progression-' + v.version"
-                            :value="v.version"
-                          >
-                            {{ v.version }}
-                          </option>
-                        </select>
                       </span>
                     </h3>
                     <table
@@ -1268,14 +1277,14 @@
                     <div v-if="overviewAbandonsPending" class="py-3 text-center text-text/60">
                       {{ t('statisticsPage.loading') }}
                     </div>
-                    <div v-else-if="overviewMatchOutcomeTotal > 0" class="flex items-center gap-3">
+                    <div v-else-if="overviewMatchOutcomeTotal > 0" class="flex items-center gap-2">
                       <div
-                        class="overview-match-outcome-bagel h-24 w-24 shrink-0 rounded-full"
+                        class="overview-match-outcome-bagel h-16 w-16 shrink-0 rounded-full"
                         :style="{ background: overviewMatchOutcomeDonutBg }"
                         aria-hidden="true"
                       >
                         <div
-                          class="flex h-full w-full items-center justify-center rounded-full text-[10px] font-semibold text-text/85"
+                          class="flex h-full w-full items-center justify-center rounded-full text-[9px] font-semibold text-text/85"
                         >
                           {{ overviewPlayedPct.toFixed(0) }}%
                         </div>
@@ -1285,19 +1294,19 @@
                           Total: {{ overviewMatchOutcomeTotal.toLocaleString() }}
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-500" />
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-200" />
                           Early surrender: {{ overviewEarlySurrenderCount.toLocaleString() }} ({{
                             overviewEarlySurrenderPct.toFixed(2)
                           }}%)
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-violet-400" />
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-50" />
                           Surrender: {{ overviewSurrenderOnlyCount.toLocaleString() }} ({{
                             overviewSurrenderOnlyPct.toFixed(2)
                           }}%)
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-300" />
                           Jouees: {{ overviewPlayedCount.toLocaleString() }} ({{
                             overviewPlayedPct.toFixed(2)
                           }}%)
@@ -1566,32 +1575,64 @@
                       </button>
                     </div>
                   </div>
-                </div>
-
-                <!-- Section Objectifs -->
-                <section class="space-y-3">
-                  <h2
-                    class="group/tooltip flex items-center gap-1.5 text-lg font-semibold text-text-accent"
-                  >
-                    {{ t('statisticsPage.overviewTeamsObjectives') }}
-                    <span class="relative inline-flex cursor-help text-text/50" aria-hidden="true">
-                      ⓘ
-                      <span
-                        role="tooltip"
-                        class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
-                      >
-                        {{ t('statisticsPage.tooltipOverviewObjectives') }}
-                      </span>
-                    </span>
-                  </h2>
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="rounded-lg border border-primary/30 bg-surface/30 p-6"
+                    class="fast-stat-card fast-stat-card-objectives rounded-lg border border-primary/30 bg-surface/30 p-6"
                   >
+                    <div class="mb-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                        :class="
+                          objectivesPanelTab === 'objectives'
+                            ? 'bg-accent text-background'
+                            : 'bg-black/20 text-text/80 hover:bg-white/10'
+                        "
+                        @click="objectivesPanelTab = 'objectives'"
+                      >
+                        {{ t('statisticsPage.objectivesTabMain') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                        :class="
+                          objectivesPanelTab === 'drakeTypes'
+                            ? 'bg-accent text-background'
+                            : 'bg-black/20 text-text/80 hover:bg-white/10'
+                        "
+                        @click="objectivesPanelTab = 'drakeTypes'"
+                      >
+                        {{ t('statisticsPage.objectivesTabDrakeTypes') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                        :class="
+                          objectivesPanelTab === 'drakeSouls'
+                            ? 'bg-accent text-background'
+                            : 'bg-black/20 text-text/80 hover:bg-white/10'
+                        "
+                        @click="objectivesPanelTab = 'drakeSouls'"
+                      >
+                        {{ t('statisticsPage.objectivesTabSouls') }}
+                      </button>
+                      <span
+                        class="relative inline-flex cursor-help text-text/50"
+                        aria-hidden="true"
+                      >
+                        ⓘ
+                        <span
+                          role="tooltip"
+                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                        >
+                          {{ t('statisticsPage.tooltipOverviewObjectives') }}
+                        </span>
+                      </span>
+                    </div>
                     <p class="mb-3 text-xs text-text/60">
                       {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
                     </p>
-                    <div class="overflow-x-auto">
+                    <div v-if="objectivesPanelTab === 'objectives'" class="overflow-x-auto">
                       <table class="w-full min-w-[280px] text-left text-sm">
                         <thead>
                           <tr class="border-b border-primary/30 text-text/70">
@@ -1644,6 +1685,14 @@
                                     aria-hidden
                                     >▼</span
                                   >
+                                  <img
+                                    v-if="objectiveIconSrc(key)"
+                                    :src="objectiveIconSrc(key)"
+                                    :alt="t('statisticsPage.overviewTeamsObjective_' + key)"
+                                    class="h-4 w-4 object-contain"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
                                   {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
                                 </button>
                               </td>
@@ -1685,8 +1734,113 @@
                         </tbody>
                       </table>
                     </div>
+                    <div v-else-if="objectivesPanelTab === 'drakeTypes'" class="overflow-x-auto">
+                      <table class="w-full min-w-[280px] text-left text-sm">
+                        <thead>
+                          <tr class="border-b border-primary/30 text-text/70">
+                            <th class="py-1.5 pr-2 font-medium">
+                              {{ t('statisticsPage.overviewTeamsObjective') }}
+                            </th>
+                            <th class="py-1.5 pr-2 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsByWin') }}
+                            </th>
+                            <th class="py-1.5 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsByLoss') }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-primary/20 text-text/80">
+                          <tr v-for="row in drakeTypeRows" :key="'drake-type-' + row.key">
+                            <td class="py-1.5 pr-2 font-medium text-text/90">
+                              <div class="flex items-center gap-2">
+                                <img
+                                  v-if="drakeIconSrc(row.key)"
+                                  :src="drakeIconSrc(row.key)"
+                                  :alt="row.label"
+                                  class="h-4 w-4 object-contain"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                                <span>{{ row.label }}</span>
+                              </div>
+                            </td>
+                            <td class="py-1.5 pr-2 text-center">
+                              {{ teamPercent(row.byWin, overviewTeamsData.matchCount) }}
+                            </td>
+                            <td class="py-1.5 text-center">
+                              {{ teamPercent(row.byLoss, overviewTeamsData.matchCount) }}
+                            </td>
+                          </tr>
+                          <tr v-if="drakeTypeRows.length === 0">
+                            <td colspan="3" class="py-2 text-center text-text/60">
+                              {{ t('statisticsPage.noData') }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div v-else class="overflow-x-auto">
+                      <table class="w-full min-w-[280px] text-left text-sm">
+                        <thead>
+                          <tr class="border-b border-primary/30 text-text/70">
+                            <th class="py-1.5 pr-2 font-medium">
+                              {{ t('statisticsPage.overviewTeamsObjective') }}
+                            </th>
+                            <th class="py-1.5 pr-2 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsByWin') }}
+                            </th>
+                            <th class="py-1.5 text-center font-medium">
+                              {{ t('statisticsPage.overviewTeamsByLoss') }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-primary/20 text-text/80">
+                          <tr>
+                            <td class="py-1.5 pr-2 font-medium text-text/90">
+                              {{ t('statisticsPage.objectivesSoulGlobal') }}
+                            </td>
+                            <td class="py-1.5 pr-2 text-center">
+                              {{ teamPercent(drakeSoulGlobal.byWin, overviewTeamsData.matchCount) }}
+                            </td>
+                            <td class="py-1.5 text-center">
+                              {{
+                                teamPercent(drakeSoulGlobal.byLoss, overviewTeamsData.matchCount)
+                              }}
+                            </td>
+                          </tr>
+                          <template v-for="row in drakeSoulRows" :key="'drake-soul-' + row.key">
+                            <tr>
+                              <td class="py-1.5 pr-2 font-medium text-text/90">
+                                <div class="flex items-center gap-2">
+                                  <img
+                                    v-if="drakeIconSrc(row.key)"
+                                    :src="drakeIconSrc(row.key)"
+                                    :alt="row.label"
+                                    class="h-4 w-4 object-contain"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                  <span>{{ row.label }}</span>
+                                </div>
+                              </td>
+                              <td class="py-1.5 pr-2 text-center">
+                                {{ teamPercent(row.byWin, overviewTeamsData.matchCount) }}
+                              </td>
+                              <td class="py-1.5 text-center">
+                                {{ teamPercent(row.byLoss, overviewTeamsData.matchCount) }}
+                              </td>
+                            </tr>
+                          </template>
+                          <tr v-if="drakeSoulRows.length === 0">
+                            <td colspan="3" class="py-2 text-center text-text/60">
+                              {{ t('statisticsPage.noData') }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </section>
+                </div>
               </div>
               <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
             </div>
@@ -2591,6 +2745,14 @@
                                   aria-hidden
                                   >▼</span
                                 >
+                                <img
+                                  v-if="objectiveIconSrc(key)"
+                                  :src="objectiveIconSrc(key)"
+                                  :alt="t('statisticsPage.overviewTeamsObjective_' + key)"
+                                  class="h-4 w-4 object-contain"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
                                 {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
                               </button>
                             </td>
@@ -4142,14 +4304,25 @@ const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const progressionFromVersionOverride = ref('')
-const filtersOpen = ref(true)
+const filtersOpen = computed({
+  get: () => statisticsUiStore.filtersOpen,
+  set: value => statisticsUiStore.setFiltersOpen(value),
+})
+function openFilters() {
+  filtersOpen.value = true
+}
+function closeFilters() {
+  filtersOpen.value = false
+}
+function toggleFiltersOpen() {
+  filtersOpen.value = !filtersOpen.value
+}
 const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([])
 
 if (import.meta.client) {
   statisticsUiStore.init()
   statisticsCustomStore.init()
   activeTab.value = normalizeLegacyTab(statisticsUiStore.activeTab)
-  filtersOpen.value = statisticsUiStore.filtersOpen
 }
 
 watch(activeTab, value => {
@@ -4157,10 +4330,6 @@ watch(activeTab, value => {
   statisticsUiStore.setActiveTab(normalizeLegacyTab(value))
 })
 
-watch(filtersOpen, value => {
-  if (!import.meta.client) return
-  statisticsUiStore.setFiltersOpen(value)
-})
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const _overviewVersionFilter = computed(() => statsVersionFilter.value || null)
 const overviewDivisionFilter = computed<string[] | null>(() =>
@@ -4461,9 +4630,9 @@ const overviewMatchOutcomeDonutBg = computed(() => {
   const s = overviewSurrenderOnlyPct.value
   const p = Math.max(0, 100 - e - s)
   return `conic-gradient(
-    rgb(59 130 246) 0% ${e}%,
-    rgb(167 139 250) ${e}% ${e + s}%,
-    rgb(34 211 238) ${e + s}% ${e + s + p}%,
+    rgb(253 230 138) 0% ${e}%,
+    rgb(255 251 235) ${e}% ${e + s}%,
+    rgb(147 197 253) ${e + s}% ${e + s + p}%,
     rgb(var(--rgb-primary) / 0.2) ${e + s + p}% 100%
   )`
 })
@@ -4509,6 +4678,17 @@ const progressionFromVersion = computed(() => {
   if (versions.length >= 2) return versions[1]?.version ?? null
   if (versions.length === 1) return versions[0]?.version ?? null
   return normalizeVersionToPrefix(versionStore.currentVersion)
+})
+const progressionSelectableVersions = computed(() => {
+  const versions = statsVersionOptions.value
+  if (versions.length <= 1) return versions
+  return versions.slice(1)
+})
+const progressionFromVersionModel = computed({
+  get: () => progressionFromVersion.value ?? '',
+  set: value => {
+    progressionFromVersionOverride.value = value || ''
+  },
 })
 
 /** Progressions complètes (tous les champions, WR + pickrate) pour onglet Progressions. */
@@ -4830,10 +5010,33 @@ const overviewTeamsData = ref<{
       distributionByLoss: Record<string, number>
     }
   }
+  drakes?: {
+    types: {
+      earth: { byWin: number; byLoss: number }
+      water: { byWin: number; byLoss: number }
+      wind: { byWin: number; byLoss: number }
+      fire: { byWin: number; byLoss: number }
+      hextec: { byWin: number; byLoss: number }
+      chem: { byWin: number; byLoss: number }
+    }
+    souls: {
+      earth: { byWin: number; byLoss: number }
+      water: { byWin: number; byLoss: number }
+      wind: { byWin: number; byLoss: number }
+      fire: { byWin: number; byLoss: number }
+      hextec: { byWin: number; byLoss: number }
+      chem: { byWin: number; byLoss: number }
+    }
+  }
 } | null>(null)
 const overviewTeamsPending = ref(false)
 const bansExpandByWin = ref(false)
 const bansExpandByLoss = ref(false)
+const objectivesPanelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
+function teamPercent(value: number, matchCount: number): string {
+  if (!matchCount) return '—'
+  return Number((value / matchCount) * 100).toFixed(2) + '%'
+}
 
 // Overview by side (Blue / Red)
 const overviewSidesData = ref<{
@@ -4900,6 +5103,27 @@ const sidesObjectiveKeysWithKills = [
   'riftHerald',
   'horde',
 ] as const
+const CDRAGON_SCOREBOARD_BASE_URL = '/data/community-dragon/scoreboard-objectives'
+const OBJECTIVE_ICON_BY_KEY: Record<string, string> = {
+  baron: `${CDRAGON_SCOREBOARD_BASE_URL}/_baronnashor.png`,
+  dragon: `${CDRAGON_SCOREBOARD_BASE_URL}/_dragon.png`,
+  elder: `${CDRAGON_SCOREBOARD_BASE_URL}/_elderdrake.png`,
+  riftHerald: `${CDRAGON_SCOREBOARD_BASE_URL}/_riftherald.png`,
+}
+const DRAKE_ICON_BY_KEY: Record<string, string> = {
+  earth: `${CDRAGON_SCOREBOARD_BASE_URL}/_mountaindrake.png`,
+  water: `${CDRAGON_SCOREBOARD_BASE_URL}/_oceandrake.png`,
+  wind: `${CDRAGON_SCOREBOARD_BASE_URL}/_clouddrake.png`,
+  fire: `${CDRAGON_SCOREBOARD_BASE_URL}/_infernaldrake.png`,
+  hextec: `${CDRAGON_SCOREBOARD_BASE_URL}/_hextechdrake.png`,
+  chem: `${CDRAGON_SCOREBOARD_BASE_URL}/_chemtechdrake.png`,
+}
+function objectiveIconSrc(key: string): string | null {
+  return OBJECTIVE_ICON_BY_KEY[key] ?? null
+}
+function drakeIconSrc(key: string): string | null {
+  return DRAKE_ICON_BY_KEY[key] ?? null
+}
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {
   const next = new Set(openSidesObjectiveKeys.value)
@@ -5118,6 +5342,7 @@ function objectiveDistributionPercentages(
   const dist = byWin
     ? (obj as { distributionByWin: Record<string, number> }).distributionByWin
     : (obj as { distributionByLoss: Record<string, number> }).distributionByLoss
+  if (!dist || typeof dist !== 'object') return []
   const total = data.matchCount
   const capHorde = key === 'horde'
   const capRiftHerald = key === 'riftHerald'
@@ -5191,6 +5416,97 @@ function objectiveRow(key: string): {
     killsByLoss: obj.killsByLoss ?? 0,
   }
 }
+const drakeTypeRows = computed(() => {
+  const d = overviewTeamsData.value?.drakes?.types
+  if (!d) return []
+  return [
+    {
+      key: 'earth',
+      label: t('statisticsPage.drakeTypeEarth'),
+      byWin: d.earth.byWin,
+      byLoss: d.earth.byLoss,
+    },
+    {
+      key: 'water',
+      label: t('statisticsPage.drakeTypeWater'),
+      byWin: d.water.byWin,
+      byLoss: d.water.byLoss,
+    },
+    {
+      key: 'wind',
+      label: t('statisticsPage.drakeTypeWind'),
+      byWin: d.wind.byWin,
+      byLoss: d.wind.byLoss,
+    },
+    {
+      key: 'fire',
+      label: t('statisticsPage.drakeTypeFire'),
+      byWin: d.fire.byWin,
+      byLoss: d.fire.byLoss,
+    },
+    {
+      key: 'hextec',
+      label: t('statisticsPage.drakeTypeHextec'),
+      byWin: d.hextec.byWin,
+      byLoss: d.hextec.byLoss,
+    },
+    {
+      key: 'chem',
+      label: t('statisticsPage.drakeTypeChem'),
+      byWin: d.chem.byWin,
+      byLoss: d.chem.byLoss,
+    },
+  ]
+})
+const drakeSoulRows = computed(() => {
+  const d = overviewTeamsData.value?.drakes?.souls
+  if (!d) return []
+  return [
+    {
+      key: 'earth',
+      label: t('statisticsPage.drakeTypeEarth'),
+      byWin: d.earth.byWin,
+      byLoss: d.earth.byLoss,
+    },
+    {
+      key: 'water',
+      label: t('statisticsPage.drakeTypeWater'),
+      byWin: d.water.byWin,
+      byLoss: d.water.byLoss,
+    },
+    {
+      key: 'wind',
+      label: t('statisticsPage.drakeTypeWind'),
+      byWin: d.wind.byWin,
+      byLoss: d.wind.byLoss,
+    },
+    {
+      key: 'fire',
+      label: t('statisticsPage.drakeTypeFire'),
+      byWin: d.fire.byWin,
+      byLoss: d.fire.byLoss,
+    },
+    {
+      key: 'hextec',
+      label: t('statisticsPage.drakeTypeHextec'),
+      byWin: d.hextec.byWin,
+      byLoss: d.hextec.byLoss,
+    },
+    {
+      key: 'chem',
+      label: t('statisticsPage.drakeTypeChem'),
+      byWin: d.chem.byWin,
+      byLoss: d.chem.byLoss,
+    },
+  ]
+})
+const drakeSoulGlobal = computed(() => {
+  const rows = drakeSoulRows.value
+  return {
+    byWin: rows.reduce((s, r) => s + r.byWin, 0),
+    byLoss: rows.reduce((s, r) => s + r.byLoss, 0),
+  }
+})
 const rankTiers = [
   'IRON',
   'BRONZE',
@@ -5563,15 +5879,30 @@ onMounted(async () => {
 
 /* Fast Stats cards - style LeagueOfGraphs */
 .fast-stat-card {
-  min-width: 0;
-  width: calc(100% - 20px);
-  max-width: calc(100% - 20px);
+  width: 313px !important;
+  min-width: 313px;
+  max-width: 313px;
+  height: 325px;
+  min-height: 325px;
   margin-left: auto;
   margin-right: auto;
-  flex: 0 0 auto;
+  flex: 0 0 313px;
+  background: #08101f !important;
+  justify-self: center;
+  overflow: hidden;
+}
+.fast-stat-card-objectives {
+  width: fit-content !important;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 100%;
+  overflow: visible;
 }
 .fast-stat-title {
   line-height: 1.4;
+  color: rgb(252 211 77) !important;
 }
 .fast-stat-table {
   border-collapse: collapse;
@@ -5584,13 +5915,16 @@ onMounted(async () => {
 }
 .fast-stat-bar-container {
   flex-shrink: 0;
+  min-width: 32px !important;
+  max-width: 54px !important;
+  margin-right: 5px;
 }
 .fast-stat-button {
   font-weight: 500;
 }
 
 .overview-match-outcome-bagel {
-  padding: 11px;
+  padding: 6px;
   box-shadow:
     inset 0 0 0 1px rgb(var(--rgb-primary) / 0.28),
     0 0 18px rgb(var(--rgb-primary) / 0.14);
@@ -5675,6 +6009,9 @@ onMounted(async () => {
 .filters-collapse-floating:hover {
   background: rgb(var(--rgb-background) / 0.3);
   border-color: rgb(var(--rgb-accent) / 0.45);
+}
+.statistics aside {
+  background: #08101f !important;
 }
 .overview-rune-no-stat {
   color: rgb(var(--rgb-text) / 0.5);

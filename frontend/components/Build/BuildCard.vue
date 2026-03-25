@@ -302,15 +302,30 @@
               'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.champion,
             }"
           >
-            <img
-              v-if="selectedChampion"
-              ref="championPortraitRef"
-              :src="championPortraitSrc"
-              :alt="selectedChampion.name"
-              :class="['champion-portrait', { 'champion-portrait--splash': championSplashEnabled }]"
-              @mouseenter="onChampionMouseEnter"
-              @mouseleave="onChampionMouseLeave"
-            />
+            <template v-if="selectedChampion">
+              <img
+                v-show="!championSplashEnabled"
+                ref="championPortraitRef"
+                :src="championIconSrc"
+                :alt="selectedChampion.name"
+                class="champion-portrait"
+                loading="eager"
+                decoding="sync"
+                @mouseenter="onChampionMouseEnter"
+                @mouseleave="onChampionMouseLeave"
+              />
+              <img
+                v-show="championSplashEnabled"
+                ref="championPortraitRef"
+                :src="championSplashSrc"
+                :alt="selectedChampion.name"
+                class="champion-portrait champion-portrait--splash"
+                loading="eager"
+                decoding="sync"
+                @mouseenter="onChampionMouseEnter"
+                @mouseleave="onChampionMouseLeave"
+              />
+            </template>
             <div v-else class="champion-portrait-placeholder"></div>
           </div>
 
@@ -1859,13 +1874,16 @@ const selectedChampion = computed(() => {
   return fullChampion ?? champion
 })
 
-const championPortraitSrc = computed(() => {
+const championIconSrc = computed(() => {
   const champion = selectedChampion.value
   if (!champion) return ''
-  if (championSplashEnabled.value) {
-    return getChampionSplashImageUrl(versionForImages.value, champion.id)
-  }
   return getChampionImageUrl(versionForImages.value, champion.image.full)
+})
+
+const championSplashSrc = computed(() => {
+  const champion = selectedChampion.value
+  if (!champion) return ''
+  return getChampionSplashImageUrl(versionForImages.value, champion.id)
 })
 
 const isDefaultBuildName = (name: string | null | undefined): boolean => {

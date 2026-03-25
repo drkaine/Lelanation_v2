@@ -30,6 +30,7 @@ import {
 } from '../worker/scriptOrchestrator.js'
 import { getRiotPollerStatus } from '../worker/riotPoller.js'
 import { resolveRiotApiKey, getClefTypeFromFile } from '../services/RiotHttpClient.js'
+import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -58,6 +59,7 @@ const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
 const RIOT_APIKEY_FILE = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
+const MATCH_FILTERS_FILE = join(process.cwd(), 'data', 'riot', 'match-filters.json')
 
 function maskKey(key: string): string {
   if (key.length <= 8) return '••••••••'
@@ -301,6 +303,26 @@ router.put('/active-patches/:patch/max', async (req, res) => {
   }
   const gameNumberMax = Math.trunc(gameNumberMaxRaw)
   try {
+    // Source of truth: keep match-filters.json in sync with admin edits.
+    const configResult = await FileManager.readJson<MatchFiltersConfig>(MATCH_FILTERS_FILE)
+    if (configResult.isErr()) {
+      return res.status(500).json({ error: configResult.unwrapErr().message })
+    }
+    const config = configResult.unwrap()
+    if (!Array.isArray(config.versions)) {
+      return res.status(500).json({ error: 'match-filters.json: versions is invalid' })
+    }
+    const versionRow = config.versions.find(v => (v?.version ?? '').trim() === patch)
+    if (!versionRow) {
+      return res.status(404).json({ error: `Patch ${patch} not found in match-filters.json` })
+    }
+    versionRow.maxMatches = gameNumberMax
+    if (typeof versionRow.completed !== 'boolean') versionRow.completed = false
+    const writeResult = await FileManager.writeJson(MATCH_FILTERS_FILE, config)
+    if (writeResult.isErr()) {
+      return res.status(500).json({ error: writeResult.unwrapErr().message })
+    }
+
     const existing = await prisma.activePatch.findUnique({
       where: { gameVersion: patch },
       select: { gamesNumber: true },

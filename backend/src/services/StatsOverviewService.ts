@@ -99,6 +99,24 @@ export interface OverviewTeamsStats {
     riftHerald: ObjectiveWithDistribution
     horde: ObjectiveWithDistribution
   }
+  drakes: {
+    types: {
+      earth: { byWin: number; byLoss: number }
+      water: { byWin: number; byLoss: number }
+      wind: { byWin: number; byLoss: number }
+      fire: { byWin: number; byLoss: number }
+      hextec: { byWin: number; byLoss: number }
+      chem: { byWin: number; byLoss: number }
+    }
+    souls: {
+      earth: { byWin: number; byLoss: number }
+      water: { byWin: number; byLoss: number }
+      wind: { byWin: number; byLoss: number }
+      fire: { byWin: number; byLoss: number }
+      hextec: { byWin: number; byLoss: number }
+      chem: { byWin: number; byLoss: number }
+    }
+  }
 }
 
 export interface ObjectiveWithDistribution {
@@ -622,6 +640,18 @@ export async function getOverviewTeamsStats(
         sumInhibitorKills: true,
         sumChampionKills: true,
         sumElderKills: true,
+        countEarthDrake: true,
+        countWaterDrake: true,
+        countWindDrake: true,
+        countFireDrake: true,
+        countHextecDrake: true,
+        countChemDrake: true,
+        countEarthDrakeSoul: true,
+        countWaterDrakeSoul: true,
+        countWindDrakeSoul: true,
+        countFireDrakeSoul: true,
+        countHextecDrakeSoul: true,
+        countChemDrakeSoul: true,
       },
     })
 
@@ -630,6 +660,10 @@ export async function getOverviewTeamsStats(
     // Aggregate objectives by win/loss
     const winAgg = { baron: { first: 0, kills: 0 }, dragon: { first: 0, kills: 0 }, elder: { first: 0, kills: 0 }, tower: { first: 0, kills: 0 }, inhibitor: { first: 0, kills: 0 }, riftHerald: { first: 0, kills: 0 }, horde: { first: 0, kills: 0 }, firstBlood: { first: 0 } }
     const lossAgg = { baron: { first: 0, kills: 0 }, dragon: { first: 0, kills: 0 }, elder: { first: 0, kills: 0 }, tower: { first: 0, kills: 0 }, inhibitor: { first: 0, kills: 0 }, riftHerald: { first: 0, kills: 0 }, horde: { first: 0, kills: 0 }, firstBlood: { first: 0 } }
+    const drakesWin = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
+    const drakesLoss = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
+    const soulsWin = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
+    const soulsLoss = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
 
     for (const r of teamStats) {
       const isWin = r.countWin > r.countGame / 2
@@ -649,6 +683,22 @@ export async function getOverviewTeamsStats(
       agg.elder.first += 0
       agg.elder.kills += r.sumElderKills
       agg.firstBlood.first += r.countFirstBlood
+
+      const drakeAgg = isWin ? drakesWin : drakesLoss
+      drakeAgg.earth += r.countEarthDrake
+      drakeAgg.water += r.countWaterDrake
+      drakeAgg.wind += r.countWindDrake
+      drakeAgg.fire += r.countFireDrake
+      drakeAgg.hextec += r.countHextecDrake
+      drakeAgg.chem += r.countChemDrake
+
+      const soulAgg = isWin ? soulsWin : soulsLoss
+      soulAgg.earth += r.countEarthDrakeSoul
+      soulAgg.water += r.countWaterDrakeSoul
+      soulAgg.wind += r.countWindDrakeSoul
+      soulAgg.fire += r.countFireDrakeSoul
+      soulAgg.hextec += r.countHextecDrakeSoul
+      soulAgg.chem += r.countChemDrakeSoul
     }
 
     // Bans from champion_core_stats - group by champion, filter by win/loss
@@ -776,6 +826,24 @@ export async function getOverviewTeamsStats(
         inhibitor: objData(winAgg.inhibitor, lossAgg.inhibitor, distInhibitor),
         riftHerald: objData(winAgg.riftHerald, lossAgg.riftHerald, distRiftHerald),
         horde: objData(winAgg.horde, lossAgg.horde, distHorde),
+      },
+      drakes: {
+        types: {
+          earth: { byWin: drakesWin.earth, byLoss: drakesLoss.earth },
+          water: { byWin: drakesWin.water, byLoss: drakesLoss.water },
+          wind: { byWin: drakesWin.wind, byLoss: drakesLoss.wind },
+          fire: { byWin: drakesWin.fire, byLoss: drakesLoss.fire },
+          hextec: { byWin: drakesWin.hextec, byLoss: drakesLoss.hextec },
+          chem: { byWin: drakesWin.chem, byLoss: drakesLoss.chem },
+        },
+        souls: {
+          earth: { byWin: soulsWin.earth, byLoss: soulsLoss.earth },
+          water: { byWin: soulsWin.water, byLoss: soulsLoss.water },
+          wind: { byWin: soulsWin.wind, byLoss: soulsLoss.wind },
+          fire: { byWin: soulsWin.fire, byLoss: soulsLoss.fire },
+          hextec: { byWin: soulsWin.hextec, byLoss: soulsLoss.hextec },
+          chem: { byWin: soulsWin.chem, byLoss: soulsLoss.chem },
+        },
       },
     }
 
