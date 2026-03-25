@@ -264,7 +264,12 @@
         </button>
 
         <!-- Roles Section - Entre la version et le séparateur -->
-        <div class="roles-section">
+        <div
+          class="roles-section"
+          :class="{
+            'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.roles,
+          }"
+        >
           <div class="roles-container">
             <button
               v-for="role in allRoles"
@@ -475,7 +480,13 @@
           }"
         >
           <!-- Starting Items (2) + Boots slot (1) - Toujours visible -->
-          <div class="starting-items-row">
+          <div
+            class="starting-items-row"
+            :class="{
+              'validation-blink-frame':
+                props.highlightMissingFields && missingFieldChecks.starterItems,
+            }"
+          >
             <div
               v-for="item in startingItems"
               :key="`starter-${item.id}`"
@@ -1813,10 +1824,15 @@ const missingFieldChecks = computed(() => {
   const build = props.build || buildStore.currentBuild
   const firstThreeUps = build?.skillOrder?.firstThreeUps ?? []
   const skillUpOrder = build?.skillOrder?.skillUpOrder ?? []
+  const items = build?.items ?? []
+  const hasStarter = items.some(i => isStarterItem(i as any))
+  const roles = build?.roles ?? []
 
   return {
     champion: !build?.champion,
     items: !build?.items || build.items.length === 0,
+    starterItems: items.length === 0 ? false : !hasStarter,
+    roles: roles.length === 0,
     runesPrimary: !(build?.runes?.primary?.pathId && build.runes.primary.keystone),
     runesSecondary: !build?.runes?.secondary?.pathId,
     summonerSpells: !(

@@ -11,6 +11,7 @@ import type {
   CalculatedStats,
   Role,
 } from '@lelanation/shared-types'
+import { isStarterItem } from '@lelanation/builds-ui'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
@@ -81,10 +82,16 @@ export const useBuildStore = defineStore('build', {
       // Check champion
       if (!build.champion) return false
 
+      // Check roles (at least 1)
+      if (!build.roles || build.roles.length === 0) return false
+
       // Check items (at least 1). UI supports: 2 starters + 2 boots + 6 core = up to 10.
       if (!build.items || build.items.length === 0 || build.items.length > 10) {
         return false
       }
+
+      // Check starter items (at least 1)
+      if (!build.items.some((it: Item) => isStarterItem(it))) return false
 
       // Check runes
       if (!build.runes) return false
@@ -132,10 +139,16 @@ export const useBuildStore = defineStore('build', {
         errors.push('Champion must be selected')
       }
 
+      if (!build.roles || build.roles.length === 0) {
+        errors.push('At least one role must be selected')
+      }
+
       if (!build.items || build.items.length === 0) {
         errors.push('At least one item must be selected')
       } else if (build.items.length > 10) {
         errors.push('Maximum 10 items allowed')
+      } else if (!build.items.some((it: Item) => isStarterItem(it))) {
+        errors.push('At least one starter item must be selected')
       }
 
       if (!build.runes) {

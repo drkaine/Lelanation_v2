@@ -7,9 +7,12 @@
       Skip to content
     </a>
     <AppNavbar v-show="!isStreamerMode" />
-    <div v-show="!isStreamerMode && !commandBarHiddenByScroll" class="command-bar-fixed-wrapper">
+    <div
+      v-show="!isStreamerMode && (isHomeRoute || !commandBarHiddenByScroll)"
+      class="command-bar-fixed-wrapper"
+    >
       <button
-        v-show="commandsCollapsed"
+        v-show="!isHomeRoute && commandsCollapsed"
         type="button"
         class="command-collapse-floating"
         title="Afficher les commandes"
@@ -18,9 +21,17 @@
       >
         ▾
       </button>
-      <div v-show="!commandsCollapsed" ref="commandBarRef" class="command-bar-overlay">
-        <div class="command-bar" :class="{ 'command-bar-collapsed': commandsCollapsed }">
+      <div
+        v-show="isHomeRoute || !commandsCollapsed"
+        ref="commandBarRef"
+        class="command-bar-overlay"
+      >
+        <div
+          class="command-bar"
+          :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
+        >
           <button
+            v-if="!isHomeRoute"
             type="button"
             class="command-collapse-button"
             :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
@@ -143,6 +154,13 @@ const appShellVars = computed(() => ({
 }))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
+const isHomeRoute = computed(() => {
+  const path = String(route.path || '').replace(/\/+$/, '') || '/'
+  const segments = path.split('/').filter(Boolean)
+  if (segments.length === 0) return true
+  if (segments.length !== 1) return false
+  return ['fr', 'en'].includes(segments[0] || '')
+})
 
 provide('tooltipsEnabled', tooltipsEnabled)
 
@@ -218,6 +236,7 @@ const onKeyDown = (event: KeyboardEvent) => {
 }
 
 const onDocumentPointerDown = (event: MouseEvent) => {
+  if (isHomeRoute.value) return
   if (commandsCollapsed.value) return
   const target = event.target as Node | null
   if (!target) return
@@ -226,8 +245,26 @@ const onDocumentPointerDown = (event: MouseEvent) => {
 }
 
 function onWindowScroll() {
+  if (isHomeRoute.value) {
+    commandBarHiddenByScroll.value = false
+    return
+  }
   commandBarHiddenByScroll.value = window.scrollY > COMMAND_BAR_SCROLL_THRESHOLD
 }
+
+watch(
+  isHomeRoute,
+  isHome => {
+    if (isHome) {
+      commandsCollapsed.value = false
+      commandBarHiddenByScroll.value = false
+      return
+    }
+    commandsCollapsed.value = true
+    onWindowScroll()
+  },
+  { immediate: true }
+)
 
 if (import.meta.client) {
   onMounted(() => {
@@ -418,6 +455,12 @@ if (import.meta.client) {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .command-help {
+    display: none;
+  }
 }
 
 .command-help-separator {

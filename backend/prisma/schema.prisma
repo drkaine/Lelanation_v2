@@ -404,14 +404,6 @@ model ChampionTierDailySnapshot {
   @@map("champion_tier_daily_snapshots")
 }
 
-model ChampionTierSnapshotRun {
-  dateOfGame   DateTime @id @db.Date @map("date_of_game")
-  rowsInserted    Int      @default(0) @map("rows_inserted")
-  createdAt       DateTime @default(now()) @map("created_at")
-
-  @@map("champion_tier_snapshot_runs")
-}
-
 model ActivePatch {
   gameVersion String   @map("game_version")
   activatedAt DateTime @default(now()) @map("activated_at")
@@ -466,6 +458,17 @@ model MvChampionVsStat {
 
   @@id([championStatId, opponentChampionId])
   @@map("mv_champion_vs_stats")
+}
+
+model MvChampionDuoRoleStat {
+  championStatId  BigInt @map("champion_stat_id")
+  allyChampionId  Int    @map("ally_champion_id")
+  allyRole        String @map("ally_role")
+  countWin        Int    @map("count_win")
+  countGame       Int    @map("count_game")
+
+  @@id([championStatId, allyChampionId, allyRole])
+  @@map("mv_champion_duo_role_stats")
 }
 
 model MvTeamCoreStat {

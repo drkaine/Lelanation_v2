@@ -9,6 +9,7 @@ import { loadMatchFilters } from './RiotConfigService.js'
 const MV_NAMES = [
   'mv_champion_core_stats',
   'mv_champion_vs_stats',
+  'mv_champion_duo_role_stats',
   'mv_team_core_stats',
   'mv_champion_first_objectif_stats',
   'mv_champion_objectif_stats',

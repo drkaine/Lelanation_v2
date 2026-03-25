@@ -282,11 +282,6 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
         logger,
       })
       totalRowsTouched += insertedEstimate
-      await prisma.championTierSnapshotRun.upsert({
-        where: { dateOfGame },
-        create: { dateOfGame, rowsInserted: insertedEstimate },
-        update: { rowsInserted: insertedEstimate },
-      })
     }
 
     await refreshAllMaterializedViews().catch(() => undefined)

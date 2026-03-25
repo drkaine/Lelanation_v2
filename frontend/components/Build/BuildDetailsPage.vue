@@ -638,12 +638,14 @@ const captureBuildImage = async (): Promise<Blob | null> => {
         const computed = window.getComputedStyle(el)
         const style = el.style
         const isSeparator = el.classList.contains('separator-line')
+        const isVariantsIndicator = el.classList.contains('variants-count-indicator')
+        const isVariantsBadge = el.classList.contains('variants-poker-badge')
         const isSpellOrLevelBadge =
           el.classList.contains('skill-key') ||
           el.classList.contains('level-badge') ||
           el.classList.contains('max-badge')
 
-        if (!isSeparator && !isSpellOrLevelBadge) {
+        if (!isSeparator && !isSpellOrLevelBadge && !isVariantsIndicator && !isVariantsBadge) {
           style.backgroundColor = 'transparent'
         }
 
@@ -658,11 +660,17 @@ const captureBuildImage = async (): Promise<Blob | null> => {
           style.color = '#082f49'
           style.visibility = 'visible'
           style.opacity = '1'
+        } else if (isVariantsBadge || isVariantsIndicator) {
+          // Keep variants count readable in image captures (badge is dark text on gold bg).
+          style.backgroundColor = computed.backgroundColor
+          style.color = computed.color
         }
 
         const bgColor = computed.backgroundColor
         if (
           !isSpellOrLevelBadge &&
+          !isVariantsIndicator &&
+          !isVariantsBadge &&
           bgColor &&
           !isWhiteOrLightGrey(bgColor) &&
           bgColor !== 'rgba(0, 0, 0, 0)' &&
