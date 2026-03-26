@@ -1,5 +1,5 @@
 <template>
-  <BuildDiscoveryFiltersShell :has-active-filters="hasActiveFilters" @clear="clearFilters">
+  <div class="build-filters flex flex-1 flex-wrap items-center gap-2">
     <div class="role-filter-row flex items-center gap-0 overflow-x-auto whitespace-nowrap">
       <button
         v-for="role in roleOptions"
@@ -55,16 +55,16 @@
         <option value="all">{{ t('buildDiscovery.all') }}</option>
       </select>
     </div>
-    <template #clear-label>
+
+    <button v-if="hasActiveFilters" class="filter-clear" @click="clearFilters">
       {{ t('buildDiscovery.clearFilters') }}
-    </template>
-  </BuildDiscoveryFiltersShell>
+    </button>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { BuildDiscoveryFiltersShell } from '@lelanation/builds-ui'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
@@ -205,6 +205,20 @@ watch(locale, () => {
   padding: 0.45rem 0.75rem;
   font-size: 0.875rem;
   color: rgb(var(--rgb-text));
+}
+
+.filter-clear {
+  border-radius: 0.5rem;
+  border: 1px solid rgb(var(--rgb-primary) / 0.8);
+  background: rgb(var(--rgb-background) / 0.25);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  color: rgb(var(--rgb-text));
+  transition: background-color 0.2s ease;
+}
+
+.filter-clear:hover {
+  background: rgb(var(--rgb-primary) / 0.2);
 }
 
 .filter-inline-label {

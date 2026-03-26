@@ -70,15 +70,6 @@ function selectVariant(idx: number | null) {
   flipped.value = false
   emit('variant-change', idx)
 }
-
-function toggleFlipped() {
-  if (subBuilds.value.length === 0) return
-  flipped.value = !flipped.value
-}
-
-defineExpose({
-  toggleFlipped,
-})
 </script>
 
 <template>

@@ -10,21 +10,14 @@ import { getSettings, setSettings } from "../settings";
 import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
 import { translate } from "../i18n";
-import type { Build, SubBuild, Role, Champion, StoredBuild, Item, YouTubeVideo } from "@lelanation/shared-types";
-import {
-  BuildCardFlip,
-  BuildDiscoveryCardShell,
-  BuildDiscoveryFiltersShell,
-  BuildDiscoveryListShell,
-  serializeBuild,
-} from "@lelanation/builds-ui";
+import type { Build, SubBuild, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
+import { BuildCardFlip } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
-import { applyVideoFilters, dedupeAndSortVideos, filterAndSortBuilds } from "@lelanation/front-core";
 import BuildDetailView from "./BuildDetailView.vue";
 
 const builds = ref<Build[]>([]);
 const loading = ref(true);
-const activeTab = ref<"builds" | "mes-builds" | "favoris" | "create" | "videos" | "settings">("builds");
+const activeTab = ref<"builds" | "mes-builds" | "favoris" | "settings">("builds");
 const lcuConnected = ref(false);
 const connectionTested = ref(false);
 const submitMessage = ref("");
@@ -53,22 +46,6 @@ const linkLoading = ref(false);
 const linkMessage = ref("");
 const linkError = ref(false);
 const importedBuilds = ref<Build[]>([]);
-const createBuildName = ref("");
-const createBuildChampionId = ref("");
-const createBuildRole = ref<Role>("top");
-const createBuildDescription = ref("");
-const createBuildMessage = ref("");
-const createBuildError = ref(false);
-
-const videosLoading = ref(false);
-const videosError = ref("");
-const videos = ref<YouTubeVideo[]>([]);
-const videoQuery = ref("");
-const videoChannelFilter = ref<"all" | string>("all");
-const videoTypeFilter = ref<"all" | "builds" | "lobby" | "other">("all");
-const videoFormatFilter = ref<"all" | "videos" | "shorts">("all");
-const voteByBuildId = ref<Record<string, "up" | "down" | null>>({});
-const buildCardFlipRefs = ref<Record<string, { toggleFlipped: () => void } | null>>({});
 
 const clientTestLoading = ref(false);
 const clientTestMessage = ref("");
@@ -135,24 +112,31 @@ const currentMajorMinor = computed(() => {
   return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v;
 });
 
-function applySharedBuildFilters(input: Build[]): Build[] {
-  let list = [...input];
+const sortedBuilds = computed(() => {
+  let list = [...builds.value];
   if (onlyUpToDate.value && currentMajorMinor.value) {
     const prefix = currentMajorMinor.value;
     list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
   }
-
-  return filterAndSortBuilds(list, {
-    searchQuery: searchQuery.value,
-    selectedChampion: null,
-    selectedRole: selectedRole.value,
-    selectedVersion: null,
-    sortBy: sortBy.value,
-  });
-}
-
-const sortedBuilds = computed(() => {
-  return applySharedBuildFilters(builds.value);
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    list = list.filter(
+      (b) =>
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q) ||
+        (b.champion?.name || "").toLowerCase().includes(q)
+    );
+  }
+  if (selectedRole.value) {
+    const r = selectedRole.value;
+    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
+  }
+  if (sortBy.value === "name") {
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } else {
+    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  }
+  return list;
 });
 
 const favoriteBuilds = computed(() => {
@@ -161,7 +145,30 @@ const favoriteBuilds = computed(() => {
 });
 
 const myImportedBuilds = computed(() => {
-  return applySharedBuildFilters(importedBuilds.value);
+  let list = [...importedBuilds.value] as Build[];
+  if (onlyUpToDate.value && currentMajorMinor.value) {
+    const prefix = currentMajorMinor.value;
+    list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.trim().toLowerCase();
+    list = list.filter(
+      (b) =>
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q) ||
+        (b.champion?.name || "").toLowerCase().includes(q)
+    );
+  }
+  if (selectedRole.value) {
+    const r = selectedRole.value;
+    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
+  }
+  if (sortBy.value === "name") {
+    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  } else {
+    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  }
+  return list;
 });
 
 const displayedBuilds = computed(() => {
@@ -172,95 +179,6 @@ const displayedBuilds = computed(() => {
 });
 
 const importedBuildIds = computed(() => new Set(importedBuilds.value.map(b => b.id)));
-const championOptions = computed(() =>
-  Object.values(championMap.value).sort((a, b) => a.name.localeCompare(b.name, settings.value.language))
-);
-const videoChannels = computed(() => {
-  const byId = new Map<string, string>();
-  for (const v of videos.value) {
-    if (!byId.has(v.channelId)) byId.set(v.channelId, v.channelTitle || v.channelId);
-  }
-  return [...byId.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-});
-const filteredVideos = computed(() =>
-  applyVideoFilters(dedupeAndSortVideos(videos.value), {
-    query: videoQuery.value,
-    channelId: videoChannelFilter.value,
-    category: videoTypeFilter.value,
-    format: videoFormatFilter.value,
-  })
-);
-
-function loadVotes() {
-  try {
-    const raw = localStorage.getItem("companion.buildVotes");
-    voteByBuildId.value = raw ? (JSON.parse(raw) as Record<string, "up" | "down" | null>) : {};
-  } catch {
-    voteByBuildId.value = {};
-  }
-}
-
-function persistVotes() {
-  try {
-    localStorage.setItem("companion.buildVotes", JSON.stringify(voteByBuildId.value));
-  } catch {
-    // no-op
-  }
-}
-
-function getUserVote(buildId: string): "up" | "down" | null {
-  return voteByBuildId.value[buildId] ?? null;
-}
-
-function getUpvoteCount(build: Build): number {
-  const base = Number(build.upvote) || 0;
-  const vote = getUserVote(build.id);
-  return vote === "up" ? base + 1 : base;
-}
-
-function getDownvoteCount(build: Build): number {
-  const base = Number(build.downvote) || 0;
-  const vote = getUserVote(build.id);
-  return vote === "down" ? base + 1 : base;
-}
-
-function handleUpvote(buildId: string) {
-  const current = getUserVote(buildId);
-  voteByBuildId.value[buildId] = current === "up" ? null : "up";
-  persistVotes();
-}
-
-function handleDownvote(buildId: string) {
-  const current = getUserVote(buildId);
-  voteByBuildId.value[buildId] = current === "down" ? null : "down";
-  persistVotes();
-}
-
-async function copyBuildLink(buildId: string) {
-  const url = `${apiBase}/builds/${buildId}`;
-  try {
-    await navigator.clipboard.writeText(url);
-  } catch {
-    // ignore
-  }
-}
-
-function setBuildCardFlipRef(buildId: string, instance: unknown) {
-  if (
-    instance &&
-    typeof instance === "object" &&
-    "toggleFlipped" in instance &&
-    typeof (instance as { toggleFlipped?: unknown }).toggleFlipped === "function"
-  ) {
-    buildCardFlipRefs.value[buildId] = instance as { toggleFlipped: () => void };
-    return;
-  }
-  buildCardFlipRefs.value[buildId] = null;
-}
-
-function toggleBuildVariants(buildId: string) {
-  buildCardFlipRefs.value[buildId]?.toggleFlipped();
-}
 
 const latestImageBase = computed(() => `${apiBase}/images/game/latest`);
 
@@ -370,42 +288,6 @@ async function loadBuilds(options?: { silent?: boolean }) {
     builds.value = [];
   } finally {
     if (!options?.silent) loading.value = false;
-  }
-}
-
-async function loadVideos(options?: { silent?: boolean }) {
-  if (!options?.silent) videosLoading.value = true;
-  videosError.value = "";
-  try {
-    const statusRes = await fetch(`${apiBase}/api/youtube/status`);
-    if (!statusRes.ok) throw new Error(`status ${statusRes.status}`);
-    const statusPayload = (await statusRes.json()) as { channels?: Array<{ channelId: string }> };
-    const channels = Array.isArray(statusPayload.channels) ? statusPayload.channels : [];
-    const all: YouTubeVideo[] = [];
-
-    await Promise.all(
-      channels.map(async (entry) => {
-        const channelId = entry.channelId;
-        if (!channelId) return;
-        try {
-          const channelRes = await fetch(`${apiBase}/api/youtube/channels/${encodeURIComponent(channelId)}`);
-          if (!channelRes.ok) return;
-          const payload = (await channelRes.json()) as { videos?: YouTubeVideo[] };
-          if (Array.isArray(payload.videos)) {
-            all.push(...payload.videos);
-          }
-        } catch {
-          // ignore individual channel errors
-        }
-      })
-    );
-
-    videos.value = dedupeAndSortVideos(all);
-  } catch {
-    videosError.value = "Impossible de charger les vidéos.";
-    videos.value = [];
-  } finally {
-    if (!options?.silent) videosLoading.value = false;
   }
 }
 
@@ -706,56 +588,6 @@ function clearFilters() {
   onlyUpToDate.value = false;
 }
 
-async function createBuildFromCompanion() {
-  createBuildMessage.value = "";
-  createBuildError.value = false;
-
-  const name = createBuildName.value.trim();
-  const championId = createBuildChampionId.value.trim();
-  if (!name || !championId) {
-    createBuildError.value = true;
-    createBuildMessage.value = "Nom du build et champion requis.";
-    return;
-  }
-
-  const champion = championMap.value[championId];
-  if (!champion) {
-    createBuildError.value = true;
-    createBuildMessage.value = "Champion introuvable.";
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const newBuild: Build = {
-    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `cmp-${Date.now()}`,
-    name,
-    author: "Companion",
-    description: createBuildDescription.value.trim() || undefined,
-    visibility: "private",
-    champion,
-    items: [],
-    runes: null,
-    shards: null,
-    summonerSpells: [null, null],
-    skillOrder: null,
-    roles: [createBuildRole.value],
-    upvote: 0,
-    downvote: 0,
-    gameVersion: currentGameVersion.value || "unknown",
-    createdAt: now,
-    updatedAt: now,
-    subBuilds: [],
-    descriptionMode: "single",
-  };
-
-  mergeImportedBuilds([serializeBuild(newBuild)]);
-  loadImportedBuilds();
-  activeTab.value = "mes-builds";
-  createBuildMessage.value = "Build créé dans Mes builds.";
-  createBuildName.value = "";
-  createBuildDescription.value = "";
-}
-
 const hasActiveFilters = computed(
   () => searchQuery.value.trim() !== "" || selectedRole.value !== null || sortBy.value !== "recent" || onlyUpToDate.value
 );
@@ -1007,7 +839,6 @@ async function createDesktopShortcut() {
 }
 
 onMounted(async () => {
-  loadVotes();
   loadCurrentGameVersion();
   loadRuneCatalog();
   loadItemCatalog();
@@ -1018,17 +849,10 @@ onMounted(async () => {
   startConnectionCheckLoop();
   await loadChampionCatalog();
   loadBuilds();
-  loadVideos({ silent: true });
   refreshFavorites();
   autoSubmitMatchIfAllowed();
   startAutoSubmitLoop();
   startBuildsRefreshLoop();
-});
-
-watch(activeTab, (tab) => {
-  if (tab === "videos" && videos.value.length === 0 && !videosLoading.value) {
-    loadVideos();
-  }
 });
 
 onUnmounted(() => {
@@ -1133,24 +957,13 @@ watch(
       >
         {{ t('tabs.favorites') }} ({{ favoriteIds.length }})
       </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'create' }" @click="activeTab = 'create'">
-        Créer
-      </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'videos' }" @click="activeTab = 'videos'">
-        Vidéos
-      </button>
       <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
         {{ t('tabs.settings') }}
       </button>
     </nav>
 
     <!-- Filters -->
-    <BuildDiscoveryFiltersShell
-      v-if="['builds', 'mes-builds', 'favoris'].includes(activeTab)"
-      :has-active-filters="hasActiveFilters"
-      class="filters-bar"
-      @clear="clearFilters"
-    >
+    <div v-if="activeTab !== 'settings'" class="filters-bar">
       <input
         v-model="searchQuery"
         type="text"
@@ -1179,11 +992,11 @@ watch(
           <option value="recent">{{ t('sort.recent') }}</option>
           <option value="name">{{ t('sort.name') }}</option>
         </select>
+        <button v-if="hasActiveFilters" class="clear-btn" @click="clearFilters">{{ t('clearFilters') }}</button>
       </div>
-      <template #clear-label>{{ t('clearFilters') }}</template>
-    </BuildDiscoveryFiltersShell>
+    </div>
 
-    <section v-if="['builds', 'mes-builds', 'favoris'].includes(activeTab)" class="panel">
+    <section v-if="activeTab !== 'settings'" class="panel">
       <p v-if="activeTab === 'builds' && loading" class="empty">{{ t('loading') }}</p>
       <p v-else-if="activeTab === 'mes-builds' && importedBuilds.length === 0" class="empty">
         {{ t('noImported') }}
@@ -1192,77 +1005,17 @@ watch(
         {{ activeTab === "favoris" ? t('noFavorites') : t('noBuilds') }}
       </p>
 
-      <BuildDiscoveryListShell v-else :empty="displayedBuilds.length === 0" class="build-grid">
-        <BuildDiscoveryCardShell
-          v-for="b in displayedBuilds"
-          :key="b.id"
-          :author="b.author || t('authorUnknown')"
-          :show-badge="importedBuildIds.has(b.id)"
-          :badge-label="t('badge.personal')"
-        >
-          <div class="card-top-actions">
-            <button
-              type="button"
-              class="card-top-icon-btn"
-              title="Variantes"
-              @click="toggleBuildVariants(b.id)"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-                <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-                <path d="M8 16H3v5" />
-              </svg>
-            </button>
-            <div class="card-top-spacer"></div>
-            <button type="button" class="card-top-icon-btn" :title="t('detail')" @click="detailBuild = b">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-            </button>
-            <button type="button" class="card-top-icon-btn" title="Partager" @click="copyBuildLink(b.id)">
-              <svg
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="18" cy="5" r="3" />
-                <circle cx="6" cy="12" r="3" />
-                <circle cx="18" cy="19" r="3" />
-                <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
-              </svg>
-            </button>
+      <div v-else class="build-grid">
+        <div v-for="b in displayedBuilds" :key="b.id" class="build-entry">
+          <div class="build-meta">
+            <h3 class="author">
+              {{ b.author || t('authorUnknown') }}
+              <span v-if="importedBuildIds.has(b.id)" class="perso-badge">{{ t('badge.personal') }}</span>
+            </h3>
           </div>
 
+          <!-- Flip card : face avant = BuildSheet, face arrière = liste variantes -->
           <BuildCardFlip
-            :ref="instance => setBuildCardFlipRef(b.id, instance)"
             :build="b"
             :images="imageResolvers"
             :rune-lookup="runeLookup"
@@ -1294,100 +1047,14 @@ watch(
                 <path d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z" />
               </svg>
             </button>
-            <button
-              type="button"
-              class="vote-btn up"
-              :class="{ active: getUserVote(b.id) === 'up' }"
-              @click="handleUpvote(b.id)"
-            >
-              <span>👍</span>
-              <span>{{ getUpvoteCount(b) }}</span>
-            </button>
-            <button
-              type="button"
-              class="vote-btn down"
-              :class="{ active: getUserVote(b.id) === 'down' }"
-              @click="handleDownvote(b.id)"
-            >
-              <span>👎</span>
-              <span>{{ getDownvoteCount(b) }}</span>
+            <button type="button" class="detail-btn" :title="t('detail')" @click="detailBuild = b">
+              {{ t('detail') }}
             </button>
             <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')" @click="importBuild(b)">
               {{ t('import') }}
             </button>
           </div>
-        </BuildDiscoveryCardShell>
-      </BuildDiscoveryListShell>
-    </section>
-
-    <section v-else-if="activeTab === 'create'" class="panel settings-panel">
-      <h3>Créer un build</h3>
-      <p class="hint-line">Création rapide locale dans le companion (build privé).</p>
-      <div class="create-grid">
-        <label class="create-field">
-          <span>Nom du build</span>
-          <input v-model="createBuildName" type="text" class="search-input" placeholder="Ex: Ahri Mid Safe" />
-        </label>
-        <label class="create-field">
-          <span>Champion</span>
-          <select v-model="createBuildChampionId" class="sort-select create-select">
-            <option value="">Sélectionner un champion</option>
-            <option v-for="champ in championOptions" :key="champ.id" :value="champ.id">
-              {{ champ.name }}
-            </option>
-          </select>
-        </label>
-        <label class="create-field">
-          <span>Rôle</span>
-          <select v-model="createBuildRole" class="sort-select create-select">
-            <option v-for="role in allRoles" :key="role" :value="role">{{ role }}</option>
-          </select>
-        </label>
-        <label class="create-field create-field-full">
-          <span>Description</span>
-          <textarea v-model="createBuildDescription" class="create-textarea" rows="4" placeholder="Plan de jeu, powerspikes, matchup..." />
-        </label>
-      </div>
-      <div class="create-actions">
-        <button type="button" class="submit-btn" @click="createBuildFromCompanion">Créer le build</button>
-      </div>
-      <p v-if="createBuildMessage" :class="{ error: createBuildError }" class="msg">{{ createBuildMessage }}</p>
-    </section>
-
-    <section v-else-if="activeTab === 'videos'" class="panel">
-      <div class="filters-bar">
-        <input v-model="videoQuery" type="text" class="search-input" placeholder="Rechercher une vidéo..." />
-        <select v-model="videoChannelFilter" class="sort-select create-select">
-          <option value="all">Toutes les chaînes</option>
-          <option v-for="channel in videoChannels" :key="channel.id" :value="channel.id">
-            {{ channel.name }}
-          </option>
-        </select>
-        <select v-model="videoTypeFilter" class="sort-select create-select">
-          <option value="all">Tous types</option>
-          <option value="builds">Build</option>
-          <option value="lobby">Lobby</option>
-          <option value="other">Autres</option>
-        </select>
-        <select v-model="videoFormatFilter" class="sort-select create-select">
-          <option value="all">Tous formats</option>
-          <option value="videos">Vidéos</option>
-          <option value="shorts">Shorts</option>
-        </select>
-        <button type="button" class="submit-btn secondary" @click="loadVideos()">Actualiser</button>
-      </div>
-      <p v-if="videosLoading" class="empty">Chargement des vidéos...</p>
-      <p v-else-if="videosError" class="msg error">{{ videosError }}</p>
-      <p v-else-if="filteredVideos.length === 0" class="empty">Aucune vidéo disponible.</p>
-      <div v-else class="video-grid">
-        <article v-for="video in filteredVideos" :key="video.id" class="video-card">
-          <img :src="video.thumbnailUrl" :alt="video.title" class="video-thumb" loading="lazy" />
-          <div class="video-content">
-            <h4 class="video-title">{{ video.title }}</h4>
-            <p class="video-meta">{{ video.channelTitle }} • {{ new Date(video.publishedAt).toLocaleDateString() }}</p>
-            <a :href="video.url" target="_blank" rel="noreferrer" class="detail-btn video-link">Voir sur YouTube</a>
-          </div>
-        </article>
+        </div>
       </div>
     </section>
 
@@ -1552,39 +1219,14 @@ watch(
 .status-pill.off { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.6); color: #fecaca; }
 .status-pill.untested { background: rgba(200, 155, 60, 0.12); border: 1px solid rgba(200, 155, 60, 0.4); color: rgba(240, 230, 210, 0.75); }
 
-.tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  margin-bottom: 0.9rem;
-  border: 1px solid rgb(var(--rgb-accent) / 0.2);
-  border-radius: 9999px;
-  background: rgb(var(--rgb-background) / 0.22);
-  padding: 0.2rem;
-  max-width: 100%;
-}
+.tabs { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; }
 .tab-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  border: none;
-  border-radius: 9999px;
-  background: transparent;
-  min-height: 36px;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: rgb(var(--rgb-text) / 0.75);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  border: 1px solid rgba(200, 155, 60, 0.5); border-radius: 8px;
+  background: rgba(30, 40, 45, 0.75); color: #f0e6d2; padding: 0.45rem 0.75rem;
+  font-size: 0.84rem; cursor: pointer; transition: background-color 0.15s ease;
 }
-.tab-btn:hover:not(:disabled) { background: rgb(var(--rgb-accent) / 0.14); color: var(--color-accent); }
-.tab-btn.active { background: rgb(var(--rgb-accent) / 0.2); color: var(--color-accent); }
+.tab-btn:hover:not(:disabled) { background: rgba(0, 90, 130, 0.55); }
+.tab-btn.active { background: rgba(200, 155, 60, 0.18); border-color: #c89b3c; }
 .tab-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Filters */
@@ -1632,35 +1274,6 @@ watch(
 
 .panel { min-height: 260px; }
 .empty { color: rgba(240, 230, 210, 0.85); }
-.create-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(220px, 1fr));
-  gap: 0.75rem;
-}
-.create-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: rgba(240, 230, 210, 0.9);
-}
-.create-field-full {
-  grid-column: 1 / -1;
-}
-.create-select {
-  min-width: 220px;
-}
-.create-textarea {
-  background: rgba(9, 20, 40, 0.95);
-  color: #f0e6d2;
-  border: 1px solid rgba(200, 155, 60, 0.45);
-  border-radius: 8px;
-  padding: 0.5rem 0.65rem;
-  font-size: 0.82rem;
-}
-.create-actions {
-  margin-top: 0.9rem;
-}
 
 .build-grid {
   display: grid;
@@ -1677,7 +1290,7 @@ watch(
   width: 300px; text-align: center;
 }
 
-.author { margin: 0; color: #c8aa6e; font-size: 0.94rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
+.author { margin: 0; color: #f0e6d2; font-size: 0.94rem; font-weight: 600; display: flex; align-items: center; gap: 0.4rem; }
 .perso-badge {
   font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
   background: rgba(200, 155, 60, 0.25); color: #c89b3c;
@@ -1697,47 +1310,11 @@ watch(
 .bookmark-icon { width: 0.75rem; height: 0.75rem; }
 
 .card-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.5rem;
-  width: 300px;
+  display: flex; justify-content: flex-end; align-items: center; gap: 0.5rem; width: 300px;
 }
 
 .build-entry .card-actions {
   margin-top: calc(0.75rem + 10px);
-}
-
-.card-top-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  width: 300px;
-  margin-bottom: 0.35rem;
-}
-
-.card-top-spacer {
-  flex: 1;
-}
-
-.card-top-icon-btn {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgb(var(--rgb-accent) / 0.55);
-  border-radius: 8px;
-  background: rgb(var(--rgb-background) / 0.22);
-  color: rgb(var(--rgb-text));
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-.card-top-icon-btn:hover {
-  background: rgb(var(--rgb-accent) / 0.14);
-  border-color: rgb(var(--rgb-accent) / 0.8);
-  color: var(--color-accent);
 }
 
 .import-btn, .submit-btn {
@@ -1745,44 +1322,6 @@ watch(
   background: rgba(10, 50, 60, 0.8); color: #cdfafa; cursor: pointer;
   padding: 0.38rem 0.7rem; font-size: 0.8rem;
   transition: background-color 0.15s ease, border-color 0.15s ease;
-}
-.vote-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border-radius: 8px;
-  background: rgb(var(--rgb-background) / 0.22);
-  padding: 0.35rem 0.45rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-.vote-btn.up {
-  border: 1px solid rgb(22 163 74 / 0.8);
-  color: rgb(34 197 94);
-}
-.vote-btn.down {
-  border: 1px solid rgb(220 38 38 / 0.8);
-  color: rgb(239 68 68);
-}
-.vote-btn.up.active {
-  background: rgb(22 163 74);
-  color: white;
-  border-color: rgb(21 128 61);
-}
-.vote-btn.down.active {
-  background: rgb(220 38 38);
-  color: white;
-  border-color: rgb(185 28 28);
-}
-.vote-btn.up:hover:not(.active) {
-  background: rgb(240 253 244);
-}
-.vote-btn.down:hover:not(.active) {
-  background: rgb(254 242 242);
 }
 .import-btn:hover:not(:disabled), .submit-btn:hover {
   background: rgba(3, 151, 171, 0.35); border-color: rgba(10, 200, 185, 0.9);
@@ -1869,45 +1408,9 @@ watch(
   color: #f0e6d2;
 }
 
-.video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 0.9rem;
-}
-.video-card {
-  border: 1px solid rgba(200, 155, 60, 0.25);
-  border-radius: 10px;
-  background: rgba(10, 20, 40, 0.55);
-  overflow: hidden;
-}
-.video-thumb {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-}
-.video-content {
-  padding: 0.7rem;
-}
-.video-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.88rem;
-  line-height: 1.3;
-}
-.video-meta {
-  margin: 0 0 0.6rem;
-  font-size: 0.75rem;
-  color: rgba(240, 230, 210, 0.72);
-}
-.video-link {
-  display: inline-block;
-  text-decoration: none;
-}
-
 @media (max-width: 660px) {
   .header-card { flex-direction: column; align-items: flex-start; }
   .build-grid { grid-template-columns: 1fr; }
-  .create-grid { grid-template-columns: 1fr; }
 }
 
 </style>

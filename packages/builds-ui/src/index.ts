@@ -34,7 +34,3 @@ export type { SortOption, FilterRole, VoteProvider } from './composables/useBuil
 export { default as BuildSheet } from './components/BuildSheet.vue'
 export type { ImageResolvers, RuneLookup } from './components/BuildSheet.vue'
 export { default as BuildCardFlip } from './components/BuildCardFlip.vue'
-export { default as BuildDiscoveryPageShell } from './components/BuildDiscoveryPageShell.vue'
-export { default as BuildDiscoveryFiltersShell } from './components/BuildDiscoveryFiltersShell.vue'
-export { default as BuildDiscoveryListShell } from './components/BuildDiscoveryListShell.vue'
-export { default as BuildDiscoveryCardShell } from './components/BuildDiscoveryCardShell.vue'

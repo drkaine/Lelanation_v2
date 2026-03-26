@@ -1,5 +1,4 @@
 import { defineStore } from 'pinia'
-import { normalizeVideosPerPage } from '@lelanation/front-core'
 import type { YouTubeChannelData, YouTubeChannelStatus } from '~/types/youtube'
 import { apiUrl } from '~/utils/apiUrl'
 import { getYouTubeChannelDataUrl, getYouTubeChannelsConfigUrl } from '~/utils/staticDataUrl'
@@ -40,11 +39,14 @@ export const useYouTubeStore = defineStore('youtube', {
       const raw = window.localStorage.getItem('youtube.videosPerPage')
       const value = raw == null ? NaN : Number(raw)
       if (!Number.isFinite(value)) return
-      this.videosPerPage = normalizeVideosPerPage(value)
+      if (value !== 0 && value !== 10 && value !== 20 && value !== 30) return
+      this.videosPerPage = value
     },
 
     setVideosPerPage(value: number) {
-      const next = normalizeVideosPerPage(Number(value))
+      const next = Number(value)
+      if (!Number.isFinite(next)) return
+      if (next !== 0 && next !== 10 && next !== 20 && next !== 30) return
       this.videosPerPage = next
       if (process.client) {
         window.localStorage.setItem('youtube.videosPerPage', String(next))
