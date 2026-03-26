@@ -27,6 +27,7 @@ const MV_NAMES = [
   'mv_champion_spell_solo_stats',
   'mv_champion_summoner_spells',
   'mv_champion_bucket',
+  'mv_team_bucket',
 ] as const
 
 async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {

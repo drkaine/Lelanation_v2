@@ -44,6 +44,7 @@ npm version 0.12.0
 npm version patch   # 0.11.0 → 0.11.1
 npm version minor   # 0.11.0 → 0.12.0
 npm version major   # 0.11.0 → 1.0.0
+xvfb-run -a npm run tauri dev
 ```
 
 Cela met à jour `package.json`, puis le script `scripts/sync-version.mjs` met à jour `tauri.conf.json` et `Cargo.toml`.  

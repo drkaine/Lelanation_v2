@@ -816,7 +816,19 @@ model MvChampionBucket {
   sumTimeEnemySpentControlled  Int    @map("sum_time_enemy_spent_controlled")
   sumTotalGold                 Int    @map("sum_total_gold")
   sumXp                        Int    @map("sum_xp")
+  countGameFinishedAtBucket    Int    @map("count_game_finished_at_bucket")
 
   @@id([championStatId, durationBucket])
   @@map("mv_champion_bucket")
+}
+
+model MvTeamBucket {
+  teamStatId      BigInt @map("team_stat_id")
+  objectiveKey    String @map("objective_key")
+  objectiveBucket Int    @map("objective_bucket")
+  countWin        Int    @map("count_win")
+  countGame       Int    @map("count_game")
+
+  @@id([teamStatId, objectiveKey, objectiveBucket])
+  @@map("mv_team_bucket")
 }

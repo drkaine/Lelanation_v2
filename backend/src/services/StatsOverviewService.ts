@@ -101,6 +101,7 @@ export interface OverviewTeamsStats {
   }
   drakes: {
     types: {
+      elder: { byWin: number; byLoss: number }
       earth: { byWin: number; byLoss: number }
       water: { byWin: number; byLoss: number }
       wind: { byWin: number; byLoss: number }
@@ -615,47 +616,9 @@ export async function getOverviewTeamsStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const teamWhere: Record<string, unknown> = {}
-    if (pVersion) teamWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(teamWhere, rankTier)
-    // mv_team_core_stats n'a pas de colonne role (agrégat match / équipe).
-
-    const teamStats = await prisma.mvTeamCoreStat.findMany({
-      where: teamWhere,
-      select: {
-        team: true,
-        countWin: true,
-        countGame: true,
-        countFirstBlood: true,
-        sumBaronKills: true,
-        countBaronFirst: true,
-        sumDragonKills: true,
-        countDragonFirst: true,
-        sumTowerKills: true,
-        countTowerFirst: true,
-        sumHordeKills: true,
-        countHordeFirst: true,
-        sumRiftHeraldKills: true,
-        countRiftHeraldFirst: true,
-        sumInhibitorKills: true,
-        sumChampionKills: true,
-        sumElderKills: true,
-        countEarthDrake: true,
-        countWaterDrake: true,
-        countWindDrake: true,
-        countFireDrake: true,
-        countHextecDrake: true,
-        countChemDrake: true,
-        countEarthDrakeSoul: true,
-        countWaterDrakeSoul: true,
-        countWindDrakeSoul: true,
-        countFireDrakeSoul: true,
-        countHextecDrakeSoul: true,
-        countChemDrakeSoul: true,
-      },
-    })
-
-    const matchCount = teamStats.reduce((s, r) => s + r.countGame, 0) / 2
+    const matchWhere = buildMatchWhere(version, rankTier)
+    const matchCount = await prisma.match.count({ where: matchWhere })
+    const rawMatchCond = buildRawMatchCond(pVersion, rankTier)
 
     // Aggregate objectives by win/loss
     const winAgg = { baron: { first: 0, kills: 0 }, dragon: { first: 0, kills: 0 }, elder: { first: 0, kills: 0 }, tower: { first: 0, kills: 0 }, inhibitor: { first: 0, kills: 0 }, riftHerald: { first: 0, kills: 0 }, horde: { first: 0, kills: 0 }, firstBlood: { first: 0 } }
@@ -664,41 +627,116 @@ export async function getOverviewTeamsStats(
     const drakesLoss = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
     const soulsWin = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
     const soulsLoss = { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 }
+    const objectiveRows = await prisma.$queryRawUnsafe<
+      Array<{
+        team_win: boolean
+        count_first_blood: number
+        sum_baron_kills: number
+        count_baron_first: number
+        sum_dragon_kills: number
+        count_dragon_first: number
+        sum_tower_kills: number
+        count_tower_first: number
+        sum_horde_kills: number
+        count_horde_first: number
+        sum_rift_herald_kills: number
+        count_rift_herald_first: number
+        sum_inhibitor_kills: number
+      }>
+    >(`
+      SELECT
+        t.win AS team_win,
+        SUM(CASE WHEN t.first_blood THEN 1 ELSE 0 END)::int AS count_first_blood,
+        SUM(t.baron_kills)::int AS sum_baron_kills,
+        SUM(CASE WHEN t.baron_first THEN 1 ELSE 0 END)::int AS count_baron_first,
+        SUM(t.dragon_kills)::int AS sum_dragon_kills,
+        SUM(CASE WHEN t.dragon_first THEN 1 ELSE 0 END)::int AS count_dragon_first,
+        SUM(t.tower_kills)::int AS sum_tower_kills,
+        SUM(CASE WHEN t.tower_first THEN 1 ELSE 0 END)::int AS count_tower_first,
+        SUM(t.horde_kills)::int AS sum_horde_kills,
+        SUM(CASE WHEN t.horde_first THEN 1 ELSE 0 END)::int AS count_horde_first,
+        SUM(t.rift_herald_kills)::int AS sum_rift_herald_kills,
+        SUM(CASE WHEN t.rift_herald_first THEN 1 ELSE 0 END)::int AS count_rift_herald_first,
+        SUM(t.inhibitor_kills)::int AS sum_inhibitor_kills
+      FROM teams t
+      INNER JOIN matchs m ON m.id = t.match_id
+      WHERE ${rawMatchCond}
+      GROUP BY t.win
+    `)
+    for (const r of objectiveRows) {
+      const agg = r.team_win ? winAgg : lossAgg
+      agg.firstBlood.first += Number(r.count_first_blood ?? 0)
+      agg.baron.first += Number(r.count_baron_first ?? 0)
+      agg.baron.kills += Number(r.sum_baron_kills ?? 0)
+      agg.dragon.first += Number(r.count_dragon_first ?? 0)
+      agg.dragon.kills += Number(r.sum_dragon_kills ?? 0)
+      agg.tower.first += Number(r.count_tower_first ?? 0)
+      agg.tower.kills += Number(r.sum_tower_kills ?? 0)
+      agg.horde.first += Number(r.count_horde_first ?? 0)
+      agg.horde.kills += Number(r.sum_horde_kills ?? 0)
+      agg.riftHerald.first += Number(r.count_rift_herald_first ?? 0)
+      agg.riftHerald.kills += Number(r.sum_rift_herald_kills ?? 0)
+      agg.inhibitor.kills += Number(r.sum_inhibitor_kills ?? 0)
+    }
 
-    for (const r of teamStats) {
-      const isWin = r.countWin > r.countGame / 2
-      const agg = isWin ? winAgg : lossAgg
-      agg.baron.first += r.countBaronFirst
-      agg.baron.kills += r.sumBaronKills
-      agg.dragon.first += r.countDragonFirst
-      agg.dragon.kills += r.sumDragonKills
-      agg.tower.first += r.countTowerFirst
-      agg.tower.kills += r.sumTowerKills
-      agg.horde.first += r.countHordeFirst
-      agg.horde.kills += r.sumHordeKills
-      agg.riftHerald.first += r.countRiftHeraldFirst
-      agg.riftHerald.kills += r.sumRiftHeraldKills
-      agg.inhibitor.first += 0
-      agg.inhibitor.kills += r.sumInhibitorKills
-      agg.elder.first += 0
-      agg.elder.kills += r.sumElderKills
-      agg.firstBlood.first += r.countFirstBlood
+    const drakeRows = await prisma.$queryRawUnsafe<
+      Array<{
+        team_win: boolean
+        count_earth_drake: number
+        count_water_drake: number
+        count_wind_drake: number
+        count_fire_drake: number
+        count_hextec_drake: number
+        count_chem_drake: number
+        count_earth_drake_soul: number
+        count_water_drake_soul: number
+        count_wind_drake_soul: number
+        count_fire_drake_soul: number
+        count_hextec_drake_soul: number
+        count_chem_drake_soul: number
+        sum_elder_kills: number
+      }>
+    >(`
+      SELECT
+        t.win AS team_win,
+        SUM(CASE WHEN upper(d.drake_type) IN ('EARTH_DRAGON', 'MOUNTAIN_DRAGON') THEN 1 ELSE 0 END)::int AS count_earth_drake,
+        SUM(CASE WHEN upper(d.drake_type) IN ('WATER_DRAGON', 'OCEAN_DRAGON') THEN 1 ELSE 0 END)::int AS count_water_drake,
+        SUM(CASE WHEN upper(d.drake_type) IN ('AIR_DRAGON', 'CLOUD_DRAGON') THEN 1 ELSE 0 END)::int AS count_wind_drake,
+        SUM(CASE WHEN upper(d.drake_type) = 'FIRE_DRAGON' THEN 1 ELSE 0 END)::int AS count_fire_drake,
+        SUM(CASE WHEN upper(d.drake_type) = 'HEXTECH_DRAGON' THEN 1 ELSE 0 END)::int AS count_hextec_drake,
+        SUM(CASE WHEN upper(d.drake_type) = 'CHEMTECH_DRAGON' THEN 1 ELSE 0 END)::int AS count_chem_drake,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('MOUNTAIN', 'EARTH_DRAGON', 'MOUNTAIN_DRAGON', 'EARTH_DRAGON_SOUL', 'MOUNTAIN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_earth_drake_soul,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('OCEAN', 'WATER_DRAGON', 'OCEAN_DRAGON', 'WATER_DRAGON_SOUL', 'OCEAN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_water_drake_soul,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('CLOUD', 'AIR_DRAGON', 'CLOUD_DRAGON', 'AIR_DRAGON_SOUL', 'CLOUD_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_wind_drake_soul,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('INFERNAL', 'FIRE_DRAGON', 'FIRE_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_fire_drake_soul,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('HEXTECH', 'HEXTECH_DRAGON', 'HEXTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_hextec_drake_soul,
+        MAX(CASE WHEN upper(trim(d.soul)) IN ('CHEMTECH', 'CHEMTECH_DRAGON', 'CHEMTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_chem_drake_soul,
+        SUM(CASE WHEN upper(d.drake_type) = 'ELDER_DRAGON' OR lower(d.drake_type) = 'elder' THEN 1 ELSE 0 END)::int AS sum_elder_kills
+      FROM drake_details d
+      INNER JOIN teams t ON t.id = d.team_id
+      INNER JOIN matchs m ON m.id = d.match_id
+      WHERE ${rawMatchCond}
+      GROUP BY t.win
+    `)
+    for (const r of drakeRows) {
+      const drakeAgg = r.team_win ? drakesWin : drakesLoss
+      drakeAgg.earth += Number(r.count_earth_drake ?? 0)
+      drakeAgg.water += Number(r.count_water_drake ?? 0)
+      drakeAgg.wind += Number(r.count_wind_drake ?? 0)
+      drakeAgg.fire += Number(r.count_fire_drake ?? 0)
+      drakeAgg.hextec += Number(r.count_hextec_drake ?? 0)
+      drakeAgg.chem += Number(r.count_chem_drake ?? 0)
 
-      const drakeAgg = isWin ? drakesWin : drakesLoss
-      drakeAgg.earth += r.countEarthDrake
-      drakeAgg.water += r.countWaterDrake
-      drakeAgg.wind += r.countWindDrake
-      drakeAgg.fire += r.countFireDrake
-      drakeAgg.hextec += r.countHextecDrake
-      drakeAgg.chem += r.countChemDrake
+      const soulAgg = r.team_win ? soulsWin : soulsLoss
+      soulAgg.earth += Number(r.count_earth_drake_soul ?? 0)
+      soulAgg.water += Number(r.count_water_drake_soul ?? 0)
+      soulAgg.wind += Number(r.count_wind_drake_soul ?? 0)
+      soulAgg.fire += Number(r.count_fire_drake_soul ?? 0)
+      soulAgg.hextec += Number(r.count_hextec_drake_soul ?? 0)
+      soulAgg.chem += Number(r.count_chem_drake_soul ?? 0)
 
-      const soulAgg = isWin ? soulsWin : soulsLoss
-      soulAgg.earth += r.countEarthDrakeSoul
-      soulAgg.water += r.countWaterDrakeSoul
-      soulAgg.wind += r.countWindDrakeSoul
-      soulAgg.fire += r.countFireDrakeSoul
-      soulAgg.hextec += r.countHextecDrakeSoul
-      soulAgg.chem += r.countChemDrakeSoul
+      const agg = r.team_win ? winAgg : lossAgg
+      agg.elder.kills += Number(r.sum_elder_kills ?? 0)
     }
 
     // Bans from champion_core_stats - group by champion, filter by win/loss
@@ -750,8 +788,15 @@ export async function getOverviewTeamsStats(
       banRatePercent: totalBansAll > 0 ? (Math.round((b.total / totalBansAll) * 1000) / 10).toFixed(1) + '%' : '—',
     }))
 
-    const matchWhere = buildMatchWhere(version, rankTier)
-    const teamDistributionWhere: Record<string, unknown> = { match: matchWhere }
+    const objectiveKeyMap = new Map<string, string>([
+      ['baronKills', 'baron'],
+      ['dragonKills', 'dragon'],
+      ['elderKills', 'elder'],
+      ['towerKills', 'tower'],
+      ['inhibitorKills', 'inhibitor'],
+      ['riftHeraldKills', 'riftHerald'],
+      ['hordeKills', 'horde'],
+    ])
     type TeamObjectiveKey =
       | 'baronKills'
       | 'dragonKills'
@@ -763,19 +808,38 @@ export async function getOverviewTeamsStats(
     async function loadObjectiveDistribution(
       key: TeamObjectiveKey
     ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
-      const rows = await prisma.team.groupBy({
-        by: [key, 'win'],
-        where: teamDistributionWhere,
-        _count: { _all: true },
-      })
+      const objectiveKey = objectiveKeyMap.get(key) ?? ''
+      if (!objectiveKey) return { win: {}, loss: {} }
+      const conditions = ['1=1']
+      if (pVersion) conditions.push(`b.game_version LIKE '${pVersion}%'`)
+      const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+      if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
+      else if (ranks.length > 1) {
+        conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+      }
+      const whereSql = conditions.join(' AND ')
+      const rows = await prisma.$queryRawUnsafe<
+        Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
+      >(`
+        SELECT
+          b.team,
+          tb.objective_bucket,
+          SUM(tb.count_win)::int AS count_win,
+          SUM(tb.count_game)::int AS count_game
+        FROM mv_team_bucket tb
+        JOIN mv_team_core_stats b ON b.id = tb.team_stat_id
+        WHERE tb.objective_key = '${objectiveKey}'
+          AND ${whereSql}
+        GROUP BY b.team, tb.objective_bucket
+      `)
       const win: Record<string, number> = {}
       const loss: Record<string, number> = {}
-      for (const r of rows as Array<Record<string, unknown> & { win: boolean; _count: { _all: number } }>) {
-        const count = Number(r[key] ?? 0)
-        const bucket = String(Number.isFinite(count) ? count : 0)
-        const n = Number(r._count?._all ?? 0)
-        if (r.win) win[bucket] = (win[bucket] ?? 0) + n
-        else loss[bucket] = (loss[bucket] ?? 0) + n
+      for (const r of rows) {
+        const bucket = String(Number(r.objective_bucket ?? 0))
+        const w = Number(r.count_win ?? 0)
+        const g = Number(r.count_game ?? 0)
+        win[bucket] = (win[bucket] ?? 0) + w
+        loss[bucket] = (loss[bucket] ?? 0) + Math.max(0, g - w)
       }
       return { win, loss }
     }
@@ -829,6 +893,7 @@ export async function getOverviewTeamsStats(
       },
       drakes: {
         types: {
+          elder: { byWin: winAgg.elder.kills, byLoss: lossAgg.elder.kills },
           earth: { byWin: drakesWin.earth, byLoss: drakesLoss.earth },
           water: { byWin: drakesWin.water, byLoss: drakesLoss.water },
           wind: { byWin: drakesWin.wind, byLoss: drakesLoss.wind },

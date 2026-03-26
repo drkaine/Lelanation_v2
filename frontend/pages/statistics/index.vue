@@ -4688,6 +4688,21 @@ const progressionFromVersionModel = computed({
   },
 })
 
+function applyDefaultVersionFiltersFromKnownVersions(): boolean {
+  const versions = statsVersionOptions.value
+  if (!versions.length) return false
+  let changed = false
+  if (!statsVersionFilter.value) {
+    statsVersionFilter.value = versions[0]?.version ?? ''
+    changed = true
+  }
+  if (!progressionFromVersionOverride.value) {
+    progressionFromVersionOverride.value = versions[1]?.version ?? versions[0]?.version ?? ''
+    changed = true
+  }
+  return changed
+}
+
 /** Progressions complètes (tous les champions, WR + pickrate) pour onglet Progressions. */
 const progressionFullData = ref<{
   oldestVersion: string | null
@@ -5009,6 +5024,7 @@ const overviewTeamsData = ref<{
   }
   drakes?: {
     types: {
+      elder: { byWin: number; byLoss: number }
       earth: { byWin: number; byLoss: number }
       water: { byWin: number; byLoss: number }
       wind: { byWin: number; byLoss: number }
@@ -5111,6 +5127,7 @@ const OBJECTIVE_ICON_BY_KEY: Record<string, string> = {
   horde: `${CDRAGON_SCOREBOARD_BASE_URL}/grub.png`,
 }
 const DRAKE_ICON_BY_KEY: Record<string, string> = {
+  elder: `${CDRAGON_SCOREBOARD_BASE_URL}/_elderdrake.png`,
   earth: `${CDRAGON_SCOREBOARD_BASE_URL}/_mountaindrake.png`,
   water: `${CDRAGON_SCOREBOARD_BASE_URL}/_oceandrake.png`,
   wind: `${CDRAGON_SCOREBOARD_BASE_URL}/_clouddrake.png`,
@@ -5382,7 +5399,6 @@ function percentForCount(key: string, count: number, byWin: boolean): string {
 const objectiveKeysWithKills = [
   'baron',
   'dragon',
-  'elder',
   'tower',
   'inhibitor',
   'riftHerald',
@@ -5420,6 +5436,12 @@ const drakeTypeRows = computed(() => {
   const d = overviewTeamsData.value?.drakes?.types
   if (!d) return []
   return [
+    {
+      key: 'elder',
+      label: t('statisticsPage.overviewTeamsObjective_elder'),
+      byWin: d.elder?.byWin ?? 0,
+      byLoss: d.elder?.byLoss ?? 0,
+    },
     {
       key: 'earth',
       label: t('statisticsPage.drakeTypeEarth'),
@@ -5844,6 +5866,8 @@ onMounted(async () => {
   await versionPromise
   statsPerfEnd('version', tVersion)
   await loadOverview()
+  const defaultsApplied = applyDefaultVersionFiltersFromKnownVersions()
+  if (defaultsApplied) onStatsFilterChange()
   statsPerfEnd('page mount', tPage)
   championsStore.loadChampions(riotLocale.value)
   itemsStore.loadItems(riotLocale.value)
