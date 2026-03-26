@@ -7,14 +7,13 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { statfs } from 'node:fs/promises'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { loadMatchFilters, loadCurrentGameVersion, loadRateLimitConfig } from '../services/RiotConfigService.js'
+import { loadMatchFilters, loadCurrentGameVersion } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
 import { DiscordService } from '../services/DiscordService.js'
 import {
   RiotHttpClient,
   resolveRiotApiKey,
-  getClefTypeFromFile,
   RIOT_INGEST_ABORTED_MESSAGE,
   type RiotMatchDto,
   type RiotParticipantDto,
@@ -155,6 +154,39 @@ function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolea
   if (major > MIN_ALLOWED_MAJOR) return true
   if (major < MIN_ALLOWED_MAJOR) return false
   return minor >= MIN_ALLOWED_MINOR
+}
+
+function comparePatchVersionDesc(a: string, b: string): number {
+  const [aMajRaw, aMinRaw] = (a ?? '').trim().split('.')
+  const [bMajRaw, bMinRaw] = (b ?? '').trim().split('.')
+  const aMaj = Number(aMajRaw)
+  const aMin = Number(aMinRaw)
+  const bMaj = Number(bMajRaw)
+  const bMin = Number(bMinRaw)
+  const aMajSafe = Number.isFinite(aMaj) ? aMaj : -1
+  const aMinSafe = Number.isFinite(aMin) ? aMin : -1
+  const bMajSafe = Number.isFinite(bMaj) ? bMaj : -1
+  const bMinSafe = Number.isFinite(bMin) ? bMin : -1
+  if (aMajSafe !== bMajSafe) return bMajSafe - aMajSafe
+  if (aMinSafe !== bMinSafe) return bMinSafe - aMinSafe
+  return b.localeCompare(a)
+}
+
+async function resolvePatchPollingPolicy(): Promise<{
+  latestPatch: string | null
+  latestPatchOnly: boolean
+}> {
+  const patches = await prisma.activePatch.findMany({
+    select: { gameVersion: true, gamesNumber: true, gameNumberMax: true },
+  })
+  if (patches.length === 0) return { latestPatch: null, latestPatchOnly: false }
+
+  const latest = [...patches].sort((x, y) => comparePatchVersionDesc(x.gameVersion, y.gameVersion))[0]
+  const max = Math.trunc(Number(latest.gameNumberMax ?? 0))
+  const current = Math.trunc(Number(latest.gamesNumber ?? 0))
+  const latestPatchOnly = max > 0 && current < max
+
+  return { latestPatch: latest.gameVersion, latestPatchOnly }
 }
 
 function averageRankFromScores(scores: number[]): { tier: string; division: string } {
@@ -1522,7 +1554,9 @@ async function runStep4ForPlayer(
 
   type StrictFetchResult =
     | { ok: true; matchDto: RiotMatchDto; timelineDto: RiotMatchTimelineDto }
-    | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'transient' }
+    | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'transient' | 'deferred_patch' }
+
+  const patchPolicy = await resolvePatchPollingPolicy()
 
   const fetchMatchAndTimelineStrict = async (matchId: string): Promise<StrictFetchResult> => {
     let attempts = 0
@@ -1551,6 +1585,12 @@ async function runStep4ForPlayer(
         )
       ) {
         return { ok: false, reason: 'version' }
+      }
+      if (patchPolicy.latestPatchOnly) {
+        const matchPatch = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
+        if (matchPatch !== patchPolicy.latestPatch) {
+          return { ok: false, reason: 'deferred_patch' }
+        }
       }
 
       const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
@@ -1682,6 +1722,14 @@ async function runStep4ForPlayer(
           })
           continue
         }
+        if (strict.reason === 'deferred_patch') {
+          await logger.info('Match deferred (latest patch priority mode)', {
+            playerId: player.id.toString(),
+            matchId,
+            latestPatch: patchPolicy.latestPatch,
+          })
+          continue
+        }
         pendingTransientIngest = true
         await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
           playerId: player.id.toString(),
@@ -1757,13 +1805,7 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
     return { ok: false }
   }
   const logger = createRiotPollerLogger()
-  const rateLimitRes = await loadRateLimitConfig()
-  if (rateLimitRes.isErr()) {
-    await logger.error('Failed to load rate-limit config', rateLimitRes.unwrapErr())
-    setState({ lastError: 'rate-limit config' })
-    return { ok: false }
-  }
-  const rateLimiter = new RiotRateLimiter(rateLimitRes.unwrap())
+  const rateLimiter = new RiotRateLimiter()
   const client = new RiotHttpClient(rateLimiter, logger)
   const filtersRes = await loadMatchFilters()
   if (filtersRes.isErr()) {
@@ -1790,7 +1832,7 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
     void logger.error(msg, {})
   })
 
-  const clefType = client.getActiveKeyInfo()?.clefType ?? (await getClefTypeFromFile())
+  const clefType = client.getActiveKeyInfo()?.clefType ?? null
   return { ok: true, client, logger, filters, clefType }
 }
 

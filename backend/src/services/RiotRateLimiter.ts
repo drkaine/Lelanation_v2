@@ -5,8 +5,6 @@
  * - When the 120s application bucket reports ≥99 uses (e.g. 99/100), pause 2 minutes before more calls.
  * - On HTTP 429: block at least 10s, or longer if Riot sends Retry-After (whichever is greater).
  */
-import type { RateLimitConfig } from './RiotConfigService.js'
-
 /** Pause when a 120s bucket count reaches this usage (Riot app limit is typically 100/120s). */
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
 /** Cooldown after hitting near-limit on the 120s bucket (ms). */
@@ -50,7 +48,7 @@ export class RiotRateLimiter {
   private penaltyUntil = 0
   private chain: Promise<void> = Promise.resolve()
 
-  constructor(_config: RateLimitConfig) {
+  constructor() {
     this.penalty429Ms = PENALTY_429_MS
   }
 

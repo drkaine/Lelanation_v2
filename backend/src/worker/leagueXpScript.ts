@@ -10,7 +10,6 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { loadRateLimitConfig } from '../services/RiotConfigService.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
 import { RiotHttpClient, resolveRiotApiKey } from '../services/RiotHttpClient.js'
 
@@ -108,11 +107,7 @@ export async function runLeagueXpScript(
 
   try {
     // Init Riot API client
-    const rateLimitRes = await loadRateLimitConfig()
-    if (rateLimitRes.isErr()) {
-      throw new Error(`Failed to load rate-limit config: ${rateLimitRes.unwrapErr().message}`)
-    }
-    const rateLimiter = new RiotRateLimiter(rateLimitRes.unwrap())
+    const rateLimiter = new RiotRateLimiter()
     const client = new RiotHttpClient(rateLimiter, logger)
 
     const resolved = await resolveRiotApiKey()

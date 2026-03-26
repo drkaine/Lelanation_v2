@@ -275,9 +275,6 @@
           <!-- Tab: Overview (default) -->
           <div v-show="activeTab === 'overview'" class="space-y-6">
             <div class="rounded-lg">
-              <h2 class="mb-4 text-xl font-semibold text-text-accent">
-                {{ t('statisticsPage.overviewTitle') }}
-              </h2>
               <div v-if="overviewPending" class="text-text/70">
                 {{ t('statisticsPage.loading') }}
               </div>
@@ -1294,7 +1291,7 @@
                           Total: {{ overviewMatchOutcomeTotal.toLocaleString() }}
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-200" />
+                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-300" />
                           Early surrender: {{ overviewEarlySurrenderCount.toLocaleString() }} ({{
                             overviewEarlySurrenderPct.toFixed(2)
                           }}%)

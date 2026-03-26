@@ -2,10 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { RiotRateLimiter } from './RiotRateLimiter.js'
 
-const dummyConfig = { buckets: [{ name: 'app', limits: [{ count: 99, windowSeconds: 120 }] }] }
-
 test('RiotRateLimiter: acquire is immediate when no penalty', async () => {
-  const limiter = new RiotRateLimiter(dummyConfig)
+  const limiter = new RiotRateLimiter()
   const t0 = Date.now()
   await limiter.acquire('app')
   await limiter.acquire('app')
@@ -15,7 +13,7 @@ test('RiotRateLimiter: acquire is immediate when no penalty', async () => {
 })
 
 test('RiotRateLimiter: penalize429 blocks ~10s', async () => {
-  const limiter = new RiotRateLimiter(dummyConfig)
+  const limiter = new RiotRateLimiter()
   limiter.penalize429()
   const t0 = Date.now()
   await limiter.acquire()
@@ -24,7 +22,7 @@ test('RiotRateLimiter: penalize429 blocks ~10s', async () => {
 })
 
 test('RiotRateLimiter: penalize429 uses max(10s, Retry-After)', async () => {
-  const limiter = new RiotRateLimiter(dummyConfig)
+  const limiter = new RiotRateLimiter()
   limiter.penalize429(15)
   const t0 = Date.now()
   await limiter.acquire()
@@ -33,7 +31,7 @@ test('RiotRateLimiter: penalize429 uses max(10s, Retry-After)', async () => {
 })
 
 test('RiotRateLimiter: 98/120s does not enqueue long cooldown', async () => {
-  const limiter = new RiotRateLimiter(dummyConfig)
+  const limiter = new RiotRateLimiter()
   const headers = new Headers({
     'x-app-rate-limit': '20:1,100:120',
     'x-app-rate-limit-count': '1:1,98:120',

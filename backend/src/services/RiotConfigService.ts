@@ -23,20 +23,6 @@ export interface MatchFiltersConfig {
   versions: MatchFilterVersion[]
 }
 
-export interface RateLimitBucketLimit {
-  count: number
-  windowSeconds: number
-}
-
-export interface RateLimitBucket {
-  name: string
-  limits: RateLimitBucketLimit[]
-}
-
-export interface RateLimitConfig {
-  buckets: RateLimitBucket[]
-}
-
 export interface VersionInfo {
   currentVersion: string
   lastSyncDate: string
@@ -50,17 +36,6 @@ export async function loadMatchFilters(): Promise<Result<MatchFiltersConfig, App
   const data = r.unwrap()
   if (!data?.versions || !Array.isArray(data.versions)) {
     return Result.err(new AppError('match-filters.json: missing or invalid versions', 'FILE_ERROR'))
-  }
-  return Result.ok(data)
-}
-
-export async function loadRateLimitConfig(): Promise<Result<RateLimitConfig, AppError>> {
-  const path = join(DATA_RIOT, 'rate-limit.json')
-  const r = await FileManager.readJson<RateLimitConfig>(path)
-  if (r.isErr()) return r
-  const data = r.unwrap()
-  if (!data?.buckets || !Array.isArray(data.buckets)) {
-    return Result.err(new AppError('rate-limit.json: missing or invalid buckets', 'FILE_ERROR'))
   }
   return Result.ok(data)
 }

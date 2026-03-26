@@ -1,18 +1,10 @@
 /**
- * HTTP client for Riot API: key resolution (env then file), rate limiting, 429/400 handling.
+ * HTTP client for Riot API: key resolution (env), rate limiting, 429/400 handling.
  */
-import { join } from 'path'
-import { FileManager } from '../utils/fileManager.js'
 import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
-const RIOT_APIKEY_FILE = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
-
-interface RiotApiKeyFile {
-  riotApiKey?: string
-  clefType?: string
-}
 
 const PLATFORM_BY_REGION: Record<string, string> = {
   euw1: 'euw1',
@@ -62,7 +54,7 @@ export interface RiotHttpError {
   body?: unknown
 }
 
-export type RiotKeySource = 'env' | 'file'
+export type RiotKeySource = 'env'
 
 export interface ActiveKeyInfo {
   key: string
@@ -82,7 +74,7 @@ export type RiotRequestOptions = {
 }
 
 /**
- * Resolve API key: try env first, then riot-apikey.json.
+ * Resolve API key from env only.
  */
 export async function resolveRiotApiKey(): Promise<
   { ok: true; key: string; source: RiotKeySource; clefType: string | null } | { ok: false; error: string }
@@ -91,30 +83,7 @@ export async function resolveRiotApiKey(): Promise<
   if (envKey) {
     return { ok: true, key: envKey, source: 'env', clefType: null }
   }
-  const read = await FileManager.readJson<RiotApiKeyFile>(RIOT_APIKEY_FILE)
-  if (read.isErr()) {
-    return { ok: false, error: read.unwrapErr().message }
-  }
-  const data = read.unwrap()
-  const key = data?.riotApiKey?.trim()
-  if (!key) {
-    return { ok: false, error: 'No RIOT_API_KEY in env and no riotApiKey in riot-apikey.json' }
-  }
-  return {
-    ok: true,
-    key,
-    source: 'file',
-    clefType: data?.clefType ?? null,
-  }
-}
-
-/**
- * Get clefType from riot-apikey.json (when key is from file we have it; when from env we read file for clefType).
- */
-export async function getClefTypeFromFile(): Promise<string | null> {
-  const r = await FileManager.readJson<RiotApiKeyFile>(RIOT_APIKEY_FILE)
-  if (r.isErr()) return null
-  return r.unwrap()?.clefType ?? null
+  return { ok: false, error: 'No RIOT_API_KEY in env' }
 }
 
 const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 20_000

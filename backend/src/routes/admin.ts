@@ -29,7 +29,7 @@ import {
   type LeagueXpOptions,
 } from '../worker/scriptOrchestrator.js'
 import { getRiotPollerStatus } from '../worker/riotPoller.js'
-import { resolveRiotApiKey, getClefTypeFromFile } from '../services/RiotHttpClient.js'
+import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -58,7 +58,6 @@ const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
-const RIOT_APIKEY_FILE = join(process.cwd(), 'data', 'admin', 'riot-apikey.json')
 const MATCH_FILTERS_FILE = join(process.cwd(), 'data', 'riot', 'match-filters.json')
 
 function maskKey(key: string): string {
@@ -252,18 +251,11 @@ router.get('/data-stats', async (_req, res) => {
     totalMatches: 0,
   }
   try {
-    const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
     const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
       prisma.match.count(),
-      configuredKeyVersion
-        ? prisma.player.count({
-            where: {
-              OR: [{ puuidKeyVersion: null }, { puuidKeyVersion: { not: configuredKeyVersion } }],
-            },
-          })
-        : prisma.player.count({ where: { puuidKeyVersion: null } }),
+      prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {
       totalPlayers,
@@ -387,18 +379,11 @@ router.get('/riot-scripts-status', async (_req, res) => {
     totalMatches: 0,
   }
   try {
-    const configuredKeyVersion = (await getClefTypeFromFile()) ?? null
     const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
       prisma.match.count(),
-      configuredKeyVersion
-        ? prisma.player.count({
-            where: {
-              OR: [{ puuidKeyVersion: null }, { puuidKeyVersion: { not: configuredKeyVersion } }],
-            },
-          })
-        : prisma.player.count({ where: { puuidKeyVersion: null } }),
+      prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {
       totalPlayers,
@@ -521,20 +506,10 @@ router.get('/riot-apikey', async (_req, res) => {
   return res.json({ maskedKey: maskKey(resolved.key), source: resolved.source })
 })
 
-/** PUT /api/admin/riot-apikey - save key to file (data/admin/riot-apikey.json) */
+/** PUT /api/admin/riot-apikey - deprecated (env-only key management). */
 router.put('/riot-apikey', async (req, res) => {
-  const key = typeof req.body?.riotApiKey === 'string' ? req.body.riotApiKey.trim() : ''
-  if (!key) {
-    return res.status(400).json({ error: 'riotApiKey is required' })
-  }
-  const { FileManager: FM } = await import('../utils/fileManager.js')
-  const read = await FM.readJson<{ clefType?: string }>(RIOT_APIKEY_FILE)
-  const clefType = read.isOk() ? read.unwrap()?.clefType ?? 'perso' : 'perso'
-  const write = await FM.writeJson(RIOT_APIKEY_FILE, { riotApiKey: key, clefType })
-  if (write.isErr()) {
-    return res.status(500).json({ error: write.unwrapErr().message })
-  }
-  return res.json({ maskedKey: maskKey(key) })
+  void req
+  return res.status(410).json({ error: 'riot-apikey.json is removed. Configure RIOT_API_KEY in backend/.env.' })
 })
 
 /** POST /api/admin/riot-apikey/test - test current key with Riot API */
