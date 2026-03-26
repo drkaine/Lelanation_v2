@@ -175,6 +175,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { applyVideoFilters, dedupeAndSortVideos } from '@lelanation/front-core'
 import { useAsyncData } from '#app'
 import { useYouTubeStore } from '~/stores/YouTubeStore'
 import VideoGridCard from '~/components/Videos/VideoGridCard.vue'
@@ -237,89 +238,17 @@ const chipClass = (active: boolean) =>
       : 'border-accent/70 bg-background/10 text-accent-dark hover:border-accent hover:bg-accent/10 hover:text-accent',
   ].join(' ')
 
-const normalize = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize('NFD')
-
-    .replace(/[\u0300-\u036F]/g, '')
-
-const detectType = (title: string): Exclude<VideoCategory, 'all'> => {
-  const t = normalize(title)
-  if (/lobby/.test(t)) return 'lobby'
-  if (/\bbuilds?\b/.test(t)) return 'builds'
-  return 'other'
-}
-
-const detectFormat = (video: YouTubeVideo): Exclude<VideoFormat, 'all'> => {
-  if (typeof video.isShort === 'boolean') {
-    return video.isShort ? 'shorts' : 'videos'
-  }
-
-  const title = video.title || ''
-  const desc = video.description || ''
-  const t = normalize(`${title} ${desc}`)
-
-  // Primary: explicit markers
-  if (/\bshorts?\b/.test(t) || /#shorts?\b/.test(t)) return 'shorts'
-
-  // Heuristic: many shorts are posted with hashtags in the title and a short title.
-  // (We don't have duration in the stored data.)
-  const hasHashtags = /#\w+/.test(title)
-  if (hasHashtags && title.length <= 90) return 'shorts'
-
-  return 'videos'
-}
-
 const allVideos = computed<YouTubeVideo[]>(() => {
   const all = Object.values(youtube.channelDataById).flatMap(d => (d?.videos ? d.videos : []))
-  // Deduplicate by id (defensive)
-  const byId = new Map<string, YouTubeVideo>()
-  for (const v of all) byId.set(v.id, v)
-  const result = [...byId.values()]
-
-  // Debug: check if channels exist but no videos (only in dev)
-  // Silently continue - videos may be loading
-
-  return result
+  return dedupeAndSortVideos(all)
 })
 
 const filteredVideos = computed<YouTubeVideo[]>(() => {
-  const q = normalize(query.value.trim())
-  const channelId = selectedChannelId.value
-  const type = selectedType.value
-  const fmt = selectedFormat.value
-
-  let list = allVideos.value
-
-  if (channelId !== 'all') {
-    list = list.filter(v => v.channelId === channelId)
-  }
-
-  if (type !== 'all') {
-    list = list.filter(v => detectType(v.title) === type)
-  }
-
-  if (fmt !== 'all') {
-    list = list.filter(v => detectFormat(v) === fmt)
-  }
-
-  if (q) {
-    list = list.filter(v => normalize(v.title).includes(q))
-  }
-
-  const toTime = (iso: string | undefined) => {
-    const t = Date.parse(String(iso || ''))
-    return Number.isFinite(t) ? t : -Infinity
-  }
-
-  // Default: strict chronological (newest first), stable tie-breakers.
-  return [...list].sort((a, b) => {
-    const dt = toTime(b.publishedAt) - toTime(a.publishedAt)
-    if (dt !== 0) return dt
-    const byTitle = a.title.localeCompare(b.title, 'fr', { sensitivity: 'base' })
-    if (byTitle !== 0) return byTitle
-    return a.id.localeCompare(b.id, 'fr', { sensitivity: 'base' })
+  return applyVideoFilters(allVideos.value, {
+    query: query.value,
+    channelId: selectedChannelId.value,
+    category: selectedType.value,
+    format: selectedFormat.value,
   })
 })
 

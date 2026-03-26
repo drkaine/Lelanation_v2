@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Build, StoredBuild } from '@lelanation/shared-types'
+import { filterAndSortBuilds, sortBuilds } from '@lelanation/front-core'
 import { useBuildStore } from './BuildStore'
 import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
@@ -74,71 +75,18 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
   getters: {
     searchResults(): Build[] {
-      let results = [...this.builds]
-
-      // Search by build name, variant titles, champion name or author
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase().trim()
-        results = results.filter(build => {
-          if (build.name?.toLowerCase().includes(query)) return true
-          if (build.champion?.name?.toLowerCase().includes(query)) return true
-          if (build.champion?.id?.toLowerCase().includes(query)) return true
-          if (build.author?.toLowerCase().includes(query)) return true
-          const subBuilds = build.subBuilds ?? []
-          if (subBuilds.some(sub => sub.title?.toLowerCase().includes(query))) return true
-          return false
-        })
-      }
-
-      // Filter by champion
-      if (this.selectedChampion) {
-        results = results.filter(build => build.champion?.id === this.selectedChampion)
-      }
-
-      // Filter by role (using build.roles field)
-      if (this.selectedRole) {
-        results = results.filter(build => {
-          // Vérifier si le build a le rôle sélectionné dans son champ roles
-          return build.roles && build.roles.includes(this.selectedRole!)
-        })
-      }
-
-      // Filter by version
-      if (this.selectedVersion) {
-        results = results.filter(build => build.gameVersion === this.selectedVersion)
-      }
-
-      // Sort
-      const sorted = [...results]
-
-      switch (this.sortBy) {
-        case 'recent':
-          sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          break
-        case 'popular': {
-          // Sort by vote count (descending), then by creation date
-          const voteStore = useVoteStore()
-          sorted.sort((a, b) => {
-            const votesA = voteStore.getVoteCount(a.id)
-            const votesB = voteStore.getVoteCount(b.id)
-            if (votesA !== votesB) {
-              return votesB - votesA
-            }
-            // If same votes, sort by most recent
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          })
-          break
-        }
-        case 'name':
-          sorted.sort((a, b) => {
-            const nameA = a.champion?.name || a.name
-            const nameB = b.champion?.name || b.name
-            return nameA.localeCompare(nameB)
-          })
-          break
-      }
-
-      return sorted
+      const voteStore = useVoteStore()
+      return filterAndSortBuilds(
+        this.builds,
+        {
+          searchQuery: this.searchQuery,
+          selectedChampion: this.selectedChampion,
+          selectedRole: this.selectedRole,
+          selectedVersion: this.selectedVersion,
+          sortBy: this.sortBy,
+        },
+        buildId => voteStore.getVoteCount(buildId)
+      )
     },
 
     totalFilteredCount(): number {
@@ -277,35 +225,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     },
 
     sortBuilds(builds: Build[]): Build[] {
-      const sorted = [...builds]
-
-      switch (this.sortBy) {
-        case 'recent':
-          return sorted.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
-        case 'popular': {
-          // Sort by vote count (descending), then by creation date
-          const voteStore = useVoteStore()
-          return sorted.sort((a, b) => {
-            const votesA = voteStore.getVoteCount(a.id)
-            const votesB = voteStore.getVoteCount(b.id)
-            if (votesA !== votesB) {
-              return votesB - votesA
-            }
-            // If same votes, sort by most recent
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          })
-        }
-        case 'name':
-          return sorted.sort((a, b) => {
-            const nameA = a.champion?.name || a.name
-            const nameB = b.champion?.name || b.name
-            return nameA.localeCompare(nameB)
-          })
-        default:
-          return sorted
-      }
+      const voteStore = useVoteStore()
+      return sortBuilds(builds, this.sortBy, buildId => voteStore.getVoteCount(buildId))
     },
 
     addToComparison(buildId: string) {

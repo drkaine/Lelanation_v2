@@ -1,24 +1,23 @@
 <template>
   <div class="build-grid" :style="buildGridVars">
-    <div v-if="builds.length === 0" class="py-12 text-center">
-      <p class="text-lg text-text">{{ t('buildDiscovery.noBuildsFound') }}</p>
-      <p class="mt-2 text-sm text-text/70">
-        {{
-          hasActiveFilters
-            ? t('buildDiscovery.adjustFilters')
-            : t('buildDiscovery.createFirstBuild')
-        }}
-      </p>
-      <NuxtLink
-        v-if="!hasActiveFilters"
-        :to="localePath('/builds/create')"
-        class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
-      >
-        {{ t('buildsPage.createBuild') }}
-      </NuxtLink>
-    </div>
-
-    <div v-else class="build-grid-list">
+    <BuildDiscoveryListShell :empty="builds.length === 0">
+      <template #empty>
+        <p class="text-lg text-text">{{ t('buildDiscovery.noBuildsFound') }}</p>
+        <p class="mt-2 text-sm text-text/70">
+          {{
+            hasActiveFilters
+              ? t('buildDiscovery.adjustFilters')
+              : t('buildDiscovery.createFirstBuild')
+          }}
+        </p>
+        <NuxtLink
+          v-if="!hasActiveFilters"
+          :to="localePath('/builds/create')"
+          class="mt-4 inline-block rounded bg-accent px-6 py-2 text-background hover:bg-accent-dark"
+        >
+          {{ t('buildsPage.createBuild') }}
+        </NuxtLink>
+      </template>
       <div v-for="build in builds" :key="build.id" class="build-grid-item">
         <div class="mb-[3px] flex w-full items-center gap-2">
           <div class="build-grid-top-icon-slot">
@@ -318,7 +317,7 @@
           </div>
         </div>
       </div>
-    </div>
+    </BuildDiscoveryListShell>
 
     <!-- Pagination (Discover, Mes builds, Favoris) -->
     <div
@@ -361,6 +360,7 @@
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { BuildDiscoveryListShell } from '@lelanation/builds-ui'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useBuildStore } from '~/stores/BuildStore'

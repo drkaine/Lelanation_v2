@@ -1,170 +1,165 @@
 <template>
-  <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
-    <div class="max-w-8xl mx-auto px-0">
-      <div class="flex justify-center">
-        <div class="streamer-tabs">
-          <button
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'discover' }"
-            @click="activeTab = 'discover'"
-          >
-            {{ t('buildsPage.discover') }}
-          </button>
-          <button
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'my-builds' }"
-            @click="activeTab = 'my-builds'"
-          >
-            {{ t('buildsPage.myBuilds') }}
-          </button>
-          <button
-            v-if="favoriteBuilds.length > 0"
-            type="button"
-            class="streamer-tab-button"
-            :class="{ 'is-active': activeTab === 'favoris' }"
-            @click="activeTab = 'favoris'"
-          >
-            {{ t('buildsPage.myFavorites') }}
-          </button>
-          <NuxtLink :to="localePath('/builds/create')" class="streamer-tab-button">
-            {{ t('buildsPage.createBuild') }}
-          </NuxtLink>
-        </div>
-      </div>
+  <BuildDiscoveryPageShell>
+    <template #tabs>
+      <button
+        type="button"
+        class="streamer-tab-button"
+        :class="{ 'is-active': activeTab === 'discover' }"
+        @click="activeTab = 'discover'"
+      >
+        {{ t('buildsPage.discover') }}
+      </button>
+      <button
+        type="button"
+        class="streamer-tab-button"
+        :class="{ 'is-active': activeTab === 'my-builds' }"
+        @click="activeTab = 'my-builds'"
+      >
+        {{ t('buildsPage.myBuilds') }}
+      </button>
+      <button
+        v-if="favoriteBuilds.length > 0"
+        type="button"
+        class="streamer-tab-button"
+        :class="{ 'is-active': activeTab === 'favoris' }"
+        @click="activeTab = 'favoris'"
+      >
+        {{ t('buildsPage.myFavorites') }}
+      </button>
+      <NuxtLink :to="localePath('/builds/create')" class="streamer-tab-button">
+        {{ t('buildsPage.createBuild') }}
+      </NuxtLink>
+    </template>
 
-      <!-- Tab Content: Discover -->
-      <div v-if="activeTab === 'discover'" class="tab-content">
-        <!-- Search and Filters -->
-        <div class="mb-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <BuildSearch />
-            <BuildFilters />
-          </div>
-        </div>
-
-        <!-- Comparison Bar -->
-        <div
-          v-if="comparisonBuilds.length > 0"
-          class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
-        >
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p class="font-semibold text-text">
-                {{ comparisonBuilds.length }}
-                {{
-                  comparisonBuilds.length === 1
-                    ? t('buildsPage.buildsInComparison')
-                    : t('buildsPage.buildsInComparison_other')
-                }}
-              </p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <NuxtLink
-                :to="localePath('/builds/compare')"
-                class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
-              >
-                {{ t('buildsPage.compare') }}
-              </NuxtLink>
-              <button
-                class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
-                @click="clearComparison"
-              >
-                {{ t('buildsPage.clear') }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Build Grid -->
-        <BuildGrid :show-favorite-toggle="true" />
-      </div>
-
-      <!-- Tab Content: My Builds -->
-      <div v-if="activeTab === 'my-builds'" class="tab-content">
-        <div class="mb-3 flex flex-wrap items-center gap-2">
+    <!-- Tab Content: Discover -->
+    <div v-if="activeTab === 'discover'" class="tab-content">
+      <!-- Search and Filters -->
+      <div class="mb-3">
+        <div class="flex flex-wrap items-center gap-2">
           <BuildSearch />
           <BuildFilters />
-          <span class="text-sm text-text-secondary">
-            {{ t('buildsPage.visibility') }}
-          </span>
-          <select
-            v-model="myBuildsVisibilityFilter"
-            class="filter-like-select md:hidden"
-            :aria-label="t('buildsPage.visibility')"
-          >
-            <option v-for="opt in visibilityFilterOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
-          <div class="filter-like-segmented hidden p-0.5 md:flex">
-            <button
-              v-for="opt in visibilityFilterOptions"
-              :key="opt.value"
-              :class="[
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                myBuildsVisibilityFilter === opt.value
-                  ? 'bg-primary/30 text-text'
-                  : 'text-text-secondary hover:bg-primary/20 hover:text-text',
-              ]"
-              @click="myBuildsVisibilityFilter = opt.value"
+        </div>
+      </div>
+
+      <!-- Comparison Bar -->
+      <div
+        v-if="comparisonBuilds.length > 0"
+        class="mb-6 rounded-lg border-2 border-accent bg-accent/20 p-4"
+      >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p class="font-semibold text-text">
+              {{ comparisonBuilds.length }}
+              {{
+                comparisonBuilds.length === 1
+                  ? t('buildsPage.buildsInComparison')
+                  : t('buildsPage.buildsInComparison_other')
+              }}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <NuxtLink
+              :to="localePath('/builds/compare')"
+              class="rounded-lg bg-accent px-4 py-2 text-background transition-colors hover:bg-accent-dark"
             >
-              {{ opt.label }}
+              {{ t('buildsPage.compare') }}
+            </NuxtLink>
+            <button
+              class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-text transition-colors hover:bg-accent/10"
+              @click="clearComparison"
+            >
+              {{ t('buildsPage.clear') }}
             </button>
           </div>
-          <button
-            v-if="adminMode"
-            class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
-            :disabled="shareLoading"
-            @click="shareBuilds"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-              <path d="M13 5v5h5" />
-              <path d="m8 14 3 3 5-5" />
-            </svg>
-            {{ shareLoading ? 'Import en cours...' : "Importer dans l'app" }}
-          </button>
-        </div>
-
-        <!-- Build Grid avec les builds de l'utilisateur -->
-        <BuildGrid
-          :custom-builds="buildsFilteredByVisibility"
-          :show-user-actions="true"
-          @delete-build="confirmDelete"
-          @toggle-visibility="toggleBuildVisibility"
-        />
-      </div>
-
-      <!-- Tab Content: Mes favoris -->
-      <div v-if="activeTab === 'favoris'" class="tab-content">
-        <div class="mb-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <BuildSearch />
-            <BuildFilters />
-          </div>
-        </div>
-        <BuildGrid :custom-builds="favoriteBuilds" :show-favorite-toggle="true" />
-      </div>
-
-      <div v-if="activeTab === 'lelariva'" class="tab-content">
-        <div class="py-12 text-center">
-          <p class="mb-4 text-lg text-text-secondary">{{ t('buildsPage.lelarivaBuilds') }}</p>
-          <p class="text-text-secondary">{{ t('buildsPage.lelarivaComingSoon') }}</p>
         </div>
       </div>
+
+      <!-- Build Grid -->
+      <BuildGrid :show-favorite-toggle="true" />
     </div>
 
+    <!-- Tab Content: My Builds -->
+    <div v-if="activeTab === 'my-builds'" class="tab-content">
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        <BuildSearch />
+        <BuildFilters />
+        <span class="text-sm text-text-secondary">
+          {{ t('buildsPage.visibility') }}
+        </span>
+        <select
+          v-model="myBuildsVisibilityFilter"
+          class="filter-like-select md:hidden"
+          :aria-label="t('buildsPage.visibility')"
+        >
+          <option v-for="opt in visibilityFilterOptions" :key="opt.value" :value="opt.value">
+            {{ opt.label }}
+          </option>
+        </select>
+        <div class="filter-like-segmented hidden p-0.5 md:flex">
+          <button
+            v-for="opt in visibilityFilterOptions"
+            :key="opt.value"
+            :class="[
+              'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              myBuildsVisibilityFilter === opt.value
+                ? 'bg-primary/30 text-text'
+                : 'text-text-secondary hover:bg-primary/20 hover:text-text',
+            ]"
+            @click="myBuildsVisibilityFilter = opt.value"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+        <button
+          v-if="adminMode"
+          class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
+          :disabled="shareLoading"
+          @click="shareBuilds"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+            <path d="M13 5v5h5" />
+            <path d="m8 14 3 3 5-5" />
+          </svg>
+          {{ shareLoading ? 'Import en cours...' : "Importer dans l'app" }}
+        </button>
+      </div>
+
+      <!-- Build Grid avec les builds de l'utilisateur -->
+      <BuildGrid
+        :custom-builds="buildsFilteredByVisibility"
+        :show-user-actions="true"
+        @delete-build="confirmDelete"
+        @toggle-visibility="toggleBuildVisibility"
+      />
+    </div>
+
+    <!-- Tab Content: Mes favoris -->
+    <div v-if="activeTab === 'favoris'" class="tab-content">
+      <div class="mb-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <BuildSearch />
+          <BuildFilters />
+        </div>
+      </div>
+      <BuildGrid :custom-builds="favoriteBuilds" :show-favorite-toggle="true" />
+    </div>
+
+    <div v-if="activeTab === 'lelariva'" class="tab-content">
+      <div class="py-12 text-center">
+        <p class="mb-4 text-lg text-text-secondary">{{ t('buildsPage.lelarivaBuilds') }}</p>
+        <p class="text-text-secondary">{{ t('buildsPage.lelarivaComingSoon') }}</p>
+      </div>
+    </div>
     <!-- Delete Confirmation Modal -->
     <div
       v-if="buildToDelete"
@@ -258,12 +253,13 @@
     >
       {{ shareError }}
     </div>
-  </div>
+  </BuildDiscoveryPageShell>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { BuildDiscoveryPageShell } from '@lelanation/builds-ui'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
@@ -489,10 +485,6 @@ onMounted(() => {
 <style scoped>
 .tab-content {
   animation: fadeIn 0.3s ease-in;
-}
-
-.builds-page {
-  padding-top: 10px;
 }
 
 .streamer-tabs {
