@@ -5105,7 +5105,10 @@ const OBJECTIVE_ICON_BY_KEY: Record<string, string> = {
   baron: `${CDRAGON_SCOREBOARD_BASE_URL}/_baronnashor.png`,
   dragon: `${CDRAGON_SCOREBOARD_BASE_URL}/_dragon.png`,
   elder: `${CDRAGON_SCOREBOARD_BASE_URL}/_elderdrake.png`,
+  tower: `${CDRAGON_SCOREBOARD_BASE_URL}/tower.png`,
+  inhibitor: `${CDRAGON_SCOREBOARD_BASE_URL}/inhibitor.png`,
   riftHerald: `${CDRAGON_SCOREBOARD_BASE_URL}/_riftherald.png`,
+  horde: `${CDRAGON_SCOREBOARD_BASE_URL}/grub.png`,
 }
 const DRAKE_ICON_BY_KEY: Record<string, string> = {
   earth: `${CDRAGON_SCOREBOARD_BASE_URL}/_mountaindrake.png`,
@@ -5115,11 +5118,11 @@ const DRAKE_ICON_BY_KEY: Record<string, string> = {
   hextec: `${CDRAGON_SCOREBOARD_BASE_URL}/_hextechdrake.png`,
   chem: `${CDRAGON_SCOREBOARD_BASE_URL}/_chemtechdrake.png`,
 }
-function objectiveIconSrc(key: string): string | null {
-  return OBJECTIVE_ICON_BY_KEY[key] ?? null
+function objectiveIconSrc(key: string): string | undefined {
+  return OBJECTIVE_ICON_BY_KEY[key]
 }
-function drakeIconSrc(key: string): string | null {
-  return DRAKE_ICON_BY_KEY[key] ?? null
+function drakeIconSrc(key: string): string | undefined {
+  return DRAKE_ICON_BY_KEY[key]
 }
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {

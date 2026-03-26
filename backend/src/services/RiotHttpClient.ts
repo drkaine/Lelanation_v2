@@ -5,6 +5,13 @@ import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
+const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
+
+function resolvePuuidKeyVersionFromEnv(): string {
+  const raw = process.env[RIOT_PUUID_KEY_VERSION_ENV]
+  const value = typeof raw === 'string' ? raw.trim() : ''
+  return value || 'perso'
+}
 
 const PLATFORM_BY_REGION: Record<string, string> = {
   euw1: 'euw1',
@@ -81,7 +88,7 @@ export async function resolveRiotApiKey(): Promise<
 > {
   const envKey = process.env[RIOT_API_KEY_ENV]?.trim()
   if (envKey) {
-    return { ok: true, key: envKey, source: 'env', clefType: null }
+    return { ok: true, key: envKey, source: 'env', clefType: resolvePuuidKeyVersionFromEnv() }
   }
   return { ok: false, error: 'No RIOT_API_KEY in env' }
 }

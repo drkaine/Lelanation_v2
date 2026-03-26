@@ -54,6 +54,7 @@ const CD_BASE =
 const CD_RANKED_EMBLEM_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem'
 const CD_SCOREBOARD_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/scoreboard'
+const CD_MINIMAP_ICONS_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/minimap/icons'
 
 const RANKED_EMBLEM_FILES = [
   'emblem-iron.png',
@@ -78,6 +79,13 @@ const SCOREBOARD_OBJECTIVE_FILES = [
   '_infernaldrake.png',
   '_hextechdrake.png',
   '_chemtechdrake.png',
+]
+const MINIMAP_OBJECTIVE_ICONS: Array<{ source: string; target: string }> = [
+  { source: 'tower.png', target: 'tower.png' },
+  { source: 'inhibitor.png', target: 'inhibitor.png' },
+  { source: 'kindred_minimap_icon.png', target: 'kindred_minimap_icon.png' },
+  { source: 'kindred_minimap_icon_enemy.png', target: 'kindred_minimap_icon_enemy.png' },
+  { source: 'grub.png', target: 'grub.png' },
 ]
 
 /**
@@ -465,6 +473,12 @@ export class CommunityDragonService {
       responseType: 'arraybuffer',
       headers: { 'User-Agent': 'Lelanation/1.0' },
     })
+    const axiosMinimapIcons = axios.create({
+      baseURL: CD_MINIMAP_ICONS_BASE,
+      timeout: 30000,
+      responseType: 'arraybuffer',
+      headers: { 'User-Agent': 'Lelanation/1.0' },
+    })
 
     for (const file of SCOREBOARD_OBJECTIVE_FILES) {
       try {
@@ -483,6 +497,26 @@ export class CommunityDragonService {
         const errorMessage = error instanceof Error ? error.message : String(error)
         errors.push({ file, error: errorMessage })
         console.error(`[CommunityDragon] Failed to sync scoreboard icon ${file}: ${errorMessage}`)
+      }
+    }
+
+    for (const icon of MINIMAP_OBJECTIVE_ICONS) {
+      try {
+        const response = await axiosMinimapIcons.get<ArrayBuffer | Buffer>(`/${icon.source}`)
+        const data = response.data
+        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+          failed++
+          errors.push({ file: icon.source, error: 'No data returned' })
+          continue
+        }
+        const targetPath = join(objectiveDir, icon.target)
+        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        synced++
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file: icon.source, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync minimap icon ${icon.source}: ${errorMessage}`)
       }
     }
 
