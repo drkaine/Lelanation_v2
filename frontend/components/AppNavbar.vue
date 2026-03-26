@@ -87,6 +87,7 @@
         </NuxtLink>
         <div class="mobile-builds-menu">
           <button
+            v-if="isAdminLoggedIn"
             type="button"
             class="version mobile-builds-trigger"
             :class="{ 'is-active': isStatisticsSectionActive }"
@@ -225,6 +226,7 @@
           @mouseleave="isStatisticsMenuOpen = false"
         >
           <NuxtLink
+            v-if="isAdminLoggedIn"
             :to="statisticsClassicLink"
             class="version builds-menu-trigger"
             :class="{ 'is-active': isStatisticsSectionActive }"
