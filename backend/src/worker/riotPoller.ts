@@ -1957,8 +1957,10 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           await refreshAllMaterializedViews()
           lastMvRefreshAt = Date.now()
         } catch (err) {
-          await logger.alerte('Refresh MVs error (non-fatal)')
-          void err
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          await logger.alerte('Refresh MVs error (non-fatal)', errorMessage)
+          // Keep refresh cadence stable even on failures to avoid per-loop retry storms.
+          lastMvRefreshAt = Date.now()
         }
       }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, shallowRef, computed, onMounted, onUnmounted, watch, provide, defineComponent, h } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -11,11 +11,15 @@ import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
 import { translate } from "../i18n";
 import type { Build, SubBuild, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
-import { CompanionBuildsPanelView } from "@lelanation/builds-ui";
+import { BuildsIndexPageView } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
 import { useBuildsFilter } from "@lelanation/builds-ui";
 import type { FilterRole } from "@lelanation/builds-ui";
 import BuildDetailView from "./BuildDetailView.vue";
+import CompanionBuildSearchAdapter from "../components/CompanionBuildSearchAdapter.vue";
+import CompanionBuildFiltersAdapter from "../components/CompanionBuildFiltersAdapter.vue";
+import CompanionBuildGridAdapter from "../components/CompanionBuildGridAdapter.vue";
+import { CompanionBuildsUiKey } from "../buildsUiContext";
 
 const builds = ref<Build[]>([]);
 const loading = ref(true);
@@ -96,6 +100,24 @@ function t(key: string, params?: Record<string, string | number>): string {
   return translate(settings.value.language, key, params);
 }
 
+function tBuild(key: string): string {
+  const map: Record<string, string> = {
+    "buildsPage.discover": "tabs.discover",
+    "buildsPage.myBuilds": "tabs.myBuilds",
+    "buildsPage.myFavorites": "tabs.favorites",
+    "buildsPage.createBuild": "tabs.settings",
+    "buildsPage.visibility": "sort.label",
+    "buildsPage.all": "sort.label",
+    "buildsPage.private": "tabs.myBuilds",
+    "buildsPage.public": "tabs.discover",
+    "buildDiscovery.searchPlaceholder": "search",
+    "buildDiscovery.noBuildsFound": "noBuilds",
+    "buildDiscovery.adjustFilters": "noBuilds",
+    "buildDiscovery.createFirstBuild": "noImported",
+  };
+  return t(map[key] ?? key);
+}
+
 function saveSetting<K extends keyof typeof settings.value>(key: K, value: (typeof settings.value)[K]) {
   settings.value = { ...settings.value, [key]: value };
   setSettings({ [key]: value });
@@ -159,9 +181,7 @@ const favoriteBuilds = computed(() => {
 
 const myImportedBuilds = computed(() => importedBuildsFilter.filteredBuilds.value);
 
-const displayedBuilds = computed(() => {
-  if (activeTab.value === "favoris") return favoriteBuilds.value;
-  if (activeTab.value === "mes-builds") return myImportedBuilds.value;
+const discoverBuilds = computed(() => {
   const ids = importedBuildIds.value;
   return sortedBuilds.value.filter((b) => !ids.has(b.id));
 });
@@ -555,6 +575,7 @@ async function importBuild(rawBuild: Build) {
     submitError.value = false;
   }
 }
+void importBuild
 
 function refreshFavorites() {
   favoriteIds.value = getFavoriteIds();
@@ -565,6 +586,37 @@ function toggleFav(id: string) {
   refreshFavorites();
 }
 
+const NoopLink = defineComponent({
+  name: "NoopLink",
+  setup(_, { slots }) {
+    return () => h("span", { class: "streamer-tab-button cursor-not-allowed opacity-70" }, slots.default?.());
+  },
+});
+const activeBuildTab = computed<string>({
+  get: () => {
+    if (activeTab.value === "builds") return "discover";
+    if (activeTab.value === "mes-builds") return "my-builds";
+    return "favoris";
+  },
+  set: (v) => {
+    if (v === "discover") activeTab.value = "builds";
+    else if (v === "my-builds") activeTab.value = "mes-builds";
+    else activeTab.value = "favoris";
+  },
+});
+const myBuildsVisibilityFilter = ref<"all" | "private" | "public">("all");
+const visibilityFilterOptions = computed(() => [
+  { value: "all" as const, label: tBuild("buildsPage.all") },
+  { value: "private" as const, label: tBuild("buildsPage.private") },
+  { value: "public" as const, label: tBuild("buildsPage.public") },
+]);
+const myBuildsForTab = computed(() => {
+  if (myBuildsVisibilityFilter.value === "all") return myImportedBuilds.value;
+  return myImportedBuilds.value.filter(
+    (b) => (b.visibility ?? "public") === myBuildsVisibilityFilter.value
+  );
+});
+
 function clearFilters() {
   baseBuildsFilter.clearFilters();
   importedBuildsFilter.clearFilters();
@@ -574,6 +626,31 @@ function clearFilters() {
 const hasActiveFilters = computed(
   () => searchQuery.value.trim() !== "" || selectedRole.value !== null || sortBy.value !== "recent" || onlyUpToDate.value
 );
+
+provide(CompanionBuildsUiKey, {
+  t,
+  searchQuery,
+  selectedRole,
+  onlyUpToDate,
+  sortBy,
+  hasActiveFilters,
+  roleOptions,
+  sortOptions,
+  discoverBuilds,
+  imageResolvers,
+  runeLookup,
+  importedBuildIds,
+  isFavorite,
+  toggleFavorite: toggleFav,
+  buildVersion,
+  openDetail: (b: Build) => {
+    detailBuild.value = b;
+  },
+  onVariantChange: (buildId, idx) => {
+    selectedSubIdxMap.value[buildId] = idx;
+  },
+  clearFilters,
+});
 
 function buildVersion(build: Build): string {
   return build.gameVersion?.trim() || currentGameVersion.value;
@@ -889,6 +966,14 @@ watch(
       <div>
         <h1 class="title">Lelanation Companion</h1>
         <p class="subtitle">{{ t('subtitle') }}</p>
+        <div class="mt-2 flex gap-2">
+          <button type="button" class="tab-btn" :class="{ active: activeTab !== 'settings' }" @click="activeTab = 'builds'">
+            {{ t("tabs.discover") }}
+          </button>
+          <button type="button" class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
+            {{ t("tabs.settings") }}
+          </button>
+        </div>
       </div>
       <span class="status-pill" :class="{ on: lcuConnected && connectionTested, off: connectionTested && !lcuConnected, untested: !connectionTested }">
         {{ !connectionTested ? t('status.untested') : (lcuConnected ? t('status.connected') : t('status.disconnected')) }}
@@ -920,36 +1005,28 @@ watch(
       <p v-if="updateError" class="update-error">{{ t('update.installError', { error: updateError }) }}</p>
     </div>
 
-    <CompanionBuildsPanelView
-      :t="t"
-      :active-tab="activeTab"
-      :imported-builds-count="importedBuilds.length"
-      :favorite-count="favoriteIds.length"
-      :loading="loading"
-      :displayed-builds="displayedBuilds"
-      :imported-build-ids="importedBuildIds"
-      :search-query="searchQuery"
-      :selected-role="selectedRole"
-      :only-up-to-date="onlyUpToDate"
-      :sort-by="sortBy"
-      :has-active-filters="hasActiveFilters"
-      :role-options="roleOptions"
-      :sort-options="sortOptions"
-      :image-resolvers="imageResolvers"
-      :rune-lookup="runeLookup"
-      :lcu-connected="lcuConnected"
-      :is-favorite="isFavorite"
-      :build-version="buildVersion"
-      @update:active-tab="activeTab = $event"
-      @update:search-query="searchQuery = $event"
-      @update:selected-role="selectedRole = $event"
-      @update:only-up-to-date="onlyUpToDate = $event"
-      @update:sort-by="sortBy = $event"
-      @clear-filters="clearFilters"
-      @toggle-favorite="toggleFav"
-      @open-detail="detailBuild = $event"
-      @import-build="importBuild"
-      @variant-change="selectedSubIdxMap[$event.buildId] = $event.idx"
+    <BuildsIndexPageView
+      v-if="activeTab !== 'settings'"
+      :t="tBuild"
+      :locale-path="() => '#'"
+      :link-component="NoopLink"
+      :build-search-component="CompanionBuildSearchAdapter"
+      :build-filters-component="CompanionBuildFiltersAdapter"
+      :build-grid-component="CompanionBuildGridAdapter"
+      :active-tab="activeBuildTab"
+      :favorite-builds="favoriteBuilds"
+      :comparison-builds="[]"
+      :my-builds-visibility-filter="myBuildsVisibilityFilter"
+      :visibility-filter-options="visibilityFilterOptions"
+      :admin-mode="false"
+      :share-loading="false"
+      :builds-filtered-by-visibility="myBuildsForTab"
+      :build-to-delete="null"
+      :share-code="null"
+      :share-copied="false"
+      :share-error="null"
+      @update:active-tab="activeBuildTab = $event"
+      @update:my-builds-visibility-filter="myBuildsVisibilityFilter = $event"
     />
 
     <section v-if="activeTab === 'settings'" class="panel settings-panel">
