@@ -1836,7 +1836,9 @@ const displayBuild = computed<Build | null>(() => {
 })
 
 const missingFieldChecks = computed(() => {
-  const build = props.build || buildStore.currentBuild
+  // En builder, utiliser le build affiche (main ou variante) pour surligner
+  // les champs manquants du contexte courant.
+  const build = displayBuild.value ?? (props.build || buildStore.currentBuild)
   const firstThreeUps = build?.skillOrder?.firstThreeUps ?? []
   const skillUpOrder = build?.skillOrder?.skillUpOrder ?? []
   const items = build?.items ?? []

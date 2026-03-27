@@ -38,11 +38,27 @@ const handleHover = (isHovering: boolean) => {
     emit('highlight-missing', false)
     return
   }
-  emit('highlight-missing', !buildStore.isBuildValid && buildStore.status !== 'loading')
+  if (buildStore.status === 'loading') {
+    emit('highlight-missing', false)
+    return
+  }
+
+  const firstIncompleteVariantIdx = buildStore.firstIncompleteSubBuildIndex
+  if (buildStore.isMainBuildValid && firstIncompleteVariantIdx !== null) {
+    buildStore.showSubBuild(firstIncompleteVariantIdx)
+  }
+
+  emit('highlight-missing', !buildStore.isBuildValid)
 }
 
 const handleSave = async () => {
   if (!buildStore.isBuildValid || buildStore.status === 'loading') {
+    if (buildStore.status !== 'loading') {
+      const firstIncompleteVariantIdx = buildStore.firstIncompleteSubBuildIndex
+      if (buildStore.isMainBuildValid && firstIncompleteVariantIdx !== null) {
+        buildStore.showSubBuild(firstIncompleteVariantIdx)
+      }
+    }
     emit('highlight-missing', true)
     return
   }

@@ -550,11 +550,18 @@ const updateRuneSelection = () => {
   buildStore.setRunes(runeSelection)
 }
 
+const resetRuneSelectionUi = () => {
+  selectedPrimaryPathId.value = null
+  selectedPrimaryRunes.value = {}
+  selectedSecondaryPathId.value = null
+  selectedSecondaryRunes.value = []
+}
+
 // Load existing rune selection from build ou variante affichée
 watch(
   () => buildStore.displayedBuild?.runes,
   runes => {
-    if (runes) {
+    if (runes && runes.primary.pathId && runes.primary.keystone) {
       selectedPrimaryPathId.value = runes.primary.pathId
       selectedPrimaryRunes.value = {
         0: runes.primary.keystone,
@@ -571,6 +578,9 @@ watch(
       if (runes.secondary.slot2 && runes.secondary.slot2 !== 0) {
         selectedSecondaryRunes.value.push(runes.secondary.slot2)
       }
+    } else {
+      // Quand on passe sur une variante vide (sans runes), vider l'affichage local.
+      resetRuneSelectionUi()
     }
   },
   { immediate: true }

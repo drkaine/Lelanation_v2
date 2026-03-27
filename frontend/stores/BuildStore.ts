@@ -37,6 +37,44 @@ interface BuildState {
   editSourceBuildId: string | null
 }
 
+type BuildLikeForValidation = Pick<
+  Build,
+  'champion' | 'roles' | 'items' | 'runes' | 'summonerSpells' | 'skillOrder'
+>
+
+function isBuildPayloadValid(build: BuildLikeForValidation | null | undefined): boolean {
+  if (!build) return false
+
+  if (!build.champion) return false
+  if (!build.roles || build.roles.length === 0) return false
+
+  if (!build.items || build.items.length === 0 || build.items.length > 10) {
+    return false
+  }
+  if (!build.items.some((it: Item) => isStarterItem(it))) return false
+
+  if (!build.runes) return false
+  if (!build.runes.primary.pathId || !build.runes.primary.keystone) return false
+  if (!build.runes.secondary.pathId) return false
+
+  if (
+    !build.summonerSpells ||
+    build.summonerSpells.length !== 2 ||
+    !build.summonerSpells[0] ||
+    !build.summonerSpells[1]
+  ) {
+    return false
+  }
+
+  if (!build.skillOrder) return false
+  if (!build.skillOrder.firstThreeUps || build.skillOrder.firstThreeUps.length !== 3) return false
+  if (build.skillOrder.firstThreeUps.some(up => !up)) return false
+  if (!build.skillOrder.skillUpOrder || build.skillOrder.skillUpOrder.length !== 3) return false
+  if (build.skillOrder.skillUpOrder.some(up => !up)) return false
+
+  return true
+}
+
 export const useBuildStore = defineStore('build', {
   state: (): BuildState => ({
     currentBuild: null,
@@ -77,53 +115,44 @@ export const useBuildStore = defineStore('build', {
 
     isBuildValid(): boolean {
       if (!this.currentBuild) return false
-      const build = this.currentBuild
+      if (!isBuildPayloadValid(this.currentBuild)) return false
 
-      // Check champion
-      if (!build.champion) return false
-
-      // Check roles (at least 1)
-      if (!build.roles || build.roles.length === 0) return false
-
-      // Check items (at least 1). UI supports: 2 starters + 2 boots + 6 core = up to 10.
-      if (!build.items || build.items.length === 0 || build.items.length > 10) {
-        return false
+      const subs = (this.currentBuild.subBuilds as SubBuild[] | undefined) ?? []
+      for (const sub of subs) {
+        const variantAsBuild = {
+          champion: this.currentBuild.champion,
+          roles: this.currentBuild.roles,
+          items: sub.items ?? [],
+          runes: sub.runes ?? null,
+          summonerSpells: sub.summonerSpells ?? [null, null],
+          skillOrder: sub.skillOrder ?? null,
+        } as BuildLikeForValidation
+        if (!isBuildPayloadValid(variantAsBuild)) return false
       }
-
-      // Check starter items (at least 1)
-      if (!build.items.some((it: Item) => isStarterItem(it))) return false
-
-      // Check runes
-      if (!build.runes) return false
-      if (!build.runes.primary.pathId || !build.runes.primary.keystone) {
-        return false
-      }
-      if (!build.runes.secondary.pathId) return false
-
-      // Check summoner spells (exactly 2)
-      if (
-        !build.summonerSpells ||
-        build.summonerSpells.length !== 2 ||
-        !build.summonerSpells[0] ||
-        !build.summonerSpells[1]
-      ) {
-        return false
-      }
-
-      // Check skill order (firstThreeUps and skillUpOrder must be complete)
-      if (!build.skillOrder) return false
-      // Les 3 premiers up doivent être définis
-      if (!build.skillOrder.firstThreeUps || build.skillOrder.firstThreeUps.length !== 3) {
-        return false
-      }
-      if (build.skillOrder.firstThreeUps.some(up => !up)) return false
-      // L'ordre de montée doit être défini
-      if (!build.skillOrder.skillUpOrder || build.skillOrder.skillUpOrder.length !== 3) {
-        return false
-      }
-      if (build.skillOrder.skillUpOrder.some(up => !up)) return false
-
       return true
+    },
+
+    isMainBuildValid(): boolean {
+      return isBuildPayloadValid(this.currentBuild)
+    },
+
+    firstIncompleteSubBuildIndex(): number | null {
+      if (!this.currentBuild) return null
+      const subs = (this.currentBuild.subBuilds as SubBuild[] | undefined) ?? []
+      for (let i = 0; i < subs.length; i += 1) {
+        const sub = subs[i]
+        if (!sub) continue
+        const variantAsBuild = {
+          champion: this.currentBuild.champion,
+          roles: this.currentBuild.roles,
+          items: sub.items ?? [],
+          runes: sub.runes ?? null,
+          summonerSpells: sub.summonerSpells ?? [null, null],
+          skillOrder: sub.skillOrder ?? null,
+        } as BuildLikeForValidation
+        if (!isBuildPayloadValid(variantAsBuild)) return i
+      }
+      return null
     },
 
     validationErrors(): string[] {
