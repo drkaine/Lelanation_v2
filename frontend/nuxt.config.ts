@@ -27,7 +27,9 @@ function getFallbackGameVersionFromBackend(): string {
 }
 
 const defaultSiteUrl = process.env.NUXT_PUBLIC_SITE_URL || 'https://lelanation.fr'
-const defaultApiBase = process.env.NUXT_PUBLIC_API_BASE || defaultSiteUrl
+const defaultApiBase =
+  process.env.NUXT_PUBLIC_API_BASE ||
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:3500' : defaultSiteUrl)
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',

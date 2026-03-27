@@ -48,7 +48,7 @@ const handleSave = async () => {
   }
   emit('highlight-missing', false)
   const success = await buildStore.saveBuild()
-  if (!success || buildStore.status !== 'success') return
+  if (!success) return
   buildStore.createNewBuild()
   router.push(`${localePath('/builds')}?tab=my-builds`)
 }

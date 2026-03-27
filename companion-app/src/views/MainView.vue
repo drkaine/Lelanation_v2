@@ -11,8 +11,10 @@ import { hasConsent } from "../consent";
 import { getImportedBuilds, mergeImportedBuilds, clearImportedBuilds } from "../importedBuilds";
 import { translate } from "../i18n";
 import type { Build, SubBuild, Role, Champion, StoredBuild, Item } from "@lelanation/shared-types";
-import { BuildCardFlip } from "@lelanation/builds-ui";
+import { CompanionBuildsPanelView } from "@lelanation/builds-ui";
 import type { ImageResolvers, RuneLookup } from "@lelanation/builds-ui";
+import { useBuildsFilter } from "@lelanation/builds-ui";
+import type { FilterRole } from "@lelanation/builds-ui";
 import BuildDetailView from "./BuildDetailView.vue";
 
 const builds = ref<Build[]>([]);
@@ -37,9 +39,9 @@ let connectionCheckTimer: ReturnType<typeof setInterval> | null = null;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 
 const searchQuery = ref("");
-const selectedRole = ref<Role | null>(null);
+const selectedRole = ref<FilterRole>(null);
 const sortBy = ref<"recent" | "name">("recent");
-const onlyUpToDate = ref(false);
+const onlyUpToDate = ref<boolean>(false);
 
 const linkCode = ref("");
 const linkLoading = ref(false);
@@ -104,6 +106,17 @@ const canAutoSubmitMatch = computed(
 );
 
 const allRoles: Role[] = ["top", "jungle", "mid", "adc", "support"];
+const roleOptions = computed(() =>
+  allRoles.map((role) => ({
+    value: role,
+    label: role === "adc" ? "ADC" : role.charAt(0).toUpperCase() + role.slice(1),
+    icon: `/icons/roles/${role === "adc" ? "bot" : role}.png`,
+  }))
+);
+const sortOptions = computed(() => [
+  { value: "recent", label: t("sort.recent") },
+  { value: "name", label: t("sort.name") },
+]);
 
 const currentMajorMinor = computed(() => {
   const v = currentGameVersion.value;
@@ -112,64 +125,39 @@ const currentMajorMinor = computed(() => {
   return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : v;
 });
 
-const sortedBuilds = computed(() => {
-  let list = [...builds.value];
-  if (onlyUpToDate.value && currentMajorMinor.value) {
-    const prefix = currentMajorMinor.value;
-    list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
-  }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    list = list.filter(
-      (b) =>
-        (b.name || "").toLowerCase().includes(q) ||
-        (b.author || "").toLowerCase().includes(q) ||
-        (b.champion?.name || "").toLowerCase().includes(q)
-    );
-  }
-  if (selectedRole.value) {
-    const r = selectedRole.value;
-    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
-  }
-  if (sortBy.value === "name") {
-    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  } else {
-    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-  }
-  return list;
+const baseBuildsFilter = useBuildsFilter(builds, {
+  currentVersion: currentMajorMinor,
 });
+const importedBuildsFilter = useBuildsFilter(importedBuilds, {
+  currentVersion: currentMajorMinor,
+});
+
+// Keep a single UI state for filters and mirror it to imported builds.
+searchQuery.value = baseBuildsFilter.searchQuery.value;
+selectedRole.value = baseBuildsFilter.selectedRole.value;
+sortBy.value = baseBuildsFilter.sortBy.value === "name" ? "name" : "recent";
+onlyUpToDate.value = baseBuildsFilter.onlyUpToDate.value;
+
+watch([searchQuery, selectedRole, sortBy, onlyUpToDate], ([q, role, sort, upToDate]) => {
+  baseBuildsFilter.searchQuery.value = q;
+  baseBuildsFilter.selectedRole.value = role;
+  baseBuildsFilter.sortBy.value = sort;
+  baseBuildsFilter.onlyUpToDate.value = upToDate;
+
+  importedBuildsFilter.searchQuery.value = q;
+  importedBuildsFilter.selectedRole.value = role;
+  importedBuildsFilter.sortBy.value = sort;
+  importedBuildsFilter.onlyUpToDate.value = upToDate;
+}, { immediate: true });
+
+const sortedBuilds = computed(() => baseBuildsFilter.filteredBuilds.value);
 
 const favoriteBuilds = computed(() => {
   const ids = new Set(favoriteIds.value);
   return sortedBuilds.value.filter((b) => ids.has(b.id));
 });
 
-const myImportedBuilds = computed(() => {
-  let list = [...importedBuilds.value] as Build[];
-  if (onlyUpToDate.value && currentMajorMinor.value) {
-    const prefix = currentMajorMinor.value;
-    list = list.filter((b) => (b.gameVersion ?? "").startsWith(prefix));
-  }
-  if (searchQuery.value.trim()) {
-    const q = searchQuery.value.trim().toLowerCase();
-    list = list.filter(
-      (b) =>
-        (b.name || "").toLowerCase().includes(q) ||
-        (b.author || "").toLowerCase().includes(q) ||
-        (b.champion?.name || "").toLowerCase().includes(q)
-    );
-  }
-  if (selectedRole.value) {
-    const r = selectedRole.value;
-    list = list.filter((b) => Array.isArray(b.roles) && b.roles.includes(r));
-  }
-  if (sortBy.value === "name") {
-    list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  } else {
-    list.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
-  }
-  return list;
-});
+const myImportedBuilds = computed(() => importedBuildsFilter.filteredBuilds.value);
 
 const displayedBuilds = computed(() => {
   if (activeTab.value === "favoris") return favoriteBuilds.value;
@@ -577,15 +565,10 @@ function toggleFav(id: string) {
   refreshFavorites();
 }
 
-function toggleRole(role: Role) {
-  selectedRole.value = selectedRole.value === role ? null : role;
-}
-
 function clearFilters() {
-  searchQuery.value = "";
-  selectedRole.value = null;
+  baseBuildsFilter.clearFilters();
+  importedBuildsFilter.clearFilters();
   sortBy.value = "recent";
-  onlyUpToDate.value = false;
 }
 
 const hasActiveFilters = computed(
@@ -937,128 +920,39 @@ watch(
       <p v-if="updateError" class="update-error">{{ t('update.installError', { error: updateError }) }}</p>
     </div>
 
-    <nav class="tabs">
-      <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="activeTab = 'builds'">
-        {{ t('tabs.discover') }}
-      </button>
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'mes-builds' }"
-        :disabled="importedBuilds.length === 0"
-        @click="activeTab = 'mes-builds'"
-      >
-        {{ t('tabs.myBuilds') }} ({{ importedBuilds.length }})
-      </button>
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'favoris' }"
-        :disabled="favoriteIds.length === 0"
-        @click="activeTab = 'favoris'"
-      >
-        {{ t('tabs.favorites') }} ({{ favoriteIds.length }})
-      </button>
-      <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="activeTab = 'settings'">
-        {{ t('tabs.settings') }}
-      </button>
-    </nav>
+    <CompanionBuildsPanelView
+      :t="t"
+      :active-tab="activeTab"
+      :imported-builds-count="importedBuilds.length"
+      :favorite-count="favoriteIds.length"
+      :loading="loading"
+      :displayed-builds="displayedBuilds"
+      :imported-build-ids="importedBuildIds"
+      :search-query="searchQuery"
+      :selected-role="selectedRole"
+      :only-up-to-date="onlyUpToDate"
+      :sort-by="sortBy"
+      :has-active-filters="hasActiveFilters"
+      :role-options="roleOptions"
+      :sort-options="sortOptions"
+      :image-resolvers="imageResolvers"
+      :rune-lookup="runeLookup"
+      :lcu-connected="lcuConnected"
+      :is-favorite="isFavorite"
+      :build-version="buildVersion"
+      @update:active-tab="activeTab = $event"
+      @update:search-query="searchQuery = $event"
+      @update:selected-role="selectedRole = $event"
+      @update:only-up-to-date="onlyUpToDate = $event"
+      @update:sort-by="sortBy = $event"
+      @clear-filters="clearFilters"
+      @toggle-favorite="toggleFav"
+      @open-detail="detailBuild = $event"
+      @import-build="importBuild"
+      @variant-change="selectedSubIdxMap[$event.buildId] = $event.idx"
+    />
 
-    <!-- Filters -->
-    <div v-if="activeTab !== 'settings'" class="filters-bar">
-      <input
-        v-model="searchQuery"
-        type="text"
-        class="search-input"
-        :placeholder="t('search')"
-      />
-      <div class="role-filters">
-        <button
-          v-for="role in allRoles"
-          :key="role"
-          type="button"
-          :class="['role-chip', { active: selectedRole === role }]"
-          @click="toggleRole(role)"
-        >
-          <img :src="`/icons/roles/${role === 'adc' ? 'bot' : role}.png`" :alt="role" class="role-chip-img" />
-          <span>{{ role === 'adc' ? 'ADC' : role.charAt(0).toUpperCase() + role.slice(1) }}</span>
-        </button>
-      </div>
-      <label class="uptodate-label">
-        <input v-model="onlyUpToDate" type="checkbox" class="uptodate-check" />
-        <span>{{ t('upToDate') }}</span>
-      </label>
-      <div class="sort-row">
-        <label class="sort-label">{{ t('sort.label') }}</label>
-        <select v-model="sortBy" class="sort-select">
-          <option value="recent">{{ t('sort.recent') }}</option>
-          <option value="name">{{ t('sort.name') }}</option>
-        </select>
-        <button v-if="hasActiveFilters" class="clear-btn" @click="clearFilters">{{ t('clearFilters') }}</button>
-      </div>
-    </div>
-
-    <section v-if="activeTab !== 'settings'" class="panel">
-      <p v-if="activeTab === 'builds' && loading" class="empty">{{ t('loading') }}</p>
-      <p v-else-if="activeTab === 'mes-builds' && importedBuilds.length === 0" class="empty">
-        {{ t('noImported') }}
-      </p>
-      <p v-else-if="displayedBuilds.length === 0" class="empty">
-        {{ activeTab === "favoris" ? t('noFavorites') : t('noBuilds') }}
-      </p>
-
-      <div v-else class="build-grid">
-        <div v-for="b in displayedBuilds" :key="b.id" class="build-entry">
-          <div class="build-meta">
-            <h3 class="author">
-              {{ b.author || t('authorUnknown') }}
-              <span v-if="importedBuildIds.has(b.id)" class="perso-badge">{{ t('badge.personal') }}</span>
-            </h3>
-          </div>
-
-          <!-- Flip card : face avant = BuildSheet, face arrière = liste variantes -->
-          <BuildCardFlip
-            :build="b"
-            :images="imageResolvers"
-            :rune-lookup="runeLookup"
-            :version="buildVersion(b)"
-            :main-build-label="t('mainBuild')"
-            :variant-label-fn="i => `${t('variant')} ${i + 1}`"
-            @variant-change="idx => { selectedSubIdxMap[b.id] = idx }"
-          />
-
-          <div class="card-actions">
-            <button
-              type="button"
-              class="bookmark-btn"
-              :class="{ on: isFavorite(b.id) }"
-              :title="isFavorite(b.id) ? t('favorite.remove') : t('favorite.add')"
-              @click="toggleFav(b.id)"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                :fill="isFavorite(b.id) ? 'currentColor' : 'none'"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="bookmark-icon"
-                aria-hidden="true"
-              >
-                <path d="M6 3.75A1.75 1.75 0 0 1 7.75 2h8.5A1.75 1.75 0 0 1 18 3.75V22l-6-3.5L6 22V3.75Z" />
-              </svg>
-            </button>
-            <button type="button" class="detail-btn" :title="t('detail')" @click="detailBuild = b">
-              {{ t('detail') }}
-            </button>
-            <button type="button" class="import-btn" :disabled="!lcuConnected" :title="t('import')" @click="importBuild(b)">
-              {{ t('import') }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section v-else class="panel settings-panel">
+    <section v-if="activeTab === 'settings'" class="panel settings-panel">
       <h3>{{ t('settings.language') }}</h3>
       <label class="row row-inline">
         <span>{{ t('settings.language') }}</span>
@@ -1235,42 +1129,6 @@ watch(
   margin-bottom: 1rem; padding: 0.75rem; border-radius: 10px;
   border: 1px solid rgba(200, 155, 60, 0.2); background: rgba(10, 20, 40, 0.35);
 }
-.search-input {
-  flex: 1 1 200px; min-width: 180px; background: rgba(9, 20, 40, 0.95);
-  color: #f0e6d2; border: 1px solid rgba(200, 155, 60, 0.45); border-radius: 8px;
-  padding: 0.4rem 0.65rem; font-size: 0.82rem;
-}
-.search-input::placeholder { color: rgba(240, 230, 210, 0.45); }
-.role-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-.role-chip {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  border: 1px solid rgba(200, 155, 60, 0.4); border-radius: 999px;
-  padding: 0.2rem 0.55rem; font-size: 0.72rem; cursor: pointer;
-  background: rgba(30, 40, 45, 0.6); color: #c8aa6e; transition: all 0.15s;
-}
-.role-chip.active { border-color: #c89b3c; background: rgba(200, 155, 60, 0.2); color: #f0e6d2; }
-.role-chip:hover { border-color: #c89b3c; background: rgba(200, 155, 60, 0.1); }
-.role-chip-img { width: 14px; height: 14px; object-fit: contain; }
-.uptodate-label {
-  display: inline-flex; align-items: center; gap: 0.35rem;
-  font-size: 0.78rem; color: #f0e6d2; cursor: pointer; white-space: nowrap;
-}
-.uptodate-check {
-  accent-color: #c89b3c; width: 14px; height: 14px; cursor: pointer;
-}
-.sort-row { display: flex; align-items: center; gap: 0.5rem; }
-.sort-label { font-size: 0.78rem; color: rgba(240, 230, 210, 0.7); }
-.sort-select {
-  background: rgba(9, 20, 40, 0.95); color: #f0e6d2;
-  border: 1px solid rgba(200, 155, 60, 0.45); border-radius: 6px;
-  padding: 0.25rem 0.4rem; font-size: 0.78rem;
-}
-.clear-btn {
-  font-size: 0.72rem; padding: 0.25rem 0.5rem; border-radius: 6px;
-  border: 1px solid rgba(200, 155, 60, 0.35); background: rgba(30, 40, 45, 0.5);
-  color: #c8aa6e; cursor: pointer;
-}
-.clear-btn:hover { background: rgba(200, 155, 60, 0.15); }
 
 .panel { min-height: 260px; }
 .empty { color: rgba(240, 230, 210, 0.85); }

@@ -6,7 +6,6 @@
     class="group overflow-hidden rounded-2xl border border-accent/70 bg-surface/80 shadow-lg shadow-black/20 backdrop-blur-sm transition hover:border-accent hover:shadow-black/35"
   >
     <div class="relative">
-      gggg
       <img
         :src="video.thumbnailUrl"
         :alt="video.title"

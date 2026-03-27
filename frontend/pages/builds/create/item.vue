@@ -1,33 +1,19 @@
 <template>
-  <div class="build-creator min-h-screen text-text">
-    <div class="max-w-8xl mx-auto px-2">
-      <!-- Step Navigation -->
-      <div class="mb-3">
-        <BuildMenuSteps :current-step="'item'" :has-champion="hasChampion" />
-      </div>
-
-      <!-- Build Card and Step Content -->
-      <div
-        class="build-layout mb-6 flex flex-col items-start gap-4 md:flex-row"
-        :class="{ 'build-layout--streamer': isStreamerMode }"
-      >
-        <!-- Step Content (Top on mobile, Left on desktop) -->
-        <div class="w-full flex-1 md:order-2">
-          <ItemSelector />
-        </div>
-
-        <!-- Build Card (Bottom on mobile, Right on desktop) -->
-        <div class="build-card-wrapper w-full flex-shrink-0 md:order-1">
-          <BuildSaveButton @highlight-missing="highlightMissingFields = $event" />
-          <BuildCard :sheet-tooltips="true" :highlight-missing-fields="highlightMissingFields" />
-        </div>
-      </div>
-    </div>
-  </div>
+  <BuildCreateItemPageView
+    :is-streamer-mode="isStreamerMode"
+    :has-champion="hasChampion"
+    :highlight-missing-fields="highlightMissingFields"
+    :item-selector-component="ItemSelector"
+    :build-card-component="BuildCard"
+    :build-save-button-component="BuildSaveButton"
+    :build-menu-steps-component="BuildMenuSteps"
+    @highlight-missing="highlightMissingFields = $event"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { BuildCreateItemPageView } from '@lelanation/builds-ui'
 import { useBuildStore } from '~/stores/BuildStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
@@ -66,30 +52,3 @@ onMounted(() => {
   buildStore.setLastBuilderStep('item')
 })
 </script>
-
-<style scoped>
-.build-creator {
-  padding: var(--build-create-page-padding-top, 1rem) 1rem 1rem;
-  margin-top: var(--build-create-page-lift, 0px);
-}
-
-.build-layout {
-  --build-card-width: 293.9px;
-}
-
-.build-layout--streamer {
-  --build-card-width: 390px;
-}
-
-.build-card-wrapper {
-  width: var(--build-card-width);
-  margin-top: 0;
-}
-
-@media (max-width: 768px) {
-  .build-card-wrapper {
-    width: 100%;
-    max-width: 100%;
-  }
-}
-</style>
