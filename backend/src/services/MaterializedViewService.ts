@@ -2,6 +2,7 @@
  * Materialized views: sync active_patches, refresh MVs, close_patch (archivage).
  * Plan: ne refresh que les patches actifs (en cours ou pas encore à max match).
  */
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { loadMatchFilters } from './RiotConfigService.js'
@@ -29,16 +30,47 @@ const MV_NAMES = [
   'mv_champion_bucket',
   'mv_team_bucket',
 ] as const
+const missingViews = new Set<string>()
 
 async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {
   for (const mvName of MV_NAMES) {
+    if (missingViews.has(mvName)) continue
     try {
-      await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
+      // Prefer CONCURRENTLY to avoid blocking readers (admin/DBeaver).
+      await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${mvName}`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       // Historical data may produce duplicate rows for some MV unique keys.
       // Skip only that MV and continue refreshing the others.
       if (message.includes('23505') || message.includes('could not create unique index')) {
+        continue
+      }
+      // Some views may require an initial non-concurrent refresh (not yet populated / no suitable index).
+      if (message.includes('CONCURRENTLY') || message.includes('55000')) {
+        try {
+          await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
+          continue
+        } catch (fallbackErr) {
+          const fallbackMessage =
+            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
+          if (
+            fallbackMessage.includes('23505') ||
+            fallbackMessage.includes('could not create unique index')
+          ) {
+            continue
+          }
+          if (fallbackMessage.includes('42P01') || fallbackMessage.includes('does not exist')) {
+            missingViews.add(mvName)
+            console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
+            continue
+          }
+          throw fallbackErr
+        }
+      }
+      // Schema drift / partial migration: skip missing MV and keep the poller running.
+      if (message.includes('42P01') || message.includes('does not exist')) {
+        missingViews.add(mvName)
+        console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
         continue
       }
       throw err
@@ -177,8 +209,41 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
  */
 export async function refreshAllMaterializedViews(): Promise<void> {
   if (!isDatabaseConfigured()) return
-  await refreshAllMaterializedViewsWithoutConcurrently()
-  await ensureMaterializedViewsPopulated()
+  const t0 = Date.now()
+  await appendUnifiedLog({
+    section: 'db',
+    type: 'debut',
+    script: 'mv_refresh',
+    message: 'Début refresh des vues matérialisées',
+  })
+  try {
+    await refreshAllMaterializedViewsWithoutConcurrently()
+    await ensureMaterializedViewsPopulated()
+    const durationMs = Date.now() - t0
+    const missingCount = missingViews.size
+    await appendUnifiedLog({
+      section: 'db',
+      type: 'fin',
+      script: 'mv_refresh',
+      message: `Fin refresh des vues matérialisées (${Math.round(durationMs / 1000)}s)`,
+      json: {
+        durationMs,
+        tablesDefined: MV_NAMES.length,
+        missingSkipped: missingCount,
+        tablesTouched: MV_NAMES.length - missingCount,
+      },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    await appendUnifiedLog({
+      section: 'db',
+      type: 'erreur',
+      script: 'mv_refresh',
+      message: msg,
+      json: { durationMs: Date.now() - t0, queryHint: 'REFRESH MATERIALIZED VIEW' },
+    })
+    throw err
+  }
 }
 
 /**

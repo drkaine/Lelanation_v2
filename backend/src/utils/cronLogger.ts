@@ -1,34 +1,16 @@
 /**
- * Logging for cron jobs - writes to logs/scripts/{cron}.log at project root.
- * Same format as ScriptLogger for consistency with admin script-logs API.
+ * Cron jobs: unified log only (single file) + console for warn/error.
  */
-import { promises as fs } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { appendUnifiedLog, type LogType } from '../logging/unifiedAppLog.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const BACKEND_ROOT = join(__dirname, '..', '..')
-const LOG_DIR = join(BACKEND_ROOT, '..', 'logs', 'scripts')
-const MAX_LOG_LINES = 10_000
-const TRUNCATE_TO = 8_000
-
-function logFilePath(cron: string): string {
-  const safe = cron.replace(/[^a-zA-Z0-9_-]/g, '_')
-  return join(LOG_DIR, `${safe}.log`)
+const CRON_TO_SCRIPT: Record<string, string> = {
+  dataDragonSync: 'datadragon',
+  youtubeSync: 'youtube',
+  communityDragonSync: 'community_dragon',
 }
 
-async function rotateIfNeeded(cron: string): Promise<void> {
-  try {
-    const file = logFilePath(cron)
-    const content = await fs.readFile(file, 'utf-8').catch(() => '')
-    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-    if (lines.length > MAX_LOG_LINES) {
-      const kept = lines.slice(-TRUNCATE_TO).join('\n') + '\n'
-      await fs.writeFile(file, kept, 'utf-8')
-    }
-  } catch {
-    // ignore
-  }
+function scriptForCron(cron: string): string {
+  return CRON_TO_SCRIPT[cron] ?? cron.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48)
 }
 
 export type CronLogger = {
@@ -38,35 +20,55 @@ export type CronLogger = {
   step: (step: string, details?: Record<string, unknown>) => Promise<void>
 }
 
-export function createCronLogger(cron: string): CronLogger {
-  const format = (msg: string, rest: unknown[]) =>
-    rest.length > 0 ? `${msg} ${rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))).join(' ')}` : msg
+function format(msg: string, rest: unknown[]): string {
+  return rest.length > 0 ? `${msg} ${rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))).join(' ')}` : msg
+}
 
-  const append = async (level: string, message: string) => {
-    await fs.mkdir(LOG_DIR, { recursive: true })
-    const line = `[${new Date().toISOString()}] [${level}] ${message}\n`
-    await fs.appendFile(logFilePath(cron), line, 'utf-8')
-    void rotateIfNeeded(cron)
+function restToJson(rest: unknown[]): Record<string, unknown> | null {
+  if (rest.length === 0) return null
+  if (rest.length === 1 && typeof rest[0] === 'object' && rest[0] !== null && !Array.isArray(rest[0])) {
+    return rest[0] as Record<string, unknown>
+  }
+  return { details: rest.map((r) => (typeof r === 'object' ? JSON.stringify(r) : String(r))) }
+}
+
+export function createCronLogger(cron: string): CronLogger {
+  const script = scriptForCron(cron)
+
+  const write = async (level: LogType, message: string, rest: unknown[]) => {
+    await appendUnifiedLog({
+      section: 'back',
+      type: level,
+      script,
+      message,
+      json: restToJson(rest),
+    })
   }
 
   return {
     async info(msg: string, ...rest: unknown[]) {
       const full = format(msg, rest)
-      await append('INFO', full)
+      await write('info', full, rest)
     },
     async warn(msg: string, ...rest: unknown[]) {
       const full = format(msg, rest)
       console.warn(`[Cron ${cron}]`, full)
-      await append('WARN', full)
+      await write('warning', full, rest)
     },
     async error(msg: string, ...rest: unknown[]) {
       const full = format(msg, rest)
       console.error(`[Cron ${cron}]`, full)
-      await append('ERROR', full)
+      await write('erreur', full, rest)
     },
     async step(step: string, details?: Record<string, unknown>) {
       const msg = details ? `${step} | ${JSON.stringify(details)}` : step
-      await append('INFO', msg)
+      await appendUnifiedLog({
+        section: 'back',
+        type: 'step',
+        script,
+        message: msg,
+        json: details ?? null,
+      })
     },
   }
 }

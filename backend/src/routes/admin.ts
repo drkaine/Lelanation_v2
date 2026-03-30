@@ -19,6 +19,12 @@ import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { prisma } from '../db.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
+  readUnifiedLogEntries,
+  deleteUnifiedLogsInRange,
+  appendUnifiedLog,
+  getUnifiedLogPathResolved,
+} from '../logging/unifiedAppLog.js'
+import {
   startScript,
   switchToScript,
   requestStop,
@@ -731,6 +737,78 @@ router.get('/script-logs', async (req, res) => {
       return res.json({ log: [], logDir: 'logs/scripts' })
     }
     return res.status(500).json({ error: (err as Error).message })
+  }
+})
+
+/** GET /api/admin/unified-logs — parsed unified log file (admin UI). */
+router.get('/unified-logs', async (req, res) => {
+  try {
+    const section = typeof req.query.section === 'string' ? req.query.section.trim() : undefined
+    const type = typeof req.query.type === 'string' ? req.query.type.trim() : undefined
+    const script = typeof req.query.script === 'string' ? req.query.script.trim() : undefined
+    const fromIso = typeof req.query.from === 'string' ? req.query.from.trim() : undefined
+    const toIso = typeof req.query.to === 'string' ? req.query.to.trim() : undefined
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined
+    const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
+    const limitParam = Number(req.query.limit)
+    const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 5000) : 500
+    const offsetParam = Number(req.query.offset)
+    const offset = Number.isFinite(offsetParam) ? Math.max(0, offsetParam) : 0
+
+    const { entries, totalMatched } = await readUnifiedLogEntries({
+      section: section || undefined,
+      type: type || undefined,
+      script: script || undefined,
+      fromIso: fromIso || undefined,
+      toIso: toIso || undefined,
+      search: search || undefined,
+      sort,
+      limit,
+      offset,
+    })
+
+    return res.json({
+      entries,
+      totalMatched,
+      logPath: getUnifiedLogPathResolved(),
+    })
+  } catch (err) {
+    return res.status(500).json({ error: (err as Error).message, entries: [], totalMatched: 0 })
+  }
+})
+
+/** DELETE body: { fromIso, toIso } — remove log lines in inclusive timestamp range. */
+router.delete('/unified-logs', async (req, res) => {
+  try {
+    const fromIso = typeof req.body?.fromIso === 'string' ? req.body.fromIso.trim() : ''
+    const toIso = typeof req.body?.toIso === 'string' ? req.body.toIso.trim() : ''
+    if (!fromIso || !toIso) {
+      return res.status(400).json({ error: 'fromIso and toIso (ISO 8601) are required' })
+    }
+    const { removed, kept } = await deleteUnifiedLogsInRange(fromIso, toIso)
+    return res.json({ ok: true, removed, kept })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: (err as Error).message })
+  }
+})
+
+/** POST body: { type?, script?, message, json? } — frontend / client events into unified log. */
+router.post('/client-log', async (req, res) => {
+  try {
+    const message = typeof req.body?.message === 'string' ? req.body.message : ''
+    if (!message.trim()) {
+      return res.status(400).json({ error: 'message is required' })
+    }
+    const type = typeof req.body?.type === 'string' && req.body.type.trim() ? req.body.type.trim() : 'info'
+    const script = typeof req.body?.script === 'string' && req.body.script.trim() ? req.body.script.trim() : 'frontend'
+    const json =
+      req.body?.json != null && typeof req.body.json === 'object'
+        ? (req.body.json as Record<string, unknown>)
+        : null
+    await appendUnifiedLog({ section: 'front', type, script, message, json })
+    return res.json({ ok: true })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: (err as Error).message })
   }
 })
 

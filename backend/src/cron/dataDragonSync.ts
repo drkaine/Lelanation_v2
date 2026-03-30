@@ -5,6 +5,7 @@ import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/MaterializedViewService.js'
 
@@ -21,6 +22,12 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
   const startTime = new Date()
   await log.info('START Data Dragon synchronization')
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'debut',
+    script: 'datadragon',
+    message: 'Data Dragon sync démarré',
+  })
 
   try {
     await cronStatus.markStart('dataDragonSync')
@@ -56,6 +63,13 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       await syncActivePatchesFromConfigAndCounts().catch(() => undefined)
       await log.info('No new version available. Current:', versionInfo.current)
       await cronStatus.markSuccess('dataDragonSync')
+      await appendUnifiedLog({
+        section: 'back',
+        type: 'fin',
+        script: 'datadragon',
+        message: 'Aucune mise à jour Data Dragon',
+        json: { updated: false, currentVersion: versionInfo.current },
+      })
       return { ok: true }
     }
 
@@ -144,6 +158,25 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
       version: syncData.version,
       duration: `${duration}s`,
       ...(assetsStats && { dataFiles: assetsStats.dataCopied, imagesCopied: assetsStats.imagesCopied, imagesSkipped: assetsStats.imagesSkipped })
+    })
+
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'fin',
+      script: 'datadragon',
+      message: `Data Dragon mis à jour — v${syncData.version}`,
+      json: {
+        updated: true,
+        version: syncData.version,
+        durationSeconds: duration,
+        assets: assetsStats
+          ? {
+              dataFiles: assetsStats.dataCopied,
+              imagesCopied: assetsStats.imagesCopied,
+              imagesSkipped: assetsStats.imagesSkipped,
+            }
+          : null,
+      },
     })
 
     return { ok: true, version: syncData.version }

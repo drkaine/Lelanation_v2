@@ -907,7 +907,32 @@
     "tabs": {
       "contact": "Contact",
       "videos": "Videos",
-      "data": "Data"
+      "data": "Data",
+      "logs": "Logs"
+    },
+    "logs": {
+      "title": "Unified logs",
+      "section": "Section",
+      "type": "Type",
+      "script": "Script",
+      "from": "From",
+      "to": "To",
+      "search": "Search",
+      "sort": "Sort",
+      "sortDesc": "Newest first",
+      "sortAsc": "Oldest first",
+      "apply": "Apply filters",
+      "all": "All",
+      "deleteRange": "Delete a time range",
+      "deleteButton": "Delete range",
+      "total": "{n} matching entries",
+      "colScript": "Script",
+      "colType": "Type",
+      "colDate": "Date (local)",
+      "colMessage": "Message",
+      "colJson": "JSON",
+      "jsonTitle": "JSON detail",
+      "copyJson": "Copy JSON"
     },
     "data": {
       "title": "Data",

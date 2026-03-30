@@ -912,7 +912,32 @@
     "tabs": {
       "contact": "Contact",
       "videos": "Vidéos",
-      "data": "Data"
+      "data": "Data",
+      "logs": "Logs"
+    },
+    "logs": {
+      "title": "Logs unifiés",
+      "section": "Section",
+      "type": "Type",
+      "script": "Script",
+      "from": "Du",
+      "to": "Au",
+      "search": "Recherche",
+      "sort": "Ordre",
+      "sortDesc": "Date ↓",
+      "sortAsc": "Date ↑",
+      "apply": "Filtrer",
+      "all": "Tous",
+      "deleteRange": "Supprimer une plage horaire",
+      "deleteButton": "Supprimer la période",
+      "total": "{n} entrée(s) correspondant aux filtres",
+      "colScript": "Script",
+      "colType": "Type",
+      "colDate": "Date HE",
+      "colMessage": "Texte",
+      "colJson": "JSON",
+      "jsonTitle": "Détail JSON",
+      "copyJson": "Copier le JSON"
     },
     "data": {
       "title": "Data",

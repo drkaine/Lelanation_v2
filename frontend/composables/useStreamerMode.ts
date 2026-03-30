@@ -11,6 +11,8 @@ export function useStreamerMode() {
   })
   const isStreamerMode = useState<boolean>('streamer-mode', () => modeCookie.value === '1')
   const initialized = useState<boolean>('streamer-mode-initialized', () => false)
+  const isMobileViewport = () =>
+    import.meta.client && window.matchMedia('(max-width: 768px)').matches
 
   // IMPORTANT: do not read localStorage before hydration, or SSR/CSR can diverge.
   if (import.meta.client) {
@@ -18,6 +20,14 @@ export function useStreamerMode() {
       if (initialized.value) return
       initialized.value = true
       try {
+        // Le mode présentation n'est pas supporté sur mobile.
+        if (isMobileViewport()) {
+          isStreamerMode.value = false
+          modeCookie.value = '0'
+          localStorage.setItem(STREAMER_MODE_STORAGE_KEY, '0')
+          return
+        }
+
         const saved = localStorage.getItem(STREAMER_MODE_STORAGE_KEY)
         if (saved === '1' || saved === '0') {
           isStreamerMode.value = saved === '1'
@@ -45,10 +55,18 @@ export function useStreamerMode() {
   }
 
   const setStreamerMode = (enabled: boolean) => {
+    if (isMobileViewport()) {
+      isStreamerMode.value = false
+      return
+    }
     isStreamerMode.value = enabled
   }
 
   const toggleStreamerMode = () => {
+    if (isMobileViewport()) {
+      isStreamerMode.value = false
+      return
+    }
     isStreamerMode.value = !isStreamerMode.value
   }
 

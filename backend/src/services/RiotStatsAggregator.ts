@@ -60,7 +60,7 @@ export class RiotStatsAggregator {
       if (cached && cached.expiresAt > now) return cached.data
 
       const where: Record<string, unknown> = {}
-      applyRankTierWhere(where, rankTier)
+      applyRankTierWhere(where, rankTier, { excludeUnrankedWhenEmpty: true })
       if (pRole) where.role = pRole
       if (pVersion) where.gameVersion = pVersion
       if (pRegion) where.region = pRegion

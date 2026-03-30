@@ -306,3 +306,37 @@ Source : `getOverviewSidesStats` (StatsOverviewService).
 | Côté bleu/rouge            | StatsOverviewService.getOverviewSidesStats | GET /api/stats/overview-sides        |
 
 Les vues matérialisées `mv_stats_champions`, `mv_stats_overview`, `mv_stats_overview_teams` mettent en cache les résultats des fonctions sans filtre (version/rank null) pour des réponses rapides ; elles sont rafraîchies après collecte (voir [migrations-long-running.md](migrations-long-running.md)).
+
+Ce que tu décris
+Delta 1 = Counter Matchup Win Rate − (100 − Counter Champions Overall Average Win Rate)
+Delta 2 = Counter Matchup Win Rate − Normalised Champions Win Rate in Matchup
+Ce qui existe dans le repo
+GET /api/stats/champions/:id/matchups (StatsMatchupsService.getMatchupsByChampion)
+
+Lit mv_champion_vs_stats et renvoie seulement : opponentChampionId, games, wins, winrate.
+Aucun delta (ni Delta 1, ni Delta 2).
+GET /api/stats/champions/:id/matchups-tier (getMatchupDetailsByChampion dans MatchupTierService.ts)
+
+C’est un stub qui retourne toujours [] (commentaire : table matchup_tier_scores supprimée).
+Donc pas de scores / deltas côté “tier” non plus.
+MatchupTierService.computeDelta (encore présent pour les tests / doc interne)
+
+Formule : winrate_A_vs_B − moyenne(winrate des autres champions vs B) (éligibles avec ≥ 100 games).
+C’est la logique décrite dans docs/stats-calculations.md §9.1, pas la même chose que ton Delta 1 (− (100 − WR global du counter)) ni ton Delta 2 (WR “normalisé in matchup”).
+Conclusion matchups : les Delta 1 et Delta 2 au sens Lolalytics que tu cites ne sont pas calculés dans l’app actuelle ; seul un winrate brut par opposant est exposé via /matchups.
+
+Synergy (duo / pairing)
+Delta 1 = Actual Win Rate Together − Expected Normalised Champions Win Rate Together
+Delta 2 = Actual Win Rate Together − (Current Champion WR + Paired Champion WR) / 2
+Ce qui existe
+Des duos de sorts d’invocateur (getSummonerSpellsDuosByChampion) : winrate par paire de sorts, pas par paire de champions avec formule “together vs expected”.
+Aucune agrégation type “WR à deux champions sur la même équipe / même lane” ni champs deltaSynergy1 / deltaSynergy2 dans le backend ou le front.
+Conclusion synergy : ces deux deltas n’existent pas dans le codebase.
+
+Synthèse
+Métrique	Implémenté ?
+Matchup Delta 1 (vs 100 − WR global du counter)	Non
+Matchup Delta 2 (vs WR “normalisé in matchup”)	Non
+Ancien delta type doc (A vs B − moyenne des autres vs B)	Fonction computeDelta seulement ; pas branchée sur l’API matchups MV
+Synergy Delta 1 / Delta 2	Non
+Si tu veux la prochaine étape, on peut soit documenter les formules exactes (dont “normalised WR in matchup” et “expected normalised together”) dans docs/stats-calculations.md, soit les implémenter dans getMatchupsByChampion en s’appuyant sur mv_champion_core_stats pour les WR globaux et les jeux par rôle/patch. Dis-moi si tu préfères doc seulement ou API + UI.

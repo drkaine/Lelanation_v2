@@ -56,12 +56,10 @@ app.use('/api/app', appRoutes)
 app.use('/api/share-builds', shareBuildsRoutes)
 
 // Initialize cron jobs
-console.log('[Server] Initializing cron jobs...')
 try {
   setupDataDragonSync()
   setupYouTubeSync()
   setupCommunityDragonSync()
-  console.log('[Server] ✅ All cron jobs initialized successfully')
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

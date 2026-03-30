@@ -8,6 +8,7 @@
  *
  * Runs once (not a loop) and exits when all players are synced.
  */
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { initRiotPoller } from './riotPoller.js'
@@ -62,7 +63,14 @@ export async function runPuuidMigrationScript(
   }
   onUpdate?.(_status)
 
-  const logger = createRiotPollerLogger()
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'debut',
+    script: 'puuid_migration',
+    message: 'Script migration PUUID démarré',
+  })
+
+  const logger = createRiotPollerLogger('puuid_migration')
 
   try {
     const init = await initRiotPoller()

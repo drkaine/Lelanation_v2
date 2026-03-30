@@ -6,6 +6,7 @@ import { FileManager } from '../utils/fileManager.js'
 import { join } from 'path'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 
 interface YouTubeChannelConfig {
@@ -21,7 +22,13 @@ type YouTubeChannelsConfigFile = {
  * Run YouTube sync once (used by cron schedule and manual trigger).
  */
 export async function runYouTubeSyncOnce(): Promise<
-  { ok: true; syncedChannels: number; totalVideos: number } | { ok: false; error: string }
+  | {
+      ok: true
+      syncedChannels: number
+      totalVideos: number
+      perChannel?: Array<{ channelId: string; channelName: string; videosAdded: number }>
+    }
+  | { ok: false; error: string }
 > {
   const youtubeService = new YouTubeService()
   const discordService = new DiscordService()
@@ -32,6 +39,12 @@ export async function runYouTubeSyncOnce(): Promise<
 
   const startTime = new Date()
   await log.info('START YouTube synchronization')
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'debut',
+    script: 'youtube',
+    message: 'YouTube sync démarré',
+  })
 
   await cronStatus.markStart('youtubeSync')
 
@@ -47,14 +60,28 @@ export async function runYouTubeSyncOnce(): Promise<
     }
     await log.info('No YouTube channels configured. Skipping sync.')
     await cronStatus.markSuccess('youtubeSync')
-    return { ok: true, syncedChannels: 0, totalVideos: 0 }
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'fin',
+      script: 'youtube',
+      message: 'YouTube — aucune chaîne configurée',
+      json: { perChannel: [] },
+    })
+    return { ok: true, syncedChannels: 0, totalVideos: 0, perChannel: [] }
   }
 
   const config = configResult.unwrap()
   if (!config.channels || config.channels.length === 0) {
     await log.info('No YouTube channels configured. Skipping sync.')
     await cronStatus.markSuccess('youtubeSync')
-    return { ok: true, syncedChannels: 0, totalVideos: 0 }
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'fin',
+      script: 'youtube',
+      message: 'YouTube — aucune chaîne configurée',
+      json: { perChannel: [] },
+    })
+    return { ok: true, syncedChannels: 0, totalVideos: 0, perChannel: [] }
   }
 
   await log.step('Syncing channels', { count: config.channels.length })
@@ -112,10 +139,24 @@ export async function runYouTubeSyncOnce(): Promise<
     duration: `${duration}s`
   })
 
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'fin',
+    script: 'youtube',
+    message: `YouTube sync terminé — ${syncData.syncedChannels} chaîne(s), ${syncData.totalVideos} vidéos`,
+    json: {
+      perChannel: syncData.perChannel,
+      totalVideos: syncData.totalVideos,
+      syncedChannels: syncData.syncedChannels,
+      durationSeconds: duration,
+    },
+  })
+
   return {
     ok: true,
     syncedChannels: syncData.syncedChannels,
     totalVideos: syncData.totalVideos,
+    perChannel: syncData.perChannel,
   }
 }
 

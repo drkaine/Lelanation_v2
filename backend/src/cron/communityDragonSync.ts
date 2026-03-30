@@ -3,6 +3,7 @@ import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 
 /**
@@ -18,6 +19,12 @@ export async function runCommunityDragonSyncOnce(): Promise<
 
   const startTime = new Date()
   await log.info('START Community Dragon synchronization')
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'debut',
+    script: 'community_dragon',
+    message: 'Community Dragon sync démarré',
+  })
 
   await cronStatus.markStart('communityDragonSync')
 
@@ -111,6 +118,19 @@ export async function runCommunityDragonSyncOnce(): Promise<
       successContext
     )
   }
+
+  await appendUnifiedLog({
+    section: 'back',
+    type: 'fin',
+    script: 'community_dragon',
+    message: 'Community Dragon sync terminé',
+    json: {
+      synced: syncData.synced,
+      failed: syncData.failed,
+      skipped: syncData.skipped,
+      durationSeconds: duration,
+    },
+  })
 
   return {
     ok: true,

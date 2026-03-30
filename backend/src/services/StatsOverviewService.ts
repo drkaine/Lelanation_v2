@@ -199,6 +199,7 @@ export interface ObjectiveCountsBySide {
 
 const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
 const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
+let hasWarnedMissingTeamBucket = false
 
 const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
 const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
@@ -257,6 +258,7 @@ function buildMatchWhere(
   else if (versions.length > 1) where.gameVersion = { in: versions.flatMap(v => [v]) }
   if (ranks.length === 1) where.rankTier = ranks[0]
   else if (ranks.length > 1) where.rankTier = { in: ranks }
+  else where.rankTier = { not: 'UNRANKED' }
   return where
 }
 
@@ -279,7 +281,7 @@ export async function getOverviewStats(
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier)
+    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) coreWhere.role = pRole
 
     const matchWhere = buildMatchWhere(version, rankTier)
@@ -419,7 +421,7 @@ export async function getOverviewDetailStats(
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier)
+    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) coreWhere.role = pRole
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
@@ -745,7 +747,7 @@ export async function getOverviewTeamsStats(
         ...(pVersion ? { gameVersion: { startsWith: pVersion } } : {}),
         ...(() => {
           const w: Record<string, unknown> = {}
-          applyRankTierWhere(w, rankTier)
+          applyRankTierWhere(w, rankTier, { excludeUnrankedWhenEmpty: true })
           if (pRole) w.role = pRole
           return w
         })(),
@@ -816,22 +818,37 @@ export async function getOverviewTeamsStats(
       if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
       else if (ranks.length > 1) {
         conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+      } else {
+        conditions.push(`b.rank_tier <> 'UNRANKED'`)
       }
       const whereSql = conditions.join(' AND ')
-      const rows = await prisma.$queryRawUnsafe<
-        Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
-      >(`
-        SELECT
-          b.team,
-          tb.objective_bucket,
-          SUM(tb.count_win)::int AS count_win,
-          SUM(tb.count_game)::int AS count_game
-        FROM mv_team_bucket tb
-        JOIN mv_team_core_stats b ON b.id = tb.team_stat_id
-        WHERE tb.objective_key = '${objectiveKey}'
-          AND ${whereSql}
-        GROUP BY b.team, tb.objective_bucket
-      `)
+      let rows: Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }> = []
+      try {
+        rows = await prisma.$queryRawUnsafe<
+          Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
+        >(`
+          SELECT
+            b.team,
+            tb.objective_bucket,
+            SUM(tb.count_win)::int AS count_win,
+            SUM(tb.count_game)::int AS count_game
+          FROM mv_team_bucket tb
+          JOIN mv_team_core_stats b ON b.id = tb.team_stat_id
+          WHERE tb.objective_key = '${objectiveKey}'
+            AND ${whereSql}
+          GROUP BY b.team, tb.objective_bucket
+        `)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (message.includes('42P01') || message.includes('mv_team_bucket')) {
+          if (!hasWarnedMissingTeamBucket) {
+            hasWarnedMissingTeamBucket = true
+            console.warn('[getOverviewTeamsStats] mv_team_bucket missing; returning empty objective distributions')
+          }
+          return { win: {}, loss: {} }
+        }
+        throw err
+      }
       const win: Record<string, number> = {}
       const loss: Record<string, number> = {}
       for (const r of rows) {
@@ -939,7 +956,7 @@ export async function getOverviewDurationWinrateStats(
   try {
     const coreWhere: Record<string, unknown> = {}
     if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier)
+    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) coreWhere.role = pRole
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
@@ -991,7 +1008,7 @@ export async function getDurationWinrateByChampion(
   try {
     const coreWhere: Record<string, unknown> = { championId }
     if (version) coreWhere.gameVersion = { startsWith: version }
-    applyRankTierWhere(coreWhere, rankTier)
+    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
 
     const coreStats = await prisma.mvChampionCoreStat.findMany({
       where: coreWhere,
@@ -1047,11 +1064,11 @@ export async function getOverviewProgressionStats(
 
   try {
     const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    applyRankTierWhere(oldestWhere, rankTier)
+    applyRankTierWhere(oldestWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) oldestWhere.role = pRole
 
     const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    applyRankTierWhere(sinceWhere, rankTier)
+    applyRankTierWhere(sinceWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) sinceWhere.role = pRole
 
     const [oldestRows, sinceRows] = await Promise.all([
@@ -1133,10 +1150,10 @@ export async function getOverviewProgressionFullStats(
 
   try {
     const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    applyRankTierWhere(oldestWhere, rankTier)
+    applyRankTierWhere(oldestWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) oldestWhere.role = pRole
     const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    applyRankTierWhere(sinceWhere, rankTier)
+    applyRankTierWhere(sinceWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     if (pRole) sinceWhere.role = pRole
 
     const [oldestRows, sinceRows] = await Promise.all([
@@ -1236,6 +1253,7 @@ function buildRawMatchCond(
   else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v}'`).join(',')})`)
   if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map(r => `'${r}'`).join(',')})`)
+  else parts.push(`m.rank_tier <> 'UNRANKED'`)
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 

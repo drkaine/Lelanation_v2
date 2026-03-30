@@ -401,12 +401,22 @@ export class YouTubeService {
    */
   async syncChannels(
     channels: YouTubeChannelConfigInput[]
-  ): Promise<Result<{ syncedChannels: number; totalVideos: number }, AppError>> {
+  ): Promise<
+    Result<
+      {
+        syncedChannels: number
+        totalVideos: number
+        perChannel: Array<{ channelId: string; channelName: string; videosAdded: number }>
+      },
+      AppError
+    >
+  > {
     const keyOk = this.requireApiKey()
     if (keyOk.isErr()) return Result.err(keyOk.unwrapErr())
 
     let syncedChannels = 0
     let totalVideos = 0
+    const perChannel: Array<{ channelId: string; channelName: string; videosAdded: number }> = []
 
     for (const input of channels) {
       const resolved = await this.resolveChannelConfig(input)
@@ -493,8 +503,13 @@ export class YouTubeService {
 
       syncedChannels++
       totalVideos += merged.length
+      perChannel.push({
+        channelId: channel.channelId,
+        channelName: channel.channelName,
+        videosAdded: newVideos.length,
+      })
     }
 
-    return Result.ok({ syncedChannels, totalVideos })
+    return Result.ok({ syncedChannels, totalVideos, perChannel })
   }
 }

@@ -1,6 +1,7 @@
 /**
  * HTTP client for Riot API: key resolution (env), rate limiting, 429/400 handling.
  */
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
 
@@ -93,7 +94,7 @@ export async function resolveRiotApiKey(): Promise<
   return { ok: false, error: 'No RIOT_API_KEY in env' }
 }
 
-const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 20_000
+const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 120_000
 
 export class RiotHttpClient {
   private key: string = ''
@@ -101,13 +102,21 @@ export class RiotHttpClient {
   private clefType: string | null = null
   private platform: string = 'euw1'
   private onInvalidKey?: () => void
-  /** Throttle INFO logs that include Riot rate-limit headers from successful responses. */
+  /** Throttle unified logs that include Riot rate-limit headers from successful responses. */
   private lastRiotRateLimitSnapshotLogMs = 0
+  /** Last observed rate-limit header set (OK responses). */
+  private lastRiotRateLimitHeaders: Record<string, string> = {}
 
   constructor(
     private readonly rateLimiter: RiotRateLimiter,
-    private readonly _log: RiotPollerLogger
+    private readonly _log: RiotPollerLogger,
+    private readonly apiLogScript: string = 'poller'
   ) {}
+
+  /** Latest rate-limit headers from the last successful Riot response (for poller snapshots). */
+  getLastRiotRateLimitHeaders(): Record<string, string> {
+    return { ...this.lastRiotRateLimitHeaders }
+  }
 
   /** Register a callback invoked whenever the API returns 401 or 403 (key invalid/expired). */
   setOnInvalidKey(cb: () => void): void {
@@ -156,14 +165,20 @@ export class RiotHttpClient {
         const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
         const riotHeaders = pickRiotRateLimitHeaders(res.headers)
         const cooldownMs = Math.max(RIOT_429_MIN_PENALTY_MS, retryAfterSec * 1000)
-        void this._log.info('Riot API HTTP 429 (response status from Riot, not simulated locally)', {
-          httpStatus: res.status,
-          origin: 'riot_http_response',
-          bucket,
-          url,
-          retryAfterSec,
-          cooldownMs,
-          riotRateLimitHeaders: riotHeaders,
+        void appendUnifiedLog({
+          section: 'back',
+          type: 'warning',
+          script: this.apiLogScript,
+          message: 'Riot API HTTP 429',
+          json: {
+            httpStatus: res.status,
+            origin: 'riot_http_response',
+            bucket,
+            url,
+            retryAfterSec,
+            cooldownMs,
+            riotRateLimitHeaders: riotHeaders,
+          },
         })
         this.rateLimiter.penalize429(retryAfterSec)
         if (options?.shouldAbort?.()) {
@@ -193,15 +208,25 @@ export class RiotHttpClient {
 
       this.rateLimiter.syncFromResponseHeaders(res.headers)
 
+      const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+      if (Object.keys(riotHeaders).length > 0) {
+        this.lastRiotRateLimitHeaders = riotHeaders
+      }
+
       const now = Date.now()
       if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
         this.lastRiotRateLimitSnapshotLogMs = now
-        const riotHeaders = pickRiotRateLimitHeaders(res.headers)
-        if (Object.keys(riotHeaders).length > 0) {
-          void this._log.info('Riot API rate limit headers (OK response)', {
-            httpStatus: res.status,
-            bucket,
-            riotRateLimitHeaders: riotHeaders,
+        if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'rate_limit',
+            script: this.apiLogScript,
+            message: 'Riot rate-limit headers (dernière réponse OK)',
+            json: {
+              httpStatus: res.status,
+              bucket,
+              riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
+            },
           })
         }
       }

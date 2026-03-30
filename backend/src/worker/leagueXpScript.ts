@@ -8,6 +8,7 @@
  *
  * Default: RANKED_SOLO_5x5 / GOLD / I on euw1, up to 5 pages (200 players/page).
  */
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
@@ -103,12 +104,12 @@ export async function runLeagueXpScript(
   }
   onUpdate?.(_status)
 
-  const logger = createRiotPollerLogger()
+  const logger = createRiotPollerLogger('league_xp')
 
   try {
     // Init Riot API client
     const rateLimiter = new RiotRateLimiter()
-    const client = new RiotHttpClient(rateLimiter, logger)
+    const client = new RiotHttpClient(rateLimiter, logger, 'league_xp')
 
     const resolved = await resolveRiotApiKey()
     if (!resolved.ok) {
@@ -117,7 +118,18 @@ export async function runLeagueXpScript(
     client.setKey(resolved.key, resolved.source, resolved.clefType)
     client.setPlatform(region)
 
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'debut',
+      script: 'league_xp',
+      message: 'League XP démarré',
+      json: { queue, tier, division, region, maxPages },
+    })
     await logger.step('League XP start', { queue, tier, division, region, maxPages })
+
+    let lastPulseMs = Date.now()
+    let lastPlayersFound = 0
+    let lastRequestCount = 0
 
     for (let page = 1; page <= maxPages && !isShouldStop(); page++) {
       const res = await client.getLeagueEntries(queue, tier, division, page)
@@ -190,6 +202,25 @@ export async function runLeagueXpScript(
         newPlayers: newEntries.length,
         cumCreated: _status.playersCreated,
       })
+
+      const now = Date.now()
+      if (now - lastPulseMs >= 120_000) {
+        await appendUnifiedLog({
+          section: 'back',
+          type: 'info',
+          script: 'league_xp',
+          message: 'Snapshot League XP (2 min)',
+          json: {
+            playersFoundDelta: _status.playersFound - lastPlayersFound,
+            requestCountDelta: _status.requestCount - lastRequestCount,
+            pagesProcessed: _status.pagesProcessed,
+            playersCreated: _status.playersCreated,
+          },
+        })
+        lastPulseMs = now
+        lastPlayersFound = _status.playersFound
+        lastRequestCount = _status.requestCount
+      }
     }
 
     _status = {
@@ -199,6 +230,19 @@ export async function runLeagueXpScript(
     }
     onUpdate?.(_status)
 
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'fin',
+      script: 'league_xp',
+      message: 'League XP terminé',
+      json: {
+        pagesProcessed: _status.pagesProcessed,
+        playersFound: _status.playersFound,
+        playersCreated: _status.playersCreated,
+        requestCount: _status.requestCount,
+        error429Count: _status.error429Count,
+      },
+    })
     await logger.step('League XP done', {
       pagesProcessed: _status.pagesProcessed,
       playersFound: _status.playersFound,

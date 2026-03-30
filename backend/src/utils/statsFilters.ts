@@ -27,11 +27,13 @@ export function toQueryStringArrayParam(value: string | string[] | null | undefi
 /** Filtre Prisma sur rank_tier (une ligue ou plusieurs). */
 export function applyRankTierWhere(
   where: Record<string, unknown>,
-  rankTier: string | string[] | null | undefined
+  rankTier: string | string[] | null | undefined,
+  options?: { excludeUnrankedWhenEmpty?: boolean }
 ): void {
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (ranks.length === 1) where.rankTier = ranks[0]
   else if (ranks.length > 1) where.rankTier = { in: ranks }
+  else if (options?.excludeUnrankedWhenEmpty) where.rankTier = { not: 'UNRANKED' }
 }
 
 /** Clé de cache stable pour plusieurs ligues. */
