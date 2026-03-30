@@ -1014,7 +1014,7 @@
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.logs.title') }}</h2>
           <p class="mb-3 text-xs text-text/60">{{ unifiedLogsPathHint }}</p>
-          <div class="mb-4 flex flex-wrap items-end gap-3">
+          <div class="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <label class="flex flex-col gap-1 text-xs text-text/80">
               {{ t('admin.logs.section') }}
               <select
@@ -1098,29 +1098,39 @@
                 <option value="asc">{{ t('admin.logs.sortAsc') }}</option>
               </select>
             </label>
-            <button
-              type="button"
-              class="rounded bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-              :disabled="unifiedLogsLoading"
-              @click="applyUnifiedLogFilters"
-            >
-              {{ unifiedLogsLoading ? '…' : t('admin.logs.apply') }}
-            </button>
+            <div class="col-span-1 flex w-full flex-wrap gap-2 sm:col-span-2 xl:col-span-4">
+              <button
+                type="button"
+                class="flex-1 rounded bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 sm:flex-none"
+                :disabled="unifiedLogsLoading"
+                @click="applyUnifiedLogFilters"
+              >
+                {{ unifiedLogsLoading ? '…' : t('admin.logs.apply') }}
+              </button>
+              <button
+                type="button"
+                class="flex-1 rounded border border-primary/40 bg-surface px-3 py-2 text-sm font-medium text-text hover:bg-primary/10 disabled:opacity-50 sm:flex-none"
+                :disabled="unifiedLogsLoading"
+                @click="refreshUnifiedLogs"
+              >
+                {{ unifiedLogsLoading ? '…' : 'Actualiser' }}
+              </button>
+            </div>
           </div>
           <div
-            class="mb-4 flex flex-wrap items-center gap-3 rounded border border-error/30 bg-error/5 p-3 text-sm"
+            class="mb-4 flex flex-col gap-3 rounded border border-error/30 bg-error/5 p-3 text-sm sm:flex-row sm:flex-wrap sm:items-center"
           >
             <span class="font-medium text-text">{{ t('admin.logs.deleteRange') }}</span>
             <input
               v-model="unifiedLogDeleteFrom"
               type="datetime-local"
-              class="rounded border border-primary/50 bg-background px-2 py-1 text-text"
+              class="w-full rounded border border-primary/50 bg-background px-2 py-1 text-text sm:w-auto"
             />
             <span class="text-text/60">→</span>
             <input
               v-model="unifiedLogDeleteTo"
               type="datetime-local"
-              class="rounded border border-primary/50 bg-background px-2 py-1 text-text"
+              class="w-full rounded border border-primary/50 bg-background px-2 py-1 text-text sm:w-auto"
             />
             <button
               type="button"
@@ -1212,7 +1222,7 @@
               :disabled="unifiedLogOffset <= 0 || unifiedLogsLoading"
               @click="
                 unifiedLogOffset = Math.max(0, unifiedLogOffset - unifiedLogLimit)
-                loadUnifiedLogs()
+                loadUnifiedLogs().catch(() => {})
               "
             >
               {{ t('admin.pagination.prev') }}
@@ -1229,7 +1239,7 @@
               "
               @click="
                 unifiedLogOffset += unifiedLogLimit
-                loadUnifiedLogs()
+                loadUnifiedLogs().catch(() => {})
               "
             >
               {{ t('admin.pagination.next') }}
@@ -1888,6 +1898,10 @@ function datetimeLocalToIso(local: string): string | undefined {
 
 function applyUnifiedLogFilters() {
   unifiedLogOffset.value = 0
+  loadUnifiedLogs().catch(() => {})
+}
+
+function refreshUnifiedLogs() {
   loadUnifiedLogs().catch(() => {})
 }
 
@@ -3003,6 +3017,10 @@ onMounted(async () => {
     loadActivePatches(),
     loadSeedPlayers(),
   ])
+  if (activeTab.value === 'logs') {
+    unifiedLogOffset.value = 0
+    loadUnifiedLogs().catch(() => {})
+  }
 })
 
 // Sync URL when tab changes (refresh will restore the tab)

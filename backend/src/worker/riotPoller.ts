@@ -13,6 +13,7 @@ import {
   loadCurrentGameVersion,
   loadGameVersionsRecap,
   computeMatchIdsTimeWindow,
+  releaseDateToStartOfDayUtcSeconds,
 } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
@@ -1606,6 +1607,20 @@ async function runStep4ForPlayer(
     | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'transient' | 'deferred_patch' }
 
   const patchPolicy = await resolvePatchPollingPolicy()
+  let latestPatchDateWindow: { startTime: number; endTime: number } | null = null
+  if (patchPolicy.latestPatchOnly) {
+    const currentRes = await loadCurrentGameVersion()
+    if (currentRes.isOk()) {
+      const current = currentRes.unwrap()
+      const startTime = releaseDateToStartOfDayUtcSeconds(current?.releaseDate ?? '')
+      if (Number.isFinite(startTime)) {
+        latestPatchDateWindow = {
+          startTime,
+          endTime: Math.floor(Date.now() / 1000),
+        }
+      }
+    }
+  }
 
   const fetchMatchAndTimelineStrict = async (matchId: string): Promise<StrictFetchResult> => {
     let attempts = 0
@@ -1727,7 +1742,10 @@ async function runStep4ForPlayer(
       count: filters.count,
       start: 0,
     }
-    if (matchListTimeWindow) {
+    if (latestPatchDateWindow) {
+      matchIdsQuery.startTime = latestPatchDateWindow.startTime
+      matchIdsQuery.endTime = latestPatchDateWindow.endTime
+    } else if (matchListTimeWindow) {
       matchIdsQuery.startTime = matchListTimeWindow.startTime
       matchIdsQuery.endTime = matchListTimeWindow.endTime
     }

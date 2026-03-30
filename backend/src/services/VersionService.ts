@@ -8,6 +8,7 @@ interface VersionInfo {
   currentVersion: string
   lastSyncDate: string
   lastSyncTimestamp: number
+  releaseDate?: string
 }
 
 interface VersionsRecapEntry {
@@ -66,11 +67,13 @@ export class VersionService {
    * Update version info after successful sync.
    * Also ensures versions.json contains this version (for match collection filter).
    */
-  async updateVersion(version: string): Promise<Result<void, AppError>> {
+  async updateVersion(version: string, releaseDateOverride?: string): Promise<Result<void, AppError>> {
+    const releaseDate = this.normalizeReleaseDate(releaseDateOverride) ?? await this.resolveReleaseDateForVersion(version)
     const versionInfo: VersionInfo = {
       currentVersion: version,
       lastSyncDate: new Date().toISOString(),
-      lastSyncTimestamp: Date.now()
+      lastSyncTimestamp: Date.now(),
+      releaseDate,
     }
 
     const writeResult = await FileManager.writeJson(this.versionFile, versionInfo)
@@ -82,6 +85,21 @@ export class VersionService {
       console.warn('[VersionService] Failed to update versions.json:', recapResult.unwrapErr())
     }
     return Result.ok(undefined)
+  }
+
+  private normalizeReleaseDate(date: string | undefined): string | null {
+    const d = (date ?? '').trim()
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null
+  }
+
+  private async resolveReleaseDateForVersion(version: string): Promise<string> {
+    const fallback = new Date().toISOString().slice(0, 10)
+    const readResult = await FileManager.readJson<VersionsRecapJson>(this.versionsFile)
+    if (readResult.isErr()) return fallback
+    const data = readResult.unwrap()
+    const entry = (data?.versions ?? []).find((e) => e.version === version)
+    const date = (entry?.releaseDate ?? '').trim()
+    return this.normalizeReleaseDate(date) ?? fallback
   }
 
   /**

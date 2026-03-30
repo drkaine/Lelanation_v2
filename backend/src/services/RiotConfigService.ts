@@ -27,6 +27,7 @@ export interface VersionInfo {
   currentVersion: string
   lastSyncDate: string
   lastSyncTimestamp: number
+  releaseDate?: string
 }
 
 export async function loadMatchFilters(): Promise<Result<MatchFiltersConfig, AppError>> {

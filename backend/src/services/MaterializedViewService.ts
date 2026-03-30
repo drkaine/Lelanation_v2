@@ -203,12 +203,10 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
   return touched
 }
 
-/**
- * Lance le refresh des vues matérialisées (CONCURRENTLY).
- * À appeler périodiquement (ex. toutes les 2h ou après chaque batch d'agrégation, selon charge).
- */
-export async function refreshAllMaterializedViews(): Promise<void> {
-  if (!isDatabaseConfigured()) return
+/** Un seul refresh à la fois : évite deux `debut` sans `fin` cohérent si poller + snapshot (ou autres) se chevauchent. */
+let mvRefreshInFlight: Promise<void> | null = null
+
+async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
   const t0 = Date.now()
   await appendUnifiedLog({
     section: 'db',
@@ -244,6 +242,24 @@ export async function refreshAllMaterializedViews(): Promise<void> {
     })
     throw err
   }
+}
+
+/**
+ * Lance le refresh des vues matérialisées (CONCURRENTLY).
+ * À appeler périodiquement (ex. toutes les 2h ou après chaque batch d'agrégation, selon charge).
+ * Les appels concurrents partagent la même exécution (pas de second `debut` ni refresh DB en double).
+ */
+export async function refreshAllMaterializedViews(): Promise<void> {
+  if (!isDatabaseConfigured()) return
+  if (mvRefreshInFlight) return mvRefreshInFlight
+  mvRefreshInFlight = (async () => {
+    try {
+      await runRefreshAllMaterializedViewsOnce()
+    } finally {
+      mvRefreshInFlight = null
+    }
+  })()
+  return mvRefreshInFlight
 }
 
 /**

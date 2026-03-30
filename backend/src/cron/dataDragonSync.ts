@@ -1,4 +1,5 @@
 import cron from 'node-cron'
+import { join } from 'path'
 import { DataDragonService } from '../services/DataDragonService.js'
 import { VersionService } from '../services/VersionService.js'
 import { DiscordService } from '../services/DiscordService.js'
@@ -8,6 +9,7 @@ import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/MaterializedViewService.js'
+import { FileManager } from '../utils/fileManager.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -115,7 +117,20 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     }
 
     // Update version info
-    const updateResult = await versionService.updateVersion(syncData.version)
+    let releaseDateOverride: string | undefined = undefined
+    try {
+      const recap = await FileManager.readJson<{ versions?: Array<{ version: string; releaseDate: string; patchLabel: string }> }>(
+        join(process.cwd(), 'data', 'game', 'versions.json')
+      )
+      if (recap.isOk()) {
+        const label = patch
+        const entry = (recap.unwrap().versions ?? []).find((v) => v.patchLabel === label || v.version === syncData.version)
+        if (entry?.releaseDate) releaseDateOverride = entry.releaseDate
+      }
+    } catch {
+      // ignore; fallback handled by VersionService
+    }
+    const updateResult = await versionService.updateVersion(syncData.version, releaseDateOverride)
     if (updateResult.isErr()) {
       await log.warn('Failed to update version info:', updateResult.unwrapErr())
     }
