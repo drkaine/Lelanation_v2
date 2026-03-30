@@ -1220,10 +1220,7 @@
               type="button"
               class="rounded border border-primary/40 px-3 py-1 disabled:opacity-50"
               :disabled="unifiedLogOffset <= 0 || unifiedLogsLoading"
-              @click="
-                unifiedLogOffset = Math.max(0, unifiedLogOffset - unifiedLogLimit)
-                loadUnifiedLogs().catch(() => {})
-              "
+              @click="unifiedLogsGoPrev"
             >
               {{ t('admin.pagination.prev') }}
             </button>
@@ -1237,10 +1234,7 @@
               :disabled="
                 unifiedLogOffset + unifiedLogLimit >= unifiedLogsTotal || unifiedLogsLoading
               "
-              @click="
-                unifiedLogOffset += unifiedLogLimit
-                loadUnifiedLogs().catch(() => {})
-              "
+              @click="unifiedLogsGoNext"
             >
               {{ t('admin.pagination.next') }}
             </button>
@@ -1902,6 +1896,16 @@ function applyUnifiedLogFilters() {
 }
 
 function refreshUnifiedLogs() {
+  loadUnifiedLogs().catch(() => {})
+}
+
+function unifiedLogsGoPrev() {
+  unifiedLogOffset.value = Math.max(0, unifiedLogOffset.value - unifiedLogLimit)
+  loadUnifiedLogs().catch(() => {})
+}
+
+function unifiedLogsGoNext() {
+  unifiedLogOffset.value += unifiedLogLimit
   loadUnifiedLogs().catch(() => {})
 }
 
