@@ -124,13 +124,6 @@
         </div>
 
         <div class="mt-[5px] flex w-full items-stretch gap-1.5">
-          <!-- <button
-              class="rounded border border-accent/70 bg-surface px-2 py-1 text-xs text-text transition-colors hover:bg-accent/10"
-              :title="t('theorycraft.testBuild')"
-              @click.stop="goToTheorycraft(build)"
-            >
-              <span>{{ t('theorycraft.testBuild') }}</span>
-            </button> -->
           <!-- Boutons de vote (désactivés pour les builds de l'utilisateur) -->
           <!-- Bouton Favori -->
           <button
@@ -1024,15 +1017,6 @@ const handleClickOutside = (event: MouseEvent) => {
     openShareDropdown.value = null
   }
 }
-
-// const goToTheorycraft = async (build: Build) => {
-//   if (!build) return
-//   // Charger le build dans le store theorycraft avant de naviguer
-//   const { useTheorycraftStore } = await import('~/stores/TheorycraftStore')
-//   const theorycraftStore = useTheorycraftStore()
-//   theorycraftStore.loadBuild(build)
-//   navigateTo(localePath('/theorycraft'))
-// }
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)

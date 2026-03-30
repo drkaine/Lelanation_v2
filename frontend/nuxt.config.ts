@@ -140,7 +140,6 @@ export default defineNuxtConfig({
           '/',
           '/builds',
           '/builds/create',
-          '/theorycraft',
           '/videos',
           '/statistics',
           '/privacy',

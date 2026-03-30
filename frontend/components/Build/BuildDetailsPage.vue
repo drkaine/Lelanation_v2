@@ -898,15 +898,6 @@ const copyBuildImageWithAuthorAndDescription = async () => {
   }
 }
 
-// const goToTheorycraft = async () => {
-//   if (!build.value) return
-//   // Charger le build dans le store theorycraft avant de naviguer
-//   const { useTheorycraftStore } = await import('~/stores/TheorycraftStore')
-//   const theorycraftStore = useTheorycraftStore()
-//   theorycraftStore.loadBuild(build.value)
-//   navigateTo(localePath('/theorycraft'))
-// }
-
 const confirmDelete = () => {
   if (!build.value) return
   buildToDelete.value = build.value.id
