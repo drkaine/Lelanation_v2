@@ -2,6 +2,11 @@ import { Router } from 'express'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import { FileManager } from '../utils/fileManager.js'
+import {
+  trackBuildView,
+  trackBuildShare,
+  type BuildShareType,
+} from '../services/BuildEngagementService.js'
 
 type BuildPayload = unknown
 
@@ -16,6 +21,7 @@ const router = Router()
 // sur le serveur de prod. Si besoin, un script pourra plus tard
 // recopier ces fichiers vers le front pour un mode 100% statique.
 const buildsDir = join(process.cwd(), 'data', 'builds')
+const VALID_SHARE_TYPES: BuildShareType[] = ['link', 'image', 'image_with_meta']
 
 /**
  * Save a build
@@ -121,6 +127,48 @@ router.get('/:id', async (req, res) => {
     return res.json(readResult.unwrap())
   } catch (error) {
     return res.status(500).json({ error: 'Failed to read builds directory' })
+  }
+})
+
+/**
+ * Track one view on build details page.
+ * POST /api/builds/:id/track-view
+ */
+router.post('/:id/track-view', async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  try {
+    const stats = await trackBuildView(buildId)
+    return res.json({ ok: true, stats })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to track build view',
+    })
+  }
+})
+
+/**
+ * Track one share action by type.
+ * POST /api/builds/:id/track-share
+ * Body: { shareType: 'link' | 'image' | 'image_with_meta' }
+ */
+router.post('/:id/track-share', async (req, res) => {
+  const buildId = typeof req.params.id === 'string' ? req.params.id.trim() : ''
+  const shareTypeRaw = typeof req.body?.shareType === 'string' ? req.body.shareType.trim() : ''
+  if (!buildId) return res.status(400).json({ error: 'Invalid build id' })
+  if (!VALID_SHARE_TYPES.includes(shareTypeRaw as BuildShareType)) {
+    return res.status(400).json({ error: 'Invalid shareType' })
+  }
+  const shareType = shareTypeRaw as BuildShareType
+  try {
+    const stats = await trackBuildShare(buildId, shareType)
+    return res.json({ ok: true, stats })
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to track build share',
+    })
   }
 })
 

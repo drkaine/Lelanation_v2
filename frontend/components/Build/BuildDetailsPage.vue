@@ -357,6 +357,8 @@ const openShareDropdown = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
 const buildToDelete = ref<string | null>(null)
 
+type ShareTrackType = 'link' | 'image' | 'image_with_meta'
+
 /** Variante affichée sur la BuildCard (null = principale). */
 const detailDisplayedSubIndex = ref<number | null>(null)
 
@@ -550,6 +552,19 @@ const toggleShareDropdown = () => {
   openShareDropdown.value = !openShareDropdown.value
 }
 
+const trackBuildShare = async (shareType: ShareTrackType) => {
+  if (!build.value?.id) return
+  try {
+    await fetch(apiUrl(`/api/builds/${encodeURIComponent(build.value.id)}/track-share`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareType }),
+    })
+  } catch {
+    // Ignore analytics errors
+  }
+}
+
 const copyBuildLink = async () => {
   if (!build.value) return
   const subParam =
@@ -557,6 +572,7 @@ const copyBuildLink = async () => {
   const buildUrl = `${window.location.origin}/builds/${build.value.id}${subParam}`
   try {
     await navigator.clipboard.writeText(buildUrl)
+    trackBuildShare('link').catch(() => {})
     openShareDropdown.value = false
   } catch (error) {
     const textarea = document.createElement('textarea')
@@ -565,6 +581,7 @@ const copyBuildLink = async () => {
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
+    trackBuildShare('link').catch(() => {})
     openShareDropdown.value = false
   }
 }
@@ -746,6 +763,7 @@ const downloadBuildImage = async () => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    trackBuildShare('image').catch(() => {})
     openShareDropdown.value = false
   } catch {
     // Failed to download image
@@ -763,6 +781,7 @@ const copyBuildImage = async () => {
         'image/png': blob,
       }),
     ])
+    trackBuildShare('image').catch(() => {})
     openShareDropdown.value = false
   } catch {
     // Fallback: télécharger l'image
@@ -881,6 +900,7 @@ const copyBuildImageWithAuthorAndDescription = async () => {
         'image/png': blob,
       }),
     ])
+    trackBuildShare('image_with_meta').catch(() => {})
     openShareDropdown.value = false
   } catch {
     const blob = await captureBuildImageWithAuthorAndDescription()
@@ -893,6 +913,7 @@ const copyBuildImageWithAuthorAndDescription = async () => {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
+      trackBuildShare('image_with_meta').catch(() => {})
       openShareDropdown.value = false
     }
   }
@@ -964,6 +985,9 @@ watch(
 
     // Si pas trouvé localement, charger depuis l'API
     try {
+      fetch(apiUrl(`/api/builds/${encodeURIComponent(id)}/track-view`), {
+        method: 'POST',
+      }).catch(() => {})
       const response = await fetch(apiUrl(`/api/builds/${encodeURIComponent(id)}`))
       if (response.ok) {
         const buildData = await response.json()

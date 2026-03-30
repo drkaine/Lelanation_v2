@@ -78,6 +78,30 @@
           </div>
           <div class="flex items-center gap-1">
             <button
+              v-if="isAdmin"
+              type="button"
+              class="build-grid-top-icon-button"
+              :title="t('buildDiscovery.adminStatsInfo')"
+              :aria-label="t('buildDiscovery.adminStatsInfo')"
+              @click.stop="openBuildStatsModal(build.id)"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 10v6" />
+                <path d="M12 7h.01" />
+              </svg>
+            </button>
+            <button
               type="button"
               class="build-grid-top-icon-button"
               :title="t('buildDiscovery.viewBuild')"
@@ -313,6 +337,65 @@
       </div>
     </div>
 
+    <div
+      v-if="adminStatsModalOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      @click="closeBuildStatsModal"
+    >
+      <div
+        class="w-full max-w-md rounded-lg border border-primary/30 bg-surface p-4 text-text"
+        @click.stop
+      >
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-base font-semibold">{{ t('buildDiscovery.adminStatsTitle') }}</h3>
+          <button
+            type="button"
+            class="rounded px-2 py-1 text-sm hover:bg-primary/20"
+            @click="closeBuildStatsModal"
+          >
+            ✕
+          </button>
+        </div>
+        <p class="mb-3 text-xs text-text/70">
+          {{ t('buildDiscovery.adminStatsBuildId') }}: {{ adminStatsBuildId }}
+        </p>
+        <p v-if="adminStatsLoading" class="text-sm text-text/70">{{ t('admin.loading') }}</p>
+        <p v-else-if="adminStatsError" class="text-sm text-error">{{ adminStatsError }}</p>
+        <div v-else-if="adminStatsData" class="space-y-2 text-sm">
+          <div class="flex items-center justify-between">
+            <span>{{ t('buildDiscovery.adminStatsViews') }}</span>
+            <strong>{{ adminStatsData.views }}</strong>
+          </div>
+          <div class="flex items-center justify-between">
+            <span>{{ t('buildDiscovery.adminStatsSharesTotal') }}</span>
+            <strong>{{ adminStatsData.sharesTotal }}</strong>
+          </div>
+          <div class="mt-2 rounded border border-primary/30 bg-background/40 p-2 text-xs">
+            <div class="flex items-center justify-between">
+              <span>{{ t('buildDiscovery.adminStatsSharesLink') }}</span>
+              <strong>{{ adminStatsData.shares.link }}</strong>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('buildDiscovery.adminStatsSharesImage') }}</span>
+              <strong>{{ adminStatsData.shares.image }}</strong>
+            </div>
+            <div class="flex items-center justify-between">
+              <span>{{ t('buildDiscovery.adminStatsSharesImageMeta') }}</span>
+              <strong>{{ adminStatsData.shares.image_with_meta }}</strong>
+            </div>
+          </div>
+          <p class="text-xs text-text/60">
+            {{ t('buildDiscovery.adminStatsLastView') }}:
+            {{ formatAdminStatsDate(adminStatsData.lastViewedAt) }}
+          </p>
+          <p class="text-xs text-text/60">
+            {{ t('buildDiscovery.adminStatsLastShare') }}:
+            {{ formatAdminStatsDate(adminStatsData.lastSharedAt) }}
+          </p>
+        </div>
+      </div>
+    </div>
+
     <!-- Pagination (Discover, Mes builds, Favoris) -->
     <div
       v-if="showPagination"
@@ -363,6 +446,8 @@ import type { Build } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useAdminAuth } from '~/composables/useAdminAuth'
+import { apiUrl } from '~/utils/apiUrl'
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
@@ -375,8 +460,21 @@ const openShareDropdown = ref<string | null>(null)
 const buildCardRefs = ref<Record<string, HTMLElement | null>>({})
 const buildCardComponentRefs = ref<Record<string, { toggleFlipped: () => void } | null>>({})
 const localFlippedMap = ref<Record<string, boolean>>({})
+const isAdmin = ref(false)
+const adminStatsModalOpen = ref(false)
+const adminStatsLoading = ref(false)
+const adminStatsError = ref('')
+const adminStatsBuildId = ref('')
+const adminStatsData = ref<{
+  views: number
+  sharesTotal: number
+  shares: { link: number; image: number; image_with_meta: number }
+  lastViewedAt: string | null
+  lastSharedAt: string | null
+} | null>(null)
 /** Variante actuellement affichée par build (null = principale). */
 const displayedSubMap = ref<Record<string, number | null>>({})
+const { fetchWithAuth, checkLoggedIn } = useAdminAuth()
 const buildGridVars = computed(() => ({
   '--build-grid-card-width': isStreamerMode.value
     ? 'min(390px, calc(100vw - 30px))'
@@ -619,12 +717,27 @@ const toggleShareDropdown = (buildId: string) => {
   }
 }
 
+type ShareTrackType = 'link' | 'image' | 'image_with_meta'
+
+async function trackBuildShare(buildId: string, shareType: ShareTrackType) {
+  try {
+    await fetch(apiUrl(`/api/builds/${encodeURIComponent(buildId)}/track-share`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shareType }),
+    })
+  } catch {
+    // Ignore analytics errors
+  }
+}
+
 const copyBuildLink = async (buildId: string) => {
   const subIdx = displayedSubMap.value[buildId]
   const subParam = typeof subIdx === 'number' ? `?sub=${subIdx}` : ''
   const buildUrl = `${window.location.origin}/builds/${buildId}${subParam}`
   try {
     await navigator.clipboard.writeText(buildUrl)
+    trackBuildShare(buildId, 'link').catch(() => {})
     openShareDropdown.value = null
   } catch (error) {
     const textarea = document.createElement('textarea')
@@ -633,6 +746,7 @@ const copyBuildLink = async (buildId: string) => {
     textarea.select()
     document.execCommand('copy')
     document.body.removeChild(textarea)
+    trackBuildShare(buildId, 'link').catch(() => {})
     openShareDropdown.value = null
   }
 }
@@ -835,6 +949,7 @@ const downloadBuildImage = async (buildId: string) => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
+    trackBuildShare(buildId, 'image').catch(() => {})
     openShareDropdown.value = null
   } catch {
     // Failed to download image
@@ -850,6 +965,7 @@ const copyBuildImage = async (buildId: string) => {
     if (navigator.clipboard && navigator.clipboard.write) {
       const item = new ClipboardItem({ 'image/png': blob })
       await navigator.clipboard.write([item])
+      trackBuildShare(buildId, 'image').catch(() => {})
       openShareDropdown.value = null
     } else {
       // Fallback: convertir en data URL et copier via un élément temporaire
@@ -989,6 +1105,7 @@ async function copyBuildImageWithAuthorAndDescription(build: Build) {
     if (!blob) return
 
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    trackBuildShare(build.id, 'image_with_meta').catch(() => {})
     openShareDropdown.value = null
   } catch {
     const authorText = (build.author || t('buildDiscovery.anonymous')).trim() || '—'
@@ -1003,8 +1120,56 @@ async function copyBuildImageWithAuthorAndDescription(build: Build) {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
+      trackBuildShare(build.id, 'image_with_meta').catch(() => {})
       openShareDropdown.value = null
     }
+  }
+}
+
+function formatAdminStatsDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleString()
+}
+
+function closeBuildStatsModal() {
+  adminStatsModalOpen.value = false
+  adminStatsBuildId.value = ''
+  adminStatsData.value = null
+  adminStatsError.value = ''
+}
+
+async function openBuildStatsModal(buildId: string) {
+  adminStatsModalOpen.value = true
+  adminStatsBuildId.value = buildId
+  adminStatsLoading.value = true
+  adminStatsError.value = ''
+  adminStatsData.value = null
+  try {
+    const res = await fetchWithAuth(
+      apiUrl(`/api/admin/builds/${encodeURIComponent(buildId)}/engagement`)
+    )
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data) {
+      adminStatsError.value = 'Impossible de charger les stats.'
+      return
+    }
+    adminStatsData.value = {
+      views: Number(data.views) || 0,
+      sharesTotal: Number(data.sharesTotal) || 0,
+      shares: {
+        link: Number(data.shares?.link) || 0,
+        image: Number(data.shares?.image) || 0,
+        image_with_meta: Number(data.shares?.image_with_meta) || 0,
+      },
+      lastViewedAt: typeof data.lastViewedAt === 'string' ? data.lastViewedAt : null,
+      lastSharedAt: typeof data.lastSharedAt === 'string' ? data.lastSharedAt : null,
+    }
+  } catch {
+    adminStatsError.value = 'Impossible de charger les stats.'
+  } finally {
+    adminStatsLoading.value = false
   }
 }
 
@@ -1019,6 +1184,17 @@ const handleClickOutside = (event: MouseEvent) => {
 }
 
 onMounted(() => {
+  if (checkLoggedIn()) {
+    fetchWithAuth(apiUrl('/api/admin/me'))
+      .then(r => {
+        isAdmin.value = r.ok
+      })
+      .catch(() => {
+        isAdmin.value = false
+      })
+  } else {
+    isAdmin.value = false
+  }
   document.addEventListener('click', handleClickOutside)
 })
 
