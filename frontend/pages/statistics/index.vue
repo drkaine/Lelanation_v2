@@ -3122,6 +3122,9 @@
                 </button>
               </div>
             </div>
+            <p v-if="tierListPatchDeltaCaption" class="text-xs text-text/70">
+              {{ tierListPatchDeltaCaption }}
+            </p>
             <div v-if="tierListPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
@@ -3145,17 +3148,16 @@
               >
                 <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
                   <div
-                    class="tier-list-lolalytics-banner flex h-[34px] border-b-2 border-black text-sm text-text-primary"
+                    class="tier-list-lolalytics-banner flex h-[34px] min-w-0 border-b-2 border-black text-sm text-text-primary"
                   >
                     <div
-                      class="flex flex-1 items-center justify-center bg-[var(--color-grey-300)] px-2 text-center font-medium"
-                      :class="hasTierListHighElo ? 'sm:flex-1' : ''"
+                      class="flex min-w-0 flex-1 items-center justify-center bg-[var(--color-grey-300)] px-2 text-center font-medium"
                     >
                       {{ t('statisticsPage.tierListBannerAllRanks') }}
                     </div>
                     <div
                       v-if="hasTierListHighElo"
-                      class="hidden flex-1 items-center justify-center border-l-2 border-black bg-[var(--color-grey-300)] px-2 text-center font-semibold text-[rgb(var(--rgb-gold-100))] sm:flex"
+                      class="tier-list-lolalytics-banner-apex hidden shrink-0 items-center justify-center border-l-2 border-black bg-[var(--color-grey-300)] px-1 text-center text-xs font-semibold text-[rgb(var(--rgb-gold-100))] sm:flex sm:w-[184px] sm:max-w-[184px]"
                     >
                       {{ t('statisticsPage.tierListBannerApex') }}
                     </div>
@@ -3275,7 +3277,7 @@
                   <div
                     v-for="row in paginatedTierList"
                     :key="row.championId"
-                    class="tier-list-lolalytics-row odd:bg-primary/12 flex h-[52px] w-full cursor-pointer items-center justify-between text-text-primary/90 even:bg-surface/45 hover:brightness-110"
+                    class="tier-list-lolalytics-row odd:bg-primary/12 flex min-h-[60px] w-full cursor-pointer items-center justify-between py-0.5 text-text-primary/90 even:bg-surface/45 hover:brightness-110"
                     role="button"
                     tabindex="0"
                     @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
@@ -3347,21 +3349,54 @@
                       <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
                     </div>
                     <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
                     >
                       <span :class="tierListWinrateClass(row.winrate * 100)">{{
                         (row.winrate * 100).toFixed(2)
                       }}</span>
+                      <span
+                        v-if="tierListPatchDeltaRefLabel && row.patchRefWinratePp != null"
+                        class="text-[10px] leading-none"
+                        :class="tierListPatchDeltaClass(row.patchRefWinratePp)"
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{ formatTierListPatchDeltaPp(row.patchRefWinratePp) }}</span
+                      >
                     </div>
                     <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
                     >
-                      {{ (row.pickrate * 100).toFixed(2) }}
+                      <span>{{ (row.pickrate * 100).toFixed(2) }}</span>
+                      <span
+                        v-if="tierListPatchDeltaRefLabel && row.patchRefPickratePp != null"
+                        class="text-[10px] leading-none"
+                        :class="tierListPatchDeltaClass(row.patchRefPickratePp)"
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{ formatTierListPatchDeltaPp(row.patchRefPickratePp) }}</span
+                      >
                     </div>
                     <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
                     >
-                      {{ (row.banrate * 100).toFixed(2) }}
+                      <span>{{ (row.banrate * 100).toFixed(2) }}</span>
+                      <span
+                        v-if="tierListPatchDeltaRefLabel && row.patchRefBanratePp != null"
+                        class="text-[10px] leading-none"
+                        :class="tierListPatchDeltaClass(row.patchRefBanratePp)"
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{ formatTierListPatchDeltaPp(row.patchRefBanratePp) }}</span
+                      >
                     </div>
                     <div
                       class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
@@ -3380,19 +3415,45 @@
                         {{ row.highEloRank != null ? row.highEloRank : '—' }}
                       </div>
                       <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 flex-col items-center justify-center gap-0 leading-tight sm:flex"
                       >
-                        <span
-                          v-if="row.highEloWinrate != null"
-                          :class="tierListWinrateClass(row.highEloWinrate * 100)"
-                          >{{ (row.highEloWinrate * 100).toFixed(2) }}</span
-                        >
+                        <template v-if="row.highEloWinrate != null">
+                          <span :class="tierListWinrateClass(row.highEloWinrate * 100)">{{
+                            (row.highEloWinrate * 100).toFixed(2)
+                          }}</span>
+                          <span
+                            v-if="
+                              tierListPatchDeltaRefLabel && row.patchRefHighEloWinratePp != null
+                            "
+                            class="text-[10px] leading-none"
+                            :class="tierListPatchDeltaClass(row.patchRefHighEloWinratePp)"
+                            :title="
+                              t('statisticsPage.tierListPatchDeltaTitle', {
+                                ref: tierListPatchDeltaRefLabel,
+                              })
+                            "
+                            >{{ formatTierListPatchDeltaPp(row.patchRefHighEloWinratePp) }}</span
+                          >
+                        </template>
                         <span v-else>—</span>
                       </div>
                       <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
                       >
-                        {{ row.highEloGames != null ? row.highEloGames.toLocaleString() : '—' }}
+                        <span>{{
+                          row.highEloGames != null ? row.highEloGames.toLocaleString() : '—'
+                        }}</span>
+                        <span
+                          v-if="tierListPatchDeltaRefLabel && row.patchRefHighEloGamesDelta != null"
+                          class="text-[10px] leading-none"
+                          :class="tierListPatchDeltaGamesClass(row.patchRefHighEloGamesDelta)"
+                          :title="
+                            t('statisticsPage.tierListPatchDeltaGamesTitle', {
+                              ref: tierListPatchDeltaRefLabel,
+                            })
+                          "
+                          >{{ formatTierListPatchDeltaGames(row.patchRefHighEloGamesDelta) }}</span
+                        >
                       </div>
                       <div
                         class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
@@ -3448,113 +3509,166 @@
                   </div>
                 </div>
               </div>
-              <!-- Vue graphique : barres par champion (ordre worst → best, couleur = tier) -->
+              <!-- Vue graphique : barres divergentes (PBI), style analytics sombre -->
               <div
                 v-show="tierListViewModel === 'chart' && totalTierListCount > 0"
-                class="flex flex-col gap-4 rounded-lg border border-primary/30 bg-surface/30 p-4 lg:flex-row"
+                class="tier-list-diverging-wrap overflow-x-auto rounded-xl border border-slate-700/80 bg-[#0c1222] p-4 shadow-inner"
               >
-                <div class="flex-1 overflow-x-auto">
+                <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0 lg:flex-row lg:gap-4">
                   <div
-                    class="tier-list-bar-chart flex items-center justify-start gap-0.5"
-                    style="min-height: 160px; min-width: min(100%, max-content)"
+                    class="flex shrink-0 flex-row flex-wrap gap-3 lg:w-36 lg:flex-col lg:justify-center lg:gap-2 lg:pr-2"
                   >
-                    <NuxtLink
-                      v-for="c in tierListBarChartData"
-                      :key="c.championId"
-                      :to="localePath('/statistics/champion/' + c.championId)"
-                      class="tier-list-bar-item flex h-40 flex-col items-center justify-center gap-0"
-                      :title="
-                        (championName(c.championId) || c.championId) +
-                        ' – PBI ' +
-                        Number(c.pbi).toFixed(2)
-                      "
+                    <div
+                      class="mb-1 hidden text-[10px] font-bold uppercase tracking-widest text-white/90 lg:block"
                     >
-                      <div class="flex min-h-[52px] flex-1 flex-col items-center justify-end">
-                        <div
-                          v-if="c.pbi >= 0"
-                          class="tier-bar tier-bar-up w-6 shrink-0 rounded-t"
-                          :style="{
-                            height: c.barHeight * 0.52 + 'px',
-                            minHeight: c.pbi > 0 ? '4px' : '0',
-                            backgroundColor: TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
-                          }"
-                        />
+                      {{ t('statisticsPage.tierListLegend') }}
+                    </div>
+                    <div
+                      v-for="entry in TIER_DIVERGING_LEGEND"
+                      :key="entry.key"
+                      class="flex items-center gap-2 text-xs text-white/90"
+                    >
+                      <span
+                        class="inline-block h-3.5 w-3.5 shrink-0 rounded-sm shadow-sm"
+                        :style="{ backgroundColor: entry.color }"
+                      />
+                      <span class="w-7 font-semibold tabular-nums text-white">{{
+                        entry.key === 'S+'
+                          ? t('statisticsPage.tierS+')
+                          : entry.key === 'F'
+                            ? t('statisticsPage.tierF')
+                            : t('statisticsPage.tier' + entry.key)
+                      }}</span>
+                    </div>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <h3
+                      class="mb-2 font-sans text-sm font-bold uppercase tracking-tight text-white md:text-base"
+                    >
+                      {{ tierListChartHeading }}
+                    </h3>
+                    <p class="mb-3 text-[11px] text-amber-200/60">
+                      {{ t('statisticsPage.tierListChartPbiAxis') }}
+                    </p>
+                    <div class="flex gap-1">
+                      <div
+                        class="relative w-9 shrink-0 text-[10px] leading-none text-amber-100/80 md:w-10"
+                      >
+                        <div class="relative h-[220px]">
+                          <span
+                            v-for="tick in tierListChartYScale.ticks"
+                            :key="'ytick-' + tick"
+                            class="absolute right-0.5 -translate-y-1/2 tabular-nums"
+                            :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
+                          >
+                            {{ Number.isInteger(tick) ? tick : Number(tick.toFixed(1)) }}</span
+                          >
+                        </div>
                       </div>
-                      <img
-                        v-if="gameVersion && championByKey(c.championId)"
-                        :src="
-                          getChampionImageUrl(gameVersion, championByKey(c.championId)!.image.full)
-                        "
-                        :alt="championName(c.championId) || ''"
-                        class="h-8 w-8 shrink-0 rounded-full border-2 border-primary/30 object-cover"
-                        width="32"
-                        height="32"
-                      />
-                      <div class="flex min-h-[52px] flex-1 flex-col items-center justify-start">
+                      <div class="relative min-h-[280px] min-w-0 flex-1">
+                        <div class="relative h-[220px] w-full overflow-visible">
+                          <div
+                            v-for="tick in tierListChartYScale.ticks"
+                            :key="'grid-' + tick"
+                            class="pointer-events-none absolute left-0 right-0 z-0 border-t border-amber-400/20"
+                            :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
+                          />
+                          <div
+                            class="pointer-events-none absolute bottom-12 right-0 top-0 z-[1] w-[18%] bg-slate-950/55"
+                            aria-hidden="true"
+                          />
+                          <div
+                            class="absolute bottom-12 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
+                          >
+                            <NuxtLink
+                              v-for="c in tierListChartRows"
+                              :key="c.championId"
+                              :to="localePath('/statistics/champion/' + c.championId)"
+                              class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+                              :title="
+                                (championName(c.championId) || c.championId) +
+                                ' — PBI ' +
+                                Number(c.pbi).toFixed(2)
+                              "
+                            >
+                              <div class="relative h-full w-full">
+                                <div
+                                  class="absolute bottom-12 left-0 right-0 top-0 flex justify-center"
+                                >
+                                  <div class="relative h-full w-[85%] max-w-[12px]">
+                                    <div
+                                      class="absolute left-0 right-0 top-1/2 z-[1] h-px bg-amber-400/55"
+                                    />
+                                    <div
+                                      v-if="c.pbi >= 0"
+                                      class="absolute bottom-1/2 left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
+                                      :style="{
+                                        height: tierListChartBarHalfPct(c.pbi) + '%',
+                                        backgroundColor:
+                                          TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
+                                      }"
+                                    />
+                                    <div
+                                      v-else
+                                      class="absolute left-0 right-0 top-1/2 rounded-b-[2px] transition-all group-hover:brightness-110"
+                                      :style="{
+                                        height: tierListChartBarHalfPct(c.pbi) + '%',
+                                        backgroundColor:
+                                          TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
+                                      }"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </NuxtLink>
+                          </div>
+                        </div>
                         <div
-                          v-if="c.pbi < 0"
-                          class="tier-bar tier-bar-down w-6 shrink-0 rounded-b"
-                          :style="{
-                            height: c.barHeight * 0.52 + 'px',
-                            minHeight: c.pbi < 0 ? '4px' : '0',
-                            backgroundColor: TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
-                          }"
-                        />
+                          class="flex h-14 items-end justify-stretch gap-px border-t border-amber-400/25 px-0.5 pt-1"
+                        >
+                          <div
+                            v-for="c in tierListChartRows"
+                            :key="'lbl-' + c.championId"
+                            class="flex min-h-14 min-w-0 flex-1 items-end justify-center overflow-hidden pb-0.5"
+                          >
+                            <span
+                              class="tier-list-chart-x-label max-w-[3rem] whitespace-nowrap text-[9px] font-medium leading-none text-white/85"
+                            >
+                              {{ championName(c.championId) || c.championId }}
+                            </span>
+                          </div>
+                        </div>
+                        <div
+                          class="mt-1 flex justify-between border-t border-white/10 pt-1 text-[10px] text-amber-200/50"
+                        >
+                          <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
+                          <span>{{ t('statisticsPage.tierListChartBest') }}</span>
+                        </div>
                       </div>
-                    </NuxtLink>
+                    </div>
                   </div>
-                  <div class="mt-1 flex justify-between text-[10px] text-text/50">
-                    <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
-                    <span>{{ t('statisticsPage.tierListChartBest') }}</span>
-                  </div>
-                </div>
-                <!-- Légende des tiers (style image) -->
-                <div
-                  class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 lg:w-56"
-                >
-                  <div class="mb-2 text-sm font-semibold text-text">
-                    {{ t('statisticsPage.tierListLegend') }}
-                  </div>
-                  <div class="space-y-1.5 text-xs">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block h-4 w-4 shrink-0 rounded"
-                        style="background-color: #eab308"
-                      />
-                      <span class="font-medium text-amber-400">S</span>
-                      <span class="text-text/80">{{ t('statisticsPage.tierLegendS') }}</span>
+                  <div
+                    class="flex shrink-0 flex-col items-center justify-center gap-2 border-t border-slate-600/50 pt-3 lg:w-36 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
+                  >
+                    <img
+                      v-if="tierListChartAsideIcon"
+                      :src="tierListChartAsideIcon"
+                      :alt="tierListChartAsideLabel"
+                      class="h-16 w-16 object-contain opacity-95 drop-shadow-md md:h-20 md:w-20"
+                      width="80"
+                      height="80"
+                    />
+                    <div
+                      v-else
+                      class="flex h-16 w-16 items-center justify-center rounded-lg border border-amber-500/30 bg-slate-900/80 text-2xl text-amber-200/50 md:h-20 md:w-20"
+                      aria-hidden="true"
+                    >
+                      ◆
                     </div>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block h-4 w-4 shrink-0 rounded"
-                        style="background-color: #38bdf8"
-                      />
-                      <span class="font-medium text-sky-400">A</span>
-                      <span class="text-text/80">{{ t('statisticsPage.tierLegendA') }}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block h-4 w-4 shrink-0 rounded"
-                        style="background-color: #a78bfa"
-                      />
-                      <span class="font-medium text-violet-400">B</span>
-                      <span class="text-text/80">{{ t('statisticsPage.tierLegendB') }}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block h-4 w-4 shrink-0 rounded"
-                        style="background-color: #fb923c"
-                      />
-                      <span class="font-medium text-orange-400">C</span>
-                      <span class="text-text/80">{{ t('statisticsPage.tierLegendC') }}</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block h-4 w-4 shrink-0 rounded"
-                        style="background-color: #dc2626"
-                      />
-                      <span class="font-medium text-red-500">F</span>
-                      <span class="text-text/80">{{ t('statisticsPage.tierLegendF') }}</span>
+                    <div
+                      class="text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-amber-100/90"
+                    >
+                      {{ tierListChartAsideLabel }}
                     </div>
                   </div>
                 </div>
@@ -4208,21 +4322,73 @@ interface TierListRowWithDelta {
   highEloWinrate?: number
   highEloGames?: number
   delta?: number
+  /** Points de % vs patch de référence (progressions). */
+  patchRefWinratePp?: number
+  patchRefPickratePp?: number
+  patchRefBanratePp?: number
+  patchRefHighEloWinratePp?: number
+  patchRefHighEloGamesDelta?: number
 }
+
+function formatTierListPatchDeltaPp(pp: number): string {
+  const sign = pp > 0 ? '+' : ''
+  return `${sign}${pp.toFixed(2)}`
+}
+
+function formatTierListPatchDeltaGames(n: number): string {
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${Math.round(n).toLocaleString()}`
+}
+
+function tierListPatchDeltaClass(pp: number): string {
+  if (pp > 0.05) return 'text-green-400/90'
+  if (pp < -0.05) return 'text-red-400/90'
+  return 'text-text/55'
+}
+
+function tierListPatchDeltaGamesClass(n: number): string {
+  if (n > 0) return 'text-green-400/90'
+  if (n < 0) return 'text-red-400/90'
+  return 'text-text/55'
+}
+
 const tierListRows = computed((): TierListRowWithDelta[] => {
   const rows = tierListData.value?.rows ?? []
   const highElo = highEloRowsByChampionId.value
+  const refS = tierListRefStatsById.value
+  const refHeMap = tierListRefHighEloById.value
   return rows.map(r => {
     const he = highElo.get(r.championId)
     const winratePct = r.winrate * 100
     const highEloWinratePct = he ? he.winrate * 100 : undefined
     const delta = highEloWinratePct != null ? winratePct - highEloWinratePct : undefined
+    const refRow = refS.get(r.championId)
+    let patchRefWinratePp: number | undefined
+    let patchRefPickratePp: number | undefined
+    let patchRefBanratePp: number | undefined
+    if (refRow) {
+      patchRefWinratePp = (r.winrate - refRow.winrate) * 100
+      patchRefPickratePp = (r.pickrate - refRow.pickrate) * 100
+      patchRefBanratePp = (r.banrate - refRow.banrate) * 100
+    }
+    const refHe = refHeMap.get(r.championId)
+    let patchRefHighEloWinratePp: number | undefined
+    let patchRefHighEloGamesDelta: number | undefined
+    if (he && refHe) {
+      patchRefHighEloWinratePp = (he.winrate - refHe.winrate) * 100
+      patchRefHighEloGamesDelta = he.games - refHe.games
+    }
     return {
       ...r,
       highEloRank: he?.rank,
       highEloWinrate: he?.winrate,
       highEloGames: he?.games,
       delta,
+      patchRefWinratePp,
+      patchRefPickratePp,
+      patchRefBanratePp,
+      patchRefHighEloWinratePp,
+      patchRefHighEloGamesDelta,
     }
   })
 })
@@ -4283,27 +4449,83 @@ const paginatedTierList = computed(() => {
   return list.slice(start, start + size)
 })
 
-/** Tier list bar chart: ordered by PBI (worst to best). */
-const tierListBarChartData = computed(() => {
-  const list = [...tierListSearchFilteredRows.value].sort((a, b) => a.pbi - b.pbi)
-  const minPbi = Math.min(...list.map(c => c.pbi), -5)
-  const maxPbi = Math.max(...list.map(c => c.pbi), 10)
-  const range = Math.max(Math.abs(minPbi), Math.abs(maxPbi), 1)
-  return list.map(c => ({
-    ...c,
-    barHeight: (Math.abs(c.pbi) / range) * 100,
-  }))
+/** Tier list chart: worst PBI → best (gauche → droite), style barres divergentes. */
+const tierListChartRows = computed(() =>
+  [...tierListSearchFilteredRows.value].sort((a, b) => a.pbi - b.pbi)
+)
+
+function tierListChartNiceStep(maxAbs: number, targetDivisions: number): number {
+  if (maxAbs <= 0) return 1
+  const rough = maxAbs / targetDivisions
+  const exp = Math.floor(Math.log10(rough))
+  const f = rough / Math.pow(10, exp)
+  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10
+  return nf * Math.pow(10, exp)
+}
+
+const tierListChartYScale = computed(() => {
+  const list = tierListChartRows.value
+  const fallback = { maxAbs: 10, yMin: -10, yMax: 10, ticks: [-10, -5, 0, 5, 10] as number[] }
+  if (!list.length) return fallback
+  const vals = list.map(c => c.pbi)
+  const minV = Math.min(...vals)
+  const maxV = Math.max(...vals)
+  const maxAbs = Math.max(Math.abs(minV), Math.abs(maxV), 0.01)
+  const step = tierListChartNiceStep(maxAbs, 4)
+  const limit = Math.ceil(maxAbs / step) * step
+  const ticks: number[] = []
+  for (let v = -limit; v <= limit + 1e-9; v += step) {
+    ticks.push(Math.round(v * 1000) / 1000)
+  }
+  return { maxAbs: limit, yMin: -limit, yMax: limit, ticks }
 })
 
-const TIER_CHART_COLORS: Record<string, string> = {
-  'S+': '#f5c542',
-  S: '#22c55e',
-  A: '#2563eb',
-  B: '#60a5fa',
-  C: '#a855f7',
-  D: '#dc2626',
-  F: '#dc2626',
+function tierListChartYTickBottomPct(tick: number): number {
+  const s = tierListChartYScale.value
+  return ((tick - s.yMin) / (s.yMax - s.yMin)) * 100
 }
+
+function tierListChartBarHalfPct(pbi: number): number {
+  const maxAbs = tierListChartYScale.value.maxAbs
+  if (maxAbs <= 0) return 0
+  return (Math.abs(pbi) / maxAbs) * 50
+}
+
+const tierListChartHeading = computed(() => {
+  const role = statsRoleFilter.value
+    ? mainRoleLabel(statsRoleFilter.value)
+    : t('statisticsPage.tierListChartAllRoles')
+  return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
+})
+
+const tierListChartAsideLabel = computed(() => {
+  if (!statsRoleFilter.value) return t('statisticsPage.tierListChartAllRolesShort')
+  return mainRoleLabel(statsRoleFilter.value).toUpperCase()
+})
+
+const tierListChartAsideIcon = computed(() =>
+  statsRoleFilter.value ? mainRoleIconSrc(statsRoleFilter.value) : null
+)
+
+/** Couleurs barres / légende — style diverging tier (F rouge → S+ or). */
+const TIER_CHART_COLORS: Record<string, string> = {
+  F: '#dc2626',
+  D: '#dc2626',
+  C: '#a78bfa',
+  B: '#7dd3fc',
+  A: '#3b82f6',
+  S: '#22c55e',
+  'S+': '#e5c558',
+}
+
+const TIER_DIVERGING_LEGEND: Array<{ key: string; color: string }> = [
+  { key: 'F', color: TIER_CHART_COLORS.F },
+  { key: 'C', color: TIER_CHART_COLORS.C },
+  { key: 'B', color: TIER_CHART_COLORS.B },
+  { key: 'A', color: TIER_CHART_COLORS.A },
+  { key: 'S', color: TIER_CHART_COLORS.S },
+  { key: 'S+', color: TIER_CHART_COLORS['S+'] },
+]
 
 function cycleTierListSort(col: TierListSortColumn) {
   if (tierListSortColumn.value === col) {
@@ -5379,8 +5601,9 @@ const _overviewEffectiveTotalMatches = computed(() => {
 const overviewFilteredChampionIds = computed(() => {
   return new Set((championsData.value?.champions ?? []).map(c => c.championId))
 })
+/** Aligné sur l’API : avec OTP = pas de recoupement côté champions ; sinon on restreint aux IDs renvoyés par /champions. */
 function filterOverviewRowsByOtpPool<T extends { championId: number }>(rows: T[]): T[] {
-  if (statsOtpFilter.value === 'solo') return rows
+  if (statsOtpFilter.value === 'oui') return rows
   const allowed = overviewFilteredChampionIds.value
   if (allowed.size === 0) return rows
   const filtered = rows.filter(row => allowed.has(row.championId))
@@ -5695,6 +5918,12 @@ const tierListData = ref<{
     games: number
   }>
 } | null>(null)
+/** Stats ref. patch (progressions) pour Δ WR / pick / ban / Apex. */
+const tierListRefStatsById = ref(
+  new Map<number, { winrate: number; pickrate: number; banrate: number }>()
+)
+const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
+
 const queryString = computed(() => {
   const params = new URLSearchParams()
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
@@ -5730,54 +5959,116 @@ const effectiveTierListPatch = computed(() => {
   if (fromFilter) return fromFilter
   return patchFromVersion(gameVersion.value)
 })
+
+const tierListPatchDeltaRefLabel = computed(() => {
+  const ref = patchFromVersion(progressionFromVersion.value)
+  const main = effectiveTierListPatch.value
+  if (!ref || !main || ref === main) return null
+  return ref
+})
+
+const tierListPatchDeltaCaption = computed(() => {
+  const ref = tierListPatchDeltaRefLabel.value
+  const main = effectiveTierListPatch.value
+  if (!ref || !main) return ''
+  return t('statisticsPage.tierListPatchDeltaHint', { current: main, ref })
+})
+
+function tierListQueryString(patch: string | null): string {
+  const params = new URLSearchParams()
+  if (patch) params.set('patch', patch)
+  if (statsDivisionFilter.value.length === 1) {
+    params.set('rankTier', statsDivisionFilter.value[0]!)
+  } else {
+    params.set('rankTier', 'all')
+  }
+  params.set('otp', statsOtpFilter.value)
+  const q = params.toString()
+  return q ? `?${q}` : ''
+}
+
+type TierListFetchPayload = {
+  patch: string
+  rankTier: string
+  rows: Array<{
+    rank: number
+    championId: number
+    tier: string
+    mainRole: string
+    mainRolePct: number
+    winrate: number
+    pickrate: number
+    banrate: number
+    pbi: number
+    games: number
+  }>
+  highEloRows?: Array<{
+    rank: number
+    championId: number
+    tier: string
+    mainRole: string
+    mainRolePct: number
+    winrate: number
+    pickrate: number
+    banrate: number
+    pbi: number
+    games: number
+  }>
+  error?: string
+  message?: string
+}
+
 async function loadTierList() {
   tierListPending.value = true
   tierListError.value = null
+  tierListRefStatsById.value = new Map()
+  tierListRefHighEloById.value = new Map()
   try {
-    const params = new URLSearchParams()
     const patch = effectiveTierListPatch.value
-    if (patch) params.set('patch', patch)
-    if (statsDivisionFilter.value.length === 1) {
-      params.set('rankTier', statsDivisionFilter.value[0]!)
-    } else {
-      params.set('rankTier', 'all')
-    }
-    params.set('otp', statsOtpFilter.value)
-    const data = await statsFetch<{
-      patch: string
-      rankTier: string
-      rows: Array<{
-        rank: number
-        championId: number
-        tier: string
-        mainRole: string
-        mainRolePct: number
-        winrate: number
-        pickrate: number
-        banrate: number
-        pbi: number
-        games: number
-      }>
-      highEloRows?: Array<{
-        rank: number
-        championId: number
-        tier: string
-        mainRole: string
-        mainRolePct: number
-        winrate: number
-        pickrate: number
-        banrate: number
-        pbi: number
-        games: number
-      }>
-      error?: string
-      message?: string
-    }>(apiUrl(`/api/stats/tier-list?${params.toString()}`))
+    const data = await statsFetch<TierListFetchPayload>(
+      apiUrl(`/api/stats/tier-list${tierListQueryString(patch)}`)
+    )
     tierListData.value = data
     if (data?.error || data?.message) {
       tierListError.value = [data.error, data.message].filter(Boolean).join(': ')
     } else {
       tierListError.value = null
+    }
+
+    const refPatch = patchFromVersion(progressionFromVersion.value)
+    if (
+      refPatch &&
+      patch &&
+      refPatch !== patch &&
+      !data?.error &&
+      data?.rows &&
+      data.rows.length > 0
+    ) {
+      try {
+        const refData = await statsFetch<TierListFetchPayload>(
+          apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
+        )
+        if (refData && !refData.error && refData.rows?.length) {
+          const m = new Map<number, { winrate: number; pickrate: number; banrate: number }>()
+          for (const row of refData.rows) {
+            m.set(row.championId, {
+              winrate: row.winrate,
+              pickrate: row.pickrate,
+              banrate: row.banrate,
+            })
+          }
+          tierListRefStatsById.value = m
+          const hm = new Map<number, { winrate: number; games: number }>()
+          if (refData.highEloRows?.length) {
+            for (const row of refData.highEloRows) {
+              hm.set(row.championId, { winrate: row.winrate, games: row.games })
+            }
+          }
+          tierListRefHighEloById.value = hm
+        }
+      } catch {
+        /* réf. patch optionnelle */
+      }
     }
   } catch (err) {
     tierListError.value = err instanceof Error ? err.message : String(err)
@@ -5787,8 +6078,9 @@ async function loadTierList() {
   }
 }
 watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
-  if (activeTab.value === 'infos' || activeTab.value === 'tierlist') loadChampions()
-  if (activeTab.value === 'tierlist') loadTierList()
+  const tab = activeTab.value
+  if (tab === 'infos' || tab === 'tierlist' || tab === 'overview') loadChampions()
+  if (tab === 'tierlist') loadTierList()
 })
 watch(effectiveTierListPatch, (patch, oldPatch) => {
   if (activeTab.value === 'tierlist' && (patch || oldPatch)) loadTierList()
@@ -5944,6 +6236,7 @@ watch(progressionFromVersion, () => {
     loadProgressionsFull()
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
+  if (activeTab.value === 'tierlist') loadTierList()
 })
 
 onMounted(async () => {
@@ -6193,5 +6486,12 @@ onMounted(async () => {
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+.tier-list-chart-x-label {
+  display: inline-block;
+  transform: rotate(-90deg);
+  transform-origin: center bottom;
+  max-height: 3.5rem;
 }
 </style>

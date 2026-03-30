@@ -117,8 +117,13 @@ function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): stri
 const STATS_CACHE_MAX_AGE = 60 // seconds — allow browser/CDN cache for stats GET
 /** Keep below typical gateway timeout (often 60s) so we return 503 before gateway returns 504. */
 const OVERVIEW_TIMEOUT_MS = 50_000
-/** Seuil en % de pickrate : au-dessus = “pas OTP”, en dessous = “OTP” (one-trick / très faible présence). Défaut 0.1% pour éviter de tout filtrer sur petits volumes. */
-const STATS_OTP_PICKRATE_THRESHOLD = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '0.1')
+/**
+ * Seuil pickrate en % (stats globales champion) :
+ * - otp=non (sans OTP) : pickrate >= seuil (hors niche, ex. ≥ 1 % par défaut).
+ * - otp=oui (avec OTP) : pas de filtre pickrate (tous les champions).
+ * - otp=solo (que les OTP / niche) : uniquement pickrate < seuil (champions niche).
+ */
+const STATS_OTP_PICKRATE_THRESHOLD = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
 const STATS_TREND_WR_DELTA_PCT = Number(process.env.STATS_TREND_WR_DELTA_PCT ?? '5')
 const STATS_TREND_PICK_DELTA_PCT = Number(process.env.STATS_TREND_PICK_DELTA_PCT ?? '10')
 const STATS_TREND_GAMES_DELTA_PCT = Number(process.env.STATS_TREND_GAMES_DELTA_PCT ?? '15')
@@ -137,8 +142,8 @@ type OtpMode = 'oui' | 'non' | 'solo'
 
 function otpModeFromQuery(value: unknown): OtpMode {
   const raw = (queryString(value) ?? '').trim().toLowerCase()
-  if (raw === 'oui' || raw === 'yes' || raw === 'true' || raw === '1') return 'oui'
-  if (raw === 'solo' || raw === 'all') return 'solo'
+  if (raw === 'oui' || raw === 'yes' || raw === 'true' || raw === '1' || raw === 'all') return 'oui'
+  if (raw === 'solo' || raw === 'niche') return 'solo'
   return 'non'
 }
 
@@ -156,8 +161,8 @@ function parsePickrateNumber(raw: unknown): number {
 }
 
 function keepByOtpPickratePercent(pickratePercent: number, mode: OtpMode): boolean {
-  if (mode === 'solo') return true
-  if (mode === 'oui') return pickratePercent < STATS_OTP_PICKRATE_THRESHOLD
+  if (mode === 'oui') return true
+  if (mode === 'solo') return pickratePercent < STATS_OTP_PICKRATE_THRESHOLD
   return pickratePercent >= STATS_OTP_PICKRATE_THRESHOLD
 }
 
@@ -167,14 +172,14 @@ function keepByOtpPickrateRatio(pickrateRatio: number, mode: OtpMode): boolean {
 
 /** Tier list : pickrate API = ratio 0–1. */
 function filterTierListRowsByOtp<T extends { pickrate: number }>(rows: T[], mode: OtpMode): T[] {
-  if (mode === 'solo' || rows.length === 0) return rows
+  if (mode === 'oui' || rows.length === 0) return rows
   const filtered = rows.filter((row) => keepByOtpPickrateRatio(row.pickrate, mode))
   return filtered.length > 0 ? filtered : rows
 }
 
 /** Champions / overview : pickrate = % 0–100 (agrégateur). Si tout serait filtré, on renvoie la liste d’origine. */
 function filterChampionRowsByOtp<T extends { pickrate?: number }>(rows: T[], mode: OtpMode): T[] {
-  if (mode === 'solo' || rows.length === 0) return rows
+  if (mode === 'oui' || rows.length === 0) return rows
   const filtered = rows.filter((row) =>
     keepByOtpPickratePercent(parsePickrateNumber(row.pickrate), mode)
   )
@@ -259,10 +264,10 @@ router.get('/overview', async (req: Request, res: Response) => {
     .filter((c) => keepByOtpPickratePercent(parsePickrateNumber((c as { pickrate?: unknown }).pickrate), otpMode))
     .map((c) => (c as { championId: number }).championId)
   const allowedChampionIds =
-    otpMode !== 'solo' && championPool.length > 0 && allowedIdsFromPool.length === 0
+    otpMode !== 'oui' && championPool.length > 0 && allowedIdsFromPool.length === 0
       ? new Set(championPool.map((c) => (c as { championId: number }).championId))
       : new Set(allowedIdsFromPool)
-  const hasOtpFilterPool = championPool.length > 0 && otpMode !== 'solo'
+  const hasOtpFilterPool = championPool.length > 0 && otpMode !== 'oui'
   if (hasOtpFilterPool) {
     if (Array.isArray(data.topWinrateChampions)) {
       data.topWinrateChampions = data.topWinrateChampions.filter((c) =>
@@ -877,11 +882,11 @@ router.get('/overview-cards', async (req: Request, res: Response) => {
     .filter((c) => keepByOtpPickratePercent(parsePickrateNumber(c.pickrate), otpMode))
     .map((c) => c.championId)
   const allowedChampionIds =
-    otpMode !== 'solo' && pool.length > 0 && allowedIdsFromPool.length === 0
+    otpMode !== 'oui' && pool.length > 0 && allowedIdsFromPool.length === 0
       ? new Set(pool.map((c) => c.championId))
       : new Set(allowedIdsFromPool)
   const filterByOtp = <T extends { championId: number }>(rows: T[]): T[] =>
-    pool.length === 0 || otpMode === 'solo' ? rows : rows.filter((r) => allowedChampionIds.has(r.championId))
+    pool.length === 0 || otpMode === 'oui' ? rows : rows.filter((r) => allowedChampionIds.has(r.championId))
 
   return res.json({
     topPickrateChampions: filterByOtp(overview?.topPickrateChampions ?? []),

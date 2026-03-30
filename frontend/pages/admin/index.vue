@@ -1013,7 +1013,6 @@
       <div v-show="activeTab === 'logs'" class="w-full space-y-4">
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.logs.title') }}</h2>
-          <p class="mb-3 text-xs text-text/60">{{ unifiedLogsPathHint }}</p>
           <div class="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <label class="flex flex-col gap-1 text-xs text-text/80">
               {{ t('admin.logs.section') }}
