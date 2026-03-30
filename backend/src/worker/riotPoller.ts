@@ -49,6 +49,16 @@ const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 40
 const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
+
+/** Ragrégateur `poller_hourly` : défaut 1h ; ex. `POLLER_HOURLY_SUMMARY_MS=60000` pour tester (min 60s, max 24h). */
+function getPollerHourlySummaryIntervalMs(): number {
+  const raw = parseInt(process.env.POLLER_HOURLY_SUMMARY_MS ?? '', 10)
+  const fallback = 60 * 60 * 1000
+  if (!Number.isFinite(raw) || raw <= 0) return fallback
+  const minMs = 60_000
+  const maxMs = 24 * 60 * 60 * 1000
+  return Math.min(maxMs, Math.max(minMs, raw))
+}
 /** Dernière exécution du refresh MV (process). Initialisé à « maintenant » pour qu’un redémarrage (ex. `make build` → pm2) ne déclenche pas un refresh tout de suite : avec `0`, `Date.now()-0` dépassait toujours 4h. */
 let lastMvRefreshAt = Date.now()
 
@@ -2020,6 +2030,7 @@ async function runStep4Counters() {
 async function runLoop(init: RiotPollerInit): Promise<void> {
   const { client, logger, filters, clefType } = init
   const discord = new DiscordService()
+  const hourlySummaryIntervalMs = getPollerHourlySummaryIntervalMs()
   setState({
     isRunning: true,
     shouldStop: false,
@@ -2075,6 +2086,24 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersPolled = 0
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
+    let hourlyWindowStartedAtMs = Date.now()
+    let hourlyPlayersFetched = state.playersFetched
+    let hourlyMatchesFetched = state.matchesFetched
+    let hourlyRequestCount = state.requestCount
+    let hourlyNearLimitPauseCount = client.getRateLimiterStats().nearLimitPauseCount
+    let hourlyHttp429PauseCount = client.getRateLimiterStats().http429PauseCount
+
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'info',
+      script: 'poller_hourly',
+      message: `Résumé horaire poller — planificateur actif (intervalle ${Math.round(hourlySummaryIntervalMs / 60_000)} min ; POLLER_HOURLY_SUMMARY_MS)`,
+      json: {
+        intervalMs: hourlySummaryIntervalMs,
+        hint: 'Le backend démarre le poller via startDefaultScript() après RIOT_POLLER_STARTUP_DELAY_MS (défaut 2 min).',
+      },
+    })
+
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
 
@@ -2214,6 +2243,39 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
 
       const now = Date.now()
+      if (now - hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
+        const elapsedMs = Math.max(1, now - hourlyWindowStartedAtMs)
+        const playersDelta = state.playersFetched - hourlyPlayersFetched
+        const matchesDelta = state.matchesFetched - hourlyMatchesFetched
+        const requestsDelta = state.requestCount - hourlyRequestCount
+        const limiterStats = client.getRateLimiterStats()
+        const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - hourlyNearLimitPauseCount
+        const http429PauseDelta = limiterStats.http429PauseCount - hourlyHttp429PauseCount
+        const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+        await appendUnifiedLog({
+          section: 'back',
+          type: 'info',
+          script: 'poller_hourly',
+          message: `Résumé horaire poller — players:+${playersDelta}, matches:+${matchesDelta}, req/h:${requestsPerHour}, pauses rate-limit refresh:${nearLimitPauseDelta}`,
+          json: {
+            windowStartIso: new Date(hourlyWindowStartedAtMs).toISOString(),
+            windowEndIso: new Date(now).toISOString(),
+            elapsedMs,
+            playersDelta,
+            matchesDelta,
+            requestsDelta,
+            requestsPerHour,
+            rateLimitRefreshPauses: nearLimitPauseDelta,
+            rateLimit429Pauses: http429PauseDelta,
+          },
+        })
+        hourlyWindowStartedAtMs = now
+        hourlyPlayersFetched = state.playersFetched
+        hourlyMatchesFetched = state.matchesFetched
+        hourlyRequestCount = state.requestCount
+        hourlyNearLimitPauseCount = limiterStats.nearLimitPauseCount
+        hourlyHttp429PauseCount = limiterStats.http429PauseCount
+      }
       if (now - heartbeatAtMs >= 60_000) {
         const deltaPlayersPolled = state.playersPolled - heartbeatPlayersPolled
         const deltaPlayersFetched = state.playersFetched - heartbeatPlayersFetched

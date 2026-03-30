@@ -118,6 +118,10 @@ export class RiotHttpClient {
     return { ...this.lastRiotRateLimitHeaders }
   }
 
+  getRateLimiterStats(): { nearLimitPauseCount: number; http429PauseCount: number } {
+    return this.rateLimiter.getStats()
+  }
+
   /** Register a callback invoked whenever the API returns 401 or 403 (key invalid/expired). */
   setOnInvalidKey(cb: () => void): void {
     this.onInvalidKey = cb

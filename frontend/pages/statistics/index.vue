@@ -3,7 +3,7 @@
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
       type="button"
-      class="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
+      class="fixed left-4 top-4 z-40 flex w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -342,15 +342,12 @@
                       </span>
                     </h3>
                     <table
-                      v-if="(overviewData.topPickrateChampions ?? []).length"
+                      v-if="overviewTopPickrateChampionsFiltered.length"
                       class="fast-stat-table w-full text-xs"
                     >
                       <tbody>
                         <tr
-                          v-for="(row, idx) in (overviewData.topPickrateChampions ?? []).slice(
-                            0,
-                            5
-                          )"
+                          v-for="(row, idx) in overviewTopPickrateChampionsFiltered.slice(0, 5)"
                           :key="row.championId"
                           class="fast-stat-row"
                         >
@@ -383,7 +380,7 @@
                                         100,
                                         (row.pickrate /
                                           Math.max(
-                                            ...(overviewData.topPickrateChampions ?? []).map(
+                                            ...overviewTopPickrateChampionsFiltered.map(
                                               (c: { pickrate: number }) => c.pickrate
                                             ),
                                             1
@@ -405,7 +402,7 @@
                       {{ t('statisticsPage.fastStatsNoData') }}
                     </div>
                     <div
-                      v-if="(overviewData.topPickrateChampions ?? []).length"
+                      v-if="overviewTopPickrateChampionsFiltered.length"
                       class="mt-1 text-center"
                     >
                       <button
@@ -2259,7 +2256,7 @@
                                   )
                                 "
                                 :alt="championName(row.championId) ?? ''"
-                                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                                class="h-5 w-5 shrink-0 rounded-full object-cover"
                                 width="24"
                                 height="24"
                               />
@@ -2316,7 +2313,7 @@
                                   )
                                 "
                                 :alt="championName(row.championId) ?? ''"
-                                class="h-6 w-6 shrink-0 rounded-full object-cover"
+                                class="h-5 w-5 shrink-0 rounded-full object-cover"
                                 width="24"
                                 height="24"
                               />
@@ -3141,233 +3138,274 @@
               >
                 {{ t('statisticsPage.tierListNoData') }}
               </div>
-              <!-- Vue tableau -->
+              <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
               <div
                 v-show="tierListViewModel === 'table' && totalTierListCount > 0"
-                class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+                class="w-full overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
               >
-                <table class="w-full min-w-[800px] text-left text-sm">
-                  <thead class="border-b border-primary/30 bg-surface/50">
-                    <tr>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('rank')"
-                      >
-                        {{ t('statisticsPage.tierListRank') }}
-                        <span class="ml-1">{{ tierListSortIcon('rank') }}</span>
-                      </th>
-                      <th class="px-4 py-3 font-semibold text-text">
-                        {{ t('statisticsPage.champion') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('tier')"
-                      >
-                        {{ t('statisticsPage.tierListTier') }}
-                        <span class="ml-1">{{ tierListSortIcon('tier') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListTierTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('mainRolePct')"
-                      >
-                        {{ t('statisticsPage.tierListMainRole') }}
-                        <span class="ml-1">{{ tierListSortIcon('mainRolePct') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListMainRoleTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('winrate')"
-                      >
-                        {{ t('statisticsPage.winrate') }}
-                        <span class="ml-1">{{ tierListSortIcon('winrate') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListWinrateTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('pickrate')"
-                      >
-                        {{ t('statisticsPage.pickrate') }}
-                        <span class="ml-1">{{ tierListSortIcon('pickrate') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListPickrateTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('banrate')"
-                      >
-                        {{ t('statisticsPage.banrate') }}
-                        <span class="ml-1">{{ tierListSortIcon('banrate') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListBanrateTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('pbi')"
-                      >
-                        {{ t('statisticsPage.tierListPbi') }}
-                        <span class="ml-1">{{ tierListSortIcon('pbi') }}</span>
-                        <span
-                          class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                          :title="t('statisticsPage.tierListPbiTooltip')"
-                          >?</span
-                        >
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                        @click="cycleTierListSort('games')"
-                      >
-                        {{ t('statisticsPage.tierListGames') }}
-                        <span class="ml-1">{{ tierListSortIcon('games') }}</span>
-                      </th>
-                      <template v-if="(tierListData?.highEloRows?.length ?? 0) > 0">
-                        <th
-                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                          @click="cycleTierListSort('highEloRank')"
-                        >
-                          {{ t('statisticsPage.tierListHighEloRank') }}
-                          <span class="ml-1">{{ tierListSortIcon('highEloRank') }}</span>
-                        </th>
-                        <th
-                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                          @click="cycleTierListSort('highEloWinrate')"
-                        >
-                          {{ t('statisticsPage.tierListHighEloWin') }}
-                          <span class="ml-1">{{ tierListSortIcon('highEloWinrate') }}</span>
-                          <span
-                            class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                            :title="t('statisticsPage.tierListHighEloWinTooltip')"
-                            >?</span
-                          >
-                        </th>
-                        <th
-                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                          @click="cycleTierListSort('highEloGames')"
-                        >
-                          {{ t('statisticsPage.tierListHighEloGames') }}
-                          <span class="ml-1">{{ tierListSortIcon('highEloGames') }}</span>
-                        </th>
-                        <th
-                          class="cursor-pointer select-none px-4 py-3 font-semibold text-text hover:bg-primary/20"
-                          @click="cycleTierListSort('delta')"
-                        >
-                          {{ t('statisticsPage.tierListDelta') }}
-                          <span class="ml-1">{{ tierListSortIcon('delta') }}</span>
-                          <span
-                            class="ml-1 inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-primary/30 text-[10px] text-text/80"
-                            :title="t('statisticsPage.tierListDeltaTooltip')"
-                            >?</span
-                          >
-                        </th>
-                      </template>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-primary/20">
-                    <tr
-                      v-for="row in paginatedTierList"
-                      :key="row.championId"
-                      class="cursor-pointer hover:bg-surface/50"
-                      @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
+                <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
+                  <div
+                    class="tier-list-lolalytics-banner flex h-[34px] border-b-2 border-black text-sm text-text-primary"
+                  >
+                    <div
+                      class="flex flex-1 items-center justify-center bg-[var(--color-grey-300)] px-2 text-center font-medium"
+                      :class="hasTierListHighElo ? 'sm:flex-1' : ''"
                     >
-                      <td class="px-4 py-2 text-text/90">{{ row.rank }}</td>
-                      <td class="px-4 py-2 font-medium text-text">
-                        <div class="flex items-center gap-2">
-                          <img
-                            v-if="gameVersion && championByKey(row.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(row.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(row.championId) || ''"
-                            class="h-8 w-8 rounded-full object-cover"
-                            width="32"
-                            height="32"
-                          />
-                          <span class="text-accent underline-offset-2 hover:underline">{{
-                            championName(row.championId) || row.championId
-                          }}</span>
-                        </div>
-                      </td>
-                      <td class="px-4 py-2">
+                      {{ t('statisticsPage.tierListBannerAllRanks') }}
+                    </div>
+                    <div
+                      v-if="hasTierListHighElo"
+                      class="hidden flex-1 items-center justify-center border-l-2 border-black bg-[var(--color-grey-300)] px-2 text-center font-semibold text-[rgb(var(--rgb-gold-100))] sm:flex"
+                    >
+                      {{ t('statisticsPage.tierListBannerApex') }}
+                    </div>
+                  </div>
+
+                  <div
+                    class="tier-list-lolalytics-head sticky top-0 z-10 flex h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+                  >
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-10 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap border-b border-t border-black text-center hover:bg-primary/25 md:flex"
+                      :class="
+                        tierListSortColumn === 'rank'
+                          ? 'border-t-accent'
+                          : 'border-t-[var(--color-grey-300)]'
+                      "
+                      @click="cycleTierListSort('rank')"
+                    >
+                      {{ t('statisticsPage.tierListRank') }}{{ tierListSortIcon('rank') }}
+                    </button>
+                    <div
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-w-0 flex-1 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2"
+                    >
+                      {{ t('statisticsPage.tierListColChampion') }}
+                    </div>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                      :title="t('statisticsPage.tierListTierTooltip')"
+                      @click="cycleTierListSort('tier')"
+                    >
+                      {{ t('statisticsPage.tierListTier') }}{{ tierListSortIcon('tier') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 cursor-pointer flex-col items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[11px] leading-tight hover:bg-primary/25"
+                      :title="t('statisticsPage.tierListMainRoleTooltip')"
+                      @click="cycleTierListSort('mainRolePct')"
+                    >
+                      {{ t('statisticsPage.tierListColLane') }}{{ tierListSortIcon('mainRolePct') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                      :title="t('statisticsPage.tierListWinrateTooltip')"
+                      @click="cycleTierListSort('winrate')"
+                    >
+                      {{ t('statisticsPage.winrate') }}{{ tierListSortIcon('winrate') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                      :title="t('statisticsPage.tierListPickrateTooltip')"
+                      @click="cycleTierListSort('pickrate')"
+                    >
+                      {{ t('statisticsPage.pickrate') }}{{ tierListSortIcon('pickrate') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                      :title="t('statisticsPage.tierListBanrateTooltip')"
+                      @click="cycleTierListSort('banrate')"
+                    >
+                      {{ t('statisticsPage.banrate') }}{{ tierListSortIcon('banrate') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 md:flex"
+                      :title="t('statisticsPage.tierListPbiTooltip')"
+                      @click="cycleTierListSort('pbi')"
+                    >
+                      {{ t('statisticsPage.tierListPbi') }}{{ tierListSortIcon('pbi') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-[72px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 sm:flex"
+                      @click="cycleTierListSort('games')"
+                    >
+                      {{ t('statisticsPage.tierListGames') }}{{ tierListSortIcon('games') }}
+                    </button>
+                    <template v-if="hasTierListHighElo">
+                      <button
+                        type="button"
+                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                        @click="cycleTierListSort('highEloRank')"
+                      >
+                        {{ t('statisticsPage.tierListApexRank')
+                        }}{{ tierListSortIcon('highEloRank') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                        :title="t('statisticsPage.tierListHighEloWinTooltip')"
+                        @click="cycleTierListSort('highEloWinrate')"
+                      >
+                        {{ t('statisticsPage.winrate') }}{{ tierListSortIcon('highEloWinrate') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                        @click="cycleTierListSort('highEloGames')"
+                      >
+                        {{ t('statisticsPage.tierListGames')
+                        }}{{ tierListSortIcon('highEloGames') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                        :title="t('statisticsPage.tierListDeltaTooltip')"
+                        @click="cycleTierListSort('delta')"
+                      >
+                        {{ t('statisticsPage.tierListDelta') }}{{ tierListSortIcon('delta') }}
+                      </button>
+                    </template>
+                  </div>
+
+                  <div
+                    v-for="row in paginatedTierList"
+                    :key="row.championId"
+                    class="tier-list-lolalytics-row odd:bg-primary/12 flex h-[52px] w-full cursor-pointer items-center justify-between text-text-primary/90 even:bg-surface/45 hover:brightness-110"
+                    role="button"
+                    tabindex="0"
+                    @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
+                    @keydown.enter="
+                      navigateTo(localePath('/statistics/champion/' + row.championId))
+                    "
+                  >
+                    <div
+                      class="tier-list-lolalytics-td hidden w-10 shrink-0 items-center justify-center md:flex"
+                    >
+                      {{ row.rank }}
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex min-w-0 flex-1 items-center gap-2 px-2"
+                    >
+                      <img
+                        v-if="gameVersion && championByKey(row.championId)"
+                        :src="
+                          getChampionImageUrl(
+                            gameVersion,
+                            championByKey(row.championId)!.image.full
+                          )
+                        "
+                        :alt="championName(row.championId) || ''"
+                        class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                        width="50"
+                        height="50"
+                      />
+                      <span class="min-w-0 truncate text-left font-medium text-accent">{{
+                        championName(row.championId) || row.championId
+                      }}</span>
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center"
+                    >
+                      <span
+                        :class="[
+                          'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
+                          row.tier === 'S+' && 'bg-[#f5c542]',
+                          row.tier === 'S' && 'bg-[#22c55e]',
+                          row.tier === 'A' && 'bg-[#2563eb]',
+                          row.tier === 'B' && 'bg-[#60a5fa]',
+                          row.tier === 'C' && 'bg-[#a855f7]',
+                          (row.tier === 'D' || row.tier === 'F') && 'bg-[#dc2626]',
+                        ]"
+                      >
+                        {{
+                          row.tier === 'D'
+                            ? t('statisticsPage.tierF')
+                            : t('statisticsPage.tier' + row.tier)
+                        }}
+                      </span>
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center text-[11px] leading-tight"
+                    >
+                      <img
+                        v-if="mainRoleIconSrc(row.mainRole)"
+                        :src="mainRoleIconSrc(row.mainRole)!"
+                        :alt="mainRoleLabel(row.mainRole)"
+                        :title="mainRoleLabel(row.mainRole)"
+                        class="mb-0.5 h-[27px] w-[27px] object-contain"
+                        width="27"
+                        height="27"
+                      />
+                      <span v-else class="max-w-[2.5rem] truncate text-[10px]">{{
+                        row.mainRole
+                      }}</span>
+                      <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                    >
+                      <span :class="tierListWinrateClass(row.winrate * 100)">{{
+                        (row.winrate * 100).toFixed(2)
+                      }}</span>
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                    >
+                      {{ (row.pickrate * 100).toFixed(2) }}
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center text-center"
+                    >
+                      {{ (row.banrate * 100).toFixed(2) }}
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
+                    >
+                      {{ Number(row.pbi).toFixed(0) }}
+                    </div>
+                    <div
+                      class="tier-list-lolalytics-td hidden w-[72px] shrink-0 items-center justify-center text-center sm:flex"
+                    >
+                      {{ row.games.toLocaleString() }}
+                    </div>
+                    <template v-if="hasTierListHighElo">
+                      <div
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-10 shrink-0 items-center justify-center sm:flex"
+                      >
+                        {{ row.highEloRank != null ? row.highEloRank : '—' }}
+                      </div>
+                      <div
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
+                      >
                         <span
-                          :class="[
-                            'inline-flex h-7 w-7 items-center justify-center rounded font-bold text-background',
-                            row.tier === 'S+' && 'bg-violet-500',
-                            row.tier === 'S' && 'bg-amber-500',
-                            row.tier === 'A' && 'bg-sky-400',
-                            row.tier === 'B' && 'bg-violet-400',
-                            row.tier === 'C' && 'bg-orange-400',
-                            row.tier === 'D' && 'bg-red-600',
-                          ]"
+                          v-if="row.highEloWinrate != null"
+                          :class="tierListWinrateClass(row.highEloWinrate * 100)"
+                          >{{ (row.highEloWinrate * 100).toFixed(2) }}</span
                         >
-                          {{ t('statisticsPage.tier' + row.tier) }}
-                        </span>
-                      </td>
-                      <td class="px-4 py-2 text-text/90">
-                        <div class="flex items-center gap-1.5">
-                          <img
-                            v-if="mainRoleIconSrc(row.mainRole)"
-                            :src="mainRoleIconSrc(row.mainRole)!"
-                            :alt="mainRoleLabel(row.mainRole)"
-                            :title="mainRoleLabel(row.mainRole)"
-                            class="h-5 w-5 shrink-0 object-contain"
-                            width="20"
-                            height="20"
-                          />
-                          <span v-else class="text-xs">{{ row.mainRole }}</span>
-                          <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
-                        </div>
-                      </td>
-                      <td class="px-4 py-2 text-text/90">{{ (row.winrate * 100).toFixed(2) }}%</td>
-                      <td class="px-4 py-2 text-text/90">{{ (row.pickrate * 100).toFixed(2) }}%</td>
-                      <td class="px-4 py-2 text-text/90">{{ (row.banrate * 100).toFixed(2) }}%</td>
-                      <td class="px-4 py-2 text-text/90">{{ Number(row.pbi).toFixed(2) }}</td>
-                      <td class="px-4 py-2 text-text/90">{{ row.games.toLocaleString() }}</td>
-                      <template v-if="(tierListData?.highEloRows?.length ?? 0) > 0">
-                        <td class="px-4 py-2 text-text/90">
-                          {{ row.highEloRank != null ? row.highEloRank : '—' }}
-                        </td>
-                        <td class="px-4 py-2 text-text/90">
-                          {{
-                            row.highEloWinrate != null
-                              ? (row.highEloWinrate * 100).toFixed(2) + '%'
-                              : '—'
-                          }}
-                        </td>
-                        <td class="px-4 py-2 text-text/90">
-                          {{ row.highEloGames != null ? row.highEloGames.toLocaleString() : '—' }}
-                        </td>
-                        <td class="px-4 py-2 text-text/90">
-                          {{
-                            row.delta != null
-                              ? (row.delta > 0 ? '+' : '') + Number(row.delta).toFixed(2) + '%'
-                              : '—'
-                          }}
-                        </td>
-                      </template>
-                    </tr>
-                  </tbody>
-                </table>
+                        <span v-else>—</span>
+                      </div>
+                      <div
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
+                      >
+                        {{ row.highEloGames != null ? row.highEloGames.toLocaleString() : '—' }}
+                      </div>
+                      <div
+                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
+                      >
+                        {{
+                          row.delta != null
+                            ? (row.delta > 0 ? '+' : '') + Number(row.delta).toFixed(2)
+                            : '—'
+                        }}
+                      </div>
+                    </template>
+                  </div>
+                </div>
                 <div
                   v-if="totalTierListCount > 0"
                   class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
@@ -3472,7 +3510,7 @@
                 </div>
                 <!-- Légende des tiers (style image) -->
                 <div
-                  class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 px-4 py-3 lg:w-56"
+                  class="tier-legend shrink-0 rounded-lg border-2 border-amber-500/60 bg-surface/80 lg:w-56"
                 >
                   <div class="mb-2 text-sm font-semibold text-text">
                     {{ t('statisticsPage.tierListLegend') }}
@@ -3684,19 +3722,19 @@
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-primary/30 bg-surface/50">
                   <tr>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailItems') }}
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailPickRate') }} %
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailWinRate') }} %
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.itemStats') }}
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.itemEconomy') }}
                     </th>
                   </tr>
@@ -3810,13 +3848,13 @@
               <table class="w-full text-left text-sm">
                 <thead class="border-b border-primary/30 bg-surface/50">
                   <tr>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailSummonerSpells') }}
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailPickRate') }} %
                     </th>
-                    <th class="px-4 py-3 font-semibold text-text">
+                    <th class="font-semibold text-text">
                       {{ t('statisticsPage.overviewDetailWinRate') }} %
                     </th>
                   </tr>
@@ -4132,10 +4170,10 @@ type TierListSortColumn =
   | 'delta'
 
 const tierListViewModel = ref<'table' | 'chart'>('table')
-const tierListSortColumn = ref<TierListSortColumn | null>(null)
+const tierListSortColumn = ref<TierListSortColumn | null>('rank')
 const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
-const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1 }
+const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1, F: 1 }
 
 /** High-elo row by champion id for delta and GM+Chall columns. */
 const highEloRowsByChampionId = computed(() => {
@@ -4144,6 +4182,15 @@ const highEloRowsByChampionId = computed(() => {
   for (const r of rows) map.set(r.championId, r)
   return map
 })
+const hasTierListHighElo = computed(() => (tierListData.value?.highEloRows?.length ?? 0) > 0)
+/** Couleurs type LoLalytics pour WR % (sur 0–100). */
+function tierListWinrateClass(pct: number): string {
+  if (!Number.isFinite(pct)) return 'text-text/80'
+  if (pct >= 52.5) return 'font-medium text-green-400'
+  if (pct >= 51) return 'text-green-500/95'
+  if (pct >= 50) return 'text-sky-200/85'
+  return 'text-red-400/90'
+}
 
 /** Tier list rows with optional delta (global winrate - highElo winrate). */
 interface TierListRowWithDelta {
@@ -4180,11 +4227,31 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
   })
 })
 
-const sortedTierListRows = computed(() => {
+const tierListRoleFilteredRows = computed(() => {
   const list = tierListRows.value
+  if (!statsRoleFilter.value) return list
+  return list.filter(row => row.mainRole === statsRoleFilter.value)
+})
+
+/** Tier list only: filtre par nom / id (champ de recherche). */
+const tierListSearchFilteredRows = computed(() => {
+  const list = tierListRoleFilteredRows.value
+  const raw = championSearchQuery.value.trim().toLowerCase()
+  if (!raw) return list
+  return list.filter(row => {
+    const name = championName(row.championId)?.toLowerCase() ?? ''
+    const idStr = String(row.championId)
+    return name.includes(raw) || idStr === raw || idStr.includes(raw)
+  })
+})
+
+const sortedTierListRows = computed(() => {
+  const list = tierListSearchFilteredRows.value
   const col = tierListSortColumn.value
   const dir = tierListSortDir.value
-  if (!col || col === 'champion') return [...list]
+  if (!col || col === 'champion') {
+    return [...list].sort((a, b) => a.rank - b.rank)
+  }
   const mult = dir === 'desc' ? 1 : -1
   return [...list].sort((a, b) => {
     let diff = 0
@@ -4218,7 +4285,7 @@ const paginatedTierList = computed(() => {
 
 /** Tier list bar chart: ordered by PBI (worst to best). */
 const tierListBarChartData = computed(() => {
-  const list = [...tierListRows.value].sort((a, b) => a.pbi - b.pbi)
+  const list = [...tierListSearchFilteredRows.value].sort((a, b) => a.pbi - b.pbi)
   const minPbi = Math.min(...list.map(c => c.pbi), -5)
   const maxPbi = Math.max(...list.map(c => c.pbi), 10)
   const range = Math.max(Math.abs(minPbi), Math.abs(maxPbi), 1)
@@ -4229,12 +4296,13 @@ const tierListBarChartData = computed(() => {
 })
 
 const TIER_CHART_COLORS: Record<string, string> = {
-  'S+': '#c084fc',
-  S: '#eab308',
-  A: '#38bdf8',
-  B: '#a78bfa',
-  C: '#fb923c',
+  'S+': '#f5c542',
+  S: '#22c55e',
+  A: '#2563eb',
+  B: '#60a5fa',
+  C: '#a855f7',
   D: '#dc2626',
+  F: '#dc2626',
 }
 
 function cycleTierListSort(col: TierListSortColumn) {
@@ -4250,7 +4318,7 @@ function tierListSortIcon(col: TierListSortColumn): string {
   if (tierListSortColumn.value !== col) return '—'
   return tierListSortDir.value === 'desc' ? '↓' : '↑'
 }
-watch([tierListSortColumn, tierListSortDir, championsPageSize], () => {
+watch([tierListSortColumn, tierListSortDir, championsPageSize, championSearchQuery], () => {
   tierListPage.value = 1
 })
 
@@ -5308,27 +5376,44 @@ const _overviewEffectiveTotalMatches = computed(() => {
   if (total > 0) return total
   return overviewTeamsData.value?.matchCount ?? 0
 })
+const overviewFilteredChampionIds = computed(() => {
+  return new Set((championsData.value?.champions ?? []).map(c => c.championId))
+})
+function filterOverviewRowsByOtpPool<T extends { championId: number }>(rows: T[]): T[] {
+  if (statsOtpFilter.value === 'solo') return rows
+  const allowed = overviewFilteredChampionIds.value
+  if (allowed.size === 0) return rows
+  const filtered = rows.filter(row => allowed.has(row.championId))
+  return filtered.length > 0 ? filtered : rows
+}
+const overviewTopPickrateChampionsFiltered = computed(() =>
+  filterOverviewRowsByOtpPool(overviewData.value?.topPickrateChampions ?? [])
+)
 const overviewEffectiveTopWinrateChampions = computed(() => {
   const fromOverview = overviewData.value?.topWinrateChampions
-  if (fromOverview?.length) return fromOverview
+  if (fromOverview?.length) return filterOverviewRowsByOtpPool(fromOverview)
   const fromPickrate = overviewData.value?.topPickrateChampions
   if (!fromPickrate?.length) return []
-  return [...fromPickrate].sort((a, b) => (b.winrate ?? 0) - (a.winrate ?? 0)).slice(0, 5)
+  return filterOverviewRowsByOtpPool(fromPickrate)
+    .sort((a, b) => (b.winrate ?? 0) - (a.winrate ?? 0))
+    .slice(0, 5)
 })
 /** Top banrate champions: from overview when present, else from teams.bans.top20Total (first 5); banrate from API banRatePercent (share of all bans). */
 const overviewEffectiveTopBanrateChampions = computed(() => {
   const fromOverview = overviewData.value?.topBanrateChampions
-  if (fromOverview?.length) return fromOverview
+  if (fromOverview?.length) return filterOverviewRowsByOtpPool(fromOverview)
   const teams = overviewTeamsData.value?.bans?.top20Total
   if (!teams?.length) return []
-  return teams.slice(0, 5).map(b => {
-    const pct = typeof b.banRatePercent === 'string' ? parseFloat(b.banRatePercent) : 0
-    return {
-      championId: b.championId,
-      banCount: b.count,
-      banrate: Number.isFinite(pct) ? pct : 0,
-    }
-  })
+  return filterOverviewRowsByOtpPool(
+    teams.slice(0, 5).map(b => {
+      const pct = typeof b.banRatePercent === 'string' ? parseFloat(b.banRatePercent) : 0
+      return {
+        championId: b.championId,
+        banCount: b.count,
+        banrate: Number.isFinite(pct) ? pct : 0,
+      }
+    })
+  )
 })
 
 /** % of matches where winning team got first, and % where losing team got first. */
@@ -5652,7 +5737,11 @@ async function loadTierList() {
     const params = new URLSearchParams()
     const patch = effectiveTierListPatch.value
     if (patch) params.set('patch', patch)
-    params.set('rankTier', 'all')
+    if (statsDivisionFilter.value.length === 1) {
+      params.set('rankTier', statsDivisionFilter.value[0]!)
+    } else {
+      params.set('rankTier', 'all')
+    }
     params.set('otp', statsOtpFilter.value)
     const data = await statsFetch<{
       patch: string

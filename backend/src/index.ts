@@ -108,6 +108,8 @@ app.listen(PORT, () => {
   //   (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
   //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   // )
+  // Poller Riot (ingestion) — lance le script `poller` après RIOT_POLLER_STARTUP_DELAY_MS (défaut 2 min).
+  // Logs résumé `poller_hourly` : voir riotPoller.ts + env POLLER_HOURLY_SUMMARY_MS.
   startDefaultScript()
 })
 

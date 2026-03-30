@@ -47,6 +47,8 @@ export class RiotRateLimiter {
   private readonly penalty429Ms: number
   private penaltyUntil = 0
   private chain: Promise<void> = Promise.resolve()
+  private nearLimitPauseCount = 0
+  private http429PauseCount = 0
 
   constructor() {
     this.penalty429Ms = PENALTY_429_MS
@@ -60,7 +62,11 @@ export class RiotRateLimiter {
     const fromHeader =
       retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 0
     const ms = Math.max(this.penalty429Ms, fromHeader)
-    this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + ms)
+    const nextPenaltyUntil = Date.now() + ms
+    if (nextPenaltyUntil > this.penaltyUntil) {
+      this.http429PauseCount += 1
+      this.penaltyUntil = nextPenaltyUntil
+    }
   }
 
   /**
@@ -79,15 +85,30 @@ export class RiotRateLimiter {
     const appCount = headers.get('x-app-rate-limit-count')
     if (appLimit && appCount) {
       applyNearLimitFromBuckets(parseRiotLimitPairs(appLimit), parseRiotLimitPairs(appCount), (ms) => {
-        this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + ms)
+        const nextPenaltyUntil = Date.now() + ms
+        if (nextPenaltyUntil > this.penaltyUntil) {
+          this.nearLimitPauseCount += 1
+          this.penaltyUntil = nextPenaltyUntil
+        }
       })
     }
     const methodLimit = headers.get('x-method-rate-limit')
     const methodCount = headers.get('x-method-rate-limit-count')
     if (methodLimit && methodCount) {
       applyNearLimitFromBuckets(parseRiotLimitPairs(methodLimit), parseRiotLimitPairs(methodCount), (ms) => {
-        this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + ms)
+        const nextPenaltyUntil = Date.now() + ms
+        if (nextPenaltyUntil > this.penaltyUntil) {
+          this.nearLimitPauseCount += 1
+          this.penaltyUntil = nextPenaltyUntil
+        }
       })
+    }
+  }
+
+  getStats(): { nearLimitPauseCount: number; http429PauseCount: number } {
+    return {
+      nearLimitPauseCount: this.nearLimitPauseCount,
+      http429PauseCount: this.http429PauseCount,
     }
   }
 

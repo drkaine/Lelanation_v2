@@ -1059,6 +1059,7 @@
                 <option value="youtube" />
                 <option value="community_dragon" />
                 <option value="mv_refresh" />
+                <option value="poller_hourly" />
                 <option value="puuid_migration" />
                 <option value="league_xp" />
                 <option value="frontend" />

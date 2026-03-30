@@ -1,7 +1,18 @@
 /**
  * Materialized views: sync active_patches, refresh MVs, close_patch (archivage).
  * Plan: ne refresh que les patches actifs (en cours ou pas encore à max match).
+ *
+ * DBeaver / verrous : un `REFRESH MATERIALIZED VIEW` sans CONCURRENTLY prend un verrou exclusif
+ * et bloque les lectures sur la vue ; deux rafraîchissements (ex. appli + console SQL) sur la même
+ * vue s’attendent mutuellement. Préférer `REFRESH MATERIALIZED VIEW CONCURRENTLY` (une vue à la fois),
+ * ou arrêter le refresh applicatif pendant une maintenance manuelle ; sinon `pg_stat_activity` pour
+ * voir les sessions en attente (`wait_event`).
  */
+type MvRefreshTimingRow = {
+  name: string
+  ms: number
+  how: 'concurrent' | 'blocking' | 'skipped_dup' | 'skipped_missing'
+}
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
@@ -32,23 +43,28 @@ const MV_NAMES = [
 ] as const
 const missingViews = new Set<string>()
 
-async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {
+async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<MvRefreshTimingRow[]> {
+  const timings: MvRefreshTimingRow[] = []
   for (const mvName of MV_NAMES) {
     if (missingViews.has(mvName)) continue
+    const t0 = Date.now()
     try {
       // Prefer CONCURRENTLY to avoid blocking readers (admin/DBeaver).
       await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW CONCURRENTLY ${mvName}`)
+      timings.push({ name: mvName, ms: Date.now() - t0, how: 'concurrent' })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       // Historical data may produce duplicate rows for some MV unique keys.
       // Skip only that MV and continue refreshing the others.
       if (message.includes('23505') || message.includes('could not create unique index')) {
+        timings.push({ name: mvName, ms: Date.now() - t0, how: 'skipped_dup' })
         continue
       }
       // Some views may require an initial non-concurrent refresh (not yet populated / no suitable index).
       if (message.includes('CONCURRENTLY') || message.includes('55000')) {
         try {
           await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
+          timings.push({ name: mvName, ms: Date.now() - t0, how: 'blocking' })
           continue
         } catch (fallbackErr) {
           const fallbackMessage =
@@ -57,10 +73,12 @@ async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {
             fallbackMessage.includes('23505') ||
             fallbackMessage.includes('could not create unique index')
           ) {
+            timings.push({ name: mvName, ms: Date.now() - t0, how: 'skipped_dup' })
             continue
           }
           if (fallbackMessage.includes('42P01') || fallbackMessage.includes('does not exist')) {
             missingViews.add(mvName)
+            timings.push({ name: mvName, ms: Date.now() - t0, how: 'skipped_missing' })
             console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
             continue
           }
@@ -70,12 +88,14 @@ async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<void> {
       // Schema drift / partial migration: skip missing MV and keep the poller running.
       if (message.includes('42P01') || message.includes('does not exist')) {
         missingViews.add(mvName)
+        timings.push({ name: mvName, ms: Date.now() - t0, how: 'skipped_missing' })
         console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
         continue
       }
       throw err
     }
   }
+  return timings
 }
 
 async function getUnpopulatedMaterializedViews(): Promise<Set<string>> {
@@ -215,10 +235,11 @@ async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
     message: 'Début refresh des vues matérialisées',
   })
   try {
-    await refreshAllMaterializedViewsWithoutConcurrently()
+    const mvTimings = await refreshAllMaterializedViewsWithoutConcurrently()
     await ensureMaterializedViewsPopulated()
     const durationMs = Date.now() - t0
     const missingCount = missingViews.size
+    const slowest = [...mvTimings].sort((a, b) => b.ms - a.ms)[0]
     await appendUnifiedLog({
       section: 'db',
       type: 'fin',
@@ -229,6 +250,8 @@ async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
         tablesDefined: MV_NAMES.length,
         missingSkipped: missingCount,
         tablesTouched: MV_NAMES.length - missingCount,
+        mvTimings,
+        slowestMv: slowest ? { name: slowest.name, ms: slowest.ms, how: slowest.how } : undefined,
       },
     })
   } catch (err) {
