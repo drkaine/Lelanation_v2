@@ -3,6 +3,7 @@
   <div
     class="build-card-wrapper"
     :class="{ 'build-card-wrapper--streamer-scaled': isStreamerMode }"
+    :style="buildCardThemeVars"
   >
     <div
       v-if="
@@ -1308,7 +1309,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onUnmounted, onMounted, type CSSProperties } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { isBootsItem, isStarterItem } from '@lelanation/builds-ui'
 import { sumStarterDrainStats, getGoldPer10FromItem } from '@lelanation/builds-stats'
@@ -1338,6 +1339,22 @@ import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
+
+interface RegionsPayload {
+  regionsData: Record<string, [string, string]>
+  championMapping: Record<string, string>
+}
+
+const DEFAULT_REGION_COLORS: [string, string] = ['#BBA077', '#1E2328']
+let regionsPayloadPromise: Promise<RegionsPayload | null> | null = null
+
+const loadRegionsPayload = (): Promise<RegionsPayload | null> => {
+  if (!import.meta.client) return Promise.resolve(null)
+  if (!regionsPayloadPromise) {
+    regionsPayloadPromise = $fetch<RegionsPayload>('/data/regions.json').catch(() => null)
+  }
+  return regionsPayloadPromise
+}
 
 interface Props {
   build?: Build | null // Build optionnel - si non fourni, utilise currentBuild du store
@@ -1460,6 +1477,7 @@ const hasCopySelection = computed(
     copySelection.value.skillUpOrder
 )
 const canApplyCopy = computed(() => hasCopySelection.value && copyDestinations.value.length > 0)
+const regionsPayload = ref<RegionsPayload | null>(null)
 
 const cardAuthor = computed(() => buildStore.currentBuild?.author ?? '')
 const cardVisibility = computed<'public' | 'private'>(() => {
@@ -1874,6 +1892,43 @@ const selectedChampion = computed(() => {
   if (!champion) return null
   const fullChampion = championsStore.champions.find(c => c.id === champion.id)
   return fullChampion ?? champion
+})
+
+const hexToRgba = (hexColor: string, alpha: number): string => {
+  const normalized = hexColor.trim().replace('#', '')
+  const isShortHex = normalized.length === 3
+  const isLongHex = normalized.length === 6
+  if (!isShortHex && !isLongHex) return `rgb(31 79 122 / ${alpha})`
+  const fullHex = isShortHex
+    ? normalized
+        .split('')
+        .map(char => `${char}${char}`)
+        .join('')
+    : normalized
+  const r = parseInt(fullHex.slice(0, 2), 16)
+  const g = parseInt(fullHex.slice(2, 4), 16)
+  const b = parseInt(fullHex.slice(4, 6), 16)
+  return `rgb(${r} ${g} ${b} / ${alpha})`
+}
+
+const selectedRegionColors = computed<[string, string]>(() => {
+  const championId = selectedChampion.value?.id
+  if (!championId) return DEFAULT_REGION_COLORS
+  const payload = regionsPayload.value
+  if (!payload) return DEFAULT_REGION_COLORS
+  const regionKey = payload.championMapping[championId]
+  const palette = regionKey ? payload.regionsData[regionKey] : undefined
+  return palette ?? DEFAULT_REGION_COLORS
+})
+
+const buildCardThemeVars = computed<CSSProperties>(() => {
+  const [primaryColor, secondaryColor] = selectedRegionColors.value
+  return {
+    '--card-border-color': primaryColor,
+    '--card-border-color-soft': hexToRgba(primaryColor, 0.45),
+    '--card-border-gradient-strong': `linear-gradient(130deg, ${primaryColor}, ${secondaryColor})`,
+    '--card-border-gradient-soft': `linear-gradient(130deg, ${hexToRgba(primaryColor, 0.85)}, ${hexToRgba(secondaryColor, 0.75)})`,
+  }
 })
 
 const championIconSrc = computed(() => {
@@ -2588,6 +2643,10 @@ watch(
 
 // Charger le build sauvegardé au montage (seulement si pas de build en prop)
 onMounted(() => {
+  loadRegionsPayload().then(payload => {
+    regionsPayload.value = payload
+  })
+
   const locale = riotLocale.value
   // Ensure we have full champion payload (spells/passive) for readonly cards and old lightweight builds.
   if (championsStore.status === 'idle' && championsStore.champions.length === 0) {
@@ -2989,7 +3048,8 @@ defineExpose({
   width: 300px;
   height: 450px;
   background: var(--gradient-primary-mirror);
-  border: 2px solid var(--color-gold-300);
+  border: 2px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   border-radius: 6px;
   padding: 16px;
   backface-visibility: hidden;
@@ -3059,7 +3119,8 @@ defineExpose({
   gap: 0;
   padding: 4px;
   border-radius: 9999px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   background: rgba(0, 0, 0, 0.2);
   cursor: pointer;
   flex-shrink: 0;
@@ -3118,7 +3179,8 @@ defineExpose({
   resize: none;
   padding: 9px 11px;
   border-radius: 8px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   background: rgba(0, 0, 0, 0.26);
   color: #fff;
   font-size: clamp(10px, 0.82vw, 12px);
@@ -3130,7 +3192,8 @@ defineExpose({
   min-height: 220px;
   padding: 9px 11px;
   border-radius: 8px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   background: rgba(0, 0, 0, 0.2);
   color: rgba(255, 255, 255, 0.88);
   font-size: clamp(10px, 0.82vw, 12px);
@@ -3232,7 +3295,8 @@ defineExpose({
   height: 450px;
   background: var(--gradient-primary-mirror);
   background-attachment: fixed;
-  border: 2px solid var(--color-gold-300);
+  border: 2px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   border-radius: 6px;
   padding: 10px;
   display: flex;
@@ -3502,7 +3566,8 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 0.5px solid var(--card-border-color);
+  border: 0.5px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   object-fit: cover;
 }
 
@@ -3620,7 +3685,8 @@ defineExpose({
   width: 16px;
   height: 16px;
   border-radius: 2px;
-  border: 1px solid var(--card-border-color);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   object-fit: cover;
 }
 
@@ -3640,7 +3706,8 @@ defineExpose({
   width: 25px;
   height: 25px;
   border-radius: 3px;
-  border: 0.5px solid var(--card-border-color);
+  border: 0.5px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   object-fit: cover;
 }
 
@@ -3794,7 +3861,8 @@ defineExpose({
   width: var(--build-card-width);
   box-sizing: border-box;
   padding: 10px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.15);
 }
@@ -3824,7 +3892,8 @@ defineExpose({
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   background: rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
@@ -3833,7 +3902,8 @@ defineExpose({
   font-size: 11px;
   padding: 4px 8px;
   border-radius: 6px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   background: rgba(0, 0, 0, 0.2);
   cursor: pointer;
   opacity: 0.82;
@@ -3893,7 +3963,8 @@ defineExpose({
   height: 25px;
   margin-top: 5px;
   border-radius: 4px;
-  border: 1px solid var(--card-border-color);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   flex: 0 0 auto;
   cursor: grab;
   transition:
@@ -3976,7 +4047,8 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid var(--card-border-color);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
   object-fit: cover;
   display: block;
 }
@@ -4177,7 +4249,8 @@ defineExpose({
   z-index: 15;
   min-width: 84px;
   padding: 4px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   border-radius: 8px;
   background: rgba(8, 16, 31, 0.98);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
@@ -4215,7 +4288,8 @@ defineExpose({
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  border: 1px solid var(--card-border-color-soft);
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   object-fit: cover;
   flex: 0 0 auto;
 }
