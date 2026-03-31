@@ -2905,184 +2905,273 @@
             >
               {{ championsData.message }}
             </div>
-            <div v-else class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
-              <table class="w-full min-w-[400px] text-left text-sm">
-                <thead class="border-b border-primary/30 bg-surface/50">
-                  <tr>
-                    <th class="px-4 py-1.5 font-semibold text-text">
-                      {{ t('statisticsPage.champion') }}
-                    </th>
-                    <th
-                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                      :class="
-                        championsSortOrder === 'games'
-                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                          : 'hover:bg-surface/50'
-                      "
-                      @click="setChampionsSort('games')"
-                    >
-                      <span class="inline-flex items-center gap-1">
-                        {{ t('statisticsPage.games') }}
-                        <template v-if="championsSortOrder === 'games'">
-                          <span class="text-amber-500" aria-hidden="true">{{
-                            championsSortDir === 'desc' ? '↓' : '↑'
-                          }}</span>
-                        </template>
-                      </span>
-                    </th>
-                    <th
-                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                      :class="
-                        championsSortOrder === 'wins'
-                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                          : 'hover:bg-surface/50'
-                      "
-                      @click="setChampionsSort('wins')"
-                    >
-                      <span class="inline-flex items-center gap-1">
-                        {{ t('statisticsPage.wins') }}
-                        <template v-if="championsSortOrder === 'wins'">
-                          <span class="text-amber-500" aria-hidden="true">{{
-                            championsSortDir === 'desc' ? '↓' : '↑'
-                          }}</span>
-                        </template>
-                      </span>
-                    </th>
-                    <th
-                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                      :class="
-                        championsSortOrder === 'winrate'
-                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                          : 'hover:bg-surface/50'
-                      "
-                      @click="setChampionsSort('winrate')"
-                    >
-                      <span class="inline-flex items-center gap-1">
-                        {{ t('statisticsPage.winrate') }}
-                        <template v-if="championsSortOrder === 'winrate'">
-                          <span class="text-amber-500" aria-hidden="true">{{
-                            championsSortDir === 'desc' ? '↓' : '↑'
-                          }}</span>
-                        </template>
-                      </span>
-                    </th>
-                    <th
-                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                      :class="
-                        championsSortOrder === 'pickrate'
-                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                          : 'hover:bg-surface/50'
-                      "
-                      @click="setChampionsSort('pickrate')"
-                    >
-                      <span class="inline-flex items-center gap-1">
-                        {{ t('statisticsPage.pickrate') }}
-                        <template v-if="championsSortOrder === 'pickrate'">
-                          <span class="text-amber-500" aria-hidden="true">{{
-                            championsSortDir === 'desc' ? '↓' : '↑'
-                          }}</span>
-                        </template>
-                      </span>
-                    </th>
-                    <th
-                      class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                      :class="
-                        championsSortOrder === 'banrate'
-                          ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                          : 'hover:bg-surface/50'
-                      "
-                      @click="setChampionsSort('banrate')"
-                    >
-                      <span class="inline-flex items-center gap-1">
-                        {{ t('statisticsPage.banrate') }}
-                        <template v-if="championsSortOrder === 'banrate'">
-                          <span class="text-amber-500" aria-hidden="true">{{
-                            championsSortDir === 'desc' ? '↓' : '↑'
-                          }}</span>
-                        </template>
-                      </span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-primary/20">
-                  <tr
-                    v-for="row in paginatedChampions"
-                    :key="row.championId"
-                    class="cursor-pointer hover:bg-surface/50"
-                    @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
-                  >
-                    <td class="px-4 py-1 font-medium text-text">
-                      <div class="flex items-center gap-2">
-                        <img
-                          v-if="gameVersion && championByKey(row.championId)"
-                          :src="
-                            getChampionImageUrl(
-                              gameVersion,
-                              championByKey(row.championId)!.image.full
-                            )
-                          "
-                          :alt="championName(row.championId) || ''"
-                          class="h-5 w-5 rounded-full object-cover"
-                        />
-                        <span class="text-accent underline-offset-2 hover:underline">{{
-                          championName(row.championId) || row.championId
-                        }}</span>
-                      </div>
-                    </td>
-                    <td class="px-4 py-1 text-text/90">{{ row.games }}</td>
-                    <td class="px-4 py-1 text-text/90">{{ row.wins }}</td>
-                    <td class="px-4 py-1 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
-                    <td class="px-4 py-1 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
-                    <td class="px-4 py-1 text-text/90">
-                      {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <div
-                v-if="totalChampionsCount > 0"
-                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-1 text-sm text-text/80"
-              >
-                <span>
-                  {{ t('statisticsPage.totalGames') }}:
-                  {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
-                  <span v-if="championSearchQuery">
-                    ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
-                  >
-                </span>
-                <div class="flex items-center gap-3">
-                  <label class="flex items-center gap-1.5">
-                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                    <select
-                      v-model.number="championsPageSize"
-                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                    >
-                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                  </label>
-                  <span class="text-text/70">
-                    {{ (championsPage - 1) * championsPageSize + 1 }}-{{
-                      Math.min(championsPage * championsPageSize, totalChampionsCount)
+            <div v-else class="space-y-3">
+              <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+                  <div class="text-xs text-text/70">
+                    {{ t('statisticsPage.overviewTotalMatches') }}
+                  </div>
+                  <div class="text-lg font-semibold text-text">
+                    {{ overviewData?.totalMatches?.toLocaleString() ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+                  <div class="text-xs text-text/70">
+                    {{ t('statisticsPage.overviewPlayerCountDistinct') }}
+                  </div>
+                  <div class="text-lg font-semibold text-text">
+                    {{ overviewData?.playerCount?.toLocaleString() ?? '—' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+                  <div class="mb-2 text-sm font-semibold text-text">
+                    {{ t('statisticsPage.overviewFilterByVersion') }}
+                  </div>
+                  <div class="mb-2 text-xs text-text/70">
+                    {{
+                      statsVersionFilter
+                        ? `${statsVersionFilter} (${versionMatchCount(statsVersionFilter).toLocaleString()} ${t('statisticsPage.games')})`
+                        : t('statisticsPage.overviewVersionAll')
                     }}
-                    / {{ totalChampionsCount }}
+                  </div>
+                  <div class="max-h-40 overflow-y-auto text-xs text-text/85">
+                    <div
+                      v-for="v in statsVersionOptions"
+                      :key="'infos-version-' + v.version"
+                      class="flex items-center justify-between border-b border-primary/10 py-1 last:border-b-0"
+                    >
+                      <span>{{ v.version }}</span>
+                      <span>{{ Number(v.matchCount || 0).toLocaleString() }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+                  <div class="mb-2 text-sm font-semibold text-text">
+                    {{ t('statisticsPage.progressionsReferenceVersion') }}
+                  </div>
+                  <div class="mb-2 text-xs text-text/70">
+                    {{
+                      progressionFromVersion
+                        ? `${progressionFromVersion} (${versionMatchCount(progressionFromVersion).toLocaleString()} ${t('statisticsPage.games')})`
+                        : '—'
+                    }}
+                  </div>
+                  <div class="max-h-40 overflow-y-auto text-xs text-text/85">
+                    <div
+                      v-for="v in progressionSelectableVersions"
+                      :key="'infos-delta-version-' + v.version"
+                      class="flex items-center justify-between border-b border-primary/10 py-1 last:border-b-0"
+                    >
+                      <span>{{ v.version }}</span>
+                      <span>{{ Number(v.matchCount || 0).toLocaleString() }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+                <div class="mb-2 text-sm font-semibold text-text">
+                  {{ t('statisticsPage.overviewNumberByDivision') }}
+                </div>
+                <div class="mb-2 text-xs text-text/70">
+                  {{ t('statisticsPage.overviewFilterByVersion') }}:
+                  {{ statsVersionFilter || t('statisticsPage.overviewVersionAll') }}
+                </div>
+                <div class="grid grid-cols-2 gap-1 text-xs md:grid-cols-3 lg:grid-cols-5">
+                  <div
+                    v-for="d in infosMatchesByDivision"
+                    :key="'infos-division-' + d.rankTier"
+                    class="rounded border border-primary/20 bg-background/30 px-2 py-1"
+                  >
+                    <div class="font-medium text-text">{{ formatDivisionLabel(d.rankTier) }}</div>
+                    <div class="text-text/80">{{ Number(d.matchCount || 0).toLocaleString() }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
+                <table class="w-full min-w-[400px] text-left text-sm">
+                  <thead class="border-b border-primary/30 bg-surface/50">
+                    <tr>
+                      <th class="px-4 py-1.5 font-semibold text-text">
+                        {{ t('statisticsPage.champion') }}
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                        :class="
+                          championsSortOrder === 'games'
+                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                            : 'hover:bg-surface/50'
+                        "
+                        @click="setChampionsSort('games')"
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          {{ t('statisticsPage.games') }}
+                          <template v-if="championsSortOrder === 'games'">
+                            <span class="text-amber-500" aria-hidden="true">{{
+                              championsSortDir === 'desc' ? '↓' : '↑'
+                            }}</span>
+                          </template>
+                        </span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                        :class="
+                          championsSortOrder === 'wins'
+                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                            : 'hover:bg-surface/50'
+                        "
+                        @click="setChampionsSort('wins')"
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          {{ t('statisticsPage.wins') }}
+                          <template v-if="championsSortOrder === 'wins'">
+                            <span class="text-amber-500" aria-hidden="true">{{
+                              championsSortDir === 'desc' ? '↓' : '↑'
+                            }}</span>
+                          </template>
+                        </span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                        :class="
+                          championsSortOrder === 'winrate'
+                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                            : 'hover:bg-surface/50'
+                        "
+                        @click="setChampionsSort('winrate')"
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          {{ t('statisticsPage.winrate') }}
+                          <template v-if="championsSortOrder === 'winrate'">
+                            <span class="text-amber-500" aria-hidden="true">{{
+                              championsSortDir === 'desc' ? '↓' : '↑'
+                            }}</span>
+                          </template>
+                        </span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                        :class="
+                          championsSortOrder === 'pickrate'
+                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                            : 'hover:bg-surface/50'
+                        "
+                        @click="setChampionsSort('pickrate')"
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          {{ t('statisticsPage.pickrate') }}
+                          <template v-if="championsSortOrder === 'pickrate'">
+                            <span class="text-amber-500" aria-hidden="true">{{
+                              championsSortDir === 'desc' ? '↓' : '↑'
+                            }}</span>
+                          </template>
+                        </span>
+                      </th>
+                      <th
+                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
+                        :class="
+                          championsSortOrder === 'banrate'
+                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
+                            : 'hover:bg-surface/50'
+                        "
+                        @click="setChampionsSort('banrate')"
+                      >
+                        <span class="inline-flex items-center gap-1">
+                          {{ t('statisticsPage.banrate') }}
+                          <template v-if="championsSortOrder === 'banrate'">
+                            <span class="text-amber-500" aria-hidden="true">{{
+                              championsSortDir === 'desc' ? '↓' : '↑'
+                            }}</span>
+                          </template>
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-primary/20">
+                    <tr
+                      v-for="row in paginatedChampions"
+                      :key="row.championId"
+                      class="cursor-pointer hover:bg-surface/50"
+                      @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
+                    >
+                      <td class="px-4 py-1 font-medium text-text">
+                        <div class="flex items-center gap-2">
+                          <img
+                            v-if="gameVersion && championByKey(row.championId)"
+                            :src="
+                              getChampionImageUrl(
+                                gameVersion,
+                                championByKey(row.championId)!.image.full
+                              )
+                            "
+                            :alt="championName(row.championId) || ''"
+                            class="h-5 w-5 rounded-full object-cover"
+                          />
+                          <span class="text-accent underline-offset-2 hover:underline">{{
+                            championName(row.championId) || row.championId
+                          }}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-1 text-text/90">{{ row.games }}</td>
+                      <td class="px-4 py-1 text-text/90">{{ row.wins }}</td>
+                      <td class="px-4 py-1 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
+                      <td class="px-4 py-1 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
+                      <td class="px-4 py-1 text-text/90">
+                        {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div
+                  v-if="totalChampionsCount > 0"
+                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-1 text-sm text-text/80"
+                >
+                  <span>
+                    {{ t('statisticsPage.totalGames') }}:
+                    {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
+                    <span v-if="championSearchQuery">
+                      ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
+                    >
                   </span>
-                  <div class="flex gap-1">
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="championsPage <= 1"
-                      @click="championsPage = Math.max(1, championsPage - 1)"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="championsPage >= totalChampionsPages"
-                      @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
-                    >
-                      ›
-                    </button>
+                  <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5">
+                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                      <select
+                        v-model.number="championsPageSize"
+                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                      >
+                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                      </select>
+                    </label>
+                    <span class="text-text/70">
+                      {{ (championsPage - 1) * championsPageSize + 1 }}-{{
+                        Math.min(championsPage * championsPageSize, totalChampionsCount)
+                      }}
+                      / {{ totalChampionsCount }}
+                    </span>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="championsPage <= 1"
+                        @click="championsPage = Math.max(1, championsPage - 1)"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="championsPage >= totalChampionsPages"
+                        @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
+                      >
+                        ›
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3122,9 +3211,6 @@
                 </button>
               </div>
             </div>
-            <p v-if="tierListPatchDeltaCaption" class="text-xs text-text/70">
-              {{ tierListPatchDeltaCaption }}
-            </p>
             <div v-if="tierListPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
@@ -3147,22 +3233,6 @@
                 class="w-full overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
               >
                 <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
-                  <div
-                    class="tier-list-lolalytics-banner flex h-[34px] min-w-0 border-b-2 border-black text-sm text-text-primary"
-                  >
-                    <div
-                      class="flex min-w-0 flex-1 items-center justify-center bg-[var(--color-grey-300)] px-2 text-center font-medium"
-                    >
-                      {{ t('statisticsPage.tierListBannerAllRanks') }}
-                    </div>
-                    <div
-                      v-if="hasTierListHighElo"
-                      class="tier-list-lolalytics-banner-apex hidden shrink-0 items-center justify-center border-l-2 border-black bg-[var(--color-grey-300)] px-1 text-center text-xs font-semibold text-[rgb(var(--rgb-gold-100))] sm:flex sm:w-[184px] sm:max-w-[184px]"
-                    >
-                      {{ t('statisticsPage.tierListBannerApex') }}
-                    </div>
-                  </div>
-
                   <div
                     class="tier-list-lolalytics-head sticky top-0 z-10 flex h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
                   >
@@ -3242,6 +3312,7 @@
                       <button
                         type="button"
                         class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
+                        :title="t('statisticsPage.tierListApexRankTooltip')"
                         @click="cycleTierListSort('highEloRank')"
                       >
                         {{ t('statisticsPage.tierListApexRank')
@@ -3288,7 +3359,7 @@
                     <div
                       class="tier-list-lolalytics-td hidden w-10 shrink-0 items-center justify-center md:flex"
                     >
-                      {{ row.rank }}
+                      {{ tierListDisplayRankByChampionId.get(row.championId) ?? '—' }}
                     </div>
                     <div
                       class="tier-list-lolalytics-td flex min-w-0 flex-1 items-center gap-2 px-2"
@@ -3401,12 +3472,23 @@
                     <div
                       class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
                     >
-                      {{ Number(row.pbi).toFixed(0) }}
+                      {{ formatPbi(row.pbi, 2) }}
                     </div>
                     <div
-                      class="tier-list-lolalytics-td hidden w-[72px] shrink-0 items-center justify-center text-center sm:flex"
+                      class="tier-list-lolalytics-td hidden w-[72px] shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
                     >
-                      {{ row.games.toLocaleString() }}
+                      <span>{{ row.games.toLocaleString() }}</span>
+                      <span
+                        v-if="tierListPatchDeltaRefLabel && row.patchRefGamesDelta != null"
+                        class="text-[10px] leading-none"
+                        :class="tierListPatchDeltaGamesClass(row.patchRefGamesDelta)"
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaGamesTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{ formatTierListPatchDeltaGames(row.patchRefGamesDelta) }}</span
+                      >
                     </div>
                     <template v-if="hasTierListHighElo">
                       <div
@@ -3514,39 +3596,39 @@
                 v-show="tierListViewModel === 'chart' && totalTierListCount > 0"
                 class="tier-list-diverging-wrap overflow-x-auto rounded-xl border border-slate-700/80 bg-[#0c1222] p-4 shadow-inner"
               >
-                <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0 lg:flex-row lg:gap-4">
-                  <div
-                    class="flex shrink-0 flex-row flex-wrap gap-3 lg:w-36 lg:flex-col lg:justify-center lg:gap-2 lg:pr-2"
-                  >
-                    <div
-                      class="mb-1 hidden text-[10px] font-bold uppercase tracking-widest text-white/90 lg:block"
-                    >
-                      {{ t('statisticsPage.tierListLegend') }}
-                    </div>
-                    <div
-                      v-for="entry in TIER_DIVERGING_LEGEND"
-                      :key="entry.key"
-                      class="flex items-center gap-2 text-xs text-white/90"
-                    >
-                      <span
-                        class="inline-block h-3.5 w-3.5 shrink-0 rounded-sm shadow-sm"
-                        :style="{ backgroundColor: entry.color }"
-                      />
-                      <span class="w-7 font-semibold tabular-nums text-white">{{
-                        entry.key === 'S+'
-                          ? t('statisticsPage.tierS+')
-                          : entry.key === 'F'
-                            ? t('statisticsPage.tierF')
-                            : t('statisticsPage.tier' + entry.key)
-                      }}</span>
-                    </div>
-                  </div>
+                <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
                   <div class="min-w-0 flex-1">
                     <h3
                       class="mb-2 font-sans text-sm font-bold uppercase tracking-tight text-white md:text-base"
                     >
                       {{ tierListChartHeading }}
                     </h3>
+                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                      <button
+                        v-for="entry in TIER_DIVERGING_LEGEND"
+                        :key="'tier-filter-' + entry.key"
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-semibold transition-colors"
+                        :class="
+                          tierListChartTierEnabled(entry.key)
+                            ? 'border-white/40 bg-white/10 text-white'
+                            : 'border-white/20 bg-black/20 text-white/60'
+                        "
+                        @click="toggleTierListChartTier(entry.key)"
+                      >
+                        <span
+                          class="inline-block h-3 w-3 rounded-sm"
+                          :style="{ backgroundColor: entry.color }"
+                        />
+                        <span>{{
+                          entry.key === 'S+'
+                            ? t('statisticsPage.tierS+')
+                            : entry.key === 'F'
+                              ? t('statisticsPage.tierF')
+                              : t('statisticsPage.tier' + entry.key)
+                        }}</span>
+                      </button>
+                    </div>
                     <p class="mb-3 text-[11px] text-amber-200/60">
                       {{ t('statisticsPage.tierListChartPbiAxis') }}
                     </p>
@@ -3554,7 +3636,7 @@
                       <div
                         class="relative w-9 shrink-0 text-[10px] leading-none text-amber-100/80 md:w-10"
                       >
-                        <div class="relative h-[220px]">
+                        <div class="relative h-[320px]">
                           <span
                             v-for="tick in tierListChartYScale.ticks"
                             :key="'ytick-' + tick"
@@ -3565,8 +3647,8 @@
                           >
                         </div>
                       </div>
-                      <div class="relative min-h-[280px] min-w-0 flex-1">
-                        <div class="relative h-[220px] w-full overflow-visible">
+                      <div class="relative min-h-[380px] min-w-0 flex-1">
+                        <div class="relative h-[320px] w-full overflow-visible">
                           <div
                             v-for="tick in tierListChartYScale.ticks"
                             :key="'grid-' + tick"
@@ -3574,21 +3656,21 @@
                             :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
                           />
                           <div
-                            class="pointer-events-none absolute bottom-12 right-0 top-0 z-[1] w-[18%] bg-slate-950/55"
+                            class="pointer-events-none absolute bottom-12 right-0 top-0 z-[1] w-[12%] bg-slate-950/35"
                             aria-hidden="true"
                           />
                           <div
                             class="absolute bottom-12 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
                           >
                             <NuxtLink
-                              v-for="c in tierListChartRows"
+                              v-for="c in tierListChartVisibleRows"
                               :key="c.championId"
                               :to="localePath('/statistics/champion/' + c.championId)"
                               class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
                               :title="
                                 (championName(c.championId) || c.championId) +
                                 ' — PBI ' +
-                                Number(c.pbi).toFixed(2)
+                                formatPbi(c.pbi, 2)
                               "
                             >
                               <div class="relative h-full w-full">
@@ -3597,26 +3679,56 @@
                                 >
                                   <div class="relative h-full w-[85%] max-w-[12px]">
                                     <div
-                                      class="absolute left-0 right-0 top-1/2 z-[1] h-px bg-amber-400/55"
+                                      class="absolute left-0 right-0 z-[1] h-px bg-amber-400/55"
+                                      :style="{ bottom: tierListChartZeroBottomPct + '%' }"
                                     />
                                     <div
-                                      v-if="c.pbi >= 0"
-                                      class="absolute bottom-1/2 left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
+                                      v-if="normalizePbi(c.pbi) >= 0"
+                                      class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
                                       :style="{
-                                        height: tierListChartBarHalfPct(c.pbi) + '%',
-                                        backgroundColor:
-                                          TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
+                                        bottom: tierListChartZeroBottomPct + '%',
+                                        height: tierListChartBarPct(normalizePbi(c.pbi)) + '%',
+                                        backgroundColor: tierListChartBarColor(c.tier),
                                       }"
                                     />
                                     <div
                                       v-else
-                                      class="absolute left-0 right-0 top-1/2 rounded-b-[2px] transition-all group-hover:brightness-110"
+                                      class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
                                       :style="{
-                                        height: tierListChartBarHalfPct(c.pbi) + '%',
-                                        backgroundColor:
-                                          TIER_CHART_COLORS[c.tier] || TIER_CHART_COLORS.D,
+                                        top: 100 - tierListChartZeroBottomPct + '%',
+                                        height: tierListChartBarPct(normalizePbi(c.pbi)) + '%',
+                                        backgroundColor: tierListChartBarColor(c.tier),
                                       }"
                                     />
+                                  </div>
+                                </div>
+                                <div
+                                  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden w-44 -translate-x-1/2 rounded border border-primary/40 bg-surface/95 p-2 text-xs text-text shadow-lg group-hover:block"
+                                >
+                                  <div class="flex items-center gap-2">
+                                    <img
+                                      v-if="tierListChartChampionImage(c.championId)"
+                                      :src="tierListChartChampionImage(c.championId) || ''"
+                                      :alt="championName(c.championId) || String(c.championId)"
+                                      class="h-8 w-8 rounded object-cover"
+                                    />
+                                    <div class="min-w-0">
+                                      <div class="truncate font-semibold">
+                                        {{ championName(c.championId) || c.championId }}
+                                      </div>
+                                      <div class="text-[11px] text-text/70">
+                                        PBI {{ formatPbi(c.pbi, 2) }}
+                                      </div>
+                                      <div
+                                        v-if="
+                                          tierListPatchDeltaRefLabel && c.patchRefWinratePp != null
+                                        "
+                                        class="text-[11px]"
+                                        :class="tierListPatchDeltaClass(c.patchRefWinratePp)"
+                                      >
+                                        Δ WR {{ formatTierListPatchDeltaPp(c.patchRefWinratePp) }}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -3627,7 +3739,7 @@
                           class="flex h-14 items-end justify-stretch gap-px border-t border-amber-400/25 px-0.5 pt-1"
                         >
                           <div
-                            v-for="c in tierListChartRows"
+                            v-for="c in tierListChartVisibleRows"
                             :key="'lbl-' + c.championId"
                             class="flex min-h-14 min-w-0 flex-1 items-end justify-center overflow-hidden pb-0.5"
                           >
@@ -3645,30 +3757,6 @@
                           <span>{{ t('statisticsPage.tierListChartBest') }}</span>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                  <div
-                    class="flex shrink-0 flex-col items-center justify-center gap-2 border-t border-slate-600/50 pt-3 lg:w-36 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0"
-                  >
-                    <img
-                      v-if="tierListChartAsideIcon"
-                      :src="tierListChartAsideIcon"
-                      :alt="tierListChartAsideLabel"
-                      class="h-16 w-16 object-contain opacity-95 drop-shadow-md md:h-20 md:w-20"
-                      width="80"
-                      height="80"
-                    />
-                    <div
-                      v-else
-                      class="flex h-16 w-16 items-center justify-center rounded-lg border border-amber-500/30 bg-slate-900/80 text-2xl text-amber-200/50 md:h-20 md:w-20"
-                      aria-hidden="true"
-                    >
-                      ◆
-                    </div>
-                    <div
-                      class="text-center text-[10px] font-bold uppercase leading-tight tracking-wide text-amber-100/90"
-                    >
-                      {{ tierListChartAsideLabel }}
                     </div>
                   </div>
                 </div>
@@ -4289,7 +4377,7 @@ const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
 const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1, F: 1 }
 
-/** High-elo row by champion id for delta and GM+Chall columns. */
+/** High-elo row by champion id for Apex (Master+GM+Chall) columns and deltas. */
 const highEloRowsByChampionId = computed(() => {
   const rows = tierListData.value?.highEloRows ?? []
   const map = new Map<number, (typeof rows)[0]>()
@@ -4326,6 +4414,7 @@ interface TierListRowWithDelta {
   patchRefWinratePp?: number
   patchRefPickratePp?: number
   patchRefBanratePp?: number
+  patchRefGamesDelta?: number
   patchRefHighEloWinratePp?: number
   patchRefHighEloGamesDelta?: number
 }
@@ -4366,10 +4455,12 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
     let patchRefWinratePp: number | undefined
     let patchRefPickratePp: number | undefined
     let patchRefBanratePp: number | undefined
+    let patchRefGamesDelta: number | undefined
     if (refRow) {
       patchRefWinratePp = (r.winrate - refRow.winrate) * 100
       patchRefPickratePp = (r.pickrate - refRow.pickrate) * 100
       patchRefBanratePp = (r.banrate - refRow.banrate) * 100
+      patchRefGamesDelta = r.games - refRow.games
     }
     const refHe = refHeMap.get(r.championId)
     let patchRefHighEloWinratePp: number | undefined
@@ -4387,6 +4478,7 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
       patchRefWinratePp,
       patchRefPickratePp,
       patchRefBanratePp,
+      patchRefGamesDelta,
       patchRefHighEloWinratePp,
       patchRefHighEloGamesDelta,
     }
@@ -4448,11 +4540,40 @@ const paginatedTierList = computed(() => {
   const start = (page - 1) * size
   return list.slice(start, start + size)
 })
+const tierListDisplayRankByChampionId = computed(() => {
+  const map = new Map<number, number>()
+  sortedTierListRows.value.forEach((row, idx) => {
+    map.set(row.championId, idx + 1)
+  })
+  return map
+})
 
-/** Tier list chart: worst PBI → best (gauche → droite), style barres divergentes. */
+/** Tier list chart: grouped by tier, then by PBI inside each tier. */
+const TIER_CHART_ORDER: Record<'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F', number> = {
+  'S+': 0,
+  S: 1,
+  A: 2,
+  B: 3,
+  C: 4,
+  D: 5,
+  F: 6,
+}
 const tierListChartRows = computed(() =>
-  [...tierListSearchFilteredRows.value].sort((a, b) => a.pbi - b.pbi)
+  [...tierListSearchFilteredRows.value].sort((a, b) => {
+    const tierA = TIER_CHART_ORDER[(a.tier as keyof typeof TIER_CHART_ORDER) ?? 'D'] ?? 5
+    const tierB = TIER_CHART_ORDER[(b.tier as keyof typeof TIER_CHART_ORDER) ?? 'D'] ?? 5
+    if (tierA !== tierB) return tierA - tierB
+    return a.pbi - b.pbi
+  })
 )
+const tierListChartActiveTiers = ref<Array<'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'>>([])
+const tierListChartVisibleRows = computed(() => {
+  const active = tierListChartActiveTiers.value
+  if (!active.length) return tierListChartRows.value
+  return tierListChartRows.value.filter(row =>
+    active.includes((row.tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F') ?? 'D')
+  )
+})
 
 function tierListChartNiceStep(maxAbs: number, targetDivisions: number): number {
   if (maxAbs <= 0) return 1
@@ -4464,20 +4585,21 @@ function tierListChartNiceStep(maxAbs: number, targetDivisions: number): number 
 }
 
 const tierListChartYScale = computed(() => {
-  const list = tierListChartRows.value
-  const fallback = { maxAbs: 10, yMin: -10, yMax: 10, ticks: [-10, -5, 0, 5, 10] as number[] }
+  const list = tierListChartVisibleRows.value
+  const fallback = { range: 20, yMin: -10, yMax: 10, ticks: [-10, -5, 0, 5, 10] as number[] }
   if (!list.length) return fallback
   const vals = list.map(c => c.pbi)
-  const minV = Math.min(...vals)
-  const maxV = Math.max(...vals)
-  const maxAbs = Math.max(Math.abs(minV), Math.abs(maxV), 0.01)
-  const step = tierListChartNiceStep(maxAbs, 4)
-  const limit = Math.ceil(maxAbs / step) * step
+  const minV = Math.min(...vals, 0)
+  const maxV = Math.max(...vals, 0)
+  const span = Math.max(maxV - minV, 0.01)
+  const step = tierListChartNiceStep(span, 6)
+  const yMin = Math.floor(minV / step) * step
+  const yMax = Math.ceil(maxV / step) * step
   const ticks: number[] = []
-  for (let v = -limit; v <= limit + 1e-9; v += step) {
+  for (let v = yMin; v <= yMax + 1e-9; v += step) {
     ticks.push(Math.round(v * 1000) / 1000)
   }
-  return { maxAbs: limit, yMin: -limit, yMax: limit, ticks }
+  return { range: Math.max(yMax - yMin, 0.01), yMin, yMax, ticks }
 })
 
 function tierListChartYTickBottomPct(tick: number): number {
@@ -4485,10 +4607,21 @@ function tierListChartYTickBottomPct(tick: number): number {
   return ((tick - s.yMin) / (s.yMax - s.yMin)) * 100
 }
 
-function tierListChartBarHalfPct(pbi: number): number {
-  const maxAbs = tierListChartYScale.value.maxAbs
-  if (maxAbs <= 0) return 0
-  return (Math.abs(pbi) / maxAbs) * 50
+function tierListChartBarPct(pbi: number): number {
+  const range = tierListChartYScale.value.range
+  if (range <= 0) return 0
+  return (Math.abs(pbi) / range) * 100
+}
+
+function normalizePbi(value: number): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  // Avoid rendering and displaying "-0" due to floating noise.
+  return Math.abs(n) < 0.005 ? 0 : n
+}
+
+function formatPbi(value: number, _decimals = 2): string {
+  return String(Math.round(normalizePbi(value)))
 }
 
 const tierListChartHeading = computed(() => {
@@ -4498,17 +4631,10 @@ const tierListChartHeading = computed(() => {
   return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
 })
 
-const tierListChartAsideLabel = computed(() => {
-  if (!statsRoleFilter.value) return t('statisticsPage.tierListChartAllRolesShort')
-  return mainRoleLabel(statsRoleFilter.value).toUpperCase()
-})
-
-const tierListChartAsideIcon = computed(() =>
-  statsRoleFilter.value ? mainRoleIconSrc(statsRoleFilter.value) : null
-)
+const tierListChartZeroBottomPct = computed(() => tierListChartYTickBottomPct(0))
 
 /** Couleurs barres / légende — style diverging tier (F rouge → S+ or). */
-const TIER_CHART_COLORS: Record<string, string> = {
+const TIER_CHART_COLORS: Record<'F' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+', string> = {
   F: '#dc2626',
   D: '#dc2626',
   C: '#a78bfa',
@@ -4518,7 +4644,10 @@ const TIER_CHART_COLORS: Record<string, string> = {
   'S+': '#e5c558',
 }
 
-const TIER_DIVERGING_LEGEND: Array<{ key: string; color: string }> = [
+const TIER_DIVERGING_LEGEND: Array<{
+  key: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'
+  color: string
+}> = [
   { key: 'F', color: TIER_CHART_COLORS.F },
   { key: 'C', color: TIER_CHART_COLORS.C },
   { key: 'B', color: TIER_CHART_COLORS.B },
@@ -4526,6 +4655,36 @@ const TIER_DIVERGING_LEGEND: Array<{ key: string; color: string }> = [
   { key: 'S', color: TIER_CHART_COLORS.S },
   { key: 'S+', color: TIER_CHART_COLORS['S+'] },
 ]
+
+function tierChartColor(tier: string): string {
+  return TIER_CHART_COLORS[tier as keyof typeof TIER_CHART_COLORS] ?? TIER_CHART_COLORS.D
+}
+
+function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'): void {
+  const current = tierListChartActiveTiers.value
+  if (current.includes(tier)) {
+    tierListChartActiveTiers.value = current.filter(t => t !== tier)
+    return
+  }
+  tierListChartActiveTiers.value = [...current, tier]
+}
+
+function tierListChartTierEnabled(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'): boolean {
+  const active = tierListChartActiveTiers.value
+  return active.length === 0 || active.includes(tier)
+}
+
+function tierListChartBarColor(tier: string): string {
+  return tierListChartTierEnabled(tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F')
+    ? tierChartColor(tier)
+    : 'rgb(71 85 105 / 0.45)'
+}
+
+function tierListChartChampionImage(championId: number): string | null {
+  const champ = championByKey(championId)
+  if (!champ?.image?.full) return null
+  return getChampionImageUrl(gameVersion.value, champ.image.full)
+}
 
 function cycleTierListSort(col: TierListSortColumn) {
   if (tierListSortColumn.value === col) {
@@ -4591,6 +4750,64 @@ const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const progressionFromVersionOverride = ref('')
+const route = useRoute()
+const router = useRouter()
+const isApplyingQueryState = ref(false)
+const isSyncingQueryState = ref(false)
+
+function queryFirst(value: string | string[] | null | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? ''
+  return value ?? ''
+}
+
+function queryAll(value: string | string[] | null | undefined): string[] {
+  if (Array.isArray(value)) return value.filter(Boolean)
+  return value ? [value] : []
+}
+
+function applyStatisticsStateFromQuery(): void {
+  const tabRaw = queryFirst(route.query.tab as string | string[] | null | undefined)
+  const versionRaw = queryFirst(route.query.version as string | string[] | null | undefined)
+  const roleRaw = queryFirst(route.query.role as string | string[] | null | undefined).toUpperCase()
+  const otpRaw = queryFirst(route.query.otp as string | string[] | null | undefined)
+  const divisionsRaw = queryAll(route.query.rankTier as string | string[] | null | undefined)
+    .map(v => v.toUpperCase())
+    .filter(Boolean)
+
+  isApplyingQueryState.value = true
+  if (tabRaw) activeTab.value = normalizeLegacyTab(tabRaw)
+  statsVersionFilter.value = versionRaw
+  statsRoleFilter.value = roleRaw
+  statsDivisionFilter.value = divisionsRaw
+  statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
+  isApplyingQueryState.value = false
+}
+
+function syncStatisticsStateToQuery(): void {
+  if (!import.meta.client) return
+  if (isApplyingQueryState.value) return
+  const nextQuery = { ...route.query } as Record<string, string | string[]>
+
+  if (activeTab.value !== 'overview') nextQuery.tab = activeTab.value
+  else delete nextQuery.tab
+
+  if (statsVersionFilter.value) nextQuery.version = statsVersionFilter.value
+  else delete nextQuery.version
+
+  if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
+  else delete nextQuery.role
+
+  if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
+  else delete nextQuery.otp
+
+  if (statsDivisionFilter.value.length > 0) nextQuery.rankTier = [...statsDivisionFilter.value]
+  else delete nextQuery.rankTier
+
+  isSyncingQueryState.value = true
+  router.replace({ query: nextQuery }).finally(() => {
+    isSyncingQueryState.value = false
+  })
+}
 const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
@@ -4610,12 +4827,22 @@ if (import.meta.client) {
   statisticsUiStore.init()
   statisticsCustomStore.init()
   activeTab.value = normalizeLegacyTab(statisticsUiStore.activeTab)
+  applyStatisticsStateFromQuery()
 }
 
 watch(activeTab, value => {
   if (!import.meta.client) return
   statisticsUiStore.setActiveTab(normalizeLegacyTab(value))
 })
+
+watch(
+  () => route.query,
+  () => {
+    if (!import.meta.client) return
+    if (isSyncingQueryState.value) return
+    applyStatisticsStateFromQuery()
+  }
+)
 
 /** Alias pour compatibilité avec l’overview (requête utilise version/rankTier). */
 const _overviewVersionFilter = computed(() => statsVersionFilter.value || null)
@@ -4653,6 +4880,22 @@ const statsVersionOptions = computed(() => {
   if (statsKnownVersions.value.length > 0) return statsKnownVersions.value
   const fallback = overviewData.value?.matchesByVersion ?? []
   return [...fallback].sort((a, b) => compareVersionsDesc(a.version, b.version))
+})
+const versionMatchCountByVersion = computed(() => {
+  const map = new Map<string, number>()
+  for (const row of statsVersionOptions.value) {
+    if (!row?.version) continue
+    map.set(row.version, Number(row.matchCount) || 0)
+  }
+  return map
+})
+function versionMatchCount(version: string | null | undefined): number {
+  if (!version) return 0
+  return versionMatchCountByVersion.value.get(version) ?? 0
+}
+const infosMatchesByDivision = computed(() => {
+  const rows = overviewData.value?.matchesByDivision ?? []
+  return [...rows].sort((a, b) => (b.matchCount ?? 0) - (a.matchCount ?? 0))
 })
 /** Résumé versions (version + nb parties) pour la description en haut de page. */
 const _overviewDescriptionVersionsSummary = computed(() => {
@@ -4701,6 +4944,7 @@ function onStatsFilterChange() {
   overviewDetailData.value = null
   overviewDetailError.value = false
   if (activeTab.value === 'overview') loadOverview()
+  if (activeTab.value === 'infos') loadOverview()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
   if (activeTab.value === 'detail') loadOverviewDetail()
@@ -4710,6 +4954,9 @@ function onStatsFilterChange() {
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
+  if (statsVersionOptions.value.length <= 1) {
+    loadOverviewVersionsCatalog()
+  }
 }
 
 function resetStatsFilters() {
@@ -4832,6 +5079,22 @@ async function loadOverview() {
     overviewPending.value = false
     statsPerfEnd('loadOverview', t)
     // Toujours tenter de charger runes/items/sorts même si l’overview a échoué
+  }
+}
+
+async function loadOverviewVersionsCatalog() {
+  const params = new URLSearchParams()
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  params.set('otp', statsOtpFilter.value)
+  const q = params.toString() ? '?' + params.toString() : ''
+  try {
+    const data = await statsFetch<{
+      matchesByVersion?: Array<{ version: string; matchCount: number }>
+    }>(apiUrl('/api/stats/overview' + q))
+    mergeKnownVersions(data?.matchesByVersion)
+  } catch {
+    // Keep current options if catalog request fails.
   }
 }
 /** Duration vs winrate (5-min buckets, uses version + rank filters). */
@@ -4968,8 +5231,9 @@ const progressionFromVersion = computed(() => {
 })
 const progressionSelectableVersions = computed(() => {
   const versions = statsVersionOptions.value
-  if (versions.length <= 1) return versions
-  return versions.slice(1)
+  if (!statsVersionFilter.value) return versions
+  const filtered = versions.filter(v => v.version !== statsVersionFilter.value)
+  return filtered.length > 0 ? filtered : versions
 })
 const progressionFromVersionModel = computed({
   get: () => progressionFromVersion.value ?? '',
@@ -5920,7 +6184,7 @@ const tierListData = ref<{
 } | null>(null)
 /** Stats ref. patch (progressions) pour Δ WR / pick / ban / Apex. */
 const tierListRefStatsById = ref(
-  new Map<number, { winrate: number; pickrate: number; banrate: number }>()
+  new Map<number, { winrate: number; pickrate: number; banrate: number; games: number }>()
 )
 const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
 
@@ -5965,13 +6229,6 @@ const tierListPatchDeltaRefLabel = computed(() => {
   const main = effectiveTierListPatch.value
   if (!ref || !main || ref === main) return null
   return ref
-})
-
-const tierListPatchDeltaCaption = computed(() => {
-  const ref = tierListPatchDeltaRefLabel.value
-  const main = effectiveTierListPatch.value
-  if (!ref || !main) return ''
-  return t('statisticsPage.tierListPatchDeltaHint', { current: main, ref })
 })
 
 function tierListQueryString(patch: string | null): string {
@@ -6049,12 +6306,16 @@ async function loadTierList() {
           apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
         )
         if (refData && !refData.error && refData.rows?.length) {
-          const m = new Map<number, { winrate: number; pickrate: number; banrate: number }>()
+          const m = new Map<
+            number,
+            { winrate: number; pickrate: number; banrate: number; games: number }
+          >()
           for (const row of refData.rows) {
             m.set(row.championId, {
               winrate: row.winrate,
               pickrate: row.pickrate,
               banrate: row.banrate,
+              games: row.games,
             })
           }
           tierListRefStatsById.value = m
@@ -6230,6 +6491,10 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
 })
+
+watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+  syncStatisticsStateToQuery()
+})
 watch(progressionFromVersion, () => {
   if (activeTab.value === 'overview') {
     loadOverviewProgression()
@@ -6248,6 +6513,7 @@ onMounted(async () => {
   await versionPromise
   statsPerfEnd('version', tVersion)
   await loadOverview()
+  await loadOverviewVersionsCatalog()
   const defaultsApplied = applyDefaultVersionFiltersFromKnownVersions()
   if (defaultsApplied) onStatsFilterChange()
   statsPerfEnd('page mount', tPage)

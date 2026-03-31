@@ -22,6 +22,7 @@ const router = Router()
 // recopier ces fichiers vers le front pour un mode 100% statique.
 const buildsDir = join(process.cwd(), 'data', 'builds')
 const VALID_SHARE_TYPES: BuildShareType[] = ['link', 'image', 'image_with_meta']
+const BUILD_FILE_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.json$/i
 
 /**
  * Save a build
@@ -180,9 +181,7 @@ router.get('/', async (_req, res) => {
   try {
     const { promises: fs } = await import('fs')
     const files = await fs.readdir(buildsDir)
-    const buildFiles = files.filter(
-      file => file.endsWith('.json') && !file.endsWith('_priv.json')
-    )
+    const buildFiles = files.filter(file => BUILD_FILE_REGEX.test(file))
     
     const builds = await Promise.all(
       buildFiles.map(async (file) => {

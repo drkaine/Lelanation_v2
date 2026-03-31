@@ -1,13 +1,13 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
  * Aggregates from mv_champion_core_stats (vue matérialisée); main role = role with max games;
- * tier from tier_score percentiles; PBI = (winrate - 50) * 100 * pickrate / (100 - banrate).
+ * tier from tier_score percentiles; PBI = (winrate - bracket_avg_winrate) * 100 * pickrate / (100 - banrate).
  */
 import { prisma } from '../db.js'
 import { applyRankTierWhere } from '../utils/statsFilters.js'
 import { isDatabaseConfigured } from '../db.js'
 
-const MIN_GAMES = 10
+const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
 
 const TIER_PERCENTILES: Array<{ tier: Tier; maxPct: number }> = [
@@ -83,10 +83,15 @@ function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
   return tiers
 }
 
-function computePbi(winratePct: number, pickratePct: number, banratePct: number): number {
+function computePbi(
+  winratePct: number,
+  bracketAvgWinratePct: number,
+  pickratePct: number,
+  banratePct: number
+): number {
   const denom = 100 - banratePct
   if (denom <= 0) return 0
-  return ((winratePct - 50) * pickratePct) / denom
+  return ((winratePct - bracketAvgWinratePct) * 100 * pickratePct) / denom
 }
 
 export const __testables = {
@@ -133,17 +138,13 @@ function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
     pbi: number
     games: number
     tierScore: number
+    mainRoleGames: number
   }> = []
 
   for (const [championId, { totalGames, roleRows }] of byChampion) {
     const main = roleRows.reduce((a, b) => (b.games > a.games ? b : a), roleRows[0])
     const mainRolePct = totalGames > 0 ? (100 * main.games) / totalGames : 0
-    const winratePct = main.winrate * 100
-    const pickratePct = main.pickrate * 100
-    const banratePct = main.banrate * 100
     const tierScore = (main.winrate - 0.5) * Math.sqrt(main.games)
-    const pbi = computePbi(winratePct, pickratePct, banratePct)
-
     rows.push({
       championId,
       tier: 'D',
@@ -152,13 +153,26 @@ function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
       winrate: main.winrate,
       pickrate: main.pickrate,
       banrate: main.banrate,
-      pbi,
+      pbi: 0,
       games: totalGames,
       tierScore,
+      mainRoleGames: main.games,
     })
   }
 
   const filtered = rows.filter(r => r.games >= MIN_GAMES && r.pickrate >= MIN_PICKRATE)
+  const totalMainRoleGames = filtered.reduce((sum, row) => sum + row.mainRoleGames, 0)
+  const bracketAvgWinratePct =
+    totalMainRoleGames > 0
+      ? filtered.reduce((sum, row) => sum + row.winrate * 100 * row.mainRoleGames, 0) /
+        totalMainRoleGames
+      : 50
+  for (const row of filtered) {
+    const winratePct = row.winrate * 100
+    const pickratePct = row.pickrate * 100
+    const banratePct = row.banrate * 100
+    row.pbi = computePbi(winratePct, bracketAvgWinratePct, pickratePct, banratePct)
+  }
   const sorted = [...filtered].sort((a, b) => b.tierScore - a.tierScore)
   const tiers = assignTier(sorted)
   sorted.forEach((r, i) => {

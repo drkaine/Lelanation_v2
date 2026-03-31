@@ -7,7 +7,7 @@ const SCORE_MIN = -10
 const SCORE_MAX = 10
 
 /** Min games for a champion to be "eligible" when computing average winrate vs opponent (Delta method). */
-export const MATCHUP_DELTA_MIN_GAMES_ELIGIBLE = 100
+export const MATCHUP_DELTA_MIN_GAMES_ELIGIBLE = 1
 
 interface MatchParticipantForMatchup {
   championId?: number
