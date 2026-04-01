@@ -25,6 +25,7 @@ import {
   getOverviewDetailStats,
   getOverviewTeamsStats,
   getOverviewSidesStats,
+  getOverviewSidesProgressionFullStats,
   getOverviewDurationWinrateStats,
   getDurationWinrateByChampion,
   getOverviewProgressionStats,
@@ -443,6 +444,25 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
       sideWinrate: { blue: { matches: 0, wins: 0, winrate: 0 }, red: { matches: 0, wins: 0, winrate: 0 } },
       championWinrateBySide: { blue: [], red: [] },
       championPickBySide: { blue: [], red: [] },
+      drakesBySide: {
+        types: {
+          elder: { byBlue: 0, byRed: 0 },
+          earth: { byBlue: 0, byRed: 0 },
+          water: { byBlue: 0, byRed: 0 },
+          wind: { byBlue: 0, byRed: 0 },
+          fire: { byBlue: 0, byRed: 0 },
+          hextec: { byBlue: 0, byRed: 0 },
+          chem: { byBlue: 0, byRed: 0 },
+        },
+        souls: {
+          earth: { byBlue: 0, byRed: 0 },
+          water: { byBlue: 0, byRed: 0 },
+          wind: { byBlue: 0, byRed: 0 },
+          fire: { byBlue: 0, byRed: 0 },
+          hextec: { byBlue: 0, byRed: 0 },
+          chem: { byBlue: 0, byRed: 0 },
+        },
+      },
       objectivesBySide: {
         blue: {
           firstBlood: 0, baronFirst: 0, baronKills: 0, dragonFirst: 0, dragonKills: 0,
@@ -460,6 +480,24 @@ router.get('/overview-sides', async (req: Request, res: Response) => {
       objectivesBySideTable: emptyObjTable,
       bansBySide: { blue: [], red: [] },
     })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-sides-progression — WR/pick/ban delta par côté (patch de référence vs patch courant ou tous les patches suivants). */
+router.get('/overview-sides-progression', async (req: Request, res: Response) => {
+  const version = queryString(req.query.version)
+  const sinceVersion = queryString(req.query.sinceVersion)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getOverviewSidesProgressionFullStats(
+    version,
+    rankTier ?? null,
+    role || null,
+    sinceVersion || null
+  )
+  if (!data) {
+    return res.status(200).json({ oldestVersion: null, blue: [], red: [] })
   }
   return res.json(data)
 })
@@ -906,11 +944,21 @@ router.get('/overview-cards', async (req: Request, res: Response) => {
 router.get('/team-overview', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  const sides = await getOverviewSidesStats(
-    version ? [version] : [],
-    rankTier ?? null
+  const sides = await getOverviewSidesStats(version ? [version] : [], rankTier ?? null)
+  return res.json(
+    sides ?? {
+      matchCount: 0,
+      sideWinrate: {
+        blue: { matches: 0, wins: 0, winrate: 0 },
+        red: { matches: 0, wins: 0, winrate: 0 },
+      },
+      championWinrateBySide: { blue: [], red: [] },
+      championPickBySide: { blue: [], red: [] },
+      bansBySide: { blue: [], red: [] },
+      objectivesBySide: { blue: {}, red: {} },
+      objectivesBySideTable: { firstBlood: { firstByBlue: 0, firstByRed: 0 } },
+    }
   )
-  return res.json(sides ?? { bySide: { blue: null, red: null } })
 })
 
 /** New API: /api/stats/trends/deltas */

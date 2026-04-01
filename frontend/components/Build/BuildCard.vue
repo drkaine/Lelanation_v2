@@ -3323,10 +3323,10 @@ defineExpose({
   position: relative;
   width: 300px;
   height: 450px;
-  background: var(--color-blue-500);
-  background-attachment: fixed;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-strong) border-box;
   border: 2px solid transparent;
-  border-image: var(--card-border-gradient-strong) 1;
   border-radius: 6px;
   padding: 10px;
   display: flex;
@@ -3596,8 +3596,10 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid rgb(var(--rgb-accent) / 0.5);
-  border-image: var(--card-border-gradient-strong) 1;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
 
@@ -3716,7 +3718,9 @@ defineExpose({
   height: 16px;
   border-radius: 2px;
   border: 1px solid transparent;
-  border-image: var(--card-border-gradient-strong) 1;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
 
@@ -3736,8 +3740,10 @@ defineExpose({
   width: 25px;
   height: 25px;
   border-radius: 3px;
-  border: 0.5px solid transparent;
-  border-image: var(--card-border-gradient-strong) 1;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-strong) border-box;
   object-fit: cover;
 }
 
@@ -3861,8 +3867,9 @@ defineExpose({
 
 .boots-slot--filled {
   border: 1px solid transparent;
-  border-image: var(--card-border-gradient-soft) 1;
-  background: transparent;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-soft) border-box;
 }
 
 .boots-icon-single {
@@ -4083,8 +4090,10 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 0.03px solid transparent;
-  border-image: var(--card-border-gradient-soft) 1;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-blue-500), var(--color-blue-500)) padding-box,
+    var(--card-border-gradient-soft) border-box;
   object-fit: cover;
   display: block;
 }
@@ -4150,8 +4159,8 @@ defineExpose({
 
 .first-three-ups-item .skill-key {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
+  bottom: -5px;
+  right: -5px;
   background: rgba(0, 0, 0, 0.9);
   color: var(--color-gold-300);
   font-size: 10px;

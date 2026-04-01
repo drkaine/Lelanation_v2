@@ -448,6 +448,7 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
+import { enableCaptureMode, disableCaptureMode, fixCloneForCapture } from '~/utils/buildCardCapture'
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
@@ -756,182 +757,31 @@ const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
   if (!cardElement) return null
 
   try {
-    // Trouver le BuildCard à l'intérieur (élément avec classe build-card-wrapper)
     const buildCardWrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
     if (!buildCardWrapper) return null
 
-    // Attendre un peu pour s'assurer que tout est rendu
-    await new Promise(resolve => setTimeout(resolve, 200))
+    enableCaptureMode(buildCardWrapper)
+    await new Promise(resolve => setTimeout(resolve, 100))
 
-    // Cloner l'élément pour éviter de modifier l'original
-    const clonedElement = buildCardWrapper.cloneNode(true) as HTMLElement
-
-    // Positionner le clone hors écran mais visible pour le rendu
-    // IMPORTANT: Ne pas mettre opacity à 0, sinon dom-to-image-more ne peut pas capturer
-    clonedElement.style.position = 'fixed'
-    clonedElement.style.left = '-9999px'
-    clonedElement.style.top = '0'
-    clonedElement.style.zIndex = '9999'
-    clonedElement.style.opacity = '1'
-    clonedElement.style.visibility = 'visible'
-    clonedElement.style.pointerEvents = 'none'
-    document.body.appendChild(clonedElement)
-
-    // Fonction pour forcer tous les backgrounds à être transparents sauf ceux explicitement définis
-    const sanitizeStyles = (element: HTMLElement) => {
-      const allElements = [element, ...Array.from(element.querySelectorAll('*'))] as HTMLElement[]
-
-      // Fonction helper pour détecter si une couleur est blanche ou gris très clair
-      const isWhiteOrLightGrey = (color: string): boolean => {
-        if (!color) return false
-        const normalized = color.toLowerCase().trim()
-
-        // Couleurs blanches
-        if (
-          normalized === 'rgb(255, 255, 255)' ||
-          normalized === 'rgba(255, 255, 255, 1)' ||
-          normalized === '#ffffff' ||
-          normalized === '#fff' ||
-          normalized === 'white'
-        ) {
-          return true
-        }
-
-        // Gris très clair (comme rgb(229, 231, 235))
-        const rgbMatch = normalized.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
-        if (
-          rgbMatch &&
-          rgbMatch[1] !== undefined &&
-          rgbMatch[2] !== undefined &&
-          rgbMatch[3] !== undefined
-        ) {
-          const r = parseInt(rgbMatch[1], 10)
-          const g = parseInt(rgbMatch[2], 10)
-          const b = parseInt(rgbMatch[3], 10)
-          // Si toutes les valeurs sont > 200, c'est très clair
-          if (r > 200 && g > 200 && b > 200) {
-            return true
-          }
-        }
-
-        return false
-      }
-
-      allElements.forEach(el => {
-        const computed = window.getComputedStyle(el)
-        const style = el.style
-
-        // Vérifier si c'est un séparateur (doit conserver son background)
-        const isSeparator = el.classList.contains('separator-line')
-        // Clés de spell et badges (niveau, MAX) : conserver fond opaque pour la capture (lisibilité)
-        const isSpellOrLevelBadge =
-          el.classList.contains('skill-key') ||
-          el.classList.contains('level-badge') ||
-          el.classList.contains('max-badge')
-
-        // FORCER le background à transparent par défaut (sauf séparateurs et badges spell/niveau/max)
-        if (!isSeparator && !isSpellOrLevelBadge) {
-          style.backgroundColor = 'transparent'
-        }
-
-        // Pour skill-key, level-badge et max-badge : forcer des couleurs opaques pour dom-to-image
-        if (el.classList.contains('skill-key')) {
-          style.backgroundColor = 'rgba(0, 0, 0, 0.9)'
-          style.color = computed.color || '#c9a227'
-        } else if (el.classList.contains('level-badge')) {
-          style.backgroundColor = '#c9a227'
-          style.color = '#2563eb'
-        } else if (el.classList.contains('max-badge')) {
-          style.backgroundColor = '#7dd3fc'
-          style.color = '#082f49'
-          style.visibility = 'visible'
-          style.opacity = '1'
-        }
-
-        // Puis appliquer seulement si une couleur est explicitement définie et non blanche/transparente
-        const bgColor = computed.backgroundColor
-        if (
-          !isSpellOrLevelBadge &&
-          bgColor &&
-          !isWhiteOrLightGrey(bgColor) &&
-          bgColor !== 'rgba(0, 0, 0, 0)' &&
-          bgColor !== 'transparent'
-        ) {
-          style.backgroundColor = bgColor
-          // Pour les séparateurs, aussi appliquer l'opacité
-          if (isSeparator) {
-            style.opacity = computed.opacity || '0.8'
-          }
-        }
-
-        // Même chose pour les images de fond
-        if (computed.backgroundImage && computed.backgroundImage !== 'none') {
-          style.backgroundImage = computed.backgroundImage
-          style.backgroundSize = computed.backgroundSize
-          style.backgroundPosition = computed.backgroundPosition
-          style.backgroundRepeat = computed.backgroundRepeat
-        }
-
-        // Supprimer les bordures blanches/gris clair
-        const borderColor = computed.borderColor
-        if (isWhiteOrLightGrey(borderColor)) {
-          // Supprimer la bordure si elle est blanche/gris clair
-          style.border = 'none'
-          style.borderWidth = '0'
-          style.borderColor = 'transparent'
-        } else if (
-          borderColor &&
-          borderColor !== 'rgba(0, 0, 0, 0)' &&
-          borderColor !== 'transparent'
-        ) {
-          // Garder la bordure seulement si elle a une couleur valide
-          style.borderColor = borderColor
-        } else {
-          // Pas de bordure
-          style.border = 'none'
-        }
-
-        // Remplacer color (mais pas si c'est noir par défaut)
-        if (computed.color && computed.color !== 'rgb(0, 0, 0)') {
-          style.color = computed.color
-        }
-
-        // Pour les séparateurs, s'assurer que la hauteur et la largeur sont préservées
-        if (isSeparator) {
-          style.width = computed.width || '100%'
-          style.height = computed.height || '1px'
-          style.margin = computed.margin || '8px 0'
-        }
-      })
-    }
-
-    // Forcer l'affichage de la face avant (retirer l'état "flipped" sur le clone)
-    const flipContainers = clonedElement.querySelectorAll('.flip-container')
-    flipContainers.forEach(fc => fc.classList.remove('flipped'))
-    // Cacher explicitement les faces arrière pour éviter de capturer la liste des variantes
-    const backFaces = clonedElement.querySelectorAll('.build-card-back') as NodeListOf<HTMLElement>
-    backFaces.forEach(b => {
-      b.style.display = 'none'
-    })
-
-    // Nettoyer les styles
-    sanitizeStyles(clonedElement)
-
-    // Attendre un peu pour que les styles soient appliqués et que le clone soit rendu
-    await new Promise(resolve => setTimeout(resolve, 300))
-
-    // Utiliser dom-to-image-more directement pour convertir en blob
     const domtoimage = await import('dom-to-image-more')
-    const resultBlob = await domtoimage.toBlob(clonedElement, {
-      bgcolor: '#0a0a14',
+    const blob = await domtoimage.toBlob(buildCardWrapper, {
+      bgcolor: '#091428',
       quality: 1.0,
+      cacheBust: true,
+      filter: (node: Node) => {
+        if (node instanceof HTMLElement && node.classList.contains('build-card-back')) {
+          return false
+        }
+        return true
+      },
+      onclone: (clone: HTMLElement) => fixCloneForCapture(clone),
     })
 
-    // Nettoyer : retirer le clone du DOM
-    document.body.removeChild(clonedElement)
-
-    return resultBlob
+    disableCaptureMode(buildCardWrapper)
+    return blob
   } catch {
+    const wrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
+    if (wrapper) disableCaptureMode(wrapper)
     return null
   }
 }
