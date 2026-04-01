@@ -1,7 +1,7 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
- * Aggregates from mv_champion_core_stats (vue matérialisée); main role = role with max games;
- * tier from tier_score percentiles; PBI = (winrate - bracket_avg_winrate) * 100 * pickrate / (100 - banrate).
+ * Aggregates from mv_champion_core_stats (vue matérialisée); main role = role with max games.
+ * Tier score is computed from Lolalytics-style matchup deltas (centered distribution), then tiered by percentiles.
  */
 import { prisma } from '../db.js'
 import { applyRankTierWhere } from '../utils/statsFilters.js'
@@ -9,6 +9,7 @@ import { isDatabaseConfigured } from '../db.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
+const MATCHUP_MIN_GAMES_ELIGIBLE = 100
 
 const TIER_PERCENTILES: Array<{ tier: Tier; maxPct: number }> = [
   { tier: 'S+', maxPct: 5 },
@@ -30,7 +31,7 @@ export interface TierListRow {
   winrate: number
   pickrate: number
   banrate: number
-  pbi: number
+  pbi: number // Backward-compatible field name; now stores matchup score note.
   games: number
 }
 
@@ -83,24 +84,106 @@ function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
   return tiers
 }
 
-function computePbi(
-  winratePct: number,
-  bracketAvgWinratePct: number,
-  pickratePct: number,
-  banratePct: number
-): number {
-  const denom = 100 - banratePct
-  if (denom <= 0) return 0
-  return ((winratePct - bracketAvgWinratePct) * 100 * pickratePct) / denom
+function deltaToMatchupBaseScore(delta: number): number {
+  if (delta < -5) return -10
+  if (delta < -2) return -6
+  if (delta < -0.5) return -3
+  if (delta <= 0.5) return 0
+  if (delta <= 2) return 3
+  if (delta <= 5) return 6
+  return 10
 }
 
 export const __testables = {
   assignTier,
-  computePbi,
+  deltaToMatchupBaseScore,
   tierScoreFromWinrateAndGames: (winrate: number, games: number) => (winrate - 0.5) * Math.sqrt(games),
 }
 
-function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
+type MatchupRoleRow = {
+  championId: number
+  opponentChampionId: number
+  role: string
+  games: number
+  wins: number
+}
+
+function computeChampionMatchupScores(
+  rows: Array<{
+    championId: number
+    mainRole: string
+    games: number
+  }>,
+  matchupRows: MatchupRoleRow[]
+): Map<number, number> {
+  const byChampion = new Map<number, { mainRole: string; games: number }>()
+  for (const row of rows) byChampion.set(row.championId, { mainRole: row.mainRole, games: row.games })
+
+  type Duel = {
+    championId: number
+    role: string
+    opponentChampionId: number
+    games: number
+    winratePct: number
+  }
+  const duels: Duel[] = []
+  const byOpponentRole = new Map<string, Duel[]>()
+  for (const m of matchupRows) {
+    const champ = byChampion.get(m.championId)
+    if (!champ || champ.mainRole !== m.role || m.games <= 0) continue
+    const winratePct = (m.wins / m.games) * 100
+    const duel: Duel = {
+      championId: m.championId,
+      role: m.role,
+      opponentChampionId: m.opponentChampionId,
+      games: m.games,
+      winratePct,
+    }
+    duels.push(duel)
+    const key = `${m.role}::${m.opponentChampionId}`
+    const list = byOpponentRole.get(key) ?? []
+    list.push(duel)
+    byOpponentRole.set(key, list)
+  }
+
+  const rawDeltas: Array<{ duel: Duel; delta: number }> = []
+  for (const duel of duels) {
+    const key = `${duel.role}::${duel.opponentChampionId}`
+    const peers = byOpponentRole.get(key) ?? []
+    let sum = 0
+    let count = 0
+    for (const p of peers) {
+      if (p.championId === duel.championId) continue
+      if (p.games < MATCHUP_MIN_GAMES_ELIGIBLE) continue
+      sum += p.winratePct
+      count += 1
+    }
+    if (count === 0) continue
+    rawDeltas.push({ duel, delta: duel.winratePct - sum / count })
+  }
+
+  if (rawDeltas.length === 0) return new Map()
+  let weightSum = 0
+  let weightedDeltaSum = 0
+  for (const d of rawDeltas) {
+    weightSum += d.duel.games
+    weightedDeltaSum += d.delta * d.duel.games
+  }
+  const recenter = weightSum > 0 ? weightedDeltaSum / weightSum : 0
+
+  const noteByChampion = new Map<number, number>()
+  for (const d of rawDeltas) {
+    const champion = byChampion.get(d.duel.championId)
+    if (!champion || champion.games <= 0) continue
+    const centeredDelta = d.delta - recenter
+    const baseScore = deltaToMatchupBaseScore(centeredDelta)
+    const weighted = baseScore * (d.duel.games / champion.games)
+    noteByChampion.set(d.duel.championId, (noteByChampion.get(d.duel.championId) ?? 0) + weighted)
+  }
+  return noteByChampion
+}
+
+function buildTierListRows(roleRows: RoleRow[], matchupRows: MatchupRoleRow[]): TierListRow[] {
   const byChampion = new Map<
     number,
     { totalGames: number; roleRows: Array<{ role: string; games: number; wins: number; winrate: number; pickrate: number; banrate: number }> }
@@ -161,19 +244,16 @@ function buildTierListRows(roleRows: RoleRow[]): TierListRow[] {
   }
 
   const filtered = rows.filter(r => r.games >= MIN_GAMES && r.pickrate >= MIN_PICKRATE)
-  const totalMainRoleGames = filtered.reduce((sum, row) => sum + row.mainRoleGames, 0)
-  const bracketAvgWinratePct =
-    totalMainRoleGames > 0
-      ? filtered.reduce((sum, row) => sum + row.winrate * 100 * row.mainRoleGames, 0) /
-        totalMainRoleGames
-      : 50
-  for (const row of filtered) {
-    const winratePct = row.winrate * 100
-    const pickratePct = row.pickrate * 100
-    const banratePct = row.banrate * 100
-    row.pbi = computePbi(winratePct, bracketAvgWinratePct, pickratePct, banratePct)
-  }
+  const notes = computeChampionMatchupScores(
+    filtered.map(r => ({ championId: r.championId, mainRole: r.mainRole, games: r.games })),
+    matchupRows
+  )
+  for (const row of filtered) row.pbi = notes.get(row.championId) ?? 0
   const sorted = [...filtered].sort((a, b) => b.tierScore - a.tierScore)
+  sorted.forEach(r => {
+    r.tierScore = r.pbi
+  })
+  sorted.sort((a, b) => b.tierScore - a.tierScore)
   const tiers = assignTier(sorted)
   sorted.forEach((r, i) => {
     r.tier = tiers[i] ?? 'D'
@@ -284,6 +364,61 @@ async function fetchRoleRows(
   return roleRows
 }
 
+async function fetchMatchupRoleRows(
+  patch: string,
+  rankFilter: 'all' | 'high_elo' | string | null
+): Promise<MatchupRoleRow[]> {
+  const highEloOnly = rankFilter === 'high_elo'
+  const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
+  const where: Record<string, unknown> = {}
+  if (highEloOnly) {
+    where.rankTier = { in: HIGH_ELO_TIERS }
+  } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
+    applyRankTierWhere(where, rankFilter)
+  }
+  if (patch) where.gameVersion = { startsWith: patch }
+
+  const coreRows = await prisma.mvChampionCoreStat.findMany({
+    where,
+    select: { id: true, championId: true, role: true },
+  })
+  if (coreRows.length === 0) return []
+  const coreById = new Map<string, { championId: number; role: string }>()
+  for (const r of coreRows) {
+    coreById.set(String(r.id), { championId: r.championId, role: r.role })
+  }
+
+  const vsRows = await prisma.mvChampionVsStat.findMany({
+    where,
+    select: {
+      championStatId: true,
+      opponentChampionId: true,
+      countGame: true,
+      countWin: true,
+    },
+  })
+  const agg = new Map<string, MatchupRoleRow>()
+  for (const row of vsRows) {
+    const core = coreById.get(String(row.championStatId))
+    if (!core) continue
+    const key = `${core.championId}::${row.opponentChampionId}::${core.role}`
+    const ex = agg.get(key)
+    if (!ex) {
+      agg.set(key, {
+        championId: core.championId,
+        opponentChampionId: row.opponentChampionId,
+        role: core.role,
+        games: row.countGame,
+        wins: row.countWin,
+      })
+    } else {
+      ex.games += row.countGame
+      ex.wins += row.countWin
+    }
+  }
+  return [...agg.values()]
+}
+
 async function getLatestPatch(): Promise<string | null> {
   const row = await prisma.match.findFirst({
     orderBy: { id: 'desc' },
@@ -325,14 +460,16 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     }
   }
 
-  const rows = buildTierListRows(roleRows)
+  const matchupRows = await fetchMatchupRoleRows(patch, rankFilter)
+  const rows = buildTierListRows(roleRows, matchupRows)
 
   let highEloRows: TierListRow[] | undefined
   if (rankTier === 'all') {
     try {
       const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
       if (highEloRoleRows.length > 0) {
-        highEloRows = buildTierListRows(highEloRoleRows)
+        const highEloMatchupRows = await fetchMatchupRoleRows(patch, 'high_elo')
+        highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows)
       }
     } catch {
       // optional: skip high-elo block on error

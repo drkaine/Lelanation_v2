@@ -13,7 +13,8 @@ import {
   loadCurrentGameVersion,
   loadGameVersionsRecap,
   computeMatchIdsTimeWindow,
-  releaseDateToStartOfDayUtcSeconds,
+  getPollerPatchRolloutGraceDays,
+  resolveLatestPatchPriorityWindow,
 } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
@@ -1618,18 +1619,27 @@ async function runStep4ForPlayer(
 
   const patchPolicy = await resolvePatchPollingPolicy()
   let latestPatchDateWindow: { startTime: number; endTime: number } | null = null
-  if (patchPolicy.latestPatchOnly) {
+  /** Patchs normalisés (major.minor) acceptés en mode priorité live ; grâce post-release = latest + N-1. */
+  let priorityAllowedPatches: string[] | null = null
+  if (patchPolicy.latestPatchOnly && patchPolicy.latestPatch) {
     const currentRes = await loadCurrentGameVersion()
-    if (currentRes.isOk()) {
-      const current = currentRes.unwrap()
-      const startTime = releaseDateToStartOfDayUtcSeconds(current?.releaseDate ?? '')
-      if (Number.isFinite(startTime)) {
-        latestPatchDateWindow = {
-          startTime,
-          endTime: Math.floor(Date.now() / 1000),
-        }
+    const recapRes = await loadGameVersionsRecap()
+    const releaseDate = currentRes.isOk() ? currentRes.unwrap()?.releaseDate : undefined
+    const recap = recapRes.isOk() ? recapRes.unwrap() : null
+    const w = resolveLatestPatchPriorityWindow({
+      latestPatch: patchPolicy.latestPatch,
+      currentReleaseDate: releaseDate,
+      recap,
+      graceDays: getPollerPatchRolloutGraceDays(),
+      nowSec: Math.floor(Date.now() / 1000),
+    })
+    if (Number.isFinite(w.matchListStartTime)) {
+      latestPatchDateWindow = {
+        startTime: w.matchListStartTime,
+        endTime: Math.floor(Date.now() / 1000),
       }
     }
+    priorityAllowedPatches = w.allowedPatches.length ? w.allowedPatches : [patchPolicy.latestPatch]
   }
 
   const fetchMatchAndTimelineStrict = async (matchId: string): Promise<StrictFetchResult> => {
@@ -1662,7 +1672,8 @@ async function runStep4ForPlayer(
       }
       if (patchPolicy.latestPatchOnly) {
         const matchPatch = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
-        if (matchPatch !== patchPolicy.latestPatch) {
+        const allowed = priorityAllowedPatches ?? []
+        if (!allowed.includes(matchPatch)) {
           return { ok: false, reason: 'deferred_patch' }
         }
       }
@@ -1864,6 +1875,7 @@ async function runStep4ForPlayer(
             playerId: player.id.toString(),
             matchId,
             latestPatch: patchPolicy.latestPatch,
+            allowedPatches: priorityAllowedPatches,
           })
           continue
         }

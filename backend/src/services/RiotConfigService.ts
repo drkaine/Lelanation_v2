@@ -145,6 +145,91 @@ export function computeMatchIdsTimeWindow(
   return { startTime, endTime }
 }
 
+/**
+ * Jours calendaires UTC après le `releaseDate` du patch live (version.json) pendant lesquels on ingère
+ * aussi le patch N‑1 : peu de matchs sur le nouveau patch au tout début. Env: POLLER_PATCH_ROLLOUT_GRACE_DAYS (défaut 2).
+ */
+export function getPollerPatchRolloutGraceDays(): number {
+  const raw = process.env.POLLER_PATCH_ROLLOUT_GRACE_DAYS
+  if (raw == null || raw === '') return 2
+  const n = Number.parseInt(raw, 10)
+  if (!Number.isFinite(n) || n < 0) return 2
+  return Math.min(n, 30)
+}
+
+/**
+ * True si `nowSec` est le même jour release (UTC) ou l’un des `graceDays` jours suivants (UTC).
+ * dayIndex 0 = jour du release, …, dayIndex graceDays = dernier jour de grâce.
+ */
+export function isWithinPatchRolloutGraceUtc(
+  currentReleaseDate: string,
+  graceDays: number,
+  nowSec: number
+): boolean {
+  if (graceDays <= 0) return false
+  const releaseStart = releaseDateToStartOfDayUtcSeconds(currentReleaseDate)
+  if (!Number.isFinite(releaseStart)) return false
+  if (nowSec < releaseStart) return false
+  const dayIndex = Math.floor((nowSec - releaseStart) / 86400)
+  return dayIndex <= graceDays
+}
+
+/** Entrée recap du patch strictement inférieur à `latestPatch` (ex. 16.6 pour latest 16.7). */
+export function findPreviousPatchEntry(
+  recap: GameVersionsRecap,
+  latestPatch: string
+): GameVersionRecapEntry | null {
+  const target = (latestPatch ?? '').trim()
+  if (!target) return null
+  let best: GameVersionRecapEntry | null = null
+  for (const e of recap.versions) {
+    const label = (e.patchLabel ?? '').trim()
+    if (!label || comparePatchLabelsAsc(label, target) >= 0) continue
+    if (!best || comparePatchLabelsAsc(label, (best.patchLabel ?? '').trim()) > 0) best = e
+  }
+  return best
+}
+
+/**
+ * Mode priorité patch live (`latestPatchOnly`) : borne startTime pour l’API match-v5 + patchs acceptés à l’ingest.
+ * Pendant la grâce post-release, `allowedPatches` = [latest, previous] et `matchListStartTime` min(release N, release N-1).
+ */
+export function resolveLatestPatchPriorityWindow(args: {
+  latestPatch: string
+  currentReleaseDate: string | null | undefined
+  recap: GameVersionsRecap | null | undefined
+  graceDays: number
+  nowSec: number
+}): { matchListStartTime: number; allowedPatches: string[] } {
+  const { latestPatch, currentReleaseDate, recap, graceDays, nowSec } = args
+  const lp = (latestPatch ?? '').trim()
+  const rd = (currentReleaseDate ?? '').trim()
+  const currentStart = releaseDateToStartOfDayUtcSeconds(rd)
+
+  if (!lp) {
+    const fallback = Number.isFinite(currentStart) ? currentStart : nowSec - 7 * 86400
+    return { matchListStartTime: fallback, allowedPatches: [] }
+  }
+
+  if (!Number.isFinite(currentStart)) {
+    return { matchListStartTime: nowSec - 14 * 86400, allowedPatches: [lp] }
+  }
+
+  const inGrace =
+    graceDays > 0 && rd.length > 0 && isWithinPatchRolloutGraceUtc(rd, graceDays, nowSec)
+  const prev = inGrace && recap?.versions?.length ? findPreviousPatchEntry(recap, lp) : null
+
+  if (prev) {
+    const prevStart = releaseDateToStartOfDayUtcSeconds(prev.releaseDate)
+    const prevLabel = (prev.patchLabel ?? '').trim()
+    const start = Number.isFinite(prevStart) ? Math.min(currentStart, prevStart) : currentStart
+    const allowed = prevLabel && prevLabel !== lp ? [lp, prevLabel] : [lp]
+    return { matchListStartTime: start, allowedPatches: allowed }
+  }
+
+  return { matchListStartTime: currentStart, allowedPatches: [lp] }
+}
+
 export async function loadCurrentGameVersion(): Promise<Result<VersionInfo | null, AppError>> {
   const path = join(DATA_GAME, 'version.json')
   const exists = await FileManager.exists(path)

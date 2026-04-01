@@ -140,6 +140,10 @@ const isSelected = (champion: Champion): boolean => {
 const hasSelectedChampion = computed(() => Boolean(buildStore.currentBuild?.champion?.id))
 
 const selectChampion = (champion: Champion) => {
+  if (isSelected(champion)) {
+    buildStore.clearChampion()
+    return
+  }
   buildStore.setChampion(champion)
 }
 

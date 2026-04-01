@@ -2,13 +2,11 @@
 
 /* Global Background */
 html {
-  background: var(--gradient-primary);
-  background-attachment: fixed;
+  background: var(--color-blue-500);
 }
 
 body {
-  background: var(--gradient-primary);
-  background-attachment: fixed;
+  background: var(--color-blue-500);
   min-height: 100vh;
   margin: 0;
   padding: 0;

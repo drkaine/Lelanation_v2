@@ -2,15 +2,15 @@
  * Riot API throttle driven by response headers + HTTP 429.
  * - No local request counting: we send at full speed and read `X-App-Rate-Limit-Count` /
  *   `X-Method-Rate-Limit-Count` vs the matching limit headers.
- * - When the 120s application bucket reports ≥99 uses (e.g. 99/100), pause 2 minutes before more calls.
- * - On HTTP 429: block at least 10s, or longer if Riot sends Retry-After (whichever is greater).
+ * - When the 120s application bucket reports ≥99 uses (e.g. 99/100), pause ~1 minute before more calls.
+ * - On HTTP 429: block at least 5s, or half of Retry-After when provided (whichever is greater).
  */
 /** Pause when a 120s bucket count reaches this usage (Riot app limit is typically 100/120s). */
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
 /** Cooldown after hitting near-limit on the 120s bucket (ms). */
-export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 120_000
-/** Minimum pause after a real HTTP 429 from Riot (may extend via `penalize429(retryAfterSec)`). */
-export const RIOT_429_MIN_PENALTY_MS = 10_000
+export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 60_000
+/** Minimum pause after a real HTTP 429 from Riot (Retry-After is applied at half duration). */
+export const RIOT_429_MIN_PENALTY_MS = 5_000
 
 const PENALTY_429_MS = RIOT_429_MIN_PENALTY_MS
 
@@ -55,12 +55,14 @@ export class RiotRateLimiter {
   }
 
   /**
-   * After an HTTP 429 from Riot: block all outgoing requests for at least {@link RIOT_429_MIN_PENALTY_MS},
-   * or `retryAfterSec * 1000` from the Retry-After header when it is higher.
+   * After an HTTP 429 from Riot: block for at least {@link RIOT_429_MIN_PENALTY_MS},
+   * or half of `Retry-After` (seconds) in ms when that is higher.
    */
   penalize429(retryAfterSec?: number): void {
     const fromHeader =
-      retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 0
+      retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? Math.ceil((retryAfterSec * 1000) / 2)
+        : 0
     const ms = Math.max(this.penalty429Ms, fromHeader)
     const nextPenaltyUntil = Date.now() + ms
     if (nextPenaltyUntil > this.penaltyUntil) {
@@ -78,7 +80,7 @@ export class RiotRateLimiter {
 
   /**
    * Read Riot rate-limit headers on successful responses. If the 120s bucket is at ≥99 uses,
-   * enqueue a 2-minute cooldown (matches manual “wait before 429” behaviour).
+   * enqueue a cooldown (see {@link RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS}).
    */
   syncFromResponseHeaders(headers: { get(name: string): string | null }): void {
     const appLimit = headers.get('x-app-rate-limit')

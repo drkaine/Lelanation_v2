@@ -2,6 +2,7 @@
   <div class="statistics flex min-h-screen flex-col text-text">
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
+      v-show="!isTierListTab"
       type="button"
       class="fixed left-4 top-4 z-40 flex w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
@@ -19,7 +20,7 @@
 
     <!-- Overlay mobile (fermer les filtres au clic) -->
     <div
-      v-show="filtersOpen"
+      v-show="effectiveFiltersOpen && !isTierListTab"
       class="fixed inset-0 z-30 bg-black/50 lg:hidden"
       aria-hidden="true"
       @click="closeFilters"
@@ -48,6 +49,7 @@
     <!-- Filtres + contenu : même hauteur -->
     <div class="flex min-h-0 flex-1 pt-4">
       <button
+        v-show="!isTierListTab"
         type="button"
         class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
         :aria-label="
@@ -75,7 +77,7 @@
         :class="[
           'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
           'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
-          filtersOpen
+          effectiveFiltersOpen
             ? 'translate-x-0 lg:w-64 lg:opacity-100'
             : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
         ]"
@@ -93,6 +95,7 @@
             Reset
           </button>
           <button
+            v-show="!isTierListTab"
             type="button"
             class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
             :aria-label="t('statisticsPage.closeFilters')"
@@ -3249,7 +3252,7 @@
                       {{ t('statisticsPage.tierListRank') }}{{ tierListSortIcon('rank') }}
                     </button>
                     <div
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex min-w-0 flex-1 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2"
+                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[220px] shrink-0 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2"
                     >
                       {{ t('statisticsPage.tierListColChampion') }}
                     </div>
@@ -3357,12 +3360,30 @@
                     "
                   >
                     <div
-                      class="tier-list-lolalytics-td hidden w-10 shrink-0 items-center justify-center md:flex"
+                      class="tier-list-lolalytics-td hidden w-10 shrink-0 flex-col items-center justify-center gap-0 leading-tight md:flex"
                     >
-                      {{ tierListDisplayRankByChampionId.get(row.championId) ?? '—' }}
+                      <span>{{ tierListDisplayRankByChampionId.get(row.championId) ?? '—' }}</span>
+                      <span
+                        v-if="
+                          tierListPatchDeltaRefLabel &&
+                          tierListPatchRankDelta(row.championId) != null
+                        "
+                        class="text-[10px] leading-none"
+                        :class="
+                          tierListPatchDeltaRankClass(tierListPatchRankDelta(row.championId) || 0)
+                        "
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaRankTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{
+                          formatTierListPatchDeltaRank(tierListPatchRankDelta(row.championId) || 0)
+                        }}</span
+                      >
                     </div>
                     <div
-                      class="tier-list-lolalytics-td flex min-w-0 flex-1 items-center gap-2 px-2"
+                      class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2"
                     >
                       <img
                         v-if="gameVersion && championByKey(row.championId)"
@@ -3472,7 +3493,7 @@
                     <div
                       class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
                     >
-                      {{ formatPbi(row.pbi, 2) }}
+                      {{ formatMatchupScore(row.pbi, 2) }}
                     </div>
                     <div
                       class="tier-list-lolalytics-td hidden w-[72px] shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
@@ -3669,8 +3690,8 @@
                               class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
                               :title="
                                 (championName(c.championId) || c.championId) +
-                                ' — PBI ' +
-                                formatPbi(c.pbi, 2)
+                                ' — Score ' +
+                                formatMatchupScore(c.pbi, 2)
                               "
                             >
                               <div class="relative h-full w-full">
@@ -3717,7 +3738,7 @@
                                         {{ championName(c.championId) || c.championId }}
                                       </div>
                                       <div class="text-[11px] text-text/70">
-                                        PBI {{ formatPbi(c.pbi, 2) }}
+                                        Score {{ formatMatchupScore(c.pbi, 2) }}
                                       </div>
                                       <div
                                         v-if="
@@ -4503,6 +4524,25 @@ const tierListSearchFilteredRows = computed(() => {
   })
 })
 
+/** Rank displayed in table: recomputed on filtered cohort (role filter), independent from sort columns. */
+const tierListFilteredRankByChampionId = computed(() => {
+  const map = new Map<number, number>()
+  const ordered = [...tierListRoleFilteredRows.value].sort((a, b) => a.rank - b.rank)
+  ordered.forEach((row, idx) => map.set(row.championId, idx + 1))
+  return map
+})
+
+/** Reference patch rank map, filtered with the same role filter as current table. */
+const tierListRefFilteredRankByChampionId = computed(() => {
+  const map = new Map<number, number>()
+  const list = tierListRefRows.value.filter(row =>
+    statsRoleFilter.value ? row.mainRole === statsRoleFilter.value : true
+  )
+  const ordered = [...list].sort((a, b) => a.rank - b.rank)
+  ordered.forEach((row, idx) => map.set(row.championId, idx + 1))
+  return map
+})
+
 const sortedTierListRows = computed(() => {
   const list = tierListSearchFilteredRows.value
   const col = tierListSortColumn.value
@@ -4541,29 +4581,34 @@ const paginatedTierList = computed(() => {
   return list.slice(start, start + size)
 })
 const tierListDisplayRankByChampionId = computed(() => {
-  const map = new Map<number, number>()
-  sortedTierListRows.value.forEach((row, idx) => {
-    map.set(row.championId, idx + 1)
-  })
-  return map
+  return tierListFilteredRankByChampionId.value
 })
 
-/** Tier list chart: grouped by tier, then by PBI inside each tier. */
-const TIER_CHART_ORDER: Record<'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F', number> = {
-  'S+': 0,
-  S: 1,
-  A: 2,
-  B: 3,
-  C: 4,
-  D: 5,
-  F: 6,
+function tierListPatchRankDelta(championId: number): number | null {
+  const cur = tierListFilteredRankByChampionId.value.get(championId)
+  const ref = tierListRefFilteredRankByChampionId.value.get(championId)
+  if (cur == null || ref == null) return null
+  // Positive => rank improved (e.g. 10 -> 7 => +3).
+  return ref - cur
 }
+
+function formatTierListPatchDeltaRank(delta: number): string {
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${Math.round(delta)}`
+}
+
+function tierListPatchDeltaRankClass(delta: number): string {
+  if (delta > 0) return 'text-green-400/90'
+  if (delta < 0) return 'text-red-400/90'
+  return 'text-text/55'
+}
+
+/** Tier list chart: strictly ordered by matchup score (worst -> best). */
 const tierListChartRows = computed(() =>
   [...tierListSearchFilteredRows.value].sort((a, b) => {
-    const tierA = TIER_CHART_ORDER[(a.tier as keyof typeof TIER_CHART_ORDER) ?? 'D'] ?? 5
-    const tierB = TIER_CHART_ORDER[(b.tier as keyof typeof TIER_CHART_ORDER) ?? 'D'] ?? 5
-    if (tierA !== tierB) return tierA - tierB
-    return a.pbi - b.pbi
+    const byScore = a.pbi - b.pbi
+    if (byScore !== 0) return byScore
+    return a.rank - b.rank
   })
 )
 const tierListChartActiveTiers = ref<Array<'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'>>([])
@@ -4620,8 +4665,8 @@ function normalizePbi(value: number): number {
   return Math.abs(n) < 0.005 ? 0 : n
 }
 
-function formatPbi(value: number, _decimals = 2): string {
-  return String(Math.round(normalizePbi(value)))
+function formatMatchupScore(value: number, decimals = 2): string {
+  return normalizePbi(value).toFixed(decimals)
 }
 
 const tierListChartHeading = computed(() => {
@@ -4812,6 +4857,8 @@ const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
+const isTierListTab = computed(() => activeTab.value === 'tierlist')
+const effectiveFiltersOpen = computed(() => (isTierListTab.value ? true : filtersOpen.value))
 function openFilters() {
   filtersOpen.value = true
 }
@@ -6187,6 +6234,13 @@ const tierListRefStatsById = ref(
   new Map<number, { winrate: number; pickrate: number; banrate: number; games: number }>()
 )
 const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
+const tierListRefRows = ref<
+  Array<{
+    rank: number
+    championId: number
+    mainRole: string
+  }>
+>([])
 
 const queryString = computed(() => {
   const params = new URLSearchParams()
@@ -6280,6 +6334,7 @@ async function loadTierList() {
   tierListError.value = null
   tierListRefStatsById.value = new Map()
   tierListRefHighEloById.value = new Map()
+  tierListRefRows.value = []
   try {
     const patch = effectiveTierListPatch.value
     const data = await statsFetch<TierListFetchPayload>(
@@ -6306,6 +6361,11 @@ async function loadTierList() {
           apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
         )
         if (refData && !refData.error && refData.rows?.length) {
+          tierListRefRows.value = refData.rows.map(row => ({
+            rank: row.rank,
+            championId: row.championId,
+            mainRole: row.mainRole,
+          }))
           const m = new Map<
             number,
             { winrate: number; pickrate: number; banrate: number; games: number }

@@ -45,7 +45,7 @@
       <template v-for="category in categoryOrderKeys" :key="category">
         <div v-if="itemsByCategory[category]?.length > 0" class="category-section">
           <button
-            v-if="!isStreamerMode"
+            v-if="!isLayoutScaled"
             type="button"
             class="category-header"
             :aria-expanded="isCategoryVisible(category)"
@@ -58,7 +58,7 @@
           </button>
           <div
             class="category-items"
-            :class="{ collapsed: !isCategoryVisible(category) && !isStreamerMode }"
+            :class="{ collapsed: !isCategoryVisible(category) && !isLayoutScaled }"
           >
             <div
               v-for="item in itemsByCategory[category]"
@@ -170,7 +170,7 @@ const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
 const itemsStore = useItemsStore()
 const buildStore = useBuildStore()
 const { locale, t } = useI18n()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const { tooltipsEnabled } = useTooltipsPreference()
 
 const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
@@ -898,7 +898,7 @@ watch(hoveredItem, async newValue => {
   }
 })
 
-watch(isStreamerMode, enabled => {
+watch(isLayoutScaled, enabled => {
   if (enabled) {
     hoveredItem.value = null
   }
@@ -1073,7 +1073,7 @@ watch(locale, () => {
 .item-selected {
   position: absolute;
   inset: 0;
-  border: 2px solid rgb(var(--rgb-accent));
+  border: 2px solid rgb(var(--rgb-accent) / 0.5);
   pointer-events: none;
   overflow: visible;
 }

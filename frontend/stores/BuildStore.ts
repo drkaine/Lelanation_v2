@@ -509,6 +509,18 @@ export const useBuildStore = defineStore('build', {
       return true
     },
 
+    clearChampion() {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (this.currentBuild) {
+        this.currentBuild.champion = null
+        this.currentBuild.updatedAt = new Date().toISOString()
+        this.pendingChampionChange = null
+        this.recalculateStats()
+      }
+    },
+
     /** Confirme le changement de champion en attente : supprime les variantes et applique. */
     confirmChampionChange() {
       if (!this.pendingChampionChange || !this.currentBuild) return

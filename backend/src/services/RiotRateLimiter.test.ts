@@ -12,22 +12,22 @@ test('RiotRateLimiter: acquire is immediate when no penalty', async () => {
   assert.ok(elapsed < 50, 'No local per-second throttle: bursts allowed until headers say otherwise')
 })
 
-test('RiotRateLimiter: penalize429 blocks ~10s', async () => {
+test('RiotRateLimiter: penalize429 blocks ~5s minimum', async () => {
   const limiter = new RiotRateLimiter()
   limiter.penalize429()
   const t0 = Date.now()
   await limiter.acquire()
   const elapsed = Date.now() - t0
-  assert.ok(elapsed >= 9_000, 'Acquire after 429 should wait ~10s')
+  assert.ok(elapsed >= 4_500, 'Acquire after 429 should wait ~5s')
 })
 
-test('RiotRateLimiter: penalize429 uses max(10s, Retry-After)', async () => {
+test('RiotRateLimiter: penalize429 uses max(5s, half of Retry-After)', async () => {
   const limiter = new RiotRateLimiter()
   limiter.penalize429(15)
   const t0 = Date.now()
   await limiter.acquire()
   const elapsed = Date.now() - t0
-  assert.ok(elapsed >= 14_000, 'Retry-After 15s should extend cooldown beyond 10s minimum')
+  assert.ok(elapsed >= 7_000, 'Retry-After 15s → 7.5s effective pause, above 5s floor')
 })
 
 test('RiotRateLimiter: 98/120s does not enqueue long cooldown', async () => {

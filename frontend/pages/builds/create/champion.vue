@@ -1,6 +1,6 @@
 <template>
   <BuildCreateChampionPageView
-    :is-streamer-mode="isStreamerMode"
+    :is-streamer-mode="isLayoutScaled"
     :has-champion="hasChampion"
     :highlight-missing-fields="highlightMissingFields"
     :pending-champion-change="Boolean(buildStore.pendingChampionChange)"
@@ -27,7 +27,7 @@ import ChampionSelector from '~/components/Build/ChampionSelector.vue'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 definePageMeta({
   layout: false,
@@ -47,7 +47,7 @@ const buildStore = useBuildStore()
 const router = useRouter()
 const route = useRoute()
 const localePath = useLocalePath()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const highlightMissingFields = ref(false)
 

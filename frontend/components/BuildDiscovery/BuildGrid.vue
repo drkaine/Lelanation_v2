@@ -445,14 +445,14 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import type { Build } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
 const { hydrated } = useClientHydrated()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
@@ -476,7 +476,7 @@ const adminStatsData = ref<{
 const displayedSubMap = ref<Record<string, number | null>>({})
 const { fetchWithAuth, checkLoggedIn } = useAdminAuth()
 const buildGridVars = computed(() => ({
-  '--build-grid-card-width': isStreamerMode.value
+  '--build-grid-card-width': isLayoutScaled.value
     ? 'min(390px, calc(100vw - 30px))'
     : 'min(300px, calc(100vw - 30px))',
 }))
@@ -1209,7 +1209,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-evenly;
-  gap: 10px;
+  gap: 15px;
   padding-inline: 5px;
   box-sizing: border-box;
 }

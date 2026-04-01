@@ -1,19 +1,19 @@
 {
   "regionsData": {
-    "demacia": ["#F2F2F2", "#C8AA6E"],
-    "noxus": ["#A30000", "#1A1A1A"],
-    "ionia": ["#FFCCFF", "#40E0D0"],
-    "freljord": ["#00D0FF", "#003366"],
-    "shadow_isles": ["#00FFCC", "#030303"],
-    "shurima": ["#FFCC00", "#E3B04B"],
+    "demacia": ["#dbdbdb", "#C8AA6E"],
+    "noxus": ["#790000", "#240101"],
+    "ionia": ["#e4b5e4", "#36bfb1"],
+    "freljord": ["#00b4dd", "#003366"],
+    "shadow_isles": ["#00d1a7", "#00261f"],
+    "shurima": ["#bd9700", "#704b00"],
     "piltover": ["#0088CC", "#D4AF37"],
-    "zaun": ["#7DFF00", "#3D0075"],
-    "bilgewater": ["#FF6600", "#004040"],
-    "targon": ["#9966FF", "#FFFFFF"],
-    "void": ["#800080", "#CC00FF"],
-    "ixtal": ["#228B22", "#FFD700"],
-    "bandle": ["#FFB7FF", "#00AA00"],
-    "runeterra": ["#BBA077", "#1E2328"]
+    "zaun": ["#5bba00", "#3D0075"],
+    "bilgewater": ["#ab4500", "#004040"],
+    "targon": ["#e7e7e7", "#8156d7"],
+    "void": [ "#6e008a", "#420042"],
+    "ixtal": [ "#ccac00", "#1e7c1e"],
+    "bandle": ["#d396d3", "#008200"],
+    "runeterra": ["#BBA077", "#2b3239"]
   },
   "championMapping": {
     "Aatrox": "runeterra",

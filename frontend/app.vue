@@ -75,6 +75,18 @@
             <button
               type="button"
               class="command-toggle command-toggle-button"
+              :aria-pressed="isPresentationZoom"
+              @click="togglePresentationZoom()"
+            >
+              <span class="command-toggle-track" :class="{ active: isPresentationZoom }">
+                <span class="command-toggle-thumb" />
+              </span>
+              <span>{{ t('commandBar.presentationZoom') }}</span>
+              <span class="command-shortcut">Alt + Z</span>
+            </button>
+            <button
+              type="button"
+              class="command-toggle command-toggle-button"
               :aria-pressed="championSplashEnabled"
               @click="toggleChampionSplashEnabled()"
             >
@@ -129,6 +141,8 @@ import AppFooter from '~/components/AppFooter.vue'
 import { useStreamerMode } from '~/composables/useStreamerMode'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
+import { usePresentationZoom } from '~/composables/usePresentationZoom'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -136,6 +150,8 @@ const router = useRouter()
 const localePath = useLocalePath()
 const localeHead = useLocaleHead({ addDirAttribute: true, addSeoAttributes: true } as any)
 const { isStreamerMode, toggleStreamerMode } = useStreamerMode()
+const { isPresentationZoom, togglePresentationZoom } = usePresentationZoom()
+const { isLayoutScaled } = useLayoutScaled()
 const { tooltipsDisabled, tooltipsEnabled, setTooltipsDisabled, toggleTooltipsDisabled } =
   useTooltipsPreference()
 const { championSplashEnabled, toggleChampionSplashEnabled } = useChampionSplashPreference()
@@ -147,10 +163,10 @@ const commandBarRef = ref<HTMLElement | null>(null)
 const commandBarHiddenByScroll = ref(false)
 const COMMAND_BAR_SCROLL_THRESHOLD = 80
 const appShellVars = computed(() => ({
-  '--build-create-page-padding-top': !isStreamerMode.value ? '6px' : '1rem',
+  '--build-create-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
   '--build-create-card-top-gap': '11px',
   '--build-create-page-lift': '0px',
-  '--build-page-padding-top': !isStreamerMode.value ? '6px' : '1rem',
+  '--build-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
 }))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
@@ -203,6 +219,12 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (event.altKey && key === 's') {
     event.preventDefault()
     toggleChampionSplashEnabled()
+    return
+  }
+
+  if (event.altKey && key === 'z') {
+    event.preventDefault()
+    togglePresentationZoom()
     return
   }
 

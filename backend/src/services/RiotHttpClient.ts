@@ -168,7 +168,10 @@ export class RiotHttpClient {
       if (res.status === 429) {
         const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
         const riotHeaders = pickRiotRateLimitHeaders(res.headers)
-        const cooldownMs = Math.max(RIOT_429_MIN_PENALTY_MS, retryAfterSec * 1000)
+        const retryAfterMs =
+          Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 0
+        const halvedRetryMs = retryAfterMs > 0 ? Math.ceil(retryAfterMs / 2) : 0
+        const cooldownMs = Math.max(RIOT_429_MIN_PENALTY_MS, halvedRetryMs)
         void appendUnifiedLog({
           section: 'back',
           type: 'warning',

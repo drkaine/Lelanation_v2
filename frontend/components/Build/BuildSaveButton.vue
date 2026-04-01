@@ -1,7 +1,7 @@
 <template>
   <div
     class="save-build-wrapper"
-    :class="{ 'save-build-wrapper--streamer': isStreamerMode }"
+    :class="{ 'save-build-wrapper--streamer': isLayoutScaled }"
     @mouseenter="handleHover(true)"
     @mouseleave="handleHover(false)"
   >
@@ -23,12 +23,12 @@
 
 <script setup lang="ts">
 import { useBuildStore } from '~/stores/BuildStore'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 const buildStore = useBuildStore()
 const router = useRouter()
 const localePath = useLocalePath()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const emit = defineEmits<{
   'highlight-missing': [value: boolean]
 }>()

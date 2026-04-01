@@ -1,6 +1,6 @@
 <template>
   <BuildCreateRunePageView
-    :is-streamer-mode="isStreamerMode"
+    :is-streamer-mode="isLayoutScaled"
     :has-champion="hasChampion"
     :highlight-missing-fields="highlightMissingFields"
     :rune-selector-component="RuneSelector"
@@ -19,7 +19,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import RuneSelector from '~/components/Build/RuneSelector.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 definePageMeta({
   layout: false,
@@ -37,7 +37,7 @@ useHead({
 
 const buildStore = useBuildStore()
 const route = useRoute()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
 const highlightMissingFields = ref(false)
 

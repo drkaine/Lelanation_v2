@@ -2,11 +2,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { __testables } from './TierListService.js'
 
-test('computePbi matches statsFormulas.pbi', () => {
-  const { computePbi } = __testables
-  assert.ok(Math.abs(computePbi(55, 10, 20) - 0.625) < 1e-9)
-  assert.equal(computePbi(50, 10, 20), 0)
-  assert.equal(computePbi(55, 10, 100), 0)
+test('deltaToMatchupBaseScore applies Lolalytics bands', () => {
+  const { deltaToMatchupBaseScore } = __testables
+  assert.equal(deltaToMatchupBaseScore(-6), -10)
+  assert.equal(deltaToMatchupBaseScore(-3), -6)
+  assert.equal(deltaToMatchupBaseScore(-1), -3)
+  assert.equal(deltaToMatchupBaseScore(0), 0)
+  assert.equal(deltaToMatchupBaseScore(1.2), 3)
+  assert.equal(deltaToMatchupBaseScore(4), 6)
+  assert.equal(deltaToMatchupBaseScore(6.4), 10)
 })
 
 test('tierScoreFromWinrateAndGames', () => {

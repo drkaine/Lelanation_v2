@@ -1,6 +1,6 @@
 <template>
   <BuildCreateInfoPageView
-    :is-streamer-mode="isStreamerMode"
+    :is-streamer-mode="isLayoutScaled"
     :has-champion="hasChampion"
     :highlight-missing-fields="highlightMissingFields"
     :pending-champion-change="Boolean(buildStore.pendingChampionChange)"
@@ -32,7 +32,7 @@ import BuildCard from '~/components/Build/BuildCard.vue'
 import BuildSaveButton from '~/components/Build/BuildSaveButton.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import BuildMenuSteps from '~/components/Build/BuildMenuSteps.vue'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 definePageMeta({
   layout: false,
@@ -54,7 +54,7 @@ const route = useRoute()
 const localePath = useLocalePath()
 const { t } = useI18n()
 const hasChampion = computed(() => Boolean(buildStore.currentBuild?.champion))
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const statsCategory = ref<'basic' | 'advanced' | 'economic'>('basic')
 const highlightMissingFields = ref(false)
 

@@ -2,7 +2,7 @@
 <template>
   <div
     class="build-card-wrapper"
-    :class="{ 'build-card-wrapper--streamer-scaled': isStreamerMode }"
+    :class="{ 'build-card-wrapper--streamer-scaled': isLayoutScaled }"
     :style="buildCardThemeVars"
   >
     <div
@@ -524,7 +524,7 @@
             ></div>
 
             <!-- Boots slot (always shown) -->
-            <div class="boots-slot">
+            <div class="boots-slot" :class="{ 'boots-slot--filled': bootsItems.length > 0 }">
               <!-- Une seule paire de bottes : icône complète -->
               <img
                 v-if="bootsItems.length === 1 && bootsItems[0]"
@@ -1331,7 +1331,7 @@ import {
   getItemImageUrl,
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { useStreamerMode } from '~/composables/useStreamerMode'
+import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
@@ -1388,7 +1388,7 @@ const summonerSpellsStore = useSummonerSpellsStore()
 const localePath = useLocalePath()
 const route = useRoute()
 const { locale, t } = useI18n()
-const { isStreamerMode } = useStreamerMode()
+const { isLayoutScaled } = useLayoutScaled()
 const hideTopActions = computed(() => props.hideTopActions)
 
 // Global tooltip preference (shared state via composable)
@@ -1911,6 +1911,35 @@ const hexToRgba = (hexColor: string, alpha: number): string => {
   return `rgb(${r} ${g} ${b} / ${alpha})`
 }
 
+const hexToRgb = (hexColor: string): [number, number, number] => {
+  const normalized = hexColor.trim().replace('#', '')
+  const isShortHex = normalized.length === 3
+  const isLongHex = normalized.length === 6
+  if (!isShortHex && !isLongHex) return [31, 79, 122]
+  const fullHex = isShortHex
+    ? normalized
+        .split('')
+        .map(char => `${char}${char}`)
+        .join('')
+    : normalized
+  return [
+    parseInt(fullHex.slice(0, 2), 16),
+    parseInt(fullHex.slice(2, 4), 16),
+    parseInt(fullHex.slice(4, 6), 16),
+  ]
+}
+
+const mixHexColors = (a: string, b: string, weightA = 0.5): string => {
+  const [ar, ag, ab] = hexToRgb(a)
+  const [br, bg, bb] = hexToRgb(b)
+  const wa = Math.max(0, Math.min(1, weightA))
+  const wb = 1 - wa
+  const r = Math.round(ar * wa + br * wb)
+  const g = Math.round(ag * wa + bg * wb)
+  const bCh = Math.round(ab * wa + bb * wb)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bCh.toString(16).padStart(2, '0')}`
+}
+
 const selectedRegionColors = computed<[string, string]>(() => {
   const championId = selectedChampion.value?.id
   if (!championId) return DEFAULT_REGION_COLORS
@@ -1923,11 +1952,12 @@ const selectedRegionColors = computed<[string, string]>(() => {
 
 const buildCardThemeVars = computed<CSSProperties>(() => {
   const [primaryColor, secondaryColor] = selectedRegionColors.value
+  const midColor = mixHexColors(primaryColor, secondaryColor, 0.4)
   return {
     '--card-border-color': primaryColor,
     '--card-border-color-soft': hexToRgba(primaryColor, 0.45),
-    '--card-border-gradient-strong': `linear-gradient(130deg, ${primaryColor}, ${secondaryColor})`,
-    '--card-border-gradient-soft': `linear-gradient(130deg, ${hexToRgba(primaryColor, 0.85)}, ${hexToRgba(secondaryColor, 0.75)})`,
+    '--card-border-gradient-strong': `linear-gradient(130deg, ${primaryColor} 0%, ${midColor} 45%, ${secondaryColor} 100%)`,
+    '--card-border-gradient-soft': `linear-gradient(130deg, ${hexToRgba(primaryColor, 0.7)} 0%, ${hexToRgba(midColor, 0.72)} 45%, ${hexToRgba(secondaryColor, 0.82)} 100%)`,
   }
 })
 
@@ -3293,7 +3323,7 @@ defineExpose({
   position: relative;
   width: 300px;
   height: 450px;
-  background: var(--gradient-primary-mirror);
+  background: var(--color-blue-500);
   background-attachment: fixed;
   border: 2px solid transparent;
   border-image: var(--card-border-gradient-strong) 1;
@@ -3465,19 +3495,19 @@ defineExpose({
   margin-left: 3px;
 }
 
-/* Bordure dorée complète via pseudo-élément avec SVG en data URI */
+/* Bordure losange (carré tourné) teintée par la région */
 .champion-portrait-container::before {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 100%;
-  height: 100%;
-  transform: translate(-50%, -50%);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3Cmask id='diamond-border-mask'%3E%3Crect width='100' height='100' fill='white'/%3E%3Cpolygon points='50,2 98,50 50,98 2,50' fill='black'/%3E%3C/mask%3E%3C/defs%3E%3Cpolygon points='50,0 100,50 50,100 0,50' fill='%23c89b3c' mask='url(%23diamond-border-mask)'/%3E%3C/svg%3E");
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
-  background-position: center;
+  width: 88%;
+  height: 88%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border: 2px solid transparent;
+  border-image: var(--card-border-gradient-strong) 1;
+  box-sizing: border-box;
+  background: transparent;
   z-index: 2;
   pointer-events: none;
 }
@@ -3544,7 +3574,7 @@ defineExpose({
 .separator-line {
   width: 100%;
   height: 1px;
-  background: var(--color-gold-400);
+  background: var(--card-border-gradient-strong);
   opacity: 0.8;
   margin: 8px 0;
   display: block;
@@ -3566,7 +3596,7 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 0.5px solid transparent;
+  border: 1px solid rgb(var(--rgb-accent) / 0.5);
   border-image: var(--card-border-gradient-strong) 1;
   object-fit: cover;
 }
@@ -3829,6 +3859,12 @@ defineExpose({
   background: rgba(255, 255, 255, 0.05);
 }
 
+.boots-slot--filled {
+  border: 1px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
+  background: transparent;
+}
+
 .boots-icon-single {
   width: 100%;
   height: 100%;
@@ -4047,8 +4083,8 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid transparent;
-  border-image: var(--card-border-gradient-strong) 1;
+  border: 0.03px solid transparent;
+  border-image: var(--card-border-gradient-soft) 1;
   object-fit: cover;
   display: block;
 }
@@ -4207,7 +4243,7 @@ defineExpose({
   width: 32px;
   height: 32px;
   border-radius: 4px;
-  border: 1px solid var(--color-blue-200);
+  border: 2px solid black;
   object-fit: cover;
 }
 
@@ -4223,8 +4259,8 @@ defineExpose({
 /* Fond opaque pour lisibilité à l'écran et à la capture image (fallback pour dom-to-image) */
 .skill-key {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
+  bottom: -5px;
+  right: -5px;
   background: rgba(0, 0, 0, 0.9);
   color: var(--color-gold-300);
   font-size: 10px;
