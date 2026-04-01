@@ -13,6 +13,12 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 
+/** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
+export interface OverviewSurrenderBySide {
+  blue: { total: number; earlySurrenderCount: number; surrenderCount: number }
+  red: { total: number; earlySurrenderCount: number; surrenderCount: number }
+}
+
 export interface OverviewStats {
   totalMatches: number
   lastUpdate: string | null
@@ -38,6 +44,7 @@ export interface OverviewStats {
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
   matchesByVersion: Array<{ version: string; matchCount: number }>
   playerCount: number
+  surrenderBySide?: OverviewSurrenderBySide
   _championPool?: Array<{ championId: number; pickrate: number }>
 }
 
@@ -195,6 +202,7 @@ export interface OverviewSidesApiStats {
     >
     souls: Record<string, { byBlue: number; byRed: number }>
   }
+  surrenderBySide?: OverviewSurrenderBySide
   objectivesBySide: {
     blue: Record<string, number>
     red: Record<string, number>
@@ -318,6 +326,59 @@ function buildMatchWhere(
   return where
 }
 
+async function loadSurrenderBySideCounts(
+  matchWhere: Record<string, unknown>,
+  blueMatchTotal: number,
+  redMatchTotal: number
+): Promise<OverviewSurrenderBySide> {
+  const teamMatchWhere = { match: matchWhere }
+  const [blueEarlySurrenderCount, redEarlySurrenderCount, blueSurrenderCount, redSurrenderCount] =
+    await Promise.all([
+      prisma.team.count({
+        where: {
+          ...teamMatchWhere,
+          team: 100,
+          teamEarlySurrendered: true,
+        },
+      }),
+      prisma.team.count({
+        where: {
+          ...teamMatchWhere,
+          team: 200,
+          teamEarlySurrendered: true,
+        },
+      }),
+      prisma.team.count({
+        where: {
+          ...teamMatchWhere,
+          team: 100,
+          win: false,
+          match: { ...matchWhere, gameEndedInSurrender: true },
+        },
+      }),
+      prisma.team.count({
+        where: {
+          ...teamMatchWhere,
+          team: 200,
+          win: false,
+          match: { ...matchWhere, gameEndedInSurrender: true },
+        },
+      }),
+    ])
+  return {
+    blue: {
+      total: blueMatchTotal,
+      earlySurrenderCount: blueEarlySurrenderCount,
+      surrenderCount: blueSurrenderCount,
+    },
+    red: {
+      total: redMatchTotal,
+      earlySurrenderCount: redEarlySurrenderCount,
+      surrenderCount: redSurrenderCount,
+    },
+  }
+}
+
 // ── getOverviewStats ─────────────────────────────────────────────────────────
 
 export async function getOverviewStats(
@@ -436,6 +497,12 @@ export async function getOverviewStats(
 
     const playerCount = Number(playerCountResult[0]?.cnt ?? 0)
 
+    const [blueMatchTotal, redMatchTotal] = await Promise.all([
+      prisma.team.count({ where: { match: matchWhere, team: 100 } }),
+      prisma.team.count({ where: { match: matchWhere, team: 200 } }),
+    ])
+    const surrenderBySide = await loadSurrenderBySideCounts(matchWhere, blueMatchTotal, redMatchTotal)
+
     const result: OverviewStats = {
       totalMatches,
       lastUpdate: null,
@@ -445,6 +512,7 @@ export async function getOverviewStats(
       matchesByDivision,
       matchesByVersion,
       playerCount,
+      surrenderBySide,
       _championPool: champList.map((c) => ({ championId: c.championId, pickrate: c.pickrate })),
     }
 
@@ -1469,6 +1537,9 @@ export async function getOverviewSidesStats(
       .slice(0, 20)
     const bansBySide = { blue: bansBlue, red: bansRed }
 
+    const matchWhere = buildMatchWhere(version, rankTier)
+    const surrenderBySide = await loadSurrenderBySideCounts(matchWhere, blueSide.matches, redSide.matches)
+
     const objBySideSql = `
       SELECT t.team AS team_id,
         SUM(CASE WHEN t.first_blood THEN 1 ELSE 0 END)::int AS first_blood,
@@ -1696,6 +1767,7 @@ export async function getOverviewSidesStats(
       championWinrateBySide,
       championPickBySide,
       bansBySide,
+      surrenderBySide,
       drakesBySide,
       objectivesBySide,
       objectivesBySideTable,

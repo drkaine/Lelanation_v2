@@ -448,7 +448,7 @@ import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
-import { enableCaptureMode, disableCaptureMode, fixCloneForCapture } from '~/utils/buildCardCapture'
+import { captureBuildCardBlob } from '~/utils/buildCardCapture'
 
 const { t } = useI18n()
 const buildStore = useBuildStore()
@@ -752,38 +752,14 @@ const copyBuildLink = async (buildId: string) => {
   }
 }
 
-const captureBuildImage = async (buildId: string): Promise<Blob | null> => {
+const captureBuildImage = (buildId: string): Promise<Blob | null> => {
   const cardElement = buildCardRefs.value[buildId]
-  if (!cardElement) return null
+  if (!cardElement) return Promise.resolve(null)
 
-  try {
-    const buildCardWrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
-    if (!buildCardWrapper) return null
+  const buildCardWrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
+  if (!buildCardWrapper) return Promise.resolve(null)
 
-    enableCaptureMode(buildCardWrapper)
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    const domtoimage = await import('dom-to-image-more')
-    const blob = await domtoimage.toBlob(buildCardWrapper, {
-      bgcolor: '#091428',
-      quality: 1.0,
-      cacheBust: true,
-      filter: (node: Node) => {
-        if (node instanceof HTMLElement && node.classList.contains('build-card-back')) {
-          return false
-        }
-        return true
-      },
-      onclone: (clone: HTMLElement) => fixCloneForCapture(clone),
-    })
-
-    disableCaptureMode(buildCardWrapper)
-    return blob
-  } catch {
-    const wrapper = cardElement.querySelector('.build-card-wrapper') as HTMLElement
-    if (wrapper) disableCaptureMode(wrapper)
-    return null
-  }
+  return captureBuildCardBlob(buildCardWrapper)
 }
 
 const downloadBuildImage = async (buildId: string) => {

@@ -1238,7 +1238,7 @@
                     </div>
                   </div>
 
-                  <!-- Répartition des parties (surrender early / surrender / reste) -->
+                  <!-- Répartition des parties — donut SVG comme Solo/Duo + une carte par côté -->
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
@@ -1271,41 +1271,176 @@
                         t('statisticsPage.overviewMatchOutcomesTitle')
                       }}</span>
                     </h3>
-                    <div v-if="overviewAbandonsPending" class="py-3 text-center text-text/60">
+                    <div
+                      v-if="overviewAbandonsPending || overviewPending"
+                      class="py-3 text-center text-text/60"
+                    >
                       {{ t('statisticsPage.loading') }}
                     </div>
-                    <div v-else-if="overviewMatchOutcomeTotal > 0" class="flex items-center gap-2">
-                      <div
-                        class="overview-match-outcome-bagel h-16 w-16 shrink-0 rounded-full"
-                        :style="{ background: overviewMatchOutcomeDonutBg }"
-                        aria-hidden="true"
-                      >
-                        <div
-                          class="flex h-full w-full items-center justify-center rounded-full text-[9px] font-semibold text-text/85"
-                        >
-                          {{ overviewPlayedPct.toFixed(0) }}%
-                        </div>
-                      </div>
-                      <div class="space-y-1 text-xs">
+                    <div
+                      v-else-if="overviewMatchOutcomeTotal > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="overviewMatchOutcomeTotal"
+                        :early="overviewEarlySurrenderCount"
+                        :surrender-only="overviewSurrenderOnlyCount"
+                        :played="overviewPlayedCount"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
                         <div class="font-medium text-text">
                           Total: {{ overviewMatchOutcomeTotal.toLocaleString() }}
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-300" />
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
+                          />
                           Early surrender: {{ overviewEarlySurrenderCount.toLocaleString() }} ({{
                             overviewEarlySurrenderPct.toFixed(2)
                           }}%)
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-amber-50" />
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
                           Surrender: {{ overviewSurrenderOnlyCount.toLocaleString() }} ({{
                             overviewSurrenderOnlyPct.toFixed(2)
                           }}%)
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
-                          <span class="inline-block h-2.5 w-2.5 rounded-full bg-blue-300" />
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
                           Jouees: {{ overviewPlayedCount.toLocaleString() }} ({{
                             overviewPlayedPct.toFixed(2)
+                          }}%)
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
+                    </div>
+                  </div>
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-blue-500/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.sidesBlue') }} —
+                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    </h3>
+                    <div v-if="overviewPending" class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div
+                      v-else-if="overviewBlueMatchOutcome.total > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="overviewBlueMatchOutcome.total"
+                        :early="overviewBlueMatchOutcome.early"
+                        :surrender-only="overviewBlueMatchOutcome.surrenderOnly"
+                        :played="overviewBlueMatchOutcome.played"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ overviewBlueMatchOutcome.total.toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
+                          />
+                          Early surrender: {{ overviewBlueMatchOutcome.early.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewBlueMatchOutcome.early,
+                              overviewBlueMatchOutcome.total
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
+                          Surrender:
+                          {{ overviewBlueMatchOutcome.surrenderOnly.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewBlueMatchOutcome.surrenderOnly,
+                              overviewBlueMatchOutcome.total
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
+                          Jouees: {{ overviewBlueMatchOutcome.played.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewBlueMatchOutcome.played,
+                              overviewBlueMatchOutcome.total
+                            )
+                          }}%)
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
+                    </div>
+                  </div>
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-red-500/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.sidesRed') }} —
+                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    </h3>
+                    <div v-if="overviewPending" class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div
+                      v-else-if="overviewRedMatchOutcome.total > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="overviewRedMatchOutcome.total"
+                        :early="overviewRedMatchOutcome.early"
+                        :surrender-only="overviewRedMatchOutcome.surrenderOnly"
+                        :played="overviewRedMatchOutcome.played"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ overviewRedMatchOutcome.total.toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
+                          />
+                          Early surrender: {{ overviewRedMatchOutcome.early.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewRedMatchOutcome.early,
+                              overviewRedMatchOutcome.total
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
+                          Surrender:
+                          {{ overviewRedMatchOutcome.surrenderOnly.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewRedMatchOutcome.surrenderOnly,
+                              overviewRedMatchOutcome.total
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
+                          Jouees: {{ overviewRedMatchOutcome.played.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              overviewRedMatchOutcome.played,
+                              overviewRedMatchOutcome.total
+                            )
                           }}%)
                         </div>
                       </div>
@@ -2384,306 +2519,402 @@
             </div>
           </div>
 
-          <!-- Tab: Par côté (Blue / Red) -->
+          <!-- Tab: Par côté — fast-stats comme vue d’ensemble -->
           <div v-show="activeTab === 'team'" class="space-y-6">
             <div class="rounded-lg">
-              <h2 class="mb-4 text-xl font-semibold text-text-accent">
-                {{ t('statisticsPage.sidesTitle') }}
-              </h2>
-              <p class="mb-4 text-text/80">
-                {{ t('statisticsPage.sidesDescription') }}
-              </p>
               <div v-if="overviewSidesPending" class="text-text/70">
                 {{ t('statisticsPage.loading') }}
               </div>
-              <div v-else-if="overviewSidesData" class="space-y-6">
-                <!-- Donut Blue / Red % victoire (cercle entier, Solo/duo) -->
+              <div v-else-if="overviewSidesData" class="space-y-3">
                 <div
-                  class="flex flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-6"
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
                 >
                   <div
-                    class="pie-chart-2 relative inline-flex h-[150px] w-[150px] items-center justify-center"
-                    style="padding: 0"
+                    class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-2"
                   >
-                    <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
-                      <!-- Fond du donut (cercle entier) -->
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="48"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="14"
-                        stroke-linecap="butt"
-                        class="text-surface/50 dark:text-surface/40"
-                        :stroke-dasharray="sidesDonutCircumference + ' ' + sidesDonutCircumference"
-                        stroke-dashoffset="0"
-                      />
-                      <!-- Part bleue -->
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="48"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="14"
-                        stroke-linecap="butt"
-                        class="text-blue-500 dark:text-blue-400"
-                        :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
-                        stroke-dashoffset="0"
-                      />
-                      <!-- Part rouge -->
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="48"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="14"
-                        stroke-linecap="butt"
-                        class="text-red-500 dark:text-red-400"
-                        :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
-                        :stroke-dashoffset="-sidesDonutBlueDash"
-                      />
-                    </svg>
-                    <div class="relative z-10 flex flex-col items-center text-center">
-                      <span class="block text-xl font-bold text-blue-600 dark:text-blue-400">
-                        {{ sidesDonutBluePct }}%
-                      </span>
-                      <span class="block text-lg font-medium text-red-600 dark:text-red-400">
-                        {{ sidesDonutRedPct }}%
-                      </span>
+                    <h3
+                      class="fast-stat-title mb-2 w-full text-sm font-semibold text-text lg:text-left"
+                    >
+                      {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
+                    </h3>
+                    <div
+                      class="pie-chart-2 relative inline-flex h-[150px] w-[150px] shrink-0 items-center justify-center"
+                    >
+                      <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="48"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="14"
+                          stroke-linecap="butt"
+                          class="text-surface/50 dark:text-surface/40"
+                          :stroke-dasharray="
+                            sidesDonutCircumference + ' ' + sidesDonutCircumference
+                          "
+                          stroke-dashoffset="0"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="48"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="14"
+                          stroke-linecap="butt"
+                          class="text-blue-500 dark:text-blue-400"
+                          :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
+                          stroke-dashoffset="0"
+                        />
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="48"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="14"
+                          stroke-linecap="butt"
+                          class="text-red-500 dark:text-red-400"
+                          :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
+                          :stroke-dashoffset="-sidesDonutBlueDash"
+                        />
+                      </svg>
+                      <div class="relative z-10 flex flex-col items-center text-center">
+                        <span class="block text-xl font-bold text-blue-600 dark:text-blue-400">
+                          {{ sidesDonutBluePct }}%
+                        </span>
+                        <span class="block text-lg font-medium text-red-600 dark:text-red-400">
+                          {{ sidesDonutRedPct }}%
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <p class="mt-3 text-sm text-text/70">
-                    {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
-                  </p>
-                </div>
-                <!-- Champions les plus joués par côté -->
-                <div>
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.sidesMostPlayedBySide') }}
-                  </h3>
-                  <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                        {{ t('statisticsPage.sidesBlue') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="c in (overviewSidesData.championPickBySide?.blue ?? []).slice(
-                            0,
-                            sidesExpandPickBlue ? 20 : 5
-                          )"
-                          :key="'pick-blue-' + c.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                          :title="
-                            (championName(c.championId) ?? c.championId) +
-                            ' — ' +
-                            c.games +
-                            ' parties'
-                          "
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(c.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(c.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(c.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    </h3>
+                    <div
+                      v-if="sidesSurrenderTotal > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="sidesSurrenderTotal"
+                        :early="sidesEarlySurrenderCount"
+                        :surrender-only="sidesSurrenderOnlyCount"
+                        :played="sidesPlayedCount"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ sidesSurrenderTotal.toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
                           />
-                          <span class="text-xs text-text/80"
-                            >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
-                          >
+                          Early surrender: {{ sidesEarlySurrenderCount.toLocaleString() }} ({{
+                            sidesEarlySurrenderPct.toFixed(2)
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
+                          Surrender: {{ sidesSurrenderOnlyCount.toLocaleString() }} ({{
+                            sidesSurrenderOnlyPct.toFixed(2)
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
+                          Jouees: {{ sidesPlayedCount.toLocaleString() }} ({{
+                            sidesPlayedPct.toFixed(2)
+                          }}%)
                         </div>
                       </div>
-                      <button
-                        v-if="(overviewSidesData.championPickBySide?.blue ?? []).length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandPickBlue = !sidesExpandPickBlue"
-                      >
-                        {{
-                          sidesExpandPickBlue
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
                     </div>
-                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                        {{ t('statisticsPage.sidesRed') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="c in (overviewSidesData.championPickBySide?.red ?? []).slice(
-                            0,
-                            sidesExpandPickRed ? 20 : 5
-                          )"
-                          :key="'pick-red-' + c.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                          :title="
-                            (championName(c.championId) ?? c.championId) +
-                            ' — ' +
-                            c.games +
-                            ' parties'
-                          "
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(c.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(c.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(c.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
-                          />
-                          <span class="text-xs text-text/80"
-                            >{{ c.games }} ({{ Number(c.winrate).toFixed(2) }}%)</span
-                          >
-                        </div>
-                      </div>
-                      <button
-                        v-if="(overviewSidesData.championPickBySide?.red ?? []).length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandPickRed = !sidesExpandPickRed"
-                      >
-                        {{
-                          sidesExpandPickRed
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
                     </div>
                   </div>
-                </div>
-                <!-- Champions par côté (top winrate, min 10 games) -->
-                <div>
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.sidesChampionsBySide') }}
-                  </h3>
-                  <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                        {{ t('statisticsPage.sidesBlue') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="c in overviewSidesChampionWinrateBySide.blue.slice(
-                            0,
-                            sidesExpandBlue ? 20 : 5
-                          )"
-                          :key="'blue-' + c.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                          :title="
-                            (championName(c.championId) ?? c.championId) +
-                            ' — ' +
-                            Number(c.winrate).toFixed(2) +
-                            '%'
-                          "
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(c.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(c.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(c.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-blue-500/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.sidesBlue') }} —
+                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    </h3>
+                    <div
+                      v-if="Number(sidesSurrenderBySide.blue.total) > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="Number(sidesSurrenderBySide.blue.total)"
+                        :early="Number(sidesSurrenderBySide.blue.earlySurrenderCount)"
+                        :surrender-only="sidesBlueSurrenderOnlyCount"
+                        :played="sidesBluePlayedCount"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ Number(sidesSurrenderBySide.blue.total).toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
                           />
-                          <span class="text-xs text-text/80"
-                            >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
-                          >
+                          Early surrender:
+                          {{
+                            Number(sidesSurrenderBySide.blue.earlySurrenderCount).toLocaleString()
+                          }}
+                          ({{
+                            matchOutcomePct(
+                              Number(sidesSurrenderBySide.blue.earlySurrenderCount),
+                              Number(sidesSurrenderBySide.blue.total)
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
+                          Surrender: {{ sidesBlueSurrenderOnlyCount.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              sidesBlueSurrenderOnlyCount,
+                              Number(sidesSurrenderBySide.blue.total)
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
+                          Jouees: {{ sidesBluePlayedCount.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              sidesBluePlayedCount,
+                              Number(sidesSurrenderBySide.blue.total)
+                            )
+                          }}%)
                         </div>
                       </div>
-                      <button
-                        v-if="overviewSidesChampionWinrateBySide.blue.length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandBlue = !sidesExpandBlue"
-                      >
-                        {{
-                          sidesExpandBlue
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
                     </div>
-                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                        {{ t('statisticsPage.sidesRed') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="c in overviewSidesChampionWinrateBySide.red.slice(
-                            0,
-                            sidesExpandRed ? 20 : 5
-                          )"
-                          :key="'red-' + c.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                          :title="
-                            (championName(c.championId) ?? c.championId) +
-                            ' — ' +
-                            Number(c.winrate).toFixed(2) +
-                            '%'
-                          "
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(c.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(c.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(c.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
-                          />
-                          <span class="text-xs text-text/80"
-                            >{{ Number(c.winrate).toFixed(2) }}% ({{ c.games }})</span
-                          >
-                        </div>
-                      </div>
-                      <button
-                        v-if="overviewSidesChampionWinrateBySide.red.length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandRed = !sidesExpandRed"
-                      >
-                        {{
-                          sidesExpandRed
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
                     </div>
                   </div>
+                  <div
+                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-red-500/30 bg-surface/30 p-2"
+                  >
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                      {{ t('statisticsPage.sidesRed') }} —
+                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    </h3>
+                    <div
+                      v-if="Number(sidesSurrenderBySide.red.total) > 0"
+                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
+                    >
+                      <StatisticsMatchOutcomeDonut
+                        :total="Number(sidesSurrenderBySide.red.total)"
+                        :early="Number(sidesSurrenderBySide.red.earlySurrenderCount)"
+                        :surrender-only="sidesRedSurrenderOnlyCount"
+                        :played="sidesRedPlayedCount"
+                      />
+                      <div class="min-w-0 space-y-1 text-xs">
+                        <div class="font-medium text-text">
+                          Total: {{ Number(sidesSurrenderBySide.red.total).toLocaleString() }}
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
+                          />
+                          Early surrender:
+                          {{
+                            Number(sidesSurrenderBySide.red.earlySurrenderCount).toLocaleString()
+                          }}
+                          ({{
+                            matchOutcomePct(
+                              Number(sidesSurrenderBySide.red.earlySurrenderCount),
+                              Number(sidesSurrenderBySide.red.total)
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
+                          />
+                          Surrender: {{ sidesRedSurrenderOnlyCount.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              sidesRedSurrenderOnlyCount,
+                              Number(sidesSurrenderBySide.red.total)
+                            )
+                          }}%)
+                        </div>
+                        <div class="flex items-center gap-2 text-text/85">
+                          <span
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                          />
+                          Jouees: {{ sidesRedPlayedCount.toLocaleString() }} ({{
+                            matchOutcomePct(
+                              sidesRedPlayedCount,
+                              Number(sidesSurrenderBySide.red.total)
+                            )
+                          }}%)
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else class="py-3 text-center text-text/60">
+                      {{ t('statisticsPage.overviewNoData') }}
+                    </div>
+                  </div>
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.fastStatsMostPicked')"
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="pick"
+                    :rows="sidesBlueMostPickedRows"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.fastStatsMostPicked')"
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="pick"
+                    :rows="sidesRedMostPickedRows"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.fastStatsBestWinrate')"
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="wr"
+                    :rows="sidesBlueBestWinrateRows"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.fastStatsBestWinrate')"
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="wr"
+                    :rows="sidesRedBestWinrateRows"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.sidesBansBySide')"
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="ban"
+                    :rows="sidesBlueBanRows"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="t('statisticsPage.sidesBansBySide')"
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="ban"
+                    :rows="sidesRedBanRows"
+                  />
                 </div>
-                <!-- Objectifs par côté (table comme vue d'ensemble, colonnes Bleu / Rouge) -->
-                <div>
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.sidesObjectivesBySide') }}
-                  </h3>
-                  <p class="mb-3 text-xs text-text/60">
-                    {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
-                  </p>
-                  <div class="overflow-x-auto">
+
+                <div
+                  v-if="progressionFromVersion"
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
+                >
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsWinrateSince', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="dWr"
+                    :rows="sidesBlueTopWinrateSince"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsWinrateSince', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="dWr"
+                    :rows="sidesRedTopWinrateSince"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsPickrateSinceTitle', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="dPick"
+                    :rows="sidesBlueTopPickrateSince"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsPickrateSinceTitle', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="dPick"
+                    :rows="sidesRedTopPickrateSince"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsBanrateSinceTitle', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-blue-500/30"
+                    variant="dBan"
+                    :rows="sidesBlueTopBanrateSince"
+                  />
+                  <StatisticsTeamSideFastStatTable
+                    :title="
+                      t('statisticsPage.fastStatsBanrateSinceTitle', {
+                        version: progressionFromVersion,
+                      })
+                    "
+                    border-class="border-[1.5px] border-red-500/30"
+                    variant="dBan"
+                    :rows="sidesRedTopBanrateSince"
+                  />
+                </div>
+
+                <div
+                  v-if="overviewSidesData && overviewSidesData.matchCount > 0"
+                  class="fast-stat-card fast-stat-card-objectives rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-6"
+                >
+                  <div class="mb-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                      :class="
+                        objectivesSidesPanelTab === 'objectives'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
+                      "
+                      @click="objectivesSidesPanelTab = 'objectives'"
+                    >
+                      {{ t('statisticsPage.objectivesTabMain') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                      :class="
+                        objectivesSidesPanelTab === 'drakeTypes'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
+                      "
+                      @click="objectivesSidesPanelTab = 'drakeTypes'"
+                    >
+                      {{ t('statisticsPage.objectivesTabDrakeTypes') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
+                      :class="
+                        objectivesSidesPanelTab === 'drakeSouls'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
+                      "
+                      @click="objectivesSidesPanelTab = 'drakeSouls'"
+                    >
+                      {{ t('statisticsPage.objectivesTabSouls') }}
+                    </button>
+                  </div>
+                  <div v-if="objectivesSidesPanelTab === 'objectives'" class="overflow-x-auto">
                     <table class="w-full min-w-[280px] text-left text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-text/70">
@@ -2791,97 +3022,116 @@
                       </tbody>
                     </table>
                   </div>
-                </div>
-                <!-- Bans par côté -->
-                <div>
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.sidesBansBySide') }}
-                  </h3>
-                  <div class="grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-lg border border-blue-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-blue-600 dark:text-blue-400">
-                        {{ t('statisticsPage.sidesBlue') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="b in overviewSidesBansBySide.blue.slice(
-                            0,
-                            sidesExpandBansBlue ? 20 : 5
-                          )"
-                          :key="'ban-blue-' + b.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(b.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(b.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(b.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
-                          />
-                          <span class="text-xs text-text/80">{{ b.count }}</span>
-                        </div>
-                      </div>
-                      <button
-                        v-if="overviewSidesBansBySide.blue.length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandBansBlue = !sidesExpandBansBlue"
-                      >
-                        {{
-                          sidesExpandBansBlue
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
-                    </div>
-                    <div class="rounded-lg border border-red-500/30 bg-surface/30 p-4">
-                      <h4 class="mb-2 font-medium text-red-600 dark:text-red-400">
-                        {{ t('statisticsPage.sidesRed') }}
-                      </h4>
-                      <div class="flex flex-wrap gap-2">
-                        <div
-                          v-for="b in overviewSidesBansBySide.red.slice(
-                            0,
-                            sidesExpandBansRed ? 20 : 5
-                          )"
-                          :key="'ban-red-' + b.championId"
-                          class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                        >
-                          <img
-                            v-if="gameVersion && championByKey(b.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(b.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(b.championId) ?? ''"
-                            class="h-6 w-6 rounded-full object-cover"
-                            width="24"
-                            height="24"
-                          />
-                          <span class="text-xs text-text/80">{{ b.count }}</span>
-                        </div>
-                      </div>
-                      <button
-                        v-if="overviewSidesBansBySide.red.length > 5"
-                        type="button"
-                        class="mt-2 text-sm font-medium text-accent hover:underline"
-                        @click="sidesExpandBansRed = !sidesExpandBansRed"
-                      >
-                        {{
-                          sidesExpandBansRed
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        }}
-                      </button>
-                    </div>
+                  <div v-else-if="objectivesSidesPanelTab === 'drakeTypes'" class="overflow-x-auto">
+                    <table class="w-full min-w-[280px] text-left text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/30 text-text/70">
+                          <th class="py-1.5 pr-2 font-medium">
+                            {{ t('statisticsPage.overviewTeamsObjective') }}
+                          </th>
+                          <th
+                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
+                          >
+                            {{ t('statisticsPage.sidesBlue') }}
+                          </th>
+                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
+                            {{ t('statisticsPage.sidesRed') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-primary/20 text-text/80">
+                        <tr v-for="row in sidesDrakeTypeRows" :key="'sdt-' + row.key">
+                          <td class="py-1.5 pr-2 font-medium text-text/90">
+                            <div class="flex items-center gap-2">
+                              <img
+                                v-if="drakeIconSrc(row.key)"
+                                :src="drakeIconSrc(row.key)"
+                                :alt="row.label"
+                                class="h-4 w-4 object-contain"
+                                loading="lazy"
+                                decoding="async"
+                              />
+                              <span>{{ row.label }}</span>
+                            </div>
+                          </td>
+                          <td class="py-1.5 pr-2 text-center">
+                            {{ teamPercent(row.byBlue, overviewSidesData.matchCount) }}
+                          </td>
+                          <td class="py-1.5 text-center">
+                            {{ teamPercent(row.byRed, overviewSidesData.matchCount) }}
+                          </td>
+                        </tr>
+                        <tr v-if="sidesDrakeTypeRows.length === 0">
+                          <td colspan="3" class="py-2 text-center text-text/60">
+                            {{ t('statisticsPage.noData') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[280px] text-left text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/30 text-text/70">
+                          <th class="py-1.5 pr-2 font-medium">
+                            {{ t('statisticsPage.overviewTeamsObjective') }}
+                          </th>
+                          <th
+                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
+                          >
+                            {{ t('statisticsPage.sidesBlue') }}
+                          </th>
+                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
+                            {{ t('statisticsPage.sidesRed') }}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-primary/20 text-text/80">
+                        <tr>
+                          <td class="py-1.5 pr-2 font-medium text-text/90">
+                            {{ t('statisticsPage.objectivesSoulGlobal') }}
+                          </td>
+                          <td class="py-1.5 pr-2 text-center">
+                            {{
+                              teamPercent(sidesDrakeSoulGlobal.byBlue, overviewSidesData.matchCount)
+                            }}
+                          </td>
+                          <td class="py-1.5 text-center">
+                            {{
+                              teamPercent(sidesDrakeSoulGlobal.byRed, overviewSidesData.matchCount)
+                            }}
+                          </td>
+                        </tr>
+                        <template v-for="row in sidesDrakeSoulRows" :key="'sds-' + row.key">
+                          <tr>
+                            <td class="py-1.5 pr-2 font-medium text-text/90">
+                              <div class="flex items-center gap-2">
+                                <img
+                                  v-if="drakeIconSrc(row.key)"
+                                  :src="drakeIconSrc(row.key)"
+                                  :alt="row.label"
+                                  class="h-4 w-4 object-contain"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                                <span>{{ row.label }}</span>
+                              </div>
+                            </td>
+                            <td class="py-1.5 pr-2 text-center">
+                              {{ teamPercent(row.byBlue, overviewSidesData.matchCount) }}
+                            </td>
+                            <td class="py-1.5 text-center">
+                              {{ teamPercent(row.byRed, overviewSidesData.matchCount) }}
+                            </td>
+                          </tr>
+                        </template>
+                        <tr v-if="sidesDrakeSoulRows.length === 0">
+                          <td colspan="3" class="py-2 text-center text-text/60">
+                            {{ t('statisticsPage.noData') }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -2890,7 +3140,6 @@
               </div>
             </div>
           </div>
-
           <!-- Tab: Champions -->
           <div v-show="activeTab === 'infos'" class="space-y-2">
             <div v-if="championsPending" class="text-text/70">
@@ -4786,6 +5035,10 @@ const overviewData = ref<{
   matchesByDivision: Array<{ rankTier: string; matchCount: number }>
   matchesByVersion?: Array<{ version: string; matchCount: number }>
   playerCount: number
+  surrenderBySide?: {
+    blue: { total: number; earlySurrenderCount: number; surrenderCount: number }
+    red: { total: number; earlySurrenderCount: number; surrenderCount: number }
+  }
 } | null>(null)
 const overviewPending = ref(true)
 /** Selected version filter for overview (null = all versions). */
@@ -5222,16 +5475,29 @@ const overviewPlayedPct = computed(() =>
     ? (overviewPlayedCount.value / overviewMatchOutcomeTotal.value) * 100
     : 0
 )
-const overviewMatchOutcomeDonutBg = computed(() => {
-  const e = overviewEarlySurrenderPct.value
-  const s = overviewSurrenderOnlyPct.value
-  const p = Math.max(0, 100 - e - s)
-  return `conic-gradient(
-    rgb(253 230 138) 0% ${e}%,
-    rgb(255 251 235) ${e}% ${e + s}%,
-    rgb(147 197 253) ${e + s}% ${e + s + p}%,
-    rgb(var(--rgb-primary) / 0.2) ${e + s + p}% 100%
-  )`
+function matchOutcomePct(part: number, total: number): string {
+  if (!total) return '0.00'
+  return ((part / total) * 100).toFixed(2)
+}
+const overviewBlueMatchOutcome = computed(() => {
+  const s = overviewData.value?.surrenderBySide?.blue
+  if (!s) return { total: 0, early: 0, surrenderOnly: 0, played: 0 } as const
+  const total = Math.max(0, Number(s.total))
+  const early = Math.max(0, Number(s.earlySurrenderCount))
+  const surr = Math.max(0, Number(s.surrenderCount))
+  const surrenderOnly = Math.max(0, surr - early)
+  const played = Math.max(0, total - early - surrenderOnly)
+  return { total, early, surrenderOnly, played } as const
+})
+const overviewRedMatchOutcome = computed(() => {
+  const s = overviewData.value?.surrenderBySide?.red
+  if (!s) return { total: 0, early: 0, surrenderOnly: 0, played: 0 } as const
+  const total = Math.max(0, Number(s.total))
+  const early = Math.max(0, Number(s.earlySurrenderCount))
+  const surr = Math.max(0, Number(s.surrenderCount))
+  const surrenderOnly = Math.max(0, surr - early)
+  const played = Math.max(0, total - early - surrenderOnly)
+  return { total, early, surrenderOnly, played } as const
 })
 /** Progression: WR delta from oldest version to all since. For "Winrate depuis X" encart. */
 const overviewProgressionData = ref<{
@@ -5688,26 +5954,205 @@ const overviewSidesData = ref<{
     blue: Array<{ championId: number; count: number }>
     red: Array<{ championId: number; count: number }>
   }
+  drakesBySide?: {
+    types: Record<string, { byBlue: number; byRed: number }>
+    souls: Record<string, { byBlue: number; byRed: number }>
+  }
+  surrenderBySide?: {
+    blue: {
+      total: number
+      earlySurrenderCount: number
+      surrenderCount: number
+    }
+    red: {
+      total: number
+      earlySurrenderCount: number
+      surrenderCount: number
+    }
+  }
 } | null>(null)
 const overviewSidesPending = ref(false)
-const overviewSidesChampionWinrateBySide = computed(() => ({
-  blue: overviewSidesData.value?.championWinrateBySide?.blue ?? [],
-  red: overviewSidesData.value?.championWinrateBySide?.red ?? [],
-}))
-const overviewSidesBansBySide = computed(() => ({
-  blue: overviewSidesData.value?.bansBySide?.blue ?? [],
-  red: overviewSidesData.value?.bansBySide?.red ?? [],
-}))
+type OverviewSidesProgRow = {
+  championId: number
+  wrOldest: number
+  wrSince: number
+  deltaWr: number
+  pickrateOldest: number
+  pickrateSince: number
+  deltaPick: number
+  banrateOldest: number
+  banrateSince: number
+  deltaBan: number
+}
+const overviewSidesProgressionData = ref<{
+  oldestVersion: string | null
+  blue: OverviewSidesProgRow[]
+  red: OverviewSidesProgRow[]
+} | null>(null)
+const objectivesSidesPanelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
 const overviewSidesSideWinrate = computed(() => ({
   blue: overviewSidesData.value?.sideWinrate?.blue ?? { matches: 0, wins: 0, winrate: 0 },
   red: overviewSidesData.value?.sideWinrate?.red ?? { matches: 0, wins: 0, winrate: 0 },
 }))
-const sidesExpandBlue = ref(false)
-const sidesExpandRed = ref(false)
-const sidesExpandPickBlue = ref(false)
-const sidesExpandPickRed = ref(false)
-const sidesExpandBansBlue = ref(false)
-const sidesExpandBansRed = ref(false)
+const sidesBlueMostPickedRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championPickBySide?.blue ?? [])
+  const tot = raw.reduce((s, r) => s + r.games, 0) || 1
+  return [...raw]
+    .map(r => ({ championId: r.championId, pickrate: (r.games / tot) * 100 }))
+    .sort((a, b) => b.pickrate - a.pickrate)
+})
+const sidesRedMostPickedRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championPickBySide?.red ?? [])
+  const tot = raw.reduce((s, r) => s + r.games, 0) || 1
+  return [...raw]
+    .map(r => ({ championId: r.championId, pickrate: (r.games / tot) * 100 }))
+    .sort((a, b) => b.pickrate - a.pickrate)
+})
+const sidesBlueBestWinrateRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(
+    overviewSidesData.value?.championWinrateBySide?.blue ?? []
+  )
+  return [...raw].filter(r => r.games >= 10).sort((a, b) => b.winrate - a.winrate)
+})
+const sidesRedBestWinrateRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championWinrateBySide?.red ?? [])
+  return [...raw].filter(r => r.games >= 10).sort((a, b) => b.winrate - a.winrate)
+})
+const sidesBlueBanRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.blue ?? [])
+  return [...raw].sort((a, b) => b.count - a.count)
+})
+const sidesRedBanRows = computed(() => {
+  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.red ?? [])
+  return [...raw].sort((a, b) => b.count - a.count)
+})
+const sidesBlueTopWinrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => b.deltaWr - a.deltaWr
+  )
+)
+const sidesRedTopWinrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => b.deltaWr - a.deltaWr
+  )
+)
+const sidesBlueTopPickrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => b.deltaPick - a.deltaPick
+  )
+)
+const sidesRedTopPickrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => b.deltaPick - a.deltaPick
+  )
+)
+const sidesBlueTopBanrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => b.deltaBan - a.deltaBan
+  )
+)
+const sidesRedTopBanrateSince = computed(() =>
+  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => b.deltaBan - a.deltaBan
+  )
+)
+const sidesDrakeTypeRows = computed(() => {
+  const d = overviewSidesData.value?.drakesBySide?.types
+  if (!d) return []
+  return [
+    {
+      key: 'elder',
+      label: t('statisticsPage.overviewTeamsObjective_elder'),
+      byBlue: d.elder?.byBlue ?? 0,
+      byRed: d.elder?.byRed ?? 0,
+    },
+    {
+      key: 'earth',
+      label: t('statisticsPage.drakeTypeEarth'),
+      byBlue: d.earth?.byBlue ?? 0,
+      byRed: d.earth?.byRed ?? 0,
+    },
+    {
+      key: 'water',
+      label: t('statisticsPage.drakeTypeWater'),
+      byBlue: d.water?.byBlue ?? 0,
+      byRed: d.water?.byRed ?? 0,
+    },
+    {
+      key: 'wind',
+      label: t('statisticsPage.drakeTypeWind'),
+      byBlue: d.wind?.byBlue ?? 0,
+      byRed: d.wind?.byRed ?? 0,
+    },
+    {
+      key: 'fire',
+      label: t('statisticsPage.drakeTypeFire'),
+      byBlue: d.fire?.byBlue ?? 0,
+      byRed: d.fire?.byRed ?? 0,
+    },
+    {
+      key: 'hextec',
+      label: t('statisticsPage.drakeTypeHextec'),
+      byBlue: d.hextec?.byBlue ?? 0,
+      byRed: d.hextec?.byRed ?? 0,
+    },
+    {
+      key: 'chem',
+      label: t('statisticsPage.drakeTypeChem'),
+      byBlue: d.chem?.byBlue ?? 0,
+      byRed: d.chem?.byRed ?? 0,
+    },
+  ]
+})
+const sidesDrakeSoulRows = computed(() => {
+  const d = overviewSidesData.value?.drakesBySide?.souls
+  if (!d) return []
+  return [
+    {
+      key: 'earth',
+      label: t('statisticsPage.drakeTypeEarth'),
+      byBlue: d.earth?.byBlue ?? 0,
+      byRed: d.earth?.byRed ?? 0,
+    },
+    {
+      key: 'water',
+      label: t('statisticsPage.drakeTypeWater'),
+      byBlue: d.water?.byBlue ?? 0,
+      byRed: d.water?.byRed ?? 0,
+    },
+    {
+      key: 'wind',
+      label: t('statisticsPage.drakeTypeWind'),
+      byBlue: d.wind?.byBlue ?? 0,
+      byRed: d.wind?.byRed ?? 0,
+    },
+    {
+      key: 'fire',
+      label: t('statisticsPage.drakeTypeFire'),
+      byBlue: d.fire?.byBlue ?? 0,
+      byRed: d.fire?.byRed ?? 0,
+    },
+    {
+      key: 'hextec',
+      label: t('statisticsPage.drakeTypeHextec'),
+      byBlue: d.hextec?.byBlue ?? 0,
+      byRed: d.hextec?.byRed ?? 0,
+    },
+    {
+      key: 'chem',
+      label: t('statisticsPage.drakeTypeChem'),
+      byBlue: d.chem?.byBlue ?? 0,
+      byRed: d.chem?.byRed ?? 0,
+    },
+  ]
+})
+const sidesDrakeSoulGlobal = computed(() => {
+  const rows = sidesDrakeSoulRows.value
+  return {
+    byBlue: rows.reduce((s, r) => s + r.byBlue, 0),
+    byRed: rows.reduce((s, r) => s + r.byRed, 0),
+  }
+})
 const sidesObjectiveKeysWithKills = [
   'baron',
   'dragon',
@@ -5835,6 +6280,15 @@ function sidesQueryParams(): string {
   const s = params.toString()
   return s ? '?' + s : ''
 }
+function sidesProgressionQueryParams(): string {
+  const params = new URLSearchParams()
+  if (progressionFromVersion.value) params.set('version', progressionFromVersion.value)
+  if (statsVersionFilter.value) params.set('sinceVersion', statsVersionFilter.value)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  const s = params.toString()
+  return s ? '?' + s : ''
+}
 /** Donut: circumference for r=48 */
 const sidesDonutCircumference = 2 * Math.PI * 48
 /** Nombre réel de matchs (1 victoire par match, donc blue.wins + red.wins). matchCount côté API = blue.matches + red.matches = 2× matchs. */
@@ -5867,15 +6321,96 @@ const sidesDonutRedDash = computed(() => {
   const pct = overviewSidesSideWinrate.value.red.wins / total
   return sidesDonutCircumference * pct
 })
+const sidesSurrenderBySide = computed(() => ({
+  blue: overviewSidesData.value?.surrenderBySide?.blue ?? {
+    total: overviewSidesSideWinrate.value.blue.matches,
+    earlySurrenderCount: 0,
+    surrenderCount: 0,
+  },
+  red: overviewSidesData.value?.surrenderBySide?.red ?? {
+    total: overviewSidesSideWinrate.value.red.matches,
+    earlySurrenderCount: 0,
+    surrenderCount: 0,
+  },
+}))
+const sidesSurrenderTotal = computed(
+  () => Number(sidesSurrenderBySide.value.blue.total) + Number(sidesSurrenderBySide.value.red.total)
+)
+const sidesEarlySurrenderCount = computed(
+  () =>
+    Number(sidesSurrenderBySide.value.blue.earlySurrenderCount) +
+    Number(sidesSurrenderBySide.value.red.earlySurrenderCount)
+)
+const sidesSurrenderOnlyCount = computed(() => {
+  const allSurrenders =
+    Number(sidesSurrenderBySide.value.blue.surrenderCount) +
+    Number(sidesSurrenderBySide.value.red.surrenderCount)
+  return Math.max(0, allSurrenders - sidesEarlySurrenderCount.value)
+})
+const sidesPlayedCount = computed(() =>
+  Math.max(
+    0,
+    sidesSurrenderTotal.value - sidesEarlySurrenderCount.value - sidesSurrenderOnlyCount.value
+  )
+)
+const sidesEarlySurrenderPct = computed(() =>
+  sidesSurrenderTotal.value > 0
+    ? (sidesEarlySurrenderCount.value / sidesSurrenderTotal.value) * 100
+    : 0
+)
+const sidesSurrenderOnlyPct = computed(() =>
+  sidesSurrenderTotal.value > 0
+    ? (sidesSurrenderOnlyCount.value / sidesSurrenderTotal.value) * 100
+    : 0
+)
+const sidesPlayedPct = computed(() =>
+  sidesSurrenderTotal.value > 0 ? (sidesPlayedCount.value / sidesSurrenderTotal.value) * 100 : 0
+)
+const sidesBlueSurrenderOnlyCount = computed(() =>
+  Math.max(
+    0,
+    Number(sidesSurrenderBySide.value.blue.surrenderCount) -
+      Number(sidesSurrenderBySide.value.blue.earlySurrenderCount)
+  )
+)
+const sidesRedSurrenderOnlyCount = computed(() =>
+  Math.max(
+    0,
+    Number(sidesSurrenderBySide.value.red.surrenderCount) -
+      Number(sidesSurrenderBySide.value.red.earlySurrenderCount)
+  )
+)
+const sidesBluePlayedCount = computed(() =>
+  Math.max(
+    0,
+    Number(sidesSurrenderBySide.value.blue.total) -
+      Number(sidesSurrenderBySide.value.blue.earlySurrenderCount) -
+      sidesBlueSurrenderOnlyCount.value
+  )
+)
+const sidesRedPlayedCount = computed(() =>
+  Math.max(
+    0,
+    Number(sidesSurrenderBySide.value.red.total) -
+      Number(sidesSurrenderBySide.value.red.earlySurrenderCount) -
+      sidesRedSurrenderOnlyCount.value
+  )
+)
 async function loadOverviewSides() {
   const t = statsPerfStart('loadOverviewSides')
   overviewSidesPending.value = true
   try {
-    overviewSidesData.value = await statsFetch(
-      apiUrl('/api/stats/overview-sides' + sidesQueryParams())
-    )
+    const base = apiUrl('/api/stats/overview-sides' + sidesQueryParams())
+    const progUrl = apiUrl('/api/stats/overview-sides-progression' + sidesProgressionQueryParams())
+    const [sidesRaw, prog] = await Promise.all([
+      statsFetch<unknown>(base),
+      statsFetch<NonNullable<typeof overviewSidesProgressionData.value>>(progUrl).catch(() => null),
+    ])
+    overviewSidesData.value = sidesRaw as NonNullable<(typeof overviewSidesData)['value']>
+    overviewSidesProgressionData.value = prog ?? { oldestVersion: null, blue: [], red: [] }
   } catch {
     overviewSidesData.value = null
+    overviewSidesProgressionData.value = null
   } finally {
     overviewSidesPending.value = false
     statsPerfEnd('loadOverviewSides', t)
@@ -6562,6 +7097,7 @@ watch(progressionFromVersion, () => {
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'tierlist') loadTierList()
+  if (activeTab.value === 'team') loadOverviewSides()
 })
 
 onMounted(async () => {
@@ -6653,18 +7189,6 @@ onMounted(async () => {
 }
 .fast-stat-button {
   font-weight: 500;
-}
-
-.overview-match-outcome-bagel {
-  padding: 6px;
-  box-shadow:
-    inset 0 0 0 1px rgb(var(--rgb-primary) / 0.28),
-    0 0 18px rgb(var(--rgb-primary) / 0.14);
-}
-
-.overview-match-outcome-bagel > div {
-  background: rgb(var(--rgb-surface) / 0.95);
-  box-shadow: inset 0 0 0 1px rgb(var(--rgb-primary) / 0.22);
 }
 
 /* Overview runes (shyv.net style): grid per path, pickrate bar + winrate % */

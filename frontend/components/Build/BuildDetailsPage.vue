@@ -337,7 +337,7 @@ import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
-import { enableCaptureMode, disableCaptureMode, fixCloneForCapture } from '~/utils/buildCardCapture'
+import { captureBuildCardBlob } from '~/utils/buildCardCapture'
 
 const props = defineProps<{ buildId: string }>()
 
@@ -587,37 +587,13 @@ const copyBuildLink = async () => {
   }
 }
 
-const captureBuildImage = async (): Promise<Blob | null> => {
-  if (!buildCardRef.value || !build.value) return null
+const captureBuildImage = (): Promise<Blob | null> => {
+  if (!buildCardRef.value || !build.value) return Promise.resolve(null)
 
-  try {
-    const buildCardWrapper = buildCardRef.value.querySelector('.build-card-wrapper') as HTMLElement
-    if (!buildCardWrapper) return null
+  const buildCardWrapper = buildCardRef.value.querySelector('.build-card-wrapper') as HTMLElement
+  if (!buildCardWrapper) return Promise.resolve(null)
 
-    enableCaptureMode(buildCardWrapper)
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    const domtoimage = await import('dom-to-image-more')
-    const blob = await domtoimage.toBlob(buildCardWrapper, {
-      bgcolor: '#091428',
-      quality: 1.0,
-      cacheBust: true,
-      filter: (node: Node) => {
-        if (node instanceof HTMLElement && node.classList.contains('build-card-back')) {
-          return false
-        }
-        return true
-      },
-      onclone: (clone: HTMLElement) => fixCloneForCapture(clone),
-    })
-
-    disableCaptureMode(buildCardWrapper)
-    return blob
-  } catch {
-    const wrapper = buildCardRef.value?.querySelector('.build-card-wrapper') as HTMLElement
-    if (wrapper) disableCaptureMode(wrapper)
-    return null
-  }
+  return captureBuildCardBlob(buildCardWrapper)
 }
 
 const downloadBuildImage = async () => {

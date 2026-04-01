@@ -1,3 +1,5 @@
+import domtoimage from 'dom-to-image-more'
+
 const CAPTURE_STYLE_ID = '__build-capture-override'
 
 const CAPTURE_CSS = `
@@ -35,26 +37,6 @@ export async function fixCloneForCapture(clone: HTMLElement): Promise<void> {
     }
   }
 
-  clone.querySelectorAll('style').forEach(styleEl => {
-    let css = styleEl.textContent || ''
-    if (!css.includes('border-image-source') || css.includes('border-image-source: none')) return
-    const srcMatch = css.match(/border-image-source:\s*([^;]+);/)
-    if (!srcMatch) return
-    const gradient = srcMatch[1].trim()
-    if (gradient === 'none' || gradient === 'initial') return
-
-    const colorMatch = gradient.match(/(?:rgba?\([^)]+\))|(?:#[0-9a-fA-F]{3,8})/)
-    const solidColor = colorMatch ? colorMatch[0] : 'rgba(192, 168, 130, 0.8)'
-
-    css = css.replace(/border-image-source:\s*[^;]+;/g, 'border-image-source: none;')
-    css = css.replace(/border-image-slice:\s*[^;]+;/g, '')
-    css = css.replace(/border-image-width:\s*[^;]+;/g, '')
-    css = css.replace(/border-image-outset:\s*[^;]+;/g, '')
-    css = css.replace(/border-image-repeat:\s*[^;]+;/g, '')
-    css = css.replace(/\}/, `border-color: ${solidColor} !important; }`)
-    styleEl.textContent = css
-  })
-
   const maskTasks: Promise<void>[] = []
   const urlRegex = /url\((['"]?)(.*?)\1\)/
   for (const el of allEls) {
@@ -90,4 +72,71 @@ export async function fixCloneForCapture(clone: HTMLElement): Promise<void> {
     )
   }
   await Promise.all(maskTasks)
+}
+
+export async function captureBuildCardBlob(buildCardWrapper: HTMLElement): Promise<Blob | null> {
+  try {
+    enableCaptureMode(buildCardWrapper)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    const rect = buildCardWrapper.getBoundingClientRect()
+    const width = Math.max(1, Math.ceil(rect.width) + 2)
+    const height = Math.max(1, Math.ceil(rect.height) + 2)
+    const computed = getComputedStyle(buildCardWrapper)
+    const strongGradient =
+      computed.getPropertyValue('--card-border-gradient-strong').trim() ||
+      'linear-gradient(130deg, #2aa4d8 0%, #4f9aa8 45%, #9ca84f 100%)'
+    const softGradient =
+      computed.getPropertyValue('--card-border-gradient-soft').trim() ||
+      'linear-gradient(130deg, rgba(42, 164, 216, 0.7) 0%, rgba(79, 154, 168, 0.72) 45%, rgba(156, 168, 79, 0.82) 100%)'
+    const baseBlue = computed.getPropertyValue('--color-blue-500').trim() || '#091428'
+
+    const blob = await domtoimage.toBlob(buildCardWrapper, {
+      bgcolor: '#091428',
+      quality: 1.0,
+      cacheBust: true,
+      width,
+      height,
+      style: {
+        transform: 'none',
+        transformOrigin: 'top left',
+      },
+      filter: (node: Node) => {
+        if (node instanceof HTMLElement && node.classList.contains('build-card-back')) {
+          return false
+        }
+        return true
+      },
+      onclone: async (clone: HTMLElement) => {
+        await fixCloneForCapture(clone)
+
+        // Force border rendering inline in clone to avoid foreignObject white-border fallback.
+        const setGradientBorder = (el: HTMLElement, gradient: string) => {
+          el.style.borderImage = 'none'
+          el.style.borderColor = 'transparent'
+          el.style.backgroundImage = `linear-gradient(${baseBlue}, ${baseBlue}), ${gradient}`
+          el.style.backgroundOrigin = 'padding-box, border-box'
+          el.style.backgroundClip = 'padding-box, border-box'
+          el.style.backgroundRepeat = 'no-repeat, no-repeat'
+          el.style.backgroundSize = '100% 100%, 100% 100%'
+        }
+
+        clone
+          .querySelectorAll('.build-card')
+          .forEach(node => setGradientBorder(node as HTMLElement, strongGradient))
+        clone
+          .querySelectorAll('.summoner-spell-icon, .shard-icon-small, .shard-icon-strip')
+          .forEach(node => setGradientBorder(node as HTMLElement, strongGradient))
+        clone
+          .querySelectorAll('.item-icon, .boots-slot--filled')
+          .forEach(node => setGradientBorder(node as HTMLElement, softGradient))
+      },
+    })
+
+    return blob
+  } catch {
+    return null
+  } finally {
+    disableCaptureMode(buildCardWrapper)
+  }
 }
