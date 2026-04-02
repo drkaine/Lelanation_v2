@@ -1840,15 +1840,21 @@ export async function getOverviewSidesProgressionFullStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, blue: [], red: [] }
   }
-  const vo = escapeSqlLikePrefix(versionOldest)
+  const voRaw = String(versionOldest).trim()
+  const vo = escapeSqlLikePrefix(voRaw)
   const pRankKey = rankTierCacheKey(rankTier)
   const pRole = role != null && role !== '' ? role : null
+  const sinceRaw =
+    sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
+      ? String(sinceVersionPrefix).trim()
+      : ''
+  /** If filtres « patch courant » = même préfixe que la progression, LIKE serait identique → deltas 0. On retrouve alors le mode « tout sauf le patch de référence ». */
   const sinceEsc =
-    sinceVersionPrefix && sinceVersionPrefix !== '' ? escapeSqlLikePrefix(sinceVersionPrefix) : null
+    sinceRaw !== '' && sinceRaw !== voRaw ? escapeSqlLikePrefix(sinceRaw) : null
   const now = Date.now()
   // Cache key v2: base match condition must not include versionOldest — oldest/since filters are
   // oldestClause / sinceClause only; including both produced contradictory WHERE (no rows).
-  const cacheKey = `sidesprog2|${vo}|${pRankKey ?? ''}|${pRole ?? ''}|${sinceEsc ?? 'all'}`
+  const cacheKey = `sidesprog3|${vo}|${pRankKey ?? ''}|${pRole ?? ''}|${sinceEsc ?? 'all'}`
   const cached = overviewSidesProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 

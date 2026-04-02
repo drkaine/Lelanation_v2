@@ -294,17 +294,17 @@
                   {{ t('statisticsPage.retry') }}
                 </button>
               </div>
-              <div v-else-if="overviewData" class="space-y-3">
+              <div v-else-if="overviewData" class="space-y-[10px]">
                 <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
                 <div
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
                 >
                   <!-- Champions les plus choisis -->
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -423,7 +423,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -542,7 +542,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -661,7 +661,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -762,7 +762,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -857,7 +857,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -952,7 +952,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1049,7 +1049,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1146,7 +1146,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1238,12 +1238,12 @@
                     </div>
                   </div>
 
-                  <!-- Répartition des parties — donut SVG comme Solo/Duo + une carte par côté -->
+                  <!-- Répartition des parties (global uniquement) — donut SVG comme Solo/Duo -->
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-2 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-2 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1321,134 +1321,6 @@
                       {{ t('statisticsPage.overviewNoData') }}
                     </div>
                   </div>
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-blue-500/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.sidesBlue') }} —
-                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
-                    </h3>
-                    <div v-if="overviewPending" class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.loading') }}
-                    </div>
-                    <div
-                      v-else-if="overviewBlueMatchOutcome.total > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        :total="overviewBlueMatchOutcome.total"
-                        :early="overviewBlueMatchOutcome.early"
-                        :surrender-only="overviewBlueMatchOutcome.surrenderOnly"
-                        :played="overviewBlueMatchOutcome.played"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ overviewBlueMatchOutcome.total.toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender: {{ overviewBlueMatchOutcome.early.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewBlueMatchOutcome.early,
-                              overviewBlueMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender:
-                          {{ overviewBlueMatchOutcome.surrenderOnly.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewBlueMatchOutcome.surrenderOnly,
-                              overviewBlueMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
-                          />
-                          Jouees: {{ overviewBlueMatchOutcome.played.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewBlueMatchOutcome.played,
-                              overviewBlueMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                  </div>
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-red-500/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.sidesRed') }} —
-                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
-                    </h3>
-                    <div v-if="overviewPending" class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.loading') }}
-                    </div>
-                    <div
-                      v-else-if="overviewRedMatchOutcome.total > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        :total="overviewRedMatchOutcome.total"
-                        :early="overviewRedMatchOutcome.early"
-                        :surrender-only="overviewRedMatchOutcome.surrenderOnly"
-                        :played="overviewRedMatchOutcome.played"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ overviewRedMatchOutcome.total.toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender: {{ overviewRedMatchOutcome.early.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewRedMatchOutcome.early,
-                              overviewRedMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender:
-                          {{ overviewRedMatchOutcome.surrenderOnly.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewRedMatchOutcome.surrenderOnly,
-                              overviewRedMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
-                          />
-                          Jouees: {{ overviewRedMatchOutcome.played.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              overviewRedMatchOutcome.played,
-                              overviewRedMatchOutcome.total
-                            )
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                  </div>
 
                   <!-- Bans par équipe gagnante -->
                   <div
@@ -1456,7 +1328,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1585,7 +1457,7 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold text-text"
+                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
                     >
                       <button
                         type="button"
@@ -1709,7 +1581,7 @@
                   </div>
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card fast-stat-card-objectives rounded-lg border border-primary/30 bg-surface/30 p-6"
+                    class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
                   >
                     <div class="mb-3 flex flex-wrap gap-2">
                       <button
@@ -1764,7 +1636,10 @@
                     <p class="mb-3 text-xs text-text/60">
                       {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
                     </p>
-                    <div v-if="objectivesPanelTab === 'objectives'" class="overflow-x-auto">
+                    <div
+                      v-if="objectivesPanelTab === 'objectives'"
+                      class="w-full min-w-0 overflow-x-auto"
+                    >
                       <table class="w-full min-w-[280px] text-left text-sm">
                         <thead>
                           <tr class="border-b border-primary/30 text-text/70">
@@ -1866,7 +1741,10 @@
                         </tbody>
                       </table>
                     </div>
-                    <div v-else-if="objectivesPanelTab === 'drakeTypes'" class="overflow-x-auto">
+                    <div
+                      v-else-if="objectivesPanelTab === 'drakeTypes'"
+                      class="w-full min-w-0 overflow-x-auto"
+                    >
                       <table class="w-full min-w-[280px] text-left text-sm">
                         <thead>
                           <tr class="border-b border-primary/30 text-text/70">
@@ -1911,7 +1789,7 @@
                         </tbody>
                       </table>
                     </div>
-                    <div v-else class="overflow-x-auto">
+                    <div v-else class="w-full min-w-0 overflow-x-auto">
                       <table class="w-full min-w-[280px] text-left text-sm">
                         <thead>
                           <tr class="border-b border-primary/30 text-text/70">
@@ -2525,16 +2403,14 @@
               <div v-if="overviewSidesPending" class="text-text/70">
                 {{ t('statisticsPage.loading') }}
               </div>
-              <div v-else-if="overviewSidesData" class="space-y-3">
+              <div v-else-if="overviewSidesData" class="space-y-[10px]">
                 <div
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
                 >
                   <div
                     class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-2 w-full text-sm font-semibold text-text lg:text-left"
-                    >
+                    <h3 class="fast-stat-title mb-2 w-full text-sm font-semibold lg:text-left">
                       {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
                     </h3>
                     <div
@@ -2591,59 +2467,9 @@
                     </div>
                   </div>
                   <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
-                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
-                    </h3>
-                    <div
-                      v-if="sidesSurrenderTotal > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        :total="sidesSurrenderTotal"
-                        :early="sidesEarlySurrenderCount"
-                        :surrender-only="sidesSurrenderOnlyCount"
-                        :played="sidesPlayedCount"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ sidesSurrenderTotal.toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender: {{ sidesEarlySurrenderCount.toLocaleString() }} ({{
-                            sidesEarlySurrenderPct.toFixed(2)
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender: {{ sidesSurrenderOnlyCount.toLocaleString() }} ({{
-                            sidesSurrenderOnlyPct.toFixed(2)
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
-                          />
-                          Jouees: {{ sidesPlayedCount.toLocaleString() }} ({{
-                            sidesPlayedPct.toFixed(2)
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                  </div>
-                  <div
                     class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-blue-500/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold">
                       {{ t('statisticsPage.sidesBlue') }} —
                       {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
                     </h3>
@@ -2707,7 +2533,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-red-500/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold text-text">
+                    <h3 class="fast-stat-title mb-2 text-sm font-semibold">
                       {{ t('statisticsPage.sidesRed') }} —
                       {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
                     </h3>
@@ -2808,7 +2634,7 @@
 
                 <div
                   v-if="progressionFromVersion"
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[5px] pb-[5px]"
+                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
                 >
                   <StatisticsTeamSideFastStatTable
                     :title="
@@ -2874,7 +2700,7 @@
 
                 <div
                   v-if="overviewSidesData && overviewSidesData.matchCount > 0"
-                  class="fast-stat-card fast-stat-card-objectives rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-6"
+                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-6"
                 >
                   <div class="mb-3 flex flex-wrap gap-2">
                     <button
@@ -2914,7 +2740,10 @@
                       {{ t('statisticsPage.objectivesTabSouls') }}
                     </button>
                   </div>
-                  <div v-if="objectivesSidesPanelTab === 'objectives'" class="overflow-x-auto">
+                  <div
+                    v-if="objectivesSidesPanelTab === 'objectives'"
+                    class="w-full min-w-0 overflow-x-auto"
+                  >
                     <table class="w-full min-w-[280px] text-left text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-text/70">
@@ -3022,7 +2851,10 @@
                       </tbody>
                     </table>
                   </div>
-                  <div v-else-if="objectivesSidesPanelTab === 'drakeTypes'" class="overflow-x-auto">
+                  <div
+                    v-else-if="objectivesSidesPanelTab === 'drakeTypes'"
+                    class="w-full min-w-0 overflow-x-auto"
+                  >
                     <table class="w-full min-w-[280px] text-left text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-text/70">
@@ -3069,7 +2901,7 @@
                       </tbody>
                     </table>
                   </div>
-                  <div v-else class="overflow-x-auto">
+                  <div v-else class="w-full min-w-0 overflow-x-auto">
                     <table class="w-full min-w-[280px] text-left text-sm">
                       <thead>
                         <tr class="border-b border-primary/30 text-text/70">
@@ -5479,26 +5311,6 @@ function matchOutcomePct(part: number, total: number): string {
   if (!total) return '0.00'
   return ((part / total) * 100).toFixed(2)
 }
-const overviewBlueMatchOutcome = computed(() => {
-  const s = overviewData.value?.surrenderBySide?.blue
-  if (!s) return { total: 0, early: 0, surrenderOnly: 0, played: 0 } as const
-  const total = Math.max(0, Number(s.total))
-  const early = Math.max(0, Number(s.earlySurrenderCount))
-  const surr = Math.max(0, Number(s.surrenderCount))
-  const surrenderOnly = Math.max(0, surr - early)
-  const played = Math.max(0, total - early - surrenderOnly)
-  return { total, early, surrenderOnly, played } as const
-})
-const overviewRedMatchOutcome = computed(() => {
-  const s = overviewData.value?.surrenderBySide?.red
-  if (!s) return { total: 0, early: 0, surrenderOnly: 0, played: 0 } as const
-  const total = Math.max(0, Number(s.total))
-  const early = Math.max(0, Number(s.earlySurrenderCount))
-  const surr = Math.max(0, Number(s.surrenderCount))
-  const surrenderOnly = Math.max(0, surr - early)
-  const played = Math.max(0, total - early - surrenderOnly)
-  return { total, early, surrenderOnly, played } as const
-})
 /** Progression: WR delta from oldest version to all since. For "Winrate depuis X" encart. */
 const overviewProgressionData = ref<{
   oldestVersion: string | null
@@ -6020,11 +5832,25 @@ const sidesRedBestWinrateRows = computed(() => {
 })
 const sidesBlueBanRows = computed(() => {
   const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.blue ?? [])
-  return [...raw].sort((a, b) => b.count - a.count)
+  const m = overviewSidesData.value?.matchCount ?? 0
+  return [...raw]
+    .map(r => ({
+      championId: r.championId,
+      count: r.count,
+      banrate: m > 0 ? Math.round((r.count / m) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => b.banrate - a.banrate)
 })
 const sidesRedBanRows = computed(() => {
   const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.red ?? [])
-  return [...raw].sort((a, b) => b.count - a.count)
+  const m = overviewSidesData.value?.matchCount ?? 0
+  return [...raw]
+    .map(r => ({
+      championId: r.championId,
+      count: r.count,
+      banrate: m > 0 ? Math.round((r.count / m) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => b.banrate - a.banrate)
 })
 const sidesBlueTopWinrateSince = computed(() =>
   [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
@@ -6333,39 +6159,6 @@ const sidesSurrenderBySide = computed(() => ({
     surrenderCount: 0,
   },
 }))
-const sidesSurrenderTotal = computed(
-  () => Number(sidesSurrenderBySide.value.blue.total) + Number(sidesSurrenderBySide.value.red.total)
-)
-const sidesEarlySurrenderCount = computed(
-  () =>
-    Number(sidesSurrenderBySide.value.blue.earlySurrenderCount) +
-    Number(sidesSurrenderBySide.value.red.earlySurrenderCount)
-)
-const sidesSurrenderOnlyCount = computed(() => {
-  const allSurrenders =
-    Number(sidesSurrenderBySide.value.blue.surrenderCount) +
-    Number(sidesSurrenderBySide.value.red.surrenderCount)
-  return Math.max(0, allSurrenders - sidesEarlySurrenderCount.value)
-})
-const sidesPlayedCount = computed(() =>
-  Math.max(
-    0,
-    sidesSurrenderTotal.value - sidesEarlySurrenderCount.value - sidesSurrenderOnlyCount.value
-  )
-)
-const sidesEarlySurrenderPct = computed(() =>
-  sidesSurrenderTotal.value > 0
-    ? (sidesEarlySurrenderCount.value / sidesSurrenderTotal.value) * 100
-    : 0
-)
-const sidesSurrenderOnlyPct = computed(() =>
-  sidesSurrenderTotal.value > 0
-    ? (sidesSurrenderOnlyCount.value / sidesSurrenderTotal.value) * 100
-    : 0
-)
-const sidesPlayedPct = computed(() =>
-  sidesSurrenderTotal.value > 0 ? (sidesPlayedCount.value / sidesSurrenderTotal.value) * 100 : 0
-)
 const sidesBlueSurrenderOnlyCount = computed(() =>
   Math.max(
     0,
@@ -7160,13 +6953,17 @@ onMounted(async () => {
   overflow: hidden;
 }
 .fast-stat-card-objectives {
-  width: fit-content !important;
-  min-width: 0;
-  max-width: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   height: auto;
   min-height: 0;
   flex: 1 1 100%;
+  flex-basis: 100%;
   overflow: visible;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  align-self: stretch;
 }
 .fast-stat-title {
   line-height: 1.4;

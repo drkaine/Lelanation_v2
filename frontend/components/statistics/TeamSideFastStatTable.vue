@@ -32,7 +32,7 @@ const metricForRow = (row: Record<string, unknown>): number => {
     case 'wr':
       return Number(row.winrate ?? 0)
     case 'ban':
-      return Number(row.count ?? 0)
+      return Number(row.banrate ?? row.count ?? 0)
     case 'dWr':
       return Number(row.deltaWr ?? 0)
     case 'dPick':
@@ -80,7 +80,7 @@ const valueCellClass = computed(() => {
   if (props.variant === 'dWr') return 'w-10 shrink-0 text-right font-medium text-success'
   if (props.variant === 'dPick') return 'w-10 shrink-0 text-right font-medium text-accent'
   if (props.variant === 'dBan') return 'w-10 shrink-0 text-right font-medium text-amber-200'
-  if (props.variant === 'ban') return 'w-8 shrink-0 text-right font-medium text-text'
+  if (props.variant === 'ban') return 'w-10 shrink-0 text-right font-medium text-text'
   return 'w-9 shrink-0 text-right font-medium text-text'
 })
 
@@ -88,7 +88,7 @@ const topFive = computed(() => props.rows.slice(0, 5))
 
 const barDenom = computed(() => {
   const vals = topFive.value.map(r => metricForRow(r))
-  return Math.max(...vals, props.variant === 'ban' ? 1 : 0.01)
+  return Math.max(...vals, 0.01)
 })
 
 const isProgression = computed(
@@ -98,7 +98,7 @@ const isProgression = computed(
 
 <template>
   <div class="fast-stat-card w-full max-w-full rounded-lg bg-surface/30 p-2" :class="borderClass">
-    <h3 class="fast-stat-title mb-1 text-sm font-semibold text-text">
+    <h3 class="fast-stat-title mb-1 text-sm font-semibold">
       {{ title }}
     </h3>
     <table v-if="topFive.length" class="fast-stat-table w-full text-xs">
