@@ -7,8 +7,10 @@ const props = withDefaults(
     early: number
     surrenderOnly: number
     played: number
+    /** Vue d’ensemble : défaut. Onglet Teams : teinte « parties jouées » + centre comme les cartes blue/red. */
+    sideAccent?: 'default' | 'blue' | 'red'
   }>(),
-  { total: 0, early: 0, surrenderOnly: 0, played: 0 }
+  { total: 0, early: 0, surrenderOnly: 0, played: 0, sideAccent: 'default' }
 )
 
 /** Same geometry as win-share donut (Solo/Duo): viewBox 120, r=48, stroke 14 */
@@ -33,6 +35,28 @@ const segs = computed(() => {
     offS: -dE,
     offP: -(dE + dS),
     center: String(Math.round(pP * 100)),
+  }
+})
+
+const playedRingClass = computed(() => {
+  switch (props.sideAccent) {
+    case 'blue':
+      return 'text-sky-500 dark:text-sky-400'
+    case 'red':
+      return 'text-rose-500 dark:text-rose-400'
+    default:
+      return 'text-blue-500 dark:text-blue-400'
+  }
+})
+
+const centerPctClass = computed(() => {
+  switch (props.sideAccent) {
+    case 'blue':
+      return 'block text-xl font-bold text-sky-600 dark:text-sky-300'
+    case 'red':
+      return 'block text-xl font-bold text-rose-600 dark:text-rose-300'
+    default:
+      return 'block text-xl font-bold text-blue-600 dark:text-blue-400'
   }
 })
 </script>
@@ -87,15 +111,13 @@ const segs = computed(() => {
         stroke="currentColor"
         stroke-width="14"
         stroke-linecap="butt"
-        class="text-blue-500 dark:text-blue-400"
+        :class="playedRingClass"
         :stroke-dasharray="segs.dP + ' ' + circumference"
         :stroke-dashoffset="segs.offP"
       />
     </svg>
     <div class="relative z-10 flex flex-col items-center text-center">
-      <span class="block text-xl font-bold text-blue-600 dark:text-blue-400"
-        >{{ segs.center }}%</span
-      >
+      <span :class="centerPctClass">{{ segs.center }}%</span>
     </div>
   </div>
 </template>

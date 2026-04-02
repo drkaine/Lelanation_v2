@@ -76,9 +76,9 @@ const cardBorderClass = computed(() => {
   return 'border border-primary/30'
 })
 
-/** Même jaune-or que les fast-stats vue d’ensemble, ou teinte bleu/rouge pour Teams. */
+/** Comme `.fast-stat-title` vue d’ensemble (mb-2), teinte bleu/rouge côté Teams. */
 const headingClass = computed(() => {
-  const base = 'mb-1 flex items-center justify-between gap-2 text-sm font-semibold leading-snug'
+  const base = 'mb-2 flex items-center justify-between gap-2 text-sm font-semibold leading-snug'
   if (props.side === 'blue') return `${base} text-sky-300`
   if (props.side === 'red') return `${base} text-rose-300`
   return `${base} team-side-fast-stat-title-default`
@@ -138,32 +138,33 @@ const barClass = computed(() => {
   }
 })
 
-/** Couleurs uniquement : largeur gérée par la grille (même colonne % pour toutes les cartes). */
+/** Même largeurs que la page stats : w-9 (pick/wr/ban), w-10 (deltas) + couleurs bleu/rouge. */
 const valueCellClass = computed(() => {
-  const base = 'min-w-0 text-right font-medium tabular-nums'
+  const s = 'w-9 shrink-0 text-right font-medium tabular-nums'
+  const d = 'w-10 shrink-0 text-right font-medium tabular-nums'
   if (props.variant === 'dWr') {
-    if (props.side === 'blue') return `${base} text-sky-300`
-    if (props.side === 'red') return `${base} text-rose-300`
-    return `${base} text-success`
+    if (props.side === 'blue') return `${d} text-sky-300`
+    if (props.side === 'red') return `${d} text-rose-300`
+    return `${d} text-success`
   }
   if (props.variant === 'dPick') {
-    if (props.side === 'blue') return `${base} text-sky-200`
-    if (props.side === 'red') return `${base} text-rose-200`
-    return `${base} text-accent`
+    if (props.side === 'blue') return `${d} text-sky-200`
+    if (props.side === 'red') return `${d} text-rose-200`
+    return `${d} text-accent`
   }
   if (props.variant === 'dBan') {
-    if (props.side === 'blue') return `${base} text-blue-200`
-    if (props.side === 'red') return `${base} text-red-200`
-    return `${base} text-error`
+    if (props.side === 'blue') return `${d} text-blue-200`
+    if (props.side === 'red') return `${d} text-red-200`
+    return `${d} text-error`
   }
   if (props.variant === 'ban') {
-    if (props.side === 'blue') return `${base} text-blue-200`
-    if (props.side === 'red') return `${base} text-red-200`
-    return `${base} text-text`
+    if (props.side === 'blue') return `${s} text-blue-200`
+    if (props.side === 'red') return `${s} text-red-200`
+    return `${s} text-text`
   }
-  if (props.side === 'blue') return `${base} text-sky-200`
-  if (props.side === 'red') return `${base} text-rose-200`
-  return `${base} text-text`
+  if (props.side === 'blue') return `${s} text-sky-200`
+  if (props.side === 'red') return `${s} text-rose-200`
+  return `${s} text-text`
 })
 
 const topFive = computed(() => props.rows.slice(0, 5))
@@ -204,9 +205,9 @@ function barWidthPct(row: Record<string, unknown>): number {
     <table v-if="topFive.length" class="fast-stat-table w-full text-xs">
       <tbody>
         <tr v-for="(row, idx) in topFive" :key="'r-' + row.championId" class="fast-stat-row">
-          <td class="min-w-0 max-w-full py-0.5 align-middle">
-            <div class="fast-stat-row-inner">
-              <span class="tabular-nums text-text/70">{{ idx + 1 }}.</span>
+          <td class="py-0.5 align-middle">
+            <div class="flex items-center gap-0.5">
+              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && championByKey(Number(row.championId))"
                 :src="
@@ -216,13 +217,15 @@ function barWidthPct(row: Record<string, unknown>): number {
                   )
                 "
                 :alt="championName(Number(row.championId)) || ''"
-                class="h-5 w-5 rounded-full object-cover"
+                class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
               <span v-else class="h-5 w-5 shrink-0" aria-hidden="true" />
-              <span class="fast-stat-name-col font-medium text-text">{{
+              <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                 championName(Number(row.championId)) || row.championId
               }}</span>
-              <div class="fast-stat-bar-container h-1.5 overflow-hidden rounded bg-surface/80">
+              <div
+                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
+              >
                 <div
                   class="h-full rounded transition-[width]"
                   :class="barClass"
@@ -264,10 +267,9 @@ function barWidthPct(row: Record<string, unknown>): number {
   line-height: 1.4;
   color: rgb(252 211 77) !important;
 }
+/* Comme `.fast-stat-table` / `.fast-stat-bar-container` sur la page stats (scoped). */
 .team-side-fast-stat .fast-stat-table {
   border-collapse: collapse;
-  table-layout: fixed;
-  width: 100%;
 }
 .team-side-fast-stat .fast-stat-row {
   border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
@@ -275,31 +277,11 @@ function barWidthPct(row: Record<string, unknown>): number {
 .team-side-fast-stat .fast-stat-row:last-child {
   border-bottom: none;
 }
-.team-side-fast-stat td {
-  box-sizing: border-box;
-  max-width: 100%;
-}
-/* Colonnes fixes : toutes les cartes / toutes les lignes alignées (bleu vs rouge, pick vs delta, etc.) */
-.team-side-fast-stat .fast-stat-row-inner {
-  display: grid;
-  grid-template-columns: 1rem 1.25rem minmax(0, 1fr) 54px 2.75rem;
-  column-gap: 0.125rem;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-}
-.team-side-fast-stat .fast-stat-name-col {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: inherit;
-}
 .team-side-fast-stat .fast-stat-bar-container {
-  width: 100%;
-  min-width: 0;
-  max-width: 54px;
-  justify-self: start;
+  flex-shrink: 0;
+  min-width: 32px !important;
+  max-width: 54px !important;
+  margin-right: 5px;
 }
 
 /* Même bulle que la page stats (composant isolé, pas de styles scoped parent). */

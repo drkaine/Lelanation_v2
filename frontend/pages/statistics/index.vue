@@ -1522,37 +1522,6 @@
                         </tr>
                       </tbody>
                     </table>
-                    <div
-                      v-if="(overviewTeamsData.bans.byWin ?? []).length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        v-if="(overviewTeamsData.bans.byWin ?? []).length > 5"
-                        type="button"
-                        class="fast-stat-button inline-flex items-center justify-center rounded bg-accent p-1 text-background transition-colors hover:opacity-90"
-                        :aria-label="
-                          bansExpandByWin
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        "
-                        @click="bansExpandByWin = !bansExpandByWin"
-                      >
-                        <svg
-                          class="h-3 w-3 transition-transform"
-                          :class="{ 'rotate-180': bansExpandByWin }"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </button>
-                    </div>
                   </div>
 
                   <!-- Bans par équipe perdante -->
@@ -1649,37 +1618,6 @@
                         </tr>
                       </tbody>
                     </table>
-                    <div
-                      v-if="(overviewTeamsData.bans.byLoss ?? []).length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        v-if="(overviewTeamsData.bans.byLoss ?? []).length > 5"
-                        type="button"
-                        class="fast-stat-button inline-flex items-center justify-center rounded bg-accent p-1 text-background transition-colors hover:opacity-90"
-                        :aria-label="
-                          bansExpandByLoss
-                            ? t('statisticsPage.showLess')
-                            : t('statisticsPage.fastStatsSeeMore')
-                        "
-                        @click="bansExpandByLoss = !bansExpandByLoss"
-                      >
-                        <svg
-                          class="h-3 w-3 transition-transform"
-                          :class="{ 'rotate-180': bansExpandByLoss }"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2"
-                            d="M19 9l-7 7-7-7"
-                          />
-                        </svg>
-                      </button>
-                    </div>
                   </div>
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
@@ -2557,7 +2495,7 @@
                           stroke="currentColor"
                           stroke-width="14"
                           stroke-linecap="butt"
-                          class="text-blue-500 dark:text-blue-400"
+                          class="text-sky-500 dark:text-sky-400"
                           :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
                           stroke-dashoffset="0"
                         />
@@ -2569,16 +2507,16 @@
                           stroke="currentColor"
                           stroke-width="14"
                           stroke-linecap="butt"
-                          class="text-red-500 dark:text-red-400"
+                          class="text-rose-500 dark:text-rose-400"
                           :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
                           :stroke-dashoffset="-sidesDonutBlueDash"
                         />
                       </svg>
                       <div class="relative z-10 flex flex-col items-center text-center">
-                        <span class="block text-xl font-bold text-blue-600 dark:text-blue-400">
+                        <span class="block text-xl font-bold text-sky-600 dark:text-sky-300">
                           {{ sidesDonutBluePct }}%
                         </span>
-                        <span class="block text-lg font-medium text-red-600 dark:text-red-400">
+                        <span class="block text-lg font-medium text-rose-600 dark:text-rose-300">
                           {{ sidesDonutRedPct }}%
                         </span>
                       </div>
@@ -2610,6 +2548,7 @@
                       class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
                     >
                       <StatisticsMatchOutcomeDonut
+                        side-accent="blue"
                         :total="Number(sidesSurrenderBySide.blue.total)"
                         :early="Number(sidesSurrenderBySide.blue.earlySurrenderCount)"
                         :surrender-only="sidesBlueSurrenderOnlyCount"
@@ -2647,7 +2586,7 @@
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
                           <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-sky-400 dark:bg-sky-500"
                           />
                           Jouees: {{ sidesBluePlayedCount.toLocaleString() }} ({{
                             matchOutcomePct(
@@ -2688,6 +2627,7 @@
                       class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
                     >
                       <StatisticsMatchOutcomeDonut
+                        side-accent="red"
                         :total="Number(sidesSurrenderBySide.red.total)"
                         :early="Number(sidesSurrenderBySide.red.earlySurrenderCount)"
                         :surrender-only="sidesRedSurrenderOnlyCount"
@@ -2725,7 +2665,7 @@
                         </div>
                         <div class="flex items-center gap-2 text-text/85">
                           <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
+                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400 dark:bg-rose-500"
                           />
                           Jouees: {{ sidesRedPlayedCount.toLocaleString() }} ({{
                             matchOutcomePct(
