@@ -6,9 +6,11 @@
     >
       Skip to content
     </a>
-    <AppNavbar v-show="!isStreamerMode" />
+    <AppNavbar v-show="!isStreamerMode && !isBuildCardRenderRoute" />
     <div
-      v-show="!isStreamerMode && (isHomeRoute || !commandBarHiddenByScroll)"
+      v-show="
+        !isStreamerMode && !isBuildCardRenderRoute && (isHomeRoute || !commandBarHiddenByScroll)
+      "
       class="command-bar-fixed-wrapper"
     >
       <button
@@ -100,7 +102,11 @@
         </div>
       </div>
     </div>
-    <div v-show="!isStreamerMode" class="command-bar-spacer" aria-hidden="true"></div>
+    <div
+      v-show="!isStreamerMode && !isBuildCardRenderRoute"
+      class="command-bar-spacer"
+      aria-hidden="true"
+    ></div>
     <div
       v-show="isStreamerMode"
       class="streamer-panel streamer-panel-top"
@@ -121,7 +127,7 @@
     <main id="main" tabindex="-1" class="app-main flex-1">
       <NuxtPage />
     </main>
-    <AppFooter v-show="!isStreamerMode && !isAdminRoute" />
+    <AppFooter v-show="!isStreamerMode && !isAdminRoute && !isBuildCardRenderRoute" />
     <div
       v-show="isStreamerMode"
       class="streamer-panel streamer-panel-bottom"
@@ -129,7 +135,7 @@
     >
       <AppFooter />
     </div>
-    <CookieConsentBanner />
+    <CookieConsentBanner v-show="!isBuildCardRenderRoute" />
   </div>
 </template>
 
@@ -170,6 +176,14 @@ const appShellVars = computed(() => ({
 }))
 
 const isAdminRoute = computed(() => String(route.path).includes('/admin'))
+/** Page capture PNG build card : pas de nav / barre de commandes / ▾ flottant. */
+const isBuildCardRenderRoute = computed(() => {
+  const path = String(route.path || '').replace(/\/+$/, '') || '/'
+  const segs = path.split('/').filter(Boolean)
+  let i = 0
+  if (segs[0] === 'en' || segs[0] === 'fr') i = 1
+  return segs[i] === 'render' && segs[i + 1] === 'build-card'
+})
 const isHomeRoute = computed(() => {
   const path = String(route.path || '').replace(/\/+$/, '') || '/'
   const segments = path.split('/').filter(Boolean)

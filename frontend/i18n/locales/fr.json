@@ -692,6 +692,9 @@
     "createdOn": "Créé le",
     "addFavorite": "Ajouter aux favoris",
     "removeFavorite": "Retirer des favoris",
+    "linkCopied": "Lien copié dans le presse-papiers.",
+    "imageCopied": "Image copiée dans le presse-papiers.",
+    "imageCopyError": "Impossible de copier dans le presse-papiers.",
     "anonymous": "Anonyme"
   },
   "createBuild": {

@@ -152,6 +152,7 @@
 
                 <div class="relative min-w-0 flex-1">
                   <button
+                    ref="shareToggleButtonRef"
                     type="button"
                     class="details-action-btn details-action-btn--icon w-full min-w-[88px]"
                     :title="t('buildDiscovery.share')"
@@ -178,7 +179,10 @@
                   </button>
                   <div
                     v-if="openShareDropdown"
-                    class="absolute right-0 top-full z-50 mt-1 max-h-[min(80vh,320px)] w-52 overflow-y-auto rounded-lg border border-primary shadow-lg"
+                    :class="[
+                      'absolute right-0 z-50 w-52 rounded-lg border border-primary shadow-lg',
+                      openShareDropdownAbove ? 'bottom-full mb-1' : 'top-full mt-1',
+                    ]"
                     style="background-color: rgb(26, 26, 46)"
                     @click.stop
                   >
@@ -187,21 +191,21 @@
                       @click="copyBuildLink"
                     >
                       <span class="text-base">🔗</span>
-                      <span>Copier le lien</span>
+                      <span>{{ t('buildDiscovery.copyLink') }}</span>
                     </button>
                     <button
                       class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                       @click="downloadBuildImage"
                     >
                       <span class="text-base">⬇️</span>
-                      <span>Télécharger l'image</span>
+                      <span>{{ t('buildDiscovery.downloadImage') }}</span>
                     </button>
                     <button
                       class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                       @click="copyBuildImage"
                     >
                       <span class="text-base">📋</span>
-                      <span>Copier l'image</span>
+                      <span>{{ t('buildDiscovery.copyImage') }}</span>
                     </button>
                     <button
                       class="flex w-full items-center gap-2 rounded-b-lg border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
@@ -317,6 +321,13 @@
         </div>
       </div>
     </div>
+    <NotificationToast
+      v-if="shareToastMessage"
+      :message="shareToastMessage"
+      :type="shareToastType"
+      :duration="2800"
+      @close="closeShareToast"
+    />
   </div>
 </template>
 
@@ -330,14 +341,20 @@ import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
+import NotificationToast from '~/components/NotificationToast.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import { apiUrl } from '~/utils/apiUrl'
+import {
+  buildCardShareImageUrl,
+  fetchBuildCardSharePng,
+  copyPngBlobToClipboard,
+} from '~/utils/buildCardShareImage'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { migrateBuildToCurrent } from '~/utils/migrateBuildToCurrent'
 import type { Build, SubBuild } from '~/types/build'
 import { useClientHydrated } from '~/composables/useClientHydrated'
-import { captureBuildCardBlob } from '~/utils/buildCardCapture'
+import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
 
 const props = defineProps<{ buildId: string }>()
 
@@ -346,17 +363,22 @@ const voteStore = useVoteStore()
 const discoveryStore = useBuildDiscoveryStore()
 const favoritesStore = useFavoritesStore()
 const localePath = useLocalePath()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const { hydrated } = useClientHydrated()
+const { championSplashEnabled } = useChampionSplashPreference()
 
 const loading = ref(true)
 const error = ref<string | null>(null)
 const detailRootBuild = ref<Build | null>(null)
 const build = computed(() => detailRootBuild.value)
 const openShareDropdown = ref(false)
+const openShareDropdownAbove = ref(false)
 const buildCardRef = ref<HTMLElement | null>(null)
+const shareToggleButtonRef = ref<HTMLButtonElement | null>(null)
 const buildToDelete = ref<string | null>(null)
+const shareToastMessage = ref('')
+const shareToastType = ref<'success' | 'error'>('success')
 
 type ShareTrackType = 'link' | 'image' | 'image_with_meta'
 
@@ -506,14 +528,6 @@ const descriptionTabSections = computed(() => {
 
 const hasDescriptionTab = computed(() => descriptionTabSections.value.length > 0)
 
-/** Agrégé pour l’image « auteur + description ». */
-const activeDescription = computed(() => {
-  const sections = descriptionTabSections.value
-  if (sections.length === 0) return ''
-  if (sections.length === 1) return sections[0]?.text ?? ''
-  return sections.map(s => `${s.title}: ${s.text}`).join('\n\n')
-})
-
 watch(
   () => [build.value?.id, hasDescriptionTab.value, route.query.sub] as const,
   () => {
@@ -536,6 +550,8 @@ const isUserBuild = computed(() => {
   const savedBuilds = buildStore.getSavedBuilds()
   return savedBuilds.some(b => b.id === build.value!.id)
 })
+const SHARE_DROPDOWN_ESTIMATED_HEIGHT_PX = 190
+const VIEWPORT_SAFE_MARGIN_PX = 12
 
 const handleUpvote = async () => {
   if (!build.value) return
@@ -550,7 +566,20 @@ const handleDownvote = async () => {
 }
 
 const toggleShareDropdown = () => {
-  openShareDropdown.value = !openShareDropdown.value
+  if (openShareDropdown.value) {
+    openShareDropdown.value = false
+    return
+  }
+  const trigger = shareToggleButtonRef.value
+  if (trigger) {
+    const rect = trigger.getBoundingClientRect()
+    openShareDropdownAbove.value =
+      rect.bottom + SHARE_DROPDOWN_ESTIMATED_HEIGHT_PX + VIEWPORT_SAFE_MARGIN_PX >
+      window.innerHeight
+  } else {
+    openShareDropdownAbove.value = false
+  }
+  openShareDropdown.value = true
 }
 
 const trackBuildShare = async (shareType: ShareTrackType) => {
@@ -566,40 +595,61 @@ const trackBuildShare = async (shareType: ShareTrackType) => {
   }
 }
 
+const showShareToast = (message: string, type: 'success' | 'error' = 'success') => {
+  shareToastMessage.value = ''
+  shareToastType.value = type
+  requestAnimationFrame(() => {
+    shareToastMessage.value = message
+  })
+}
+
+const closeShareToast = () => {
+  shareToastMessage.value = ''
+}
+
 const copyBuildLink = async () => {
   if (!build.value) return
   const subParam =
     typeof detailDisplayedSubIndex.value === 'number' ? `?sub=${detailDisplayedSubIndex.value}` : ''
   const buildUrl = `${window.location.origin}/builds/${build.value.id}${subParam}`
+
   try {
     await navigator.clipboard.writeText(buildUrl)
     trackBuildShare('link').catch(() => {})
     openShareDropdown.value = false
-  } catch (error) {
+    showShareToast(t('buildDiscovery.linkCopied'), 'success')
+  } catch {
     const textarea = document.createElement('textarea')
     textarea.value = buildUrl
     document.body.appendChild(textarea)
     textarea.select()
-    document.execCommand('copy')
+    const copied = document.execCommand('copy')
     document.body.removeChild(textarea)
-    trackBuildShare('link').catch(() => {})
-    openShareDropdown.value = false
+
+    if (copied) {
+      trackBuildShare('link').catch(() => {})
+      openShareDropdown.value = false
+      showShareToast(t('buildDiscovery.linkCopied'), 'success')
+    } else {
+      showShareToast(t('buildDiscovery.imageCopyError'), 'error')
+    }
   }
 }
 
-const captureBuildImage = (): Promise<Blob | null> => {
-  if (!buildCardRef.value || !build.value) return Promise.resolve(null)
-
-  const buildCardWrapper = buildCardRef.value.querySelector('.build-card-wrapper') as HTMLElement
-  if (!buildCardWrapper) return Promise.resolve(null)
-
-  return captureBuildCardBlob(buildCardWrapper)
+function detailShareImagePath(meta: boolean): string {
+  if (!build.value) return ''
+  const sub = detailDisplayedSubIndex.value
+  return buildCardShareImageUrl(build.value.id, locale.value, {
+    sub: typeof sub === 'number' ? sub : null,
+    meta,
+    splash: championSplashEnabled.value,
+  })
 }
 
 const downloadBuildImage = async () => {
   if (!build.value) return
   try {
-    const blob = await captureBuildImage()
+    const blob = await fetchBuildCardSharePng(detailShareImagePath(false))
     if (!blob) return
 
     const url = URL.createObjectURL(blob)
@@ -620,149 +670,48 @@ const downloadBuildImage = async () => {
 const copyBuildImage = async () => {
   if (!build.value) return
   try {
-    const blob = await captureBuildImage()
-    if (!blob) return
+    const blob = await fetchBuildCardSharePng(detailShareImagePath(false))
+    if (!blob) {
+      console.warn('[BuildDetailsPage] fetch build card png returned null', build.value.id)
+      showShareToast(t('buildDiscovery.imageCopyError'), 'error')
+      return
+    }
 
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': blob,
-      }),
-    ])
+    const copied = await copyPngBlobToClipboard(blob)
+    if (!copied) {
+      showShareToast(t('buildDiscovery.imageCopyError'), 'error')
+      return
+    }
+
     trackBuildShare('image').catch(() => {})
     openShareDropdown.value = false
+    showShareToast(t('buildDiscovery.imageCopied'), 'success')
   } catch {
-    // Fallback: télécharger l'image
-    downloadBuildImage()
+    showShareToast(t('buildDiscovery.imageCopyError'), 'error')
   }
-}
-
-const DESCRIPTION_MAX_CHARS = 250
-const CARD_PADDING = 16
-const AUTHOR_FONT = '14px system-ui, sans-serif'
-const DESC_FONT = '12px system-ui, sans-serif'
-const LINE_HEIGHT_AUTHOR = 20
-const LINE_HEIGHT_DESC = 16
-const TEXT_COLOR = 'rgba(255, 255, 255, 0.9)'
-const TEXT_COLOR_DIM = 'rgba(255, 255, 255, 0.7)'
-
-/** Wrap text to fit maxWidth; returns array of lines. */
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(/\s+/)
-  const lines: string[] = []
-  let current = ''
-  for (const w of words) {
-    const next = current ? `${current} ${w}` : w
-    const m = ctx.measureText(next)
-    if (m.width > maxWidth && current) {
-      lines.push(current)
-      current = w
-    } else {
-      current = next
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-/** Capture build card image then composite author + first 250 chars of description below. */
-const captureBuildImageWithAuthorAndDescription = async (): Promise<Blob | null> => {
-  if (!build.value) return null
-  const blob = await captureBuildImage()
-  if (!blob) return null
-
-  return new Promise(resolve => {
-    const img = new Image()
-    img.onload = () => {
-      const cardWidth = img.width
-      const cardHeight = img.height
-
-      const authorText = (build.value?.author || t('buildDiscovery.anonymous')).trim() || '—'
-      const descRaw = (activeDescription.value || '').trim().slice(0, DESCRIPTION_MAX_CHARS)
-      const descText = descRaw + (descRaw.length >= DESCRIPTION_MAX_CHARS ? '…' : '')
-
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      if (!ctx) {
-        resolve(null)
-        return
-      }
-
-      ctx.font = AUTHOR_FONT
-      const authorWidth = cardWidth - CARD_PADDING * 2
-      ctx.font = DESC_FONT
-      const descLines = descText ? wrapText(ctx, descText, authorWidth) : []
-      const descHeight =
-        descLines.length > 0 ? descLines.length * LINE_HEIGHT_DESC + CARD_PADDING : 0
-      const authorBlockHeight = CARD_PADDING + LINE_HEIGHT_AUTHOR
-      const totalHeight = cardHeight + authorBlockHeight + descHeight + CARD_PADDING
-
-      canvas.width = cardWidth
-      canvas.height = totalHeight
-
-      ctx.fillStyle = '#0a0a14'
-      ctx.fillRect(0, 0, cardWidth, totalHeight)
-      ctx.drawImage(img, 0, 0)
-
-      let y = cardHeight + CARD_PADDING
-      ctx.font = AUTHOR_FONT
-      ctx.fillStyle = TEXT_COLOR
-      ctx.fillText(
-        `${t('buildDiscovery.byAuthor')} ${authorText}`,
-        CARD_PADDING,
-        y + LINE_HEIGHT_AUTHOR * 0.8
-      )
-      y += authorBlockHeight
-
-      if (descLines.length > 0) {
-        ctx.font = DESC_FONT
-        ctx.fillStyle = TEXT_COLOR_DIM
-        for (const line of descLines) {
-          ctx.fillText(line, CARD_PADDING, y + LINE_HEIGHT_DESC * 0.8)
-          y += LINE_HEIGHT_DESC
-        }
-      }
-
-      canvas.toBlob(
-        b => {
-          URL.revokeObjectURL(img.src)
-          resolve(b)
-        },
-        'image/png',
-        1.0
-      )
-    }
-    img.onerror = () => resolve(null)
-    img.src = URL.createObjectURL(blob)
-  })
 }
 
 const copyBuildImageWithAuthorAndDescription = async () => {
   if (!build.value) return
   try {
-    const blob = await captureBuildImageWithAuthorAndDescription()
-    if (!blob) return
+    const blob = await fetchBuildCardSharePng(detailShareImagePath(true))
+    if (!blob) {
+      console.warn('[BuildDetailsPage] fetch build card png (meta) returned null', build.value.id)
+      showShareToast(t('buildDiscovery.imageCopyError'), 'error')
+      return
+    }
 
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        'image/png': blob,
-      }),
-    ])
+    const copied = await copyPngBlobToClipboard(blob)
+    if (!copied) {
+      showShareToast(t('buildDiscovery.imageCopyError'), 'error')
+      return
+    }
+
     trackBuildShare('image_with_meta').catch(() => {})
     openShareDropdown.value = false
+    showShareToast(t('buildDiscovery.imageCopied'), 'success')
   } catch {
-    const blob = await captureBuildImageWithAuthorAndDescription()
-    if (blob) {
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `build-${build.value.id}-avec-auteur-description.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-      trackBuildShare('image_with_meta').catch(() => {})
-      openShareDropdown.value = false
-    }
+    showShareToast(t('buildDiscovery.imageCopyError'), 'error')
   }
 }
 

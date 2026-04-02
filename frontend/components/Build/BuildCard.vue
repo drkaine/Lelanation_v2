@@ -2,7 +2,10 @@
 <template>
   <div
     class="build-card-wrapper"
-    :class="{ 'build-card-wrapper--streamer-scaled': isLayoutScaled }"
+    :class="{
+      'build-card-wrapper--streamer-scaled': isLayoutScaled,
+      'build-card-wrapper--screenshot': props.forScreenshot,
+    }"
     :style="buildCardThemeVars"
   >
     <div
@@ -239,7 +242,10 @@
         <div class="build-version">{{ version }}</div>
 
         <button
-          v-if="(readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion)"
+          v-if="
+            !forScreenshot &&
+            ((readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion))
+          "
           ref="variantsTriggerRef"
           class="variants-count-indicator"
           type="button"
@@ -299,13 +305,13 @@
           <div
             class="champion-portrait-container"
             :class="{
-              'is-splash': championSplashEnabled,
+              'is-splash': showChampionSplashArt,
               'validation-blink-frame': props.highlightMissingFields && missingFieldChecks.champion,
             }"
           >
             <template v-if="selectedChampion">
               <img
-                v-show="!championSplashEnabled"
+                v-show="!showChampionSplashArt"
                 ref="championPortraitRef"
                 :src="championIconSrc"
                 :alt="selectedChampion.name"
@@ -316,7 +322,7 @@
                 @mouseleave="onChampionMouseLeave"
               />
               <img
-                v-show="championSplashEnabled"
+                v-show="showChampionSplashArt"
                 ref="championPortraitRef"
                 :src="championSplashSrc"
                 :alt="selectedChampion.name"
@@ -716,7 +722,7 @@
                   <span class="skill-slot-dropdown-label">{{ t(`skills.key.${spell.key}`) }}</span>
                 </button>
               </div>
-              <span v-if="index < 2" class="arrow-down">↓</span>
+              <span v-if="index < 2 && !forScreenshot" class="arrow-down">↓</span>
             </div>
           </div>
         </div>
@@ -1059,7 +1065,7 @@
         >
           <div class="back-header-slot back-header-slot--left">
             <button
-              v-if="showBackVariantSelector"
+              v-if="showBackVariantSelector && !forScreenshot"
               ref="variantsTriggerRef"
               class="variants-count-indicator variants-count-indicator--back"
               type="button"
@@ -1364,6 +1370,13 @@ interface Props {
   highlightMissingFields?: boolean
   /** En readonly : variante à afficher par défaut (null = build principal). Ex. quand la recherche ne matche qu'une variante. */
   initialDisplayedVariantIndex?: number | null
+  /** Capture PNG serveur : masque flèches / chrome superflu. */
+  forScreenshot?: boolean
+  /**
+   * Capture : true/force splash ou false/portrait. `null` = préférence utilisateur.
+   * (Une prop `boolean` optionnelle seule se voit appliquer `false` par défaut par Vue → cassait le mode splash.)
+   */
+  championSplashOverride?: boolean | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -1373,6 +1386,8 @@ const props = withDefaults(defineProps<Props>(), {
   hideTopActions: false,
   highlightMissingFields: false,
   initialDisplayedVariantIndex: null,
+  forScreenshot: false,
+  championSplashOverride: null,
 })
 
 const emit = defineEmits<{
@@ -1394,6 +1409,11 @@ const hideTopActions = computed(() => props.hideTopActions)
 // Global tooltip preference (shared state via composable)
 const { tooltipsEnabled } = useTooltipsPreference()
 const { championSplashEnabled } = useChampionSplashPreference()
+const showChampionSplashArt = computed(() => {
+  const o = props.championSplashOverride
+  if (o === true || o === false) return o
+  return championSplashEnabled.value
+})
 
 // effectiveSheetTooltips: respect both the prop and the global preference
 const effectiveSheetTooltips = computed(() => props.sheetTooltips && tooltipsEnabled.value)
@@ -4113,6 +4133,20 @@ defineExpose({
   font-weight: bold;
 }
 
+/* Capture PNG : masque seulement les ↓ entre sorts ; les → entre items core/finaux restent */
+.build-card-wrapper--screenshot .arrow-down {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* First Three Ups Section */
 .first-three-ups-section {
   position: absolute;
@@ -4265,7 +4299,7 @@ defineExpose({
   opacity: 0.3;
 }
 
-/* Fond opaque pour lisibilité à l'écran et à la capture image (fallback pour dom-to-image) */
+/* Fond opaque pour lisibilité à l'écran */
 .skill-key {
   position: absolute;
   bottom: -5px;
@@ -4721,5 +4755,13 @@ defineExpose({
   font-size: 0.9rem;
   font-weight: 600;
   color: rgb(var(--rgb-accent));
+}
+
+/* Dernier mot sur le mode capture : ↓ sorts uniquement */
+.build-card-wrapper--screenshot .arrow-down {
+  display: none !important;
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  opacity: 0 !important;
 }
 </style>

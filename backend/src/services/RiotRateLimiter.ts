@@ -8,9 +8,9 @@
 /** Pause when a 120s bucket count reaches this usage (Riot app limit is typically 100/120s). */
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
 /** Cooldown after hitting near-limit on the 120s bucket (ms). */
-export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 1_000
+export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 6_000
 /** Minimum pause after a real HTTP 429 from Riot (Retry-After is applied at half duration). */
-export const RIOT_429_MIN_PENALTY_MS = 2_000
+export const RIOT_429_MIN_PENALTY_MS = 9_000
 
 const PENALTY_429_MS = RIOT_429_MIN_PENALTY_MS
 

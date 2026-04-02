@@ -131,7 +131,7 @@ export default defineNuxtConfig({
     vueI18n: './i18n.config.ts',
   } as any,
   robots: {
-    disallow: ['/admin', '/api/admin'],
+    disallow: ['/admin', '/api/admin', '/render'],
   },
   sitemap: {
     sitemaps: {
@@ -146,7 +146,7 @@ export default defineNuxtConfig({
           '/legal',
           '/lelanation-app',
         ],
-        exclude: ['/api/**', '/admin', '/admin/**'],
+        exclude: ['/api/**', '/admin', '/admin/**', '/render/**'],
       },
     },
   },

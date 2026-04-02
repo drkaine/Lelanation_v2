@@ -690,6 +690,9 @@
     "createdOn": "Created on",
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
+    "linkCopied": "Link copied to clipboard.",
+    "imageCopied": "Image copied to clipboard.",
+    "imageCopyError": "Unable to copy to clipboard.",
     "anonymous": "Anonymous"
   },
   "createBuild": {
