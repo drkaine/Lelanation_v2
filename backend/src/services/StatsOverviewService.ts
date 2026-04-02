@@ -12,6 +12,7 @@ import {
   rankTierCacheKey,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
+import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -406,7 +407,15 @@ export async function getOverviewStats(
     const [coreRows, matchCountRows, matchDivisionRows, matchVersionRows, playerCountResult] = await Promise.all([
       prisma.mvChampionCoreStat.findMany({
         where: coreWhere,
-        select: { championId: true, countWin: true, countGame: true, countBan: true },
+        select: {
+          championId: true,
+          countWin: true,
+          countGame: true,
+          countBan: true,
+          rankTier: true,
+          gameVersion: true,
+          region: true,
+        },
       }),
       prisma.match.count({ where: matchWhere }),
       prisma.match.groupBy({
@@ -429,6 +438,8 @@ export async function getOverviewStats(
 
     const totalMatches = matchCountRows
 
+    const banTotalsByChampion = bansPerChampionFromMvRows(coreRows)
+
     // Aggregate champion stats
     const byChampion = new Map<number, { wins: number; games: number; bans: number }>()
     let totalParticipants = 0
@@ -440,8 +451,10 @@ export async function getOverviewStats(
       }
       entry.wins += row.countWin
       entry.games += row.countGame
-      entry.bans += row.countBan
       totalParticipants += row.countGame
+    }
+    for (const [cid, entry] of byChampion) {
+      entry.bans = banTotalsByChampion.get(cid) ?? 0
     }
 
     const champList = Array.from(byChampion.entries())
@@ -877,17 +890,25 @@ export async function getOverviewTeamsStats(
           return w
         })(),
       },
-      select: { championId: true, countBan: true, countWin: true, countGame: true },
+      select: {
+        championId: true,
+        countBan: true,
+        countWin: true,
+        countGame: true,
+        rankTier: true,
+        gameVersion: true,
+        region: true,
+      },
     })
 
     const bansByChamp = new Map<number, { byWin: number; byLoss: number }>()
-    for (const r of coreStatsBan) {
-      if (r.countBan === 0) continue
-      let e = bansByChamp.get(r.championId)
-      if (!e) { e = { byWin: 0, byLoss: 0 }; bansByChamp.set(r.championId, e) }
+    for (const [cid, totalBans] of bansPerChampionFromMvRows(coreStatsBan)) {
+      if (totalBans === 0) continue
       // Approximate: bans are evenly split, no win/loss info in aggregate
-      e.byWin += Math.round(r.countBan / 2)
-      e.byLoss += r.countBan - Math.round(r.countBan / 2)
+      bansByChamp.set(cid, {
+        byWin: Math.round(totalBans / 2),
+        byLoss: totalBans - Math.round(totalBans / 2),
+      })
     }
 
     const banList = Array.from(bansByChamp.entries())
@@ -1284,15 +1305,32 @@ export async function getOverviewProgressionFullStats(
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.mvChampionCoreStat.findMany({
         where: oldestWhere,
-        select: { championId: true, countWin: true, countGame: true, countBan: true },
+        select: {
+          championId: true,
+          countWin: true,
+          countGame: true,
+          countBan: true,
+          rankTier: true,
+          gameVersion: true,
+          region: true,
+        },
       }),
       prisma.mvChampionCoreStat.findMany({
         where: sinceWhere,
-        select: { championId: true, countWin: true, countGame: true, countBan: true },
+        select: {
+          championId: true,
+          countWin: true,
+          countGame: true,
+          countBan: true,
+          rankTier: true,
+          gameVersion: true,
+          region: true,
+        },
       }),
     ])
 
     const aggByChamp = (rows: typeof oldestRows) => {
+      const banTotals = bansPerChampionFromMvRows(rows)
       const m = new Map<number, { wins: number; games: number; bans: number }>()
       for (const r of rows) {
         let e = m.get(r.championId)
@@ -1302,7 +1340,9 @@ export async function getOverviewProgressionFullStats(
         }
         e.wins += r.countWin
         e.games += r.countGame
-        e.bans += r.countBan
+      }
+      for (const [cid, e] of m) {
+        e.bans = banTotals.get(cid) ?? 0
       }
       return m
     }

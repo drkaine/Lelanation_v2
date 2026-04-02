@@ -6,6 +6,7 @@ import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
@@ -73,12 +74,17 @@ export class RiotStatsAggregator {
           countWin: true,
           countGame: true,
           countBan: true,
+          rankTier: true,
+          gameVersion: true,
+          region: true,
         },
       })
 
       if (rows.length === 0) {
         return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
       }
+
+      const banTotalsByChampion = bansPerChampionFromMvRows(rows)
 
       // Aggregate by championId
       const byChampion = new Map<
@@ -92,15 +98,12 @@ export class RiotStatsAggregator {
       >()
 
       let totalGames = 0
-      let totalBans = 0
 
       for (const row of rows) {
         const cid = row.championId
         const games = row.countGame
         const wins = row.countWin
-        const bans = row.countBan
         totalGames += games
-        totalBans += bans
         let entry = byChampion.get(cid)
         if (!entry) {
           entry = { games: 0, wins: 0, bans: 0, byRole: {} }
@@ -108,11 +111,13 @@ export class RiotStatsAggregator {
         }
         entry.games += games
         entry.wins += wins
-        entry.bans += bans
         const roleKey = row.role
         if (!entry.byRole[roleKey]) entry.byRole[roleKey] = { games: 0, wins: 0 }
         entry.byRole[roleKey].games += games
         entry.byRole[roleKey].wins += wins
+      }
+      for (const [cid, entry] of byChampion) {
+        entry.bans = banTotalsByChampion.get(cid) ?? 0
       }
 
       // Total matches ≈ totalGames / 10 (10 players per match)

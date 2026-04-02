@@ -4,6 +4,7 @@
  * Tier score is computed from Lolalytics-style matchup deltas (centered distribution), then tiered by percentiles.
  */
 import { prisma } from '../db.js'
+import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { applyRankTierWhere } from '../utils/statsFilters.js'
 import { isDatabaseConfigured } from '../db.js'
 
@@ -307,6 +308,7 @@ async function fetchRoleRows(
       role: true,
       gameVersion: true,
       region: true,
+      rankTier: true,
       countWin: true,
       countGame: true,
       countBan: true,
@@ -314,6 +316,8 @@ async function fetchRoleRows(
   })
 
   if (coreRows.length === 0) return []
+
+  const banTotalsByChampion = bansPerChampionFromMvRows(coreRows)
 
   // Aggregate by (champion_id, role) across all versions matching the patch and all regions
   const aggByChampionRole = new Map<
@@ -331,8 +335,10 @@ async function fetchRoleRows(
     }
     entry.wins += row.countWin
     entry.games += row.countGame
-    entry.bans += row.countBan
     totalGamesAllRoles += row.countGame
+  }
+  for (const entry of aggByChampionRole.values()) {
+    entry.bans = banTotalsByChampion.get(entry.championId) ?? 0
   }
 
   // Total matches ≈ totalGames / 10 (10 players per match)
