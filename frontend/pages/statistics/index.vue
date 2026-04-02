@@ -303,9 +303,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -331,13 +329,13 @@
                       <span class="flex-1">
                         {{ t('statisticsPage.fastStatsMostPicked') }}
                         <span
-                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
                           aria-hidden="true"
                         >
                           ⓘ
                           <span
                             role="tooltip"
-                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
                           >
                             {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
                           </span>
@@ -422,9 +420,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -450,13 +446,13 @@
                       <span class="inline-flex flex-1 items-center">
                         {{ t('statisticsPage.fastStatsBestWinrate') }}
                         <span
-                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
                           aria-hidden="true"
                         >
                           ⓘ
                           <span
                             role="tooltip"
-                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
                           >
                             {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
                           </span>
@@ -541,9 +537,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -569,13 +563,13 @@
                       <span class="inline-flex flex-1 items-center">
                         {{ t('statisticsPage.fastStatsMostBanned') }}
                         <span
-                          class="group/tooltip relative ml-1 inline-flex cursor-help text-text/50"
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
                           aria-hidden="true"
                         >
                           ⓘ
                           <span
                             role="tooltip"
-                            class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
                           >
                             {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
                           </span>
@@ -660,9 +654,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -685,7 +677,7 @@
                       >
                         {{ cardIsFavorite('overview.winrateSince') ? '★' : '☆' }}
                       </button>
-                      <span class="flex flex-1 items-center justify-between gap-2">
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                         <span>
                           {{
                             progressionFromVersion
@@ -694,6 +686,18 @@
                                 })
                               : t('statisticsPage.fastStatsWinrateProgression')
                           }}
+                        </span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
+                          </span>
                         </span>
                       </span>
                     </h3>
@@ -721,10 +725,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.wrOldest).toFixed(1) }}% →
+                                  {{ Number(row.wrSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -761,9 +772,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -786,11 +795,25 @@
                       >
                         {{ cardIsFavorite('overview.pickrateSince') ? '★' : '☆' }}
                       </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.fastStatsPickrateSinceTitle', {
-                          version: progressionFromVersion || '—',
-                        })
-                      }}</span>
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                        <span>{{
+                          t('statisticsPage.fastStatsPickrateSinceTitle', {
+                            version: progressionFromVersion || '—',
+                          })
+                        }}</span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsPickrateSince') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <table
                       v-if="overviewTopPickrateSince.length"
@@ -816,10 +839,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.pickrateOldest).toFixed(1) }}% →
+                                  {{ Number(row.pickrateSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -856,9 +886,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -881,11 +909,25 @@
                       >
                         {{ cardIsFavorite('overview.banrateSince') ? '★' : '☆' }}
                       </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.fastStatsBanrateSinceTitle', {
-                          version: progressionFromVersion || '—',
-                        })
-                      }}</span>
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                        <span>{{
+                          t('statisticsPage.fastStatsBanrateSinceTitle', {
+                            version: progressionFromVersion || '—',
+                          })
+                        }}</span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsBanrateSince') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <table
                       v-if="overviewTopBanrateSince.length"
@@ -911,10 +953,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.banrateOldest).toFixed(1) }}% →
+                                  {{ Number(row.banrateSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -951,9 +1000,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -976,11 +1023,25 @@
                       >
                         {{ cardIsFavorite('overview.winrateSinceDown') ? '★' : '☆' }}
                       </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.fastStatsWinrateSinceDownTitle', {
-                          version: progressionFromVersion || '—',
-                        })
-                      }}</span>
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                        <span>{{
+                          t('statisticsPage.fastStatsWinrateSinceDownTitle', {
+                            version: progressionFromVersion || '—',
+                          })
+                        }}</span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsWinrateSinceDown') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <table
                       v-if="overviewBottomWinrateSince.length"
@@ -1006,10 +1067,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.wrOldest).toFixed(1) }}% →
+                                  {{ Number(row.wrSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -1048,9 +1116,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -1073,11 +1139,25 @@
                       >
                         {{ cardIsFavorite('overview.pickrateSinceDown') ? '★' : '☆' }}
                       </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.fastStatsPickrateSinceDownTitle', {
-                          version: progressionFromVersion || '—',
-                        })
-                      }}</span>
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                        <span>{{
+                          t('statisticsPage.fastStatsPickrateSinceDownTitle', {
+                            version: progressionFromVersion || '—',
+                          })
+                        }}</span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsPickrateSinceDown') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <table
                       v-if="overviewBottomPickrateSince.length"
@@ -1103,10 +1183,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.pickrateOldest).toFixed(1) }}% →
+                                  {{ Number(row.pickrateSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -1145,9 +1232,7 @@
                   <div
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -1170,11 +1255,25 @@
                       >
                         {{ cardIsFavorite('overview.banrateSinceDown') ? '★' : '☆' }}
                       </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.fastStatsBanrateSinceDownTitle', {
-                          version: progressionFromVersion || '—',
-                        })
-                      }}</span>
+                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                        <span>{{
+                          t('statisticsPage.fastStatsBanrateSinceDownTitle', {
+                            version: progressionFromVersion || '—',
+                          })
+                        }}</span>
+                        <span
+                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipFastStatsBanrateSinceDown') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <table
                       v-if="overviewBottomBanrateSince.length"
@@ -1200,10 +1299,17 @@
                                 :alt="championName(row.championId) || ''"
                                 class="h-5 w-5 shrink-0 rounded-full object-cover"
                               />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
+                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
+                                <div class="truncate font-medium leading-tight text-text">
+                                  {{ championName(row.championId) || row.championId }}
+                                </div>
+                                <div
+                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
+                                >
+                                  {{ Number(row.banrateOldest).toFixed(1) }}% →
+                                  {{ Number(row.banrateSince).toFixed(1) }}%
+                                </div>
+                              </div>
                               <div
                                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
                               >
@@ -1327,9 +1433,7 @@
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -1456,9 +1560,7 @@
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3
-                      class="fast-stat-title mb-1 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
                       <button
                         type="button"
                         class="text-base leading-none transition-colors"
@@ -1583,7 +1685,7 @@
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
                     class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
                   >
-                    <div class="mb-3 flex flex-wrap gap-2">
+                    <div class="mb-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         class="rounded px-2 py-1 text-xs font-semibold transition-colors"
@@ -1621,13 +1723,13 @@
                         {{ t('statisticsPage.objectivesTabSouls') }}
                       </button>
                       <span
-                        class="relative inline-flex cursor-help text-text/50"
-                        aria-hidden="true"
+                        class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                        :aria-label="t('statisticsPage.tooltipOverviewObjectives')"
                       >
                         ⓘ
                         <span
                           role="tooltip"
-                          class="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-[14rem] max-w-[26rem] -translate-x-1/2 rounded border border-primary/40 bg-surface/100 px-3 py-2 text-left text-xs font-normal leading-snug text-text shadow-lg group-hover/tooltip:block"
+                          class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
                         >
                           {{ t('statisticsPage.tooltipOverviewObjectives') }}
                         </span>
@@ -2408,10 +2510,26 @@
                   class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
                 >
                   <div
-                    class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-2"
+                    class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-2 w-full text-sm font-semibold lg:text-left">
-                      {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
+                    <h3
+                      class="fast-stat-title mb-2 flex w-full items-center gap-2 text-sm font-semibold lg:text-left"
+                    >
+                      <span class="inline-flex flex-1 flex-wrap items-center">
+                        {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
+                        <span
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--start hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.sidesWinrateShareNote') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <div
                       class="pie-chart-2 relative inline-flex h-[150px] w-[150px] shrink-0 items-center justify-center"
@@ -2467,11 +2585,25 @@
                     </div>
                   </div>
                   <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-blue-500/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold">
-                      {{ t('statisticsPage.sidesBlue') }} —
-                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+                      <span class="inline-flex flex-1 flex-wrap items-center">
+                        {{ t('statisticsPage.sidesBlue') }} —
+                        {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                        <span
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipSidesMatchOutcomeCard') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <div
                       v-if="Number(sidesSurrenderBySide.blue.total) > 0"
@@ -2531,11 +2663,25 @@
                     </div>
                   </div>
                   <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border-[1.5px] border-red-500/30 bg-surface/30 p-2"
+                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
-                    <h3 class="fast-stat-title mb-2 text-sm font-semibold">
-                      {{ t('statisticsPage.sidesRed') }} —
-                      {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+                      <span class="inline-flex flex-1 flex-wrap items-center">
+                        {{ t('statisticsPage.sidesRed') }} —
+                        {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
+                        <span
+                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+                          aria-hidden="true"
+                        >
+                          ⓘ
+                          <span
+                            role="tooltip"
+                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                          >
+                            {{ t('statisticsPage.tooltipSidesMatchOutcomeCard') }}
+                          </span>
+                        </span>
+                      </span>
                     </h3>
                     <div
                       v-if="Number(sidesSurrenderBySide.red.total) > 0"
@@ -2595,114 +2741,98 @@
                     </div>
                   </div>
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.fastStatsMostPicked')"
-                    border-class="border-[1.5px] border-blue-500/30"
+                    side="blue"
+                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsMostPicked')}`"
+                    :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
                     variant="pick"
                     :rows="sidesBlueMostPickedRows"
                   />
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.fastStatsMostPicked')"
-                    border-class="border-[1.5px] border-red-500/30"
+                    side="red"
+                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsMostPicked')}`"
+                    :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
                     variant="pick"
                     :rows="sidesRedMostPickedRows"
                   />
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.fastStatsBestWinrate')"
-                    border-class="border-[1.5px] border-blue-500/30"
+                    side="blue"
+                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
+                    :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
                     variant="wr"
                     :rows="sidesBlueBestWinrateRows"
                   />
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.fastStatsBestWinrate')"
-                    border-class="border-[1.5px] border-red-500/30"
+                    side="red"
+                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
+                    :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
                     variant="wr"
                     :rows="sidesRedBestWinrateRows"
                   />
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.sidesBansBySide')"
-                    border-class="border-[1.5px] border-blue-500/30"
+                    side="blue"
+                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.sidesBansBySide')}`"
+                    :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
                     variant="ban"
                     :rows="sidesBlueBanRows"
                   />
                   <StatisticsTeamSideFastStatTable
-                    :title="t('statisticsPage.sidesBansBySide')"
-                    border-class="border-[1.5px] border-red-500/30"
+                    side="red"
+                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.sidesBansBySide')}`"
+                    :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
                     variant="ban"
                     :rows="sidesRedBanRows"
                   />
-                </div>
-
-                <div
-                  v-if="progressionFromVersion"
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
-                >
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsWinrateSince', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-blue-500/30"
-                    variant="dWr"
-                    :rows="sidesBlueTopWinrateSince"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsWinrateSince', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-red-500/30"
-                    variant="dWr"
-                    :rows="sidesRedTopWinrateSince"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsPickrateSinceTitle', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-blue-500/30"
-                    variant="dPick"
-                    :rows="sidesBlueTopPickrateSince"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsPickrateSinceTitle', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-red-500/30"
-                    variant="dPick"
-                    :rows="sidesRedTopPickrateSince"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsBanrateSinceTitle', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-blue-500/30"
-                    variant="dBan"
-                    :rows="sidesBlueTopBanrateSince"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    :title="
-                      t('statisticsPage.fastStatsBanrateSinceTitle', {
-                        version: progressionFromVersion,
-                      })
-                    "
-                    border-class="border-[1.5px] border-red-500/30"
-                    variant="dBan"
-                    :rows="sidesRedTopBanrateSince"
-                  />
+                  <template v-if="progressionFromVersion">
+                    <StatisticsTeamSideFastStatTable
+                      side="blue"
+                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
+                      variant="dWr"
+                      :rows="sidesBlueTopWinrateSince"
+                    />
+                    <StatisticsTeamSideFastStatTable
+                      side="red"
+                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
+                      variant="dWr"
+                      :rows="sidesRedTopWinrateSince"
+                    />
+                    <StatisticsTeamSideFastStatTable
+                      side="blue"
+                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
+                      variant="dPick"
+                      :rows="sidesBlueTopPickrateSince"
+                    />
+                    <StatisticsTeamSideFastStatTable
+                      side="red"
+                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
+                      variant="dPick"
+                      :rows="sidesRedTopPickrateSince"
+                    />
+                    <StatisticsTeamSideFastStatTable
+                      side="blue"
+                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
+                      variant="dBan"
+                      :rows="sidesBlueTopBanrateSince"
+                    />
+                    <StatisticsTeamSideFastStatTable
+                      side="red"
+                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
+                      :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
+                      variant="dBan"
+                      :rows="sidesRedTopBanrateSince"
+                    />
+                  </template>
                 </div>
 
                 <div
                   v-if="overviewSidesData && overviewSidesData.matchCount > 0"
-                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border-[1.5px] border-primary/30 bg-surface/30 p-6"
+                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
                 >
-                  <div class="mb-3 flex flex-wrap gap-2">
+                  <div class="mb-3 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       class="rounded px-2 py-1 text-xs font-semibold transition-colors"
@@ -2739,6 +2869,18 @@
                     >
                       {{ t('statisticsPage.objectivesTabSouls') }}
                     </button>
+                    <span
+                      class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
+                      :aria-label="t('statisticsPage.tooltipSidesObjectives')"
+                    >
+                      ⓘ
+                      <span
+                        role="tooltip"
+                        class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
+                      >
+                        {{ t('statisticsPage.tooltipSidesObjectives') }}
+                      </span>
+                    </span>
                   </div>
                   <div
                     v-if="objectivesSidesPanelTab === 'objectives'"
@@ -3789,7 +3931,7 @@
                                       class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
                                       :style="{
                                         bottom: tierListChartZeroBottomPct + '%',
-                                        height: tierListChartBarPct(normalizePbi(c.pbi)) + '%',
+                                        height: tierListChartBarHeightPct(c.pbi) + '%',
                                         backgroundColor: tierListChartBarColor(c.tier),
                                       }"
                                     />
@@ -3797,8 +3939,8 @@
                                       v-else
                                       class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
                                       :style="{
-                                        top: 100 - tierListChartZeroBottomPct + '%',
-                                        height: tierListChartBarPct(normalizePbi(c.pbi)) + '%',
+                                        bottom: tierListChartScoreBottomPct(c.pbi) + '%',
+                                        height: tierListChartBarHeightPct(c.pbi) + '%',
                                         backgroundColor: tierListChartBarColor(c.tier),
                                       }"
                                     />
@@ -4292,43 +4434,12 @@ const versionStore = useVersionStore()
 const statisticsUiStore = useStatisticsUiStore()
 const statisticsCustomStore = useStatisticsCustomStore()
 const { version: gameVersion } = useGameVersion()
+const route = useRoute()
+const router = useRouter()
 
-const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
-const riotLocale = computed(() => getRiotLanguage(locale.value))
-
-const activeTab = ref<
-  | 'overview'
-  | 'tierlist'
-  | 'trends'
-  | 'team'
-  | 'runes'
-  | 'items'
-  | 'spells'
-  | 'infos'
-  | 'champions'
-  | 'progressions'
-  | 'sides'
-  | 'detail'
-  | 'duration'
-  | 'abandons'
->('overview')
-const tabs = computed(() => [
-  { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
-  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
-  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
-  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
-  { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
-  { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
-  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
-  { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
-])
-
-function cardIsFavorite(cardId: string): boolean {
-  return statisticsCustomStore.isFavorite(cardId)
-}
-
-function toggleFavoriteCard(cardId: string, title: string): void {
-  statisticsCustomStore.toggleFavorite(cardId, title)
+function queryFirst(value: string | string[] | null | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? ''
+  return value ?? ''
 }
 
 function normalizeLegacyTab(tab: string): StatisticsMainTab {
@@ -4351,6 +4462,51 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     return tab
   }
   return 'overview'
+}
+
+/** Onglet initial aligné sur l’URL (SSR + client) pour éviter hydration mismatch et faux onglet « Vue d’ensemble ». */
+function initialActiveTabFromRoute(): StatisticsMainTab {
+  const tabRaw = queryFirst(route.query.tab as string | string[] | null | undefined)
+  if (tabRaw) return normalizeLegacyTab(tabRaw)
+  return 'overview'
+}
+
+const getRiotLanguage = (loc: string): string => (loc === 'en' ? 'en_US' : 'fr_FR')
+const riotLocale = computed(() => getRiotLanguage(locale.value))
+
+const activeTab = ref<
+  | 'overview'
+  | 'tierlist'
+  | 'trends'
+  | 'team'
+  | 'runes'
+  | 'items'
+  | 'spells'
+  | 'infos'
+  | 'champions'
+  | 'progressions'
+  | 'sides'
+  | 'detail'
+  | 'duration'
+  | 'abandons'
+>(initialActiveTabFromRoute())
+const tabs = computed(() => [
+  { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
+  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
+  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
+  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
+  { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
+  { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
+  { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
+  { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
+])
+
+function cardIsFavorite(cardId: string): boolean {
+  return statisticsCustomStore.isFavorite(cardId)
+}
+
+function toggleFavoriteCard(cardId: string, title: string): void {
+  statisticsCustomStore.toggleFavorite(cardId, title)
 }
 
 const championSearchQuery = ref('')
@@ -4733,10 +4889,19 @@ function tierListChartYTickBottomPct(tick: number): number {
   return ((tick - s.yMin) / (s.yMax - s.yMin)) * 100
 }
 
-function tierListChartBarPct(pbi: number): number {
-  const range = tierListChartYScale.value.range
+/** Hauteur en % du tracé : distance entre la ligne 0 et le score (pas |score| / plage totale). */
+function tierListChartBarHeightPct(pbi: number): number {
+  const s = tierListChartYScale.value
+  const range = s.yMax - s.yMin
   if (range <= 0) return 0
-  return (Math.abs(pbi) / range) * 100
+  const n = normalizePbi(pbi)
+  const zeroPct = ((0 - s.yMin) / range) * 100
+  const valPct = ((n - s.yMin) / range) * 100
+  return Math.abs(valPct - zeroPct)
+}
+
+function tierListChartScoreBottomPct(pbi: number): number {
+  return tierListChartYTickBottomPct(normalizePbi(pbi))
 }
 
 function normalizePbi(value: number): number {
@@ -4880,15 +5045,8 @@ const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const progressionFromVersionOverride = ref('')
-const route = useRoute()
-const router = useRouter()
 const isApplyingQueryState = ref(false)
 const isSyncingQueryState = ref(false)
-
-function queryFirst(value: string | string[] | null | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? ''
-  return value ?? ''
-}
 
 function queryAll(value: string | string[] | null | undefined): string[] {
   if (Array.isArray(value)) return value.filter(Boolean)
@@ -4906,6 +5064,7 @@ function applyStatisticsStateFromQuery(): void {
 
   isApplyingQueryState.value = true
   if (tabRaw) activeTab.value = normalizeLegacyTab(tabRaw)
+  else activeTab.value = 'overview'
   statsVersionFilter.value = versionRaw
   statsRoleFilter.value = roleRaw
   statsDivisionFilter.value = divisionsRaw
@@ -4958,7 +5117,6 @@ const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([
 if (import.meta.client) {
   statisticsUiStore.init()
   statisticsCustomStore.init()
-  activeTab.value = normalizeLegacyTab(statisticsUiStore.activeTab)
   applyStatisticsStateFromQuery()
 }
 
@@ -6950,7 +7108,8 @@ onMounted(async () => {
   flex: 0 0 313px;
   background: #08101f !important;
   justify-self: center;
-  overflow: hidden;
+  /* visible : les tooltips au-dessus de la carte ne sont plus rognés */
+  overflow: visible;
 }
 .fast-stat-card-objectives {
   width: 100% !important;
@@ -6986,6 +7145,43 @@ onMounted(async () => {
 }
 .fast-stat-button {
   font-weight: 500;
+}
+
+/* Infobulles : fond/texte explicites (évite héritage .fast-stat-title + bg-surface illisible) */
+.fast-stat-tooltip-popover {
+  pointer-events: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  margin-bottom: 0.35rem;
+  min-width: 16rem;
+  max-width: min(28rem, calc(100vw - 1.5rem));
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(148 163 184 / 0.45);
+  background: rgb(15 23 42);
+  color: rgb(241 245 249);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+@media (min-width: 1024px) {
+  .fast-stat-tooltip-popover--start {
+    left: 0;
+    transform: none;
+  }
+}
+@media (max-width: 1023px) {
+  .fast-stat-tooltip-popover--start {
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 /* Overview runes (shyv.net style): grid per path, pickrate bar + winrate % */

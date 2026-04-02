@@ -832,12 +832,12 @@ export async function getOverviewTeamsStats(
         SUM(CASE WHEN upper(d.drake_type) = 'FIRE_DRAGON' THEN 1 ELSE 0 END)::int AS count_fire_drake,
         SUM(CASE WHEN upper(d.drake_type) = 'HEXTECH_DRAGON' THEN 1 ELSE 0 END)::int AS count_hextec_drake,
         SUM(CASE WHEN upper(d.drake_type) = 'CHEMTECH_DRAGON' THEN 1 ELSE 0 END)::int AS count_chem_drake,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('MOUNTAIN', 'EARTH_DRAGON', 'MOUNTAIN_DRAGON', 'EARTH_DRAGON_SOUL', 'MOUNTAIN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_earth_drake_soul,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('OCEAN', 'WATER_DRAGON', 'OCEAN_DRAGON', 'WATER_DRAGON_SOUL', 'OCEAN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_water_drake_soul,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('CLOUD', 'AIR_DRAGON', 'CLOUD_DRAGON', 'AIR_DRAGON_SOUL', 'CLOUD_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_wind_drake_soul,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('INFERNAL', 'FIRE_DRAGON', 'FIRE_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_fire_drake_soul,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('HEXTECH', 'HEXTECH_DRAGON', 'HEXTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_hextec_drake_soul,
-        MAX(CASE WHEN upper(trim(d.soul)) IN ('CHEMTECH', 'CHEMTECH_DRAGON', 'CHEMTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_chem_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('MOUNTAIN', 'EARTH_DRAGON', 'MOUNTAIN_DRAGON', 'EARTH_DRAGON_SOUL', 'MOUNTAIN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_earth_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('OCEAN', 'WATER_DRAGON', 'OCEAN_DRAGON', 'WATER_DRAGON_SOUL', 'OCEAN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_water_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('CLOUD', 'AIR_DRAGON', 'CLOUD_DRAGON', 'AIR_DRAGON_SOUL', 'CLOUD_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_wind_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('INFERNAL', 'FIRE_DRAGON', 'FIRE_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_fire_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('HEXTECH', 'HEXTECH_DRAGON', 'HEXTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_hextec_drake_soul,
+        SUM(CASE WHEN upper(trim(d.soul)) IN ('CHEMTECH', 'CHEMTECH_DRAGON', 'CHEMTECH_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_chem_drake_soul,
         SUM(CASE WHEN upper(d.drake_type) = 'ELDER_DRAGON' OR lower(d.drake_type) = 'elder' THEN 1 ELSE 0 END)::int AS sum_elder_kills
       FROM drake_details d
       INNER JOIN teams t ON t.id = d.team_id
