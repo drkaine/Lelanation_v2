@@ -1912,345 +1912,32 @@
                 <button
                   type="button"
                   class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-                  @click="loadOverviewDetail(true)"
+                  @click="retryOverviewDetail()"
                 >
                   {{ t('statisticsPage.retry') }}
                 </button>
               </div>
-              <template v-if="overviewDetailPending || overviewDetailData || overviewDetailError">
-                <fieldset
-                  class="overview-runes-fieldset rounded-lg border border-primary/30 bg-surface/30 p-6"
+              <template v-if="!overviewDetailError">
+                <div
+                  v-if="overviewDetailPending && !overviewDetailData"
+                  class="rounded-lg py-8 text-center text-text/70"
                 >
-                  <legend class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.overviewDetailRunes') }}
-                  </legend>
-                  <div
-                    v-if="overviewDetailPending && !overviewDetailData"
-                    class="py-4 text-center text-text/70"
-                  >
-                    {{ t('statisticsPage.loading') }}
-                  </div>
-                  <!-- Tree layout when rune paths are loaded -->
-                  <div
-                    v-else-if="overviewRunesByPath.some(p => p.cells.length > 0)"
-                    class="blocks flex flex-wrap gap-6"
-                  >
-                    <div
-                      v-for="{ path, cells } in overviewRunesByPath"
-                      :key="path.id"
-                      class="runes overview-runes-grid"
-                      :style="runePathPanelStyle(path.icon)"
-                    >
-                      <button
-                        v-for="(cell, idx) in cells"
-                        :key="path.id + '-' + cell.rune.id + '-' + idx"
-                        type="button"
-                        class="overview-rune-cell"
-                        :class="{ 'rune main': cell.row === 0, rune: cell.row !== 0 }"
-                        :style="{ gridArea: `${cell.row + 1} / ${cell.col + 1}` }"
-                        :title="
-                          cell.rune.name +
-                          (cell.stats
-                            ? ` — ${Number(cell.stats.pickrate).toFixed(2)}% pick, ${Number(cell.stats.winrate).toFixed(2)}% WR`
-                            : '')
-                        "
-                      >
-                        <img
-                          v-if="gameVersion"
-                          :src="getRuneImageUrl(gameVersion, cell.rune.icon)"
-                          :alt="cell.rune.name"
-                          class="overview-rune-img"
-                          width="32"
-                          height="32"
-                        />
-                        <div v-if="cell.stats" class="overview-rune-stat">
-                          <div class="overview-rune-pick">
-                            {{ Number(cell.stats.pickrate).toFixed(2) }}%
-                            {{ t('statisticsPage.overviewDetailPickRate') }}
-                          </div>
-                          <div class="overview-rune-wr">
-                            {{ Number(cell.stats.winrate).toFixed(2) }}%
-                            {{ t('statisticsPage.overviewDetailWinRate') }}
-                          </div>
-                        </div>
-                        <div v-else class="overview-rune-stat overview-rune-no-stat">—</div>
-                      </button>
-                    </div>
-                  </div>
-                  <!-- Fallback: flat list when rune paths not yet loaded -->
-                  <div
-                    v-else-if="(overviewDetailData?.runes ?? []).length"
-                    class="blocks runes overview-runes-fallback grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8"
-                  >
-                    <button
-                      v-for="r in overviewDetailData?.runes ?? []"
-                      :key="r.runeId"
-                      type="button"
-                      class="overview-rune-cell flex flex-col items-center gap-1 rounded border border-primary/20 bg-surface/50 p-2 text-center transition-colors hover:bg-primary/20"
-                      :title="
-                        (getRuneById(r.runeId)?.name ?? r.runeId) +
-                        ' — ' +
-                        r.pickrate +
-                        '% pick, ' +
-                        r.winrate +
-                        '% WR'
-                      "
-                    >
-                      <img
-                        v-if="gameVersion && getRuneById(r.runeId)"
-                        :src="getRuneImageUrl(gameVersion, getRuneById(r.runeId)!.icon)"
-                        :alt="getRuneById(r.runeId)?.name ?? ''"
-                        class="overview-rune-img h-8 w-8 object-contain"
-                        width="32"
-                        height="32"
-                      />
-                      <div class="overview-rune-stat">
-                        <div class="overview-rune-pick">
-                          {{ Number(r.pickrate).toFixed(2) }}%
-                          {{ t('statisticsPage.overviewDetailPickRate') }}
-                        </div>
-                        <div class="overview-rune-wr">
-                          {{ Number(r.winrate).toFixed(2) }}%
-                          {{ t('statisticsPage.overviewDetailWinRate') }}
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                  <!-- Sorts d'invocateur : même section, horizontal -->
-                  <div class="mt-6 border-t border-primary/30 pt-4">
-                    <h3 class="mb-3 text-base font-medium text-text">
-                      {{ t('statisticsPage.overviewDetailSummonerSpells') }}
-                    </h3>
-                    <div class="flex flex-wrap items-center gap-3">
-                      <div
-                        v-for="s in overviewDetailData?.summonerSpells ?? []"
-                        :key="s.spellId"
-                        class="flex items-center gap-2 rounded border border-primary/20 bg-surface/50 px-3 py-2"
-                      >
-                        <img
-                          v-if="gameVersion && spellImageName(s.spellId)"
-                          :src="getSpellImageUrl(gameVersion, spellImageName(s.spellId)!)"
-                          :alt="spellName(s.spellId) ?? ''"
-                          class="h-6 w-6 object-contain"
-                          width="24"
-                          height="24"
-                        />
-                        <span class="text-sm font-medium text-text/90">{{
-                          spellName(s.spellId) ?? s.spellId
-                        }}</span>
-                        <span class="text-xs text-text/70"
-                          >{{ Number(s.pickrate).toFixed(2) }}% pick —
-                          {{ Number(s.winrate).toFixed(2) }}% WR</span
-                        >
-                      </div>
-                    </div>
-                  </div>
-                </fieldset>
-
-                <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <!-- Rune sets -->
-                  <div class="rounded-lg">
-                    <h3 class="mb-3 text-lg font-medium text-text">
-                      {{ t('statisticsPage.overviewDetailRuneSets') }}
-                    </h3>
-                    <div class="flex flex-wrap gap-3">
-                      <div
-                        v-for="(set, idx) in (overviewDetailData?.runeSets ?? []).slice(
-                          0,
-                          detailExpand.runeSets ? 20 : 5
-                        )"
-                        :key="idx"
-                        class="rune-set"
-                      >
-                        <div class="rune-set-stat" :data-pct="set.pickrate + '%'">
-                          <div class="rune-set-pr" :style="{ '--n': set.pickrate }" />
-                          <div class="rune-set-wr" :style="{ '--n': set.winrate }">
-                            {{ Number(set.winrate).toFixed(2) }}%
-                          </div>
-                        </div>
-                        <div class="rune-set-runes">
-                          <div
-                            v-for="runeId in runeIdsFromSet(set.runes)"
-                            :key="runeId"
-                            class="rune-set-tooltip"
-                            :title="getRuneById(runeId)?.name ?? ''"
-                          >
-                            <div class="rune-set-rune">
-                              <div
-                                v-if="gameVersion && getRuneById(runeId)"
-                                class="rune-set-img"
-                                :style="{
-                                  '--img': `url(${getRuneImageUrl(gameVersion, getRuneById(runeId)!.icon)})`,
-                                }"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      v-if="(overviewDetailData?.runeSets ?? []).length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="detailExpand.runeSets = !detailExpand.runeSets"
-                    >
-                      {{
-                        detailExpand.runeSets
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-
-                  <!-- Items -->
-                  <div class="rounded-lg">
-                    <h3 class="mb-3 text-lg font-medium text-text">
-                      {{ t('statisticsPage.overviewDetailItems') }}
-                    </h3>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="it in (overviewDetailData?.items ?? []).slice(
-                          0,
-                          detailExpand.items ? 40 : 5
-                        )"
-                        :key="it.itemId"
-                        class="flex items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1"
-                      >
-                        <img
-                          v-if="gameVersion && itemImageName(it.itemId)"
-                          :src="getItemImageUrl(gameVersion, itemImageName(it.itemId)!)"
-                          :alt="itemName(it.itemId) ?? ''"
-                          class="h-5 w-5 object-contain"
-                          width="20"
-                          height="20"
-                        />
-                        <span class="max-w-[80px] truncate text-xs text-text/90">{{
-                          itemName(it.itemId) ?? it.itemId
-                        }}</span>
-                        <span class="text-xs text-text/70"
-                          >{{ it.pickrate }}% — {{ it.winrate }}%</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="(overviewDetailData?.items ?? []).length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="detailExpand.items = !detailExpand.items"
-                    >
-                      {{
-                        detailExpand.items
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-
-                  <!-- Item sets -->
-                  <div class="rounded-lg">
-                    <h3 class="mb-3 text-lg font-medium text-text">
-                      {{ t('statisticsPage.overviewDetailItemSets') }}
-                    </h3>
-                    <div class="flex flex-wrap gap-2">
-                      <div
-                        v-for="(set, idx) in (overviewDetailData?.itemSets ?? []).slice(
-                          0,
-                          detailExpand.itemSets ? 20 : 5
-                        )"
-                        :key="idx"
-                        class="flex flex-wrap items-center gap-1.5 rounded border border-primary/20 bg-surface/50 px-2 py-1.5"
-                      >
-                        <template v-for="itemId in set.items" :key="itemId">
-                          <img
-                            v-if="gameVersion && itemImageName(itemId)"
-                            :src="getItemImageUrl(gameVersion, itemImageName(itemId)!)"
-                            :alt="itemName(itemId) ?? ''"
-                            class="h-5 w-5 object-contain"
-                            width="20"
-                            height="20"
-                          />
-                        </template>
-                        <span class="text-xs text-text/70"
-                          >{{ Number(set.pickrate).toFixed(2) }}% —
-                          {{ Number(set.winrate).toFixed(2) }}%</span
-                        >
-                      </div>
-                    </div>
-                    <button
-                      v-if="(overviewDetailData?.itemSets ?? []).length > 5"
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="detailExpand.itemSets = !detailExpand.itemSets"
-                    >
-                      {{
-                        detailExpand.itemSets
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
-                  </div>
-
-                  <!-- Items by order -->
-                  <div class="rounded-lg">
-                    <h3 class="mb-3 text-lg font-medium text-text">
-                      {{ t('statisticsPage.overviewDetailItemsByOrder') }}
-                    </h3>
-                    <div class="space-y-2">
-                      <div
-                        v-for="slotIdx in [0, 1, 2, 3, 4, 5]"
-                        :key="slotIdx"
-                        class="rounded border border-primary/20 bg-surface/30 p-2"
-                      >
-                        <div class="mb-1 text-xs font-medium text-text/70">
-                          Slot {{ slotIdx + 1 }}
-                        </div>
-                        <div class="flex flex-wrap gap-1.5">
-                          <div
-                            v-for="row in sortedItemsBySlot(slotIdx).slice(
-                              0,
-                              detailExpand.itemsByOrder ? 10 : 5
-                            )"
-                            :key="row.itemId"
-                            class="flex items-center gap-1 rounded px-1 py-0.5"
-                            :title="
-                              (itemName(row.itemId) ?? row.itemId) +
-                              ' — ' +
-                              Number(row.winrate).toFixed(2) +
-                              '%'
-                            "
-                          >
-                            <img
-                              v-if="gameVersion && itemImageName(row.itemId)"
-                              :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                              :alt="itemName(row.itemId) ?? ''"
-                              class="h-4 w-4 object-contain"
-                              width="16"
-                              height="16"
-                            />
-                            <span class="text-xs text-text/80"
-                              >{{ Number(row.winrate).toFixed(2) }}%</span
-                            >
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      class="mt-2 text-sm font-medium text-accent hover:underline"
-                      @click="detailExpand.itemsByOrder = !detailExpand.itemsByOrder"
-                    >
-                      {{
-                        detailExpand.itemsByOrder
-                          ? t('statisticsPage.showLess')
-                          : t('statisticsPage.fastStatsSeeMore')
-                      }}
-                    </button>
+                  {{ t('statisticsPage.loading') }}
+                </div>
+                <StatisticsRunesOverviewPanel
+                  v-else-if="overviewDetailData"
+                  :game-version="gameVersion || versionStore.currentVersion || ''"
+                  :data="overviewDetailData"
+                  :baseline="overviewDetailBaselineData"
+                  :baseline-pending="overviewDetailBaselinePending"
+                  :comparison-version="progressionFromVersion"
+                />
+                <div v-else class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                  <div class="py-4 text-text/70">
+                    {{ t('statisticsPage.overviewDetailNoData') }}
                   </div>
                 </div>
               </template>
-              <div v-else class="rounded-lg border border-primary/30 bg-surface/30 p-6">
-                <div class="py-4 text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
-              </div>
             </template>
           </div>
 
@@ -4340,13 +4027,7 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
-import {
-  getChampionImageUrl,
-  getItemImageUrl,
-  getRunePathColor,
-  getRuneImageUrl,
-  getSpellImageUrl,
-} from '~/utils/imageUrl'
+import { getChampionImageUrl, getItemImageUrl, getSpellImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 
 definePageMeta({
@@ -5172,12 +4853,16 @@ function selectAllDivisions() {
 }
 function onStatsFilterChange() {
   overviewDetailData.value = null
+  overviewDetailBaselineData.value = null
   overviewDetailError.value = false
   if (activeTab.value === 'overview') loadOverview()
   if (activeTab.value === 'infos') loadOverview()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
-  if (activeTab.value === 'detail') loadOverviewDetail()
+  if (['runes', 'items', 'spells'].includes(activeTab.value)) {
+    loadOverviewDetail()
+    loadOverviewDetailBaseline()
+  }
   if (activeTab.value === 'team') {
     loadOverviewSides()
     loadOverviewTeams()
@@ -5199,18 +4884,19 @@ function resetStatsFilters() {
   onStatsFilterChange()
 }
 /** Overview detail (runes, items, spells) from GET /api/stats/overview-detail */
-const detailExpand = ref({
-  runes: false,
-  runeSets: false,
-  items: false,
-  itemSets: false,
-  itemsByOrder: false,
-  summonerSpells: false,
-})
 const overviewDetailData = ref<{
+  totalParticipants: number
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   runeSets: Array<{
     runes: unknown
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  shards?: Array<{
+    shardId: number
+    slot: number
     games: number
     wins: number
     pickrate: number
@@ -5236,10 +4922,13 @@ const overviewDetailData = ref<{
     winrate: number
   }>
 } | null>(null)
+const overviewDetailBaselineData = ref<typeof overviewDetailData.value>(null)
+const overviewDetailBaselinePending = ref(false)
 const overviewDetailPending = ref(false)
-function overviewQueryParams(): string {
+function overviewQueryParams(opts?: { version?: string | null }): string {
   const params = new URLSearchParams()
-  if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
+  const ver = opts?.version != null && opts.version !== '' ? opts.version : statsVersionFilter.value
+  if (ver) params.set('version', ver)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   params.set('otp', statsOtpFilter.value)
@@ -5729,6 +5418,33 @@ async function loadOverviewDetail(isRetry = false) {
   } finally {
     overviewDetailPending.value = false
     statsPerfEnd('loadOverviewDetail', t)
+  }
+}
+
+function retryOverviewDetail() {
+  loadOverviewDetail(true).catch(() => {})
+  loadOverviewDetailBaseline().catch(() => {})
+}
+
+/** Même filtres que l’overview-detail, version = patch de comparaison (progressions). */
+async function loadOverviewDetailBaseline() {
+  const cmp = progressionFromVersion.value
+  const cur = statsVersionFilter.value
+  if (!cmp || (cur && cmp === cur)) {
+    overviewDetailBaselineData.value = null
+    overviewDetailBaselinePending.value = false
+    return
+  }
+  overviewDetailBaselinePending.value = true
+  try {
+    overviewDetailBaselineData.value = await statsFetch(
+      apiUrl('/api/stats/overview-detail' + overviewQueryParams({ version: cmp })),
+      { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
+    )
+  } catch {
+    overviewDetailBaselineData.value = null
+  } finally {
+    overviewDetailBaselinePending.value = false
   }
 }
 
@@ -6863,78 +6579,6 @@ function itemEconomicForItem(itemId: number): string[] {
   return formatItemEconomicForDisplay(item)
 }
 
-/** Find rune by perk id across all paths/slots. */
-function getRuneById(runeId: number): { id: number; name: string; icon: string } | null {
-  for (const path of runesStore.runePaths) {
-    for (const slot of path.slots) {
-      const rune = slot.runes.find(r => r.id === runeId)
-      if (rune) return rune
-    }
-  }
-  return null
-}
-
-/** Map runeId -> stats for overview runes (pickrate, winrate, games). */
-const runeStatsByRuneId = computed(() => {
-  const runes = overviewDetailData.value?.runes ?? []
-  const map: Record<number, { pickrate: number; winrate: number; games: number }> = {}
-  for (const r of runes) {
-    map[r.runeId] = { pickrate: r.pickrate, winrate: r.winrate, games: r.games }
-  }
-  return map
-})
-
-/** Per-path rune grid for shyv-style layout: each path has 4 rows (row 0 = 4 keystones, rows 1–3 = 3 runes each). */
-const overviewRunesByPath = computed(() => {
-  const stats = runeStatsByRuneId.value
-  return runesStore.runePaths.map(path => {
-    const cells: Array<{
-      row: number
-      col: number
-      rune: { id: number; name: string; icon: string }
-      stats: { pickrate: number; winrate: number; games: number } | null
-    }> = []
-    path.slots.forEach((slot, slotIndex) => {
-      const numCols = slotIndex === 0 ? 4 : 3
-      slot.runes.slice(0, numCols).forEach((rune, runeIndex) => {
-        const st = stats[rune.id] ?? null
-        cells.push({
-          row: slotIndex,
-          col: runeIndex,
-          rune: { id: rune.id, name: rune.name, icon: rune.icon },
-          stats: st,
-        })
-      })
-    })
-    return { path, cells }
-  })
-})
-
-function runePathPanelStyle(icon: string): Record<string, string> {
-  const color = getRunePathColor(icon)
-  return {
-    borderColor: `${color}66`,
-    boxShadow: `inset 0 0 0 1px ${color}22`,
-  }
-}
-
-/** Extract perk ids from participant runes JSON (styles[].selections[].perk). */
-function runeIdsFromSet(runesUnknown: unknown): number[] {
-  if (runesUnknown == null || typeof runesUnknown !== 'object') return []
-  const perks = runesUnknown as { styles?: Array<{ selections?: Array<{ perk?: number }> }> }
-  const styles = perks?.styles
-  if (!Array.isArray(styles)) return []
-  const ids: number[] = []
-  for (const style of styles) {
-    const selections = style?.selections
-    if (!Array.isArray(selections)) continue
-    for (const sel of selections) {
-      if (typeof sel?.perk === 'number') ids.push(sel.perk)
-    }
-  }
-  return ids
-}
-
 /** Resolve spell name from game data (public/data/game/{version}/{lang}/summoner.json) by id from Participants.summonerSpells. */
 function spellName(spellId: number): string | null {
   const spell = summonerSpellsStore.getSpellById(String(spellId))
@@ -6945,13 +6589,6 @@ function spellName(spellId: number): string | null {
 function spellImageName(spellId: number): string | null {
   const spell = summonerSpellsStore.getSpellById(String(spellId))
   return spell?.image?.full ?? null
-}
-
-function sortedItemsBySlot(
-  slotIdx: number
-): Array<{ itemId: number; games: number; wins: number; winrate: number }> {
-  const list = overviewDetailData.value?.itemsByOrder[String(slotIdx)] ?? []
-  return [...list].sort((a, b) => b.games - a.games)
 }
 
 watch(activeTab, async tab => {
@@ -6967,6 +6604,7 @@ watch(activeTab, async tab => {
   if (tab === 'tierlist') loadTierList()
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
+    if (tab === 'runes') loadOverviewDetailBaseline()
   }
   if (tab === 'abandons') loadOverviewAbandons()
 })
@@ -6989,6 +6627,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'team') loadOverviewSides()
+  if (activeTab.value === 'runes') loadOverviewDetailBaseline()
 })
 
 onMounted(async () => {

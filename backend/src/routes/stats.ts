@@ -317,6 +317,7 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
       itemSets: [],
       itemsByOrder: {},
       summonerSpells: [],
+      shards: [],
     })
   }
   return res.json(data)

@@ -78,6 +78,15 @@ export interface OverviewDetailStats {
     pickrate: number
     winrate: number
   }>
+  /** Fragments (stat shards) par slot 0–2 ; même dénominateur que les runes (totalParticipants). */
+  shards: Array<{
+    shardId: number
+    slot: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
 }
 
 export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
@@ -88,6 +97,7 @@ export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   itemSets: [],
   itemsByOrder: {},
   summonerSpells: [],
+  shards: [],
 }
 
 export interface OverviewTeamsStats {
@@ -573,7 +583,7 @@ export async function getOverviewDetailStats(
 
     const statIds = coreStats.map((s) => s.id)
 
-    const [soloRunes, soloItems, spells] = await Promise.all([
+    const [soloRunes, soloItems, spells, soloShards] = await Promise.all([
       prisma.mvChampionRunesSoloStat.findMany({
         where: { championStatId: { in: statIds } },
         select: { perkId: true, countWin: true, countGame: true },
@@ -588,6 +598,10 @@ export async function getOverviewDetailStats(
           ...(!includeSmite ? { spellId: { not: 11 } } : {}),
         },
         select: { spellId: true, countWin: true, countGame: true },
+      }),
+      prisma.mvChampionShardSoloStat.findMany({
+        where: { championStatId: { in: statIds } },
+        select: { shardId: true, slot: true, countWin: true, countGame: true },
       }),
     ])
 
@@ -606,6 +620,33 @@ export async function getOverviewDetailStats(
         pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
         winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
+      .sort((a, b) => b.games - a.games)
+
+    const shardMap = new Map<string, { wins: number; games: number }>()
+    for (const r of soloShards) {
+      const k = `${r.shardId}:${r.slot}`
+      let e = shardMap.get(k)
+      if (!e) {
+        e = { wins: 0, games: 0 }
+        shardMap.set(k, e)
+      }
+      e.wins += r.countWin
+      e.games += r.countGame
+    }
+    const shards = Array.from(shardMap.entries())
+      .map(([key, e]) => {
+        const [shardIdStr, slotStr] = key.split(':')
+        const shardId = Number(shardIdStr)
+        const slot = Number(slotStr)
+        return {
+          shardId,
+          slot,
+          games: e.games,
+          wins: e.wins,
+          pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
+          winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
+        }
+      })
       .sort((a, b) => b.games - a.games)
 
     // Per-item aggregation
@@ -707,6 +748,7 @@ export async function getOverviewDetailStats(
       itemSets,
       itemsByOrder: {},
       summonerSpells,
+      shards,
     }
     overviewDetailCache.set(key, { data: result, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
     return result
