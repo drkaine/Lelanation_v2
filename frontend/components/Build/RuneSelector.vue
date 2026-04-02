@@ -306,7 +306,7 @@ const selectedSummonerSpells = ref<Array<SummonerSpell | null>>([null, null]) //
 const selectedShards = ref<Record<number, number>>({
   1: 5008, // Default: Adaptive Force
   2: 5008, // Default: Adaptive Force
-  3: 5001, // Default: Health
+  3: 5011, // Default: Health (flat)
 })
 
 const selectedPrimaryPath = computed(() => {
@@ -483,37 +483,37 @@ const slot2Options = computed<ShardOption[]>(() => [
     description: t('runes.shards.5008.desc'),
   },
   {
-    id: 5006,
-    name: t('runes.shards.5006.name'),
+    id: 5010,
+    name: t('runes.shards.5010.name'),
     image: 'move.png',
-    description: t('runes.shards.5006.desc'),
+    description: t('runes.shards.5010.desc'),
   },
   {
-    id: 5002,
-    name: t('runes.shards.5002.name'),
+    id: 5001,
+    name: t('runes.shards.5001.name'),
     image: 'growth.png',
-    description: t('runes.shards.5002.desc'),
+    description: t('runes.shards.5001.desc'),
   },
 ])
 
 const slot3Options = computed<ShardOption[]>(() => [
   {
+    id: 5011,
+    name: t('runes.shards.5011.name'),
+    image: 'hp.png',
+    description: t('runes.shards.5011.desc'),
+  },
+  {
+    id: 5013,
+    name: t('runes.shards.5013.name'),
+    image: 'tenacity.png',
+    description: t('runes.shards.5013.desc'),
+  },
+  {
     id: 5001,
     name: t('runes.shards.5001.name'),
-    image: 'hp.png',
-    description: t('runes.shards.5001.desc'),
-  },
-  {
-    id: 5003,
-    name: t('runes.shards.5003.name'),
-    image: 'tenacity.png',
-    description: t('runes.shards.5003.desc'),
-  },
-  {
-    id: 5002,
-    name: t('runes.shards.5002.name'),
     image: 'growth.png',
-    description: t('runes.shards.5002.desc'),
+    description: t('runes.shards.5001.desc'),
   },
 ])
 
@@ -522,7 +522,7 @@ const selectShard = (slot: number, shardId: number) => {
   const shardSelection: ShardSelection = {
     slot1: selectedShards.value[1] ?? 5008,
     slot2: selectedShards.value[2] ?? 5008,
-    slot3: selectedShards.value[3] ?? 5001,
+    slot3: selectedShards.value[3] ?? 5011,
   }
   buildStore.setShards(shardSelection)
 }
@@ -605,7 +605,7 @@ watch(
       selectedShards.value = {
         1: shards.slot1 || 5008,
         2: shards.slot2 || 5008,
-        3: shards.slot3 || 5001,
+        3: shards.slot3 || 5011,
       }
     }
   },

@@ -280,7 +280,7 @@ export const useBuildStore = defineStore('build', {
         shards: {
           slot1: 5008,
           slot2: 5008,
-          slot3: 5001,
+          slot3: 5011,
         },
         summonerSpells: [null, null],
         skillOrder: {

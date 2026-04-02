@@ -133,13 +133,14 @@ const shardStats = computed(() => {
   else if (shards.slot1 === 5007) totals.abilityHaste += 8;
 
   if (shards.slot2 === 5008) totals.attackDamage += 5.4;
-  else if (shards.slot2 === 5006) totals.percentMovementSpeed += 2.5;
-  else if (shards.slot2 === 5002)
+  else if (shards.slot2 === 5006 || shards.slot2 === 5010)
+    totals.percentMovementSpeed += 2.5;
+  else if (shards.slot2 === 5002 || shards.slot2 === 5001)
     totals.health += Math.round(10 + (selectedLevel.value - 1) * (190 / 17));
 
-  if (shards.slot3 === 5001) totals.health += 65;
-  else if (shards.slot3 === 5003) totals.tenacity += 0.15;
-  else if (shards.slot3 === 5002)
+  if (shards.slot3 === 5011) totals.health += 65;
+  else if (shards.slot3 === 5013 || shards.slot3 === 5003) totals.tenacity += 0.15;
+  else if (shards.slot3 === 5002 || shards.slot3 === 5001)
     totals.health += Math.round(10 + (selectedLevel.value - 1) * (190 / 17));
 
   return totals;

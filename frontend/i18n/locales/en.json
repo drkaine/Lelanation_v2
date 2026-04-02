@@ -138,15 +138,27 @@
         "name": "Move Speed",
         "desc": "+2.5% Move Speed"
       },
+      "5010": {
+        "name": "Move Speed",
+        "desc": "+2.5% Move Speed"
+      },
       "5002": {
         "name": "Health per level",
         "desc": "+10-200 Health (based on level)"
       },
       "5001": {
+        "name": "Scaling Health",
+        "desc": "+10-200 Health (based on level)"
+      },
+      "5011": {
         "name": "Health",
         "desc": "+65 Health"
       },
       "5003": {
+        "name": "Tenacity",
+        "desc": "+15% Tenacity and Slow Resist"
+      },
+      "5013": {
         "name": "Tenacity",
         "desc": "+15% Tenacity and Slow Resist"
       }
@@ -234,7 +246,7 @@
     "tierListChartHeading": "TIERLIST : {role}",
     "tierListChartAllRoles": "All roles",
     "tierListChartAllRolesShort": "All roles",
-    "tierListChartPbiAxis": "Vertical axis: PBI (pick–ban influence). Center line = 0.",
+    "tierListChartPbiAxis": "Vertical axis: matchup score (×100, weighted matchup sum), fixed scale −500 to +500, 0 at center. Order: lowest to highest.",
     "tierListRank": "Rank",
     "tierListMainRole": "Main role",
     "tierListPbi": "PBI",
@@ -328,7 +340,6 @@
     "overviewDetailPickRate": "pick",
     "overviewDetailWinRate": "WR",
     "runesDeltaVs": "Compared to patch {version}",
-    "runesBanNote": "Ban rate by rune is not available (bans are per champion).",
     "runeSetsMostPicked": "Most picked rune sets",
     "runeSetsLeastPicked": "Least picked rune sets",
     "runeSetsBestWr": "Highest win rate (min. games)",

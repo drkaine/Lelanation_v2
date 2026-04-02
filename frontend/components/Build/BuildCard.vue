@@ -2356,10 +2356,13 @@ const shardIcons: Record<number, string> = {
   5008: '/icons/shards/adaptative.png',
   5005: '/icons/shards/speed.png',
   5006: '/icons/shards/move.png',
+  5010: '/icons/shards/move.png',
   5007: '/icons/shards/cdr.png',
-  5001: '/icons/shards/hp.png',
+  5001: '/icons/shards/growth.png',
   5002: '/icons/shards/growth.png',
+  5011: '/icons/shards/hp.png',
   5003: '/icons/shards/tenacity.png',
+  5013: '/icons/shards/tenacity.png',
 }
 
 const getShardIconById = (shardId: number): string =>

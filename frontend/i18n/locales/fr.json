@@ -138,15 +138,27 @@
         "name": "Vitesse de déplacement",
         "desc": "+2.5% Vitesse de déplacement"
       },
+      "5010": {
+        "name": "Vitesse de déplacement",
+        "desc": "+2.5% Vitesse de déplacement"
+      },
       "5002": {
         "name": "PV par niveau",
         "desc": "+10-200 PV (selon niveau)"
       },
       "5001": {
+        "name": "PV (croissance)",
+        "desc": "+10-200 PV (selon niveau)"
+      },
+      "5011": {
         "name": "PV",
         "desc": "+65 PV"
       },
       "5003": {
+        "name": "Ténacité",
+        "desc": "+15% Ténacité et résistance aux ralentissements"
+      },
+      "5013": {
         "name": "Ténacité",
         "desc": "+15% Ténacité et résistance aux ralentissements"
       }
@@ -234,7 +246,7 @@
     "tierListChartHeading": "TIERLIST : {role}",
     "tierListChartAllRoles": "Tous les rôles",
     "tierListChartAllRolesShort": "Tous les rôles",
-    "tierListChartPbiAxis": "Axe vertical : note matchup (somme des scores pondérés). Classement du plus bas au plus haut.",
+    "tierListChartPbiAxis": "Axe vertical : score matchup (×100, somme pondérée des matchups), échelle fixe de −500 à +500, 0 au centre. Classement du plus bas au plus haut.",
     "tierListRank": "Rang",
     "tierListMainRole": "Rôle principal",
     "tierListPbi": "Score matchup",
@@ -329,7 +341,6 @@
     "overviewDetailPickRate": "pick",
     "overviewDetailWinRate": "WR",
     "runesDeltaVs": "Par rapport au patch {version}",
-    "runesBanNote": "Le taux de ban par rune n’est pas disponible (les bans sont par champion).",
     "runeSetsMostPicked": "Sets de runes les plus joués",
     "runeSetsLeastPicked": "Sets de runes les moins joués",
     "runeSetsBestWr": "Meilleur taux de victoire (jeux min.)",

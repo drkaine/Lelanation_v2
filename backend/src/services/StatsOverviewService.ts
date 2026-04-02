@@ -13,6 +13,7 @@ import {
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
+import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -633,6 +634,7 @@ export async function getOverviewDetailStats(
       e.wins += r.countWin
       e.games += r.countGame
     }
+    mergeLegacyStatShardAggregates(shardMap)
     const shards = Array.from(shardMap.entries())
       .map(([key, e]) => {
         const [shardIdStr, slotStr] = key.split(':')

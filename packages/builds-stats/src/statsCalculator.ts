@@ -391,13 +391,14 @@ function calculateShardStats(
 
   if (shards.slot2 === 5008)
     stats.attackDamage = (stats.attackDamage || 0) + 5.4;
-  else if (shards.slot2 === 5006) stats.percentMovementSpeed = 2.5;
-  else if (shards.slot2 === 5002)
+  else if (shards.slot2 === 5006 || shards.slot2 === 5010)
+    stats.percentMovementSpeed = 2.5;
+  else if (shards.slot2 === 5002 || shards.slot2 === 5001)
     stats.health = Math.round(10 + (level - 1) * (190 / 17));
 
-  if (shards.slot3 === 5001) stats.health = 65;
-  else if (shards.slot3 === 5003) stats.tenacity = 0.15;
-  else if (shards.slot3 === 5002)
+  if (shards.slot3 === 5011) stats.health = 65;
+  else if (shards.slot3 === 5013 || shards.slot3 === 5003) stats.tenacity = 0.15;
+  else if (shards.slot3 === 5002 || shards.slot3 === 5001)
     stats.health =
       (stats.health || 0) + Math.round(10 + (level - 1) * (190 / 17));
 

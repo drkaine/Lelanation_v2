@@ -398,25 +398,24 @@ const shardStats = computed(() => {
       totals.abilityHaste += 8
     }
 
-    // Slot 2: Adaptive Force (5008), Movement Speed (5006), Health per level (5002)
+    // Slot 2: Adaptive (5008), Move Speed (5010 / 5006), Scaling HP (5001 / 5002)
     if (shards.value.slot2 === 5008) {
       // Adaptive: 5.4 AD or 9 AP
       totals.attackDamage += 5.4
-    } else if (shards.value.slot2 === 5006) {
+    } else if (shards.value.slot2 === 5006 || shards.value.slot2 === 5010) {
       totals.percentMovementSpeed += 2.5 // 2.5% movement speed
-    } else if (shards.value.slot2 === 5002) {
+    } else if (shards.value.slot2 === 5002 || shards.value.slot2 === 5001) {
       // Health per level: 10-200 based on level (formula: 10 + (level - 1) * 11.176)
       const healthPerLevel = Math.round(10 + (selectedLevel.value - 1) * (190 / 17))
       totals.health += healthPerLevel
     }
 
-    // Slot 3: Health (5001), Tenacity + Slow Resist (5003), Health per level (5002)
-    if (shards.value.slot3 === 5001) {
-      totals.health += 65 // Fixed 65 health
-    } else if (shards.value.slot3 === 5003) {
-      totals.tenacity += 0.15 // 15% tenacity and slow resist
-    } else if (shards.value.slot3 === 5002) {
-      // Health per level: 10-200 based on level (formula: 10 + (level - 1) * 11.176)
+    // Slot 3: flat PV (5011 ; ancien client utilisait 5001), ténacité (5013 / 5003), croissance (5001 / 5002)
+    if (shards.value.slot3 === 5011) {
+      totals.health += 65
+    } else if (shards.value.slot3 === 5013 || shards.value.slot3 === 5003) {
+      totals.tenacity += 0.15
+    } else if (shards.value.slot3 === 5002 || shards.value.slot3 === 5001) {
       const healthPerLevel = Math.round(10 + (selectedLevel.value - 1) * (190 / 17))
       totals.health += healthPerLevel
     }

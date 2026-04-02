@@ -3274,7 +3274,7 @@
                       </span>
                     </div>
                     <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center text-[11px] leading-tight"
+                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 text-center text-[11px] leading-tight"
                     >
                       <img
                         v-if="mainRoleIconSrc(row.mainRole)"
@@ -3289,6 +3289,17 @@
                         row.mainRole
                       }}</span>
                       <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
+                      <span
+                        v-if="tierListPatchDeltaRefLabel && row.patchRefMainRolePctPp != null"
+                        class="text-[10px] leading-none"
+                        :class="tierListPatchDeltaClass(row.patchRefMainRolePctPp)"
+                        :title="
+                          t('statisticsPage.tierListPatchDeltaTitle', {
+                            ref: tierListPatchDeltaRefLabel,
+                          })
+                        "
+                        >{{ formatTierListPatchDeltaPp(row.patchRefMainRolePctPp) }}</span
+                      >
                     </div>
                     <div
                       class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
@@ -3554,7 +3565,7 @@
                                       :style="{ bottom: tierListChartZeroBottomPct + '%' }"
                                     />
                                     <div
-                                      v-if="normalizePbi(c.pbi) >= 0"
+                                      v-if="scaleMatchupScore(c.pbi) >= 0"
                                       class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
                                       :style="{
                                         bottom: tierListChartZeroBottomPct + '%',
@@ -4097,9 +4108,9 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 
 const activeTab = ref<
   | 'overview'
+  | 'team'
   | 'tierlist'
   | 'trends'
-  | 'team'
   | 'runes'
   | 'items'
   | 'spells'
@@ -4113,9 +4124,9 @@ const activeTab = ref<
 >(initialActiveTabFromRoute())
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
+  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
   { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
   { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
-  { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
@@ -4293,6 +4304,8 @@ interface TierListRowWithDelta {
   patchRefWinratePp?: number
   patchRefPickratePp?: number
   patchRefBanratePp?: number
+  /** Δ part des parties sur le rôle principal (0–100 vs ref., en points de %). */
+  patchRefMainRolePctPp?: number
   patchRefGamesDelta?: number
   patchRefHighEloWinratePp?: number
   patchRefHighEloGamesDelta?: number
@@ -4334,11 +4347,13 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
     let patchRefWinratePp: number | undefined
     let patchRefPickratePp: number | undefined
     let patchRefBanratePp: number | undefined
+    let patchRefMainRolePctPp: number | undefined
     let patchRefGamesDelta: number | undefined
     if (refRow) {
       patchRefWinratePp = (r.winrate - refRow.winrate) * 100
       patchRefPickratePp = (r.pickrate - refRow.pickrate) * 100
       patchRefBanratePp = (r.banrate - refRow.banrate) * 100
+      patchRefMainRolePctPp = r.mainRolePct - refRow.mainRolePct
       patchRefGamesDelta = r.games - refRow.games
     }
     const refHe = refHeMap.get(r.championId)
@@ -4357,6 +4372,7 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
       patchRefWinratePp,
       patchRefPickratePp,
       patchRefBanratePp,
+      patchRefMainRolePctPp,
       patchRefGamesDelta,
       patchRefHighEloWinratePp,
       patchRefHighEloGamesDelta,
@@ -4478,32 +4494,25 @@ const tierListChartVisibleRows = computed(() => {
   )
 })
 
-function tierListChartNiceStep(maxAbs: number, targetDivisions: number): number {
-  if (maxAbs <= 0) return 1
-  const rough = maxAbs / targetDivisions
-  const exp = Math.floor(Math.log10(rough))
-  const f = rough / Math.pow(10, exp)
-  const nf = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10
-  return nf * Math.pow(10, exp)
-}
+/** Axe fixe du graphique tier list : score matchup ×100, de -500 à +500 (ligne 0 au centre). */
+const TIER_LIST_MATCHUP_CHART_Y_MIN = -500
+const TIER_LIST_MATCHUP_CHART_Y_MAX = 500
+const TIER_LIST_MATCHUP_CHART_TICKS: number[] = [500, 250, 0, -250, -500]
 
-const tierListChartYScale = computed(() => {
-  const list = tierListChartVisibleRows.value
-  const fallback = { range: 20, yMin: -10, yMax: 10, ticks: [-10, -5, 0, 5, 10] as number[] }
-  if (!list.length) return fallback
-  const vals = list.map(c => c.pbi)
-  const minV = Math.min(...vals, 0)
-  const maxV = Math.max(...vals, 0)
-  const span = Math.max(maxV - minV, 0.01)
-  const step = tierListChartNiceStep(span, 6)
-  const yMin = Math.floor(minV / step) * step
-  const yMax = Math.ceil(maxV / step) * step
-  const ticks: number[] = []
-  for (let v = yMin; v <= yMax + 1e-9; v += step) {
-    ticks.push(Math.round(v * 1000) / 1000)
-  }
-  return { range: Math.max(yMax - yMin, 0.01), yMin, yMax, ticks }
-})
+const tierListChartYScale = computed(() => ({
+  range: TIER_LIST_MATCHUP_CHART_Y_MAX - TIER_LIST_MATCHUP_CHART_Y_MIN,
+  yMin: TIER_LIST_MATCHUP_CHART_Y_MIN,
+  yMax: TIER_LIST_MATCHUP_CHART_Y_MAX,
+  ticks: TIER_LIST_MATCHUP_CHART_TICKS,
+}))
+
+/** Position des barres sur l’axe fixe ; valeurs hors plage sont clampées visuellement (tooltip = valeur réelle). */
+function matchupScoreClampedForChart(pbi: number): number {
+  return Math.min(
+    TIER_LIST_MATCHUP_CHART_Y_MAX,
+    Math.max(TIER_LIST_MATCHUP_CHART_Y_MIN, scaleMatchupScore(pbi))
+  )
+}
 
 function tierListChartYTickBottomPct(tick: number): number {
   const s = tierListChartYScale.value
@@ -4515,25 +4524,31 @@ function tierListChartBarHeightPct(pbi: number): number {
   const s = tierListChartYScale.value
   const range = s.yMax - s.yMin
   if (range <= 0) return 0
-  const n = normalizePbi(pbi)
+  const n = matchupScoreClampedForChart(pbi)
   const zeroPct = ((0 - s.yMin) / range) * 100
   const valPct = ((n - s.yMin) / range) * 100
   return Math.abs(valPct - zeroPct)
 }
 
 function tierListChartScoreBottomPct(pbi: number): number {
-  return tierListChartYTickBottomPct(normalizePbi(pbi))
+  return tierListChartYTickBottomPct(matchupScoreClampedForChart(pbi))
 }
 
-function normalizePbi(value: number): number {
+/** Score matchup API (petit nombre) → affichage / axe Y graphique (×100). */
+function scaleMatchupScore(value: number): number {
+  const n = Number(value) * 100
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Évite les « -0 » sur les libellés après mise à l’échelle. */
+function normalizeScaledMatchupScore(value: number): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return 0
-  // Avoid rendering and displaying "-0" due to floating noise.
-  return Math.abs(n) < 0.005 ? 0 : n
+  return Math.abs(n) < 0.5 ? 0 : n
 }
 
 function formatMatchupScore(value: number, decimals = 2): string {
-  return normalizePbi(value).toFixed(decimals)
+  return normalizeScaledMatchupScore(scaleMatchupScore(value)).toFixed(decimals)
 }
 
 const tierListChartHeading = computed(() => {
@@ -4861,6 +4876,8 @@ function onStatsFilterChange() {
   if (activeTab.value === 'champions') loadChampions()
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
     loadOverviewDetail()
+  }
+  if (activeTab.value === 'runes') {
     loadOverviewDetailBaseline()
   }
   if (activeTab.value === 'team') {
@@ -5426,7 +5443,7 @@ function retryOverviewDetail() {
   loadOverviewDetailBaseline().catch(() => {})
 }
 
-/** Même filtres que l’overview-detail, version = patch de comparaison (progressions). */
+/** Même filtres que overview-detail, version = patch de comparaison (progressions). */
 async function loadOverviewDetailBaseline() {
   const cmp = progressionFromVersion.value
   const cur = statsVersionFilter.value
@@ -6373,7 +6390,10 @@ const tierListData = ref<{
 } | null>(null)
 /** Stats ref. patch (progressions) pour Δ WR / pick / ban / Apex. */
 const tierListRefStatsById = ref(
-  new Map<number, { winrate: number; pickrate: number; banrate: number; games: number }>()
+  new Map<
+    number,
+    { winrate: number; pickrate: number; banrate: number; games: number; mainRolePct: number }
+  >()
 )
 const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
 const tierListRefRows = ref<
@@ -6510,7 +6530,13 @@ async function loadTierList() {
           }))
           const m = new Map<
             number,
-            { winrate: number; pickrate: number; banrate: number; games: number }
+            {
+              winrate: number
+              pickrate: number
+              banrate: number
+              games: number
+              mainRolePct: number
+            }
           >()
           for (const row of refData.rows) {
             m.set(row.championId, {
@@ -6518,6 +6544,7 @@ async function loadTierList() {
               pickrate: row.pickrate,
               banrate: row.banrate,
               games: row.games,
+              mainRolePct: row.mainRolePct,
             })
           }
           tierListRefStatsById.value = m

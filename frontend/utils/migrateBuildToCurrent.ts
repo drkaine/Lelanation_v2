@@ -162,7 +162,7 @@ export async function migrateBuildToCurrent(
   migrated.shards = build.shards || {
     slot1: 5008, // Adaptive Force (default)
     slot2: 5008, // Adaptive Force (default)
-    slot3: 5001, // Health (default)
+    slot3: 5011, // Health flat (Riot perk id)
   }
 
   return { migrated, warnings }

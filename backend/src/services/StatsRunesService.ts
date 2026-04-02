@@ -5,6 +5,7 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 
 export interface RuneRow {
   runes: unknown
@@ -241,6 +242,19 @@ export async function getShardStatsByChampion(options: {
       }
       entry.wins += row.countWin
       entry.games += row.countGame
+    }
+
+    const mergeMap = new Map<string, { wins: number; games: number }>()
+    for (const [key, entry] of byShardSlot.entries()) {
+      mergeMap.set(key, { wins: entry.wins, games: entry.games })
+    }
+    mergeLegacyStatShardAggregates(mergeMap)
+    byShardSlot.clear()
+    for (const [key, e] of mergeMap.entries()) {
+      const [shardIdStr, slotStr] = key.split(':')
+      const shardId = Number(shardIdStr)
+      const slot = Number(slotStr)
+      byShardSlot.set(key, { shardId, slot, wins: e.wins, games: e.games })
     }
 
     const shards: ShardStatRow[] = []

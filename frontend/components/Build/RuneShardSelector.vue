@@ -96,15 +96,17 @@ const shardIconSrc = (id: number): string => {
     case 5005:
       return '/icons/shards/speed.png'
     case 5006:
+    case 5010:
       return '/icons/shards/move.png'
     case 5007:
       return '/icons/shards/cdr.png'
-    case 5001:
+    case 5011:
       return '/icons/shards/hp.png'
-    // Fallback mapping for defense shards (local icon set)
+    case 5001:
     case 5002:
       return '/icons/shards/growth.png'
     case 5003:
+    case 5013:
       return '/icons/shards/tenacity.png'
     default:
       return '/icons/shards/adaptative.png'

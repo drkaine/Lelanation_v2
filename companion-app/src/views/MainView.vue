@@ -210,10 +210,13 @@ function makeImageResolvers(): ImageResolvers {
         5008: "adaptative.png",
         5005: "speed.png",
         5006: "move.png",
+        5010: "move.png",
         5007: "cdr.png",
-        5001: "hp.png",
+        5001: "growth.png",
         5002: "growth.png",
+        5011: "hp.png",
         5003: "tenacity.png",
+        5013: "tenacity.png",
       };
       const file = map[shardId];
       return file ? `/icons/shards/${file}` : "";
@@ -242,10 +245,13 @@ function makeRuneLookup(): RuneLookup {
         5008: "adaptative.png",
         5005: "speed.png",
         5006: "move.png",
+        5010: "move.png",
         5007: "cdr.png",
-        5001: "hp.png",
+        5001: "growth.png",
         5002: "growth.png",
+        5011: "hp.png",
         5003: "tenacity.png",
+        5013: "tenacity.png",
       };
       const file = map[shardId];
       return file ? `/icons/shards/${file}` : "";
