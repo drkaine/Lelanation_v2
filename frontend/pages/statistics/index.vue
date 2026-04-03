@@ -348,7 +348,7 @@
                     >
                       <tbody>
                         <tr
-                          v-for="(row, idx) in overviewTopPickrateChampionsFiltered.slice(0, 5)"
+                          v-for="(row, idx) in overviewTopPickrateChampionsFiltered"
                           :key="row.championId"
                           class="fast-stat-row"
                         >
@@ -465,7 +465,7 @@
                     >
                       <tbody>
                         <tr
-                          v-for="(row, idx) in overviewEffectiveTopWinrateChampions.slice(0, 5)"
+                          v-for="(row, idx) in overviewEffectiveTopWinrateChampions"
                           :key="row.championId"
                           class="fast-stat-row"
                         >
@@ -582,7 +582,7 @@
                     >
                       <tbody>
                         <tr
-                          v-for="(row, idx) in overviewEffectiveTopBanrateChampions.slice(0, 5)"
+                          v-for="(row, idx) in overviewEffectiveTopBanrateChampions"
                           :key="row.championId"
                           class="fast-stat-row"
                         >
@@ -1621,7 +1621,7 @@
                   </div>
                   <div
                     v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
+                    class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
                   >
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                       <button
@@ -1761,6 +1761,7 @@
                                     class="h-4 w-4 object-contain"
                                     loading="lazy"
                                     decoding="async"
+                                    @error="onObjectiveIconError($event, key)"
                                   />
                                   {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
                                 </button>
@@ -1832,6 +1833,7 @@
                                   class="h-4 w-4 object-contain"
                                   loading="lazy"
                                   decoding="async"
+                                  @error="onDrakeIconError($event, row.key)"
                                 />
                                 <span>{{ row.label }}</span>
                               </div>
@@ -1891,6 +1893,7 @@
                                     class="h-4 w-4 object-contain"
                                     loading="lazy"
                                     decoding="async"
+                                    @error="onDrakeIconError($event, row.key)"
                                   />
                                   <span>{{ row.label }}</span>
                                 </div>
@@ -2560,7 +2563,7 @@
 
                 <div
                   v-if="overviewSidesData && overviewSidesData.matchCount > 0"
-                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
+                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
                 >
                   <div class="mb-3 flex flex-wrap items-center gap-2">
                     <button
@@ -2703,6 +2706,7 @@
                                   class="h-4 w-4 object-contain"
                                   loading="lazy"
                                   decoding="async"
+                                  @error="onObjectiveIconError($event, key)"
                                 />
                                 {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
                               </button>
@@ -2776,6 +2780,7 @@
                                 class="h-4 w-4 object-contain"
                                 loading="lazy"
                                 decoding="async"
+                                @error="onDrakeIconError($event, row.key)"
                               />
                               <span>{{ row.label }}</span>
                             </div>
@@ -2839,6 +2844,7 @@
                                   class="h-4 w-4 object-contain"
                                   loading="lazy"
                                   decoding="async"
+                                  @error="onDrakeIconError($event, row.key)"
                                 />
                                 <span>{{ row.label }}</span>
                               </div>
@@ -3827,6 +3833,351 @@
             </template>
           </div>
 
+          <!-- Tab: Champion (tableau global bleu/rouge + dégâts + KDA) -->
+          <div v-show="activeTab === 'championTable'" class="space-y-4">
+            <div v-if="championGlobalTablePending" class="text-text/70">
+              {{ t('statisticsPage.loading') }}
+            </div>
+            <div
+              v-else-if="championGlobalTableError"
+              class="rounded border border-error bg-surface p-3 text-error"
+            >
+              {{ championGlobalTableError }}
+            </div>
+            <div
+              v-else-if="championGlobalSortedRows.length === 0"
+              class="statistics-overview-surface rounded-lg border border-primary/30 p-4 text-text/70"
+            >
+              {{ t('statisticsPage.championTableNoData') }}
+            </div>
+            <div
+              v-else
+              class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
+            >
+              <div
+                class="tier-list-lolalytics champion-global-table min-w-[960px] text-[11px] text-text-primary/90"
+              >
+                <div
+                  class="tier-list-lolalytics-head sticky top-0 z-10 flex h-8 w-full flex-nowrap items-stretch justify-start border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+                >
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[220px] shrink-0 cursor-pointer items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 hover:bg-primary/25"
+                    @click="setChampionGlobalSort('champion')"
+                  >
+                    {{ t('statisticsPage.tierListColChampion')
+                    }}{{ championGlobalSortIcon('champion') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipBlue') +
+                      ' — ' +
+                      t('statisticsPage.tierListWinrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('blueWinrate')"
+                  >
+                    W{{ championGlobalSortIcon('blueWinrate') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipBlue') +
+                      ' — ' +
+                      t('statisticsPage.tierListPickrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('bluePickrate')"
+                  >
+                    P{{ championGlobalSortIcon('bluePickrate') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipBlue') +
+                      ' — ' +
+                      t('statisticsPage.tierListBanrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('blueBanrate')"
+                  >
+                    B{{ championGlobalSortIcon('blueBanrate') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipRed') +
+                      ' — ' +
+                      t('statisticsPage.tierListWinrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('redWinrate')"
+                  >
+                    W{{ championGlobalSortIcon('redWinrate') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipRed') +
+                      ' — ' +
+                      t('statisticsPage.tierListPickrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('redPickrate')"
+                  >
+                    P{{ championGlobalSortIcon('redPickrate') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-[26px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="
+                      t('statisticsPage.championTableTooltipRed') +
+                      ' — ' +
+                      t('statisticsPage.tierListBanrateTooltip')
+                    "
+                    @click="setChampionGlobalSort('redBanrate')"
+                  >
+                    B{{ championGlobalSortIcon('redBanrate') }}
+                  </button>
+                  <div
+                    class="flex h-8 w-[108px] shrink-0 items-center justify-center border-l border-black/40 px-0.5 text-center text-[9px] font-medium leading-tight"
+                    :title="t('statisticsPage.championTableTooltipDealt')"
+                  >
+                    Δ →
+                  </div>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableDealtTotal')"
+                    @click="setChampionGlobalSort('dmgTotal')"
+                  >
+                    <img
+                      src="/icons/statsicon/Critical_strike_damage.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('dmgTotal') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableDealtPhys')"
+                    @click="setChampionGlobalSort('dmgPhys')"
+                  >
+                    <img
+                      src="/icons/statsicon/AD.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('dmgPhys') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableDealtMagic')"
+                    @click="setChampionGlobalSort('dmgMagic')"
+                  >
+                    <img
+                      src="/icons/statsicon/ap.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('dmgMagic') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableDealtTrue')"
+                    @click="setChampionGlobalSort('dmgTrue')"
+                  >
+                    <img
+                      src="/icons/statsicon/Critical_strike.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('dmgTrue') }}</span>
+                  </button>
+                  <div
+                    class="flex h-8 w-[72px] shrink-0 items-center justify-center border-l border-black/40 px-0.5 text-center text-[9px] font-medium leading-tight"
+                    :title="t('statisticsPage.championTableTooltipTaken')"
+                  >
+                    ← Δ
+                  </div>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableTakenPhys')"
+                    @click="setChampionGlobalSort('takenPhys')"
+                  >
+                    <img
+                      src="/icons/statsicon/Armor.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('takenPhys') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableTakenMagic')"
+                    @click="setChampionGlobalSort('takenMagic')"
+                  >
+                    <img
+                      src="/icons/statsicon/Magic_resistance.png"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('takenMagic') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer items-center justify-center gap-0.5 border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    :title="t('statisticsPage.championTableTakenTrue')"
+                    @click="setChampionGlobalSort('takenTrue')"
+                  >
+                    <img
+                      src="/icons/statsicon/Health.svg"
+                      alt=""
+                      class="h-3 w-3 shrink-0 object-contain"
+                    /><span class="leading-none">{{ championGlobalSortIcon('takenTrue') }}</span>
+                  </button>
+                  <div
+                    class="flex h-8 w-[54px] shrink-0 items-center justify-center border-l border-black/40 text-[9px] font-medium"
+                    :title="t('statisticsPage.championTableTooltipKda')"
+                  >
+                    KDA
+                  </div>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    @click="setChampionGlobalSort('kills')"
+                  >
+                    K{{ championGlobalSortIcon('kills') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    @click="setChampionGlobalSort('deaths')"
+                  >
+                    D{{ championGlobalSortIcon('deaths') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="tier-list-lolalytics-th flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
+                    @click="setChampionGlobalSort('assists')"
+                  >
+                    A{{ championGlobalSortIcon('assists') }}
+                  </button>
+                </div>
+                <div
+                  v-for="row in championGlobalSortedRows"
+                  :key="row.championId"
+                  class="tier-list-lolalytics-row flex min-h-[60px] w-full flex-nowrap items-center justify-start py-0.5 odd:bg-white/[0.04] even:bg-black/25"
+                >
+                  <div
+                    class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2"
+                  >
+                    <img
+                      v-if="gameVersion && championByKey(row.championId)"
+                      :src="
+                        getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)
+                      "
+                      :alt="championName(row.championId) || ''"
+                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                      width="50"
+                      height="50"
+                    />
+                    <span class="min-w-0 truncate text-left font-medium text-accent">{{
+                      championName(row.championId) || row.championId
+                    }}</span>
+                  </div>
+                  <div class="flex w-[78px] shrink-0 border-l border-black/20">
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.blue.games ? formatChampionGlobalPct(row.blue.winrate) : '—' }}
+                    </div>
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.blue.games ? formatChampionGlobalPct(row.blue.pickrate) : '—' }}
+                    </div>
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.blue.games ? formatChampionGlobalPct(row.blue.banrate) : '—' }}
+                    </div>
+                  </div>
+                  <div class="flex w-[78px] shrink-0 border-l border-black/20">
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.red.games ? formatChampionGlobalPct(row.red.winrate) : '—' }}
+                    </div>
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.red.games ? formatChampionGlobalPct(row.red.pickrate) : '—' }}
+                    </div>
+                    <div
+                      class="flex w-[26px] shrink-0 items-center justify-center text-center leading-tight"
+                    >
+                      {{ row.red.games ? formatChampionGlobalPct(row.red.banrate) : '—' }}
+                    </div>
+                  </div>
+                  <div class="w-[108px] shrink-0" aria-hidden="true" />
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageToChamps) }}
+                  </div>
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageToChampsPhys) }}
+                  </div>
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageToChampsMagic) }}
+                  </div>
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageToChampsTrue) }}
+                  </div>
+                  <div class="w-[72px] shrink-0" aria-hidden="true" />
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageTakenPhys) }}
+                  </div>
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageTakenMagic) }}
+                  </div>
+                  <div
+                    class="flex w-9 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDamageTakenTrue) }}
+                  </div>
+                  <div class="w-[54px] shrink-0" aria-hidden="true" />
+                  <div
+                    class="flex w-8 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgKills) }}
+                  </div>
+                  <div
+                    class="flex w-8 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgDeaths) }}
+                  </div>
+                  <div
+                    class="flex w-8 shrink-0 items-center justify-center font-mono text-[10px] leading-tight"
+                  >
+                    {{ formatChampionGlobalNum(row.avgAssists) }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Tab: Durée de partie -->
           <div v-show="activeTab === 'duration'" class="space-y-4">
             <h2 class="text-xl font-semibold text-text-accent">
@@ -3967,10 +4318,6 @@
 
           <!-- Tab: Objets (global) -->
           <div v-show="activeTab === 'items'" class="space-y-6">
-            <h2 class="text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.itemsTitle') }}
-            </h2>
-            <p class="text-sm text-text/80">{{ t('statisticsPage.itemsDescription') }}</p>
             <div v-if="overviewDetailPending" class="text-text/70">
               {{ t('statisticsPage.loading') }}
             </div>
@@ -3982,25 +4329,27 @@
             </div>
             <template
               v-else-if="
+                itemFastSliceConfigs.length > 0 ||
                 (overviewDetailData?.items?.length ?? 0) > 0 ||
-                (overviewDetailData?.itemsBoots?.length ?? 0) > 0 ||
-                (overviewDetailData?.itemsStarters?.length ?? 0) > 0 ||
-                (overviewDetailData?.itemsCores?.length ?? 0) > 0 ||
-                (overviewDetailData?.itemsFinals?.length ?? 0) > 0 ||
                 (overviewDetailData?.itemStarterSets?.length ?? 0) > 0
               "
             >
-              <StatisticsItemStatsFastSection
-                v-if="(overviewDetailData.itemsStarters ?? []).length"
-                :section-title="t('statisticsPage.itemsSectionStarters')"
-                :rows="overviewDetailData.itemsStarters ?? []"
-                :baseline-rows="overviewDetailBaselineData?.itemsStarters ?? null"
-                :total-participants="overviewDetailData.totalParticipants"
-                :game-version="gameVersion"
-                favorite-prefix="items.starters"
-                :ref-version-label="progressionFromVersion"
-                :baseline-pending="overviewDetailBaselinePending"
-              />
+              <div
+                v-if="itemFastSliceConfigs.length > 0"
+                class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-2"
+              >
+                <StatisticsItemStatsFastSection
+                  v-for="c in itemFastSliceConfigs"
+                  :key="c.slice"
+                  :slice="c.slice"
+                  :rows="c.rows"
+                  :baseline-rows="c.baselineRows"
+                  :total-participants="overviewDetailData.totalParticipants"
+                  :game-version="gameVersion"
+                  :ref-version-label="progressionFromVersion"
+                  :baseline-pending="overviewDetailBaselinePending"
+                />
+              </div>
               <template v-if="(overviewDetailData.itemStarterSets ?? []).length">
                 <h3 class="text-base font-semibold text-text-accent">
                   {{ t('statisticsPage.itemsStarterSetsTitle') }}
@@ -4065,50 +4414,6 @@
                   </table>
                 </div>
               </template>
-              <StatisticsItemStatsFastSection
-                v-if="(overviewDetailData.itemsCores ?? []).length"
-                :section-title="t('statisticsPage.itemsSectionCore')"
-                :rows="overviewDetailData.itemsCores ?? []"
-                :baseline-rows="overviewDetailBaselineData?.itemsCores ?? null"
-                :total-participants="overviewDetailData.totalParticipants"
-                :game-version="gameVersion"
-                favorite-prefix="items.core"
-                :ref-version-label="progressionFromVersion"
-                :baseline-pending="overviewDetailBaselinePending"
-              />
-              <StatisticsItemStatsFastSection
-                v-if="(overviewDetailData.itemsBoots ?? []).length"
-                :section-title="t('statisticsPage.itemsSectionBoots')"
-                :rows="overviewDetailData.itemsBoots ?? []"
-                :baseline-rows="overviewDetailBaselineData?.itemsBoots ?? null"
-                :total-participants="overviewDetailData.totalParticipants"
-                :game-version="gameVersion"
-                favorite-prefix="items.boots"
-                :ref-version-label="progressionFromVersion"
-                :baseline-pending="overviewDetailBaselinePending"
-              />
-              <StatisticsItemStatsFastSection
-                v-if="(overviewDetailData.items?.length ?? 0) > 0"
-                :section-title="t('statisticsPage.itemsSectionSolo')"
-                :rows="overviewDetailData.items"
-                :baseline-rows="overviewDetailBaselineData?.items ?? null"
-                :total-participants="overviewDetailData.totalParticipants"
-                :game-version="gameVersion"
-                favorite-prefix="items.solo"
-                :ref-version-label="progressionFromVersion"
-                :baseline-pending="overviewDetailBaselinePending"
-              />
-              <StatisticsItemStatsFastSection
-                v-if="(overviewDetailData.itemsFinals ?? []).length"
-                :section-title="t('statisticsPage.itemsSectionFinal')"
-                :rows="overviewDetailData.itemsFinals ?? []"
-                :baseline-rows="overviewDetailBaselineData?.itemsFinals ?? null"
-                :total-participants="overviewDetailData.totalParticipants"
-                :game-version="gameVersion"
-                favorite-prefix="items.final"
-                :ref-version-label="progressionFromVersion"
-                :baseline-pending="overviewDetailBaselinePending"
-              />
               <h3 class="text-base font-semibold text-text-accent">
                 {{ t('statisticsPage.itemsFullTableTitle') }}
               </h3>
@@ -4323,8 +4628,14 @@ import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
   scoreboardDrakeIconByKey,
+  scoreboardDrakeIconCdByKey,
   scoreboardObjectiveIconByKey,
+  scoreboardObjectiveIconCdByKey,
 } from '~/utils/objectiveScoreboardIcons'
+import type {
+  ItemAggRow,
+  ItemSliceCategory,
+} from '~/components/statistics/ItemStatsFastSection.vue'
 
 definePageMeta({
   layout: 'default',
@@ -4366,9 +4677,11 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
   if (tab === 'detail') return 'runes'
   if (tab === 'duration') return 'team'
   if (tab === 'abandons') return 'team'
+  if (tab === 'champion-table' || tab === 'championstable') return 'championTable'
   if (
     tab === 'overview' ||
     tab === 'tierlist' ||
+    tab === 'championTable' ||
     tab === 'trends' ||
     tab === 'team' ||
     tab === 'runes' ||
@@ -4395,6 +4708,7 @@ const activeTab = ref<
   | 'overview'
   | 'team'
   | 'tierlist'
+  | 'championTable'
   | 'trends'
   | 'runes'
   | 'items'
@@ -4411,6 +4725,11 @@ const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
   { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
+  {
+    id: 'championTable' as const,
+    label: t('statisticsPage.tabChampionTable'),
+    widgetId: 'championTable',
+  },
   { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
@@ -4435,6 +4754,38 @@ const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 const itemsPageSize = ref(20)
 const itemsPage = ref(1)
 const itemsList = computed(() => overviewDetailData.value?.items ?? [])
+
+/** Tranches objets (starters / core / bottes / finaux / solo) → 8 cartes chacune dans la même grille. */
+const itemFastSliceConfigs = computed(() => {
+  const d = overviewDetailData.value
+  const b = overviewDetailBaselineData.value
+  if (!d) {
+    return [] as Array<{
+      slice: ItemSliceCategory
+      rows: ItemAggRow[]
+      baselineRows: ItemAggRow[] | null
+    }>
+  }
+  const slices: Array<{
+    slice: ItemSliceCategory
+    rows: ItemAggRow[] | undefined
+    baseline: ItemAggRow[] | undefined
+  }> = [
+    { slice: 'starter', rows: d.itemsStarters, baseline: b?.itemsStarters },
+    { slice: 'core', rows: d.itemsCores, baseline: b?.itemsCores },
+    { slice: 'boots', rows: d.itemsBoots, baseline: b?.itemsBoots },
+    { slice: 'final', rows: d.itemsFinals, baseline: b?.itemsFinals },
+    { slice: 'solo', rows: d.items, baseline: b?.items },
+  ]
+  return slices
+    .map(s => ({
+      slice: s.slice,
+      rows: s.rows ?? [],
+      baselineRows: s.baseline != null && s.baseline.length > 0 ? s.baseline : null,
+    }))
+    .filter(s => s.rows.length > 0)
+})
+
 const totalItemsCount = computed(() => itemsList.value.length)
 const totalItemsPages = computed(() =>
   Math.max(1, Math.ceil(totalItemsCount.value / itemsPageSize.value))
@@ -6103,81 +6454,91 @@ const overviewSidesSideWinrate = computed(() => ({
   red: overviewSidesData.value?.sideWinrate?.red ?? { matches: 0, wins: 0, winrate: 0 },
 }))
 const sidesBlueMostPickedRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championPickBySide?.blue ?? [])
-  const tot = raw.reduce((s, r) => s + r.games, 0) || 1
-  return [...raw]
+  const rawAll = overviewSidesData.value?.championPickBySide?.blue ?? []
+  const tot = rawAll.reduce((s, r) => s + r.games, 0) || 1
+  const ranked = [...rawAll]
     .map(r => ({ championId: r.championId, pickrate: (r.games / tot) * 100 }))
     .sort((a, b) => b.pickrate - a.pickrate)
+  return takeOverviewChampionTopN(ranked, FAST_STAT_ROW_COUNT)
 })
 const sidesRedMostPickedRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championPickBySide?.red ?? [])
-  const tot = raw.reduce((s, r) => s + r.games, 0) || 1
-  return [...raw]
+  const rawAll = overviewSidesData.value?.championPickBySide?.red ?? []
+  const tot = rawAll.reduce((s, r) => s + r.games, 0) || 1
+  const ranked = [...rawAll]
     .map(r => ({ championId: r.championId, pickrate: (r.games / tot) * 100 }))
     .sort((a, b) => b.pickrate - a.pickrate)
+  return takeOverviewChampionTopN(ranked, FAST_STAT_ROW_COUNT)
 })
 const sidesBlueBestWinrateRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(
-    overviewSidesData.value?.championWinrateBySide?.blue ?? []
-  )
-  return [...raw].filter(r => r.games >= 10).sort((a, b) => b.winrate - a.winrate)
+  const raw = overviewSidesData.value?.championWinrateBySide?.blue ?? []
+  const ordered = [...raw].filter(r => r.games >= 5).sort((a, b) => b.winrate - a.winrate)
+  return takeOverviewChampionTopN(ordered, FAST_STAT_ROW_COUNT)
 })
 const sidesRedBestWinrateRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.championWinrateBySide?.red ?? [])
-  return [...raw].filter(r => r.games >= 10).sort((a, b) => b.winrate - a.winrate)
+  const raw = overviewSidesData.value?.championWinrateBySide?.red ?? []
+  const ordered = [...raw].filter(r => r.games >= 5).sort((a, b) => b.winrate - a.winrate)
+  return takeOverviewChampionTopN(ordered, FAST_STAT_ROW_COUNT)
 })
 const sidesBlueBanRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.blue ?? [])
+  const raw = overviewSidesData.value?.bansBySide?.blue ?? []
   const m = overviewSidesData.value?.matchCount ?? 0
-  return [...raw]
+  const ranked = [...raw]
     .map(r => ({
       championId: r.championId,
       count: r.count,
       banrate: m > 0 ? Math.round((r.count / m) * 10000) / 100 : 0,
     }))
     .sort((a, b) => b.banrate - a.banrate)
+  return takeOverviewChampionTopN(ranked, FAST_STAT_ROW_COUNT)
 })
 const sidesRedBanRows = computed(() => {
-  const raw = filterOverviewRowsByOtpPool(overviewSidesData.value?.bansBySide?.red ?? [])
+  const raw = overviewSidesData.value?.bansBySide?.red ?? []
   const m = overviewSidesData.value?.matchCount ?? 0
-  return [...raw]
+  const ranked = [...raw]
     .map(r => ({
       championId: r.championId,
       count: r.count,
       banrate: m > 0 ? Math.round((r.count / m) * 10000) / 100 : 0,
     }))
     .sort((a, b) => b.banrate - a.banrate)
+  return takeOverviewChampionTopN(ranked, FAST_STAT_ROW_COUNT)
 })
-const sidesBlueTopWinrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+const sidesBlueTopWinrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
     (a, b) => b.deltaWr - a.deltaWr
   )
-)
-const sidesRedTopWinrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedTopWinrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
     (a, b) => b.deltaWr - a.deltaWr
   )
-)
-const sidesBlueTopPickrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesBlueTopPickrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
     (a, b) => b.deltaPick - a.deltaPick
   )
-)
-const sidesRedTopPickrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedTopPickrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
     (a, b) => b.deltaPick - a.deltaPick
   )
-)
-const sidesBlueTopBanrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.blue ?? [])].sort(
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesBlueTopBanrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
     (a, b) => b.deltaBan - a.deltaBan
   )
-)
-const sidesRedTopBanrateSince = computed(() =>
-  [...filterOverviewRowsByOtpPool(overviewSidesProgressionData.value?.red ?? [])].sort(
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedTopBanrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
     (a, b) => b.deltaBan - a.deltaBan
   )
-)
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
 const sidesDrakeTypeRows = computed(() => {
   const d = overviewSidesData.value?.drakesBySide?.types
   if (!d) return []
@@ -6289,6 +6650,24 @@ function objectiveIconSrc(key: string): string | undefined {
 }
 function drakeIconSrc(key: string): string | undefined {
   return scoreboardDrakeIconByKey[key]
+}
+function onObjectiveIconError(e: Event, key: string): void {
+  const el = e.target as HTMLImageElement
+  if (el.dataset.cdFallback === '1') return
+  const url = scoreboardObjectiveIconCdByKey[key]
+  if (url) {
+    el.dataset.cdFallback = '1'
+    el.src = url
+  }
+}
+function onDrakeIconError(e: Event, key: string): void {
+  const el = e.target as HTMLImageElement
+  if (el.dataset.cdFallback === '1') return
+  const url = scoreboardDrakeIconCdByKey[key]
+  if (url) {
+    el.dataset.cdFallback = '1'
+    el.src = url
+  }
 }
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {
@@ -6517,42 +6896,67 @@ const _overviewEffectiveTotalMatches = computed(() => {
 const overviewFilteredChampionIds = computed(() => {
   return new Set((championsData.value?.champions ?? []).map(c => c.championId))
 })
-/** Aligné sur l’API : avec OTP = pas de recoupement côté champions ; sinon on restreint aux IDs renvoyés par /champions. */
-function filterOverviewRowsByOtpPool<T extends { championId: number }>(rows: T[]): T[] {
-  if (statsOtpFilter.value === 'oui') return rows
+const FAST_STAT_ROW_COUNT = 5
+/**
+ * Prend les n premières lignes en conservant l’ordre API ; priorité aux IDs présents dans /champions,
+ * puis complète pour toujours remplir l’affichage fast-stat.
+ */
+function takeOverviewChampionTopN<T extends { championId: number }>(
+  rows: readonly T[],
+  n: number = FAST_STAT_ROW_COUNT
+): T[] {
+  if (!rows.length || n <= 0) return []
+  if (statsOtpFilter.value === 'oui') return rows.slice(0, n)
   const allowed = overviewFilteredChampionIds.value
-  if (allowed.size === 0) return rows
-  const filtered = rows.filter(row => allowed.has(row.championId))
-  return filtered.length > 0 ? filtered : rows
+  if (allowed.size === 0) return rows.slice(0, n)
+  const out: T[] = []
+  const seen = new Set<number>()
+  for (const row of rows) {
+    if (!allowed.has(row.championId)) continue
+    if (seen.has(row.championId)) continue
+    seen.add(row.championId)
+    out.push(row)
+    if (out.length >= n) return out
+  }
+  for (const row of rows) {
+    if (seen.has(row.championId)) continue
+    seen.add(row.championId)
+    out.push(row)
+    if (out.length >= n) return out
+  }
+  return out
 }
+
 const overviewTopPickrateChampionsFiltered = computed(() =>
-  filterOverviewRowsByOtpPool(overviewData.value?.topPickrateChampions ?? [])
+  takeOverviewChampionTopN(overviewData.value?.topPickrateChampions ?? [], FAST_STAT_ROW_COUNT)
 )
 const overviewEffectiveTopWinrateChampions = computed(() => {
   const fromOverview = overviewData.value?.topWinrateChampions
-  if (fromOverview?.length) return filterOverviewRowsByOtpPool(fromOverview)
+  if (fromOverview?.length) {
+    return takeOverviewChampionTopN(fromOverview, FAST_STAT_ROW_COUNT)
+  }
   const fromPickrate = overviewData.value?.topPickrateChampions
   if (!fromPickrate?.length) return []
-  return filterOverviewRowsByOtpPool(fromPickrate)
-    .sort((a, b) => (b.winrate ?? 0) - (a.winrate ?? 0))
-    .slice(0, 5)
+  const sorted = [...fromPickrate].sort((a, b) => (b.winrate ?? 0) - (a.winrate ?? 0))
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
 })
-/** Top banrate champions: from overview when present, else from teams.bans.top20Total (first 5); banrate from API banRatePercent (share of all bans). */
+/** Top banrate champions: from overview when present, else from teams.bans.top20Total; banrate from API banRatePercent (share of all bans). */
 const overviewEffectiveTopBanrateChampions = computed(() => {
   const fromOverview = overviewData.value?.topBanrateChampions
-  if (fromOverview?.length) return filterOverviewRowsByOtpPool(fromOverview)
+  if (fromOverview?.length) {
+    return takeOverviewChampionTopN(fromOverview, FAST_STAT_ROW_COUNT)
+  }
   const teams = overviewTeamsData.value?.bans?.top20Total
   if (!teams?.length) return []
-  return filterOverviewRowsByOtpPool(
-    teams.slice(0, 5).map(b => {
-      const pct = typeof b.banRatePercent === 'string' ? parseFloat(b.banRatePercent) : 0
-      return {
-        championId: b.championId,
-        banCount: b.count,
-        banrate: Number.isFinite(pct) ? pct : 0,
-      }
-    })
-  )
+  const mapped = teams.slice(0, 120).map(b => {
+    const pct = typeof b.banRatePercent === 'string' ? parseFloat(b.banRatePercent) : 0
+    return {
+      championId: b.championId,
+      banCount: b.count,
+      banrate: Number.isFinite(pct) ? pct : 0,
+    }
+  })
+  return takeOverviewChampionTopN(mapped, FAST_STAT_ROW_COUNT)
 })
 
 /** % of matches where winning team got first, and % where losing team got first. */
@@ -6857,6 +7261,174 @@ const tierListRefRows = ref<
   }>
 >([])
 
+type ChampionGlobalTableRow = {
+  championId: number
+  blue: {
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+    banrate: number
+  }
+  red: {
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+    banrate: number
+  }
+  totalGames: number
+  avgDamageToChamps: number
+  avgDamageToChampsPhys: number
+  avgDamageToChampsMagic: number
+  avgDamageToChampsTrue: number
+  avgDamageTakenPhys: number
+  avgDamageTakenMagic: number
+  avgDamageTakenTrue: number
+  avgDamageTakenTotal: number
+  avgKills: number
+  avgDeaths: number
+  avgAssists: number
+}
+
+type ChampionGlobalSortColumn =
+  | 'champion'
+  | 'blueWinrate'
+  | 'bluePickrate'
+  | 'blueBanrate'
+  | 'redWinrate'
+  | 'redPickrate'
+  | 'redBanrate'
+  | 'dmgTotal'
+  | 'dmgPhys'
+  | 'dmgMagic'
+  | 'dmgTrue'
+  | 'takenPhys'
+  | 'takenMagic'
+  | 'takenTrue'
+  | 'kills'
+  | 'deaths'
+  | 'assists'
+  | 'totalGames'
+
+const championGlobalTablePending = ref(false)
+const championGlobalTableError = ref<string | null>(null)
+const championGlobalTableData = ref<{
+  matchCount: number
+  rows: ChampionGlobalTableRow[]
+  error?: string
+  message?: string
+} | null>(null)
+
+const championGlobalSortColumn = ref<ChampionGlobalSortColumn>('totalGames')
+const championGlobalSortDir = ref<'asc' | 'desc'>('desc')
+
+function setChampionGlobalSort(col: ChampionGlobalSortColumn) {
+  if (championGlobalSortColumn.value === col) {
+    championGlobalSortDir.value = championGlobalSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    championGlobalSortColumn.value = col
+    championGlobalSortDir.value = 'desc'
+  }
+}
+
+function championGlobalSortIcon(col: ChampionGlobalSortColumn): string {
+  if (championGlobalSortColumn.value !== col) return '—'
+  return championGlobalSortDir.value === 'desc' ? '↓' : '↑'
+}
+
+function formatChampionGlobalPct(n: number): string {
+  return `${Number(n).toFixed(1)}%`
+}
+
+function formatChampionGlobalNum(n: number): string {
+  return Number(n).toLocaleString(locale.value, { maximumFractionDigits: 1 })
+}
+
+function championGlobalCompare(
+  a: ChampionGlobalTableRow,
+  b: ChampionGlobalTableRow,
+  col: ChampionGlobalSortColumn,
+  dir: 'asc' | 'desc'
+): number {
+  const m = dir === 'desc' ? -1 : 1
+  switch (col) {
+    case 'totalGames':
+      return (a.totalGames - b.totalGames) * m
+    case 'champion': {
+      const na = championName(a.championId) || String(a.championId)
+      const nb = championName(b.championId) || String(b.championId)
+      return na.localeCompare(nb, locale.value, { sensitivity: 'base' }) * m
+    }
+    case 'blueWinrate':
+      return (a.blue.winrate - b.blue.winrate) * m
+    case 'bluePickrate':
+      return (a.blue.pickrate - b.blue.pickrate) * m
+    case 'blueBanrate':
+      return (a.blue.banrate - b.blue.banrate) * m
+    case 'redWinrate':
+      return (a.red.winrate - b.red.winrate) * m
+    case 'redPickrate':
+      return (a.red.pickrate - b.red.pickrate) * m
+    case 'redBanrate':
+      return (a.red.banrate - b.red.banrate) * m
+    case 'dmgTotal':
+      return (a.avgDamageToChamps - b.avgDamageToChamps) * m
+    case 'dmgPhys':
+      return (a.avgDamageToChampsPhys - b.avgDamageToChampsPhys) * m
+    case 'dmgMagic':
+      return (a.avgDamageToChampsMagic - b.avgDamageToChampsMagic) * m
+    case 'dmgTrue':
+      return (a.avgDamageToChampsTrue - b.avgDamageToChampsTrue) * m
+    case 'takenPhys':
+      return (a.avgDamageTakenPhys - b.avgDamageTakenPhys) * m
+    case 'takenMagic':
+      return (a.avgDamageTakenMagic - b.avgDamageTakenMagic) * m
+    case 'takenTrue':
+      return (a.avgDamageTakenTrue - b.avgDamageTakenTrue) * m
+    case 'kills':
+      return (a.avgKills - b.avgKills) * m
+    case 'deaths':
+      return (a.avgDeaths - b.avgDeaths) * m
+    case 'assists':
+      return (a.avgAssists - b.avgAssists) * m
+    default:
+      return 0
+  }
+}
+
+const championGlobalSortedRows = computed(() => {
+  const rows = [...(championGlobalTableData.value?.rows ?? [])]
+  const col = championGlobalSortColumn.value
+  const dir = championGlobalSortDir.value
+  rows.sort((a, b) => championGlobalCompare(a, b, col, dir))
+  return rows
+})
+
+async function loadChampionGlobalTable() {
+  championGlobalTablePending.value = true
+  championGlobalTableError.value = null
+  try {
+    const data = await statsFetch<{
+      matchCount: number
+      rows: ChampionGlobalTableRow[]
+      error?: string
+      message?: string
+    }>(apiUrl('/api/stats/champions/global-table' + sidesQueryParams()))
+    championGlobalTableData.value = data
+    if (data?.error || data?.message) {
+      championGlobalTableError.value = [data.error, data.message].filter(Boolean).join(': ')
+    } else {
+      championGlobalTableError.value = null
+    }
+  } catch (e) {
+    championGlobalTableError.value = e instanceof Error ? e.message : String(e)
+    championGlobalTableData.value = null
+  } finally {
+    championGlobalTablePending.value = false
+  }
+}
+
 const queryString = computed(() => {
   const params = new URLSearchParams()
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
@@ -7027,6 +7599,7 @@ watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
   const tab = activeTab.value
   if (tab === 'infos' || tab === 'tierlist' || tab === 'overview') loadChampions()
   if (tab === 'tierlist') loadTierList()
+  if (tab === 'championTable') loadChampionGlobalTable()
 })
 watch(effectiveTierListPatch, (patch, oldPatch) => {
   if (activeTab.value === 'tierlist' && (patch || oldPatch)) loadTierList()
@@ -7073,6 +7646,7 @@ watch(activeTab, async tab => {
   if (tab === 'team') loadOverviewSides()
   if (tab === 'tierlist' || tab === 'infos') loadChampions()
   if (tab === 'tierlist') loadTierList()
+  if (tab === 'championTable') loadChampionGlobalTable()
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
     if (tab === 'runes' || tab === 'items' || tab === 'spells') loadOverviewDetailBaseline()
@@ -7085,6 +7659,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadOverviewTeams()
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
+  if (activeTab.value === 'championTable') loadChampionGlobalTable()
 })
 
 watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
@@ -7097,6 +7672,7 @@ watch(progressionFromVersion, () => {
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'tierlist') loadTierList()
+  if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()

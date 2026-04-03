@@ -381,14 +381,8 @@ function runeSetLayout(run: unknown): {
 <template>
   <div class="stats-runes-panel flex w-full flex-col gap-8">
     <!-- Grille runes + fragments -->
-    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-6">
-      <div v-if="comparisonVersion" class="mb-3 text-xs text-text/55">
-        {{ t('statisticsPage.runesDeltaVs', { version: comparisonVersion }) }}
-        <span v-if="baselinePending" class="ml-1 text-text/40"
-          >({{ t('statisticsPage.loading') }})</span
-        >
-      </div>
-      <div class="flex flex-col gap-10">
+    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-3">
+      <div class="flex flex-col gap-7">
         <div
           class="stats-runes-paths-grid grid min-w-0 gap-x-4 gap-y-8 overflow-x-auto pb-2 lg:gap-x-6"
           style="grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr))"
@@ -545,166 +539,178 @@ function runeSetLayout(run: unknown): {
     </div>
 
     <!-- Sets : plus / moins pick, meilleur / pire WR -->
-    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-6">
-      <h3 class="mb-4 text-sm font-semibold text-text">
-        {{ t('statisticsPage.overviewDetailRuneSets') }}
-      </h3>
-      <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3">
-        <div
-          v-for="block in [
-            {
-              key: 'topPick',
-              title: t('statisticsPage.runeSetsMostPicked'),
-              list: runeSetsHighlights.topPick,
-            },
-            {
-              key: 'lowPick',
-              title: t('statisticsPage.runeSetsLeastPicked'),
-              list: runeSetsHighlights.lowPick,
-            },
-            {
-              key: 'bestWr',
-              title: t('statisticsPage.runeSetsBestWr'),
-              list: runeSetsHighlights.bestWr,
-            },
-            {
-              key: 'worstWr',
-              title: t('statisticsPage.runeSetsWorstWr'),
-              list: runeSetsHighlights.worstWr,
-            },
-          ]"
-          :key="block.key"
-          class="min-w-0"
-        >
-          <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent/90">
-            {{ block.title }}
-          </h4>
-          <div class="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
-            <div
-              v-for="(row, idx) in block.list.map(s => ({ set: s, ly: runeSetLayout(s.runes) }))"
-              :key="block.key + '-' + idx"
-              class="rune-set-card statistics-overview-surface min-w-0 rounded-lg border border-primary/30 px-4 py-3"
-            >
-              <div class="rune-set-build-strip flex min-w-0 flex-col gap-2">
-                <div class="grid min-w-0 grid-cols-2 gap-3">
-                  <!-- Primaire : clé de voûte + ligne principale -->
-                  <div class="flex min-w-0 flex-wrap content-start items-center gap-1">
+    <div class="grid gap-4 lg:grid-cols-2 2xl:grid-cols-4 2xl:gap-3">
+      <div
+        v-for="block in [
+          {
+            key: 'topPick',
+            title: t('statisticsPage.runeSetsMostPicked'),
+            list: runeSetsHighlights.topPick,
+          },
+          {
+            key: 'lowPick',
+            title: t('statisticsPage.runeSetsLeastPicked'),
+            list: runeSetsHighlights.lowPick,
+          },
+          {
+            key: 'bestWr',
+            title: t('statisticsPage.runeSetsBestWr'),
+            list: runeSetsHighlights.bestWr,
+          },
+          {
+            key: 'worstWr',
+            title: t('statisticsPage.runeSetsWorstWr'),
+            list: runeSetsHighlights.worstWr,
+          },
+        ]"
+        :key="block.key"
+        class="min-w-0"
+      >
+        <h4 class="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-accent/90">
+          {{ block.title }}
+        </h4>
+        <div class="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
+          <div
+            v-for="(row, idx) in block.list.map(s => ({ set: s, ly: runeSetLayout(s.runes) }))"
+            :key="block.key + '-' + idx"
+            class="rune-set-card statistics-overview-surface min-w-0 rounded-lg border border-primary/30 px-4 py-3"
+          >
+            <div class="rune-set-build-strip flex min-w-0 flex-col gap-2">
+              <!-- Clé de voûte seule (hors ligne d’alignement avec le secondaire) -->
+              <div v-if="row.ly.keystone && getRuneById(row.ly.keystone)" class="flex shrink-0">
+                <img
+                  :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
+                  :alt="getRuneById(row.ly.keystone)!.name"
+                  class="rune-set-keystone-img shrink-0 rounded-full object-cover"
+                  width="64"
+                  height="64"
+                />
+              </div>
+              <!-- Primaire / secondaire : deux colonnes, runes empilées et alignées en haut -->
+              <div
+                v-if="
+                  row.ly.primaryRow.length || row.ly.secondaryPath || row.ly.secondaryRunes.length
+                "
+                class="grid min-w-0 items-start gap-x-3 gap-y-1"
+                :class="
+                  row.ly.primaryRow.length && (row.ly.secondaryPath || row.ly.secondaryRunes.length)
+                    ? 'grid-cols-2'
+                    : 'grid-cols-1'
+                "
+              >
+                <div
+                  v-if="row.ly.primaryRow.length"
+                  class="flex min-w-0 flex-col items-start gap-1"
+                >
+                  <template v-for="rid in row.ly.primaryRow" :key="'p-' + rid">
                     <img
-                      v-if="row.ly.keystone && getRuneById(row.ly.keystone)"
-                      :src="getRuneImageUrl(gameVersion, getRuneById(row.ly.keystone)!.icon)"
-                      :alt="getRuneById(row.ly.keystone)!.name"
-                      class="rune-set-keystone-img shrink-0 rounded-full object-cover"
-                      width="64"
-                      height="64"
+                      v-if="getRuneById(rid)"
+                      :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
+                      :alt="getRuneById(rid)!.name"
+                      :title="getRuneById(rid)!.name"
+                      class="rune-set-small-rune rounded-full object-cover"
+                      width="28"
+                      height="28"
                     />
-                    <template v-for="rid in row.ly.primaryRow" :key="'p-' + rid">
-                      <img
-                        v-if="getRuneById(rid)"
-                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                        :alt="getRuneById(rid)!.name"
-                        :title="getRuneById(rid)!.name"
-                        class="rune-set-small-rune rounded-full object-cover"
-                        width="28"
-                        height="28"
-                      />
-                    </template>
-                  </div>
-                  <!-- Secondaire : icône de branche + runes -->
-                  <div class="flex min-w-0 flex-wrap content-start items-center gap-1">
-                    <div
-                      v-if="row.ly.secondaryPath"
-                      class="rune-set-path-icon flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full"
-                    >
-                      <span
-                        class="block h-[28px] w-[28px] rounded-full"
-                        :style="{
-                          backgroundColor: getRunePathColor(
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          ),
-                          WebkitMaskImage: `url(${getRunePathImageUrl(
-                            gameVersion,
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          )})`,
-                          maskImage: `url(${getRunePathImageUrl(
-                            gameVersion,
-                            row.ly.secondaryPath.icon,
-                            row.ly.secondaryPath.id,
-                            row.ly.secondaryPath.name
-                          )})`,
-                          WebkitMaskSize: 'contain',
-                          maskSize: 'contain',
-                          WebkitMaskRepeat: 'no-repeat',
-                          maskRepeat: 'no-repeat',
-                          WebkitMaskPosition: 'center',
-                          maskPosition: 'center',
-                        }"
-                      />
-                    </div>
-                    <template v-for="rid in row.ly.secondaryRunes" :key="'s-' + rid">
-                      <img
-                        v-if="getRuneById(rid)"
-                        :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
-                        :alt="getRuneById(rid)!.name"
-                        :title="getRuneById(rid)!.name"
-                        class="rune-set-small-rune rounded-full object-cover"
-                        width="28"
-                        height="28"
-                      />
-                    </template>
-                  </div>
+                  </template>
                 </div>
                 <div
-                  v-if="row.ly.shards.length"
-                  class="flex flex-wrap items-center justify-center gap-1 border-t border-primary/10 pt-2 sm:justify-end"
+                  v-if="row.ly.secondaryPath || row.ly.secondaryRunes.length"
+                  class="rune-set-secondary-group flex min-w-0 flex-col items-start gap-1"
                 >
-                  <img
-                    v-for="sid in row.ly.shards"
-                    :key="'sh-' + sid"
-                    :src="getShardIcon(sid)"
-                    :alt="shardName(sid)"
-                    :title="shardName(sid)"
-                    class="rune-set-shard-img rounded-full bg-black/25 object-contain"
-                    width="22"
-                    height="22"
-                  />
+                  <div
+                    v-if="row.ly.secondaryPath"
+                    class="rune-set-path-icon flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full"
+                  >
+                    <span
+                      class="block h-[28px] w-[28px] rounded-full"
+                      :style="{
+                        backgroundColor: getRunePathColor(
+                          row.ly.secondaryPath.icon,
+                          row.ly.secondaryPath.id,
+                          row.ly.secondaryPath.name
+                        ),
+                        WebkitMaskImage: `url(${getRunePathImageUrl(
+                          gameVersion,
+                          row.ly.secondaryPath.icon,
+                          row.ly.secondaryPath.id,
+                          row.ly.secondaryPath.name
+                        )})`,
+                        maskImage: `url(${getRunePathImageUrl(
+                          gameVersion,
+                          row.ly.secondaryPath.icon,
+                          row.ly.secondaryPath.id,
+                          row.ly.secondaryPath.name
+                        )})`,
+                        WebkitMaskSize: 'contain',
+                        maskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        maskPosition: 'center',
+                      }"
+                    />
+                  </div>
+                  <template v-for="rid in row.ly.secondaryRunes" :key="'s-' + rid">
+                    <img
+                      v-if="getRuneById(rid)"
+                      :src="getRuneImageUrl(gameVersion, getRuneById(rid)!.icon)"
+                      :alt="getRuneById(rid)!.name"
+                      :title="getRuneById(rid)!.name"
+                      class="rune-set-small-rune rounded-full object-cover"
+                      width="28"
+                      height="28"
+                    />
+                  </template>
                 </div>
               </div>
               <div
-                class="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-primary/10 pt-3 text-xs leading-tight text-text/85"
+                v-if="row.ly.shards.length"
+                class="flex flex-wrap items-center justify-center gap-1 pt-2 sm:justify-end"
               >
-                <span
-                  ><span class="text-text/55">WR:</span>
-                  {{ ' ' }}
-                  <span class="font-semibold tabular-nums" :class="wrClass(row.set.winrate)">{{
-                    Number(row.set.winrate).toFixed(2)
-                  }}</span
-                  >%</span
-                >
-                <span
-                  ><span class="text-text/55">pR:</span>
-                  {{ ' ' }}
-                  <span class="font-semibold tabular-nums">{{
-                    Number(row.set.pickrate).toFixed(2)
-                  }}</span
-                  >%</span
-                >
-                <span
-                  ><span class="text-text/50">{{ t('statisticsPage.tierListGames') }}</span>
-                  {{ ' ' }}
-                  <span class="font-semibold tabular-nums">{{
-                    Number(row.set.games).toLocaleString()
-                  }}</span></span
-                >
+                <img
+                  v-for="sid in row.ly.shards"
+                  :key="'sh-' + sid"
+                  :src="getShardIcon(sid)"
+                  :alt="shardName(sid)"
+                  :title="shardName(sid)"
+                  class="rune-set-shard-img rounded-full bg-black/25 object-contain"
+                  width="22"
+                  height="22"
+                />
               </div>
             </div>
-            <p v-if="!block.list.length" class="text-xs text-text/50">
-              {{ t('statisticsPage.overviewNoData') }}
-            </p>
+            <div
+              class="mt-3 flex flex-wrap gap-x-4 gap-y-1 pt-1 text-xs leading-tight text-text/85"
+            >
+              <span
+                ><span class="text-text/55">WR:</span>
+                {{ ' ' }}
+                <span class="font-semibold tabular-nums" :class="wrClass(row.set.winrate)">{{
+                  Number(row.set.winrate).toFixed(2)
+                }}</span
+                >%</span
+              >
+              <span
+                ><span class="text-text/55">pR:</span>
+                {{ ' ' }}
+                <span class="font-semibold tabular-nums">{{
+                  Number(row.set.pickrate).toFixed(2)
+                }}</span
+                >%</span
+              >
+              <span
+                ><span class="text-text/50">{{ t('statisticsPage.tierListGames') }}</span>
+                {{ ' ' }}
+                <span class="font-semibold tabular-nums">{{
+                  Number(row.set.games).toLocaleString()
+                }}</span></span
+              >
+            </div>
           </div>
+          <p v-if="!block.list.length" class="text-xs text-text/50">
+            {{ t('statisticsPage.overviewNoData') }}
+          </p>
         </div>
       </div>
     </div>

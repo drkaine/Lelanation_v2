@@ -178,14 +178,15 @@ const valueCellClass = computed(() => {
   return `${s} text-text`
 })
 
-const topFive = computed(() => props.rows.slice(0, 5))
+const FAST_SIDE_STAT_ROWS = 5
+const displayRows = computed(() => props.rows.slice(0, FAST_SIDE_STAT_ROWS))
 
 const isProgression = computed(
   () => props.variant === 'dWr' || props.variant === 'dPick' || props.variant === 'dBan'
 )
 
 const barDenom = computed(() => {
-  const vals = topFive.value.map(r =>
+  const vals = displayRows.value.map(r =>
     isProgression.value ? Math.abs(metricForRow(r)) : metricForRow(r)
   )
   return Math.max(...vals, 0.01)
@@ -245,9 +246,9 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
         </span>
       </span>
     </h3>
-    <table v-if="topFive.length" class="fast-stat-table w-full text-xs">
+    <table v-if="displayRows.length" class="fast-stat-table w-full text-xs">
       <tbody>
-        <tr v-for="(row, idx) in topFive" :key="'r-' + row.championId" class="fast-stat-row">
+        <tr v-for="(row, idx) in displayRows" :key="'r-' + row.championId" class="fast-stat-row">
           <td class="py-0.5 align-middle">
             <div class="flex items-center gap-0.5">
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>

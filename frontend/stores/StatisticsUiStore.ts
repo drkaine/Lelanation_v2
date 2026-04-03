@@ -5,6 +5,7 @@ const STORAGE_KEY = 'lelanation_statistics_ui'
 export type StatisticsMainTab =
   | 'overview'
   | 'tierlist'
+  | 'championTable'
   | 'trends'
   | 'team'
   | 'runes'
@@ -20,6 +21,7 @@ interface StatisticsUiState {
 const VALID_TABS: StatisticsMainTab[] = [
   'overview',
   'tierlist',
+  'championTable',
   'trends',
   'team',
   'runes',

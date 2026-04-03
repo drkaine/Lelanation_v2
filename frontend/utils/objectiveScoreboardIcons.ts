@@ -1,49 +1,66 @@
 /**
- * Icônes objectifs / drakes pour les stats (côtés bleu/rouge).
- * Les chemins /data/community-dragon/scoreboard-objectives/*.png ne sont pas versionnés
- * dans le repo : on utilise des SVG inline (data URLs) pour éviter 404/500 en prod.
+ * Icônes objectifs / drakes (stats côtés bleu/rouge).
+ * Fichiers produits par CommunityDragonService.syncScoreboardObjectiveIcons() dans
+ * frontend/public/data/community-dragon/scoreboard-objectives/ (voir backend CommunityDragonService).
+ * @see https://raw.communitydragon.org/latest/game/assets/ux/scoreboard
  */
-function svgDataUrl(inner: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">${inner}</svg>`
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+
+const LOCAL_BASE = '/data/community-dragon/scoreboard-objectives'
+
+const CD_SCOREBOARD = 'https://raw.communitydragon.org/latest/game/assets/ux/scoreboard'
+const CD_MINIMAP = 'https://raw.communitydragon.org/latest/game/assets/ux/minimap/icons'
+
+function local(file: string): string {
+  return `${LOCAL_BASE}/${file}`
 }
 
-const elderDragonIcon = svgDataUrl(
-  '<path fill="#fb923c" d="M6 17c4-9 16-9 20 0-4 3-6 8-6 11H12c0-3-2-8-6-11z"/><circle cx="16" cy="12" r="3" fill="#ffedd5"/>'
-)
+function cdScoreboard(file: string): string {
+  return `${CD_SCOREBOARD}/${file}`
+}
 
-/** Icônes objectifs (baron, tours, etc.) */
+function cdMinimap(file: string): string {
+  return `${CD_MINIMAP}/${file}`
+}
+
+/** Icônes objectifs (baron, tours, etc.) — chemins locaux après sync CD. */
 export const scoreboardObjectiveIconByKey: Record<string, string> = {
-  baron: svgDataUrl(
-    '<circle cx="16" cy="16" r="13" stroke="#c084fc" stroke-width="2"/><path stroke="#c084fc" stroke-width="2" stroke-linecap="round" d="M10 20c2-4 10-4 12 0"/><circle cx="12" cy="13" r="1.5" fill="#e9d5ff"/><circle cx="20" cy="13" r="1.5" fill="#e9d5ff"/>'
-  ),
-  dragon: svgDataUrl(
-    '<path fill="#f87171" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/><path fill="#fecaca" d="M10 14h12v2H10z"/>'
-  ),
-  elder: elderDragonIcon,
-  tower: svgDataUrl(
-    '<path stroke="#94a3b8" stroke-width="2" d="M10 26V10h12v16"/><path stroke="#cbd5e1" stroke-width="1.5" d="M8 10h16M12 10V6h8v4"/><path stroke="#64748b" d="M13 14h6M13 18h6M13 22h6"/>'
-  ),
-  inhibitor: svgDataUrl(
-    '<path fill="#38bdf8" d="M16 4l10 8v12H6V12l10-8z" opacity=".9"/><path stroke="#0ea5e9" stroke-width="1.5" d="M16 9v14M11 13h10"/>'
-  ),
-  riftHerald: svgDataUrl(
-    '<ellipse cx="16" cy="18" rx="10" ry="7" stroke="#a78bfa" stroke-width="2"/><circle cx="16" cy="12" r="5" stroke="#c4b5fd" stroke-width="2"/><circle cx="14" cy="11" r="1" fill="#ddd6fe"/><circle cx="18" cy="11" r="1" fill="#ddd6fe"/>'
-  ),
-  horde: svgDataUrl(
-    '<circle cx="10" cy="20" r="3" fill="#84cc16"/><circle cx="16" cy="17" r="3.5" fill="#a3e635"/><circle cx="22" cy="20" r="3" fill="#84cc16"/><path stroke="#4d7c0f" stroke-width="1" d="M8 24h16"/>'
-  ),
+  baron: local('_baronnashor.png'),
+  dragon: local('_dragon.png'),
+  elder: local('_elderdrake.png'),
+  tower: local('tower.png'),
+  inhibitor: local('inhibitor.png'),
+  riftHerald: local('_riftherald.png'),
+  horde: local('grub.png'),
 }
 
-/** Icônes par type de drake (couleurs proches du client) */
+/** Repli CDN si les PNG locaux manquent (ex. avant premier sync). */
+export const scoreboardObjectiveIconCdByKey: Record<string, string> = {
+  baron: cdScoreboard('_baronnashor.png'),
+  dragon: cdScoreboard('_dragon.png'),
+  elder: cdScoreboard('_elderdrake.png'),
+  tower: cdMinimap('tower.png'),
+  inhibitor: cdMinimap('inhibitor.png'),
+  riftHerald: cdScoreboard('_riftherald.png'),
+  horde: cdMinimap('grub.png'),
+}
+
+/** Icônes par type de drake — locales. */
 export const scoreboardDrakeIconByKey: Record<string, string> = {
-  elder: elderDragonIcon,
-  earth: svgDataUrl('<path fill="#ca8a04" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'),
-  water: svgDataUrl('<path fill="#0ea5e9" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'),
-  wind: svgDataUrl('<path fill="#94a3b8" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'),
-  fire: svgDataUrl('<path fill="#ef4444" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'),
-  hextec: svgDataUrl(
-    '<path fill="#8b5cf6" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'
-  ),
-  chem: svgDataUrl('<path fill="#22c55e" d="M6 18c4-8 16-8 20 0-3 2-5 6-5 10H11c0-4-2-8-5-10z"/>'),
+  elder: local('_elderdrake.png'),
+  earth: local('_mountaindrake.png'),
+  water: local('_oceandrake.png'),
+  wind: local('_clouddrake.png'),
+  fire: local('_infernaldrake.png'),
+  hextec: local('_hextechdrake.png'),
+  chem: local('_chemtechdrake.png'),
+}
+
+export const scoreboardDrakeIconCdByKey: Record<string, string> = {
+  elder: cdScoreboard('_elderdrake.png'),
+  earth: cdScoreboard('_mountaindrake.png'),
+  water: cdScoreboard('_oceandrake.png'),
+  wind: cdScoreboard('_clouddrake.png'),
+  fire: cdScoreboard('_infernaldrake.png'),
+  hextec: cdScoreboard('_hextechdrake.png'),
+  chem: cdScoreboard('_chemtechdrake.png'),
 }

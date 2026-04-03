@@ -528,7 +528,7 @@ export async function getOverviewStats(
 
     const topWinrateChampions = [...champList]
       .sort((a, b) => b.winrate - a.winrate)
-      .slice(0, 5)
+      .slice(0, 120)
       .map(({ championId, games, wins, winrate, pickrate }) => ({
         championId, games, wins,
         winrate: Math.round(winrate * 100) / 100,
@@ -537,7 +537,7 @@ export async function getOverviewStats(
 
     const topPickrateChampions = [...champList]
       .sort((a, b) => b.pickrate - a.pickrate)
-      .slice(0, 5)
+      .slice(0, 120)
       .map(({ championId, games, wins, winrate, pickrate }) => ({
         championId, games, wins,
         winrate: Math.round(winrate * 100) / 100,
@@ -547,7 +547,7 @@ export async function getOverviewStats(
     const topBanrateChampions = [...champList]
       .filter(c => c.bans > 0)
       .sort((a, b) => b.bans - a.bans)
-      .slice(0, 5)
+      .slice(0, 120)
       .map(({ championId, bans, banrate }) => ({
         championId,
         banCount: bans,
@@ -597,6 +597,11 @@ export async function getOverviewStats(
 
 /** Trinkets + balise de contrôle (2055) : exclus des stats objets agrégées. */
 const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363, 2055])
+
+/** Potions / consommables : exclus du slice starter et des combinaisons starter (pas du solo global). */
+const OVERVIEW_STARTER_SLICE_EXCLUDED_IDS = new Set([
+  2003, 2009, 2010, 2031, 2032, 2033, 2060, 2138, 2139, 2140,
+])
 
 const APEX_LADDER_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
 
@@ -659,7 +664,9 @@ async function loadItemStarterSetsFromMatches(
     role != null && role !== ''
       ? ` AND mp.role = '${String(role).replace(/'/g, "''")}'`
       : ''
-  const excludeSql = Array.from(OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS).join(', ')
+  const starterExcludeSql = Array.from(
+    new Set([...OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS, ...OVERVIEW_STARTER_SLICE_EXCLUDED_IDS])
+  ).join(', ')
   const sql = `
       WITH per_player AS (
         SELECT
@@ -669,7 +676,7 @@ async function loadItemStarterSetsFromMatches(
               SELECT '[' || string_agg((e->>'itemId')::text, ',' ORDER BY (e->>'order')::int, (e->>'timestampMs')::bigint)
               FROM jsonb_array_elements(mp.items) AS e
               WHERE COALESCE((e->>'starter')::boolean, false)
-                AND (e->>'itemId')::int NOT IN (${excludeSql})
+                AND (e->>'itemId')::int NOT IN (${starterExcludeSql})
             ),
             '[]'
           ) AS starter_key
@@ -872,7 +879,13 @@ export async function getOverviewDetailStats(
       }
       e.wins += r.countWin
       e.games += r.countGame
-      mergeItemSlice(itemStarterMap, r.itemId, r.countWin, r.countGame, r.countStarter)
+      mergeItemSlice(
+        itemStarterMap,
+        r.itemId,
+        r.countWin,
+        r.countGame,
+        OVERVIEW_STARTER_SLICE_EXCLUDED_IDS.has(r.itemId) ? 0 : r.countStarter
+      )
       mergeItemSlice(itemCoreMap, r.itemId, r.countWin, r.countGame, r.countCore)
       const otherSlots = Math.max(0, r.countGame - r.countStarter - r.countCore)
       mergeItemSlice(itemFinalMap, r.itemId, r.countWin, r.countGame, otherSlots)
@@ -1946,7 +1959,7 @@ export async function getOverviewSidesStats(
       INNER JOIN matchs m ON m.id = mp.match_id
       WHERE ${matchCond} AND t.team IN (100, 200)
       GROUP BY t.team, mp.champion_id
-      HAVING COUNT(*) >= 10
+      HAVING COUNT(*) >= 5
     `
     const champRows = await prisma.$queryRawUnsafe<
       Array<{ team_id: number; champion_id: number; games: number; wins: number }>
@@ -1961,12 +1974,12 @@ export async function getOverviewSidesStats(
     const champBlueAll = champRows.filter((r) => Number(r.team_id) === 100).map(toChampRow)
     const champRedAll = champRows.filter((r) => Number(r.team_id) === 200).map(toChampRow)
     const championWinrateBySide = {
-      blue: [...champBlueAll].sort((a, b) => b.winrate - a.winrate).slice(0, 20),
-      red: [...champRedAll].sort((a, b) => b.winrate - a.winrate).slice(0, 20),
+      blue: [...champBlueAll].sort((a, b) => b.winrate - a.winrate).slice(0, 120),
+      red: [...champRedAll].sort((a, b) => b.winrate - a.winrate).slice(0, 120),
     }
     const championPickBySide = {
-      blue: [...champBlueAll].sort((a, b) => b.games - a.games).slice(0, 20),
-      red: [...champRedAll].sort((a, b) => b.games - a.games).slice(0, 20),
+      blue: [...champBlueAll].sort((a, b) => b.games - a.games).slice(0, 120),
+      red: [...champRedAll].sort((a, b) => b.games - a.games).slice(0, 120),
     }
 
     const banRows = await prisma.$queryRawUnsafe<
@@ -1984,12 +1997,12 @@ export async function getOverviewSidesStats(
       .filter((r) => Number(r.team_id) === 100)
       .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 20)
+      .slice(0, 120)
     const bansRed = banRows
       .filter((r) => Number(r.team_id) === 200)
       .map((r) => ({ championId: Number(r.champion_id), count: Number(r.cnt) }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 20)
+      .slice(0, 120)
     const bansBySide = { blue: bansBlue, red: bansRed }
 
     const matchWhere = buildMatchWhere(version, rankTier)

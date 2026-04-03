@@ -13,6 +13,7 @@ import {
   patchFromGameVersion,
 } from '../services/MatchupTierService.js'
 import { getTierList } from '../services/TierListService.js'
+import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
@@ -193,7 +194,6 @@ router.get('/overview', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
 
   const runOverview = async () => {
@@ -260,33 +260,7 @@ router.get('/overview', async (req: Request, res: Response) => {
     }
   }
 
-  const championPool = Array.isArray(data._championPool) ? data._championPool : []
-  const allowedIdsFromPool = championPool
-    .filter((c) => keepByOtpPickratePercent(parsePickrateNumber((c as { pickrate?: unknown }).pickrate), otpMode))
-    .map((c) => (c as { championId: number }).championId)
-  const allowedChampionIds =
-    otpMode !== 'oui' && championPool.length > 0 && allowedIdsFromPool.length === 0
-      ? new Set(championPool.map((c) => (c as { championId: number }).championId))
-      : new Set(allowedIdsFromPool)
-  const hasOtpFilterPool = championPool.length > 0 && otpMode !== 'oui'
-  if (hasOtpFilterPool) {
-    if (Array.isArray(data.topWinrateChampions)) {
-      data.topWinrateChampions = data.topWinrateChampions.filter((c) =>
-        allowedChampionIds.has((c as { championId: number }).championId)
-      )
-    }
-    if (Array.isArray(data.topPickrateChampions)) {
-      data.topPickrateChampions = data.topPickrateChampions.filter((c) =>
-        allowedChampionIds.has((c as { championId: number }).championId)
-      )
-    }
-    if (Array.isArray(data.topBanrateChampions)) {
-      data.topBanrateChampions = data.topBanrateChampions.filter((c) =>
-        allowedChampionIds.has((c as { championId: number }).championId)
-      )
-    }
-  }
-
+  // Top pick / WR / ban : vrai top agrégé (pas de filtre OTP ici — voir tier list).
   return res.json(data)
 })
 
@@ -552,6 +526,34 @@ router.get('/champions', async (req: Request, res: Response) => {
     champions,
     generatedAt: data.generatedAt
   })
+})
+
+/** GET /api/stats/champions/global-table — tableau par champion : WR/pick/ban bleu & rouge, dégâts moyens, KDA. Query: ?version=…&rankTier=… (comme overview-sides). */
+router.get('/champions/global-table', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryStringArray(req.query.version)
+  const rankTier = queryStringArray(req.query.rankTier)
+  const sqlStart = Date.now()
+  try {
+    const data = await getChampionGlobalTable(
+      version.length ? version : null,
+      rankTier.length ? rankTier : null
+    )
+    ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+    if (!data) {
+      return res.status(200).json({ matchCount: 0, rows: [], message: 'Database not configured.' })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[champions/global-table]', message, err)
+    return res.status(200).json({
+      matchCount: 0,
+      rows: [],
+      error: 'Champion global table failed',
+      message,
+    })
+  }
 })
 
 router.get('/champions/:championId', async (req: Request, res: Response) => {
@@ -920,7 +922,6 @@ router.get('/overview-cards', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const otpMode = otpModeFromQuery(req.query.otp)
   const fromVersion = queryString(req.query.fromVersion) ?? version
 
   const [overview, teams] = await Promise.all([
@@ -928,21 +929,10 @@ router.get('/overview-cards', async (req: Request, res: Response) => {
     getOverviewTeamsStats(version, rankTier, role),
   ])
 
-  const pool = overview?._championPool ?? []
-  const allowedIdsFromPool = pool
-    .filter((c) => keepByOtpPickratePercent(parsePickrateNumber(c.pickrate), otpMode))
-    .map((c) => c.championId)
-  const allowedChampionIds =
-    otpMode !== 'oui' && pool.length > 0 && allowedIdsFromPool.length === 0
-      ? new Set(pool.map((c) => c.championId))
-      : new Set(allowedIdsFromPool)
-  const filterByOtp = <T extends { championId: number }>(rows: T[]): T[] =>
-    pool.length === 0 || otpMode === 'oui' ? rows : rows.filter((r) => allowedChampionIds.has(r.championId))
-
   return res.json({
-    topPickrateChampions: filterByOtp(overview?.topPickrateChampions ?? []),
-    topWinrateChampions: filterByOtp(overview?.topWinrateChampions ?? []),
-    topBanrateChampions: filterByOtp(overview?.topBanrateChampions ?? []),
+    topPickrateChampions: overview?.topPickrateChampions ?? [],
+    topWinrateChampions: overview?.topWinrateChampions ?? [],
+    topBanrateChampions: overview?.topBanrateChampions ?? [],
     winrateSince: {
       fromVersion,
       value:
