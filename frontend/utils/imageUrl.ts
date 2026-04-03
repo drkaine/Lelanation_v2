@@ -77,6 +77,17 @@ function detectRunePathKind(
   const nameLower = (ref.pathName ?? '').toLowerCase()
   const id = Number(ref.pathId ?? 0)
 
+  /** Fichiers client Riot du type perk-images/Styles/7204_Resolve.png (pas les IDs API 8xxx). */
+  const style720 = iconLower.match(/(?:^|\/)(720[0-4])[_./]/)
+  if (style720) {
+    const n = style720[1]
+    if (n === '7200') return 'domination'
+    if (n === '7201') return 'precision'
+    if (n === '7202') return 'sorcery'
+    if (n === '7203') return 'inspiration'
+    if (n === '7204') return 'resolve'
+  }
+
   if (
     iconLower.includes('domination') ||
     nameLower.includes('domination') ||

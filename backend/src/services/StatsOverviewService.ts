@@ -14,6 +14,7 @@ import {
 } from '../utils/statsFilters.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
+import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -61,7 +62,23 @@ export interface OverviewDetailStats {
     winrate: number
   }>
   items: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  /** Achats marqués starter (agrégés, wins au prorata par ligne MV). */
+  itemsStarters: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  /** Achats marqués core. */
+  itemsCores: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  /** Autres slots (hors starter/core) sur les 6 premiers emplacements. */
+  itemsFinals: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  /** Bottes seules (même métrique que `items`) — exclues des autres listes objets. */
+  itemsBoots: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
   itemSets: Array<{
+    items: number[]
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  /** Combinaisons d’objets starter (ordre d’achat, hors balise / trinkets exclus). */
+  itemStarterSets: Array<{
     items: number[]
     games: number
     wins: number
@@ -72,12 +89,34 @@ export interface OverviewDetailStats {
     string,
     Array<{ itemId: number; games: number; wins: number; winrate: number }>
   >
+  /** Sorts solo agrégés (slot D = 0, F = 1 dans la MV). */
   summonerSpells: Array<{
     spellId: number
     games: number
     wins: number
     pickrate: number
     winrate: number
+    countSlot0: number
+    countSlot1: number
+    /** % des présences du sort en slot D (touche D). */
+    pctSlotD: number
+    /** % des présences du sort en slot F. */
+    pctSlotF: number
+    highEloGames?: number
+    highEloWinrate?: number
+    highEloRank?: number
+  }>
+  /** Paires D→F (ordre Riot) depuis match_players. */
+  summonerSpellSets: Array<{
+    spellIdD: number
+    spellIdF: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+    highEloGames?: number
+    highEloWinrate?: number
+    highEloRank?: number
   }>
   /** Fragments (stat shards) par slot 0–2 ; même dénominateur que les runes (totalParticipants). */
   shards: Array<{
@@ -95,9 +134,15 @@ export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   runes: [],
   runeSets: [],
   items: [],
+  itemsStarters: [],
+  itemsCores: [],
+  itemsFinals: [],
+  itemsBoots: [],
   itemSets: [],
+  itemStarterSets: [],
   itemsByOrder: {},
   summonerSpells: [],
+  summonerSpellSets: [],
   shards: [],
 }
 
@@ -550,7 +595,113 @@ export async function getOverviewStats(
 
 // ── getOverviewDetailStats ───────────────────────────────────────────────────
 
-const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363])
+/** Trinkets + balise de contrôle (2055) : exclus des stats objets agrégées. */
+const OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS = new Set([3340, 3364, 3363, 2055])
+
+const APEX_LADDER_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
+
+type SpellPairSqlRow = { spell_d: number; spell_f: number; games: number; wins: number }
+
+async function loadSummonerSpellPairsFromMatches(
+  version: string | null,
+  rankTier: string | string[] | null,
+  role: string | null,
+  includeSmite: boolean,
+  useApexRanksOnly: boolean
+): Promise<SpellPairSqlRow[]> {
+  const matchCond = buildRawMatchCond(
+    version,
+    useApexRanksOnly ? [...APEX_LADDER_TIERS] : rankTier
+  )
+  const roleSql =
+    role != null && role !== ''
+      ? ` AND mp.role = '${String(role).replace(/'/g, "''")}'`
+      : ''
+  const smiteSql = includeSmite ? '' : ` AND NOT (11 = ANY(mp.summoner_spells))`
+  const sql = `
+      SELECT mp.summoner_spells[1]::int AS spell_d,
+             mp.summoner_spells[2]::int AS spell_f,
+             COUNT(*)::int AS games,
+             SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
+      FROM match_players mp
+      INNER JOIN teams t ON t.id = mp.team_id
+      INNER JOIN matchs m ON m.id = mp.match_id
+      WHERE ${matchCond}
+        AND cardinality(mp.summoner_spells) >= 2
+        ${roleSql}${smiteSql}
+      GROUP BY 1, 2
+      HAVING COUNT(*) >= 40
+      ORDER BY games DESC
+      LIMIT 150
+    `
+  try {
+    const rows = await prisma.$queryRawUnsafe<SpellPairSqlRow[]>(sql)
+    return rows ?? []
+  } catch (err) {
+    console.warn(
+      '[loadSummonerSpellPairsFromMatches]',
+      useApexRanksOnly ? 'apex' : 'main',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  }
+}
+
+type ItemStarterSetSqlRow = { starter_key: string; games: number; wins: number }
+
+async function loadItemStarterSetsFromMatches(
+  version: string | null,
+  rankTier: string | string[] | null,
+  role: string | null
+): Promise<ItemStarterSetSqlRow[]> {
+  const matchCond = buildRawMatchCond(version, rankTier)
+  const roleSql =
+    role != null && role !== ''
+      ? ` AND mp.role = '${String(role).replace(/'/g, "''")}'`
+      : ''
+  const excludeSql = Array.from(OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS).join(', ')
+  const sql = `
+      WITH per_player AS (
+        SELECT
+          t.win,
+          COALESCE(
+            (
+              SELECT '[' || string_agg((e->>'itemId')::text, ',' ORDER BY (e->>'order')::int, (e->>'timestampMs')::bigint)
+              FROM jsonb_array_elements(mp.items) AS e
+              WHERE COALESCE((e->>'starter')::boolean, false)
+                AND (e->>'itemId')::int NOT IN (${excludeSql})
+            ),
+            '[]'
+          ) AS starter_key
+        FROM match_players mp
+        INNER JOIN teams t ON t.id = mp.team_id
+        INNER JOIN matchs m ON m.id = mp.match_id
+        WHERE ${matchCond}
+          AND jsonb_typeof(mp.items) = 'array'
+          AND jsonb_array_length(mp.items) > 0
+          ${roleSql}
+      )
+      SELECT starter_key,
+             COUNT(*)::int AS games,
+             SUM(CASE WHEN win THEN 1 ELSE 0 END)::int AS wins
+      FROM per_player
+      WHERE starter_key <> '[]'
+      GROUP BY starter_key
+      HAVING COUNT(*) >= 5
+      ORDER BY COUNT(*) DESC
+      LIMIT 50
+    `
+  try {
+    const rows = await prisma.$queryRawUnsafe<ItemStarterSetSqlRow[]>(sql)
+    return rows ?? []
+  } catch (err) {
+    console.warn(
+      '[loadItemStarterSetsFromMatches]',
+      err instanceof Error ? err.message : err
+    )
+    return []
+  }
+}
 
 export async function getOverviewDetailStats(
   version?: string | null,
@@ -598,7 +749,13 @@ export async function getOverviewDetailStats(
           championStatId: { in: statIds },
           ...(!includeSmite ? { spellId: { not: 11 } } : {}),
         },
-        select: { spellId: true, countWin: true, countGame: true },
+        select: {
+          spellId: true,
+          countWin: true,
+          countGame: true,
+          countSlot0: true,
+          countSlot1: true,
+        },
       }),
       prisma.mvChampionShardSoloStat.findMany({
         where: { championStatId: { in: statIds } },
@@ -651,13 +808,74 @@ export async function getOverviewDetailStats(
       })
       .sort((a, b) => b.games - a.games)
 
-    // Per-item aggregation
+    // Per-item aggregation (tous achats + découpes starter / core / reste des 6 slots)
+    const itemMeta = await loadItemMeta()
+    const isBootItemId = (itemId: number) => isBootsItem(itemMeta.get(itemId), itemId)
+
+    type ItemSliceAgg = { w: number; g: number }
+    const mergeItemSlice = (
+      map: Map<number, ItemSliceAgg>,
+      itemId: number,
+      countWin: number,
+      countGame: number,
+      sliceGames: number
+    ): void => {
+      if (sliceGames <= 0) return
+      let e = map.get(itemId)
+      if (!e) {
+        e = { w: 0, g: 0 }
+        map.set(itemId, e)
+      }
+      e.g += sliceGames
+      if (countGame > 0) e.w += (countWin * sliceGames) / countGame
+    }
+    const sliceRows = (
+      map: Map<number, ItemSliceAgg>
+    ): Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }> =>
+      Array.from(map.entries())
+        .map(([itemId, e]) => {
+          const games = Math.max(0, Math.round(e.g))
+          const wins = Math.round(e.w)
+          return {
+            itemId,
+            games,
+            wins,
+            pickrate:
+              totalParticipants > 0 ? Math.round((games / totalParticipants) * 10000) / 100 : 0,
+            winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+          }
+        })
+        .filter((r) => r.games > 0)
+        .sort((a, b) => b.games - a.games)
+
     const itemMap = new Map<number, { wins: number; games: number }>()
+    const itemBootMap = new Map<number, { wins: number; games: number }>()
+    const itemStarterMap = new Map<number, ItemSliceAgg>()
+    const itemCoreMap = new Map<number, ItemSliceAgg>()
+    const itemFinalMap = new Map<number, ItemSliceAgg>()
     for (const r of soloItems) {
       if (OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(r.itemId)) continue
+      if (isBootItemId(r.itemId)) {
+        let b = itemBootMap.get(r.itemId)
+        if (!b) {
+          b = { wins: 0, games: 0 }
+          itemBootMap.set(r.itemId, b)
+        }
+        b.wins += r.countWin
+        b.games += r.countGame
+        continue
+      }
       let e = itemMap.get(r.itemId)
-      if (!e) { e = { wins: 0, games: 0 }; itemMap.set(r.itemId, e) }
-      e.wins += r.countWin; e.games += r.countGame
+      if (!e) {
+        e = { wins: 0, games: 0 }
+        itemMap.set(r.itemId, e)
+      }
+      e.wins += r.countWin
+      e.games += r.countGame
+      mergeItemSlice(itemStarterMap, r.itemId, r.countWin, r.countGame, r.countStarter)
+      mergeItemSlice(itemCoreMap, r.itemId, r.countWin, r.countGame, r.countCore)
+      const otherSlots = Math.max(0, r.countGame - r.countStarter - r.countCore)
+      mergeItemSlice(itemFinalMap, r.itemId, r.countWin, r.countGame, otherSlots)
     }
     const items = Array.from(itemMap.entries())
       .map(([itemId, e]) => ({
@@ -668,23 +886,141 @@ export async function getOverviewDetailStats(
         winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
       .sort((a, b) => b.games - a.games)
-
-    // Summoner spells
-    const spellMap = new Map<number, { wins: number; games: number }>()
-    for (const r of spells) {
-      let e = spellMap.get(r.spellId)
-      if (!e) { e = { wins: 0, games: 0 }; spellMap.set(r.spellId, e) }
-      e.wins += r.countWin; e.games += r.countGame
-    }
-    const summonerSpells = Array.from(spellMap.entries())
-      .map(([spellId, e]) => ({
-        spellId,
+    const itemsBoots = Array.from(itemBootMap.entries())
+      .map(([itemId, e]) => ({
+        itemId,
         games: e.games,
         wins: e.wins,
         pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
         winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
       .sort((a, b) => b.games - a.games)
+    const itemsStarters = sliceRows(itemStarterMap)
+    const itemsCores = sliceRows(itemCoreMap)
+    const itemsFinals = sliceRows(itemFinalMap)
+
+    // Summoner spells (solo + slots D/F + apex ladder)
+    const spellMap = new Map<number, { wins: number; games: number; slot0: number; slot1: number }>()
+    for (const r of spells) {
+      let e = spellMap.get(r.spellId)
+      if (!e) {
+        e = { wins: 0, games: 0, slot0: 0, slot1: 0 }
+        spellMap.set(r.spellId, e)
+      }
+      e.wins += r.countWin
+      e.games += r.countGame
+      e.slot0 += r.countSlot0
+      e.slot1 += r.countSlot1
+    }
+
+    const apexCoreWhere: Record<string, unknown> = {}
+    if (pVersion) apexCoreWhere.gameVersion = { startsWith: pVersion }
+    apexCoreWhere.rankTier = { in: [...APEX_LADDER_TIERS] }
+    if (pRole) apexCoreWhere.role = pRole
+    const apexCoreStats = await prisma.mvChampionCoreStat.findMany({
+      where: apexCoreWhere,
+      select: { id: true },
+    })
+    const apexStatIds = apexCoreStats.map((s) => s.id)
+    const apexSpellRows =
+      apexStatIds.length > 0
+        ? await prisma.mvChampionSummonerSpellAgg.findMany({
+            where: {
+              championStatId: { in: apexStatIds },
+              ...(!includeSmite ? { spellId: { not: 11 } } : {}),
+            },
+            select: { spellId: true, countWin: true, countGame: true },
+          })
+        : []
+    const apexSpellMap = new Map<number, { wins: number; games: number }>()
+    for (const r of apexSpellRows) {
+      let e = apexSpellMap.get(r.spellId)
+      if (!e) {
+        e = { wins: 0, games: 0 }
+        apexSpellMap.set(r.spellId, e)
+      }
+      e.wins += r.countWin
+      e.games += r.countGame
+    }
+
+    let summonerSpells = Array.from(spellMap.entries())
+      .map(([spellId, e]) => {
+        const g = e.games
+        const ax = apexSpellMap.get(spellId)
+        const heG = ax?.games
+        const heW = ax?.wins
+        return {
+          spellId,
+          games: g,
+          wins: e.wins,
+          pickrate: totalParticipants > 0 ? Math.round((g / totalParticipants) * 10000) / 100 : 0,
+          winrate: g > 0 ? Math.round((e.wins / g) * 10000) / 100 : 0,
+          countSlot0: e.slot0,
+          countSlot1: e.slot1,
+          pctSlotD: g > 0 ? Math.round((e.slot0 / g) * 10000) / 100 : 0,
+          pctSlotF: g > 0 ? Math.round((e.slot1 / g) * 10000) / 100 : 0,
+          highEloGames: heG,
+          highEloWinrate:
+            heG != null && heG > 0 && heW != null
+              ? Math.round((heW / heG) * 10000) / 100
+              : undefined,
+        }
+      })
+      .sort((a, b) => b.games - a.games)
+
+    const soloHeRanked = [...summonerSpells]
+      .filter((s) => (s.highEloGames ?? 0) > 0)
+      .sort((a, b) => (b.highEloGames ?? 0) - (a.highEloGames ?? 0))
+    const soloHeRankMap = new Map<number, number>()
+    soloHeRanked.forEach((s, i) => soloHeRankMap.set(s.spellId, i + 1))
+    summonerSpells = summonerSpells.map((s) => ({
+      ...s,
+      highEloRank: soloHeRankMap.get(s.spellId),
+    }))
+
+    const [pairRowsMain, pairRowsApex, itemStarterSetRows] = await Promise.all([
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, pRole, includeSmite ?? false, false),
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, pRole, includeSmite ?? false, true),
+      loadItemStarterSetsFromMatches(pVersion, rankTier ?? null, pRole),
+    ])
+    const apexPairMap = new Map<string, { games: number; wins: number }>()
+    for (const r of pairRowsApex) {
+      const key = `${Number(r.spell_d)}:${Number(r.spell_f)}`
+      apexPairMap.set(key, { games: Number(r.games), wins: Number(r.wins) })
+    }
+    let summonerSpellSets = pairRowsMain.map((r) => {
+      const spellIdD = Number(r.spell_d)
+      const spellIdF = Number(r.spell_f)
+      const games = Number(r.games)
+      const wins = Number(r.wins)
+      const key = `${spellIdD}:${spellIdF}`
+      const ax = apexPairMap.get(key)
+      const heG = ax?.games
+      const heW = ax?.wins
+      return {
+        spellIdD,
+        spellIdF,
+        games,
+        wins,
+        pickrate:
+          totalParticipants > 0 ? Math.round((games / totalParticipants) * 10000) / 100 : 0,
+        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+        highEloGames: heG,
+        highEloWinrate:
+          heG != null && heG > 0 && heW != null
+            ? Math.round((heW / heG) * 10000) / 100
+            : undefined,
+      }
+    })
+    const setHeRanked = [...summonerSpellSets]
+      .filter((s) => (s.highEloGames ?? 0) > 0)
+      .sort((a, b) => (b.highEloGames ?? 0) - (a.highEloGames ?? 0))
+    const setHeRankMap = new Map<string, number>()
+    setHeRanked.forEach((s, i) => setHeRankMap.set(`${s.spellIdD}:${s.spellIdF}`, i + 1))
+    summonerSpellSets = summonerSpellSets.map((s) => ({
+      ...s,
+      highEloRank: setHeRankMap.get(`${s.spellIdD}:${s.spellIdF}`),
+    }))
 
     // Item sets (combinations) - from champion_item_stats
     const itemSetRows = await prisma.mvChampionItemStat.findMany({
@@ -704,15 +1040,44 @@ export async function getOverviewDetailStats(
         let parsedItems: number[]
         try { parsedItems = JSON.parse(listStr) as number[] } catch { parsedItems = [] }
         return {
-          items: parsedItems.filter((id) => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id)),
+          items: parsedItems.filter(
+            (id) => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id) && !isBootItemId(id)
+          ),
           games: e.games,
           wins: e.wins,
           pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,
           winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
         }
       })
+      .filter((row) => row.items.length > 0)
       .sort((a, b) => b.games - a.games)
       .slice(0, 50)
+
+    const itemStarterSets = itemStarterSetRows
+      .map((r) => {
+        let parsedItems: number[]
+        try {
+          parsedItems = JSON.parse(r.starter_key) as number[]
+        } catch {
+          parsedItems = []
+        }
+        const games = Number(r.games)
+        const wins = Number(r.wins)
+        return {
+          items: parsedItems.filter(
+            (id) =>
+              Number.isFinite(id) &&
+              !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id) &&
+              !isBootItemId(id)
+          ),
+          games,
+          wins,
+          pickrate:
+            totalParticipants > 0 ? Math.round((games / totalParticipants) * 10000) / 100 : 0,
+          winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+        }
+      })
+      .filter((row) => row.items.length > 0)
 
     // Rune sets (combinations) - from champion_runes_stats
     const runeSetRows = await prisma.mvChampionRunesStat.findMany({
@@ -747,9 +1112,15 @@ export async function getOverviewDetailStats(
       runes,
       runeSets,
       items,
+      itemsStarters,
+      itemsCores,
+      itemsFinals,
+      itemsBoots,
       itemSets,
+      itemStarterSets,
       itemsByOrder: {},
       summonerSpells,
+      summonerSpellSets,
       shards,
     }
     overviewDetailCache.set(key, { data: result, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })

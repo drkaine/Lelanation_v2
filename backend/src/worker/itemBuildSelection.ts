@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
-type ItemMeta = {
+export type ItemMeta = {
   id: string
   name: string
   tags?: string[]
@@ -31,7 +31,7 @@ const BOOT_IDS = new Set(['1001', '3005', '3006', '3009', '3010', '3020', '3047'
 const STARTER_IDS = new Set([
   '1036', '1054', '1055', '1056', '1082', '1083', '3070',
   '3865', '3866', '3867', '2003', '2009', '2010',
-  '2031', '2032', '2033', '2055', '1101', '1102', '1103',
+  '2031', '2032', '2033', '1101', '1102', '1103',
 ])
 const ATLAS_UPGRADE_IDS = new Set(['3869', '3870', '3871', '3876', '3877'])
 const STARTER_PATTERNS = [
@@ -56,7 +56,7 @@ function normalizeText(input: string | undefined): string {
     .replace(/[\u0300-\u036f]/g, '')
 }
 
-async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
+export async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
   if (itemMetaCache) return itemMetaCache
   if (itemMetaLoadPromise) return itemMetaLoadPromise
   itemMetaLoadPromise = (async () => {
@@ -104,6 +104,8 @@ async function loadItemMeta(): Promise<Map<number, ItemMeta>> {
 function isStarter(item: ItemMeta | undefined, itemId: number): boolean {
   const id = String(itemId)
   if (ATLAS_UPGRADE_IDS.has(id)) return false
+  /** Balise de contrôle : consommable mais pas « starter » pour builds / stats. */
+  if (itemId === 2055) return false
   if (STARTER_IDS.has(id) || CONSUMABLE_IDS.has(id)) return true
   if (item?.tags?.includes('Consumable')) return true
   const lower = normalizeText(item?.name)
@@ -116,6 +118,11 @@ function isBoots(item: ItemMeta | undefined, itemId: number): boolean {
   if (BOOT_IDS.has(id)) return true
   if (item?.from?.some((parentId) => BOOT_IDS.has(parentId))) return true
   return false
+}
+
+/** Bottes (tags / arbre d’objets) — pour stats overview hors agrégat solo général. */
+export function isBootsItem(item: ItemMeta | undefined, itemId: number): boolean {
+  return isBoots(item, itemId)
 }
 
 function isLegendary(item: ItemMeta | undefined, itemId: number): boolean {

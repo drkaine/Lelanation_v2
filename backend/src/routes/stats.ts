@@ -314,9 +314,15 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
       runes: [],
       runeSets: [],
       items: [],
+      itemsStarters: [],
+      itemsCores: [],
+      itemsFinals: [],
+      itemsBoots: [],
       itemSets: [],
+      itemStarterSets: [],
       itemsByOrder: {},
       summonerSpells: [],
+      summonerSpellSets: [],
       shards: [],
     })
   }

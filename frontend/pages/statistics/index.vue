@@ -1954,7 +1954,10 @@
                   :baseline-pending="overviewDetailBaselinePending"
                   :comparison-version="progressionFromVersion"
                 />
-                <div v-else class="rounded-lg border border-primary/30 bg-surface/30 p-6">
+                <div
+                  v-else
+                  class="statistics-overview-surface rounded-lg border border-primary/30 p-6"
+                >
                   <div class="py-4 text-text/70">
                     {{ t('statisticsPage.overviewDetailNoData') }}
                   </div>
@@ -3198,14 +3201,14 @@
             <template v-else>
               <div
                 v-if="totalTierListCount === 0"
-                class="rounded-lg border border-primary/30 bg-surface/30 p-4 text-text/70"
+                class="statistics-overview-surface rounded-lg border border-primary/30 p-4 text-text/70"
               >
                 {{ t('statisticsPage.tierListNoData') }}
               </div>
               <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
               <div
                 v-show="tierListViewModel === 'table' && totalTierListCount > 0"
-                class="w-full overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+                class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
               >
                 <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
                   <div
@@ -3323,7 +3326,7 @@
                   <div
                     v-for="row in paginatedTierList"
                     :key="row.championId"
-                    class="tier-list-lolalytics-row odd:bg-primary/12 flex min-h-[60px] w-full cursor-pointer items-center justify-between py-0.5 text-text-primary/90 even:bg-surface/45 hover:brightness-110"
+                    class="tier-list-lolalytics-row flex min-h-[60px] w-full cursor-pointer items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
                     role="button"
                     tabindex="0"
                     @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
@@ -3598,7 +3601,7 @@
               <!-- Vue graphique : barres divergentes (PBI), style analytics sombre -->
               <div
                 v-show="tierListViewModel === 'chart' && totalTierListCount > 0"
-                class="tier-list-diverging-wrap overflow-x-auto rounded-xl border border-slate-700/80 bg-[#0c1222] p-4 shadow-inner"
+                class="tier-list-diverging-wrap statistics-overview-surface overflow-x-auto rounded-xl border border-primary/30 p-4 shadow-inner"
               >
                 <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
                   <div class="min-w-0 flex-1">
@@ -3963,7 +3966,7 @@
           </div>
 
           <!-- Tab: Objets (global) -->
-          <div v-show="activeTab === 'items'" class="space-y-4">
+          <div v-show="activeTab === 'items'" class="space-y-6">
             <h2 class="text-xl font-semibold text-text-accent">
               {{ t('statisticsPage.itemsTitle') }}
             </h2>
@@ -3977,114 +3980,246 @@
             >
               {{ t('statisticsPage.overviewDetailTimeout') }}
             </div>
-            <div
-              v-else-if="overviewDetailData?.items?.length"
-              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
+            <template
+              v-else-if="
+                (overviewDetailData?.items?.length ?? 0) > 0 ||
+                (overviewDetailData?.itemsBoots?.length ?? 0) > 0 ||
+                (overviewDetailData?.itemsStarters?.length ?? 0) > 0 ||
+                (overviewDetailData?.itemsCores?.length ?? 0) > 0 ||
+                (overviewDetailData?.itemsFinals?.length ?? 0) > 0 ||
+                (overviewDetailData?.itemStarterSets?.length ?? 0) > 0
+              "
             >
-              <table class="w-full text-left text-sm">
-                <thead class="border-b border-primary/30 bg-surface/50">
-                  <tr>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailItems') }}
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailPickRate') }} %
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailWinRate') }} %
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.itemStats') }}
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.itemEconomy') }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-primary/20">
-                  <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-surface/50">
-                    <td class="px-4 py-2">
-                      <div class="flex items-center gap-2">
-                        <img
-                          v-if="itemImageName(row.itemId)"
-                          :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                          :alt="itemName(row.itemId) || ''"
-                          class="h-8 w-8 rounded object-cover"
-                          width="32"
-                          height="32"
-                        />
-                        <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
-                      </div>
-                    </td>
-                    <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-                    <td class="px-4 py-2 text-text/90">
-                      {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-                    </td>
-                    <td class="max-w-[200px] px-4 py-2 text-text/80">
-                      <span
-                        v-if="itemStatsForItem(row.itemId).length"
-                        :title="itemStatsForItem(row.itemId).join(', ')"
-                        class="line-clamp-2 text-xs"
+              <StatisticsItemStatsFastSection
+                v-if="(overviewDetailData.itemsStarters ?? []).length"
+                :section-title="t('statisticsPage.itemsSectionStarters')"
+                :rows="overviewDetailData.itemsStarters ?? []"
+                :baseline-rows="overviewDetailBaselineData?.itemsStarters ?? null"
+                :total-participants="overviewDetailData.totalParticipants"
+                :game-version="gameVersion"
+                favorite-prefix="items.starters"
+                :ref-version-label="progressionFromVersion"
+                :baseline-pending="overviewDetailBaselinePending"
+              />
+              <template v-if="(overviewDetailData.itemStarterSets ?? []).length">
+                <h3 class="text-base font-semibold text-text-accent">
+                  {{ t('statisticsPage.itemsStarterSetsTitle') }}
+                </h3>
+                <p class="text-xs text-text/65">{{ t('statisticsPage.itemsStarterSetsHint') }}</p>
+                <div
+                  class="statistics-overview-surface mt-2 overflow-x-auto rounded-lg border border-primary/30"
+                >
+                  <table class="w-full min-w-[320px] text-left text-sm">
+                    <thead class="border-b border-primary/30 bg-black/25">
+                      <tr>
+                        <th class="px-3 py-2 font-semibold text-text">
+                          {{ t('statisticsPage.overviewDetailItems') }}
+                        </th>
+                        <th class="px-3 py-2 font-semibold text-text">
+                          {{ t('statisticsPage.overviewDetailPickRate') }} %
+                        </th>
+                        <th class="px-3 py-2 font-semibold text-text">
+                          {{ t('statisticsPage.overviewDetailWinRate') }} %
+                        </th>
+                        <th class="hidden px-3 py-2 font-semibold text-text sm:table-cell">
+                          {{ t('statisticsPage.tierListGames') }}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-primary/20">
+                      <tr
+                        v-for="srow in overviewDetailData.itemStarterSets ?? []"
+                        :key="srow.items.join('-')"
+                        class="hover:bg-white/5"
                       >
-                        {{ itemStatsForItem(row.itemId).join(', ') }}
-                      </span>
-                      <span v-else class="text-text/50">—</span>
-                    </td>
-                    <td class="max-w-[160px] px-4 py-2 text-text/80">
-                      <span
-                        v-if="itemEconomicForItem(row.itemId).length"
-                        :title="itemEconomicForItem(row.itemId).join(', ')"
-                        class="line-clamp-2 text-xs"
-                      >
-                        {{ itemEconomicForItem(row.itemId).join(', ') }}
-                      </span>
-                      <span v-else class="text-text/50">—</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                        <td class="px-3 py-2">
+                          <div class="flex flex-wrap items-center gap-1">
+                            <template v-for="(iid, iidx) in srow.items" :key="iidx + '-' + iid">
+                              <img
+                                v-if="itemImageName(iid)"
+                                :src="getItemImageUrl(gameVersion, itemImageName(iid)!)"
+                                :alt="itemName(iid) || ''"
+                                class="h-7 w-7 rounded border border-primary/20 object-cover"
+                                width="28"
+                                height="28"
+                              />
+                              <span
+                                v-else
+                                class="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded border border-primary/30 px-1 text-[10px] text-text/70"
+                                >{{ iid }}</span
+                              >
+                            </template>
+                          </div>
+                        </td>
+                        <td class="px-3 py-2 tabular-nums text-text/90">
+                          {{ Number(srow.pickrate).toFixed(2) }}
+                        </td>
+                        <td class="px-3 py-2 tabular-nums text-text/90">
+                          {{ Number(srow.winrate).toFixed(2) }}
+                        </td>
+                        <td class="hidden px-3 py-2 tabular-nums text-text/80 sm:table-cell">
+                          {{ srow.games.toLocaleString() }}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+              <StatisticsItemStatsFastSection
+                v-if="(overviewDetailData.itemsCores ?? []).length"
+                :section-title="t('statisticsPage.itemsSectionCore')"
+                :rows="overviewDetailData.itemsCores ?? []"
+                :baseline-rows="overviewDetailBaselineData?.itemsCores ?? null"
+                :total-participants="overviewDetailData.totalParticipants"
+                :game-version="gameVersion"
+                favorite-prefix="items.core"
+                :ref-version-label="progressionFromVersion"
+                :baseline-pending="overviewDetailBaselinePending"
+              />
+              <StatisticsItemStatsFastSection
+                v-if="(overviewDetailData.itemsBoots ?? []).length"
+                :section-title="t('statisticsPage.itemsSectionBoots')"
+                :rows="overviewDetailData.itemsBoots ?? []"
+                :baseline-rows="overviewDetailBaselineData?.itemsBoots ?? null"
+                :total-participants="overviewDetailData.totalParticipants"
+                :game-version="gameVersion"
+                favorite-prefix="items.boots"
+                :ref-version-label="progressionFromVersion"
+                :baseline-pending="overviewDetailBaselinePending"
+              />
+              <StatisticsItemStatsFastSection
+                v-if="(overviewDetailData.items?.length ?? 0) > 0"
+                :section-title="t('statisticsPage.itemsSectionSolo')"
+                :rows="overviewDetailData.items"
+                :baseline-rows="overviewDetailBaselineData?.items ?? null"
+                :total-participants="overviewDetailData.totalParticipants"
+                :game-version="gameVersion"
+                favorite-prefix="items.solo"
+                :ref-version-label="progressionFromVersion"
+                :baseline-pending="overviewDetailBaselinePending"
+              />
+              <StatisticsItemStatsFastSection
+                v-if="(overviewDetailData.itemsFinals ?? []).length"
+                :section-title="t('statisticsPage.itemsSectionFinal')"
+                :rows="overviewDetailData.itemsFinals ?? []"
+                :baseline-rows="overviewDetailBaselineData?.itemsFinals ?? null"
+                :total-participants="overviewDetailData.totalParticipants"
+                :game-version="gameVersion"
+                favorite-prefix="items.final"
+                :ref-version-label="progressionFromVersion"
+                :baseline-pending="overviewDetailBaselinePending"
+              />
+              <h3 class="text-base font-semibold text-text-accent">
+                {{ t('statisticsPage.itemsFullTableTitle') }}
+              </h3>
               <div
-                v-if="totalItemsCount > 0"
-                class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+                class="statistics-overview-surface overflow-x-auto rounded-lg border border-primary/30"
               >
-                <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
-                <div class="flex items-center gap-3">
-                  <label class="flex items-center gap-1.5">
-                    <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                    <select
-                      v-model.number="itemsPageSize"
-                      class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                    >
-                      <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                    </select>
-                  </label>
-                  <span class="text-text/70">
-                    {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
-                      Math.min(itemsPage * itemsPageSize, totalItemsCount)
-                    }}
-                    / {{ totalItemsCount }}
-                  </span>
-                  <div class="flex gap-1">
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="itemsPage <= 1"
-                      @click="itemsPage = Math.max(1, itemsPage - 1)"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                      :disabled="itemsPage >= totalItemsPages"
-                      @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
-                    >
-                      ›
-                    </button>
+                <table class="w-full text-left text-sm">
+                  <thead class="border-b border-primary/30 bg-black/25">
+                    <tr>
+                      <th class="font-semibold text-text">
+                        {{ t('statisticsPage.overviewDetailItems') }}
+                      </th>
+                      <th class="font-semibold text-text">
+                        {{ t('statisticsPage.overviewDetailPickRate') }} %
+                      </th>
+                      <th class="font-semibold text-text">
+                        {{ t('statisticsPage.overviewDetailWinRate') }} %
+                      </th>
+                      <th class="font-semibold text-text">
+                        {{ t('statisticsPage.itemStats') }}
+                      </th>
+                      <th class="font-semibold text-text">
+                        {{ t('statisticsPage.itemEconomy') }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-primary/20">
+                    <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-white/5">
+                      <td class="px-4 py-2">
+                        <div class="flex items-center gap-2">
+                          <img
+                            v-if="itemImageName(row.itemId)"
+                            :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                            :alt="itemName(row.itemId) || ''"
+                            class="h-8 w-8 rounded object-cover"
+                            width="32"
+                            height="32"
+                          />
+                          <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
+                      <td class="px-4 py-2 text-text/90">
+                        {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
+                      </td>
+                      <td class="max-w-[200px] px-4 py-2 text-text/80">
+                        <span
+                          v-if="itemStatsForItem(row.itemId).length"
+                          :title="itemStatsForItem(row.itemId).join(', ')"
+                          class="line-clamp-2 text-xs"
+                        >
+                          {{ itemStatsForItem(row.itemId).join(', ') }}
+                        </span>
+                        <span v-else class="text-text/50">—</span>
+                      </td>
+                      <td class="max-w-[160px] px-4 py-2 text-text/80">
+                        <span
+                          v-if="itemEconomicForItem(row.itemId).length"
+                          :title="itemEconomicForItem(row.itemId).join(', ')"
+                          class="line-clamp-2 text-xs"
+                        >
+                          {{ itemEconomicForItem(row.itemId).join(', ') }}
+                        </span>
+                        <span v-else class="text-text/50">—</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div
+                  v-if="totalItemsCount > 0"
+                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+                >
+                  <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
+                  <div class="flex items-center gap-3">
+                    <label class="flex items-center gap-1.5">
+                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
+                      <select
+                        v-model.number="itemsPageSize"
+                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                      >
+                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                      </select>
+                    </label>
+                    <span class="text-text/70">
+                      {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
+                        Math.min(itemsPage * itemsPageSize, totalItemsCount)
+                      }}
+                      / {{ totalItemsCount }}
+                    </span>
+                    <div class="flex gap-1">
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="itemsPage <= 1"
+                        @click="itemsPage = Math.max(1, itemsPage - 1)"
+                      >
+                        ‹
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                        :disabled="itemsPage >= totalItemsPages"
+                        @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
+                      >
+                        ›
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </template>
             <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
           </div>
 
@@ -4103,51 +4238,19 @@
             >
               {{ t('statisticsPage.overviewDetailTimeout') }}
             </div>
-            <div
-              v-else-if="overviewDetailData?.summonerSpells?.length"
-              class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30"
-            >
-              <table class="w-full text-left text-sm">
-                <thead class="border-b border-primary/30 bg-surface/50">
-                  <tr>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailSummonerSpells') }}
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailPickRate') }} %
-                    </th>
-                    <th class="font-semibold text-text">
-                      {{ t('statisticsPage.overviewDetailWinRate') }} %
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-primary/20">
-                  <tr
-                    v-for="row in overviewDetailData?.summonerSpells ?? []"
-                    :key="row.spellId"
-                    class="hover:bg-surface/50"
-                  >
-                    <td class="px-4 py-2">
-                      <div class="flex items-center gap-2">
-                        <img
-                          v-if="spellImageName(row.spellId)"
-                          :src="getSpellImageUrl(gameVersion, spellImageName(row.spellId)!)"
-                          :alt="spellName(row.spellId) || ''"
-                          class="h-8 w-8 rounded object-cover"
-                          width="32"
-                          height="32"
-                        />
-                        <span class="text-text">{{ spellName(row.spellId) || row.spellId }}</span>
-                      </div>
-                    </td>
-                    <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-                    <td class="px-4 py-2 text-text/90">
-                      {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <SummonerSpellTierTables
+              v-else-if="
+                (overviewDetailData?.summonerSpells?.length ?? 0) > 0 ||
+                (overviewDetailData?.summonerSpellSets?.length ?? 0) > 0
+              "
+              :solo-rows="overviewDetailData?.summonerSpells ?? []"
+              :set-rows="overviewDetailData?.summonerSpellSets ?? []"
+              :baseline-solo="overviewDetailBaselineData?.summonerSpells ?? null"
+              :baseline-sets="overviewDetailBaselineData?.summonerSpellSets ?? null"
+              :ref-version-label="progressionFromVersion"
+              :baseline-pending="overviewDetailBaselinePending"
+              :game-version="gameVersion"
+            />
             <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
           </div>
 
@@ -4216,8 +4319,12 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
-import { getChampionImageUrl, getItemImageUrl, getSpellImageUrl } from '~/utils/imageUrl'
+import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
+import {
+  scoreboardDrakeIconByKey,
+  scoreboardObjectiveIconByKey,
+} from '~/utils/objectiveScoreboardIcons'
 
 definePageMeta({
   layout: 'default',
@@ -5148,7 +5255,7 @@ function onStatsFilterChange() {
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
     loadOverviewDetail()
   }
-  if (activeTab.value === 'runes') {
+  if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()
   }
   if (activeTab.value === 'team') {
@@ -5191,7 +5298,42 @@ const overviewDetailData = ref<{
     winrate: number
   }>
   items: Array<{ itemId: number; games: number; wins: number; pickrate: number; winrate: number }>
+  itemsStarters?: Array<{
+    itemId: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  itemsCores?: Array<{
+    itemId: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  itemsFinals?: Array<{
+    itemId: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  itemsBoots?: Array<{
+    itemId: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
   itemSets: Array<{
+    items: number[]
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+  itemStarterSets?: Array<{
     items: number[]
     games: number
     wins: number
@@ -5208,6 +5350,24 @@ const overviewDetailData = ref<{
     wins: number
     pickrate: number
     winrate: number
+    countSlot0?: number
+    countSlot1?: number
+    pctSlotD?: number
+    pctSlotF?: number
+    highEloGames?: number
+    highEloWinrate?: number
+    highEloRank?: number
+  }>
+  summonerSpellSets: Array<{
+    spellIdD: number
+    spellIdF: number
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+    highEloGames?: number
+    highEloWinrate?: number
+    highEloRank?: number
   }>
 } | null>(null)
 const overviewDetailBaselineData = ref<typeof overviewDetailData.value>(null)
@@ -6124,30 +6284,11 @@ const sidesObjectiveKeysWithKills = [
   'riftHerald',
   'horde',
 ] as const
-const CDRAGON_SCOREBOARD_BASE_URL = '/data/community-dragon/scoreboard-objectives'
-const OBJECTIVE_ICON_BY_KEY: Record<string, string> = {
-  baron: `${CDRAGON_SCOREBOARD_BASE_URL}/_baronnashor.png`,
-  dragon: `${CDRAGON_SCOREBOARD_BASE_URL}/_dragon.png`,
-  elder: `${CDRAGON_SCOREBOARD_BASE_URL}/_elderdrake.png`,
-  tower: `${CDRAGON_SCOREBOARD_BASE_URL}/tower.png`,
-  inhibitor: `${CDRAGON_SCOREBOARD_BASE_URL}/inhibitor.png`,
-  riftHerald: `${CDRAGON_SCOREBOARD_BASE_URL}/_riftherald.png`,
-  horde: `${CDRAGON_SCOREBOARD_BASE_URL}/grub.png`,
-}
-const DRAKE_ICON_BY_KEY: Record<string, string> = {
-  elder: `${CDRAGON_SCOREBOARD_BASE_URL}/_elderdrake.png`,
-  earth: `${CDRAGON_SCOREBOARD_BASE_URL}/_mountaindrake.png`,
-  water: `${CDRAGON_SCOREBOARD_BASE_URL}/_oceandrake.png`,
-  wind: `${CDRAGON_SCOREBOARD_BASE_URL}/_clouddrake.png`,
-  fire: `${CDRAGON_SCOREBOARD_BASE_URL}/_infernaldrake.png`,
-  hextec: `${CDRAGON_SCOREBOARD_BASE_URL}/_hextechdrake.png`,
-  chem: `${CDRAGON_SCOREBOARD_BASE_URL}/_chemtechdrake.png`,
-}
 function objectiveIconSrc(key: string): string | undefined {
-  return OBJECTIVE_ICON_BY_KEY[key]
+  return scoreboardObjectiveIconByKey[key]
 }
 function drakeIconSrc(key: string): string | undefined {
-  return DRAKE_ICON_BY_KEY[key]
+  return scoreboardDrakeIconByKey[key]
 }
 const openSidesObjectiveKeys = ref<Set<string>>(new Set())
 function toggleSidesObjective(key: string) {
@@ -6921,18 +7062,6 @@ function itemEconomicForItem(itemId: number): string[] {
   return formatItemEconomicForDisplay(item)
 }
 
-/** Resolve spell name from game data (public/data/game/{version}/{lang}/summoner.json) by id from Participants.summonerSpells. */
-function spellName(spellId: number): string | null {
-  const spell = summonerSpellsStore.getSpellById(String(spellId))
-  return spell?.name ?? null
-}
-
-/** Resolve spell image filename from game data summoner.json by id (key). */
-function spellImageName(spellId: number): string | null {
-  const spell = summonerSpellsStore.getSpellById(String(spellId))
-  return spell?.image?.full ?? null
-}
-
 watch(activeTab, async tab => {
   if (tab === 'overview') loadOverview()
   if (tab === 'trends') {
@@ -6946,7 +7075,7 @@ watch(activeTab, async tab => {
   if (tab === 'tierlist') loadTierList()
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
-    if (tab === 'runes') loadOverviewDetailBaseline()
+    if (tab === 'runes' || tab === 'items' || tab === 'spells') loadOverviewDetailBaseline()
   }
   if (tab === 'abandons') loadOverviewAbandons()
 })
@@ -6969,7 +7098,9 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'team') loadOverviewSides()
-  if (activeTab.value === 'runes') loadOverviewDetailBaseline()
+  if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
+    loadOverviewDetailBaseline()
+  }
 })
 
 onMounted(async () => {
@@ -7015,94 +7146,6 @@ onMounted(async () => {
 .stats-mode-btn-active {
   background: rgb(var(--rgb-accent) / 0.2);
   color: var(--color-accent);
-}
-
-/* Fast Stats cards - style LeagueOfGraphs */
-.fast-stat-card {
-  width: 313px !important;
-  min-width: 313px;
-  max-width: 313px;
-  height: 325px;
-  min-height: 325px;
-  margin-left: auto;
-  margin-right: auto;
-  flex: 0 0 313px;
-  background: #08101f !important;
-  justify-self: center;
-  /* visible : les tooltips au-dessus de la carte ne sont plus rognés */
-  overflow: visible;
-}
-.fast-stat-card-objectives {
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-  height: auto;
-  min-height: 0;
-  flex: 1 1 100%;
-  flex-basis: 100%;
-  overflow: visible;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  align-self: stretch;
-}
-.fast-stat-title {
-  line-height: 1.4;
-  color: rgb(252 211 77) !important;
-}
-.fast-stat-table {
-  border-collapse: collapse;
-}
-.fast-stat-row {
-  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
-}
-.fast-stat-row:last-child {
-  border-bottom: none;
-}
-.fast-stat-bar-container {
-  flex-shrink: 0;
-  min-width: 32px !important;
-  max-width: 54px !important;
-  margin-right: 5px;
-}
-.fast-stat-button {
-  font-weight: 500;
-}
-
-/* Infobulles : fond/texte explicites (évite héritage .fast-stat-title + bg-surface illisible) */
-.fast-stat-tooltip-popover {
-  pointer-events: none;
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 200;
-  margin-bottom: 0.35rem;
-  min-width: 16rem;
-  max-width: min(28rem, calc(100vw - 1.5rem));
-  padding: 0.55rem 0.85rem;
-  border-radius: 0.375rem;
-  border: 1px solid rgb(148 163 184 / 0.45);
-  background: rgb(15 23 42);
-  color: rgb(241 245 249);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  font-weight: 400;
-  text-align: left;
-  white-space: normal;
-  word-break: break-word;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
-}
-@media (min-width: 1024px) {
-  .fast-stat-tooltip-popover--start {
-    left: 0;
-    transform: none;
-  }
-}
-@media (max-width: 1023px) {
-  .fast-stat-tooltip-popover--start {
-    left: 50%;
-    transform: translateX(-50%);
-  }
 }
 
 /* Overview runes (shyv.net style): grid per path, pickrate bar + winrate % */
@@ -7250,5 +7293,100 @@ onMounted(async () => {
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
+}
+</style>
+
+<style>
+/**
+ * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
+ * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
+ */
+.statistics .statistics-overview-surface {
+  background-color: #08101f !important;
+}
+
+.statistics .fast-stat-card {
+  width: 313px !important;
+  min-width: 313px;
+  max-width: 313px;
+  height: 325px;
+  min-height: 325px;
+  margin-left: auto;
+  margin-right: auto;
+  flex: 0 0 313px;
+  background: #08101f !important;
+  justify-self: center;
+  overflow: visible;
+}
+.statistics .fast-stat-card.fast-stat-card-objectives {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 100%;
+  flex-basis: 100%;
+  overflow: visible;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  align-self: stretch;
+}
+.statistics .fast-stat-title {
+  line-height: 1.4;
+  color: rgb(252 211 77) !important;
+}
+.statistics .fast-stat-table {
+  border-collapse: collapse;
+}
+.statistics .fast-stat-row {
+  border-bottom: 1px solid rgb(var(--rgb-primary) / 0.1);
+}
+.statistics .fast-stat-row:last-child {
+  border-bottom: none;
+}
+.statistics .fast-stat-bar-container {
+  flex-shrink: 0;
+  min-width: 32px !important;
+  max-width: 54px !important;
+  margin-right: 5px;
+}
+.statistics .fast-stat-button {
+  font-weight: 500;
+}
+
+.statistics .fast-stat-tooltip-popover {
+  pointer-events: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  margin-bottom: 0.35rem;
+  min-width: 16rem;
+  max-width: min(28rem, calc(100vw - 1.5rem));
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgb(148 163 184 / 0.45);
+  background: rgb(15 23 42);
+  color: rgb(241 245 249);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+@media (min-width: 1024px) {
+  .statistics .fast-stat-tooltip-popover--start {
+    left: 0;
+    transform: none;
+  }
+}
+@media (max-width: 1023px) {
+  .statistics .fast-stat-tooltip-popover--start {
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 </style>

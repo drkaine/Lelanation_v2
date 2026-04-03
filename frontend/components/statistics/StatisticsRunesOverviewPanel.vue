@@ -6,7 +6,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { RunePath } from '@lelanation/shared-types'
 import { useRunesStore } from '~/stores/RunesStore'
-import { getRuneImageUrl, getRunePathColor } from '~/utils/imageUrl'
+import { getRuneImageUrl, getRunePathColor, getRunePathImageUrl } from '~/utils/imageUrl'
 
 type RuneStat = { pickrate: number; winrate: number; games: number }
 type DetailPayload = {
@@ -381,7 +381,7 @@ function runeSetLayout(run: unknown): {
 <template>
   <div class="stats-runes-panel flex w-full flex-col gap-8">
     <!-- Grille runes + fragments -->
-    <div class="rounded-lg border border-primary/30 bg-surface/30 p-4 sm:p-6">
+    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-6">
       <div v-if="comparisonVersion" class="mb-3 text-xs text-text/55">
         {{ t('statisticsPage.runesDeltaVs', { version: comparisonVersion }) }}
         <span v-if="baselinePending" class="ml-1 text-text/40"
@@ -545,7 +545,7 @@ function runeSetLayout(run: unknown): {
     </div>
 
     <!-- Sets : plus / moins pick, meilleur / pire WR -->
-    <div class="rounded-lg border border-primary/30 bg-surface/30 p-4 sm:p-6">
+    <div class="statistics-overview-surface rounded-lg border border-primary/30 p-4 sm:p-6">
       <h3 class="mb-4 text-sm font-semibold text-text">
         {{ t('statisticsPage.overviewDetailRuneSets') }}
       </h3>
@@ -583,7 +583,7 @@ function runeSetLayout(run: unknown): {
             <div
               v-for="(row, idx) in block.list.map(s => ({ set: s, ly: runeSetLayout(s.runes) }))"
               :key="block.key + '-' + idx"
-              class="rune-set-card min-w-0 rounded-lg border border-primary/30 bg-surface/30 px-4 py-3"
+              class="rune-set-card statistics-overview-surface min-w-0 rounded-lg border border-primary/30 px-4 py-3"
             >
               <div class="rune-set-build-strip flex min-w-0 flex-col gap-2">
                 <div class="grid min-w-0 grid-cols-2 gap-3">
@@ -623,8 +623,18 @@ function runeSetLayout(run: unknown): {
                             row.ly.secondaryPath.id,
                             row.ly.secondaryPath.name
                           ),
-                          WebkitMaskImage: `url(${getRuneImageUrl(gameVersion, row.ly.secondaryPath.icon)})`,
-                          maskImage: `url(${getRuneImageUrl(gameVersion, row.ly.secondaryPath.icon)})`,
+                          WebkitMaskImage: `url(${getRunePathImageUrl(
+                            gameVersion,
+                            row.ly.secondaryPath.icon,
+                            row.ly.secondaryPath.id,
+                            row.ly.secondaryPath.name
+                          )})`,
+                          maskImage: `url(${getRunePathImageUrl(
+                            gameVersion,
+                            row.ly.secondaryPath.icon,
+                            row.ly.secondaryPath.id,
+                            row.ly.secondaryPath.name
+                          )})`,
                           WebkitMaskSize: 'contain',
                           maskSize: 'contain',
                           WebkitMaskRepeat: 'no-repeat',
