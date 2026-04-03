@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { getChampionImageUrl } from '~/utils/imageUrl'
+import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 
 const props = withDefaults(
   defineProps<{
@@ -14,11 +15,21 @@ const props = withDefaults(
     side?: 'blue' | 'red'
     variant: 'pick' | 'wr' | 'ban' | 'dWr' | 'dPick' | 'dBan'
     rows: readonly Record<string, unknown>[]
+    /** Id widget statistiques personnalisées (étoile), ex. team.blueMostPicked */
+    favoriteCardId?: string
   }>(),
-  { tooltip: '', side: undefined }
+  { tooltip: '', side: undefined, favoriteCardId: '' }
 )
 
 const { t } = useI18n()
+const statisticsCustomStore = useStatisticsCustomStore()
+
+function cardIsFavorite(cardId: string): boolean {
+  return statisticsCustomStore.isFavorite(cardId)
+}
+function toggleFavoriteCard(cardId: string, title: string): void {
+  statisticsCustomStore.toggleFavorite(cardId, title)
+}
 const { version: gameVersion } = useGameVersion()
 const championsStore = useChampionsStore()
 
@@ -187,11 +198,43 @@ function barWidthPct(row: Record<string, unknown>): number {
   const d = barDenom.value
   return Math.min(100, (base / d) * 100)
 }
+
+/** Même sous-ligne que la vue d’ensemble (patch réf. → patch filtré). */
+function progressionBeforeAfterLine(row: Record<string, unknown>): string {
+  switch (props.variant) {
+    case 'dWr':
+      return `${Number(row.wrOldest ?? 0).toFixed(1)}% → ${Number(row.wrSince ?? 0).toFixed(1)}%`
+    case 'dPick':
+      return `${Number(row.pickrateOldest ?? 0).toFixed(1)}% → ${Number(row.pickrateSince ?? 0).toFixed(1)}%`
+    case 'dBan':
+      return `${Number(row.banrateOldest ?? 0).toFixed(1)}% → ${Number(row.banrateSince ?? 0).toFixed(1)}%`
+    default:
+      return ''
+  }
+}
 </script>
 
 <template>
   <div class="team-side-fast-stat rounded-lg p-2" :class="cardBorderClass">
     <h3 :class="headingClass">
+      <button
+        v-if="favoriteCardId"
+        type="button"
+        class="shrink-0 text-base leading-none transition-colors"
+        :class="
+          cardIsFavorite(favoriteCardId)
+            ? 'text-amber-300 hover:text-amber-200'
+            : 'text-text/45 grayscale hover:text-text/75'
+        "
+        :title="
+          cardIsFavorite(favoriteCardId)
+            ? t('buildDiscovery.removeFavorite')
+            : t('buildDiscovery.addFavorite')
+        "
+        @click="toggleFavoriteCard(favoriteCardId, title)"
+      >
+        {{ cardIsFavorite(favoriteCardId) ? '★' : '☆' }}
+      </button>
       <span class="inline-flex min-w-0 flex-1 items-center">
         {{ title }}
         <span v-if="tooltip" :class="tooltipTriggerClass" aria-hidden="true">
@@ -220,9 +263,17 @@ function barWidthPct(row: Record<string, unknown>): number {
                 class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
               <span v-else class="h-5 w-5 shrink-0" aria-hidden="true" />
-              <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
-                championName(Number(row.championId)) || row.championId
-              }}</span>
+              <div v-if="isProgression" class="min-w-0 max-w-[6.5rem] shrink-0">
+                <div class="truncate font-medium leading-tight text-text">
+                  {{ championName(Number(row.championId)) || row.championId }}
+                </div>
+                <div class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70">
+                  {{ progressionBeforeAfterLine(row) }}
+                </div>
+              </div>
+              <span v-else class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">
+                {{ championName(Number(row.championId)) || row.championId }}
+              </span>
               <div
                 class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
               >

@@ -1626,6 +1626,28 @@
                     <div class="mb-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
+                        class="shrink-0 text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('overview.objectives')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('overview.objectives')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'overview.objectives',
+                            t('statisticsPage.overviewTeamsObjectives')
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('overview.objectives') ? '★' : '☆' }}
+                      </button>
+                      <button
+                        type="button"
                         class="rounded px-2 py-1 text-xs font-semibold transition-colors"
                         :class="
                           objectivesPanelTab === 'objectives'
@@ -2140,6 +2162,28 @@
                     <h3
                       class="fast-stat-title mb-2 flex w-full items-center gap-2 text-sm font-semibold lg:text-left"
                     >
+                      <button
+                        type="button"
+                        class="shrink-0 text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('team.sideWinrateDonut')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('team.sideWinrateDonut')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'team.sideWinrateDonut',
+                            t('statisticsPage.sidesDonutTitleSoloDuo')
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('team.sideWinrateDonut') ? '★' : '☆' }}
+                      </button>
                       <span class="inline-flex flex-1 flex-wrap items-center">
                         {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
                         <span
@@ -2213,6 +2257,28 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+                      <button
+                        type="button"
+                        class="shrink-0 text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('team.blueMatchOutcome')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('team.blueMatchOutcome')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'team.blueMatchOutcome',
+                            `${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.overviewMatchOutcomesTitle')}`
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('team.blueMatchOutcome') ? '★' : '☆' }}
+                      </button>
                       <span class="inline-flex flex-1 flex-wrap items-center">
                         {{ t('statisticsPage.sidesBlue') }} —
                         {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
@@ -2292,6 +2358,28 @@
                     class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
                   >
                     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
+                      <button
+                        type="button"
+                        class="shrink-0 text-base leading-none transition-colors"
+                        :class="
+                          cardIsFavorite('team.redMatchOutcome')
+                            ? 'text-amber-300 hover:text-amber-200'
+                            : 'text-text/45 grayscale hover:text-text/75'
+                        "
+                        :title="
+                          cardIsFavorite('team.redMatchOutcome')
+                            ? 'Retirer des favoris'
+                            : 'Ajouter aux favoris'
+                        "
+                        @click="
+                          toggleFavoriteCard(
+                            'team.redMatchOutcome',
+                            `${t('statisticsPage.sidesRed')} — ${t('statisticsPage.overviewMatchOutcomesTitle')}`
+                          )
+                        "
+                      >
+                        {{ cardIsFavorite('team.redMatchOutcome') ? '★' : '☆' }}
+                      </button>
                       <span class="inline-flex flex-1 flex-wrap items-center">
                         {{ t('statisticsPage.sidesRed') }} —
                         {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
@@ -2369,6 +2457,7 @@
                   </div>
                   <StatisticsTeamSideFastStatTable
                     side="blue"
+                    favorite-card-id="team.blueMostPicked"
                     :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsMostPicked')}`"
                     :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
                     variant="pick"
@@ -2376,6 +2465,7 @@
                   />
                   <StatisticsTeamSideFastStatTable
                     side="red"
+                    favorite-card-id="team.redMostPicked"
                     :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsMostPicked')}`"
                     :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
                     variant="pick"
@@ -2383,6 +2473,7 @@
                   />
                   <StatisticsTeamSideFastStatTable
                     side="blue"
+                    favorite-card-id="team.blueBestWinrate"
                     :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
                     :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
                     variant="wr"
@@ -2390,6 +2481,7 @@
                   />
                   <StatisticsTeamSideFastStatTable
                     side="red"
+                    favorite-card-id="team.redBestWinrate"
                     :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
                     :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
                     variant="wr"
@@ -2397,6 +2489,7 @@
                   />
                   <StatisticsTeamSideFastStatTable
                     side="blue"
+                    favorite-card-id="team.blueBansBySide"
                     :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.sidesBansBySide')}`"
                     :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
                     variant="ban"
@@ -2404,6 +2497,7 @@
                   />
                   <StatisticsTeamSideFastStatTable
                     side="red"
+                    favorite-card-id="team.redBansBySide"
                     :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.sidesBansBySide')}`"
                     :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
                     variant="ban"
@@ -2412,6 +2506,7 @@
                   <template v-if="progressionFromVersion">
                     <StatisticsTeamSideFastStatTable
                       side="blue"
+                      favorite-card-id="team.blueWinrateSince"
                       :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
                       variant="dWr"
@@ -2419,6 +2514,7 @@
                     />
                     <StatisticsTeamSideFastStatTable
                       side="red"
+                      favorite-card-id="team.redWinrateSince"
                       :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
                       variant="dWr"
@@ -2426,6 +2522,7 @@
                     />
                     <StatisticsTeamSideFastStatTable
                       side="blue"
+                      favorite-card-id="team.bluePickrateSince"
                       :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
                       variant="dPick"
@@ -2433,6 +2530,7 @@
                     />
                     <StatisticsTeamSideFastStatTable
                       side="red"
+                      favorite-card-id="team.redPickrateSince"
                       :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
                       variant="dPick"
@@ -2440,6 +2538,7 @@
                     />
                     <StatisticsTeamSideFastStatTable
                       side="blue"
+                      favorite-card-id="team.blueBanrateSince"
                       :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
                       variant="dBan"
@@ -2447,6 +2546,7 @@
                     />
                     <StatisticsTeamSideFastStatTable
                       side="red"
+                      favorite-card-id="team.redBanrateSince"
                       :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
                       :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
                       variant="dBan"
@@ -2460,6 +2560,28 @@
                   class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-6"
                 >
                   <div class="mb-3 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      class="shrink-0 text-base leading-none transition-colors"
+                      :class="
+                        cardIsFavorite('team.objectives')
+                          ? 'text-amber-300 hover:text-amber-200'
+                          : 'text-text/45 grayscale hover:text-text/75'
+                      "
+                      :title="
+                        cardIsFavorite('team.objectives')
+                          ? 'Retirer des favoris'
+                          : 'Ajouter aux favoris'
+                      "
+                      @click="
+                        toggleFavoriteCard(
+                          'team.objectives',
+                          `${t('statisticsPage.tabTeam')} — ${t('statisticsPage.sidesObjectivesBySide')}`
+                        )
+                      "
+                    >
+                      {{ cardIsFavorite('team.objectives') ? '★' : '☆' }}
+                    </button>
                     <button
                       type="button"
                       class="rounded px-2 py-1 text-xs font-semibold transition-colors"
@@ -3505,7 +3627,7 @@
                         <span>{{
                           entry.key === 'S+'
                             ? t('statisticsPage.tierS+')
-                            : entry.key === 'F'
+                            : entry.key === 'D'
                               ? t('statisticsPage.tierF')
                               : t('statisticsPage.tier' + entry.key)
                         }}</span>
@@ -3519,116 +3641,172 @@
                         class="relative w-9 shrink-0 text-[10px] leading-none text-amber-100/80 md:w-10"
                       >
                         <div class="relative h-[320px]">
-                          <span
-                            v-for="tick in tierListChartYScale.ticks"
-                            :key="'ytick-' + tick"
-                            class="absolute right-0.5 -translate-y-1/2 tabular-nums"
-                            :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
-                          >
-                            {{ Number.isInteger(tick) ? tick : Number(tick.toFixed(1)) }}</span
-                          >
+                          <div class="absolute inset-0">
+                            <span
+                              v-for="tick in tierListChartYScale.ticks"
+                              :key="'ytick-' + tick"
+                              class="absolute right-0.5 -translate-y-1/2 tabular-nums"
+                              :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
+                            >
+                              {{
+                                Math.abs(tick - Math.round(tick)) < 1e-6
+                                  ? Math.round(tick)
+                                  : Number(tick.toFixed(1))
+                              }}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <div class="relative min-h-[380px] min-w-0 flex-1">
+                      <div class="relative min-w-0 flex-1">
                         <div class="relative h-[320px] w-full overflow-visible">
-                          <div
-                            v-for="tick in tierListChartYScale.ticks"
-                            :key="'grid-' + tick"
-                            class="pointer-events-none absolute left-0 right-0 z-0 border-t border-amber-400/20"
-                            :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
-                          />
-                          <div
-                            class="pointer-events-none absolute bottom-12 right-0 top-0 z-[1] w-[12%] bg-slate-950/35"
-                            aria-hidden="true"
-                          />
-                          <div
-                            class="absolute bottom-12 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
-                          >
-                            <NuxtLink
-                              v-for="c in tierListChartVisibleRows"
-                              :key="c.championId"
-                              :to="localePath('/statistics/champion/' + c.championId)"
-                              class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
-                              :title="
-                                (championName(c.championId) || c.championId) +
-                                ' — Score ' +
-                                formatMatchupScore(c.pbi, 2)
-                              "
+                          <div class="absolute inset-0">
+                            <div
+                              v-for="tick in tierListChartYScale.ticks"
+                              :key="'grid-' + tick"
+                              class="pointer-events-none absolute left-0 right-0 z-0 border-t border-amber-400/20"
+                              :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
+                            />
+                            <div
+                              class="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-[12%] bg-slate-950/35"
+                              aria-hidden="true"
+                            />
+                            <div
+                              class="absolute bottom-0 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
                             >
-                              <div class="relative h-full w-full">
-                                <div
-                                  class="absolute bottom-12 left-0 right-0 top-0 flex justify-center"
-                                >
-                                  <div class="relative h-full w-[85%] max-w-[12px]">
-                                    <div
-                                      class="absolute left-0 right-0 z-[1] h-px bg-amber-400/55"
-                                      :style="{ bottom: tierListChartZeroBottomPct + '%' }"
-                                    />
-                                    <div
-                                      v-if="scaleMatchupScore(c.pbi) >= 0"
-                                      class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
-                                      :style="{
-                                        bottom: tierListChartZeroBottomPct + '%',
-                                        height: tierListChartBarHeightPct(c.pbi) + '%',
-                                        backgroundColor: tierListChartBarColor(c.tier),
-                                      }"
-                                    />
-                                    <div
-                                      v-else
-                                      class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
-                                      :style="{
-                                        bottom: tierListChartScoreBottomPct(c.pbi) + '%',
-                                        height: tierListChartBarHeightPct(c.pbi) + '%',
-                                        backgroundColor: tierListChartBarColor(c.tier),
-                                      }"
-                                    />
-                                  </div>
-                                </div>
-                                <div
-                                  class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 hidden w-44 -translate-x-1/2 rounded border border-primary/40 bg-surface/95 p-2 text-xs text-text shadow-lg group-hover:block"
-                                >
-                                  <div class="flex items-center gap-2">
-                                    <img
-                                      v-if="tierListChartChampionImage(c.championId)"
-                                      :src="tierListChartChampionImage(c.championId) || ''"
-                                      :alt="championName(c.championId) || String(c.championId)"
-                                      class="h-8 w-8 rounded object-cover"
-                                    />
-                                    <div class="min-w-0">
-                                      <div class="truncate font-semibold">
-                                        {{ championName(c.championId) || c.championId }}
-                                      </div>
-                                      <div class="text-[11px] text-text/70">
-                                        Score {{ formatMatchupScore(c.pbi, 2) }}
-                                      </div>
+                              <NuxtLink
+                                v-for="c in tierListChartVisibleRows"
+                                :key="c.championId"
+                                :to="localePath('/statistics/champion/' + c.championId)"
+                                class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+                                :title="
+                                  (championName(c.championId) || c.championId) +
+                                  ' — Score ' +
+                                  formatMatchupScore(c.pbi, 2)
+                                "
+                                @mouseenter="onTierListChartBarEnter(c, $event)"
+                                @mousemove="onTierListChartBarMove"
+                                @mouseleave="onTierListChartBarLeave"
+                              >
+                                <div class="relative h-full w-full">
+                                  <div class="flex h-full w-full justify-center">
+                                    <div class="relative h-full w-[85%] max-w-[12px]">
                                       <div
-                                        v-if="
-                                          tierListPatchDeltaRefLabel && c.patchRefWinratePp != null
-                                        "
-                                        class="text-[11px]"
-                                        :class="tierListPatchDeltaClass(c.patchRefWinratePp)"
-                                      >
-                                        Δ WR {{ formatTierListPatchDeltaPp(c.patchRefWinratePp) }}
-                                      </div>
+                                        class="absolute left-0 right-0 z-[1] h-px bg-amber-400/55"
+                                        :style="{ bottom: tierListChartZeroBottomPct + '%' }"
+                                      />
+                                      <div
+                                        v-if="scaleMatchupScore(c.pbi) >= 0"
+                                        class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
+                                        :style="{
+                                          bottom: tierListChartZeroBottomPct + '%',
+                                          height: tierListChartBarHeightPct(c.pbi) + '%',
+                                          backgroundColor: tierListChartBarColor(c.tier),
+                                        }"
+                                      />
+                                      <div
+                                        v-else
+                                        class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
+                                        :style="{
+                                          bottom: tierListChartScoreBottomPct(c.pbi) + '%',
+                                          height: tierListChartBarHeightPct(c.pbi) + '%',
+                                          backgroundColor: tierListChartBarColor(c.tier),
+                                        }"
+                                      />
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            </NuxtLink>
+                              </NuxtLink>
+                            </div>
                           </div>
                         </div>
+                        <Teleport to="body">
+                          <div
+                            v-if="tierListChartTooltip && tierListChartTooltipRow"
+                            class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-amber-500/45 bg-[#0c1222] p-2 text-left text-xs text-amber-50 shadow-xl"
+                            :style="{
+                              left: tierListChartTooltip.x + 'px',
+                              top: tierListChartTooltip.y + 'px',
+                              transform: 'translate(-50%, calc(-100% - 12px))',
+                            }"
+                          >
+                            <div class="flex items-center gap-2">
+                              <img
+                                v-if="
+                                  tierListChartChampionImage(tierListChartTooltipRow.championId)
+                                "
+                                :src="
+                                  tierListChartChampionImage(tierListChartTooltipRow.championId) ||
+                                  ''
+                                "
+                                :alt="
+                                  championName(tierListChartTooltipRow.championId) ||
+                                  String(tierListChartTooltipRow.championId)
+                                "
+                                class="h-8 w-8 shrink-0 rounded object-cover"
+                              />
+                              <div class="min-w-0">
+                                <div class="truncate font-semibold text-amber-100">
+                                  {{
+                                    championName(tierListChartTooltipRow.championId) ||
+                                    tierListChartTooltipRow.championId
+                                  }}
+                                </div>
+                                <div class="text-[11px] text-amber-200/75">
+                                  Score {{ formatMatchupScore(tierListChartTooltipRow.pbi, 2) }}
+                                </div>
+                                <div
+                                  v-if="
+                                    tierListPatchDeltaRefLabel &&
+                                    tierListChartTooltipRow.patchRefMatchupScorePp != null
+                                  "
+                                  class="text-[11px]"
+                                  :class="
+                                    tierListPatchDeltaClass(
+                                      tierListChartTooltipRow.patchRefMatchupScorePp
+                                    )
+                                  "
+                                >
+                                  {{
+                                    t('statisticsPage.tierListChartDeltaMatchupVsRef', {
+                                      ref: tierListPatchDeltaRefLabel,
+                                    })
+                                  }}:
+                                  {{
+                                    formatTierListPatchDeltaPp(
+                                      tierListChartTooltipRow.patchRefMatchupScorePp
+                                    )
+                                  }}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Teleport>
                         <div
-                          class="flex h-14 items-end justify-stretch gap-px border-t border-amber-400/25 px-0.5 pt-1"
+                          class="flex h-[52px] items-center justify-stretch gap-px border-t border-amber-400/25 px-0.5 pt-1"
                         >
                           <div
                             v-for="c in tierListChartVisibleRows"
                             :key="'lbl-' + c.championId"
-                            class="flex min-h-14 min-w-0 flex-1 items-end justify-center overflow-hidden pb-0.5"
+                            class="flex min-w-0 flex-1 items-center justify-center overflow-visible"
                           >
+                            <img
+                              v-if="gameVersion && championByKey(c.championId)"
+                              :src="
+                                getChampionImageUrl(
+                                  gameVersion,
+                                  championByKey(c.championId)!.image.full
+                                )
+                              "
+                              :alt="championName(c.championId) || String(c.championId)"
+                              class="h-9 w-9 shrink-0 rounded-full border border-amber-400/30 object-cover"
+                              width="36"
+                              height="36"
+                            />
                             <span
-                              class="tier-list-chart-x-label max-w-[3rem] whitespace-nowrap text-[9px] font-medium leading-none text-white/85"
+                              v-else
+                              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/25 bg-black/40 text-[10px] font-semibold text-white/80"
                             >
-                              {{ championName(c.championId) || c.championId }}
+                              {{ (championName(c.championId) || String(c.championId)).slice(0, 2) }}
                             </span>
                           </div>
                         </div>
@@ -4309,6 +4487,8 @@ interface TierListRowWithDelta {
   patchRefGamesDelta?: number
   patchRefHighEloWinratePp?: number
   patchRefHighEloGamesDelta?: number
+  /** Écart du score matchup (brut) en points ×100 vs patch de référence. */
+  patchRefMatchupScorePp?: number
 }
 
 function formatTierListPatchDeltaPp(pp: number): string {
@@ -4349,12 +4529,14 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
     let patchRefBanratePp: number | undefined
     let patchRefMainRolePctPp: number | undefined
     let patchRefGamesDelta: number | undefined
+    let patchRefMatchupScorePp: number | undefined
     if (refRow) {
       patchRefWinratePp = (r.winrate - refRow.winrate) * 100
       patchRefPickratePp = (r.pickrate - refRow.pickrate) * 100
       patchRefBanratePp = (r.banrate - refRow.banrate) * 100
       patchRefMainRolePctPp = r.mainRolePct - refRow.mainRolePct
       patchRefGamesDelta = r.games - refRow.games
+      patchRefMatchupScorePp = (r.pbi - refRow.pbi) * 100
     }
     const refHe = refHeMap.get(r.championId)
     let patchRefHighEloWinratePp: number | undefined
@@ -4376,15 +4558,13 @@ const tierListRows = computed((): TierListRowWithDelta[] => {
       patchRefGamesDelta,
       patchRefHighEloWinratePp,
       patchRefHighEloGamesDelta,
+      patchRefMatchupScorePp,
     }
   })
 })
 
-const tierListRoleFilteredRows = computed(() => {
-  const list = tierListRows.value
-  if (!statsRoleFilter.value) return list
-  return list.filter(row => row.mainRole === statsRoleFilter.value)
-})
+/** Rôle appliqué côté API (stats du rôle choisi, y compris si ce n’est pas le rôle le plus joué). */
+const tierListRoleFilteredRows = computed(() => tierListRows.value)
 
 /** Tier list only: filtre par nom / id (champ de recherche). */
 const tierListSearchFilteredRows = computed(() => {
@@ -4485,38 +4665,132 @@ const tierListChartRows = computed(() =>
     return a.rank - b.rank
   })
 )
-const tierListChartActiveTiers = ref<Array<'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'>>([])
+const tierListChartActiveTiers = ref<Array<'S+' | 'S' | 'A' | 'B' | 'C' | 'D'>>([])
+/** Tooltip graphique tier list : suit la souris, au-dessus du curseur. */
+const tierListChartTooltip = ref<{ championId: number; x: number; y: number } | null>(null)
+function onTierListChartBarEnter(c: TierListRowWithDelta, e: MouseEvent) {
+  tierListChartTooltip.value = { championId: c.championId, x: e.clientX, y: e.clientY }
+}
+function onTierListChartBarMove(e: MouseEvent) {
+  const t = tierListChartTooltip.value
+  if (!t) return
+  tierListChartTooltip.value = { ...t, x: e.clientX, y: e.clientY }
+}
+function onTierListChartBarLeave() {
+  tierListChartTooltip.value = null
+}
+watch([activeTab, tierListViewModel], () => {
+  tierListChartTooltip.value = null
+})
+/** API = tier « D » pour le plus bas ; l’ancienne légende utilisait « F » — on normalise pour le filtre. */
+function tierListChartApiTier(tier: string): 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' {
+  const t = tier === 'F' ? 'D' : tier
+  return t as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
+}
+
 const tierListChartVisibleRows = computed(() => {
   const active = tierListChartActiveTiers.value
   if (!active.length) return tierListChartRows.value
-  return tierListChartRows.value.filter(row =>
-    active.includes((row.tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F') ?? 'D')
-  )
+  const activeKeys = active.map(k => tierListChartApiTier(k))
+  return tierListChartRows.value.filter(row => activeKeys.includes(tierListChartApiTier(row.tier)))
+})
+const tierListChartTooltipRow = computed((): TierListRowWithDelta | null => {
+  const tip = tierListChartTooltip.value
+  if (!tip) return null
+  return tierListChartVisibleRows.value.find(r => r.championId === tip.championId) ?? null
 })
 
-/** Axe fixe du graphique tier list : score matchup ×100, de -500 à +500 (ligne 0 au centre). */
-const TIER_LIST_MATCHUP_CHART_Y_MIN = -500
-const TIER_LIST_MATCHUP_CHART_Y_MAX = 500
-const TIER_LIST_MATCHUP_CHART_TICKS: number[] = [500, 250, 0, -250, -500]
+/** Score matchup API (petit nombre) → échelle graphique (×100), plage théorique ±500. */
+function scaleMatchupScore(value: number): number {
+  const n = Number(value) * 100
+  return Number.isFinite(n) ? n : 0
+}
 
-const tierListChartYScale = computed(() => ({
-  range: TIER_LIST_MATCHUP_CHART_Y_MAX - TIER_LIST_MATCHUP_CHART_Y_MIN,
-  yMin: TIER_LIST_MATCHUP_CHART_Y_MIN,
-  yMax: TIER_LIST_MATCHUP_CHART_Y_MAX,
-  ticks: TIER_LIST_MATCHUP_CHART_TICKS,
-}))
+const TIER_LIST_MATCHUP_CHART_ABS_MAX = 500
 
-/** Position des barres sur l’axe fixe ; valeurs hors plage sont clampées visuellement (tooltip = valeur réelle). */
+function niceNumForTicks(range: number, round: boolean): number {
+  if (!Number.isFinite(range) || range <= 0) return 1
+  const exp = Math.floor(Math.log10(range))
+  const frac = range / 10 ** exp
+  let niceFrac: number
+  if (round) {
+    if (frac < 1.5) niceFrac = 1
+    else if (frac < 3) niceFrac = 2
+    else if (frac < 7) niceFrac = 5
+    else niceFrac = 10
+  } else if (frac <= 1) niceFrac = 1
+  else if (frac <= 2) niceFrac = 2
+  else if (frac <= 5) niceFrac = 5
+  else niceFrac = 10
+  return niceFrac * 10 ** exp
+}
+
+function computeTierListChartTicks(yMin: number, yMax: number, maxTicks = 7): number[] {
+  const span = yMax - yMin
+  if (!(span > 0) || !Number.isFinite(span)) {
+    return [yMax, yMin].filter(Number.isFinite)
+  }
+  const step = niceNumForTicks(span / Math.max(maxTicks - 1, 2), true)
+  const ticks: number[] = []
+  const start = Math.ceil((yMin - 1e-9) / step) * step
+  const end = Math.floor((yMax + 1e-9) / step) * step
+  for (let t = start; t <= end + step * 0.01; t += step) {
+    const x = Math.round(t * 1e4) / 1e4
+    if (x >= yMin - 1e-6 && x <= yMax + 1e-6) ticks.push(x)
+  }
+  if (!ticks.length) return [(yMin + yMax) / 2]
+  return [...new Set(ticks)].sort((a, b) => b - a)
+}
+
+/** Axe Y adapté aux scores visibles (×100), borné à ±500 ; inclut 0 pour la baseline divergente. */
+const tierListChartYScale = computed(() => {
+  const rows = tierListChartVisibleRows.value
+  const scores =
+    rows.length > 0 ? rows.map(r => scaleMatchupScore(r.pbi)).filter(Number.isFinite) : []
+
+  if (scores.length === 0) {
+    const yMin = -TIER_LIST_MATCHUP_CHART_ABS_MAX
+    const yMax = TIER_LIST_MATCHUP_CHART_ABS_MAX
+    return {
+      range: yMax - yMin,
+      yMin,
+      yMax,
+      ticks: [500, 250, 0, -250, -500],
+    }
+  }
+
+  const rawMin = Math.min(...scores)
+  const rawMax = Math.max(...scores)
+  const dataSpan = Math.max(rawMax - rawMin, 1e-6)
+  const pad = Math.max(dataSpan * 0.08, 6)
+  let yMin = Math.min(0, rawMin - pad)
+  let yMax = Math.max(0, rawMax + pad)
+  yMin = Math.max(yMin, -TIER_LIST_MATCHUP_CHART_ABS_MAX)
+  yMax = Math.min(yMax, TIER_LIST_MATCHUP_CHART_ABS_MAX)
+  if (yMax <= yMin) {
+    yMin -= 1
+    yMax += 1
+  }
+  return {
+    range: yMax - yMin,
+    yMin,
+    yMax,
+    ticks: computeTierListChartTicks(yMin, yMax, 7),
+  }
+})
+
+/** Valeurs hors domaine visuel : clamp (tooltip garde la valeur réelle). */
 function matchupScoreClampedForChart(pbi: number): number {
-  return Math.min(
-    TIER_LIST_MATCHUP_CHART_Y_MAX,
-    Math.max(TIER_LIST_MATCHUP_CHART_Y_MIN, scaleMatchupScore(pbi))
-  )
+  const s = tierListChartYScale.value
+  const v = scaleMatchupScore(pbi)
+  return Math.min(s.yMax, Math.max(s.yMin, v))
 }
 
 function tierListChartYTickBottomPct(tick: number): number {
   const s = tierListChartYScale.value
-  return ((tick - s.yMin) / (s.yMax - s.yMin)) * 100
+  const d = s.yMax - s.yMin
+  if (!(d > 0) || !Number.isFinite(d)) return 50
+  return ((tick - s.yMin) / d) * 100
 }
 
 /** Hauteur en % du tracé : distance entre la ligne 0 et le score (pas |score| / plage totale). */
@@ -4534,21 +4808,10 @@ function tierListChartScoreBottomPct(pbi: number): number {
   return tierListChartYTickBottomPct(matchupScoreClampedForChart(pbi))
 }
 
-/** Score matchup API (petit nombre) → affichage / axe Y graphique (×100). */
-function scaleMatchupScore(value: number): number {
-  const n = Number(value) * 100
-  return Number.isFinite(n) ? n : 0
-}
-
-/** Évite les « -0 » sur les libellés après mise à l’échelle. */
-function normalizeScaledMatchupScore(value: number): number {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return 0
-  return Math.abs(n) < 0.5 ? 0 : n
-}
-
 function formatMatchupScore(value: number, decimals = 2): string {
-  return normalizeScaledMatchupScore(scaleMatchupScore(value)).toFixed(decimals)
+  const n = scaleMatchupScore(value)
+  if (!Number.isFinite(n)) return (0).toFixed(decimals)
+  return n.toFixed(decimals)
 }
 
 const tierListChartHeading = computed(() => {
@@ -4558,7 +4821,9 @@ const tierListChartHeading = computed(() => {
   return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
 })
 
-const tierListChartZeroBottomPct = computed(() => tierListChartYTickBottomPct(0))
+const tierListChartZeroBottomPct = computed(() =>
+  Math.min(100, Math.max(0, tierListChartYTickBottomPct(0)))
+)
 
 /** Couleurs barres / légende — style diverging tier (F rouge → S+ or). */
 const TIER_CHART_COLORS: Record<'F' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+', string> = {
@@ -4572,10 +4837,11 @@ const TIER_CHART_COLORS: Record<'F' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+', string
 }
 
 const TIER_DIVERGING_LEGEND: Array<{
-  key: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'
+  key: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
   color: string
 }> = [
-  { key: 'F', color: TIER_CHART_COLORS.F },
+  /** Libellé i18n tierF (comme le tableau) — clé API = D */
+  { key: 'D', color: TIER_CHART_COLORS.D },
   { key: 'C', color: TIER_CHART_COLORS.C },
   { key: 'B', color: TIER_CHART_COLORS.B },
   { key: 'A', color: TIER_CHART_COLORS.A },
@@ -4587,7 +4853,7 @@ function tierChartColor(tier: string): string {
   return TIER_CHART_COLORS[tier as keyof typeof TIER_CHART_COLORS] ?? TIER_CHART_COLORS.D
 }
 
-function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'): void {
+function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'): void {
   const current = tierListChartActiveTiers.value
   if (current.includes(tier)) {
     tierListChartActiveTiers.value = current.filter(t => t !== tier)
@@ -4596,13 +4862,13 @@ function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F')
   tierListChartActiveTiers.value = [...current, tier]
 }
 
-function tierListChartTierEnabled(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F'): boolean {
+function tierListChartTierEnabled(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'): boolean {
   const active = tierListChartActiveTiers.value
   return active.length === 0 || active.includes(tier)
 }
 
 function tierListChartBarColor(tier: string): string {
-  return tierListChartTierEnabled(tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' | 'F')
+  return tierListChartTierEnabled(tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D')
     ? tierChartColor(tier)
     : 'rgb(71 85 105 / 0.45)'
 }
@@ -4706,6 +4972,9 @@ function applyStatisticsStateFromQuery(): void {
   statsDivisionFilter.value = divisionsRaw
   statsOtpFilter.value = otpRaw === 'oui' || otpRaw === 'solo' || otpRaw === 'non' ? otpRaw : 'non'
   isApplyingQueryState.value = false
+  if (import.meta.client) {
+    syncProgressionDeltaToVersionBeforeFilter()
+  }
 }
 
 function syncStatisticsStateToQuery(): void {
@@ -4749,12 +5018,6 @@ function toggleFiltersOpen() {
   filtersOpen.value = !filtersOpen.value
 }
 const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([])
-
-if (import.meta.client) {
-  statisticsUiStore.init()
-  statisticsCustomStore.init()
-  applyStatisticsStateFromQuery()
-}
 
 watch(activeTab, value => {
   if (!import.meta.client) return
@@ -4807,6 +5070,14 @@ const statsVersionOptions = computed(() => {
   const fallback = overviewData.value?.matchesByVersion ?? []
   return [...fallback].sort((a, b) => compareVersionsDesc(a.version, b.version))
 })
+
+// Init client après statsVersionOptions (applyStatisticsStateFromQuery → syncProgressionDelta).
+if (import.meta.client) {
+  statisticsUiStore.init()
+  statisticsCustomStore.init()
+  applyStatisticsStateFromQuery()
+}
+
 const versionMatchCountByVersion = computed(() => {
   const map = new Map<string, number>()
   for (const row of statsVersionOptions.value) {
@@ -5150,6 +5421,29 @@ function normalizeVersionToPrefix(v: string | null | undefined): string | null {
   if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
   return parts[0] || null
 }
+/**
+ * Filtre version = patch analysé ; delta / référence progression = patch immédiatement plus ancien
+ * (liste `statsVersionOptions` triée du plus récent au plus ancien).
+ */
+function syncProgressionDeltaToVersionBeforeFilter(): boolean {
+  const filter = statsVersionFilter.value.trim()
+  const list = statsVersionOptions.value
+  const before = progressionFromVersionOverride.value
+  if (!filter) {
+    if (before !== '') {
+      progressionFromVersionOverride.value = ''
+      return true
+    }
+    return false
+  }
+  const idx = list.findIndex(v => v.version === filter)
+  if (idx < 0) return false
+  const prev = list[idx + 1]?.version ?? ''
+  if (before === prev) return false
+  progressionFromVersionOverride.value = prev
+  return true
+}
+
 /** Version for "since" cards: user override, else latest-1, else latest/current. */
 const progressionFromVersion = computed(() => {
   if (progressionFromVersionOverride.value) return progressionFromVersionOverride.value
@@ -5171,6 +5465,20 @@ const progressionFromVersionModel = computed({
   },
 })
 
+if (import.meta.client) {
+  watch(statsVersionFilter, () => {
+    syncProgressionDeltaToVersionBeforeFilter()
+  })
+  watch(
+    () => statsVersionOptions.value.map(v => v.version).join('\n'),
+    () => {
+      if (!statsVersionFilter.value) return
+      if (progressionFromVersionOverride.value !== '') return
+      syncProgressionDeltaToVersionBeforeFilter()
+    }
+  )
+}
+
 function applyDefaultVersionFiltersFromKnownVersions(): boolean {
   const versions = statsVersionOptions.value
   if (!versions.length) return false
@@ -5179,11 +5487,8 @@ function applyDefaultVersionFiltersFromKnownVersions(): boolean {
     statsVersionFilter.value = versions[0]?.version ?? ''
     changed = true
   }
-  if (!progressionFromVersionOverride.value) {
-    progressionFromVersionOverride.value = versions[1]?.version ?? versions[0]?.version ?? ''
-    changed = true
-  }
-  return changed
+  const progChanged = syncProgressionDeltaToVersionBeforeFilter()
+  return changed || progChanged
 }
 
 /** Progressions complètes (tous les champions, WR + pickrate) pour onglet Progressions. */
@@ -6392,7 +6697,14 @@ const tierListData = ref<{
 const tierListRefStatsById = ref(
   new Map<
     number,
-    { winrate: number; pickrate: number; banrate: number; games: number; mainRolePct: number }
+    {
+      winrate: number
+      pickrate: number
+      banrate: number
+      games: number
+      mainRolePct: number
+      pbi: number
+    }
   >()
 )
 const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
@@ -6455,6 +6767,7 @@ function tierListQueryString(patch: string | null): string {
   } else {
     params.set('rankTier', 'all')
   }
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   params.set('otp', statsOtpFilter.value)
   const q = params.toString()
   return q ? `?${q}` : ''
@@ -6536,6 +6849,7 @@ async function loadTierList() {
               banrate: number
               games: number
               mainRolePct: number
+              pbi: number
             }
           >()
           for (const row of refData.rows) {
@@ -6545,6 +6859,7 @@ async function loadTierList() {
               banrate: row.banrate,
               games: row.games,
               mainRolePct: row.mainRolePct,
+              pbi: row.pbi,
             })
           }
           tierListRefStatsById.value = m
@@ -6935,12 +7250,5 @@ onMounted(async () => {
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
-}
-
-.tier-list-chart-x-label {
-  display: inline-block;
-  transform: rotate(-90deg);
-  transform-origin: center bottom;
-  max-height: 3.5rem;
 }
 </style>

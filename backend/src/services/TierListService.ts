@@ -1,7 +1,8 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
- * Aggregates from mv_champion_core_stats (vue matérialisée); main role = role with max games.
- * Tier score is computed from Lolalytics-style matchup deltas (centered distribution), then tiered by percentiles.
+ * Aggregates from mv_champion_core_stats; par défaut stats = rôle le plus joué.
+ * Avec option `role`, stats = ce rôle pour tout champion ayant assez de games dessus (même si ce n’est pas son main).
+ * Tier score: matchup deltas (centrées) puis percentiles.
  */
 import { prisma } from '../db.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
@@ -40,6 +41,8 @@ export interface GetTierListOptions {
   patch?: string | null
   platformId?: string | null
   rankTier?: 'all' | string | null
+  /** Si défini (TOP, JUNGLE, MIDDLE, …) : une ligne par champion ayant assez de games sur ce rôle, stats = ce rôle (pas seulement le rôle le plus joué). */
+  role?: string | null
 }
 
 export interface GetTierListResult {
@@ -65,6 +68,17 @@ function toNum(v: unknown): number {
   if (typeof v === 'number' && !Number.isNaN(v)) return v
   if (typeof v === 'string') return Number(v) || 0
   return 0
+}
+
+/** Aligne les libellés rôle (DB / Riot / front) sur une clé unique. */
+function normalizeTierListRole(role: string | null | undefined): string {
+  const u = String(role ?? '')
+    .trim()
+    .toUpperCase()
+  if (u === 'MID') return 'MIDDLE'
+  if (u === 'ADC') return 'BOTTOM'
+  if (u === 'UTILITY') return 'SUPPORT'
+  return u
 }
 
 function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
@@ -131,7 +145,12 @@ function computeChampionMatchupScores(
   const byOpponentRole = new Map<string, Duel[]>()
   for (const m of matchupRows) {
     const champ = byChampion.get(m.championId)
-    if (!champ || champ.mainRole !== m.role || m.games <= 0) continue
+    if (
+      !champ ||
+      normalizeTierListRole(champ.mainRole) !== normalizeTierListRole(m.role) ||
+      m.games <= 0
+    )
+      continue
     const winratePct = (m.wins / m.games) * 100
     const duel: Duel = {
       championId: m.championId,
@@ -184,7 +203,11 @@ function computeChampionMatchupScores(
   return noteByChampion
 }
 
-function buildTierListRows(roleRows: RoleRow[], matchupRows: MatchupRoleRow[]): TierListRow[] {
+function buildTierListRows(
+  roleRows: RoleRow[],
+  matchupRows: MatchupRoleRow[],
+  focusRole?: string | null
+): TierListRow[] {
   const byChampion = new Map<
     number,
     { totalGames: number; roleRows: Array<{ role: string; games: number; wins: number; winrate: number; pickrate: number; banrate: number }> }
@@ -225,22 +248,33 @@ function buildTierListRows(roleRows: RoleRow[], matchupRows: MatchupRoleRow[]): 
     mainRoleGames: number
   }> = []
 
-  for (const [championId, { totalGames, roleRows }] of byChampion) {
-    const main = roleRows.reduce((a, b) => (b.games > a.games ? b : a), roleRows[0])
-    const mainRolePct = totalGames > 0 ? (100 * main.games) / totalGames : 0
-    const tierScore = (main.winrate - 0.5) * Math.sqrt(main.games)
+  const focus = focusRole?.trim() ? normalizeTierListRole(focusRole) : null
+
+  for (const [championId, { totalGames, roleRows: rrs }] of byChampion) {
+    if (!rrs.length) continue
+    let selected: (typeof rrs)[0]
+    if (focus) {
+      const found = rrs.find(r => normalizeTierListRole(r.role) === focus)
+      if (!found || found.games < MIN_GAMES) continue
+      selected = found
+    } else {
+      selected = rrs.reduce((a, b) => (b.games > a.games ? b : a), rrs[0]!)
+    }
+
+    const mainRolePct = totalGames > 0 ? (100 * selected.games) / totalGames : 0
+    const tierScore = (selected.winrate - 0.5) * Math.sqrt(selected.games)
     rows.push({
       championId,
       tier: 'D',
-      mainRole: main.role,
+      mainRole: normalizeTierListRole(selected.role),
       mainRolePct,
-      winrate: main.winrate,
-      pickrate: main.pickrate,
-      banrate: main.banrate,
+      winrate: selected.winrate,
+      pickrate: selected.pickrate,
+      banrate: selected.banrate,
       pbi: 0,
-      games: totalGames,
+      games: focus ? selected.games : totalGames,
       tierScore,
-      mainRoleGames: main.games,
+      mainRoleGames: selected.games,
     })
   }
 
@@ -466,8 +500,10 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
     }
   }
 
+  const focusRole = options.role?.trim() ? options.role : null
+
   const matchupRows = await fetchMatchupRoleRows(patch, rankFilter)
-  const rows = buildTierListRows(roleRows, matchupRows)
+  const rows = buildTierListRows(roleRows, matchupRows, focusRole)
 
   let highEloRows: TierListRow[] | undefined
   if (rankTier === 'all') {
@@ -475,7 +511,7 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
       const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
       if (highEloRoleRows.length > 0) {
         const highEloMatchupRows = await fetchMatchupRoleRows(patch, 'high_elo')
-        highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows)
+        highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows, focusRole)
       }
     } catch {
       // optional: skip high-elo block on error

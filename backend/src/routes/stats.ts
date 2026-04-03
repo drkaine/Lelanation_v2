@@ -752,9 +752,15 @@ router.get('/tier-list', async (req: Request, res: Response) => {
   const platformId = queryString(req.query.platformId) ?? null
   const rankTierRaw = queryString(req.query.rankTier)
   const rankTier = rankTierRaw === 'all' || !rankTierRaw ? 'all' : rankTierRaw
+  const roleFocus = queryString(req.query.role)?.trim() || null
   const otpMode = otpModeFromQuery(req.query.otp)
   try {
-    const data = await getTierList({ patch: patch || undefined, platformId, rankTier })
+    const data = await getTierList({
+      patch: patch || undefined,
+      platformId,
+      rankTier,
+      role: roleFocus,
+    })
     if (!data) {
       return res.status(200).json({
         patch: patch ?? null,
@@ -1102,7 +1108,8 @@ router.get('/tierlist', async (req: Request, res: Response) => {
   const rt = rankTierParam(req.query.rankTier)
   const rankTier =
     rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
-  const data = await getTierList({ patch, rankTier })
+  const roleFocus = queryString(req.query.role)?.trim() || null
+  const data = await getTierList({ patch, rankTier, role: roleFocus })
   return res.json(data ?? { patch: patch ?? null, rankTier, rows: [], highEloRows: [] })
 })
 
@@ -1111,7 +1118,8 @@ router.get('/tierlist-graph', async (req: Request, res: Response) => {
   const rt = rankTierParam(req.query.rankTier)
   const rankTier =
     rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
-  const data = await getTierList({ patch, rankTier })
+  const roleFocus = queryString(req.query.role)?.trim() || null
+  const data = await getTierList({ patch, rankTier, role: roleFocus })
   const rows = data?.rows ?? []
   return res.json({
     patch: data?.patch ?? patch ?? null,
