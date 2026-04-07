@@ -496,6 +496,7 @@ model MvTeamCoreStat {
   countWin                 Int     @map("count_win")
   countGame                Int     @map("count_game")
   countTeamEarlySurrendered Int    @map("count_team_early_surrendered")
+  countTeamSurrendered     Int     @map("count_team_surrendered")
   sumBaronKills            Int     @map("sum_baron_kills")
   countBaronFirst          Int     @map("count_baron_first")
   sumDragonKills           Int     @map("sum_dragon_kills")
@@ -736,10 +737,11 @@ model MvChampionShardStat {
 model MvChampionRunesStat {
   championStatId BigInt @map("champion_stat_id")
   runeList       String @map("rune_list")
+  shardList      String @default("") @map("shard_list")
   countWin       Int    @map("count_win")
   countGame      Int    @map("count_game")
 
-  @@id([championStatId, runeList])
+  @@id([championStatId, runeList, shardList])
   @@map("mv_champion_runes_stats")
 }
 

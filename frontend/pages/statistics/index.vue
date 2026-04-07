@@ -1445,6 +1445,7 @@ const overviewDetailData = ref<{
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   runeSets: Array<{
     runes: unknown
+    shards?: number[]
     games: number
     wins: number
     pickrate: number

@@ -9,6 +9,8 @@ import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js
 
 export interface RuneRow {
   runes: unknown
+  /** Stat shards (mp.shards), même ordre que dans les matchs. */
+  shards: number[]
   games: number
   wins: number
   winrate: number
@@ -54,17 +56,28 @@ export async function getRunesByChampion(
       where: { championStatId: { in: statIds } },
       select: {
         runeList: true,
+        shardList: true,
         countWin: true,
         countGame: true,
       },
     })
 
-    const byList = new Map<string, { wins: number; games: number }>()
+    const aggKeySep = '\u001e'
+    const parseShardListCsv = (csv: string | null | undefined): number[] => {
+      if (csv == null || csv === '') return []
+      return csv
+        .split(',')
+        .map((x) => Number(String(x).trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    }
+
+    const byList = new Map<string, { wins: number; games: number; shardList: string }>()
     for (const row of runeStatRows) {
-      const key = row.runeList
+      const shard = row.shardList ?? ''
+      const key = `${row.runeList}${aggKeySep}${shard}`
       let entry = byList.get(key)
       if (!entry) {
-        entry = { wins: 0, games: 0 }
+        entry = { wins: 0, games: 0, shardList: shard }
         byList.set(key, entry)
       }
       entry.wins += row.countWin
@@ -72,8 +85,10 @@ export async function getRunesByChampion(
     }
 
     const runes: RuneRow[] = []
-    for (const [listStr, entry] of byList.entries()) {
+    for (const [aggKey, entry] of byList.entries()) {
       if (entry.games < minGames) continue
+      const sepIdx = aggKey.indexOf(aggKeySep)
+      const listStr = sepIdx >= 0 ? aggKey.slice(0, sepIdx) : aggKey
       let parsedRunes: unknown
       try {
         parsedRunes = JSON.parse(listStr)
@@ -82,6 +97,7 @@ export async function getRunesByChampion(
       }
       runes.push({
         runes: parsedRunes,
+        shards: parseShardListCsv(entry.shardList),
         games: entry.games,
         wins: entry.wins,
         winrate: entry.games > 0 ? Math.round((entry.wins / entry.games) * 10000) / 100 : 0,

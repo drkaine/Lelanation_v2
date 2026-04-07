@@ -64,6 +64,8 @@ export interface OverviewDetailStats {
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   runeSets: Array<{
     runes: unknown
+    /** Fragments (StatMods), ordre slot Riot ; renvoyés depuis mp.shards via la MV. */
+    shards: number[]
     games: number
     wins: number
     pickrate: number
@@ -388,7 +390,7 @@ async function loadSurrenderBySideCounts(
       SELECT
         mv.team AS team_num,
         COALESCE(SUM(mv.count_team_early_surrendered), 0)::bigint AS early_cnt,
-        COALESCE(SUM(mv.count_team_early_surrendered), 0)::bigint AS surrender_cnt
+        COALESCE(SUM(mv.count_team_surrendered), 0)::bigint AS surrender_cnt
       FROM mv_team_core_stats mv
       WHERE ${cond}
       GROUP BY mv.team
@@ -1047,22 +1049,43 @@ export async function getOverviewDetailStats(
     // Rune sets (combinations) - from champion_runes_stats
     const runeSetRows = await prisma.mvChampionRunesStat.findMany({
       where: { championStatId: { in: statIds } },
-      select: { runeList: true, countWin: true, countGame: true },
+      select: { runeList: true, shardList: true, countWin: true, countGame: true },
       take: 2000,
     })
-    const runeSetMap = new Map<string, { wins: number; games: number }>()
+    const runeSetAggKeySep = '\u001e'
+    const parseShardListCsv = (csv: string | null | undefined): number[] => {
+      if (csv == null || csv === '') return []
+      return csv
+        .split(',')
+        .map((x) => Number(String(x).trim()))
+        .filter((n) => Number.isFinite(n) && n > 0)
+    }
+    const runeSetMap = new Map<string, { wins: number; games: number; shardList: string }>()
     for (const r of runeSetRows) {
-      let e = runeSetMap.get(r.runeList)
-      if (!e) { e = { wins: 0, games: 0 }; runeSetMap.set(r.runeList, e) }
-      e.wins += r.countWin; e.games += r.countGame
+      const shard = r.shardList ?? ''
+      const aggKey = `${r.runeList}${runeSetAggKeySep}${shard}`
+      let e = runeSetMap.get(aggKey)
+      if (!e) {
+        e = { wins: 0, games: 0, shardList: shard }
+        runeSetMap.set(aggKey, e)
+      }
+      e.wins += r.countWin
+      e.games += r.countGame
     }
     const runeSets = Array.from(runeSetMap.entries())
       .filter(([, e]) => e.games >= 5)
-      .map(([listStr, e]) => {
+      .map(([aggKey, e]) => {
+        const sepIdx = aggKey.indexOf(runeSetAggKeySep)
+        const runeListPart = sepIdx >= 0 ? aggKey.slice(0, sepIdx) : aggKey
         let parsedRunes: unknown
-        try { parsedRunes = JSON.parse(listStr) } catch { parsedRunes = listStr }
+        try {
+          parsedRunes = JSON.parse(runeListPart)
+        } catch {
+          parsedRunes = runeListPart
+        }
         return {
           runes: parsedRunes,
+          shards: parseShardListCsv(e.shardList),
           games: e.games,
           wins: e.wins,
           pickrate: totalParticipants > 0 ? Math.round((e.games / totalParticipants) * 10000) / 100 : 0,

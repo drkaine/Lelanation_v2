@@ -14,6 +14,7 @@ type DetailPayload = {
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
   runeSets: Array<{
     runes: unknown
+    shards?: number[]
     games: number
     wins: number
     pickrate: number
@@ -314,14 +315,49 @@ function sortShardIdsForSet(ids: number[]): number[] {
   return [...ids].sort((a, b) => (order.get(a) ?? 999) - (order.get(b) ?? 999))
 }
 
-function runeSetLayout(run: unknown): {
+type RuneSetRow = NonNullable<DetailPayload['runeSets']>[number]
+
+/** Clé stable (runes + fragments API) pour le baseline. */
+function runeSetStableKey(set: Pick<RuneSetRow, 'runes' | 'shards'>): string {
+  const { style0, style1, shards: fromRunes } = parseRuneSetParts(set.runes)
+  const perkIds = [...new Set([...style0, ...style1])]
+    .filter(id => !isShardStatId(id))
+    .sort((a, b) => a - b)
+  const apiShards = set.shards?.filter(n => Number.isFinite(n) && n > 0) ?? []
+  const shardIds =
+    apiShards.length > 0
+      ? [...new Set(apiShards)].sort((a, b) => a - b)
+      : [...new Set(fromRunes)].sort((a, b) => a - b)
+  return `${perkIds.join(',')}|${shardIds.join(',')}`
+}
+
+const baselineRuneSetStatByKey = computed(() => {
+  const m = new Map<string, { pickrate: number; winrate: number }>()
+  for (const s of props.baseline?.runeSets ?? []) {
+    m.set(runeSetStableKey(s), { pickrate: s.pickrate, winrate: s.winrate })
+  }
+  return m
+})
+
+function baselineStatsForRuneSet(
+  set: RuneSetRow
+): { pickrate: number; winrate: number } | undefined {
+  return baselineRuneSetStatByKey.value.get(runeSetStableKey(set))
+}
+
+function runeSetLayout(
+  run: unknown,
+  shardIdsFromApi?: number[] | null
+): {
   keystone: number | null
   primaryRow: number[]
   secondaryPath: RunePath | null
   secondaryRunes: number[]
   shards: number[]
 } {
-  const { style0, style1, shards: rawShards } = parseRuneSetParts(run)
+  const { style0, style1, shards: rawFromRunes } = parseRuneSetParts(run)
+  const api = shardIdsFromApi?.filter(n => Number.isFinite(n) && n > 0) ?? []
+  const rawShards = api.length > 0 ? api : rawFromRunes
   const shards = sortShardIdsForSet(rawShards)
 
   /** Toutes les perks non-shard (JSON `[…]` met souvent les 6 runes en « style 0 » seulement). */
@@ -571,10 +607,19 @@ function runeSetLayout(run: unknown): {
         </h4>
         <div class="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2">
           <div
-            v-for="(row, idx) in block.list.map(s => ({ set: s, ly: runeSetLayout(s.runes) }))"
+            v-for="(row, idx) in block.list.map(s => ({
+              set: s,
+              ly: runeSetLayout(s.runes, s.shards ?? null),
+            }))"
             :key="block.key + '-' + idx"
-            class="rune-set-card statistics-overview-surface min-w-0 rounded-lg border border-primary/30 px-4 py-3"
+            class="rune-set-card statistics-overview-surface relative min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
           >
+            <span
+              class="absolute z-10 flex h-2 min-w-2 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
+              aria-hidden="true"
+            >
+              {{ idx + 1 }}
+            </span>
             <div class="rune-set-build-strip flex min-w-0 flex-col gap-2">
               <!-- Clé de voûte seule (hors ligne d’alignement avec le secondaire) -->
               <div v-if="row.ly.keystone && getRuneById(row.ly.keystone)" class="flex shrink-0">
@@ -699,13 +744,22 @@ function runeSetLayout(run: unknown): {
                 }}</span
                 >%</span
               >
-              <span
-                ><span class="text-text/50">{{ t('statisticsPage.tierListGames') }}</span>
-                {{ ' ' }}
-                <span class="font-semibold tabular-nums">{{
-                  Number(row.set.games).toLocaleString()
-                }}</span></span
-              >
+              <template v-if="comparisonVersion && !baselinePending">
+                <span
+                  class="text-[10px] tabular-nums"
+                  :class="deltaClass(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate)"
+                >
+                  ΔP
+                  {{ formatDelta(row.set.pickrate, baselineStatsForRuneSet(row.set)?.pickrate) }}
+                </span>
+                <span
+                  class="text-[10px] tabular-nums"
+                  :class="deltaClass(row.set.winrate, baselineStatsForRuneSet(row.set)?.winrate)"
+                >
+                  ΔWR
+                  {{ formatDelta(row.set.winrate, baselineStatsForRuneSet(row.set)?.winrate) }}
+                </span>
+              </template>
             </div>
           </div>
           <p v-if="!block.list.length" class="text-xs text-text/50">

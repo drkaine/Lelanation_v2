@@ -1627,7 +1627,14 @@ const buildsExpand = ref(false)
 const runesPending = ref(false)
 const runesData = ref<{
   totalGames: number
-  runes: Array<{ runes: unknown; games: number; wins: number; winrate: number; pickrate: number }>
+  runes: Array<{
+    runes: unknown
+    shards?: number[]
+    games: number
+    wins: number
+    winrate: number
+    pickrate: number
+  }>
 } | null>(null)
 const runesPerRuneData = ref<{
   totalGames: number
@@ -1639,6 +1646,7 @@ const detailPending = ref(false)
 const detailData = ref<{
   runeSets?: Array<{
     runes: unknown
+    shards?: number[]
     games: number
     wins: number
     pickrate: number
