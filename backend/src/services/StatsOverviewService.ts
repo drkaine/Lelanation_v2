@@ -50,6 +50,15 @@ export interface OverviewStats {
   _championPool?: Array<{ championId: number; pickrate: number }>
 }
 
+export interface InfosPatchDivisionMatrix {
+  divisions: string[]
+  rows: Array<{
+    version: string
+    all: number
+    byDivision: Record<string, number>
+  }>
+}
+
 export interface OverviewDetailStats {
   totalParticipants: number
   runes: Array<{ runeId: number; games: number; wins: number; pickrate: number; winrate: number }>
@@ -1624,6 +1633,44 @@ export async function getOverviewMeta(
     return { lastUpdate: null, playerCount }
   } catch (err) {
     console.error('[getOverviewMeta]', err)
+    return null
+  }
+}
+
+export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionMatrix | null> {
+  if (!isDatabaseConfigured()) return null
+  type RawRow = { version: string; rank_tier: string; match_count: bigint }
+  try {
+    const raw = await prisma.$queryRawUnsafe<RawRow[]>(`
+      SELECT
+        mo.game_version::text AS version,
+        mo.rank_tier::text AS rank_tier,
+        COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
+      FROM mv_match_outcome_stats mo
+      WHERE mo.rank_tier <> 'UNRANKED'
+      GROUP BY mo.game_version, mo.rank_tier
+    `)
+    const divisionSet = new Set<string>()
+    const byVersion = new Map<string, { all: number; byDivision: Record<string, number> }>()
+    for (const r of raw) {
+      const version = String(r.version ?? '').trim()
+      const tier = String(r.rank_tier ?? '').trim().toUpperCase()
+      const mc = Math.max(0, Number(r.match_count ?? 0))
+      if (!version || !tier) continue
+      divisionSet.add(tier)
+      const entry = byVersion.get(version) ?? { all: 0, byDivision: {} }
+      entry.byDivision[tier] = (entry.byDivision[tier] ?? 0) + mc
+      entry.all += mc
+      byVersion.set(version, entry)
+    }
+    const rows = [...byVersion.entries()].map(([version, data]) => ({
+      version,
+      all: data.all,
+      byDivision: data.byDivision,
+    }))
+    return { divisions: [...divisionSet], rows }
+  } catch (err) {
+    console.error('[getInfosPatchDivisionMatrix]', err)
     return null
   }
 }

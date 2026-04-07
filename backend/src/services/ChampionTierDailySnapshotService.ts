@@ -11,6 +11,7 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
+import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { refreshAllMaterializedViews } from './MaterializedViewService.js'
 
 type Logger = ReturnType<typeof createRiotPollerLogger>
@@ -204,7 +205,7 @@ async function getActiveSnapshotDates(): Promise<Date[]> {
   return dates.map((r) => new Date(`${r.d.toISOString().slice(0, 10)}T00:00:00.000Z`))
 }
 
-async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<void> {
+async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<number> {
   // Archive daily snapshots whose date belongs to a completed patch.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
@@ -229,7 +230,7 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
     WHERE ap.game_number_max > 0
       AND ap.games_number >= ap.game_number_max
   `
-  if (rows.length === 0) return
+  if (rows.length === 0) return 0
   for (const r of rows) {
     const date = r.d
     await prisma.$executeRaw`
@@ -245,6 +246,7 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<voi
     `
   }
   if (logger) void logger.step('Champion tier snapshot archive completed', { daysArchived: rows.length })
+  return rows.length
 }
 
 /**
@@ -269,6 +271,7 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
   if (!pastSlot) return
 
   try {
+    const t0 = Date.now()
     await cleanupInvalidSnapshotRoles(logger)
     const snapshotDates = await getActiveSnapshotDates()
     if (snapshotDates.length === 0) return
@@ -285,14 +288,20 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
     }
 
     await refreshAllMaterializedViews().catch(() => undefined)
-    await archiveSnapshotsForCompletedPatches(logger)
+    const archivedDays = await archiveSnapshotsForCompletedPatches(logger)
     lastActiveRefreshAtMs = Date.now()
-    if (logger) {
-      void logger.step('Champion tier snapshots refreshed for active patch dates', {
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'info',
+      script: 'snapshot_daily',
+      message: `Resume snapshots — days:${snapshotDates.length}, rowsTouched:${totalRowsTouched}, archivedDays:${archivedDays}`,
+      json: {
         days: snapshotDates.length,
         rowsTouched: totalRowsTouched,
-      })
-    }
+        archivedDays,
+        durationMs: Date.now() - t0,
+      },
+    })
   } catch (err) {
     if (logger) void logger.alerte('Champion tier daily snapshot failed', { error: String(err) })
   }

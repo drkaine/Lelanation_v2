@@ -277,5328 +277,62 @@
 
           <!-- Tab: Overview (default) -->
           <div v-show="activeTab === 'overview'" class="space-y-6">
-            <div class="rounded-lg">
-              <div v-if="overviewPending" class="text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div
-                v-else-if="overviewError"
-                class="rounded border border-error/50 bg-error/10 p-4 text-error"
-              >
-                <p class="mb-2">{{ overviewError }}</p>
-                <button
-                  type="button"
-                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-background hover:opacity-90"
-                  @click="loadOverview()"
-                >
-                  {{ t('statisticsPage.retry') }}
-                </button>
-              </div>
-              <div v-else-if="overviewData" class="space-y-[10px]">
-                <!-- Fast Stats encarts (style LeagueOfGraphs avec nos couleurs) -->
-                <div
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
-                >
-                  <!-- Champions les plus choisis -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.mostPicked')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.mostPicked')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.mostPicked',
-                            t('statisticsPage.fastStatsMostPicked')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.mostPicked') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex-1">
-                        {{ t('statisticsPage.fastStatsMostPicked') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsMostPicked') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewTopPickrateChampionsFiltered.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewTopPickrateChampionsFiltered"
-                          :key="row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-accent transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (row.pickrate /
-                                          Math.max(
-                                            ...overviewTopPickrateChampionsFiltered.map(
-                                              (c: { pickrate: number }) => c.pickrate
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-9 shrink-0 text-right font-medium text-text"
-                                >{{ Number(row.pickrate).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoData') }}
-                    </div>
-                    <div
-                      v-if="overviewTopPickrateChampionsFiltered.length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToTierListWithSort('pickrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Meilleurs champions -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.bestWinrate')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.bestWinrate')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.bestWinrate',
-                            t('statisticsPage.fastStatsBestWinrate')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.bestWinrate') ? '★' : '☆' }}
-                      </button>
-                      <span class="inline-flex flex-1 items-center">
-                        {{ t('statisticsPage.fastStatsBestWinrate') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsBestWinrate') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewEffectiveTopWinrateChampions.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewEffectiveTopWinrateChampions"
-                          :key="row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-success transition-[width]"
-                                  :style="{
-                                    width: (() => {
-                                      const list = overviewEffectiveTopWinrateChampions
-                                      const minWr = Math.min(...list.map(c => c.winrate), 50)
-                                      const maxWr = Math.max(...list.map(c => c.winrate), 52)
-                                      const range = maxWr - minWr || 1
-                                      return (
-                                        Math.min(
-                                          100,
-                                          Math.max(0, ((row.winrate - minWr) / range) * 100)
-                                        ) + '%'
-                                      )
-                                    })(),
-                                  }"
-                                />
-                              </div>
-                              <span class="w-9 shrink-0 text-right font-medium text-text"
-                                >{{ Number(row.winrate).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoData') }}
-                    </div>
-                    <div
-                      v-if="overviewEffectiveTopWinrateChampions.length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToTierListWithSort('winrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Champions les plus bannis -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.mostBanned')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.mostBanned')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.mostBanned',
-                            t('statisticsPage.fastStatsMostBanned')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.mostBanned') ? '★' : '☆' }}
-                      </button>
-                      <span class="inline-flex flex-1 items-center">
-                        {{ t('statisticsPage.fastStatsMostBanned') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsMostBanned') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewEffectiveTopBanrateChampions.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewEffectiveTopBanrateChampions"
-                          :key="row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(row.championId) || row.championId }}</span
-                              >
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (row.banrate /
-                                          Math.max(
-                                            ...overviewEffectiveTopBanrateChampions.map(
-                                              (c: { banrate: number }) => c.banrate
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-9 shrink-0 text-right font-medium text-text"
-                                >{{ Number(row.banrate).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoData') }}
-                    </div>
-                    <div
-                      v-if="overviewEffectiveTopBanrateChampions.length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToTierListWithSort('banrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Winrate depuis X -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.winrateSince')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.winrateSince')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.winrateSince',
-                            t('statisticsPage.fastStatsWinrateProgression')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.winrateSince') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>
-                          {{
-                            progressionFromVersion
-                              ? t('statisticsPage.fastStatsWinrateSince', {
-                                  version: progressionFromVersion ?? undefined,
-                                })
-                              : t('statisticsPage.fastStatsWinrateProgression')
-                          }}
-                        </span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsWinrateSince') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewTopWinrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewTopWinrateSince.slice(0, 5)"
-                          :key="'wr-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.wrOldest).toFixed(1) }}% →
-                                  {{ Number(row.wrSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-success transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (row.deltaWr /
-                                          Math.max(
-                                            ...overviewTopWinrateSince.map(x => x.deltaWr),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-success"
-                                >+{{ Number(row.deltaWr).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewTopWinrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueWinrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Pickrate depuis X -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.pickrateSince')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.pickrateSince')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.pickrateSince',
-                            t('statisticsPage.fastStatsPickrateSinceTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.pickrateSince') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>{{
-                          t('statisticsPage.fastStatsPickrateSinceTitle', {
-                            version: progressionFromVersion || '—',
-                          })
-                        }}</span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsPickrateSince') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewTopPickrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewTopPickrateSince.slice(0, 5)"
-                          :key="'pr-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.pickrateOldest).toFixed(1) }}% →
-                                  {{ Number(row.pickrateSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-accent transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (row.deltaPick /
-                                          Math.max(
-                                            ...overviewTopPickrateSince.map(x => x.deltaPick),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-accent"
-                                >+{{ Number(row.deltaPick).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewTopPickrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('bluePickrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Banrate depuis X -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.banrateSince')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.banrateSince')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.banrateSince',
-                            t('statisticsPage.fastStatsBanrateSinceTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.banrateSince') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>{{
-                          t('statisticsPage.fastStatsBanrateSinceTitle', {
-                            version: progressionFromVersion || '—',
-                          })
-                        }}</span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsBanrateSince') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewTopBanrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewTopBanrateSince.slice(0, 5)"
-                          :key="'br-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.banrateOldest).toFixed(1) }}% →
-                                  {{ Number(row.banrateSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (row.deltaBan /
-                                          Math.max(
-                                            ...overviewTopBanrateSince.map(x => x.deltaBan),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-error"
-                                >+{{ Number(row.deltaBan).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewTopBanrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueBanrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Winrate depuis X (baisse) -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.winrateSinceDown')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.winrateSinceDown')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.winrateSinceDown',
-                            t('statisticsPage.fastStatsWinrateSinceDownTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.winrateSinceDown') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>{{
-                          t('statisticsPage.fastStatsWinrateSinceDownTitle', {
-                            version: progressionFromVersion || '—',
-                          })
-                        }}</span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsWinrateSinceDown') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewBottomWinrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewBottomWinrateSince.slice(0, 5)"
-                          :key="'wr-down-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.wrOldest).toFixed(1) }}% →
-                                  {{ Number(row.wrSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (Math.abs(row.deltaWr) /
-                                          Math.max(
-                                            ...overviewBottomWinrateSince.map(x =>
-                                              Math.abs(x.deltaWr)
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-error"
-                                >{{ Number(row.deltaWr).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewBottomWinrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueWinrate', 'asc')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Pickrate depuis X (baisse) -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.pickrateSinceDown')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.pickrateSinceDown')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.pickrateSinceDown',
-                            t('statisticsPage.fastStatsPickrateSinceDownTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.pickrateSinceDown') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>{{
-                          t('statisticsPage.fastStatsPickrateSinceDownTitle', {
-                            version: progressionFromVersion || '—',
-                          })
-                        }}</span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsPickrateSinceDown') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewBottomPickrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewBottomPickrateSince.slice(0, 5)"
-                          :key="'pr-down-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.pickrateOldest).toFixed(1) }}% →
-                                  {{ Number(row.pickrateSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (Math.abs(row.deltaPick) /
-                                          Math.max(
-                                            ...overviewBottomPickrateSince.map(x =>
-                                              Math.abs(x.deltaPick)
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-error"
-                                >{{ Number(row.deltaPick).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewBottomPickrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('bluePickrate', 'asc')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Banrate depuis X (baisse) -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.banrateSinceDown')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.banrateSinceDown')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.banrateSinceDown',
-                            t('statisticsPage.fastStatsBanrateSinceDownTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.banrateSinceDown') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                        <span>{{
-                          t('statisticsPage.fastStatsBanrateSinceDownTitle', {
-                            version: progressionFromVersion || '—',
-                          })
-                        }}</span>
-                        <span
-                          class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipFastStatsBanrateSinceDown') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <table
-                      v-if="overviewBottomBanrateSince.length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in overviewBottomBanrateSince.slice(0, 5)"
-                          :key="'br-down-' + row.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5 align-middle">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <div class="min-w-0 max-w-[6.5rem] shrink-0">
-                                <div class="truncate font-medium leading-tight text-text">
-                                  {{ championName(row.championId) || row.championId }}
-                                </div>
-                                <div
-                                  class="whitespace-nowrap text-[9px] tabular-nums leading-tight text-text/70"
-                                >
-                                  {{ Number(row.banrateOldest).toFixed(1) }}% →
-                                  {{ Number(row.banrateSince).toFixed(1) }}%
-                                </div>
-                              </div>
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        (Math.abs(row.deltaBan) /
-                                          Math.max(
-                                            ...overviewBottomBanrateSince.map(x =>
-                                              Math.abs(x.deltaBan)
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-10 shrink-0 text-right font-medium text-error"
-                                >{{ Number(row.deltaBan).toFixed(2) }}%</span
-                              >
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.fastStatsNoProgression') }}
-                    </div>
-                    <div v-if="overviewBottomBanrateSince.length" class="mt-1 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueBanrate', 'asc')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Répartition des parties (global uniquement) — donut SVG comme Solo/Duo -->
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3
-                      class="fast-stat-title mb-2 flex items-center justify-between gap-2 text-sm font-semibold"
-                    >
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.matchOutcome')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.matchOutcome')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.matchOutcome',
-                            t('statisticsPage.overviewMatchOutcomesTitle')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.matchOutcome') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex-1">{{
-                        t('statisticsPage.overviewMatchOutcomesTitle')
-                      }}</span>
-                    </h3>
-                    <div
-                      v-if="overviewAbandonsPending || overviewPending"
-                      class="py-3 text-center text-text/60"
-                    >
-                      {{ t('statisticsPage.loading') }}
-                    </div>
-                    <div
-                      v-else-if="overviewMatchOutcomeTotal > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        :total="overviewMatchOutcomeTotal"
-                        :early="overviewEarlySurrenderCount"
-                        :surrender-only="overviewSurrenderOnlyCount"
-                        :played="overviewPlayedCount"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ overviewMatchOutcomeTotal.toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender: {{ overviewEarlySurrenderCount.toLocaleString() }} ({{
-                            overviewEarlySurrenderPct.toFixed(2)
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender: {{ overviewSurrenderOnlyCount.toLocaleString() }} ({{
-                            overviewSurrenderOnlyPct.toFixed(2)
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-blue-400"
-                          />
-                          Jouees: {{ overviewPlayedCount.toLocaleString() }} ({{
-                            overviewPlayedPct.toFixed(2)
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                    <div v-if="overviewMatchOutcomeTotal > 0" class="mt-2 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('totalGames')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Bans par équipe gagnante -->
-                  <div
-                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.bansByWin')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.bansByWin')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.bansByWin',
-                            t('statisticsPage.overviewTeamsBansByWin')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.bansByWin') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex-1">{{ t('statisticsPage.overviewTeamsBansByWin') }}</span>
-                    </h3>
-                    <table
-                      v-if="(overviewTeamsData.bans.byWin ?? []).length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(b, idx) in (overviewTeamsData.bans.byWin ?? []).slice(
-                            0,
-                            bansExpandByWin ? 20 : 5
-                          )"
-                          :key="'win-' + b.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(b.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(b.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(b.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(b.championId) || b.championId }}</span
-                              >
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-success transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
-                                          0) /
-                                          Math.max(
-                                            ...(overviewTeamsData.bans.byWin ?? []).map(
-                                              x =>
-                                                parseFloat(
-                                                  String(x.banRatePercent).replace(',', '.')
-                                                ) || 0
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-9 shrink-0 text-right font-medium text-text">{{
-                                b.banRatePercent
-                              }}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div
-                      v-if="(overviewTeamsData.bans.byWin ?? []).length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueBanrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Bans par équipe perdante -->
-                  <div
-                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.bansByLoss')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.bansByLoss')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.bansByLoss',
-                            t('statisticsPage.overviewTeamsBansByLoss')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.bansByLoss') ? '★' : '☆' }}
-                      </button>
-                      <span class="flex-1">{{ t('statisticsPage.overviewTeamsBansByLoss') }}</span>
-                    </h3>
-                    <table
-                      v-if="(overviewTeamsData.bans.byLoss ?? []).length"
-                      class="fast-stat-table w-full text-xs"
-                    >
-                      <tbody>
-                        <tr
-                          v-for="(b, idx) in (overviewTeamsData.bans.byLoss ?? []).slice(
-                            0,
-                            bansExpandByLoss ? 20 : 5
-                          )"
-                          :key="'loss-' + b.championId"
-                          class="fast-stat-row"
-                        >
-                          <td class="py-0.5">
-                            <div class="flex items-center gap-0.5">
-                              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-                              <img
-                                v-if="gameVersion && championByKey(b.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(b.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(b.championId) || ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                              />
-                              <span
-                                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                                >{{ championName(b.championId) || b.championId }}</span
-                              >
-                              <div
-                                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                              >
-                                <div
-                                  class="h-full rounded bg-error transition-[width]"
-                                  :style="{
-                                    width:
-                                      Math.min(
-                                        100,
-                                        ((parseFloat(String(b.banRatePercent).replace(',', '.')) ||
-                                          0) /
-                                          Math.max(
-                                            ...(overviewTeamsData.bans.byLoss ?? []).map(
-                                              x =>
-                                                parseFloat(
-                                                  String(x.banRatePercent).replace(',', '.')
-                                                ) || 0
-                                            ),
-                                            1
-                                          )) *
-                                          100
-                                      ) + '%',
-                                  }"
-                                />
-                              </div>
-                              <span class="w-9 shrink-0 text-right font-medium text-text">{{
-                                b.banRatePercent
-                              }}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div
-                      v-if="(overviewTeamsData.bans.byLoss ?? []).length"
-                      class="mt-1 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('redBanrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    v-if="overviewTeamsData && overviewTeamsData.matchCount > 0"
-                    class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
-                  >
-                    <div class="mb-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        class="shrink-0 text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('overview.objectives')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('overview.objectives')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'overview.objectives',
-                            t('statisticsPage.overviewTeamsObjectives')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('overview.objectives') ? '★' : '☆' }}
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                        :class="
-                          objectivesPanelTab === 'objectives'
-                            ? 'bg-accent text-background'
-                            : 'bg-black/20 text-text/80 hover:bg-white/10'
-                        "
-                        @click="objectivesPanelTab = 'objectives'"
-                      >
-                        {{ t('statisticsPage.objectivesTabMain') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                        :class="
-                          objectivesPanelTab === 'drakeTypes'
-                            ? 'bg-accent text-background'
-                            : 'bg-black/20 text-text/80 hover:bg-white/10'
-                        "
-                        @click="objectivesPanelTab = 'drakeTypes'"
-                      >
-                        {{ t('statisticsPage.objectivesTabDrakeTypes') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                        :class="
-                          objectivesPanelTab === 'drakeSouls'
-                            ? 'bg-accent text-background'
-                            : 'bg-black/20 text-text/80 hover:bg-white/10'
-                        "
-                        @click="objectivesPanelTab = 'drakeSouls'"
-                      >
-                        {{ t('statisticsPage.objectivesTabSouls') }}
-                      </button>
-                      <span
-                        class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                        :aria-label="t('statisticsPage.tooltipOverviewObjectives')"
-                      >
-                        ⓘ
-                        <span
-                          role="tooltip"
-                          class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                        >
-                          {{ t('statisticsPage.tooltipOverviewObjectives') }}
-                        </span>
-                      </span>
-                    </div>
-                    <p class="mb-3 text-xs text-text/60">
-                      {{ t('statisticsPage.overviewTeamsFirstByTeam') }}
-                    </p>
-                    <div
-                      v-if="objectivesPanelTab === 'objectives'"
-                      class="w-full min-w-0 overflow-x-auto"
-                    >
-                      <table class="w-full min-w-[280px] text-left text-sm">
-                        <thead>
-                          <tr class="border-b border-primary/30 text-text/70">
-                            <th class="py-1.5 pr-2 font-medium">
-                              {{ t('statisticsPage.overviewTeamsObjective') }}
-                            </th>
-                            <th class="py-1.5 pr-2 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsFirstByWin') }}
-                            </th>
-                            <th class="py-1.5 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsFirstByLoss') }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-primary/20 text-text/80">
-                          <tr>
-                            <td class="py-1.5 pr-2">
-                              {{ t('statisticsPage.overviewTeamsFirstBlood') }}
-                            </td>
-                            <td class="py-1.5 pr-2 text-center">
-                              {{
-                                firstPercentByTeam(
-                                  overviewTeamsData.objectives.firstBlood.firstByWin,
-                                  overviewTeamsData.objectives.firstBlood.firstByLoss,
-                                  overviewTeamsData.matchCount
-                                ).win
-                              }}
-                            </td>
-                            <td class="py-1.5 text-center">
-                              {{
-                                firstPercentByTeam(
-                                  overviewTeamsData.objectives.firstBlood.firstByWin,
-                                  overviewTeamsData.objectives.firstBlood.firstByLoss,
-                                  overviewTeamsData.matchCount
-                                ).loss
-                              }}
-                            </td>
-                          </tr>
-                          <template v-for="key in objectiveKeysWithKills" :key="key">
-                            <tr>
-                              <td class="py-1.5 pr-2">
-                                <button
-                                  type="button"
-                                  class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                                  @click="toggleObjective(key)"
-                                >
-                                  <span
-                                    class="inline-block transition-transform duration-200"
-                                    :class="openObjectiveKeys.has(key) ? 'rotate-180' : ''"
-                                    aria-hidden
-                                    >▼</span
-                                  >
-                                  <img
-                                    v-if="objectiveIconSrc(key)"
-                                    :src="objectiveIconSrc(key)"
-                                    :alt="t('statisticsPage.overviewTeamsObjective_' + key)"
-                                    class="h-4 w-4 object-contain"
-                                    loading="lazy"
-                                    decoding="async"
-                                    @error="onObjectiveIconError($event, key)"
-                                  />
-                                  {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
-                                </button>
-                              </td>
-                              <td class="py-1.5 pr-2 text-center">
-                                {{
-                                  firstPercentByTeam(
-                                    objectiveRow(key).firstByWin,
-                                    objectiveRow(key).firstByLoss,
-                                    overviewTeamsData.matchCount
-                                  ).win
-                                }}
-                              </td>
-                              <td class="py-1.5 text-center">
-                                {{
-                                  firstPercentByTeam(
-                                    objectiveRow(key).firstByWin,
-                                    objectiveRow(key).firstByLoss,
-                                    overviewTeamsData.matchCount
-                                  ).loss
-                                }}
-                              </td>
-                            </tr>
-                            <template v-if="openObjectiveKeys.has(key)">
-                              <tr
-                                v-for="count in objectiveCounts(key)"
-                                :key="key + '-' + count"
-                                class="bg-surface/30"
-                              >
-                                <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
-                                <td class="py-1 pr-2 text-center text-text/80">
-                                  {{ percentForCount(key, count, true) }}
-                                </td>
-                                <td class="py-1 text-center text-text/80">
-                                  {{ percentForCount(key, count, false) }}
-                                </td>
-                              </tr>
-                            </template>
-                          </template>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div
-                      v-else-if="objectivesPanelTab === 'drakeTypes'"
-                      class="w-full min-w-0 overflow-x-auto"
-                    >
-                      <table class="w-full min-w-[280px] text-left text-sm">
-                        <thead>
-                          <tr class="border-b border-primary/30 text-text/70">
-                            <th class="py-1.5 pr-2 font-medium">
-                              {{ t('statisticsPage.overviewTeamsObjective') }}
-                            </th>
-                            <th class="py-1.5 pr-2 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsByWin') }}
-                            </th>
-                            <th class="py-1.5 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsByLoss') }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-primary/20 text-text/80">
-                          <tr v-for="row in drakeTypeRows" :key="'drake-type-' + row.key">
-                            <td class="py-1.5 pr-2 font-medium text-text/90">
-                              <div class="flex items-center gap-2">
-                                <img
-                                  v-if="drakeIconSrc(row.key)"
-                                  :src="drakeIconSrc(row.key)"
-                                  :alt="row.label"
-                                  class="h-4 w-4 object-contain"
-                                  loading="lazy"
-                                  decoding="async"
-                                  @error="onDrakeIconError($event, row.key)"
-                                />
-                                <span>{{ row.label }}</span>
-                              </div>
-                            </td>
-                            <td class="py-1.5 pr-2 text-center">
-                              {{ teamPercent(row.byWin, overviewTeamsData.matchCount) }}
-                            </td>
-                            <td class="py-1.5 text-center">
-                              {{ teamPercent(row.byLoss, overviewTeamsData.matchCount) }}
-                            </td>
-                          </tr>
-                          <tr v-if="drakeTypeRows.length === 0">
-                            <td colspan="3" class="py-2 text-center text-text/60">
-                              {{ t('statisticsPage.noData') }}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div v-else class="w-full min-w-0 overflow-x-auto">
-                      <table class="w-full min-w-[280px] text-left text-sm">
-                        <thead>
-                          <tr class="border-b border-primary/30 text-text/70">
-                            <th class="py-1.5 pr-2 font-medium">
-                              {{ t('statisticsPage.overviewTeamsObjective') }}
-                            </th>
-                            <th class="py-1.5 pr-2 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsByWin') }}
-                            </th>
-                            <th class="py-1.5 text-center font-medium">
-                              {{ t('statisticsPage.overviewTeamsByLoss') }}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody class="divide-y divide-primary/20 text-text/80">
-                          <tr>
-                            <td class="py-1.5 pr-2 font-medium text-text/90">
-                              {{ t('statisticsPage.objectivesSoulGlobal') }}
-                            </td>
-                            <td class="py-1.5 pr-2 text-center">
-                              {{ teamPercent(drakeSoulGlobal.byWin, overviewTeamsData.matchCount) }}
-                            </td>
-                            <td class="py-1.5 text-center">
-                              {{
-                                teamPercent(drakeSoulGlobal.byLoss, overviewTeamsData.matchCount)
-                              }}
-                            </td>
-                          </tr>
-                          <template v-for="row in drakeSoulRows" :key="'drake-soul-' + row.key">
-                            <tr>
-                              <td class="py-1.5 pr-2 font-medium text-text/90">
-                                <div class="flex items-center gap-2">
-                                  <img
-                                    v-if="drakeIconSrc(row.key)"
-                                    :src="drakeIconSrc(row.key)"
-                                    :alt="row.label"
-                                    class="h-4 w-4 object-contain"
-                                    loading="lazy"
-                                    decoding="async"
-                                    @error="onDrakeIconError($event, row.key)"
-                                  />
-                                  <span>{{ row.label }}</span>
-                                </div>
-                              </td>
-                              <td class="py-1.5 pr-2 text-center">
-                                {{ teamPercent(row.byWin, overviewTeamsData.matchCount) }}
-                              </td>
-                              <td class="py-1.5 text-center">
-                                {{ teamPercent(row.byLoss, overviewTeamsData.matchCount) }}
-                              </td>
-                            </tr>
-                          </template>
-                          <tr v-if="drakeSoulRows.length === 0">
-                            <td colspan="3" class="py-2 text-center text-text/60">
-                              {{ t('statisticsPage.noData') }}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="text-text/70">{{ t('statisticsPage.overviewNoData') }}</div>
-            </div>
+            <StatisticsOverviewTab />
           </div>
 
           <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
           <div v-show="activeTab === 'runes'" class="space-y-6">
-            <template v-if="overviewDetailPending">
-              <div class="rounded-lg">
-                <div class="py-4 text-text/70">{{ t('statisticsPage.loading') }}</div>
-              </div>
-            </template>
-            <template v-else>
-              <div
-                v-if="overviewDetailError"
-                class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4"
-              >
-                <p class="text-text/90">{{ t('statisticsPage.overviewDetailTimeout') }}</p>
-                <button
-                  type="button"
-                  class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-                  @click="retryOverviewDetail()"
-                >
-                  {{ t('statisticsPage.retry') }}
-                </button>
-              </div>
-              <template v-if="!overviewDetailError">
-                <div
-                  v-if="overviewDetailPending && !overviewDetailData"
-                  class="rounded-lg py-8 text-center text-text/70"
-                >
-                  {{ t('statisticsPage.loading') }}
-                </div>
-                <StatisticsRunesOverviewPanel
-                  v-else-if="overviewDetailData"
-                  :game-version="gameVersion || versionStore.currentVersion || ''"
-                  :data="overviewDetailData"
-                  :baseline="overviewDetailBaselineData"
-                  :baseline-pending="overviewDetailBaselinePending"
-                  :comparison-version="progressionFromVersion"
-                />
-                <div
-                  v-else
-                  class="statistics-overview-surface rounded-lg border border-primary/30 p-6"
-                >
-                  <div class="py-4 text-text/70">
-                    {{ t('statisticsPage.overviewDetailNoData') }}
-                  </div>
-                </div>
-              </template>
-            </template>
+            <StatisticsRunesTab />
           </div>
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
           <div v-show="activeTab === 'trends'" class="space-y-6">
-            <div class="rounded-lg">
-              <h2 class="mb-4 text-xl font-semibold text-text-accent">
-                {{ t('statisticsPage.progressionsTitle') }}
-              </h2>
-              <p class="mb-4 text-text/80">
-                {{
-                  t('statisticsPage.progressionsDescription', {
-                    version: progressionFullData?.oldestVersion ?? '—',
-                  })
-                }}
-              </p>
-              <div v-if="progressionFullPending" class="text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div v-else-if="!progressionFullData?.oldestVersion" class="text-text/70">
-                {{ t('statisticsPage.progressionsNoVersion') }}
-              </div>
-              <div v-else-if="progressionFullData" class="space-y-8">
-                <!-- Progression du winrate -->
-                <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.progressionsWinrateTable') }}
-                  </h3>
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-left text-text/80">
-                          <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
-                          <th class="pb-2 pr-2 text-right">
-                            {{ t('statisticsPage.progressionsWinrateCol') }}
-                          </th>
-                          <th class="pb-2 pl-2 text-right">
-                            {{ t('statisticsPage.progressionsDelta') }}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="row in paginatedProgressionsChampions"
-                          :key="'wr-' + row.championId"
-                          class="border-b border-primary/20"
-                        >
-                          <td class="py-1.5 pr-2">
-                            <NuxtLink
-                              :to="localePath('/statistics/champion/' + row.championId)"
-                              class="flex items-center gap-2 hover:text-accent"
-                            >
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) ?? ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                                width="24"
-                                height="24"
-                              />
-                              <span>{{ championName(row.championId) || row.championId }}</span>
-                            </NuxtLink>
-                          </td>
-                          <td class="py-1.5 text-right">{{ Number(row.wrSince).toFixed(2) }}%</td>
-                          <td
-                            class="py-1.5 pl-2 text-right"
-                            :class="row.deltaWr >= 0 ? 'text-success' : 'text-error'"
-                          >
-                            {{ row.deltaWr >= 0 ? '+' : '' }}{{ row.deltaWr.toFixed(2) }}%
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <!-- Progression de la popularité -->
-                <div class="rounded-lg border border-primary/30 bg-surface/50 p-4">
-                  <h3 class="mb-3 text-lg font-medium text-text">
-                    {{ t('statisticsPage.progressionsPopularityTable') }}
-                  </h3>
-                  <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-left text-text/80">
-                          <th class="pb-2 pr-2">{{ t('statisticsPage.champion') }}</th>
-                          <th class="pb-2 pr-2 text-right">
-                            {{ t('statisticsPage.progressionsPopularity') }}
-                          </th>
-                          <th class="pb-2 pl-2 text-right">
-                            {{ t('statisticsPage.progressionsDelta') }}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="row in paginatedProgressionsByPickrate"
-                          :key="'pick-' + row.championId"
-                          class="border-b border-primary/20"
-                        >
-                          <td class="py-1.5 pr-2">
-                            <NuxtLink
-                              :to="localePath('/statistics/champion/' + row.championId)"
-                              class="flex items-center gap-2 hover:text-accent"
-                            >
-                              <img
-                                v-if="gameVersion && championByKey(row.championId)"
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.championId)!.image.full
-                                  )
-                                "
-                                :alt="championName(row.championId) ?? ''"
-                                class="h-5 w-5 shrink-0 rounded-full object-cover"
-                                width="24"
-                                height="24"
-                              />
-                              <span>{{ championName(row.championId) || row.championId }}</span>
-                            </NuxtLink>
-                          </td>
-                          <td class="py-1.5 text-right">
-                            {{ Number(row.pickrateSince).toFixed(2) }}%
-                          </td>
-                          <td
-                            class="py-1.5 pl-2 text-right"
-                            :class="row.deltaPick >= 0 ? 'text-success' : 'text-error'"
-                          >
-                            {{ row.deltaPick >= 0 ? '+' : '' }}{{ row.deltaPick.toFixed(2) }}%
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                <div
-                  v-if="totalProgressionsCount > 0"
-                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-                >
-                  <span>{{ totalProgressionsCount }} {{ t('statisticsPage.champion') }}</span>
-                  <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5">
-                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="progressionsPageSize"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                      >
-                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                      </select>
-                    </label>
-                    <span class="text-text/70">
-                      {{ (progressionsPage - 1) * progressionsPageSize + 1 }}-{{
-                        Math.min(progressionsPage * progressionsPageSize, totalProgressionsCount)
-                      }}
-                      / {{ totalProgressionsCount }}
-                    </span>
-                    <div class="flex gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="progressionsPage <= 1"
-                        @click="progressionsPage = Math.max(1, progressionsPage - 1)"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="progressionsPage >= totalProgressionsPages"
-                        @click="
-                          progressionsPage = Math.min(totalProgressionsPages, progressionsPage + 1)
-                        "
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <StatisticsTrendsTab />
           </div>
 
-          <!-- Tab: Par côté — fast-stats comme vue d’ensemble -->
+          <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
           <div v-show="activeTab === 'team'" class="space-y-6">
-            <div class="rounded-lg">
-              <div v-if="overviewSidesPending" class="text-text/70">
-                {{ t('statisticsPage.loading') }}
-              </div>
-              <div v-else-if="overviewSidesData" class="space-y-[10px]">
-                <div
-                  class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-[10px]"
-                >
-                  <div
-                    class="fast-stat-card flex w-full max-w-full flex-col items-center rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3
-                      class="fast-stat-title mb-2 flex w-full items-center gap-2 text-sm font-semibold lg:text-left"
-                    >
-                      <button
-                        type="button"
-                        class="shrink-0 text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('team.sideWinrateDonut')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('team.sideWinrateDonut')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'team.sideWinrateDonut',
-                            t('statisticsPage.sidesDonutTitleSoloDuo')
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('team.sideWinrateDonut') ? '★' : '☆' }}
-                      </button>
-                      <span class="inline-flex flex-1 flex-wrap items-center">
-                        {{ t('statisticsPage.sidesDonutTitleSoloDuo') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--start hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.sidesWinrateShareNote') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <div
-                      class="pie-chart-2 relative inline-flex h-[150px] w-[150px] shrink-0 items-center justify-center"
-                    >
-                      <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="48"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="14"
-                          stroke-linecap="butt"
-                          class="text-surface/50 dark:text-surface/40"
-                          :stroke-dasharray="
-                            sidesDonutCircumference + ' ' + sidesDonutCircumference
-                          "
-                          stroke-dashoffset="0"
-                        />
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="48"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="14"
-                          stroke-linecap="butt"
-                          class="text-sky-500 dark:text-sky-400"
-                          :stroke-dasharray="sidesDonutBlueDash + ' ' + sidesDonutCircumference"
-                          stroke-dashoffset="0"
-                        />
-                        <circle
-                          cx="60"
-                          cy="60"
-                          r="48"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="14"
-                          stroke-linecap="butt"
-                          class="text-rose-500 dark:text-rose-400"
-                          :stroke-dasharray="sidesDonutRedDash + ' ' + sidesDonutCircumference"
-                          :stroke-dashoffset="-sidesDonutBlueDash"
-                        />
-                      </svg>
-                      <div class="relative z-10 flex flex-col items-center text-center">
-                        <span class="block text-xl font-bold text-sky-600 dark:text-sky-300">
-                          {{ sidesDonutBluePct }}%
-                        </span>
-                        <span class="block text-lg font-medium text-rose-600 dark:text-rose-300">
-                          {{ sidesDonutRedPct }}%
-                        </span>
-                      </div>
-                    </div>
-                    <div class="mt-2 w-full text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('totalGames')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="shrink-0 text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('team.blueMatchOutcome')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('team.blueMatchOutcome')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'team.blueMatchOutcome',
-                            `${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.overviewMatchOutcomesTitle')}`
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('team.blueMatchOutcome') ? '★' : '☆' }}
-                      </button>
-                      <span class="inline-flex flex-1 flex-wrap items-center">
-                        {{ t('statisticsPage.sidesBlue') }} —
-                        {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipSidesMatchOutcomeCard') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <div
-                      v-if="Number(sidesSurrenderBySide.blue.total) > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        side-accent="blue"
-                        :total="Number(sidesSurrenderBySide.blue.total)"
-                        :early="Number(sidesSurrenderBySide.blue.earlySurrenderCount)"
-                        :surrender-only="sidesBlueSurrenderOnlyCount"
-                        :played="sidesBluePlayedCount"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ Number(sidesSurrenderBySide.blue.total).toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender:
-                          {{
-                            Number(sidesSurrenderBySide.blue.earlySurrenderCount).toLocaleString()
-                          }}
-                          ({{
-                            matchOutcomePct(
-                              Number(sidesSurrenderBySide.blue.earlySurrenderCount),
-                              Number(sidesSurrenderBySide.blue.total)
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender: {{ sidesBlueSurrenderOnlyCount.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              sidesBlueSurrenderOnlyCount,
-                              Number(sidesSurrenderBySide.blue.total)
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-sky-400 dark:bg-sky-500"
-                          />
-                          Jouees: {{ sidesBluePlayedCount.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              sidesBluePlayedCount,
-                              Number(sidesSurrenderBySide.blue.total)
-                            )
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                    <div
-                      v-if="Number(sidesSurrenderBySide.blue.total) > 0"
-                      class="mt-2 text-center"
-                    >
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('blueWinrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-                  <div
-                    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
-                  >
-                    <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
-                      <button
-                        type="button"
-                        class="shrink-0 text-base leading-none transition-colors"
-                        :class="
-                          cardIsFavorite('team.redMatchOutcome')
-                            ? 'text-amber-300 hover:text-amber-200'
-                            : 'text-text/45 grayscale hover:text-text/75'
-                        "
-                        :title="
-                          cardIsFavorite('team.redMatchOutcome')
-                            ? 'Retirer des favoris'
-                            : 'Ajouter aux favoris'
-                        "
-                        @click="
-                          toggleFavoriteCard(
-                            'team.redMatchOutcome',
-                            `${t('statisticsPage.sidesRed')} — ${t('statisticsPage.overviewMatchOutcomesTitle')}`
-                          )
-                        "
-                      >
-                        {{ cardIsFavorite('team.redMatchOutcome') ? '★' : '☆' }}
-                      </button>
-                      <span class="inline-flex flex-1 flex-wrap items-center">
-                        {{ t('statisticsPage.sidesRed') }} —
-                        {{ t('statisticsPage.overviewMatchOutcomesTitle') }}
-                        <span
-                          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
-                          aria-hidden="true"
-                        >
-                          ⓘ
-                          <span
-                            role="tooltip"
-                            class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                          >
-                            {{ t('statisticsPage.tooltipSidesMatchOutcomeCard') }}
-                          </span>
-                        </span>
-                      </span>
-                    </h3>
-                    <div
-                      v-if="Number(sidesSurrenderBySide.red.total) > 0"
-                      class="flex flex-col items-center gap-3 sm:flex-row sm:items-center"
-                    >
-                      <StatisticsMatchOutcomeDonut
-                        side-accent="red"
-                        :total="Number(sidesSurrenderBySide.red.total)"
-                        :early="Number(sidesSurrenderBySide.red.earlySurrenderCount)"
-                        :surrender-only="sidesRedSurrenderOnlyCount"
-                        :played="sidesRedPlayedCount"
-                      />
-                      <div class="min-w-0 space-y-1 text-xs">
-                        <div class="font-medium text-text">
-                          Total: {{ Number(sidesSurrenderBySide.red.total).toLocaleString() }}
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300"
-                          />
-                          Early surrender:
-                          {{
-                            Number(sidesSurrenderBySide.red.earlySurrenderCount).toLocaleString()
-                          }}
-                          ({{
-                            matchOutcomePct(
-                              Number(sidesSurrenderBySide.red.earlySurrenderCount),
-                              Number(sidesSurrenderBySide.red.total)
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-100"
-                          />
-                          Surrender: {{ sidesRedSurrenderOnlyCount.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              sidesRedSurrenderOnlyCount,
-                              Number(sidesSurrenderBySide.red.total)
-                            )
-                          }}%)
-                        </div>
-                        <div class="flex items-center gap-2 text-text/85">
-                          <span
-                            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-rose-400 dark:bg-rose-500"
-                          />
-                          Jouees: {{ sidesRedPlayedCount.toLocaleString() }} ({{
-                            matchOutcomePct(
-                              sidesRedPlayedCount,
-                              Number(sidesSurrenderBySide.red.total)
-                            )
-                          }}%)
-                        </div>
-                      </div>
-                    </div>
-                    <div v-else class="py-3 text-center text-text/60">
-                      {{ t('statisticsPage.overviewNoData') }}
-                    </div>
-                    <div v-if="Number(sidesSurrenderBySide.red.total) > 0" class="mt-2 text-center">
-                      <button
-                        type="button"
-                        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                        @click="goToChampionTableWithSort('redWinrate')"
-                      >
-                        {{ t('statisticsPage.fastStatsSeeMore') }}
-                      </button>
-                    </div>
-                  </div>
-                  <StatisticsTeamSideFastStatTable
-                    side="blue"
-                    favorite-card-id="team.blueMostPicked"
-                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsMostPicked')}`"
-                    :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
-                    variant="pick"
-                    :rows="sidesBlueMostPickedRows"
-                    @see-more="() => goToChampionTableWithSort('bluePickrate')"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    side="red"
-                    favorite-card-id="team.redMostPicked"
-                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsMostPicked')}`"
-                    :tooltip="t('statisticsPage.tooltipFastStatsMostPicked')"
-                    variant="pick"
-                    :rows="sidesRedMostPickedRows"
-                    @see-more="() => goToChampionTableWithSort('redPickrate')"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    side="blue"
-                    favorite-card-id="team.blueBestWinrate"
-                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
-                    :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
-                    variant="wr"
-                    :rows="sidesBlueBestWinrateRows"
-                    @see-more="() => goToChampionTableWithSort('blueWinrate')"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    side="red"
-                    favorite-card-id="team.redBestWinrate"
-                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBestWinrate')}`"
-                    :tooltip="t('statisticsPage.tooltipFastStatsBestWinrate')"
-                    variant="wr"
-                    :rows="sidesRedBestWinrateRows"
-                    @see-more="() => goToChampionTableWithSort('redWinrate')"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    side="blue"
-                    favorite-card-id="team.blueBansBySide"
-                    :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.sidesBansBySide')}`"
-                    :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
-                    variant="ban"
-                    :rows="sidesBlueBanRows"
-                    @see-more="() => goToChampionTableWithSort('blueBanrate')"
-                  />
-                  <StatisticsTeamSideFastStatTable
-                    side="red"
-                    favorite-card-id="team.redBansBySide"
-                    :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.sidesBansBySide')}`"
-                    :tooltip="t('statisticsPage.tooltipSidesBansBySide')"
-                    variant="ban"
-                    :rows="sidesRedBanRows"
-                    @see-more="() => goToChampionTableWithSort('redBanrate')"
-                  />
-                  <template v-if="progressionFromVersion">
-                    <StatisticsTeamSideFastStatTable
-                      side="blue"
-                      favorite-card-id="team.blueWinrateSince"
-                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
-                      variant="dWr"
-                      :rows="sidesBlueTopWinrateSince"
-                      @see-more="() => goToChampionTableWithSort('blueWinrate')"
-                    />
-                    <StatisticsTeamSideFastStatTable
-                      side="red"
-                      favorite-card-id="team.redWinrateSince"
-                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsWinrateSince', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsWinrateSince')"
-                      variant="dWr"
-                      :rows="sidesRedTopWinrateSince"
-                      @see-more="() => goToChampionTableWithSort('redWinrate')"
-                    />
-                    <StatisticsTeamSideFastStatTable
-                      side="blue"
-                      favorite-card-id="team.bluePickrateSince"
-                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
-                      variant="dPick"
-                      :rows="sidesBlueTopPickrateSince"
-                      @see-more="() => goToChampionTableWithSort('bluePickrate')"
-                    />
-                    <StatisticsTeamSideFastStatTable
-                      side="red"
-                      favorite-card-id="team.redPickrateSince"
-                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsPickrateSinceTitle', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsPickrateSince')"
-                      variant="dPick"
-                      :rows="sidesRedTopPickrateSince"
-                      @see-more="() => goToChampionTableWithSort('redPickrate')"
-                    />
-                    <StatisticsTeamSideFastStatTable
-                      side="blue"
-                      favorite-card-id="team.blueBanrateSince"
-                      :title="`${t('statisticsPage.sidesBlue')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
-                      variant="dBan"
-                      :rows="sidesBlueTopBanrateSince"
-                      @see-more="() => goToChampionTableWithSort('blueBanrate')"
-                    />
-                    <StatisticsTeamSideFastStatTable
-                      side="red"
-                      favorite-card-id="team.redBanrateSince"
-                      :title="`${t('statisticsPage.sidesRed')} — ${t('statisticsPage.fastStatsBanrateSinceTitle', { version: progressionFromVersion })}`"
-                      :tooltip="t('statisticsPage.tooltipFastStatsBanrateSince')"
-                      variant="dBan"
-                      :rows="sidesRedTopBanrateSince"
-                      @see-more="() => goToChampionTableWithSort('redBanrate')"
-                    />
-                  </template>
-                </div>
-
-                <div
-                  v-if="overviewSidesData && overviewSidesData.matchCount > 0"
-                  class="fast-stat-card fast-stat-card-objectives w-full rounded-lg border border-primary/30 bg-surface/30 p-3"
-                >
-                  <div class="mb-3 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="shrink-0 text-base leading-none transition-colors"
-                      :class="
-                        cardIsFavorite('team.objectives')
-                          ? 'text-amber-300 hover:text-amber-200'
-                          : 'text-text/45 grayscale hover:text-text/75'
-                      "
-                      :title="
-                        cardIsFavorite('team.objectives')
-                          ? 'Retirer des favoris'
-                          : 'Ajouter aux favoris'
-                      "
-                      @click="
-                        toggleFavoriteCard(
-                          'team.objectives',
-                          `${t('statisticsPage.tabTeam')} — ${t('statisticsPage.sidesObjectivesBySide')}`
-                        )
-                      "
-                    >
-                      {{ cardIsFavorite('team.objectives') ? '★' : '☆' }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                      :class="
-                        objectivesSidesPanelTab === 'objectives'
-                          ? 'bg-accent text-background'
-                          : 'bg-black/20 text-text/80 hover:bg-white/10'
-                      "
-                      @click="objectivesSidesPanelTab = 'objectives'"
-                    >
-                      {{ t('statisticsPage.objectivesTabMain') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                      :class="
-                        objectivesSidesPanelTab === 'drakeTypes'
-                          ? 'bg-accent text-background'
-                          : 'bg-black/20 text-text/80 hover:bg-white/10'
-                      "
-                      @click="objectivesSidesPanelTab = 'drakeTypes'"
-                    >
-                      {{ t('statisticsPage.objectivesTabDrakeTypes') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
-                      :class="
-                        objectivesSidesPanelTab === 'drakeSouls'
-                          ? 'bg-accent text-background'
-                          : 'bg-black/20 text-text/80 hover:bg-white/10'
-                      "
-                      @click="objectivesSidesPanelTab = 'drakeSouls'"
-                    >
-                      {{ t('statisticsPage.objectivesTabSouls') }}
-                    </button>
-                    <span
-                      class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
-                      :aria-label="t('statisticsPage.tooltipSidesObjectives')"
-                    >
-                      ⓘ
-                      <span
-                        role="tooltip"
-                        class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block"
-                      >
-                        {{ t('statisticsPage.tooltipSidesObjectives') }}
-                      </span>
-                    </span>
-                  </div>
-                  <div
-                    v-if="objectivesSidesPanelTab === 'objectives'"
-                    class="w-full min-w-0 overflow-x-auto"
-                  >
-                    <table class="w-full min-w-[280px] text-left text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-text/70">
-                          <th class="py-1.5 pr-2 font-medium">
-                            {{ t('statisticsPage.overviewTeamsObjective') }}
-                          </th>
-                          <th
-                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
-                          >
-                            {{ t('statisticsPage.sidesBlue') }}
-                          </th>
-                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
-                            {{ t('statisticsPage.sidesRed') }}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-primary/20 text-text/80">
-                        <tr>
-                          <td class="py-1.5 pr-2">
-                            {{ t('statisticsPage.overviewTeamsFirstBlood') }}
-                          </td>
-                          <td class="py-1.5 pr-2 text-center">
-                            {{
-                              firstPercentBySide(
-                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ??
-                                  0,
-                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ??
-                                  0,
-                                overviewSidesData.matchCount
-                              ).blue
-                            }}
-                          </td>
-                          <td class="py-1.5 text-center">
-                            {{
-                              firstPercentBySide(
-                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ??
-                                  0,
-                                overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ??
-                                  0,
-                                overviewSidesData.matchCount
-                              ).red
-                            }}
-                          </td>
-                        </tr>
-                        <template v-for="key in sidesObjectiveKeysWithKills" :key="key">
-                          <tr>
-                            <td class="py-1.5 pr-2">
-                              <button
-                                type="button"
-                                class="flex items-center gap-1 font-medium text-text/90 hover:text-text"
-                                @click="toggleSidesObjective(key)"
-                              >
-                                <span
-                                  class="inline-block transition-transform duration-200"
-                                  :class="openSidesObjectiveKeys.has(key) ? 'rotate-180' : ''"
-                                  aria-hidden
-                                  >▼</span
-                                >
-                                <img
-                                  v-if="objectiveIconSrc(key)"
-                                  :src="objectiveIconSrc(key)"
-                                  :alt="t('statisticsPage.overviewTeamsObjective_' + key)"
-                                  class="h-4 w-4 object-contain"
-                                  loading="lazy"
-                                  decoding="async"
-                                  @error="onObjectiveIconError($event, key)"
-                                />
-                                {{ t('statisticsPage.overviewTeamsObjective_' + key) }}
-                              </button>
-                            </td>
-                            <td class="py-1.5 pr-2 text-center">
-                              {{
-                                firstPercentBySide(
-                                  objectiveRowSides(key).firstByBlue,
-                                  objectiveRowSides(key).firstByRed,
-                                  overviewSidesData.matchCount
-                                ).blue
-                              }}
-                            </td>
-                            <td class="py-1.5 text-center">
-                              {{
-                                firstPercentBySide(
-                                  objectiveRowSides(key).firstByBlue,
-                                  objectiveRowSides(key).firstByRed,
-                                  overviewSidesData.matchCount
-                                ).red
-                              }}
-                            </td>
-                          </tr>
-                          <template v-if="openSidesObjectiveKeys.has(key)">
-                            <tr
-                              v-for="count in sidesObjectiveCounts(key)"
-                              :key="key + '-' + count"
-                              class="bg-surface/30"
-                            >
-                              <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
-                              <td class="py-1 pr-2 text-center text-text/80">
-                                {{ percentForCountSides(key, count, true) }}
-                              </td>
-                              <td class="py-1 text-center text-text/80">
-                                {{ percentForCountSides(key, count, false) }}
-                              </td>
-                            </tr>
-                          </template>
-                        </template>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div
-                    v-else-if="objectivesSidesPanelTab === 'drakeTypes'"
-                    class="w-full min-w-0 overflow-x-auto"
-                  >
-                    <table class="w-full min-w-[280px] text-left text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-text/70">
-                          <th class="py-1.5 pr-2 font-medium">
-                            {{ t('statisticsPage.overviewTeamsObjective') }}
-                          </th>
-                          <th
-                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
-                          >
-                            {{ t('statisticsPage.sidesBlue') }}
-                          </th>
-                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
-                            {{ t('statisticsPage.sidesRed') }}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-primary/20 text-text/80">
-                        <tr v-for="row in sidesDrakeTypeRows" :key="'sdt-' + row.key">
-                          <td class="py-1.5 pr-2 font-medium text-text/90">
-                            <div class="flex items-center gap-2">
-                              <img
-                                v-if="drakeIconSrc(row.key)"
-                                :src="drakeIconSrc(row.key)"
-                                :alt="row.label"
-                                class="h-4 w-4 object-contain"
-                                loading="lazy"
-                                decoding="async"
-                                @error="onDrakeIconError($event, row.key)"
-                              />
-                              <span>{{ row.label }}</span>
-                            </div>
-                          </td>
-                          <td class="py-1.5 pr-2 text-center">
-                            {{ teamPercent(row.byBlue, overviewSidesData.matchCount) }}
-                          </td>
-                          <td class="py-1.5 text-center">
-                            {{ teamPercent(row.byRed, overviewSidesData.matchCount) }}
-                          </td>
-                        </tr>
-                        <tr v-if="sidesDrakeTypeRows.length === 0">
-                          <td colspan="3" class="py-2 text-center text-text/60">
-                            {{ t('statisticsPage.noData') }}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div v-else class="w-full min-w-0 overflow-x-auto">
-                    <table class="w-full min-w-[280px] text-left text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-text/70">
-                          <th class="py-1.5 pr-2 font-medium">
-                            {{ t('statisticsPage.overviewTeamsObjective') }}
-                          </th>
-                          <th
-                            class="py-1.5 pr-2 text-center font-medium text-blue-600 dark:text-blue-400"
-                          >
-                            {{ t('statisticsPage.sidesBlue') }}
-                          </th>
-                          <th class="py-1.5 text-center font-medium text-red-600 dark:text-red-400">
-                            {{ t('statisticsPage.sidesRed') }}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-primary/20 text-text/80">
-                        <tr>
-                          <td class="py-1.5 pr-2 font-medium text-text/90">
-                            {{ t('statisticsPage.objectivesSoulGlobal') }}
-                          </td>
-                          <td class="py-1.5 pr-2 text-center">
-                            {{
-                              teamPercent(sidesDrakeSoulGlobal.byBlue, overviewSidesData.matchCount)
-                            }}
-                          </td>
-                          <td class="py-1.5 text-center">
-                            {{
-                              teamPercent(sidesDrakeSoulGlobal.byRed, overviewSidesData.matchCount)
-                            }}
-                          </td>
-                        </tr>
-                        <template v-for="row in sidesDrakeSoulRows" :key="'sds-' + row.key">
-                          <tr>
-                            <td class="py-1.5 pr-2 font-medium text-text/90">
-                              <div class="flex items-center gap-2">
-                                <img
-                                  v-if="drakeIconSrc(row.key)"
-                                  :src="drakeIconSrc(row.key)"
-                                  :alt="row.label"
-                                  class="h-4 w-4 object-contain"
-                                  loading="lazy"
-                                  decoding="async"
-                                  @error="onDrakeIconError($event, row.key)"
-                                />
-                                <span>{{ row.label }}</span>
-                              </div>
-                            </td>
-                            <td class="py-1.5 pr-2 text-center">
-                              {{ teamPercent(row.byBlue, overviewSidesData.matchCount) }}
-                            </td>
-                            <td class="py-1.5 text-center">
-                              {{ teamPercent(row.byRed, overviewSidesData.matchCount) }}
-                            </td>
-                          </tr>
-                        </template>
-                        <tr v-if="sidesDrakeSoulRows.length === 0">
-                          <td colspan="3" class="py-2 text-center text-text/60">
-                            {{ t('statisticsPage.noData') }}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="rounded border border-primary/30 bg-surface/50 p-4 text-text/70">
-                {{ t('statisticsPage.overviewNoData') }}
-              </div>
-            </div>
+            <StatisticsTeamTab />
           </div>
-          <!-- Tab: Champions -->
-          <div v-show="activeTab === 'infos'" class="space-y-2">
-            <div v-if="championsPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="championsError"
-              class="rounded border border-error bg-surface p-3 text-error"
-            >
-              {{ championsError }}
-            </div>
-            <div
-              v-else-if="championsData?.message && !championsData?.champions?.length"
-              class="text-text/70"
-            >
-              {{ championsData.message }}
-            </div>
-            <div v-else class="space-y-3">
-              <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
-                  <div class="text-xs text-text/70">
-                    {{ t('statisticsPage.overviewTotalMatches') }}
-                  </div>
-                  <div class="text-lg font-semibold text-text">
-                    {{ overviewData?.totalMatches?.toLocaleString() ?? '—' }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
-                  <div class="text-xs text-text/70">
-                    {{ t('statisticsPage.overviewPlayerCountDistinct') }}
-                  </div>
-                  <div class="text-lg font-semibold text-text">
-                    {{ overviewData?.playerCount?.toLocaleString() ?? '—' }}
-                  </div>
-                </div>
-              </div>
 
-              <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
-                  <div class="mb-2 text-sm font-semibold text-text">
-                    {{ t('statisticsPage.overviewFilterByVersion') }}
-                  </div>
-                  <div class="mb-2 text-xs text-text/70">
-                    {{
-                      statsVersionFilter
-                        ? `${statsVersionFilter} (${versionMatchCount(statsVersionFilter).toLocaleString()} ${t('statisticsPage.games')})`
-                        : t('statisticsPage.overviewVersionAll')
-                    }}
-                  </div>
-                  <div class="max-h-40 overflow-y-auto text-xs text-text/85">
-                    <div
-                      v-for="v in statsVersionOptions"
-                      :key="'infos-version-' + v.version"
-                      class="flex items-center justify-between border-b border-primary/10 py-1 last:border-b-0"
-                    >
-                      <span>{{ v.version }}</span>
-                      <span>{{ Number(v.matchCount || 0).toLocaleString() }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
-                  <div class="mb-2 text-sm font-semibold text-text">
-                    {{ t('statisticsPage.progressionsReferenceVersion') }}
-                  </div>
-                  <div class="mb-2 text-xs text-text/70">
-                    {{
-                      progressionFromVersion
-                        ? `${progressionFromVersion} (${versionMatchCount(progressionFromVersion).toLocaleString()} ${t('statisticsPage.games')})`
-                        : '—'
-                    }}
-                  </div>
-                  <div class="max-h-40 overflow-y-auto text-xs text-text/85">
-                    <div
-                      v-for="v in progressionSelectableVersions"
-                      :key="'infos-delta-version-' + v.version"
-                      class="flex items-center justify-between border-b border-primary/10 py-1 last:border-b-0"
-                    >
-                      <span>{{ v.version }}</span>
-                      <span>{{ Number(v.matchCount || 0).toLocaleString() }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
-                <div class="mb-2 text-sm font-semibold text-text">
-                  {{ t('statisticsPage.overviewNumberByDivision') }}
-                </div>
-                <div class="mb-2 text-xs text-text/70">
-                  {{ t('statisticsPage.overviewFilterByVersion') }}:
-                  {{ statsVersionFilter || t('statisticsPage.overviewVersionAll') }}
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-xs md:grid-cols-3 lg:grid-cols-5">
-                  <div
-                    v-for="d in infosMatchesByDivision"
-                    :key="'infos-division-' + d.rankTier"
-                    class="rounded border border-primary/20 bg-background/30 px-2 py-1"
-                  >
-                    <div class="font-medium text-text">{{ formatDivisionLabel(d.rankTier) }}</div>
-                    <div class="text-text/80">{{ Number(d.matchCount || 0).toLocaleString() }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
-                <table class="w-full min-w-[400px] text-left text-sm">
-                  <thead class="border-b border-primary/30 bg-surface/50">
-                    <tr>
-                      <th class="px-4 py-1.5 font-semibold text-text">
-                        {{ t('statisticsPage.champion') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                        :class="
-                          championsSortOrder === 'games'
-                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                            : 'hover:bg-surface/50'
-                        "
-                        @click="setChampionsSort('games')"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          {{ t('statisticsPage.games') }}
-                          <template v-if="championsSortOrder === 'games'">
-                            <span class="text-amber-500" aria-hidden="true">{{
-                              championsSortDir === 'desc' ? '↓' : '↑'
-                            }}</span>
-                          </template>
-                        </span>
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                        :class="
-                          championsSortOrder === 'wins'
-                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                            : 'hover:bg-surface/50'
-                        "
-                        @click="setChampionsSort('wins')"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          {{ t('statisticsPage.wins') }}
-                          <template v-if="championsSortOrder === 'wins'">
-                            <span class="text-amber-500" aria-hidden="true">{{
-                              championsSortDir === 'desc' ? '↓' : '↑'
-                            }}</span>
-                          </template>
-                        </span>
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                        :class="
-                          championsSortOrder === 'winrate'
-                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                            : 'hover:bg-surface/50'
-                        "
-                        @click="setChampionsSort('winrate')"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          {{ t('statisticsPage.winrate') }}
-                          <template v-if="championsSortOrder === 'winrate'">
-                            <span class="text-amber-500" aria-hidden="true">{{
-                              championsSortDir === 'desc' ? '↓' : '↑'
-                            }}</span>
-                          </template>
-                        </span>
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                        :class="
-                          championsSortOrder === 'pickrate'
-                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                            : 'hover:bg-surface/50'
-                        "
-                        @click="setChampionsSort('pickrate')"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          {{ t('statisticsPage.pickrate') }}
-                          <template v-if="championsSortOrder === 'pickrate'">
-                            <span class="text-amber-500" aria-hidden="true">{{
-                              championsSortDir === 'desc' ? '↓' : '↑'
-                            }}</span>
-                          </template>
-                        </span>
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-4 py-1.5 font-semibold text-text transition-[box-shadow]"
-                        :class="
-                          championsSortOrder === 'banrate'
-                            ? 'rounded ring-2 ring-amber-400/90 ring-offset-2 ring-offset-surface/50'
-                            : 'hover:bg-surface/50'
-                        "
-                        @click="setChampionsSort('banrate')"
-                      >
-                        <span class="inline-flex items-center gap-1">
-                          {{ t('statisticsPage.banrate') }}
-                          <template v-if="championsSortOrder === 'banrate'">
-                            <span class="text-amber-500" aria-hidden="true">{{
-                              championsSortDir === 'desc' ? '↓' : '↑'
-                            }}</span>
-                          </template>
-                        </span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-primary/20">
-                    <tr
-                      v-for="row in paginatedChampions"
-                      :key="row.championId"
-                      class="cursor-pointer hover:bg-surface/50"
-                      @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
-                    >
-                      <td class="px-4 py-1 font-medium text-text">
-                        <div class="flex items-center gap-2">
-                          <img
-                            v-if="gameVersion && championByKey(row.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(row.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(row.championId) || ''"
-                            class="h-5 w-5 rounded-full object-cover"
-                          />
-                          <span class="text-accent underline-offset-2 hover:underline">{{
-                            championName(row.championId) || row.championId
-                          }}</span>
-                        </div>
-                      </td>
-                      <td class="px-4 py-1 text-text/90">{{ row.games }}</td>
-                      <td class="px-4 py-1 text-text/90">{{ row.wins }}</td>
-                      <td class="px-4 py-1 text-text/90">{{ Number(row.winrate).toFixed(2) }}%</td>
-                      <td class="px-4 py-1 text-text/90">{{ Number(row.pickrate).toFixed(2) }}%</td>
-                      <td class="px-4 py-1 text-text/90">
-                        {{ row.banrate != null ? Number(row.banrate).toFixed(2) + '%' : '—' }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div
-                  v-if="totalChampionsCount > 0"
-                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-1 text-sm text-text/80"
-                >
-                  <span>
-                    {{ t('statisticsPage.totalGames') }}:
-                    {{ championsData?.totalMatches ?? championsData?.totalGames ?? 0 }}
-                    <span v-if="championSearchQuery">
-                      ({{ t('statisticsPage.showing') }} {{ totalChampionsCount }})</span
-                    >
-                  </span>
-                  <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5">
-                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="championsPageSize"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                      >
-                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                      </select>
-                    </label>
-                    <span class="text-text/70">
-                      {{ (championsPage - 1) * championsPageSize + 1 }}-{{
-                        Math.min(championsPage * championsPageSize, totalChampionsCount)
-                      }}
-                      / {{ totalChampionsCount }}
-                    </span>
-                    <div class="flex gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="championsPage <= 1"
-                        @click="championsPage = Math.max(1, championsPage - 1)"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="championsPage >= totalChampionsPages"
-                        @click="championsPage = Math.min(totalChampionsPages, championsPage + 1)"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <!-- Tab: Infos -->
+          <div v-show="activeTab === 'infos'">
+            <StatisticsInfosTab />
           </div>
 
           <!-- Tab: Bans -->
-          <div v-show="activeTab === 'bans'" class="space-y-2">
-            <p class="text-sm text-text/75">
-              {{ t('statisticsPage.bansTableIntro') }}
-            </p>
-            <div v-if="bansPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="bansError"
-              class="rounded border border-error bg-surface p-3 text-error"
-            >
-              {{ bansError }}
-            </div>
-            <div
-              v-else-if="bansTableData?.message && !bansTableData?.rows?.length"
-              class="text-text/70"
-            >
-              {{ bansTableData.message }}
-            </div>
-            <div v-else class="space-y-3">
-              <div
-                class="rounded-lg border border-primary/30 bg-surface/30 p-3 text-sm text-text/85"
-              >
-                {{
-                  t('statisticsPage.bansMatchCount', {
-                    count: (bansTableData?.matchCount ?? 0).toLocaleString(),
-                  })
-                }}
-                <span v-if="statsVersionFilter" class="ml-2 text-text/70">
-                  · {{ statsVersionFilter }}
-                </span>
-              </div>
-              <div class="overflow-x-auto rounded-lg border border-primary/30 bg-surface/30">
-                <table class="w-full min-w-[520px] text-left text-sm">
-                  <thead class="border-b border-primary/30 bg-surface/50">
-                    <tr>
-                      <th class="px-3 py-1.5 font-semibold text-text">
-                        {{ t('statisticsPage.champion') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('total')"
-                      >
-                        {{ t('statisticsPage.bansColTotal') }}{{ bansSortHint('total') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('rate')"
-                      >
-                        {{ t('statisticsPage.bansColRate') }}{{ bansSortHint('rate') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('blue')"
-                      >
-                        {{ t('statisticsPage.bansColBlue') }}{{ bansSortHint('blue') }}
-                      </th>
-                      <th
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('red')"
-                      >
-                        {{ t('statisticsPage.bansColRed') }}{{ bansSortHint('red') }}
-                      </th>
-                      <th
-                        v-if="showBansRoleColumns"
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('top')"
-                      >
-                        {{ t('statisticsPage.bansColTop') }}{{ bansSortHint('top') }}
-                      </th>
-                      <th
-                        v-if="showBansRoleColumns"
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('jungle')"
-                      >
-                        {{ t('statisticsPage.bansColJungle') }}{{ bansSortHint('jungle') }}
-                      </th>
-                      <th
-                        v-if="showBansRoleColumns"
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('middle')"
-                      >
-                        {{ t('statisticsPage.bansColMiddle') }}{{ bansSortHint('middle') }}
-                      </th>
-                      <th
-                        v-if="showBansRoleColumns"
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('bottom')"
-                      >
-                        {{ t('statisticsPage.bansColBottom') }}{{ bansSortHint('bottom') }}
-                      </th>
-                      <th
-                        v-if="showBansRoleColumns"
-                        class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                        @click="setBansSort('support')"
-                      >
-                        {{ t('statisticsPage.bansColSupport') }}{{ bansSortHint('support') }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-primary/20">
-                    <tr
-                      v-for="row in paginatedBans"
-                      :key="'ban-' + row.championId"
-                      class="cursor-pointer hover:bg-surface/50"
-                      @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
-                    >
-                      <td class="px-3 py-1 font-medium text-text">
-                        <div class="flex items-center gap-2">
-                          <img
-                            v-if="gameVersion && championByKey(row.championId)"
-                            :src="
-                              getChampionImageUrl(
-                                gameVersion,
-                                championByKey(row.championId)!.image.full
-                              )
-                            "
-                            :alt="championName(row.championId) || ''"
-                            class="h-5 w-5 rounded-full object-cover"
-                          />
-                          <span class="text-accent underline-offset-2 hover:underline">{{
-                            championName(row.championId) || row.championId
-                          }}</span>
-                        </div>
-                      </td>
-                      <td class="px-3 py-1 tabular-nums text-text/90">{{ row.bansTotal }}</td>
-                      <td class="px-3 py-1 tabular-nums text-text/90">
-                        {{ banRateForBansRow(row, bansTableData?.matchCount ?? 0).toFixed(2) }}%
-                      </td>
-                      <td class="px-3 py-1 tabular-nums text-text/90">{{ row.bansBlue }}</td>
-                      <td class="px-3 py-1 tabular-nums text-text/90">{{ row.bansRed }}</td>
-                      <td v-if="showBansRoleColumns" class="px-3 py-1 tabular-nums text-text/90">
-                        {{ row.bansTop }}
-                      </td>
-                      <td v-if="showBansRoleColumns" class="px-3 py-1 tabular-nums text-text/90">
-                        {{ row.bansJungle }}
-                      </td>
-                      <td v-if="showBansRoleColumns" class="px-3 py-1 tabular-nums text-text/90">
-                        {{ row.bansMiddle }}
-                      </td>
-                      <td v-if="showBansRoleColumns" class="px-3 py-1 tabular-nums text-text/90">
-                        {{ row.bansBottom }}
-                      </td>
-                      <td v-if="showBansRoleColumns" class="px-3 py-1 tabular-nums text-text/90">
-                        {{ row.bansSupport }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div
-                  v-if="totalBansCount > 0"
-                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-3 py-1 text-sm text-text/80"
-                >
-                  <span v-if="championSearchQuery">
-                    {{ t('statisticsPage.showing') }} {{ totalBansCount }}
-                  </span>
-                  <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5">
-                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="championsPageSize"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                      >
-                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="'bans-ps-' + n" :value="n">
-                          {{ n }}
-                        </option>
-                      </select>
-                    </label>
-                    <span class="text-text/70">
-                      {{ (bansPage - 1) * championsPageSize + 1 }}-{{
-                        Math.min(bansPage * championsPageSize, totalBansCount)
-                      }}
-                      / {{ totalBansCount }}
-                    </span>
-                    <div class="flex gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="bansPage <= 1"
-                        @click="bansPage = Math.max(1, bansPage - 1)"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="bansPage >= totalBansPages"
-                        @click="bansPage = Math.min(totalBansPages, bansPage + 1)"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div v-show="activeTab === 'bans'">
+            <StatisticsBansTab />
           </div>
 
           <!-- Tab: Tier list -->
           <div v-show="activeTab === 'tierlist'" class="space-y-4">
-            <div class="flex flex-wrap items-center gap-4">
-              <h2 class="text-xl font-semibold text-text-accent">
-                {{ t('statisticsPage.tierListTitle') }}
-              </h2>
-              <div class="flex gap-2">
-                <button
-                  type="button"
-                  :class="[
-                    'rounded px-3 py-1.5 text-sm font-medium',
-                    tierListViewModel === 'table'
-                      ? 'bg-accent text-background'
-                      : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-                  ]"
-                  @click="tierListViewModel = 'table'"
-                >
-                  {{ t('statisticsPage.tierListViewTable') }}
-                </button>
-                <button
-                  type="button"
-                  :class="[
-                    'rounded px-3 py-1.5 text-sm font-medium',
-                    tierListViewModel === 'chart'
-                      ? 'bg-accent text-background'
-                      : 'bg-surface/50 text-text/80 hover:bg-primary/20',
-                  ]"
-                  @click="tierListViewModel = 'chart'"
-                >
-                  {{ t('statisticsPage.tierListViewChart') }}
-                </button>
-              </div>
-            </div>
-            <div v-if="tierListPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="tierListError"
-              class="rounded border border-error bg-surface p-3 text-error"
-            >
-              {{ tierListError }}
-            </div>
-            <template v-else>
-              <div
-                v-if="totalTierListCount === 0"
-                class="statistics-overview-surface rounded-lg border border-primary/30 p-4 text-text/70"
-              >
-                {{ t('statisticsPage.tierListNoData') }}
-              </div>
-              <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
-              <div
-                v-show="tierListViewModel === 'table' && totalTierListCount > 0"
-                class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-              >
-                <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
-                  <div
-                    class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-                  >
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-10 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap border-b border-t border-black text-center hover:bg-primary/25 md:flex"
-                      :class="
-                        tierListSortColumn === 'rank'
-                          ? 'border-t-accent'
-                          : 'border-t-[var(--color-grey-300)]'
-                      "
-                      @click="cycleTierListSort('rank')"
-                    >
-                      {{ t('statisticsPage.tierListRank') }}{{ tierListSortIcon('rank') }}
-                    </button>
-                    <div
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[220px] shrink-0 items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2"
-                    >
-                      {{ t('statisticsPage.tierListColChampion') }}
-                    </div>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25"
-                      :title="t('statisticsPage.tierListTierTooltip')"
-                      @click="cycleTierListSort('tier')"
-                    >
-                      {{ t('statisticsPage.tierListTier') }}{{ tierListSortIcon('tier') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-10 shrink-0 cursor-pointer flex-col items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[11px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.tierListMainRoleTooltip')"
-                      @click="cycleTierListSort('mainRolePct')"
-                    >
-                      {{ t('statisticsPage.tierListColLane') }}{{ tierListSortIcon('mainRolePct') }}
-                    </button>
-                    <div
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
-                        :title="t('statisticsPage.tierListWinrateTooltip')"
-                        @click="cycleTierListSort('winrate')"
-                      >
-                        {{ t('statisticsPage.winrate') }}{{ tierListSortIcon('winrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="cycleTierListSort('patchWinratePp')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ tierListSortIcon('patchWinratePp') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
-                        :title="t('statisticsPage.tierListPickrateTooltip')"
-                        @click="cycleTierListSort('pickrate')"
-                      >
-                        {{ t('statisticsPage.pickrate') }}{{ tierListSortIcon('pickrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="cycleTierListSort('patchPickratePp')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ tierListSortIcon('patchPickratePp') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
-                        :title="t('statisticsPage.tierListBanrateTooltip')"
-                        @click="cycleTierListSort('banrate')"
-                      >
-                        {{ t('statisticsPage.banrate') }}{{ tierListSortIcon('banrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="cycleTierListSort('patchBanratePp')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ tierListSortIcon('patchBanratePp') }}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 md:flex"
-                      :title="t('statisticsPage.tierListPbiTooltip')"
-                      @click="cycleTierListSort('pbi')"
-                    >
-                      {{ t('statisticsPage.tierListPbi') }}{{ tierListSortIcon('pbi') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-[72px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 sm:flex"
-                      @click="cycleTierListSort('games')"
-                    >
-                      {{ t('statisticsPage.tierListGames') }}{{ tierListSortIcon('games') }}
-                    </button>
-                    <template v-if="hasTierListHighElo">
-                      <button
-                        type="button"
-                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-10 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                        :title="t('statisticsPage.tierListApexRankTooltip')"
-                        @click="cycleTierListSort('highEloRank')"
-                      >
-                        {{ t('statisticsPage.tierListApexRank')
-                        }}{{ tierListSortIcon('highEloRank') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                        :title="t('statisticsPage.tierListHighEloWinTooltip')"
-                        @click="cycleTierListSort('highEloWinrate')"
-                      >
-                        {{ t('statisticsPage.winrate') }}{{ tierListSortIcon('highEloWinrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                        @click="cycleTierListSort('highEloGames')"
-                      >
-                        {{ t('statisticsPage.tierListGames')
-                        }}{{ tierListSortIcon('highEloGames') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="tier-list-lolalytics-th tier-list-lolalytics-th-apex hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                        :title="t('statisticsPage.tierListDeltaTooltip')"
-                        @click="cycleTierListSort('delta')"
-                      >
-                        {{ t('statisticsPage.tierListDelta') }}{{ tierListSortIcon('delta') }}
-                      </button>
-                    </template>
-                  </div>
-
-                  <div
-                    v-for="row in paginatedTierList"
-                    :key="row.championId"
-                    class="tier-list-lolalytics-row flex min-h-[60px] w-full cursor-pointer items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
-                    role="button"
-                    tabindex="0"
-                    @click="navigateTo(localePath('/statistics/champion/' + row.championId))"
-                    @keydown.enter="
-                      navigateTo(localePath('/statistics/champion/' + row.championId))
-                    "
-                  >
-                    <div
-                      class="tier-list-lolalytics-td hidden w-10 shrink-0 flex-col items-center justify-center gap-0 leading-tight md:flex"
-                    >
-                      <span>{{ tierListDisplayRankByChampionId.get(row.championId) ?? '—' }}</span>
-                      <span
-                        v-if="
-                          tierListPatchDeltaRefLabel &&
-                          tierListPatchRankDelta(row.championId) != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaRankClass(tierListPatchRankDelta(row.championId) || 0)
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaRankTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaRank(tierListPatchRankDelta(row.championId) || 0)
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2"
-                    >
-                      <img
-                        v-if="gameVersion && championByKey(row.championId)"
-                        :src="
-                          getChampionImageUrl(
-                            gameVersion,
-                            championByKey(row.championId)!.image.full
-                          )
-                        "
-                        :alt="championName(row.championId) || ''"
-                        class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                        width="50"
-                        height="50"
-                      />
-                      <span class="min-w-0 truncate text-left font-medium text-accent">{{
-                        championName(row.championId) || row.championId
-                      }}</span>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center"
-                    >
-                      <span
-                        :class="[
-                          'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
-                          row.tier === 'S+' && 'bg-[#f5c542]',
-                          row.tier === 'S' && 'bg-[#22c55e]',
-                          row.tier === 'A' && 'bg-[#2563eb]',
-                          row.tier === 'B' && 'bg-[#60a5fa]',
-                          row.tier === 'C' && 'bg-[#a855f7]',
-                          (row.tier === 'D' || row.tier === 'F') && 'bg-[#dc2626]',
-                        ]"
-                      >
-                        {{
-                          row.tier === 'D'
-                            ? t('statisticsPage.tierF')
-                            : t('statisticsPage.tier' + row.tier)
-                        }}
-                      </span>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 text-center text-[11px] leading-tight"
-                    >
-                      <img
-                        v-if="mainRoleIconSrc(row.mainRole)"
-                        :src="mainRoleIconSrc(row.mainRole)!"
-                        :alt="mainRoleLabel(row.mainRole)"
-                        :title="mainRoleLabel(row.mainRole)"
-                        class="mb-0.5 h-[27px] w-[27px] object-contain"
-                        width="27"
-                        height="27"
-                      />
-                      <span v-else class="max-w-[2.5rem] truncate text-[10px]">{{
-                        row.mainRole
-                      }}</span>
-                      <span>{{ Number(row.mainRolePct).toFixed(0) }}%</span>
-                      <span
-                        v-if="tierListPatchDeltaRefLabel && row.patchRefMainRolePctPp != null"
-                        class="text-[10px] leading-none"
-                        :class="tierListPatchDeltaClass(row.patchRefMainRolePctPp)"
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{ formatTierListPatchDeltaPp(row.patchRefMainRolePctPp) }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span :class="tierListWinrateClass(row.winrate * 100)">{{
-                        (row.winrate * 100).toFixed(2)
-                      }}</span>
-                      <span
-                        v-if="tierListPatchDeltaRefLabel && row.patchRefWinratePp != null"
-                        class="text-[10px] leading-none"
-                        :class="tierListPatchDeltaClass(row.patchRefWinratePp)"
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{ formatTierListPatchDeltaPp(row.patchRefWinratePp) }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span>{{ (row.pickrate * 100).toFixed(2) }}</span>
-                      <span
-                        v-if="tierListPatchDeltaRefLabel && row.patchRefPickratePp != null"
-                        class="text-[10px] leading-none"
-                        :class="tierListPatchDeltaClass(row.patchRefPickratePp)"
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{ formatTierListPatchDeltaPp(row.patchRefPickratePp) }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span>{{ (row.banrate * 100).toFixed(2) }}</span>
-                      <span
-                        v-if="tierListPatchDeltaRefLabel && row.patchRefBanratePp != null"
-                        class="text-[10px] leading-none"
-                        :class="tierListPatchDeltaClass(row.patchRefBanratePp)"
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{ formatTierListPatchDeltaPp(row.patchRefBanratePp) }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
-                    >
-                      {{ formatMatchupScore(row.pbi, 2) }}
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td hidden w-[72px] shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
-                    >
-                      <span>{{ row.games.toLocaleString() }}</span>
-                      <span
-                        v-if="tierListPatchDeltaRefLabel && row.patchRefGamesDelta != null"
-                        class="text-[10px] leading-none"
-                        :class="tierListPatchDeltaGamesClass(row.patchRefGamesDelta)"
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaGamesTitle', {
-                            ref: tierListPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{ formatTierListPatchDeltaGames(row.patchRefGamesDelta) }}</span
-                      >
-                    </div>
-                    <template v-if="hasTierListHighElo">
-                      <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-10 shrink-0 items-center justify-center sm:flex"
-                      >
-                        {{ row.highEloRank != null ? row.highEloRank : '—' }}
-                      </div>
-                      <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 flex-col items-center justify-center gap-0 leading-tight sm:flex"
-                      >
-                        <template v-if="row.highEloWinrate != null">
-                          <span :class="tierListWinrateClass(row.highEloWinrate * 100)">{{
-                            (row.highEloWinrate * 100).toFixed(2)
-                          }}</span>
-                          <span
-                            v-if="
-                              tierListPatchDeltaRefLabel && row.patchRefHighEloWinratePp != null
-                            "
-                            class="text-[10px] leading-none"
-                            :class="tierListPatchDeltaClass(row.patchRefHighEloWinratePp)"
-                            :title="
-                              t('statisticsPage.tierListPatchDeltaTitle', {
-                                ref: tierListPatchDeltaRefLabel,
-                              })
-                            "
-                            >{{ formatTierListPatchDeltaPp(row.patchRefHighEloWinratePp) }}</span
-                          >
-                        </template>
-                        <span v-else>—</span>
-                      </div>
-                      <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
-                      >
-                        <span>{{
-                          row.highEloGames != null ? row.highEloGames.toLocaleString() : '—'
-                        }}</span>
-                        <span
-                          v-if="tierListPatchDeltaRefLabel && row.patchRefHighEloGamesDelta != null"
-                          class="text-[10px] leading-none"
-                          :class="tierListPatchDeltaGamesClass(row.patchRefHighEloGamesDelta)"
-                          :title="
-                            t('statisticsPage.tierListPatchDeltaGamesTitle', {
-                              ref: tierListPatchDeltaRefLabel,
-                            })
-                          "
-                          >{{ formatTierListPatchDeltaGames(row.patchRefHighEloGamesDelta) }}</span
-                        >
-                      </div>
-                      <div
-                        class="tier-list-lolalytics-td tier-list-lolalytics-td-apex hidden w-12 shrink-0 items-center justify-center sm:flex"
-                      >
-                        {{
-                          row.delta != null
-                            ? (row.delta > 0 ? '+' : '') + Number(row.delta).toFixed(2)
-                            : '—'
-                        }}
-                      </div>
-                    </template>
-                  </div>
-                </div>
-                <div
-                  v-if="totalTierListCount > 0"
-                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-                >
-                  <span>{{ t('statisticsPage.showing') }} {{ totalTierListCount }}</span>
-                  <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5">
-                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="championsPageSize"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                      >
-                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                      </select>
-                    </label>
-                    <span class="text-text/70">
-                      {{ (tierListPage - 1) * championsPageSize + 1 }}-{{
-                        Math.min(tierListPage * championsPageSize, totalTierListCount)
-                      }}
-                      / {{ totalTierListCount }}
-                    </span>
-                    <div class="flex gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="tierListPage <= 1"
-                        @click="tierListPage = Math.max(1, tierListPage - 1)"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="tierListPage >= totalTierListPages"
-                        @click="tierListPage = Math.min(totalTierListPages, tierListPage + 1)"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <!-- Vue graphique : barres divergentes (PBI), style analytics sombre -->
-              <div
-                v-show="tierListViewModel === 'chart' && totalTierListCount > 0"
-                class="tier-list-diverging-wrap statistics-overview-surface overflow-x-auto rounded-xl border border-primary/30 p-4 shadow-inner"
-              >
-                <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
-                  <div class="min-w-0 flex-1">
-                    <h3
-                      class="mb-2 font-sans text-sm font-bold uppercase tracking-tight text-white md:text-base"
-                    >
-                      {{ tierListChartHeading }}
-                    </h3>
-                    <div class="mb-2 flex flex-wrap items-center gap-2">
-                      <button
-                        v-for="entry in TIER_DIVERGING_LEGEND"
-                        :key="'tier-filter-' + entry.key"
-                        type="button"
-                        class="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-semibold transition-colors"
-                        :class="
-                          tierListChartTierEnabled(entry.key)
-                            ? 'border-white/40 bg-white/10 text-white'
-                            : 'border-white/20 bg-black/20 text-white/60'
-                        "
-                        @click="toggleTierListChartTier(entry.key)"
-                      >
-                        <span
-                          class="inline-block h-3 w-3 rounded-sm"
-                          :style="{ backgroundColor: entry.color }"
-                        />
-                        <span>{{
-                          entry.key === 'S+'
-                            ? t('statisticsPage.tierS+')
-                            : entry.key === 'D'
-                              ? t('statisticsPage.tierF')
-                              : t('statisticsPage.tier' + entry.key)
-                        }}</span>
-                      </button>
-                    </div>
-                    <p class="mb-3 text-[11px] text-amber-200/60">
-                      {{ t('statisticsPage.tierListChartPbiAxis') }}
-                    </p>
-                    <div class="flex gap-1">
-                      <div
-                        class="relative w-9 shrink-0 text-[10px] leading-none text-amber-100/80 md:w-10"
-                      >
-                        <div class="relative h-[320px]">
-                          <div class="absolute inset-0">
-                            <span
-                              v-for="tick in tierListChartYScale.ticks"
-                              :key="'ytick-' + tick"
-                              class="absolute right-0.5 -translate-y-1/2 tabular-nums"
-                              :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
-                            >
-                              {{
-                                Math.abs(tick - Math.round(tick)) < 1e-6
-                                  ? Math.round(tick)
-                                  : Number(tick.toFixed(1))
-                              }}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="relative min-w-0 flex-1">
-                        <div class="relative h-[320px] w-full overflow-visible">
-                          <div class="absolute inset-0">
-                            <div
-                              v-for="tick in tierListChartYScale.ticks"
-                              :key="'grid-' + tick"
-                              class="pointer-events-none absolute left-0 right-0 z-0 border-t border-amber-400/20"
-                              :style="{ bottom: tierListChartYTickBottomPct(tick) + '%' }"
-                            />
-                            <div
-                              class="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-[12%] bg-slate-950/35"
-                              aria-hidden="true"
-                            />
-                            <div
-                              class="absolute bottom-0 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
-                            >
-                              <NuxtLink
-                                v-for="c in tierListChartVisibleRows"
-                                :key="c.championId"
-                                :to="localePath('/statistics/champion/' + c.championId)"
-                                class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
-                                :title="
-                                  (championName(c.championId) || c.championId) +
-                                  ' — Score ' +
-                                  formatMatchupScore(c.pbi, 2)
-                                "
-                                @mouseenter="onTierListChartBarEnter(c, $event)"
-                                @mousemove="onTierListChartBarMove"
-                                @mouseleave="onTierListChartBarLeave"
-                              >
-                                <div class="relative h-full w-full">
-                                  <div class="flex h-full w-full justify-center">
-                                    <div class="relative h-full w-[85%] max-w-[12px]">
-                                      <div
-                                        class="absolute left-0 right-0 z-[1] h-px bg-amber-400/55"
-                                        :style="{ bottom: tierListChartZeroBottomPct + '%' }"
-                                      />
-                                      <div
-                                        v-if="scaleMatchupScore(c.pbi) >= 0"
-                                        class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
-                                        :style="{
-                                          bottom: tierListChartZeroBottomPct + '%',
-                                          height: tierListChartBarHeightPct(c.pbi) + '%',
-                                          backgroundColor: tierListChartBarColor(c.tier),
-                                        }"
-                                      />
-                                      <div
-                                        v-else
-                                        class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
-                                        :style="{
-                                          bottom: tierListChartScoreBottomPct(c.pbi) + '%',
-                                          height: tierListChartBarHeightPct(c.pbi) + '%',
-                                          backgroundColor: tierListChartBarColor(c.tier),
-                                        }"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </NuxtLink>
-                            </div>
-                          </div>
-                        </div>
-                        <Teleport to="body">
-                          <div
-                            v-if="tierListChartTooltip && tierListChartTooltipRow"
-                            class="pointer-events-none fixed z-[300] w-max max-w-[17rem] rounded border border-amber-500/45 bg-[#0c1222] p-2 text-left text-xs text-amber-50 shadow-xl"
-                            :style="{
-                              left: tierListChartTooltip.x + 'px',
-                              top: tierListChartTooltip.y + 'px',
-                              transform: 'translate(-50%, calc(-100% - 12px))',
-                            }"
-                          >
-                            <div class="flex items-center gap-2">
-                              <img
-                                v-if="
-                                  tierListChartChampionImage(tierListChartTooltipRow.championId)
-                                "
-                                :src="
-                                  tierListChartChampionImage(tierListChartTooltipRow.championId) ||
-                                  ''
-                                "
-                                :alt="
-                                  championName(tierListChartTooltipRow.championId) ||
-                                  String(tierListChartTooltipRow.championId)
-                                "
-                                class="h-8 w-8 shrink-0 rounded object-cover"
-                              />
-                              <div class="min-w-0">
-                                <div class="truncate font-semibold text-amber-100">
-                                  {{
-                                    championName(tierListChartTooltipRow.championId) ||
-                                    tierListChartTooltipRow.championId
-                                  }}
-                                </div>
-                                <div class="text-[11px] text-amber-200/75">
-                                  Score {{ formatMatchupScore(tierListChartTooltipRow.pbi, 2) }}
-                                </div>
-                                <div
-                                  v-if="
-                                    tierListPatchDeltaRefLabel &&
-                                    tierListChartTooltipRow.patchRefMatchupScorePp != null
-                                  "
-                                  class="text-[11px]"
-                                  :class="
-                                    tierListPatchDeltaClass(
-                                      tierListChartTooltipRow.patchRefMatchupScorePp
-                                    )
-                                  "
-                                >
-                                  {{
-                                    t('statisticsPage.tierListChartDeltaMatchupVsRef', {
-                                      ref: tierListPatchDeltaRefLabel,
-                                    })
-                                  }}:
-                                  {{
-                                    formatTierListPatchDeltaPp(
-                                      tierListChartTooltipRow.patchRefMatchupScorePp
-                                    )
-                                  }}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </Teleport>
-                        <div
-                          class="flex h-[52px] items-center justify-stretch gap-px border-t border-amber-400/25 px-0.5 pt-1"
-                        >
-                          <div
-                            v-for="c in tierListChartVisibleRows"
-                            :key="'lbl-' + c.championId"
-                            class="flex min-w-0 flex-1 items-center justify-center overflow-visible"
-                          >
-                            <img
-                              v-if="gameVersion && championByKey(c.championId)"
-                              :src="
-                                getChampionImageUrl(
-                                  gameVersion,
-                                  championByKey(c.championId)!.image.full
-                                )
-                              "
-                              :alt="championName(c.championId) || String(c.championId)"
-                              class="h-9 w-9 shrink-0 rounded-full border border-amber-400/30 object-cover"
-                              width="36"
-                              height="36"
-                            />
-                            <span
-                              v-else
-                              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-amber-400/25 bg-black/40 text-[10px] font-semibold text-white/80"
-                            >
-                              {{ (championName(c.championId) || String(c.championId)).slice(0, 2) }}
-                            </span>
-                          </div>
-                        </div>
-                        <div
-                          class="mt-1 flex justify-between border-t border-white/10 pt-1 text-[10px] text-amber-200/50"
-                        >
-                          <span>{{ t('statisticsPage.tierListChartWorst') }}</span>
-                          <span>{{ t('statisticsPage.tierListChartBest') }}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
+            <StatisticsTierListTab />
           </div>
 
           <!-- Tab: Champion (tableau global bleu/rouge + dégâts + KDA) -->
           <div v-show="activeTab === 'championTable'" class="space-y-4">
-            <div v-if="championGlobalTablePending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="championGlobalTableError"
-              class="rounded border border-error bg-surface p-3 text-error"
-            >
-              {{ championGlobalTableError }}
-            </div>
-            <div
-              v-else-if="championGlobalSortedRows.length === 0"
-              class="statistics-overview-surface rounded-lg border border-primary/30 p-4 text-text/70"
-            >
-              {{ t('statisticsPage.championTableNoData') }}
-            </div>
-            <div
-              v-else
-              class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
-            >
-              <div
-                class="tier-list-lolalytics champion-global-table text-[11px] text-text-primary/90"
-                :style="{ minWidth: championGlobalTableMinWidthPx + 'px' }"
-              >
-                <div
-                  class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full flex-nowrap items-stretch justify-start border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
-                >
-                  <button
-                    type="button"
-                    class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[220px] shrink-0 cursor-pointer items-center justify-start border-b border-t border-black border-t-[var(--color-grey-300)] px-2 hover:bg-primary/25"
-                    @click="setChampionGlobalSort('champion')"
-                  >
-                    {{ t('statisticsPage.tierListColChampion')
-                    }}{{ championGlobalSortIcon('champion') }}
-                  </button>
-                  <template v-if="championGlobalExpandBlue">
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex min-h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-sky-400/45 border-t-[var(--color-grey-300)] text-[11px] hover:bg-primary/30"
-                      :title="t('statisticsPage.championTableCollapseGroup')"
-                      @click="championGlobalExpandBlue = false"
-                    >
-                      ◀
-                    </button>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipBlue') +
-                          ' — ' +
-                          t('statisticsPage.tierListWinrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('blueWinrate')"
-                      >
-                        {{ t('statisticsPage.winrate') }}{{ championGlobalSortIcon('blueWinrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('blueWinrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('blueWinrateDelta') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipBlue') +
-                          ' — ' +
-                          t('statisticsPage.tierListPickrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('bluePickrate')"
-                      >
-                        {{ t('statisticsPage.pickrate')
-                        }}{{ championGlobalSortIcon('bluePickrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('bluePickrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('bluePickrateDelta') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipBlue') +
-                          ' — ' +
-                          t('statisticsPage.tierListBanrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('blueBanrate')"
-                      >
-                        {{ t('statisticsPage.banrate') }}{{ championGlobalSortIcon('blueBanrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('blueBanrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('blueBanrateDelta') }}
-                      </button>
-                    </div>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="tier-list-lolalytics-th flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-t border-black border-sky-400/45 border-t-[var(--color-grey-300)] px-0.5 text-center text-[9px] font-semibold leading-tight text-sky-200/90 hover:bg-primary/25"
-                    :title="t('statisticsPage.championTableExpandGroup')"
-                    @click="championGlobalExpandBlue = true"
-                  >
-                    <span>{{ t('statisticsPage.championTableGroupBlue') }}</span>
-                    <span class="text-[10px] text-text/80">▶</span>
-                  </button>
-                  <template v-if="championGlobalExpandRed">
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex min-h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-red-400/45 border-t-[var(--color-grey-300)] text-[11px] hover:bg-primary/30"
-                      :title="t('statisticsPage.championTableCollapseGroup')"
-                      @click="championGlobalExpandRed = false"
-                    >
-                      ◀
-                    </button>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipRed') +
-                          ' — ' +
-                          t('statisticsPage.tierListWinrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('redWinrate')"
-                      >
-                        {{ t('statisticsPage.winrate') }}{{ championGlobalSortIcon('redWinrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('redWinrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('redWinrateDelta') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipRed') +
-                          ' — ' +
-                          t('statisticsPage.tierListPickrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('redPickrate')"
-                      >
-                        {{ t('statisticsPage.pickrate')
-                        }}{{ championGlobalSortIcon('redPickrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('redPickrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('redPickrateDelta') }}
-                      </button>
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-th flex w-12 shrink-0 flex-col justify-stretch border-b border-t border-black border-t-[var(--color-grey-300)] py-0.5"
-                    >
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                        :title="
-                          t('statisticsPage.championTableTooltipRed') +
-                          ' — ' +
-                          t('statisticsPage.tierListBanrateTooltip')
-                        "
-                        @click="setChampionGlobalSort('redBanrate')"
-                      >
-                        {{ t('statisticsPage.banrate') }}{{ championGlobalSortIcon('redBanrate') }}
-                      </button>
-                      <button
-                        type="button"
-                        class="flex flex-1 flex-col items-center justify-center border-t border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                        :title="t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                        @click="setChampionGlobalSort('redBanrateDelta')"
-                      >
-                        {{ t('statisticsPage.championTableDeltaSymbol')
-                        }}{{ championGlobalSortIcon('redBanrateDelta') }}
-                      </button>
-                    </div>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="tier-list-lolalytics-th flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-t border-black border-red-400/45 border-t-[var(--color-grey-300)] px-0.5 text-center text-[9px] font-semibold leading-tight text-red-200/90 hover:bg-primary/25"
-                    :title="t('statisticsPage.championTableExpandGroup')"
-                    @click="championGlobalExpandRed = true"
-                  >
-                    <span>{{ t('statisticsPage.championTableGroupRed') }}</span>
-                    <span class="text-[10px] text-text/80">▶</span>
-                  </button>
-                  <template v-if="championGlobalExpandDealt">
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] text-[11px] hover:bg-primary/30"
-                      :title="t('statisticsPage.championTableCollapseGroup')"
-                      @click="championGlobalExpandDealt = false"
-                    >
-                      ◀
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTooltipDealt')"
-                      @click="setChampionGlobalSort('dmgTotal')"
-                    >
-                      {{ t('statisticsPage.championTableColTotal')
-                      }}{{ championGlobalSortIcon('dmgTotal') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableDealtPhys')"
-                      @click="setChampionGlobalSort('dmgPhys')"
-                    >
-                      {{ t('statisticsPage.championTableColPhys')
-                      }}{{ championGlobalSortIcon('dmgPhys') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableDealtMagic')"
-                      @click="setChampionGlobalSort('dmgMagic')"
-                    >
-                      {{ t('statisticsPage.championTableColMagic')
-                      }}{{ championGlobalSortIcon('dmgMagic') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableDealtTrue')"
-                      @click="setChampionGlobalSort('dmgTrue')"
-                    >
-                      {{ t('statisticsPage.championTableColBrut')
-                      }}{{ championGlobalSortIcon('dmgTrue') }}
-                    </button>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="tier-list-lolalytics-th flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-                    :title="t('statisticsPage.championTableExpandGroup')"
-                    @click="championGlobalExpandDealt = true"
-                  >
-                    <span>{{ t('statisticsPage.championTableGroupDealt') }}</span>
-                    <span class="text-[10px] text-text/80">▶</span>
-                  </button>
-                  <template v-if="championGlobalExpandTaken">
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] text-[11px] hover:bg-primary/30"
-                      :title="t('statisticsPage.championTableCollapseGroup')"
-                      @click="championGlobalExpandTaken = false"
-                    >
-                      ◀
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTooltipTaken')"
-                      @click="setChampionGlobalSort('takenTotal')"
-                    >
-                      {{ t('statisticsPage.championTableColTotal')
-                      }}{{ championGlobalSortIcon('takenTotal') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTakenPhys')"
-                      @click="setChampionGlobalSort('takenPhys')"
-                    >
-                      {{ t('statisticsPage.championTableColPhys')
-                      }}{{ championGlobalSortIcon('takenPhys') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTakenMagic')"
-                      @click="setChampionGlobalSort('takenMagic')"
-                    >
-                      {{ t('statisticsPage.championTableColMagic')
-                      }}{{ championGlobalSortIcon('takenMagic') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTakenTrue')"
-                      @click="setChampionGlobalSort('takenTrue')"
-                    >
-                      {{ t('statisticsPage.championTableColBrut')
-                      }}{{ championGlobalSortIcon('takenTrue') }}
-                    </button>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="tier-list-lolalytics-th flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-                    :title="t('statisticsPage.championTableExpandGroup')"
-                    @click="championGlobalExpandTaken = true"
-                  >
-                    <span>{{ t('statisticsPage.championTableGroupTaken') }}</span>
-                    <span class="text-[10px] text-text/80">▶</span>
-                  </button>
-                  <template v-if="championGlobalExpandKda">
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] text-[11px] hover:bg-primary/30"
-                      :title="t('statisticsPage.championTableCollapseGroup')"
-                      @click="championGlobalExpandKda = false"
-                    >
-                      ◀
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      :title="t('statisticsPage.championTableTooltipKda')"
-                      @click="setChampionGlobalSort('kills')"
-                    >
-                      {{ t('statisticsPage.championTableColKill')
-                      }}{{ championGlobalSortIcon('kills') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      @click="setChampionGlobalSort('deaths')"
-                    >
-                      {{ t('statisticsPage.championTableColDeath')
-                      }}{{ championGlobalSortIcon('deaths') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="tier-list-lolalytics-th flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-t border-black border-t-[var(--color-grey-300)] px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                      @click="setChampionGlobalSort('assists')"
-                    >
-                      {{ t('statisticsPage.championTableColAssist')
-                      }}{{ championGlobalSortIcon('assists') }}
-                    </button>
-                  </template>
-                  <button
-                    v-else
-                    type="button"
-                    class="tier-list-lolalytics-th flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-t border-black border-white/25 border-t-[var(--color-grey-300)] px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-                    :title="t('statisticsPage.championTableExpandGroup')"
-                    @click="championGlobalExpandKda = true"
-                  >
-                    <span>{{ t('statisticsPage.championTableGroupKda') }}</span>
-                    <span class="text-[10px] text-text/80">▶</span>
-                  </button>
-                </div>
-                <div
-                  v-for="row in championGlobalSortedRows"
-                  :key="row.championId"
-                  class="tier-list-lolalytics-row flex min-h-[72px] w-full flex-nowrap items-center justify-start py-0.5 odd:bg-white/[0.04] even:bg-black/25"
-                >
-                  <div
-                    class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2"
-                  >
-                    <img
-                      v-if="gameVersion && championByKey(row.championId)"
-                      :src="
-                        getChampionImageUrl(gameVersion, championByKey(row.championId)!.image.full)
-                      "
-                      :alt="championName(row.championId) || ''"
-                      class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-                      width="50"
-                      height="50"
-                    />
-                    <span class="min-w-0 truncate text-left font-medium text-accent">{{
-                      championName(row.championId) || row.championId
-                    }}</span>
-                  </div>
-                  <template v-if="championGlobalExpandBlue">
-                    <div
-                      class="tier-list-lolalytics-td w-7 shrink-0 border-l border-sky-400/35"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.blue.games ? tierListWinrateClass(row.blue.winrate) : 'text-text/55'
-                        "
-                        >{{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.blue.games
-                            ? championGlobalPickrateClass(row.blue.pickrate)
-                            : 'text-text/55'
-                        "
-                        >{{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.blue.games
-                            ? championGlobalBanrateClass(row.blue.banrate)
-                            : 'text-text/55'
-                        "
-                        >{{ row.blue.games ? row.blue.banrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'blue', 'banrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'banrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'blue', 'banrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                  </template>
-                  <div
-                    v-else
-                    class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-sky-400/35"
-                    aria-hidden="true"
-                  />
-                  <template v-if="championGlobalExpandRed">
-                    <div
-                      class="tier-list-lolalytics-td w-7 shrink-0 border-l border-red-400/40"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.red.games ? tierListWinrateClass(row.red.winrate) : 'text-text/55'
-                        "
-                        >{{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.red.games
-                            ? championGlobalPickrateClass(row.red.pickrate)
-                            : 'text-text/55'
-                        "
-                        >{{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-                    >
-                      <span
-                        :class="
-                          row.red.games
-                            ? championGlobalBanrateClass(row.red.banrate)
-                            : 'text-text/55'
-                        "
-                        >{{ row.red.games ? row.red.banrate.toFixed(2) : '—' }}</span
-                      >
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalSideStatDeltaPp(row.championId, 'red', 'banrate') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          tierListPatchDeltaClass(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'banrate')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatTierListPatchDeltaPp(
-                            championGlobalSideStatDeltaPp(row.championId, 'red', 'banrate')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                  </template>
-                  <div
-                    v-else
-                    class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-red-400/40"
-                    aria-hidden="true"
-                  />
-                  <template v-if="championGlobalExpandDealt">
-                    <div
-                      class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageToChamps') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageToChampsPhys) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys') !=
-                            null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageToChampsMagic) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic') !=
-                            null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageToChampsTrue) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue') !=
-                            null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                  </template>
-                  <div
-                    v-else
-                    class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-                    aria-hidden="true"
-                  />
-                  <template v-if="championGlobalExpandTaken">
-                    <div
-                      class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageTakenTotal) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!,
-                            true
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageTakenPhys) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!,
-                            true
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageTakenMagic) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!,
-                            true
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDamageTakenTrue) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!,
-                            true
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                  </template>
-                  <div
-                    v-else
-                    class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-                    aria-hidden="true"
-                  />
-                  <template v-if="championGlobalExpandKda">
-                    <div
-                      class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-                      aria-hidden="true"
-                    />
-                    <div
-                      class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgKills) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgKills') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgKills')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgKills')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgDeaths) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgDeaths') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgDeaths')!,
-                            true
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgDeaths')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                    <div
-                      class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-                    >
-                      <span>{{ formatChampionGlobalNum(row.avgAssists) }}</span>
-                      <span
-                        v-if="
-                          championGlobalPatchDeltaRefLabel &&
-                          championGlobalNumericDelta(row.championId, 'avgAssists') != null
-                        "
-                        class="text-[10px] leading-none"
-                        :class="
-                          championGlobalNumericDeltaClass(
-                            championGlobalNumericDelta(row.championId, 'avgAssists')!
-                          )
-                        "
-                        :title="
-                          t('statisticsPage.tierListPatchDeltaTitle', {
-                            ref: championGlobalPatchDeltaRefLabel,
-                          })
-                        "
-                        >{{
-                          formatChampionGlobalNumericDelta(
-                            championGlobalNumericDelta(row.championId, 'avgAssists')!
-                          )
-                        }}</span
-                      >
-                    </div>
-                  </template>
-                  <div
-                    v-else
-                    class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-                    aria-hidden="true"
-                  />
-                </div>
-              </div>
-            </div>
+            <StatisticsChampionTableTab />
           </div>
 
           <!-- Tab: Durée de partie -->
           <div v-show="activeTab === 'duration'" class="space-y-4">
-            <h2 class="text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.durationTitle') }}
-            </h2>
-            <p class="text-sm text-text/80">
-              {{ t('statisticsPage.overviewDurationWinrateDescription') }}
-            </p>
-            <div
-              v-if="overviewDurationWinratePending || !overviewDurationWinrateData?.buckets?.length"
-              class="text-text/70"
-            >
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="durationWinrateChartBuckets.length"
-              class="relative w-full rounded-lg border border-primary/30 bg-surface/30 p-4"
-            >
-              <div class="relative min-h-[280px] w-full">
-                <svg
-                  :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                  class="h-auto min-h-[260px] w-full"
-                  preserveAspectRatio="xMidYMid meet"
-                  aria-hidden="true"
-                >
-                  <defs>
-                    <linearGradient id="duration-fill-global" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
-                      <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
-                    </linearGradient>
-                  </defs>
-                  <path :d="durationWinrateChartClosedPath" fill="url(#duration-fill-global)" />
-                  <path
-                    :d="durationWinrateChartLinePath"
-                    fill="none"
-                    stroke="rgb(var(--rgb-accent))"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                  <g v-for="(pt, i) in durationWinrateChartPointsList" :key="'dpt-' + i">
-                    <circle
-                      :cx="pt.x"
-                      :cy="pt.y"
-                      r="12"
-                      fill="transparent"
-                      class="cursor-pointer"
-                      @mouseenter="
-                        durationChartTooltip = {
-                          durationLabel: pt.durationLabel,
-                          winrate: pt.winrate,
-                          matchCount: pt.matchCount,
-                          x: pt.x,
-                          y: pt.y,
-                        }
-                      "
-                      @mouseleave="durationChartTooltip = null"
-                    />
-                    <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
-                  </g>
-                  <g v-for="(tick, i) in durationWinrateAxisX.ticks" :key="'dx-' + i">
-                    <line
-                      :x1="tick.x"
-                      :y1="CHART_PAD.top + PLOT_H"
-                      :y2="CHART_PAD.top + PLOT_H + 4"
-                      stroke="currentColor"
-                      stroke-width="1"
-                      class="text-text/50"
-                    />
-                    <text
-                      :x="tick.x"
-                      :y="CHART_H - 6"
-                      text-anchor="middle"
-                      class="fill-text/70 text-[10px]"
-                    >
-                      {{ tick.value }}
-                    </text>
-                  </g>
-                  <g v-for="(tick, i) in durationWinrateAxisY.ticks" :key="'dy-' + i">
-                    <line
-                      :x1="CHART_PAD.left"
-                      :y1="tick.y"
-                      :x2="CHART_PAD.left - 4"
-                      :y2="tick.y"
-                      stroke="currentColor"
-                      stroke-width="1"
-                      class="text-text/50"
-                    />
-                    <text
-                      :x="CHART_PAD.left - 8"
-                      :y="tick.y + 4"
-                      text-anchor="end"
-                      class="fill-text/70 text-[10px]"
-                    >
-                      {{ tick.value }}
-                    </text>
-                  </g>
-                  <!-- Légende abscisse (X) -->
-                  <text
-                    :x="CHART_W / 2"
-                    :y="CHART_H - 4"
-                    text-anchor="middle"
-                    class="fill-text/60 text-[11px]"
-                  >
-                    {{ t('statisticsPage.overviewDurationWinrateAxisX') }}
-                  </text>
-                  <!-- Légende ordonnée (Y) -->
-                  <text
-                    :x="14"
-                    :y="CHART_H / 2"
-                    text-anchor="middle"
-                    class="fill-text/60 text-[11px]"
-                    :transform="`rotate(-90, 14, ${CHART_H / 2})`"
-                  >
-                    {{ t('statisticsPage.overviewDurationMatchesAxisY') }}
-                  </text>
-                </svg>
-                <div
-                  v-if="durationChartTooltip"
-                  class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
-                  :style="{
-                    left: (durationChartTooltip.x / CHART_W) * 100 + '%',
-                    top: (durationChartTooltip.y / CHART_H) * 100 + '%',
-                    transform: 'translate(-50%, -100%) translateY(-8px)',
-                  }"
-                >
-                  <div class="font-medium text-text">
-                    {{ durationChartTooltip.durationLabel }}
-                  </div>
-                  <div class="text-text/80">
-                    {{ durationChartTooltip.matchCount }}
-                    {{ t('statisticsPage.overviewDurationWinrateTooltipMatches') }}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <StatisticsDurationTab />
           </div>
 
           <!-- Tab: Objets (global) -->
           <div v-show="activeTab === 'items'" class="space-y-6">
-            <div v-if="overviewDetailPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="overviewDetailError"
-              class="rounded border border-error/50 p-3 text-error"
-            >
-              {{ t('statisticsPage.overviewDetailTimeout') }}
-            </div>
-            <template
-              v-else-if="
-                itemFastSliceConfigs.length > 0 ||
-                (overviewDetailData?.items?.length ?? 0) > 0 ||
-                (overviewDetailData?.itemStarterSets?.length ?? 0) > 0
-              "
-            >
-              <div
-                v-if="itemFastSliceConfigs.length > 0"
-                class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-2"
-              >
-                <StatisticsItemStatsFastSection
-                  v-for="c in itemFastSliceConfigs"
-                  :key="c.slice"
-                  :slice="c.slice"
-                  :rows="c.rows"
-                  :baseline-rows="c.baselineRows"
-                  :total-participants="overviewDetailData?.totalParticipants ?? 0"
-                  :game-version="gameVersion"
-                  :ref-version-label="progressionFromVersion"
-                  :baseline-pending="overviewDetailBaselinePending"
-                />
-              </div>
-              <template v-if="(overviewDetailData?.itemStarterSets ?? []).length">
-                <h3 class="text-base font-semibold text-text-accent">
-                  {{ t('statisticsPage.itemsStarterSetsTitle') }}
-                </h3>
-                <p class="text-xs text-text/65">{{ t('statisticsPage.itemsStarterSetsHint') }}</p>
-                <div
-                  class="statistics-overview-surface mt-2 overflow-x-auto rounded-lg border border-primary/30"
-                >
-                  <table class="w-full min-w-[320px] text-left text-sm">
-                    <thead class="border-b border-primary/30 bg-black/25">
-                      <tr>
-                        <th class="px-3 py-2 font-semibold text-text">
-                          {{ t('statisticsPage.overviewDetailItems') }}
-                        </th>
-                        <th class="px-3 py-2 font-semibold text-text">
-                          {{ t('statisticsPage.overviewDetailPickRate') }} %
-                        </th>
-                        <th class="px-3 py-2 font-semibold text-text">
-                          {{ t('statisticsPage.overviewDetailWinRate') }} %
-                        </th>
-                        <th class="hidden px-3 py-2 font-semibold text-text sm:table-cell">
-                          {{ t('statisticsPage.tierListGames') }}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-primary/20">
-                      <tr
-                        v-for="srow in overviewDetailData?.itemStarterSets ?? []"
-                        :key="srow.items.join('-')"
-                        class="hover:bg-white/5"
-                      >
-                        <td class="px-3 py-2">
-                          <div class="flex flex-wrap items-center gap-1">
-                            <template v-for="(iid, iidx) in srow.items" :key="iidx + '-' + iid">
-                              <img
-                                v-if="itemImageName(iid)"
-                                :src="getItemImageUrl(gameVersion, itemImageName(iid)!)"
-                                :alt="itemName(iid) || ''"
-                                class="h-7 w-7 rounded border border-primary/20 object-cover"
-                                width="28"
-                                height="28"
-                              />
-                              <span
-                                v-else
-                                class="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded border border-primary/30 px-1 text-[10px] text-text/70"
-                                >{{ iid }}</span
-                              >
-                            </template>
-                          </div>
-                        </td>
-                        <td class="px-3 py-2 tabular-nums text-text/90">
-                          {{ Number(srow.pickrate).toFixed(2) }}
-                        </td>
-                        <td class="px-3 py-2 tabular-nums text-text/90">
-                          {{ Number(srow.winrate).toFixed(2) }}
-                        </td>
-                        <td class="hidden px-3 py-2 tabular-nums text-text/80 sm:table-cell">
-                          {{ srow.games.toLocaleString() }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </template>
-              <h3 class="text-base font-semibold text-text-accent">
-                {{ t('statisticsPage.itemsFullTableTitle') }}
-              </h3>
-              <div
-                class="statistics-overview-surface overflow-x-auto rounded-lg border border-primary/30"
-              >
-                <table class="w-full text-left text-sm">
-                  <thead class="border-b border-primary/30 bg-black/25">
-                    <tr>
-                      <th class="font-semibold text-text">
-                        {{ t('statisticsPage.overviewDetailItems') }}
-                      </th>
-                      <th class="font-semibold text-text">
-                        {{ t('statisticsPage.overviewDetailPickRate') }} %
-                      </th>
-                      <th class="font-semibold text-text">
-                        {{ t('statisticsPage.overviewDetailWinRate') }} %
-                      </th>
-                      <th class="font-semibold text-text">
-                        {{ t('statisticsPage.itemStats') }}
-                      </th>
-                      <th class="font-semibold text-text">
-                        {{ t('statisticsPage.itemEconomy') }}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-primary/20">
-                    <tr v-for="row in paginatedItems" :key="row.itemId" class="hover:bg-white/5">
-                      <td class="px-4 py-2">
-                        <div class="flex items-center gap-2">
-                          <img
-                            v-if="itemImageName(row.itemId)"
-                            :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                            :alt="itemName(row.itemId) || ''"
-                            class="h-8 w-8 rounded object-cover"
-                            width="32"
-                            height="32"
-                          />
-                          <span class="text-text">{{ itemName(row.itemId) || row.itemId }}</span>
-                        </div>
-                      </td>
-                      <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-                      <td class="px-4 py-2 text-text/90">
-                        {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-                      </td>
-                      <td class="max-w-[200px] px-4 py-2 text-text/80">
-                        <span
-                          v-if="itemStatsForItem(row.itemId).length"
-                          :title="itemStatsForItem(row.itemId).join(', ')"
-                          class="line-clamp-2 text-xs"
-                        >
-                          {{ itemStatsForItem(row.itemId).join(', ') }}
-                        </span>
-                        <span v-else class="text-text/50">—</span>
-                      </td>
-                      <td class="max-w-[160px] px-4 py-2 text-text/80">
-                        <span
-                          v-if="itemEconomicForItem(row.itemId).length"
-                          :title="itemEconomicForItem(row.itemId).join(', ')"
-                          class="line-clamp-2 text-xs"
-                        >
-                          {{ itemEconomicForItem(row.itemId).join(', ') }}
-                        </span>
-                        <span v-else class="text-text/50">—</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div
-                  v-if="totalItemsCount > 0"
-                  class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
-                >
-                  <span>{{ totalItemsCount }} {{ t('statisticsPage.overviewDetailItems') }}</span>
-                  <div class="flex items-center gap-3">
-                    <label class="flex items-center gap-1.5">
-                      <span class="text-text/70">{{ t('statisticsPage.perPage') }}</span>
-                      <select
-                        v-model.number="itemsPageSize"
-                        class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
-                      >
-                        <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
-                      </select>
-                    </label>
-                    <span class="text-text/70">
-                      {{ (itemsPage - 1) * itemsPageSize + 1 }}-{{
-                        Math.min(itemsPage * itemsPageSize, totalItemsCount)
-                      }}
-                      / {{ totalItemsCount }}
-                    </span>
-                    <div class="flex gap-1">
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="itemsPage <= 1"
-                        @click="itemsPage = Math.max(1, itemsPage - 1)"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                        :disabled="itemsPage >= totalItemsPages"
-                        @click="itemsPage = Math.min(totalItemsPages, itemsPage + 1)"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+            <StatisticsItemsTab />
           </div>
 
           <!-- Tab: Sorts d'invocateur (global) -->
           <div v-show="activeTab === 'spells'" class="space-y-4">
-            <h2 class="text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.spellsTitle') }}
-            </h2>
-            <p class="text-sm text-text/80">{{ t('statisticsPage.spellsDescription') }}</p>
-            <div v-if="overviewDetailPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div
-              v-else-if="overviewDetailError"
-              class="rounded border border-error/50 p-3 text-error"
-            >
-              {{ t('statisticsPage.overviewDetailTimeout') }}
-            </div>
-            <SummonerSpellTierTables
-              v-else-if="
-                (overviewDetailData?.summonerSpells?.length ?? 0) > 0 ||
-                (overviewDetailData?.summonerSpellSets?.length ?? 0) > 0
-              "
-              :solo-rows="overviewDetailData?.summonerSpells ?? []"
-              :set-rows="overviewDetailData?.summonerSpellSets ?? []"
-              :baseline-solo="overviewDetailBaselineData?.summonerSpells ?? null"
-              :baseline-sets="overviewDetailBaselineData?.summonerSpellSets ?? null"
-              :ref-version-label="progressionFromVersion"
-              :baseline-pending="overviewDetailBaselinePending"
-              :game-version="gameVersion"
-            />
-            <div v-else class="text-text/70">{{ t('statisticsPage.overviewDetailNoData') }}</div>
+            <StatisticsSpellsTab />
           </div>
 
           <!-- Tab: Abandons -->
           <div v-show="activeTab === 'abandons'" class="space-y-4">
-            <h2 class="text-xl font-semibold text-text-accent">
-              {{ t('statisticsPage.abandonsTitle') }}
-            </h2>
-            <p class="text-sm text-text/80">{{ t('statisticsPage.abandonsDescription') }}</p>
-            <div v-if="overviewAbandonsPending" class="text-text/70">
-              {{ t('statisticsPage.loading') }}
-            </div>
-            <div v-else-if="overviewAbandonsData" class="grid gap-4 sm:grid-cols-3">
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                <div class="text-sm text-text/70">{{ t('statisticsPage.abandonsRemakeRate') }}</div>
-                <div class="text-2xl font-semibold text-text">
-                  {{ overviewAbandonsData.remakeRate?.toFixed(2) ?? 0 }}%
-                </div>
-                <div class="text-xs text-text/50">
-                  {{ overviewAbandonsData.remakeCount }} / {{ overviewAbandonsData.totalMatches }}
-                </div>
-              </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                <div class="text-sm text-text/70">
-                  {{ t('statisticsPage.abandonsEarlySurrenderRate') }}
-                </div>
-                <div class="text-2xl font-semibold text-text">
-                  {{ overviewAbandonsData.earlySurrenderRate?.toFixed(2) ?? 0 }}%
-                </div>
-                <div class="text-xs text-text/50">
-                  {{ overviewAbandonsData.earlySurrenderCount }} /
-                  {{ overviewAbandonsData.totalMatches }}
-                </div>
-              </div>
-              <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                <div class="text-sm text-text/70">
-                  {{ t('statisticsPage.abandonsSurrenderRate') }}
-                </div>
-                <div class="text-2xl font-semibold text-text">
-                  {{ overviewAbandonsData.surrenderRate?.toFixed(2) ?? 0 }}%
-                </div>
-                <div class="text-xs text-text/50">
-                  {{ overviewAbandonsData.surrenderCount }} /
-                  {{ overviewAbandonsData.totalMatches }}
-                </div>
-              </div>
-            </div>
-            <div v-else class="text-text/70">{{ t('statisticsPage.noData') }}</div>
+            <StatisticsAbandonsTab />
           </div>
         </div>
       </div>
@@ -5607,7 +341,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+/* eslint-disable @typescript-eslint/no-unused-vars -- setup bindings are used by tab SFCs via provide('statisticsPageCtx'), not this file's template */
+import { ref, computed, watch, nextTick, getCurrentInstance, provide, unref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -5619,7 +354,20 @@ import { useVersionStore } from '~/stores/VersionStore'
 import { useStatisticsUiStore, type StatisticsMainTab } from '~/stores/StatisticsUiStore'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
+import { useStatisticsBansTab } from '~/composables/statistics/useStatisticsBansTab'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
+import StatisticsOverviewTab from '~/components/statistics/tabs/StatisticsOverviewTab.vue'
+import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
+import StatisticsTrendsTab from '~/components/statistics/tabs/StatisticsTrendsTab.vue'
+import StatisticsTeamTab from '~/components/statistics/tabs/StatisticsTeamTab.vue'
+import StatisticsInfosTab from '~/components/statistics/tabs/StatisticsInfosTab.vue'
+import StatisticsBansTab from '~/components/statistics/tabs/StatisticsBansTab.vue'
+import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
+import StatisticsChampionTableTab from '~/components/statistics/tabs/StatisticsChampionTableTab.vue'
+import StatisticsDurationTab from '~/components/statistics/tabs/StatisticsDurationTab.vue'
+import StatisticsItemsTab from '~/components/statistics/tabs/StatisticsItemsTab.vue'
+import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
+import StatisticsAbandonsTab from '~/components/statistics/tabs/StatisticsAbandonsTab.vue'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
   scoreboardDrakeIconByKey,
@@ -5817,7 +565,7 @@ const paginatedProgressionsByPickrate = computed(() => {
   return list.slice(start, start + size)
 })
 /** Sort order for Champions tab (from Fast Stats "Voir plus" or selector). */
-const championsSortOrder = ref<'winrate' | 'pickrate' | 'banrate' | 'games' | 'wins'>('winrate')
+const championsSortOrder = ref<'winrate' | 'pickrate' | 'games' | 'wins'>('winrate')
 /** Sort direction: desc = highest first (default), asc = lowest first. */
 const championsSortDir = ref<'asc' | 'desc'>('desc')
 // Quand on change de colonne (ex. via le menu "Trier par"), repasser en décroissant par défaut.
@@ -5840,7 +588,6 @@ const filteredChampions = computed(() => {
     let diff = 0
     if (sort === 'winrate') diff = (b.winrate ?? 0) - (a.winrate ?? 0)
     else if (sort === 'pickrate') diff = (b.pickrate ?? 0) - (a.pickrate ?? 0)
-    else if (sort === 'banrate') diff = (b.banrate ?? 0) - (a.banrate ?? 0)
     else if (sort === 'wins') diff = (b.wins ?? 0) - (a.wins ?? 0)
     else diff = (b.games ?? 0) - (a.games ?? 0)
     return mult * diff
@@ -5863,7 +610,7 @@ watch([championSearchQuery, championsSortOrder, championsSortDir, championsPageS
 })
 
 /** Click on sortable column header: same column toggles asc/desc, else set column and desc. */
-function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate' | 'banrate') {
+function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate') {
   if (championsSortOrder.value === col) {
     championsSortDir.value = championsSortDir.value === 'desc' ? 'asc' : 'desc'
   } else {
@@ -5880,10 +627,8 @@ type TierListSortColumn =
   | 'mainRolePct'
   | 'winrate'
   | 'pickrate'
-  | 'banrate'
   | 'patchWinratePp'
   | 'patchPickratePp'
-  | 'patchBanratePp'
   | 'pbi'
   | 'games'
   | 'highEloRank'
@@ -5897,7 +642,7 @@ const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
 
 /** Cartes « plus choisis / meilleurs WR / plus bannis » → tier list en mode tableau avec le bon tri. */
-function goToTierListWithSort(sort: 'winrate' | 'pickrate' | 'banrate') {
+function goToTierListWithSort(sort: 'winrate' | 'pickrate') {
   tierListSortColumn.value = sort
   tierListSortDir.value = 'desc'
   tierListViewModel.value = 'table'
@@ -5930,15 +675,6 @@ function championGlobalPickrateClass(pct: number): string {
   if (pct >= 6) return 'text-sky-200/85'
   if (pct >= 2) return 'text-text/85'
   return 'text-rose-400/90'
-}
-
-/** Banrate % (0–100) : tons chauds si ban forte. */
-function championGlobalBanrateClass(pct: number): string {
-  if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 35) return 'font-medium text-amber-400/90'
-  if (pct >= 18) return 'text-orange-300/85'
-  if (pct >= 6) return 'text-text/85'
-  return 'text-slate-400/85'
 }
 
 /** Tier list rows with optional delta (global winrate - highElo winrate). */
@@ -6091,13 +827,10 @@ const sortedTierListRows = computed(() => {
     else if (col === 'mainRolePct') diff = a.mainRolePct - b.mainRolePct
     else if (col === 'winrate') diff = a.winrate - b.winrate
     else if (col === 'pickrate') diff = a.pickrate - b.pickrate
-    else if (col === 'banrate') diff = a.banrate - b.banrate
     else if (col === 'patchWinratePp')
       diff = (a.patchRefWinratePp ?? 0) - (b.patchRefWinratePp ?? 0)
     else if (col === 'patchPickratePp')
       diff = (a.patchRefPickratePp ?? 0) - (b.patchRefPickratePp ?? 0)
-    else if (col === 'patchBanratePp')
-      diff = (a.patchRefBanratePp ?? 0) - (b.patchRefBanratePp ?? 0)
     else if (col === 'pbi') diff = a.pbi - b.pbi
     else if (col === 'games') diff = a.games - b.games
     else if (col === 'highEloRank') diff = (a.highEloRank ?? 0) - (b.highEloRank ?? 0)
@@ -6550,6 +1283,24 @@ function mergeKnownVersions(
     .map(([version, matchCount]) => ({ version, matchCount }))
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
 }
+
+async function loadKnownVersionsFromGameData(): Promise<void> {
+  try {
+    const data = await statsFetch<{
+      versions?: Array<{ version?: string; patchLabel?: string }>
+    }>(apiUrl('/api/game-data/versions'))
+    const rows =
+      data?.versions
+        ?.map(v => {
+          const version = String(v.patchLabel ?? v.version ?? '').trim()
+          return version ? { version, matchCount: 0 } : null
+        })
+        .filter((v): v is { version: string; matchCount: number } => v != null) ?? []
+    mergeKnownVersions(rows)
+  } catch {
+    // ignore versions catalog failures, overview data remains fallback
+  }
+}
 const statsVersionOptions = computed(() => {
   if (statsKnownVersions.value.length > 0) return statsKnownVersions.value
   const fallback = overviewData.value?.matchesByVersion ?? []
@@ -6575,10 +1326,31 @@ function versionMatchCount(version: string | null | undefined): number {
   if (!version) return 0
   return versionMatchCountByVersion.value.get(version) ?? 0
 }
-const infosMatchesByDivision = computed(() => {
-  const rows = overviewData.value?.matchesByDivision ?? []
-  return [...rows].sort((a, b) => (b.matchCount ?? 0) - (a.matchCount ?? 0))
+const infosMatrixPending = ref(false)
+const infosMatrixError = ref<string | null>(null)
+const infosMatrixData = ref<{
+  divisions: string[]
+  rows: Array<{ version: string; all: number; byDivision: Record<string, number> }>
+} | null>(null)
+const infosMatrixColumns = computed(() => {
+  const rankOrder = rankTiers
+  const present = new Set(
+    (infosMatrixData.value?.divisions ?? []).map(v => String(v).toUpperCase())
+  )
+  const ordered = rankOrder.filter(t => present.has(t))
+  return ['ALL', ...ordered]
 })
+const infosMatrixRows = computed(() => {
+  const rows = infosMatrixData.value?.rows ?? []
+  return [...rows].sort((a, b) => compareVersionsDesc(a.version, b.version))
+})
+function infosMatrixCell(
+  row: { version: string; all: number; byDivision: Record<string, number> },
+  division: string
+): number {
+  if (division === 'ALL') return Number(row.all ?? 0)
+  return Number(row.byDivision?.[division] ?? 0)
+}
 /** Résumé versions (version + nb parties) pour la description en haut de page. */
 const _overviewDescriptionVersionsSummary = computed(() => {
   const list = overviewData.value?.matchesByVersion ?? []
@@ -6628,7 +1400,7 @@ function onStatsFilterChange() {
   overviewDetailError.value = false
   if (activeTab.value === 'overview') loadOverview()
   if (activeTab.value === 'infos') loadOverview()
-  if (activeTab.value === 'bans') loadBansTable()
+  if (activeTab.value === 'bans') bansTab.loadBansTable()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
@@ -6828,11 +1600,23 @@ async function loadOverview() {
   }
 }
 
-async function loadOverviewVersionsCatalog() {
-  if ((overviewData.value?.matchesByVersion?.length ?? 0) > 0) {
-    mergeKnownVersions(overviewData.value?.matchesByVersion)
-    return
+async function loadInfosPatchDivisionMatrix() {
+  if (infosMatrixPending.value) return
+  infosMatrixPending.value = true
+  infosMatrixError.value = null
+  try {
+    infosMatrixData.value = await statsFetch(apiUrl('/api/stats/infos/patch-division-matrix'))
+  } catch (err) {
+    infosMatrixData.value = null
+    infosMatrixError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    infosMatrixPending.value = false
   }
+}
+
+async function loadOverviewVersionsCatalog() {
+  mergeKnownVersions(overviewData.value?.matchesByVersion)
+  await loadKnownVersionsFromGameData()
   const params = new URLSearchParams()
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
@@ -7119,7 +1903,6 @@ const CHART_H = 260
 const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
 const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
 const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used when duration winrate chart is rendered
 const durationWinrateTooltip = ref<{
   durationLabel: string
   winrate: number
@@ -7906,7 +2689,6 @@ async function loadOverviewTeams() {
 }
 
 /** True when we have at least overview totalMatches > 0 or teams matchCount > 0 (so we don't show "No stats yet" when only teams data exists). */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Fallback for empty state
 const overviewHasAnyStats = computed(
   () =>
     (overviewData.value?.totalMatches ?? 0) > 0 || (overviewTeamsData.value?.matchCount ?? 0) > 0
@@ -8233,39 +3015,6 @@ const championsData = ref<{
 const championsPending = ref(true)
 const championsError = ref<string | null>(null)
 
-type BansTableRow = {
-  championId: number
-  bansTotal: number
-  bansBlue: number
-  bansRed: number
-  bansTop: number
-  bansJungle: number
-  bansMiddle: number
-  bansBottom: number
-  bansSupport: number
-}
-type BansSortCol =
-  | 'total'
-  | 'rate'
-  | 'blue'
-  | 'red'
-  | 'top'
-  | 'jungle'
-  | 'middle'
-  | 'bottom'
-  | 'support'
-const bansTableData = ref<{
-  matchCount: number
-  rows: BansTableRow[]
-  message?: string
-  error?: string
-} | null>(null)
-const bansPending = ref(false)
-const bansError = ref<string | null>(null)
-const bansSortColumn = ref<BansSortCol>('total')
-const bansSortDir = ref<'asc' | 'desc'>('desc')
-const bansPage = ref(1)
-
 const tierListPending = ref(false)
 const tierListError = ref<string | null>(null)
 const tierListData = ref<{
@@ -8353,16 +3102,12 @@ type ChampionGlobalSortColumn =
   | 'champion'
   | 'blueWinrate'
   | 'bluePickrate'
-  | 'blueBanrate'
   | 'blueWinrateDelta'
   | 'bluePickrateDelta'
-  | 'blueBanrateDelta'
   | 'redWinrate'
   | 'redPickrate'
-  | 'redBanrate'
   | 'redWinrateDelta'
   | 'redPickrateDelta'
-  | 'redBanrateDelta'
   | 'dmgTotal'
   | 'dmgPhys'
   | 'dmgMagic'
@@ -8400,8 +3145,8 @@ const championGlobalTableMinWidthPx = computed(() => {
   const wDmg = 40
   const wKda = 36
   const wCollapsed = 68
-  w += championGlobalExpandBlue.value ? wNarrow + 3 * w12 : wCollapsed
-  w += championGlobalExpandRed.value ? wNarrow + 3 * w12 : wCollapsed
+  w += championGlobalExpandBlue.value ? wNarrow + 2 * w12 : wCollapsed
+  w += championGlobalExpandRed.value ? wNarrow + 2 * w12 : wCollapsed
   w += championGlobalExpandDealt.value ? wNarrow + 4 * wDmg : wCollapsed
   w += championGlobalExpandTaken.value ? wNarrow + 4 * wDmg : wCollapsed
   w += championGlobalExpandKda.value ? wNarrow + 3 * wKda : wCollapsed
@@ -8436,6 +3181,10 @@ function goToChampionTableWithSort(col: ChampionGlobalSortColumn, dir: 'asc' | '
   }
 }
 
+function goToBansTab() {
+  activeTab.value = 'bans'
+}
+
 function championGlobalSortIcon(col: ChampionGlobalSortColumn): string {
   if (championGlobalSortColumn.value !== col) return '—'
   return championGlobalSortDir.value === 'desc' ? '↓' : '↑'
@@ -8448,7 +3197,7 @@ function formatChampionGlobalNum(n: number): string {
 function championGlobalSideStatDeltaSortValue(
   row: ChampionGlobalTableRow,
   side: 'blue' | 'red',
-  stat: 'winrate' | 'pickrate' | 'banrate'
+  stat: 'winrate' | 'pickrate'
 ): number {
   const refRow = championGlobalTableRefById.value.get(row.championId)
   if (!refRow) return 0
@@ -8476,8 +3225,6 @@ function championGlobalCompare(
       return (a.blue.winrate - b.blue.winrate) * m
     case 'bluePickrate':
       return (a.blue.pickrate - b.blue.pickrate) * m
-    case 'blueBanrate':
-      return (a.blue.banrate - b.blue.banrate) * m
     case 'blueWinrateDelta':
       return (
         (championGlobalSideStatDeltaSortValue(a, 'blue', 'winrate') -
@@ -8490,18 +3237,10 @@ function championGlobalCompare(
           championGlobalSideStatDeltaSortValue(b, 'blue', 'pickrate')) *
         m
       )
-    case 'blueBanrateDelta':
-      return (
-        (championGlobalSideStatDeltaSortValue(a, 'blue', 'banrate') -
-          championGlobalSideStatDeltaSortValue(b, 'blue', 'banrate')) *
-        m
-      )
     case 'redWinrate':
       return (a.red.winrate - b.red.winrate) * m
     case 'redPickrate':
       return (a.red.pickrate - b.red.pickrate) * m
-    case 'redBanrate':
-      return (a.red.banrate - b.red.banrate) * m
     case 'redWinrateDelta':
       return (
         (championGlobalSideStatDeltaSortValue(a, 'red', 'winrate') -
@@ -8512,12 +3251,6 @@ function championGlobalCompare(
       return (
         (championGlobalSideStatDeltaSortValue(a, 'red', 'pickrate') -
           championGlobalSideStatDeltaSortValue(b, 'red', 'pickrate')) *
-        m
-      )
-    case 'redBanrateDelta':
-      return (
-        (championGlobalSideStatDeltaSortValue(a, 'red', 'banrate') -
-          championGlobalSideStatDeltaSortValue(b, 'red', 'banrate')) *
         m
       )
     case 'dmgTotal':
@@ -8611,135 +3344,29 @@ function championGlobalTableQueryForVersion(versionFull: string | null | undefin
   if (v) params.set('version', v)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+  params.set('otp', statsOtpFilter.value)
   const s = params.toString()
   return s ? `?${s}` : ''
 }
 
 const showBansRoleColumns = computed(() => !statsRoleFilter.value)
 
-function banRateForBansRow(row: { bansTotal: number }, matchCount: number): number {
-  if (matchCount <= 0) return 0
-  return Math.round((10000 * row.bansTotal) / (2 * matchCount)) / 100
-}
-
-function bansSortHint(col: BansSortCol): string {
-  if (bansSortColumn.value !== col) return ''
-  return bansSortDir.value === 'desc' ? ' ↓' : ' ↑'
-}
-
-const filteredBansRows = computed(() => {
-  const list = bansTableData.value?.rows ?? []
-  const mc = bansTableData.value?.matchCount ?? 0
-  const q = championSearchQuery.value.toLowerCase()
-  const filtered = q
-    ? list.filter(row => {
-        const name = championName(row.championId)?.toLowerCase() ?? ''
-        return name.includes(q) || String(row.championId).includes(q)
-      })
-    : [...list]
-  const col = bansSortColumn.value
-  const dir = bansSortDir.value
-  const mult = dir === 'desc' ? 1 : -1
-  return filtered.sort((a, b) => {
-    let va = 0
-    let vb = 0
-    switch (col) {
-      case 'total':
-        va = a.bansTotal
-        vb = b.bansTotal
-        break
-      case 'rate':
-        va = banRateForBansRow(a, mc)
-        vb = banRateForBansRow(b, mc)
-        break
-      case 'blue':
-        va = a.bansBlue
-        vb = b.bansBlue
-        break
-      case 'red':
-        va = a.bansRed
-        vb = b.bansRed
-        break
-      case 'top':
-        va = a.bansTop
-        vb = b.bansTop
-        break
-      case 'jungle':
-        va = a.bansJungle
-        vb = b.bansJungle
-        break
-      case 'middle':
-        va = a.bansMiddle
-        vb = b.bansMiddle
-        break
-      case 'bottom':
-        va = a.bansBottom
-        vb = b.bansBottom
-        break
-      case 'support':
-        va = a.bansSupport
-        vb = b.bansSupport
-        break
-      default:
-        break
-    }
-    return mult * (vb - va)
-  })
+// Keep the composable return as one object — bundlers drop destructured bindings that are only used via
+// provide/inject in child SFCs, which breaks SSR (e.g. bansSortHint).
+const bansTab = useStatisticsBansTab({
+  championSearchQuery,
+  championsPageSize,
+  statsVersionFilter,
+  progressionFromVersion,
+  gameVersion,
+  statsFetch,
+  apiUrl,
+  patchFromVersion,
+  championGlobalTableQueryForVersion,
+  statsPerfStart,
+  statsPerfEnd,
+  championName,
 })
-
-const totalBansCount = computed(() => filteredBansRows.value.length)
-const totalBansPages = computed(() =>
-  Math.max(1, Math.ceil(totalBansCount.value / championsPageSize.value))
-)
-const paginatedBans = computed(() => {
-  const list = filteredBansRows.value
-  const size = championsPageSize.value
-  const page = Math.min(bansPage.value, totalBansPages.value)
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
-
-watch(bansSortColumn, () => {
-  bansSortDir.value = 'desc'
-})
-watch([championSearchQuery, bansSortColumn, bansSortDir, championsPageSize], () => {
-  bansPage.value = 1
-})
-
-function setBansSort(col: BansSortCol) {
-  if (bansSortColumn.value === col) {
-    bansSortDir.value = bansSortDir.value === 'desc' ? 'asc' : 'desc'
-  } else {
-    bansSortColumn.value = col
-    bansSortDir.value = 'desc'
-  }
-}
-
-async function loadBansTable() {
-  const t = statsPerfStart('loadBansTable')
-  bansPending.value = true
-  bansError.value = null
-  try {
-    const qs = championGlobalTableQueryForVersion(statsVersionFilter.value)
-    const data = await statsFetch<{
-      matchCount: number
-      rows: BansTableRow[]
-      error?: string
-      message?: string
-    }>(apiUrl(`/api/stats/champions/bans-table${qs}`))
-    bansTableData.value = data
-    if (data?.error || data?.message) {
-      bansError.value = [data.error, data.message].filter(Boolean).join(': ') || null
-    } else {
-      bansError.value = null
-    }
-  } catch (e) {
-    bansError.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    bansPending.value = false
-    statsPerfEnd('loadBansTable', t)
-  }
-}
 
 async function loadChampionGlobalTable() {
   championGlobalTablePending.value = true
@@ -8796,7 +3423,7 @@ async function loadChampionGlobalTable() {
 function championGlobalSideStatDeltaPp(
   championId: number,
   side: 'blue' | 'red',
-  stat: 'winrate' | 'pickrate' | 'banrate'
+  stat: 'winrate' | 'pickrate'
 ): number | undefined {
   if (!championGlobalPatchDeltaRefLabel.value) return undefined
   const refRow = championGlobalTableRefById.value.get(championId)
@@ -8969,7 +3596,7 @@ async function loadTierList() {
 }
 watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
   const tab = activeTab.value
-  if (tab === 'infos' || tab === 'tierlist' || tab === 'overview') loadChampions()
+  if (tab === 'tierlist' || tab === 'overview') loadChampions()
   if (tab === 'tierlist') loadTierList()
   if (tab === 'championTable') loadChampionGlobalTable()
 })
@@ -9016,10 +3643,11 @@ watch(activeTab, async tab => {
     loadProgressionsFull()
   }
   if (tab === 'team') loadOverviewSides()
-  if (tab === 'tierlist' || tab === 'infos') loadChampions()
+  if (tab === 'tierlist') loadChampions()
   if (tab === 'tierlist') loadTierList()
+  if (tab === 'infos') loadInfosPatchDivisionMatrix()
   if (tab === 'championTable') loadChampionGlobalTable()
-  if (tab === 'bans') loadBansTable()
+  if (tab === 'bans') bansTab.loadBansTable()
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
     if (tab === 'runes' || tab === 'items' || tab === 'spells') loadOverviewDetailBaseline()
@@ -9033,7 +3661,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
-  if (activeTab.value === 'bans') loadBansTable()
+  if (activeTab.value === 'bans') bansTab.loadBansTable()
 })
 
 watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
@@ -9061,7 +3689,9 @@ onMounted(async () => {
   const tVersion = statsPerfStart('version')
   await versionPromise
   statsPerfEnd('version', tVersion)
+  await loadKnownVersionsFromGameData()
   await loadOverview()
+  await loadInfosPatchDivisionMatrix()
   const defaultsApplied = applyDefaultVersionFiltersFromKnownVersions()
   if (defaultsApplied) onStatsFilterChange()
   statsPerfEnd('page mount', tPage)
@@ -9072,8 +3702,254 @@ onMounted(async () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
-  if (activeTab.value === 'bans') await loadBansTable()
+  if (activeTab.value === 'bans') await bansTab.loadBansTable()
 })
+
+// Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).
+const statisticsPageInjectFallback: Record<string, unknown> = {
+  CHART_H,
+  CHART_PAD,
+  CHART_W,
+  PAGE_SIZE_OPTIONS,
+  PLOT_H,
+  TIER_DIVERGING_LEGEND,
+  bansExpandByLoss,
+  bansExpandByWin,
+  cardIsFavorite,
+  championByKey,
+  championGlobalExpandBlue,
+  championGlobalExpandDealt,
+  championGlobalExpandKda,
+  championGlobalExpandRed,
+  championGlobalExpandTaken,
+  championGlobalNumericDelta,
+  championGlobalNumericDeltaClass,
+  championGlobalPatchDeltaRefLabel,
+  championGlobalPickrateClass,
+  championGlobalSideStatDeltaPp,
+  championGlobalSortIcon,
+  championGlobalSortedRows,
+  championGlobalTableError,
+  championGlobalTableMinWidthPx,
+  championGlobalTablePending,
+  championName,
+  championSearchQuery,
+  championsPageSize,
+  cycleTierListSort,
+  drakeIconSrc,
+  drakeSoulGlobal,
+  drakeSoulRows,
+  drakeTypeRows,
+  durationChartTooltip,
+  durationWinrateAxisX,
+  durationWinrateAxisY,
+  durationWinrateChartBuckets,
+  durationWinrateChartClosedPath,
+  durationWinrateChartLinePath,
+  durationWinrateChartPointsList,
+  firstPercentBySide,
+  firstPercentByTeam,
+  formatChampionGlobalNum,
+  formatChampionGlobalNumericDelta,
+  formatDivisionLabel,
+  formatMatchupScore,
+  formatTierListPatchDeltaGames,
+  formatTierListPatchDeltaPp,
+  formatTierListPatchDeltaRank,
+  gameVersion,
+  getChampionImageUrl,
+  getItemImageUrl,
+  getRankedEmblemUrl,
+  goToBansTab,
+  goToChampionTableWithSort,
+  goToTierListWithSort,
+  hasTierListHighElo,
+  infosMatrixCell,
+  infosMatrixColumns,
+  infosMatrixError,
+  infosMatrixPending,
+  infosMatrixRows,
+  itemEconomicForItem,
+  itemFastSliceConfigs,
+  itemImageName,
+  itemName,
+  itemStatsForItem,
+  itemsPage,
+  itemsPageSize,
+  loadOverview,
+  localePath,
+  mainRoleIconSrc,
+  mainRoleLabel,
+  matchOutcomePct,
+  objectiveCounts,
+  objectiveIconSrc,
+  objectiveKeysWithKills,
+  objectiveRow,
+  objectiveRowSides,
+  objectivesPanelTab,
+  objectivesSidesPanelTab,
+  onDrakeIconError,
+  onObjectiveIconError,
+  onTierListChartBarEnter,
+  onTierListChartBarLeave,
+  onTierListChartBarMove,
+  openObjectiveKeys,
+  openSidesObjectiveKeys,
+  overviewAbandonsData,
+  overviewAbandonsPending,
+  overviewBottomBanrateSince,
+  overviewBottomPickrateSince,
+  overviewBottomWinrateSince,
+  overviewData,
+  overviewDetailBaselineData,
+  overviewDetailBaselinePending,
+  overviewDetailData,
+  overviewDetailError,
+  overviewDetailPending,
+  overviewDurationWinrateData,
+  overviewDurationWinratePending,
+  overviewEarlySurrenderCount,
+  overviewEarlySurrenderPct,
+  overviewEffectiveTopBanrateChampions,
+  overviewEffectiveTopWinrateChampions,
+  overviewError,
+  overviewMatchOutcomeTotal,
+  overviewPending,
+  overviewPlayedCount,
+  overviewPlayedPct,
+  overviewSidesData,
+  overviewSidesPending,
+  overviewSurrenderOnlyCount,
+  overviewSurrenderOnlyPct,
+  overviewTeamsData,
+  overviewTopBanrateSince,
+  overviewTopPickrateChampionsFiltered,
+  overviewTopPickrateSince,
+  overviewTopWinrateSince,
+  paginatedItems,
+  paginatedProgressionsByPickrate,
+  paginatedProgressionsChampions,
+  paginatedTierList,
+  percentForCount,
+  percentForCountSides,
+  progressionFromVersion,
+  progressionFullData,
+  progressionFullPending,
+  progressionsPage,
+  progressionsPageSize,
+  retryOverviewDetail,
+  scaleMatchupScore,
+  setChampionGlobalSort,
+  showBansRoleColumns,
+  sidesBlueBanRows,
+  sidesBlueBestWinrateRows,
+  sidesBlueMostPickedRows,
+  sidesBluePlayedCount,
+  sidesBlueSurrenderOnlyCount,
+  sidesBlueTopBanrateSince,
+  sidesBlueTopPickrateSince,
+  sidesBlueTopWinrateSince,
+  sidesDonutBlueDash,
+  sidesDonutBluePct,
+  sidesDonutCircumference,
+  sidesDonutRedDash,
+  sidesDonutRedPct,
+  sidesDrakeSoulGlobal,
+  sidesDrakeSoulRows,
+  sidesDrakeTypeRows,
+  sidesObjectiveCounts,
+  sidesObjectiveKeysWithKills,
+  sidesRedBanRows,
+  sidesRedBestWinrateRows,
+  sidesRedMostPickedRows,
+  sidesRedPlayedCount,
+  sidesRedSurrenderOnlyCount,
+  sidesRedTopBanrateSince,
+  sidesRedTopPickrateSince,
+  sidesRedTopWinrateSince,
+  sidesSurrenderBySide,
+  teamPercent,
+  tierListChartBarColor,
+  tierListChartBarHeightPct,
+  tierListChartChampionImage,
+  tierListChartHeading,
+  tierListChartScoreBottomPct,
+  tierListChartTierEnabled,
+  tierListChartTooltip,
+  tierListChartTooltipRow,
+  tierListChartVisibleRows,
+  tierListChartYScale,
+  tierListChartYTickBottomPct,
+  tierListChartZeroBottomPct,
+  tierListDisplayRankByChampionId,
+  tierListError,
+  tierListPage,
+  tierListPatchDeltaClass,
+  tierListPatchDeltaGamesClass,
+  tierListPatchDeltaRankClass,
+  tierListPatchDeltaRefLabel,
+  tierListPatchRankDelta,
+  tierListPending,
+  tierListSortColumn,
+  tierListSortIcon,
+  tierListViewModel,
+  tierListWinrateClass,
+  toggleFavoriteCard,
+  toggleObjective,
+  toggleSidesObjective,
+  toggleTierListChartTier,
+  totalItemsCount,
+  totalItemsPages,
+  totalProgressionsCount,
+  totalProgressionsPages,
+  totalTierListCount,
+  totalTierListPages,
+  versionStore,
+}
+
+const __statisticsVm = getCurrentInstance()
+if (__statisticsVm?.proxy) {
+  const __statisticsPageCtx = new Proxy(
+    {},
+    {
+      get(_target, key: string | symbol) {
+        if (key === 't') return t
+        if (typeof key !== 'string') {
+          return unref((__statisticsVm.proxy as any)[key])
+        }
+        if (key === 'onBansPageUpdated') {
+          return (v: number) => {
+            bansTab.bansPage.value = v
+          }
+        }
+        if (key === 'onBansPageSizeUpdated') {
+          return (v: number) => {
+            championsPageSize.value = v
+          }
+        }
+        if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
+          return unref((bansTab as any)[key])
+        }
+        const inst = __statisticsVm as any
+        // <script setup> bindings live on setupState; in SSR, some keys are missing from `proxy`
+        // while tab SFCs compile to `unref(p).foo` (single unref — nested refs must be values here).
+        const setupState = inst.setupState as Record<string, unknown> | undefined
+        if (setupState && key in setupState) {
+          return unref(setupState[key] as never)
+        }
+        if (Object.prototype.hasOwnProperty.call(statisticsPageInjectFallback, key)) {
+          return unref((statisticsPageInjectFallback as any)[key])
+        }
+        return unref((__statisticsVm.proxy as any)[key])
+      },
+      set(_target, key: string | symbol, value: unknown) {
+        ;(__statisticsVm.proxy as any)[key] = value
+        return true
+      },
+    }
+  )
+  provide('statisticsPageCtx', __statisticsPageCtx)
+}
 </script>
 
 <style scoped>

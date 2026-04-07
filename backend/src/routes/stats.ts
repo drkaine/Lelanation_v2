@@ -32,6 +32,7 @@ import {
   getDurationWinrateByChampion,
   getOverviewProgressionStats,
   getOverviewProgressionFullStats,
+  getInfosPatchDivisionMatrix,
 } from '../services/StatsOverviewService.js'
 import { getOverviewAbandons } from '../services/StatsAbandonsService.js'
 import {
@@ -498,12 +499,14 @@ router.get('/champions/bans-table', async (req: Request, res: Response) => {
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
   const role = queryString(req.query.role)
+  const otp = queryString(req.query.otp)
   const sqlStart = Date.now()
   try {
     const data = await getChampionBansTable(
       version.length ? version : null,
       rankTier.length ? rankTier : null,
-      role
+      role,
+      otp
     )
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
     if (!data) {
@@ -1137,6 +1140,16 @@ router.get('/infos/meta', async (req: Request, res: Response) => {
     matchesByVersion: overview?.matchesByVersion ?? [],
     otpPickrateThreshold: STATS_OTP_PICKRATE_THRESHOLD,
   })
+})
+
+router.get('/infos/patch-division-matrix', async (_req: Request, res: Response) => {
+  const data = await getInfosPatchDivisionMatrix()
+  return res.json(
+    data ?? {
+      divisions: [],
+      rows: [],
+    }
+  )
 })
 
 /** POST /api/stats/aggregate - recalculer les agrégats (admin / cron) */

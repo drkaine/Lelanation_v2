@@ -18,6 +18,23 @@ export type ChampionBansTableRow = {
   bansSupport: number
 }
 
+type OtpMode = 'oui' | 'non' | 'solo'
+
+function otpModeFromQuery(value: string | null | undefined): OtpMode {
+  const raw = String(value ?? '')
+    .trim()
+    .toLowerCase()
+  if (raw === 'oui' || raw === 'yes' || raw === 'true' || raw === '1' || raw === 'all') return 'oui'
+  if (raw === 'solo' || raw === 'niche') return 'solo'
+  return 'non'
+}
+
+function keepByOtpPickratePercent(pickratePercent: number, mode: OtpMode, threshold: number): boolean {
+  if (mode === 'oui') return true
+  if (mode === 'solo') return pickratePercent < threshold
+  return pickratePercent >= threshold
+}
+
 function normalizeRoleFilter(role: string | null | undefined): string | null {
   if (role == null || role === '') return null
   const u = role.trim().toUpperCase()
@@ -30,15 +47,30 @@ function normalizeRoleFilter(role: string | null | undefined): string | null {
 export async function getChampionBansTable(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
-  role?: string | null
+  role?: string | null,
+  otp?: string | null
 ): Promise<{ matchCount: number; rows: ChampionBansTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
+  const otpMode = otpModeFromQuery(otp)
+  const otpThreshold = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
   const matchCond = buildRawMatchCond(version, rankTier)
   const roleFilter = normalizeRoleFilter(role)
-  /** Filtre rôle du banneur (colonne `banner_role_norm` dans la MV). */
-  const roleCondMv =
+  /**
+   * Filtre rôle "joué" pour l'onglet Bans:
+   * - On conserve uniquement les champions qui ont des games sur ce rôle
+   *   dans le même périmètre version/rank.
+   * - On NE filtre pas les bans par rôle du banneur ici.
+   */
+  const rolePlayedCond =
     roleFilter != null
-      ? `AND mv.banner_role_norm = '${roleFilter.replace(/'/g, "''")}'`
+      ? `AND EXISTS (
+          SELECT 1
+          FROM mv_champion_side_stats cs
+          WHERE cs.champion_id = mv.banned_champion_id
+            AND ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')}
+            AND cs.role_norm = '${roleFilter.replace(/'/g, "''")}'
+            AND cs.count_game > 0
+        )`
       : ''
 
   const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(
@@ -67,7 +99,7 @@ export async function getChampionBansTable(
       SUM(mv.ban_count) FILTER (WHERE mv.banner_role_norm = 'SUPPORT')::int AS bans_support
     FROM mv_champion_bans_by_banner mv
     WHERE ${mvWhere}
-    ${roleCondMv}
+    ${rolePlayedCond}
     GROUP BY mv.banned_champion_id
     ORDER BY bans_total DESC, champion_id ASC
   `
@@ -96,6 +128,35 @@ export async function getChampionBansTable(
     bansBottom: Number(r.bans_bottom),
     bansSupport: Number(r.bans_support),
   }))
+
+  if (otpMode !== 'oui' && rows.length > 0) {
+    const sideWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
+    const roleSql =
+      roleFilter != null ? ` AND cs.role_norm = '${roleFilter.replace(/'/g, "''")}'` : ''
+    const pickRows = await prisma.$queryRawUnsafe<Array<{ champion_id: number; games: bigint }>>(`
+      SELECT
+        cs.champion_id::int AS champion_id,
+        SUM(cs.count_game)::bigint AS games
+      FROM mv_champion_side_stats cs
+      WHERE ${sideWhere}
+      ${roleSql}
+      GROUP BY cs.champion_id
+    `)
+    const gamesByChampion = new Map<number, number>()
+    let totalGames = 0
+    for (const r of pickRows) {
+      const g = Number(r.games ?? 0)
+      gamesByChampion.set(Number(r.champion_id), g)
+      totalGames += g
+    }
+    const otpFiltered = rows.filter((row) => {
+      if (totalGames <= 0) return true
+      const g = gamesByChampion.get(row.championId) ?? 0
+      const pickratePct = (g / totalGames) * 100
+      return keepByOtpPickratePercent(pickratePct, otpMode, otpThreshold)
+    })
+    return { matchCount, rows: otpFiltered.length > 0 ? otpFiltered : rows }
+  }
 
   return { matchCount, rows }
 }
