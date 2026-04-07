@@ -403,6 +403,7 @@
     "overviewNumberByVersion": "Number by version",
     "overviewNumberByDivision": "Number by division",
     "overviewVersionAll": "All",
+    "infosMatrixPatchHeader": "Patch",
     "overviewDurationWinrateDescription": "Number of matches per duration bucket (smoothed data). X-axis: game duration (min). Y-axis: number of matches.",
     "overviewDurationWinrateAxisX": "Duration (min)",
     "overviewDurationWinrateAxisY": "Winrate (%)",

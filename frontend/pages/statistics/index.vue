@@ -2,7 +2,6 @@
   <div class="statistics flex min-h-screen flex-col text-text">
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
-      v-show="!isTierListTab"
       type="button"
       class="fixed left-4 top-4 z-40 flex w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
@@ -20,7 +19,7 @@
 
     <!-- Overlay mobile (fermer les filtres au clic) -->
     <div
-      v-show="effectiveFiltersOpen && !isTierListTab"
+      v-show="filtersOpen"
       class="fixed inset-0 z-30 bg-black/50 lg:hidden"
       aria-hidden="true"
       @click="closeFilters"
@@ -49,7 +48,6 @@
     <!-- Filtres + contenu : même hauteur -->
     <div class="flex min-h-0 flex-1 pt-4">
       <button
-        v-show="!isTierListTab"
         type="button"
         class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
         :aria-label="
@@ -77,7 +75,7 @@
         :class="[
           'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
           'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
-          effectiveFiltersOpen
+          filtersOpen
             ? 'translate-x-0 lg:w-64 lg:opacity-100'
             : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
         ]"
@@ -95,7 +93,6 @@
             Reset
           </button>
           <button
-            v-show="!isTierListTab"
             type="button"
             class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
             :aria-label="t('statisticsPage.closeFilters')"
@@ -286,9 +283,9 @@
           </div>
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-          <div v-show="activeTab === 'trends'" class="space-y-6">
+          <!-- <div v-show="activeTab === 'trends'" class="space-y-6">
             <StatisticsTrendsTab />
-          </div>
+          </div> -->
 
           <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
           <div v-show="activeTab === 'team'" class="space-y-6">
@@ -427,11 +424,11 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'championTable' ||
     tab === 'trends' ||
     tab === 'team' ||
+    tab === 'bans' ||
     tab === 'runes' ||
     tab === 'items' ||
     tab === 'spells' ||
-    tab === 'infos' ||
-    tab === 'bans'
+    tab === 'infos'
   ) {
     return tab
   }
@@ -470,6 +467,7 @@ const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
   { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
+  { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   {
     id: 'championTable' as const,
     label: t('statisticsPage.tabChampionTable'),
@@ -480,7 +478,6 @@ const tabs = computed(() => [
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
-  { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
 ])
 
 function cardIsFavorite(cardId: string): boolean {
@@ -625,15 +622,20 @@ type TierListSortColumn =
   | 'champion'
   | 'tier'
   | 'mainRolePct'
+  | 'patchMainRolePctPp'
   | 'winrate'
   | 'pickrate'
   | 'patchWinratePp'
   | 'patchPickratePp'
   | 'pbi'
+  | 'patchPbiPp'
   | 'games'
+  | 'patchGamesDelta'
   | 'highEloRank'
   | 'highEloWinrate'
+  | 'patchHighEloWinratePp'
   | 'highEloGames'
+  | 'patchHighEloGamesDelta'
   | 'delta'
 
 const tierListViewModel = ref<'table' | 'chart'>('table')
@@ -825,6 +827,8 @@ const sortedTierListRows = computed(() => {
     if (col === 'rank') diff = a.rank - b.rank
     else if (col === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
     else if (col === 'mainRolePct') diff = a.mainRolePct - b.mainRolePct
+    else if (col === 'patchMainRolePctPp')
+      diff = (a.patchRefMainRolePctPp ?? 0) - (b.patchRefMainRolePctPp ?? 0)
     else if (col === 'winrate') diff = a.winrate - b.winrate
     else if (col === 'pickrate') diff = a.pickrate - b.pickrate
     else if (col === 'patchWinratePp')
@@ -832,10 +836,18 @@ const sortedTierListRows = computed(() => {
     else if (col === 'patchPickratePp')
       diff = (a.patchRefPickratePp ?? 0) - (b.patchRefPickratePp ?? 0)
     else if (col === 'pbi') diff = a.pbi - b.pbi
+    else if (col === 'patchPbiPp')
+      diff = (a.patchRefMatchupScorePp ?? 0) - (b.patchRefMatchupScorePp ?? 0)
     else if (col === 'games') diff = a.games - b.games
+    else if (col === 'patchGamesDelta')
+      diff = (a.patchRefGamesDelta ?? 0) - (b.patchRefGamesDelta ?? 0)
     else if (col === 'highEloRank') diff = (a.highEloRank ?? 0) - (b.highEloRank ?? 0)
     else if (col === 'highEloWinrate') diff = (a.highEloWinrate ?? 0) - (b.highEloWinrate ?? 0)
+    else if (col === 'patchHighEloWinratePp')
+      diff = (a.patchRefHighEloWinratePp ?? 0) - (b.patchRefHighEloWinratePp ?? 0)
     else if (col === 'highEloGames') diff = (a.highEloGames ?? 0) - (b.highEloGames ?? 0)
+    else if (col === 'patchHighEloGamesDelta')
+      diff = (a.patchRefHighEloGamesDelta ?? 0) - (b.patchRefHighEloGamesDelta ?? 0)
     else if (col === 'delta') diff = (a.delta ?? 0) - (b.delta ?? 0)
     return mult * diff
   })
@@ -1224,8 +1236,6 @@ const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
-const isTierListTab = computed(() => activeTab.value === 'tierlist')
-const effectiveFiltersOpen = computed(() => (isTierListTab.value ? true : filtersOpen.value))
 function openFilters() {
   filtersOpen.value = true
 }
@@ -3098,6 +3108,19 @@ type ChampionGlobalTableRow = {
   avgAssists: number
 }
 
+type ChampionGlobalNumericDeltaKey =
+  | 'avgDamageToChamps'
+  | 'avgDamageToChampsPhys'
+  | 'avgDamageToChampsMagic'
+  | 'avgDamageToChampsTrue'
+  | 'avgDamageTakenTotal'
+  | 'avgDamageTakenPhys'
+  | 'avgDamageTakenMagic'
+  | 'avgDamageTakenTrue'
+  | 'avgKills'
+  | 'avgDeaths'
+  | 'avgAssists'
+
 type ChampionGlobalSortColumn =
   | 'champion'
   | 'blueWinrate'
@@ -3109,16 +3132,27 @@ type ChampionGlobalSortColumn =
   | 'redWinrateDelta'
   | 'redPickrateDelta'
   | 'dmgTotal'
+  | 'dmgTotalDelta'
   | 'dmgPhys'
+  | 'dmgPhysDelta'
   | 'dmgMagic'
+  | 'dmgMagicDelta'
   | 'dmgTrue'
+  | 'dmgTrueDelta'
   | 'takenTotal'
+  | 'takenTotalDelta'
   | 'takenPhys'
+  | 'takenPhysDelta'
   | 'takenMagic'
+  | 'takenMagicDelta'
   | 'takenTrue'
+  | 'takenTrueDelta'
   | 'kills'
+  | 'killsDelta'
   | 'deaths'
+  | 'deathsDelta'
   | 'assists'
+  | 'assistsDelta'
   | 'totalGames'
 
 const championGlobalTablePending = ref(false)
@@ -3132,25 +3166,24 @@ const championGlobalTableData = ref<{
 /** Lignes du même endpoint pour la version de référence (progressions), pour Δ sous WR/PR/BR et stats. */
 const championGlobalTableRefById = ref(new Map<number, ChampionGlobalTableRow>())
 
-const championGlobalExpandBlue = ref(true)
-const championGlobalExpandRed = ref(true)
-const championGlobalExpandDealt = ref(true)
-const championGlobalExpandTaken = ref(true)
-const championGlobalExpandKda = ref(true)
-
+/** Tableau champion : toutes les colonnes visibles (plus de groupes repliables). */
 const championGlobalTableMinWidthPx = computed(() => {
-  let w = 220
-  const w12 = 48
-  const wNarrow = 28
-  const wDmg = 40
-  const wKda = 36
-  const wCollapsed = 68
-  w += championGlobalExpandBlue.value ? wNarrow + 2 * w12 : wCollapsed
-  w += championGlobalExpandRed.value ? wNarrow + 2 * w12 : wCollapsed
-  w += championGlobalExpandDealt.value ? wNarrow + 4 * wDmg : wCollapsed
-  w += championGlobalExpandTaken.value ? wNarrow + 4 * wDmg : wCollapsed
-  w += championGlobalExpandKda.value ? wNarrow + 3 * wKda : wCollapsed
-  return w
+  const wChamp = 110
+  const wDual = 48
+  return wChamp + 4 * wDual + 8 * wDual + 3 * wDual
+})
+
+const championGlobalPage = ref(1)
+
+const championGlobalFilteredRows = computed(() => {
+  const list = championGlobalTableData.value?.rows ?? []
+  const raw = championSearchQuery.value.trim().toLowerCase()
+  if (!raw) return list
+  return list.filter(row => {
+    const name = championName(row.championId)?.toLowerCase() ?? ''
+    const idStr = String(row.championId)
+    return name.includes(raw) || idStr === raw || idStr.includes(raw)
+  })
 })
 
 const championGlobalSortColumn = ref<ChampionGlobalSortColumn>('totalGames')
@@ -3169,8 +3202,6 @@ function setChampionGlobalSort(col: ChampionGlobalSortColumn) {
 function goToChampionTableWithSort(col: ChampionGlobalSortColumn, dir: 'asc' | 'desc' = 'desc') {
   championGlobalSortColumn.value = col
   championGlobalSortDir.value = dir
-  if (String(col).startsWith('blue')) championGlobalExpandBlue.value = true
-  if (String(col).startsWith('red')) championGlobalExpandRed.value = true
   activeTab.value = 'championTable'
   if (import.meta.client) {
     nextTick(() => {
@@ -3204,6 +3235,15 @@ function championGlobalSideStatDeltaSortValue(
   const cur = side === 'blue' ? row.blue : row.red
   const rf = side === 'blue' ? refRow.blue : refRow.red
   return cur[stat] - rf[stat]
+}
+
+function championGlobalNumericDeltaSortValue(
+  row: ChampionGlobalTableRow,
+  key: ChampionGlobalNumericDeltaKey
+): number {
+  const refRow = championGlobalTableRefById.value.get(row.championId)
+  if (!refRow) return 0
+  return row[key] - refRow[key]
 }
 
 function championGlobalCompare(
@@ -3255,38 +3295,123 @@ function championGlobalCompare(
       )
     case 'dmgTotal':
       return (a.avgDamageToChamps - b.avgDamageToChamps) * m
+    case 'dmgTotalDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageToChamps') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageToChamps')) *
+        m
+      )
     case 'dmgPhys':
       return (a.avgDamageToChampsPhys - b.avgDamageToChampsPhys) * m
+    case 'dmgPhysDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageToChampsPhys') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageToChampsPhys')) *
+        m
+      )
     case 'dmgMagic':
       return (a.avgDamageToChampsMagic - b.avgDamageToChampsMagic) * m
+    case 'dmgMagicDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageToChampsMagic') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageToChampsMagic')) *
+        m
+      )
     case 'dmgTrue':
       return (a.avgDamageToChampsTrue - b.avgDamageToChampsTrue) * m
+    case 'dmgTrueDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageToChampsTrue') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageToChampsTrue')) *
+        m
+      )
     case 'takenTotal':
       return (a.avgDamageTakenTotal - b.avgDamageTakenTotal) * m
+    case 'takenTotalDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageTakenTotal') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageTakenTotal')) *
+        m
+      )
     case 'takenPhys':
       return (a.avgDamageTakenPhys - b.avgDamageTakenPhys) * m
+    case 'takenPhysDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageTakenPhys') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageTakenPhys')) *
+        m
+      )
     case 'takenMagic':
       return (a.avgDamageTakenMagic - b.avgDamageTakenMagic) * m
+    case 'takenMagicDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageTakenMagic') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageTakenMagic')) *
+        m
+      )
     case 'takenTrue':
       return (a.avgDamageTakenTrue - b.avgDamageTakenTrue) * m
+    case 'takenTrueDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDamageTakenTrue') -
+          championGlobalNumericDeltaSortValue(b, 'avgDamageTakenTrue')) *
+        m
+      )
     case 'kills':
       return (a.avgKills - b.avgKills) * m
+    case 'killsDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgKills') -
+          championGlobalNumericDeltaSortValue(b, 'avgKills')) *
+        m
+      )
     case 'deaths':
       return (a.avgDeaths - b.avgDeaths) * m
+    case 'deathsDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgDeaths') -
+          championGlobalNumericDeltaSortValue(b, 'avgDeaths')) *
+        m
+      )
     case 'assists':
       return (a.avgAssists - b.avgAssists) * m
+    case 'assistsDelta':
+      return (
+        (championGlobalNumericDeltaSortValue(a, 'avgAssists') -
+          championGlobalNumericDeltaSortValue(b, 'avgAssists')) *
+        m
+      )
     default:
       return 0
   }
 }
 
 const championGlobalSortedRows = computed(() => {
-  const rows = [...(championGlobalTableData.value?.rows ?? [])]
+  const rows = [...championGlobalFilteredRows.value]
   const col = championGlobalSortColumn.value
   const dir = championGlobalSortDir.value
   rows.sort((a, b) => championGlobalCompare(a, b, col, dir))
   return rows
 })
+
+const totalChampionGlobalCount = computed(() => championGlobalSortedRows.value.length)
+const totalChampionGlobalPages = computed(() =>
+  Math.max(1, Math.ceil(totalChampionGlobalCount.value / championsPageSize.value))
+)
+const paginatedChampionGlobalRows = computed(() => {
+  const list = championGlobalSortedRows.value
+  const size = championsPageSize.value
+  const page = Math.min(championGlobalPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
+  const start = (page - 1) * size
+  return list.slice(start, start + size)
+})
+
+watch(
+  [championGlobalSortColumn, championGlobalSortDir, championsPageSize, championSearchQuery],
+  () => {
+    championGlobalPage.value = 1
+  }
+)
 
 const queryString = computed(() => {
   const params = new URLSearchParams()
@@ -3349,7 +3474,8 @@ function championGlobalTableQueryForVersion(versionFull: string | null | undefin
   return s ? `?${s}` : ''
 }
 
-const showBansRoleColumns = computed(() => !statsRoleFilter.value)
+/** Bans : le backend filtre les lignes (champions joués dans le rôle) mais garde les stats ban par rôle banneur — toujours afficher les colonnes. */
+const showBansRoleColumns = computed(() => true)
 
 // Keep the composable return as one object — bundlers drop destructured bindings that are only used via
 // provide/inject in child SFCs, which breaks SSR (e.g. bansSortHint).
@@ -3433,19 +3559,6 @@ function championGlobalSideStatDeltaPp(
   const rf = side === 'blue' ? refRow.blue : refRow.red
   return cur[stat] - rf[stat]
 }
-
-type ChampionGlobalNumericDeltaKey =
-  | 'avgDamageToChamps'
-  | 'avgDamageToChampsPhys'
-  | 'avgDamageToChampsMagic'
-  | 'avgDamageToChampsTrue'
-  | 'avgDamageTakenTotal'
-  | 'avgDamageTakenPhys'
-  | 'avgDamageTakenMagic'
-  | 'avgDamageTakenTrue'
-  | 'avgKills'
-  | 'avgDeaths'
-  | 'avgAssists'
 
 function championGlobalNumericDelta(
   championId: number,
@@ -3717,21 +3830,20 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   bansExpandByWin,
   cardIsFavorite,
   championByKey,
-  championGlobalExpandBlue,
-  championGlobalExpandDealt,
-  championGlobalExpandKda,
-  championGlobalExpandRed,
-  championGlobalExpandTaken,
   championGlobalNumericDelta,
   championGlobalNumericDeltaClass,
   championGlobalPatchDeltaRefLabel,
   championGlobalPickrateClass,
   championGlobalSideStatDeltaPp,
+  championGlobalPage,
   championGlobalSortIcon,
   championGlobalSortedRows,
   championGlobalTableError,
   championGlobalTableMinWidthPx,
   championGlobalTablePending,
+  paginatedChampionGlobalRows,
+  totalChampionGlobalCount,
+  totalChampionGlobalPages,
   championName,
   championSearchQuery,
   championsPageSize,
@@ -4133,6 +4245,7 @@ if (__statisticsVm?.proxy) {
 }
 
 .statistics .fast-stat-card {
+  margin-bottom: 10px;
   width: 313px !important;
   min-width: 313px;
   max-width: 313px;

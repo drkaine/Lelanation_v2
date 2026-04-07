@@ -34,24 +34,67 @@
         <table class="w-full min-w-[760px] text-left text-sm">
           <thead class="border-b border-primary/30 bg-surface/50">
             <tr>
-              <th class="px-3 py-1.5 font-semibold text-text">Patch</th>
+              <th
+                scope="col"
+                class="w-12 px-2 py-1.5 text-center font-semibold text-text"
+                :title="p.t('statisticsPage.infosMatrixPatchHeader')"
+              >
+                <span class="sr-only">{{ p.t('statisticsPage.infosMatrixPatchHeader') }}</span>
+                <svg
+                  class="mx-auto h-5 w-5 text-text/85"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                  />
+                </svg>
+              </th>
               <th
                 v-for="division in p.infosMatrixColumns ?? []"
                 :key="'infos-col-' + division"
-                class="px-3 py-1.5 font-semibold text-text"
+                scope="col"
+                class="px-2 py-1.5 text-center font-semibold text-text"
+                :title="
+                  division === 'ALL'
+                    ? p.t('statisticsPage.overviewVersionAll')
+                    : p.formatDivisionLabel(division)
+                "
               >
-                <div class="flex items-center gap-2">
+                <span class="sr-only">{{
+                  division === 'ALL'
+                    ? p.t('statisticsPage.overviewVersionAll')
+                    : p.formatDivisionLabel(division)
+                }}</span>
+                <div class="flex justify-center">
                   <img
                     v-if="division !== 'ALL' && p.getRankedEmblemUrl(division)"
                     :src="p.getRankedEmblemUrl(division)!"
-                    :alt="p.formatDivisionLabel(division)"
+                    alt=""
                     class="h-5 w-5 object-contain"
                   />
-                  <span>{{
-                    division === 'ALL'
-                      ? p.t('statisticsPage.overviewVersionAll')
-                      : p.formatDivisionLabel(division)
-                  }}</span>
+                  <svg
+                    v-else
+                    class="h-5 w-5 text-text/85"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                    />
+                  </svg>
                 </div>
               </th>
             </tr>

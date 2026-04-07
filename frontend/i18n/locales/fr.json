@@ -404,6 +404,7 @@
     "overviewNumberByVersion": "Nombre par version",
     "overviewNumberByDivision": "Nombre par division",
     "overviewVersionAll": "Toutes",
+    "infosMatrixPatchHeader": "Patch",
     "overviewDurationWinrateDescription": "Nombre de parties par tranche de durée (données lissées). Abscisse : durée de la partie (min). Ordonnée : nombre de parties.",
     "overviewDurationWinrateAxisX": "Durée (min)",
     "overviewDurationWinrateAxisY": "Winrate (%)",

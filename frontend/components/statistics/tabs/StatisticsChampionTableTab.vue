@@ -26,172 +26,129 @@ const p = inject('statisticsPageCtx') as any
       class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
     >
       <div
-        class="tier-list-lolalytics champion-global-table text-[11px] text-text-primary/90"
+        class="tier-list-lolalytics champion-global-table w-full min-w-0 text-[13px] text-text-primary/90"
         :style="{ minWidth: p.championGlobalTableMinWidthPx + 'px' }"
       >
         <div
-          class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full flex-nowrap items-stretch justify-start border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+          class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
         >
           <button
             type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[220px] shrink-0 cursor-pointer items-center justify-start border-b border-black px-2 hover:bg-primary/25"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[110px] shrink-0 cursor-pointer items-center justify-start border-b border-black px-1.5 hover:bg-primary/25"
             @click="p.setChampionGlobalSort('champion')"
           >
             {{ p.t('statisticsPage.tierListColChampion')
             }}{{ p.championGlobalSortIcon('champion') }}
           </button>
-          <template v-if="p.championGlobalExpandBlue">
-            <button
-              type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-black border-sky-400/45 text-[11px] hover:bg-primary/30"
-              :title="p.t('statisticsPage.championTableCollapseGroup')"
-              @click="p.championGlobalExpandBlue = false"
-            >
-              ◀
-            </button>
-            <div
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
-            >
-              <button
-                type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                :title="
-                  p.t('statisticsPage.championTableTooltipBlue') +
-                  ' — ' +
-                  p.t('statisticsPage.tierListWinrateTooltip')
-                "
-                @click="p.setChampionGlobalSort('blueWinrate')"
-              >
-                {{ p.t('statisticsPage.winrate') }}{{ p.championGlobalSortIcon('blueWinrate') }}
-              </button>
-              <button
-                type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                @click="p.setChampionGlobalSort('blueWinrateDelta')"
-              >
-                {{ p.t('statisticsPage.championTableDeltaSymbol')
-                }}{{ p.championGlobalSortIcon('blueWinrateDelta') }}
-              </button>
-            </div>
-            <div
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
-            >
-              <button
-                type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                :title="
-                  p.t('statisticsPage.championTableTooltipBlue') +
-                  ' — ' +
-                  p.t('statisticsPage.tierListPickrateTooltip')
-                "
-                @click="p.setChampionGlobalSort('bluePickrate')"
-              >
-                {{ p.t('statisticsPage.pickrate') }}{{ p.championGlobalSortIcon('bluePickrate') }}
-              </button>
-              <button
-                type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                @click="p.setChampionGlobalSort('bluePickrateDelta')"
-              >
-                {{ p.t('statisticsPage.championTableDeltaSymbol')
-                }}{{ p.championGlobalSortIcon('bluePickrateDelta') }}
-              </button>
-            </div>
-          </template>
-          <button
-            v-else
-            type="button"
-            class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-black border-sky-400/45 px-0.5 text-center text-[9px] font-semibold leading-tight text-sky-200/90 hover:bg-primary/25"
-            :title="p.t('statisticsPage.championTableExpandGroup')"
-            @click="p.championGlobalExpandBlue = true"
+          <!-- Bleu : couleur uniquement sur le texte des titres -->
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
-            <span>{{ p.t('statisticsPage.championTableGroupBlue') }}</span>
-            <span class="text-[10px] text-text/80">▶</span>
-          </button>
-          <template v-if="p.championGlobalExpandRed">
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-black border-red-400/45 text-[11px] hover:bg-primary/30"
-              :title="p.t('statisticsPage.championTableCollapseGroup')"
-              @click="p.championGlobalExpandRed = false"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] font-medium leading-tight text-sky-300 hover:bg-primary/25"
+              :title="
+                p.t('statisticsPage.championTableTooltipBlue') +
+                ' — ' +
+                p.t('statisticsPage.tierListWinrateTooltip')
+              "
+              @click="p.setChampionGlobalSort('blueWinrate')"
             >
-              ◀
+              {{ p.t('statisticsPage.winrate') }}{{ p.championGlobalSortIcon('blueWinrate') }}
             </button>
-            <div
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('blueWinrateDelta')"
             >
-              <button
-                type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                :title="
-                  p.t('statisticsPage.championTableTooltipRed') +
-                  ' — ' +
-                  p.t('statisticsPage.tierListWinrateTooltip')
-                "
-                @click="p.setChampionGlobalSort('redWinrate')"
-              >
-                {{ p.t('statisticsPage.winrate') }}{{ p.championGlobalSortIcon('redWinrate') }}
-              </button>
-              <button
-                type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                @click="p.setChampionGlobalSort('redWinrateDelta')"
-              >
-                {{ p.t('statisticsPage.championTableDeltaSymbol')
-                }}{{ p.championGlobalSortIcon('redWinrateDelta') }}
-              </button>
-            </div>
-            <div
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
-            >
-              <button
-                type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-                :title="
-                  p.t('statisticsPage.championTableTooltipRed') +
-                  ' — ' +
-                  p.t('statisticsPage.tierListPickrateTooltip')
-                "
-                @click="p.setChampionGlobalSort('redPickrate')"
-              >
-                {{ p.t('statisticsPage.pickrate') }}{{ p.championGlobalSortIcon('redPickrate') }}
-              </button>
-              <button
-                type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[8px] leading-tight text-text/75 hover:bg-primary/20"
-                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-                @click="p.setChampionGlobalSort('redPickrateDelta')"
-              >
-                {{ p.t('statisticsPage.championTableDeltaSymbol')
-                }}{{ p.championGlobalSortIcon('redPickrateDelta') }}
-              </button>
-            </div>
-          </template>
-          <button
-            v-else
-            type="button"
-            class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-black border-red-400/45 px-0.5 text-center text-[9px] font-semibold leading-tight text-red-200/90 hover:bg-primary/25"
-            :title="p.t('statisticsPage.championTableExpandGroup')"
-            @click="p.championGlobalExpandRed = true"
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('blueWinrateDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
-            <span>{{ p.t('statisticsPage.championTableGroupRed') }}</span>
-            <span class="text-[10px] text-text/80">▶</span>
-          </button>
-          <template v-if="p.championGlobalExpandDealt">
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-black border-white/25 text-[11px] hover:bg-primary/30"
-              :title="p.t('statisticsPage.championTableCollapseGroup')"
-              @click="p.championGlobalExpandDealt = false"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] font-medium leading-tight text-sky-300 hover:bg-primary/25"
+              :title="
+                p.t('statisticsPage.championTableTooltipBlue') +
+                ' — ' +
+                p.t('statisticsPage.tierListPickrateTooltip')
+              "
+              @click="p.setChampionGlobalSort('bluePickrate')"
             >
-              ◀
+              {{ p.t('statisticsPage.pickrate') }}{{ p.championGlobalSortIcon('bluePickrate') }}
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('bluePickrateDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('bluePickrateDelta') }}
+            </button>
+          </div>
+          <!-- Rouge -->
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] font-medium leading-tight text-red-300 hover:bg-primary/25"
+              :title="
+                p.t('statisticsPage.championTableTooltipRed') +
+                ' — ' +
+                p.t('statisticsPage.tierListWinrateTooltip')
+              "
+              @click="p.setChampionGlobalSort('redWinrate')"
+            >
+              {{ p.t('statisticsPage.winrate') }}{{ p.championGlobalSortIcon('redWinrate') }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('redWinrateDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('redWinrateDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] font-medium leading-tight text-red-300 hover:bg-primary/25"
+              :title="
+                p.t('statisticsPage.championTableTooltipRed') +
+                ' — ' +
+                p.t('statisticsPage.tierListPickrateTooltip')
+              "
+              @click="p.setChampionGlobalSort('redPickrate')"
+            >
+              {{ p.t('statisticsPage.pickrate') }}{{ p.championGlobalSortIcon('redPickrate') }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('redPickrateDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('redPickrateDelta') }}
+            </button>
+          </div>
+          <!-- Dégâts infligés -->
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTooltipDealt')"
               @click="p.setChampionGlobalSort('dmgTotal')"
             >
@@ -200,7 +157,20 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('dmgTotalDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('dmgTotalDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtPhys')"
               @click="p.setChampionGlobalSort('dmgPhys')"
             >
@@ -209,7 +179,20 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('dmgPhysDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('dmgPhysDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtMagic')"
               @click="p.setChampionGlobalSort('dmgMagic')"
             >
@@ -218,36 +201,43 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('dmgMagicDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('dmgMagicDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtTrue')"
               @click="p.setChampionGlobalSort('dmgTrue')"
             >
               {{ p.t('statisticsPage.championTableColBrut')
               }}{{ p.championGlobalSortIcon('dmgTrue') }}
             </button>
-          </template>
-          <button
-            v-else
-            type="button"
-            class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-black border-white/25 px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-            :title="p.t('statisticsPage.championTableExpandGroup')"
-            @click="p.championGlobalExpandDealt = true"
-          >
-            <span>{{ p.t('statisticsPage.championTableGroupDealt') }}</span>
-            <span class="text-[10px] text-text/80">▶</span>
-          </button>
-          <template v-if="p.championGlobalExpandTaken">
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-black border-white/25 text-[11px] hover:bg-primary/30"
-              :title="p.t('statisticsPage.championTableCollapseGroup')"
-              @click="p.championGlobalExpandTaken = false"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('dmgTrueDelta')"
             >
-              ◀
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('dmgTrueDelta') }}
             </button>
+          </div>
+          <!-- Dégâts subis -->
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTooltipTaken')"
               @click="p.setChampionGlobalSort('takenTotal')"
             >
@@ -256,7 +246,20 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('takenTotalDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('takenTotalDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenPhys')"
               @click="p.setChampionGlobalSort('takenPhys')"
             >
@@ -265,7 +268,20 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('takenPhysDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('takenPhysDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenMagic')"
               @click="p.setChampionGlobalSort('takenMagic')"
             >
@@ -274,36 +290,43 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-10 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('takenMagicDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('takenMagicDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenTrue')"
               @click="p.setChampionGlobalSort('takenTrue')"
             >
               {{ p.t('statisticsPage.championTableColBrut')
               }}{{ p.championGlobalSortIcon('takenTrue') }}
             </button>
-          </template>
-          <button
-            v-else
-            type="button"
-            class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-black border-white/25 px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-            :title="p.t('statisticsPage.championTableExpandGroup')"
-            @click="p.championGlobalExpandTaken = true"
-          >
-            <span>{{ p.t('statisticsPage.championTableGroupTaken') }}</span>
-            <span class="text-[10px] text-text/80">▶</span>
-          </button>
-          <template v-if="p.championGlobalExpandKda">
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-7 shrink-0 cursor-pointer items-center justify-center border-b border-l border-black border-white/25 text-[11px] hover:bg-primary/30"
-              :title="p.t('statisticsPage.championTableCollapseGroup')"
-              @click="p.championGlobalExpandKda = false"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('takenTrueDelta')"
             >
-              ◀
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('takenTrueDelta') }}
             </button>
+          </div>
+          <!-- KDA -->
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTooltipKda')"
               @click="p.setChampionGlobalSort('kills')"
             >
@@ -312,7 +335,20 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('killsDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('killsDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               @click="p.setChampionGlobalSort('deaths')"
             >
               {{ p.t('statisticsPage.championTableColDeath')
@@ -320,525 +356,533 @@ const p = inject('statisticsPageCtx') as any
             </button>
             <button
               type="button"
-              class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-9 shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-black px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('deathsDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('deathsDelta') }}
+            </button>
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+          >
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
               @click="p.setChampionGlobalSort('assists')"
             >
               {{ p.t('statisticsPage.championTableColAssist')
               }}{{ p.championGlobalSortIcon('assists') }}
             </button>
-          </template>
-          <button
-            v-else
-            type="button"
-            class="tier-list-lolalytics-th border-p.t border-p.t-[var(--color-grey-300)] flex h-8 w-[68px] shrink-0 cursor-pointer flex-col items-center justify-center gap-0 border-b border-l border-black border-white/25 px-0.5 text-center text-[9px] font-semibold leading-tight hover:bg-primary/25"
-            :title="p.t('statisticsPage.championTableExpandGroup')"
-            @click="p.championGlobalExpandKda = true"
-          >
-            <span>{{ p.t('statisticsPage.championTableGroupKda') }}</span>
-            <span class="text-[10px] text-text/80">▶</span>
-          </button>
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+              @click="p.setChampionGlobalSort('assistsDelta')"
+            >
+              {{ p.t('statisticsPage.championTableDeltaSymbol')
+              }}{{ p.championGlobalSortIcon('assistsDelta') }}
+            </button>
+          </div>
         </div>
+
         <div
-          v-for="row in p.championGlobalSortedRows"
+          v-for="row in p.paginatedChampionGlobalRows"
           :key="row.championId"
-          class="tier-list-lolalytics-row flex min-h-[72px] w-full flex-nowrap items-center justify-start py-0.5 odd:bg-white/[0.04] even:bg-black/25"
+          class="tier-list-lolalytics-row flex min-h-[60px] w-full flex-nowrap items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
         >
-          <div class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2">
+          <div
+            class="tier-list-lolalytics-td flex w-[110px] shrink-0 flex-col items-center justify-center gap-0.5 px-1 py-0.5 text-center"
+          >
             <img
               v-if="p.gameVersion && p.championByKey(row.championId)"
               :src="
                 p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
               "
               :alt="p.championName(row.championId) || ''"
-              class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
-              width="50"
-              height="50"
+              class="h-8 w-8 shrink-0 border border-black object-cover"
+              width="32"
+              height="32"
             />
-            <span class="min-w-0 truncate text-left font-medium text-accent">{{
-              p.championName(row.championId) || row.championId
-            }}</span>
+            <span
+              class="line-clamp-2 max-w-full text-[10px] font-medium leading-tight text-accent"
+              :title="p.championName(row.championId) || String(row.championId)"
+              >{{ p.championName(row.championId) || row.championId }}</span
+            >
           </div>
-          <template v-if="p.championGlobalExpandBlue">
-            <div
-              class="tier-list-lolalytics-td w-7 shrink-0 border-l border-sky-400/35"
-              aria-hidden="true"
-            />
-            <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-            >
-              <span
-                :class="row.blue.games ? p.tierListWinrateClass(row.blue.winrate) : 'text-text/55'"
-                >{{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}</span
-              >
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
-            >
-              <span
-                :class="
-                  row.blue.games ? p.championGlobalPickrateClass(row.blue.pickrate) : 'text-text/55'
-                "
-                >{{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}</span
-              >
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
-                  )
-                }}</span
-              >
-            </div>
-          </template>
           <div
-            v-else
-            class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-sky-400/35"
-            aria-hidden="true"
-          />
-          <template v-if="p.championGlobalExpandRed">
-            <div
-              class="tier-list-lolalytics-td w-7 shrink-0 border-l border-red-400/40"
-              aria-hidden="true"
-            />
-            <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+          >
+            <span
+              :class="row.blue.games ? p.tierListWinrateClass(row.blue.winrate) : 'text-text/55'"
+              >{{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}</span
             >
-              <span
-                :class="row.red.games ? p.tierListWinrateClass(row.red.winrate) : 'text-text/55'"
-                >{{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}</span
-              >
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.tierListPatchDeltaClass(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatTierListPatchDeltaPp(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
+                )
+              }}</span
             >
-              <span
-                :class="
-                  row.red.games ? p.championGlobalPickrateClass(row.red.pickrate) : 'text-text/55'
-                "
-                >{{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}</span
-              >
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.tierListPatchDeltaClass(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatTierListPatchDeltaPp(
-                    p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
-                  )
-                }}</span
-              >
-            </div>
-          </template>
+          </div>
           <div
-            v-else
-            class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-red-400/40"
-            aria-hidden="true"
-          />
-          <template v-if="p.championGlobalExpandDealt">
-            <div
-              class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-              aria-hidden="true"
-            />
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+          >
+            <span
+              :class="
+                row.blue.games ? p.championGlobalPickrateClass(row.blue.pickrate) : 'text-text/55'
+              "
+              >{{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.tierListPatchDeltaClass(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatTierListPatchDeltaPp(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
+                )
+              }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsPhys) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-            >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsMagic) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-            >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsTrue) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
-                  )
-                }}</span
-              >
-            </div>
-          </template>
+          </div>
           <div
-            v-else
-            class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-            aria-hidden="true"
-          />
-          <template v-if="p.championGlobalExpandTaken">
-            <div
-              class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-              aria-hidden="true"
-            />
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+          >
+            <span
+              :class="row.red.games ? p.tierListWinrateClass(row.red.winrate) : 'text-text/55'"
+              >{{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTotal) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!,
-                    true
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.tierListPatchDeltaClass(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatTierListPatchDeltaPp(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
+                )
+              }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenPhys) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!,
-                    true
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-            >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenMagic) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!,
-                    true
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-            >
-              <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTrue) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!,
-                    true
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!
-                  )
-                }}</span
-              >
-            </div>
-          </template>
+          </div>
           <div
-            v-else
-            class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-            aria-hidden="true"
-          />
-          <template v-if="p.championGlobalExpandKda">
-            <div
-              class="tier-list-lolalytics-td w-7 shrink-0 border-l border-white/20"
-              aria-hidden="true"
-            />
-            <div
-              class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+          >
+            <span
+              :class="
+                row.red.games ? p.championGlobalPickrateClass(row.red.pickrate) : 'text-text/55'
+              "
+              >{{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgKills) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgKills') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgKills')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgKills')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.tierListPatchDeltaClass(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatTierListPatchDeltaPp(
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
+                )
+              }}</span
             >
-              <span>{{ p.formatChampionGlobalNum(row.avgDeaths) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgDeaths')!,
-                    true
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgDeaths')!
-                  )
-                }}</span
-              >
-            </div>
-            <div
-              class="tier-list-lolalytics-td flex w-9 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-            >
-              <span>{{ p.formatChampionGlobalNum(row.avgAssists) }}</span>
-              <span
-                v-if="
-                  p.championGlobalPatchDeltaRefLabel &&
-                  p.championGlobalNumericDelta(row.championId, 'avgAssists') != null
-                "
-                class="text-[10px] leading-none"
-                :class="
-                  p.championGlobalNumericDeltaClass(
-                    p.championGlobalNumericDelta(row.championId, 'avgAssists')!
-                  )
-                "
-                :title="
-                  p.t('statisticsPage.tierListPatchDeltaTitle', {
-                    ref: p.championGlobalPatchDeltaRefLabel,
-                  })
-                "
-                >{{
-                  p.formatChampionGlobalNumericDelta(
-                    p.championGlobalNumericDelta(row.championId, 'avgAssists')!
-                  )
-                }}</span
-              >
-            </div>
-          </template>
+          </div>
           <div
-            v-else
-            class="tier-list-lolalytics-td w-[68px] shrink-0 border-l border-white/20"
-            aria-hidden="true"
-          />
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChamps')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsPhys) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsPhys')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsMagic) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsMagic')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsTrue) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageToChampsTrue')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTotal) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!,
+                  true
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTotal')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenPhys) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!,
+                  true
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenPhys')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenMagic) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!,
+                  true
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenMagic')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTrue) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!,
+                  true
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDamageTakenTrue')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgKills) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgKills') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgKills')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgDeaths) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgDeaths')!,
+                  true
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgDeaths')!
+                )
+              }}</span
+            >
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+          >
+            <span>{{ p.formatChampionGlobalNum(row.avgAssists) }}</span>
+            <span
+              v-if="
+                p.championGlobalPatchDeltaRefLabel &&
+                p.championGlobalNumericDelta(row.championId, 'avgAssists') != null
+              "
+              class="text-[10px] leading-none"
+              :class="
+                p.championGlobalNumericDeltaClass(
+                  p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                )
+              "
+              :title="
+                p.t('statisticsPage.tierListPatchDeltaTitle', {
+                  ref: p.championGlobalPatchDeltaRefLabel,
+                })
+              "
+              >{{
+                p.formatChampionGlobalNumericDelta(
+                  p.championGlobalNumericDelta(row.championId, 'avgAssists')!
+                )
+              }}</span
+            >
+          </div>
+        </div>
+        <div
+          v-if="p.totalChampionGlobalCount > 0"
+          class="border-p.t flex flex-wrap items-center justify-between gap-2 border-primary/20 px-4 py-2 text-sm text-text/80"
+        >
+          <span>{{ p.t('statisticsPage.showing') }} {{ p.totalChampionGlobalCount }}</span>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1.5">
+              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+              <select
+                v-model.number="p.championsPageSize"
+                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+              >
+                <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </label>
+            <span class="text-text/70">
+              {{ (p.championGlobalPage - 1) * p.championsPageSize + 1 }}-{{
+                Math.min(p.championGlobalPage * p.championsPageSize, p.totalChampionGlobalCount)
+              }}
+              / {{ p.totalChampionGlobalCount }}
+            </span>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="p.championGlobalPage <= 1"
+                @click="p.championGlobalPage = Math.max(1, p.championGlobalPage - 1)"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="p.championGlobalPage >= p.totalChampionGlobalPages"
+                @click="
+                  p.championGlobalPage = Math.min(
+                    p.totalChampionGlobalPages,
+                    p.championGlobalPage + 1
+                  )
+                "
+              >
+                ›
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

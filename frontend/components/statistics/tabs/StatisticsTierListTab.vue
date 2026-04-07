@@ -84,20 +84,33 @@ const p = inject('statisticsPageCtx') as any
             >
               {{ p.t('statisticsPage.tierListTier') }}{{ p.tierListSortIcon('tier') }}
             </button>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-10 shrink-0 cursor-pointer flex-col items-center justify-center border-b border-black text-[11px] leading-tight hover:bg-primary/25"
-              :title="p.t('statisticsPage.tierListMainRoleTooltip')"
-              @click="p.cycleTierListSort('mainRolePct')"
-            >
-              {{ p.t('statisticsPage.tierListColLane') }}{{ p.tierListSortIcon('mainRolePct') }}
-            </button>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                :title="p.t('statisticsPage.tierListMainRoleTooltip')"
+                @click="p.cycleTierListSort('mainRolePct')"
+              >
+                {{ p.t('statisticsPage.tierListColLane') }}{{ p.tierListSortIcon('mainRolePct') }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                @click="p.cycleTierListSort('patchMainRolePctPp')"
+              >
+                {{ p.t('statisticsPage.championTableDeltaSymbol')
+                }}{{ p.tierListSortIcon('patchMainRolePctPp') }}
+              </button>
+            </div>
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+            >
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
                 :title="p.t('statisticsPage.tierListWinrateTooltip')"
                 @click="p.cycleTierListSort('winrate')"
               >
@@ -105,7 +118,7 @@ const p = inject('statisticsPageCtx') as any
               </button>
               <button
                 type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+                class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
                 :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
                 @click="p.cycleTierListSort('patchWinratePp')"
               >
@@ -114,11 +127,11 @@ const p = inject('statisticsPageCtx') as any
               </button>
             </div>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-12 shrink-0 flex-col justify-stretch border-b border-black py-0.5"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
             >
               <button
                 type="button"
-                class="flex flex-1 flex-col items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
                 :title="p.t('statisticsPage.tierListPickrateTooltip')"
                 @click="p.cycleTierListSort('pickrate')"
               >
@@ -126,7 +139,7 @@ const p = inject('statisticsPageCtx') as any
               </button>
               <button
                 type="button"
-                class="border-p.t flex flex-1 flex-col items-center justify-center border-black/20 px-0.5 pt-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+                class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
                 :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
                 @click="p.cycleTierListSort('patchPickratePp')"
               >
@@ -134,21 +147,47 @@ const p = inject('statisticsPageCtx') as any
                 }}{{ p.tierListSortIcon('patchPickratePp') }}
               </button>
             </div>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-black hover:bg-primary/25 md:flex"
-              :title="p.t('statisticsPage.tierListPbiTooltip')"
-              @click="p.cycleTierListSort('pbi')"
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 md:flex"
             >
-              {{ p.t('statisticsPage.tierListPbi') }}{{ p.tierListSortIcon('pbi') }}
-            </button>
-            <button
-              type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden w-[72px] shrink-0 cursor-pointer items-center justify-center border-b border-black hover:bg-primary/25 sm:flex"
-              @click="p.cycleTierListSort('games')"
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                :title="p.t('statisticsPage.tierListPbiTooltip')"
+                @click="p.cycleTierListSort('pbi')"
+              >
+                {{ p.t('statisticsPage.tierListPbi') }}{{ p.tierListSortIcon('pbi') }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                @click="p.cycleTierListSort('patchPbiPp')"
+              >
+                {{ p.t('statisticsPage.championTableDeltaSymbol')
+                }}{{ p.tierListSortIcon('patchPbiPp') }}
+              </button>
+            </div>
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-[72px] shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 sm:flex"
             >
-              {{ p.t('statisticsPage.tierListGames') }}{{ p.tierListSortIcon('games') }}
-            </button>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                @click="p.cycleTierListSort('games')"
+              >
+                {{ p.t('statisticsPage.tierListGames') }}{{ p.tierListSortIcon('games') }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
+                :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                @click="p.cycleTierListSort('patchGamesDelta')"
+              >
+                {{ p.t('statisticsPage.championTableDeltaSymbol')
+                }}{{ p.tierListSortIcon('patchGamesDelta') }}
+              </button>
+            </div>
             <template v-if="p.hasTierListHighElo">
               <button
                 type="button"
@@ -158,21 +197,47 @@ const p = inject('statisticsPageCtx') as any
               >
                 {{ p.t('statisticsPage.tierListApexRank') }}{{ p.tierListSortIcon('highEloRank') }}
               </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-black text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                :title="p.t('statisticsPage.tierListHighEloWinTooltip')"
-                @click="p.cycleTierListSort('highEloWinrate')"
+              <div
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
               >
-                {{ p.t('statisticsPage.winrate') }}{{ p.tierListSortIcon('highEloWinrate') }}
-              </button>
-              <button
-                type="button"
-                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-black text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
-                @click="p.cycleTierListSort('highEloGames')"
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                  :title="p.t('statisticsPage.tierListHighEloWinTooltip')"
+                  @click="p.cycleTierListSort('highEloWinrate')"
+                >
+                  {{ p.t('statisticsPage.winrate') }}{{ p.tierListSortIcon('highEloWinrate') }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-[rgb(var(--rgb-gold-100))]/90 hover:bg-primary/20"
+                  :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                  @click="p.cycleTierListSort('patchHighEloWinratePp')"
+                >
+                  {{ p.t('statisticsPage.championTableDeltaSymbol')
+                  }}{{ p.tierListSortIcon('patchHighEloWinratePp') }}
+                </button>
+              </div>
+              <div
+                class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 text-[rgb(var(--rgb-gold-100))] sm:flex"
               >
-                {{ p.t('statisticsPage.tierListGames') }}{{ p.tierListSortIcon('highEloGames') }}
-              </button>
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[11px] leading-tight hover:bg-primary/25"
+                  @click="p.cycleTierListSort('highEloGames')"
+                >
+                  {{ p.t('statisticsPage.tierListGames') }}{{ p.tierListSortIcon('highEloGames') }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-[rgb(var(--rgb-gold-100))]/90 hover:bg-primary/20"
+                  :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
+                  @click="p.cycleTierListSort('patchHighEloGamesDelta')"
+                >
+                  {{ p.t('statisticsPage.championTableDeltaSymbol')
+                  }}{{ p.tierListSortIcon('patchHighEloGamesDelta') }}
+                </button>
+              </div>
               <button
                 type="button"
                 class="tier-list-lolalytics-th tier-list-lolalytics-th-apex border-p.t border-p.t-[var(--color-grey-300)] hidden w-12 shrink-0 cursor-pointer items-center justify-center border-b border-black text-[rgb(var(--rgb-gold-100))] hover:bg-primary/25 sm:flex"
@@ -310,9 +375,20 @@ const p = inject('statisticsPageCtx') as any
               >
             </div>
             <div
-              class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-center md:flex"
+              class="tier-list-lolalytics-td hidden w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight md:flex"
             >
-              {{ p.formatMatchupScore(row.pbi, 2) }}
+              <span>{{ p.formatMatchupScore(row.pbi, 2) }}</span>
+              <span
+                v-if="p.tierListPatchDeltaRefLabel && row.patchRefMatchupScorePp != null"
+                class="text-[10px] leading-none"
+                :class="p.tierListPatchDeltaClass(row.patchRefMatchupScorePp)"
+                :title="
+                  p.t('statisticsPage.tierListPatchDeltaTitle', {
+                    ref: p.tierListPatchDeltaRefLabel,
+                  })
+                "
+                >{{ p.formatTierListPatchDeltaPp(row.patchRefMatchupScorePp) }}</span
+              >
             </div>
             <div
               class="tier-list-lolalytics-td hidden w-[72px] shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight sm:flex"
