@@ -5,7 +5,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { applyRankTierWhere, rankTierCacheKey } from '../utils/statsFilters.js'
+import { rankTierCacheKey, toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
 const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
@@ -64,12 +64,35 @@ export async function getOverviewAbandons(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    // Build match filter
-    const matchWhere: Record<string, unknown> = {}
-    if (pVersion) matchWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(matchWhere, rankTier)
+    const versions = toQueryStringArrayParam(version)
+    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+    const cond: string[] = ['1=1']
+    if (versions.length === 1) cond.push(`mo.game_version LIKE '${versions[0].replace(/'/g, "''")}%'`)
+    else if (versions.length > 1)
+      cond.push(`mo.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
+    if (ranks.length === 1) cond.push(`mo.rank_tier = '${ranks[0]}'`)
+    else if (ranks.length > 1) cond.push(`mo.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+    else cond.push(`mo.rank_tier <> 'UNRANKED'`)
+    const whereSql = cond.join(' AND ')
 
-    const totalMatches = await prisma.match.count({ where: matchWhere })
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{
+        total_matches: bigint
+        early_surrender_count: bigint
+        surrender_count: bigint
+        remake_count: bigint
+      }>
+    >(`
+      SELECT
+        COALESCE(SUM(mo.count_match), 0)::bigint AS total_matches,
+        COALESCE(SUM(mo.count_early_surrender), 0)::bigint AS early_surrender_count,
+        COALESCE(SUM(mo.count_surrender), 0)::bigint AS surrender_count,
+        COALESCE(SUM(mo.count_remake), 0)::bigint AS remake_count
+      FROM mv_match_outcome_stats mo
+      WHERE ${whereSql}
+    `)
+    const row = rows[0]
+    const totalMatches = Number(row?.total_matches ?? 0)
     if (totalMatches === 0) {
       return {
         totalMatches: 0,
@@ -82,31 +105,9 @@ export async function getOverviewAbandons(
       }
     }
 
-    const [earlySurrenderCount, surrenderCount] = await Promise.all([
-      prisma.match.count({ where: { ...matchWhere, gameEndedInEarlySurrender: true } }),
-      prisma.match.count({ where: { ...matchWhere, gameEndedInSurrender: true } }),
-    ])
-
-    // Remake = match where at least one player has 0 items
-    // Check match_player_items count grouped by match_player
-    const remakeCandidates = await prisma.matchPlayer.findMany({
-      where: {
-        match: matchWhere,
-      },
-      select: {
-        matchId: true,
-        items: true,
-      },
-    })
-
-    const remakeMatchIds = new Set<bigint>()
-    for (const mp of remakeCandidates) {
-      const itemCount = Array.isArray(mp.items) ? mp.items.length : 0
-      if (itemCount === 0) {
-        remakeMatchIds.add(mp.matchId)
-      }
-    }
-    const remakeCount = remakeMatchIds.size
+    const earlySurrenderCount = Number(row?.early_surrender_count ?? 0)
+    const surrenderCount = Number(row?.surrender_count ?? 0)
+    const remakeCount = Number(row?.remake_count ?? 0)
 
     const rates = computeAbandonRates(totalMatches, remakeCount, earlySurrenderCount, surrenderCount)
     const result: OverviewAbandonsResult = {

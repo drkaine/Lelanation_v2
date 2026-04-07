@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "dev:no-watch": "tsx src/index.ts",
-    "build": "cd .. && npx prisma generate --schema=backend/prisma/schema.prisma && cd backend && tsc",
+    "build": "prisma generate && tsc",
     "build:no-generate": "tsc && pm2 restart lelanation-backend",
     "start": "node dist/index.js",
     "sync:data": "tsx src/scripts/syncData.ts",
@@ -16,7 +16,7 @@
     "test:matchups": "tsx --test src/services/MatchupTierService.test.ts",
     "test:stats": "tsx --test src/utils/statsFormulas.test.ts src/utils/statsMvBanAggregate.test.ts src/utils/statShardLegacyMerge.test.ts src/services/TierListService.test.ts src/services/StatsAbandonsService.test.ts src/services/MatchupTierService.test.ts",
     "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/riotPoller.db.test.ts",
-    "prisma:generate": "cd .. && npx prisma generate --schema=backend/prisma/schema.prisma",
+    "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
     "script:league-xp": "tsx src/worker/runScript.ts league-xp"

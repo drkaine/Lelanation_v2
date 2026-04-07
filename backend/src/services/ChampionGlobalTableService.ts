@@ -1,10 +1,11 @@
 /**
- * Table globale champions : WR / pick / ban par côté, dégâts moyens, KDA (agrégation SQL).
+ * Table globale champions : WR / pick / ban par côté, dégâts moyens, KDA.
+ * Runtime source policy: materialized views only.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
-function buildRawMatchCond(
+export function buildRawMatchCond(
   version?: string | string[] | null,
   rankTier?: string | string[] | null
 ): string {
@@ -83,11 +84,12 @@ export async function getChampionGlobalTable(
   rankTier?: string | string[] | null
 ): Promise<{ matchCount: number; rows: ChampionGlobalTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
-  const matchCond = buildRawMatchCond(version, rankTier)
-
-  const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(
-    `SELECT COUNT(DISTINCT m.id)::bigint AS mc FROM matchs m WHERE ${matchCond}`
-  )
+  const matchCondMatchOutcome = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')
+  const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
+    SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
+    FROM mv_match_outcome_stats mo
+    WHERE ${matchCondMatchOutcome}
+  `)
   const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
   if (matchCount === 0) {
     return { matchCount: 0, rows: [] }
@@ -112,42 +114,40 @@ export async function getChampionGlobalTable(
     sum_a: bigint
   }
 
+  const matchCondSide = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
   const aggSql = `
     SELECT
-      t.team AS team_id,
-      mp.champion_id AS champion_id,
-      COUNT(*)::int AS games,
-      SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins,
-      SUM(COALESCE(c.physical_damage_dealt_to_champions, 0))::bigint AS sum_phys_d,
-      SUM(COALESCE(c.magic_damage_dealt_to_champions, 0))::bigint AS sum_magic_d,
-      SUM(COALESCE(c.true_damage_dealt_to_champions, 0))::bigint AS sum_true_d,
-      SUM(COALESCE(c.physical_damage_taken, 0))::bigint AS sum_phys_t,
-      SUM(COALESCE(c.magic_damage_taken, 0))::bigint AS sum_magic_t,
-      SUM(COALESCE(c.true_damage_taken, 0))::bigint AS sum_true_t,
-      SUM(COALESCE(c.total_damage_taken, 0))::bigint AS sum_total_t,
-      SUM(COALESCE(k.kills, 0))::bigint AS sum_k,
-      SUM(COALESCE(k.deaths, 0))::bigint AS sum_de,
-      SUM(COALESCE(k.assists, 0))::bigint AS sum_a
-    FROM match_players mp
-    INNER JOIN teams t ON t.id = mp.team_id
-    INNER JOIN matchs m ON m.id = mp.match_id
-    LEFT JOIN match_player_combats c ON c.match_player_id = mp.id
-    LEFT JOIN match_player_core k ON k.match_player_id = mp.id
-    WHERE ${matchCond} AND t.team IN (100, 200)
-    GROUP BY t.team, mp.champion_id
+      mv.team_num AS team_id,
+      mv.champion_id AS champion_id,
+      SUM(mv.count_game)::int AS games,
+      SUM(mv.count_win)::int AS wins,
+      SUM(mv.sum_phys_dmg_to_champ)::bigint AS sum_phys_d,
+      SUM(mv.sum_magic_dmg_to_champ)::bigint AS sum_magic_d,
+      SUM(mv.sum_true_dmg_to_champ)::bigint AS sum_true_d,
+      SUM(mv.sum_phys_dmg_taken)::bigint AS sum_phys_t,
+      SUM(mv.sum_magic_dmg_taken)::bigint AS sum_magic_t,
+      SUM(mv.sum_true_dmg_taken)::bigint AS sum_true_t,
+      SUM(mv.sum_total_dmg_taken)::bigint AS sum_total_t,
+      SUM(mv.sum_kills)::bigint AS sum_k,
+      SUM(mv.sum_deaths)::bigint AS sum_de,
+      SUM(mv.sum_assists)::bigint AS sum_a
+    FROM mv_champion_side_stats mv
+    WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
+    GROUP BY mv.team_num, mv.champion_id
   `
   const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)
 
+  const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
   const banRows = await prisma.$queryRawUnsafe<
     Array<{ team_id: number; champion_id: number; cnt: number }>
   >(`
-    SELECT t.team AS team_id, b.champion_id AS champion_id,
-           COUNT(*)::int AS cnt
-    FROM bans b
-    INNER JOIN teams t ON t.id = b.team_id
-    INNER JOIN matchs m ON m.id = b.match_id
-    WHERE ${matchCond} AND t.team IN (100, 200)
-    GROUP BY t.team, b.champion_id
+    SELECT
+      mv.team_num AS team_id,
+      mv.banned_champion_id AS champion_id,
+      SUM(mv.ban_count)::int AS cnt
+    FROM mv_champion_bans_by_banner mv
+    WHERE ${matchCondBans} AND mv.team_num IN (100, 200)
+    GROUP BY mv.team_num, mv.banned_champion_id
   `)
 
   const banMap = new Map<string, number>()

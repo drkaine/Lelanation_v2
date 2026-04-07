@@ -31,13 +31,8 @@ export function createRiotPollerLogger(script: string = 'poller'): RiotPollerLog
   const prefix = `[${script}]`
   return {
     async info(msg: string, ...rest: unknown[]) {
-      void appendUnifiedLog({
-        section: 'back',
-        type: 'info',
-        script,
-        message: formatMsg(msg, rest),
-        json: restToJson(rest),
-      })
+      // Unified log stays summary-oriented (30m/1h in riotPoller.ts).
+      // Keep detailed info only on stdout when verbose mode is enabled.
       if (!verbose) return
       console.log(prefix, formatMsg(msg, rest))
     },
@@ -64,13 +59,7 @@ export function createRiotPollerLogger(script: string = 'poller'): RiotPollerLog
       console.error(prefix, full)
     },
     async step(step: string, details?: Record<string, unknown>) {
-      void appendUnifiedLog({
-        section: 'back',
-        type: 'step',
-        script,
-        message: details ? `${step} | ${JSON.stringify(details)}` : step,
-        json: details ?? null,
-      })
+      // Do not append step-by-step details to unified log by default.
       if (!verbose) return
       console.log(prefix, details ? `${step} | ${JSON.stringify(details)}` : step)
     },

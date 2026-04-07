@@ -50,6 +50,7 @@ const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 40
 const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
+const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
 
 /** Ragrégateur `poller_hourly` : défaut 1h ; ex. `POLLER_HOURLY_SUMMARY_MS=60000` pour tester (min 60s, max 24h). */
 function getPollerHourlySummaryIntervalMs(): number {
@@ -378,13 +379,14 @@ export async function runPhase2(
   let lastReqCount = state.requestCount
 
   while (!shouldStop()) {
-    if (Date.now() - lastPulseMs >= 120_000) {
+    if (Date.now() - lastPulseMs >= POLLER_SUMMARY_30M_MS) {
       await appendUnifiedLog({
         section: 'back',
         type: 'info',
         script: 'puuid_migration',
-        message: 'Snapshot migration PUUID (2 min)',
+        message: 'Resume migration PUUID (30 min)',
         json: {
+          windowMs: POLLER_SUMMARY_30M_MS,
           migratedDelta: totalSynced - lastTotalSynced,
           requestCountDelta: state.requestCount - lastReqCount,
           totalSynced,
@@ -507,9 +509,9 @@ export async function runPhase2(
 
   await appendUnifiedLog({
     section: 'back',
-    type: 'fin',
+    type: 'info',
     script: 'puuid_migration',
-    message: 'Phase 2 migration terminée',
+    message: 'Resume migration PUUID (final)',
     json: { totalSynced, totalPlaceholder, requestCount: state.requestCount },
   })
   await logger.step('Phase 2 end', { totalSynced, totalPlaceholder })
@@ -1723,9 +1725,6 @@ async function runStep4ForPlayer(
       return 'ok'
     }
 
-    const cycleStartMs = Date.now()
-    const reqAtStart = counters.requestCount
-    const matchesAtStart = counters.matchesFetched
     const playersFetchedBefore = counters.playersFetched
 
     if (!isLikelyRiotPuuid(player.puuid)) {
@@ -1737,18 +1736,6 @@ async function runStep4ForPlayer(
         where: { id: player.id },
         data: { puuidKeyVersion: 'perdu' },
       }).catch(() => undefined)
-      await appendUnifiedLog({
-        section: 'back',
-        type: 'fin',
-        script: 'poller',
-        message: `Cycle joueur ${player.id} (${region}) — puuid invalide`,
-        json: {
-          playerId: player.id.toString(),
-          region,
-          reason: 'invalid_puuid',
-          durationMs: Date.now() - cycleStartMs,
-        },
-      })
       continue
     }
 
@@ -1786,19 +1773,6 @@ async function runStep4ForPlayer(
         await logger.error('400 decrypt', matchIdsRes.body)
         return '400_decrypt'
       }
-      await appendUnifiedLog({
-        section: 'back',
-        type: 'fin',
-        script: 'poller',
-        message: `Cycle joueur ${player.id} (${region}) — échec liste matchs`,
-        json: {
-          playerId: player.id.toString(),
-          region,
-          httpStatus: matchIdsRes.status,
-          durationMs: Date.now() - cycleStartMs,
-          requestsDelta: counters.requestCount - reqAtStart,
-        },
-      })
       continue
     }
 
@@ -1810,7 +1784,6 @@ async function runStep4ForPlayer(
     const existingSet = new Set(existing.map((m) => m.riotMatchId))
     const nowMs = Date.now()
     const toFetch = matchIds.filter((id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs))
-    const redundantInList = matchIds.filter((id) => existingSet.has(id)).length
 
     if (toFetch.length === 0) {
       await prisma.player.update({
@@ -1823,24 +1796,6 @@ async function runStep4ForPlayer(
         region,
         matchesCount: matchIds.length,
         newPlayersCount: newPlayersFromPlayer0,
-      })
-      await appendUnifiedLog({
-        section: 'back',
-        type: 'fin',
-        script: 'poller',
-        message: `Cycle joueur ${player.id} (${region}) — rien à ingérer`,
-        json: {
-          playerId: player.id.toString(),
-          region,
-          matchIdsFromApi: matchIds.length,
-          alreadyInDbOrSkipped: redundantInList,
-          newMatchesToFetch: 0,
-          ingestedOk: 0,
-          newPlayersDelta: newPlayersFromPlayer0,
-          durationMs: Date.now() - cycleStartMs,
-          requestsDelta: counters.requestCount - reqAtStart,
-          pendingTransientIngest: false,
-        },
       })
       continue
     }
@@ -1935,7 +1890,7 @@ async function runStep4ForPlayer(
       if (dbCount !== ingestedIds.length) {
         await appendUnifiedLog({
           section: 'db',
-          type: 'verification',
+          type: 'warning',
           script: 'poller',
           message: `Écart DB: ${ingestedIds.length} match(s) attendus, ${dbCount} présents`,
           json: {
@@ -1964,26 +1919,7 @@ async function runStep4ForPlayer(
       newPlayersCount: newPlayersFromPlayer,
       pendingTransientIngest,
     })
-    await appendUnifiedLog({
-      section: 'back',
-      type: 'fin',
-      script: 'poller',
-      message: `Cycle joueur ${player.id} (${region}) — ${ingestedIds.length} match(s) ingérés`,
-      json: {
-        playerId: player.id.toString(),
-        region,
-        matchIdsFromApi: matchIds.length,
-        alreadyInDbOrSkipped: redundantInList,
-        newMatchesToFetch: toFetch.length,
-        ingestedOk: ingestedIds.length,
-        newPlayersDelta: newPlayersFromPlayer,
-        matchesFetchedDelta: counters.matchesFetched - matchesAtStart,
-        durationMs: Date.now() - cycleStartMs,
-        requestsDelta: counters.requestCount - reqAtStart,
-        pendingTransientIngest,
-        riotRateLimitHeaders: client.getLastRiotRateLimitHeaders(),
-      },
-    })
+    void newPlayersFromPlayer
   }
 
   return flags.foundPrismaError ? 'prisma_error' : 'ok'
@@ -2061,14 +1997,6 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   })
 
   try {
-    await appendUnifiedLog({
-      section: 'back',
-      type: 'debut',
-      script: 'poller',
-      message: 'Poller démarré',
-      json: { pid: process.pid },
-    })
-
     const recapRes = await loadGameVersionsRecap()
     let matchListTimeWindow: { startTime: number; endTime: number } | null = null
     if (recapRes.isOk()) {
@@ -2098,23 +2026,18 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersPolled = 0
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
+    let summary30mWindowStartedAtMs = Date.now()
+    let summary30mPlayersFetched = state.playersFetched
+    let summary30mMatchesFetched = state.matchesFetched
+    let summary30mRequestCount = state.requestCount
+    let summary30mNearLimitPauseCount = client.getRateLimiterStats().nearLimitPauseCount
+    let summary30mHttp429PauseCount = client.getRateLimiterStats().http429PauseCount
     let hourlyWindowStartedAtMs = Date.now()
     let hourlyPlayersFetched = state.playersFetched
     let hourlyMatchesFetched = state.matchesFetched
     let hourlyRequestCount = state.requestCount
     let hourlyNearLimitPauseCount = client.getRateLimiterStats().nearLimitPauseCount
     let hourlyHttp429PauseCount = client.getRateLimiterStats().http429PauseCount
-
-    await appendUnifiedLog({
-      section: 'back',
-      type: 'info',
-      script: 'poller_hourly',
-      message: `Résumé horaire poller — planificateur actif (intervalle ${Math.round(hourlySummaryIntervalMs / 60_000)} min ; POLLER_HOURLY_SUMMARY_MS)`,
-      json: {
-        intervalMs: hourlySummaryIntervalMs,
-        hint: 'Le backend démarre le poller via startDefaultScript() après RIOT_POLLER_STARTUP_DELAY_MS (défaut 2 min).',
-      },
-    })
 
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
@@ -2255,6 +2178,40 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
 
       const now = Date.now()
+      if (now - summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
+        const elapsedMs = Math.max(1, now - summary30mWindowStartedAtMs)
+        const playersDelta = state.playersFetched - summary30mPlayersFetched
+        const matchesDelta = state.matchesFetched - summary30mMatchesFetched
+        const requestsDelta = state.requestCount - summary30mRequestCount
+        const limiterStats = client.getRateLimiterStats()
+        const nearLimitPauseDelta =
+          limiterStats.nearLimitPauseCount - summary30mNearLimitPauseCount
+        const http429PauseDelta = limiterStats.http429PauseCount - summary30mHttp429PauseCount
+        const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+        await appendUnifiedLog({
+          section: 'back',
+          type: 'info',
+          script: 'poller_30m',
+          message: `Resume 30 min poller — players:+${playersDelta}, matches:+${matchesDelta}, req/h:${requestsPerHour}, pauses rate-limit refresh:${nearLimitPauseDelta}`,
+          json: {
+            windowStartIso: new Date(summary30mWindowStartedAtMs).toISOString(),
+            windowEndIso: new Date(now).toISOString(),
+            elapsedMs,
+            playersDelta,
+            matchesDelta,
+            requestsDelta,
+            requestsPerHour,
+            rateLimitRefreshPauses: nearLimitPauseDelta,
+            rateLimit429Pauses: http429PauseDelta,
+          },
+        })
+        summary30mWindowStartedAtMs = now
+        summary30mPlayersFetched = state.playersFetched
+        summary30mMatchesFetched = state.matchesFetched
+        summary30mRequestCount = state.requestCount
+        summary30mNearLimitPauseCount = limiterStats.nearLimitPauseCount
+        summary30mHttp429PauseCount = limiterStats.http429PauseCount
+      }
       if (now - hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
         const elapsedMs = Math.max(1, now - hourlyWindowStartedAtMs)
         const playersDelta = state.playersFetched - hourlyPlayersFetched

@@ -39,7 +39,12 @@ const MV_NAMES = [
   'mv_champion_spell_solo_stats',
   'mv_champion_summoner_spells',
   'mv_champion_bucket',
+  'mv_champion_bans_by_banner',
   'mv_team_bucket',
+  'mv_match_outcome_stats',
+  'mv_champion_side_stats',
+  'mv_champion_summoner_spell_pair_stats',
+  'mv_champion_item_starter_set_stats',
 ] as const
 const missingViews = new Set<string>()
 

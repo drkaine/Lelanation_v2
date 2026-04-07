@@ -12,6 +12,7 @@ export type StatisticsMainTab =
   | 'items'
   | 'spells'
   | 'infos'
+  | 'bans'
 
 interface StatisticsUiState {
   filtersOpen: boolean
@@ -28,6 +29,7 @@ const VALID_TABS: StatisticsMainTab[] = [
   'items',
   'spells',
   'infos',
+  'bans',
 ]
 
 function isValidTab(value: unknown): value is StatisticsMainTab {

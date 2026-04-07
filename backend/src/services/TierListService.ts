@@ -460,12 +460,13 @@ async function fetchMatchupRoleRows(
 }
 
 async function getLatestPatch(): Promise<string | null> {
-  const row = await prisma.match.findFirst({
-    orderBy: { id: 'desc' },
+  const row = await prisma.activePatch.findFirst({
+    where: { isCurrent: true },
+    orderBy: { gameVersion: 'desc' },
     select: { gameVersion: true },
   })
   if (!row?.gameVersion) return null
-  return normalizePatch(row.gameVersion)
+  return row.gameVersion.includes('.') ? row.gameVersion : normalizePatch(row.gameVersion)
 }
 
 export async function getTierList(options: GetTierListOptions): Promise<GetTierListResult | null> {

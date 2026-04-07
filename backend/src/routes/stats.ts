@@ -14,6 +14,7 @@ import {
 } from '../services/MatchupTierService.js'
 import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
+import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
@@ -39,15 +40,6 @@ import {
 } from '../services/StatsSummonerSpellsService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { isDatabaseConfigured } from '../db.js'
-import {
-  getPrecomputedChampions,
-  getPrecomputedOverview,
-  getPrecomputedOverviewTeams,
-  getPrecomputedOverviewDetail,
-  getPrecomputedDurationWinrate,
-  getPrecomputedSides,
-  getPrecomputedAbandons,
-} from '../services/StatsPrecomputedService.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -99,13 +91,6 @@ function rankTierParam(value: unknown): string[] | null {
     .map((s) => s.toUpperCase())
     .filter(Boolean)
   return tiers.length ? tiers : null
-}
-
-/** Clé pour tables pré-calculées (une seule ligue ou toutes). */
-function rankTierForPrecomputed(rankTier: string[] | null): string | null {
-  if (rankTier == null || rankTier.length === 0) return null
-  if (rankTier.length === 1) return rankTier[0]
-  return null
 }
 
 function resolvePatchFromQuery(patchValue: unknown, versionValue: unknown): string | null {
@@ -197,14 +182,6 @@ router.get('/overview', async (req: Request, res: Response) => {
   const sqlStart = Date.now()
 
   const runOverview = async () => {
-    if (
-      version == null &&
-      (rankTier == null || rankTier.length <= 1) &&
-      !role
-    ) {
-      const pre = await getPrecomputedOverview(rankTierForPrecomputed(rankTier))
-      if (pre?.data) return pre.data
-    }
     return getOverviewStats(version, rankTier, role)
   }
 
@@ -238,7 +215,7 @@ router.get('/overview', async (req: Request, res: Response) => {
       message: 'No stats yet. Run match collection first.',
     })
   }
-  const data = raw as {
+  const data = raw as unknown as {
     totalMatches: number
     lastUpdate?: string | null
     playerCount?: number
@@ -272,13 +249,6 @@ router.get('/overview-detail', async (req: Request, res: Response) => {
   const role = queryString(req.query.role)
   const includeSmite = req.query.includeSmite === '1' || req.query.includeSmite === 'true'
   const sqlStart = Date.now()
-  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
-    const pre = await getPrecomputedOverviewDetail(rankTierForPrecomputed(rankTier), includeSmite)
-    if (pre?.data) {
-      ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
-      return res.json(pre.data)
-    }
-  }
   const data = await getOverviewDetailStats(version, rankTier, includeSmite, role)
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
@@ -309,10 +279,6 @@ router.get('/overview-duration-winrate', async (req: Request, res: Response) => 
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
-    const pre = await getPrecomputedDurationWinrate(rankTierForPrecomputed(rankTier))
-    if (pre?.data) return res.json(pre.data)
-  }
   const data = await getOverviewDurationWinrateStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({ buckets: [] })
@@ -325,10 +291,6 @@ router.get('/overview-abandons', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  if (version == null && (rankTier == null || rankTier.length <= 1)) {
-    const pre = await getPrecomputedAbandons(rankTierForPrecomputed(rankTier))
-    if (pre?.data) return res.json(pre.data)
-  }
   const data = await getOverviewAbandons(version, rankTier)
   if (!data) {
     return res.status(200).json({
@@ -373,10 +335,6 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  if (version == null && (rankTier == null || rankTier.length <= 1) && !role) {
-    const pre = await getPrecomputedOverviewTeams(rankTierForPrecomputed(rankTier))
-    if (pre?.data) return res.json(pre.data)
-  }
   const data = await getOverviewTeamsStats(version, rankTier, role)
   if (!data) {
     return res.status(200).json({
@@ -401,10 +359,6 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
 router.get('/overview-sides', async (req: Request, res: Response) => {
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
-  if (version.length === 0 && rankTier.length <= 1) {
-    const pre = await getPrecomputedSides(rankTier[0] ?? null)
-    if (pre?.data) return res.json(pre.data)
-  }
   const data = await getOverviewSidesStats(
     version.length ? version : null,
     rankTier.length ? rankTier : null
@@ -490,24 +444,6 @@ router.get('/champions', async (req: Request, res: Response) => {
   const role = (req.query.role as string) || undefined
   const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
-  const pre =
-    rankTier == null || rankTier.length <= 1
-      ? await getPrecomputedChampions(rankTierForPrecomputed(rankTier), role ?? null)
-      : null
-  if (pre?.data) {
-    const d = pre.data as { totalGames?: number; totalMatches?: number; champions?: unknown[]; generatedAt?: string | null }
-    ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
-    const champions = filterChampionRowsByOtp(
-      (d.champions ?? []) as Array<{ pickrate?: number }>,
-      otpMode
-    )
-    return res.json({
-      totalGames: d.totalGames ?? 0,
-      totalMatches: d.totalMatches ?? 0,
-      champions,
-      generatedAt: d.generatedAt ?? null
-    })
-  }
   const data = await aggregator.load({ rankTier, role: role ?? null })
   ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
   if (!data) {
@@ -551,6 +487,36 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
       matchCount: 0,
       rows: [],
       error: 'Champion global table failed',
+      message,
+    })
+  }
+})
+
+/** GET /api/stats/champions/bans-table — bans par champion (total, bleu/rouge, par rôle du banneur). Query: ?version=…&rankTier=…&role=TOP */
+router.get('/champions/bans-table', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryStringArray(req.query.version)
+  const rankTier = queryStringArray(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const sqlStart = Date.now()
+  try {
+    const data = await getChampionBansTable(
+      version.length ? version : null,
+      rankTier.length ? rankTier : null,
+      role
+    )
+    ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
+    if (!data) {
+      return res.status(200).json({ matchCount: 0, rows: [], message: 'Database not configured.' })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[champions/bans-table]', message, err)
+    return res.status(200).json({
+      matchCount: 0,
+      rows: [],
+      error: 'Champion bans table failed',
       message,
     })
   }

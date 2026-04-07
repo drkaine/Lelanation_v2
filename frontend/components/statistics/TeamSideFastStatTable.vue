@@ -24,6 +24,8 @@ const props = withDefaults(
 const { t } = useI18n()
 const statisticsCustomStore = useStatisticsCustomStore()
 
+const emit = defineEmits<{ seeMore: [] }>()
+
 function cardIsFavorite(cardId: string): boolean {
   return statisticsCustomStore.isFavorite(cardId)
 }
@@ -297,6 +299,15 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
           : t('statisticsPage.fastStatsNoData')
       }}
     </div>
+    <div v-if="displayRows.length" class="mt-1 flex justify-center">
+      <button
+        type="button"
+        class="rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+        @click="emit('seeMore')"
+      >
+        {{ t('statisticsPage.fastStatsSeeMore') }}
+      </button>
+    </div>
   </div>
 </template>
 
@@ -306,8 +317,8 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
   width: 313px !important;
   min-width: 313px;
   max-width: 313px;
-  height: 325px;
   min-height: 325px;
+  height: auto;
   margin-left: auto;
   margin-right: auto;
   flex: 0 0 313px;
