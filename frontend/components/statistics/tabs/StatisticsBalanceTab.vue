@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue'
+import { computed, inject } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -25,12 +25,12 @@ type BalanceRow = {
 
 type StatusFilter = 'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 
-const globalFilter = ref<StatusFilter>('ALL')
-const averageFilter = ref<StatusFilter>('ALL')
-const skilledFilter = ref<StatusFilter>('ALL')
-const eliteFilter = ref<StatusFilter>('ALL')
-
 const rows = computed<BalanceRow[]>(() => p.balanceFrameworkData?.rows ?? [])
+const searchQuery = computed(() =>
+  String(p.championSearchQuery ?? '')
+    .trim()
+    .toLowerCase()
+)
 const previousPatch = computed<string | null>(() => p.balanceFrameworkData?.previousPatch ?? null)
 const rules = computed(() => p.balanceFrameworkData?.rules ?? null)
 const abrByLevel = computed<{
@@ -44,13 +44,6 @@ function statusMatches(
   filter: StatusFilter
 ): boolean {
   return filter === 'ALL' || value === filter
-}
-
-function filterLabel(v: StatusFilter): string {
-  if (v === 'ALL') return p.t('statisticsPage.overviewVersionAll')
-  if (v === 'OVERPOWERED') return p.t('statisticsPage.balanceStatusOverpowered')
-  if (v === 'UNDERPOWERED') return p.t('statisticsPage.balanceStatusUnderpowered')
-  return p.t('statisticsPage.balanceStatusBalanced')
 }
 
 function fmt(v: number): string {
@@ -86,6 +79,28 @@ function statusLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
   return p.t('statisticsPage.balanceStatusBalanced')
 }
 
+function statusCodeToLabel(v: string): string {
+  const code = String(v || '')
+    .trim()
+    .toUpperCase()
+  if (code === 'OVERPOWERED') return statusLabel('OVERPOWERED')
+  if (code === 'UNDERPOWERED') return statusLabel('UNDERPOWERED')
+  if (code === 'BALANCED') return statusLabel('BALANCED')
+  return v
+}
+
+function formatDeltaLabel(v: string | null): string {
+  if (!v) return '—'
+  const parts = String(v)
+    .split('->')
+    .map(x => x.trim())
+    .filter(Boolean)
+  if (parts.length === 2) {
+    return `${statusCodeToLabel(parts[0] ?? '')} -> ${statusCodeToLabel(parts[1] ?? '')}`
+  }
+  return statusCodeToLabel(v)
+}
+
 function statusClass(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
   if (v === 'OVERPOWERED') return 'text-error'
   if (v === 'UNDERPOWERED') return 'text-sky-300'
@@ -99,24 +114,25 @@ function deltaClass(v: string | null): string {
   return 'text-success'
 }
 
-function rankStatus(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): number {
-  if (v === 'OVERPOWERED') return 0
-  if (v === 'UNDERPOWERED') return 1
-  return 2
-}
-
 const filteredRows = computed<BalanceRow[]>(() => {
   const out = rows.value.filter(row => {
-    if (!statusMatches(row.globalStatus, globalFilter.value)) return false
-    if (!statusMatches(row.average.status, averageFilter.value)) return false
-    if (!statusMatches(row.skilled.status, skilledFilter.value)) return false
-    if (!statusMatches(row.elite.status, eliteFilter.value)) return false
+    if (searchQuery.value) {
+      const champ = String(p.championName(row.championId) ?? '').toLowerCase()
+      const role = String(row.role ?? '').toLowerCase()
+      if (!champ.includes(searchQuery.value) && !role.includes(searchQuery.value)) return false
+    }
+    const gf = (p.balanceGlobalFilter as StatusFilter) ?? 'ALL'
+    const af = (p.balanceAverageFilter as StatusFilter) ?? 'ALL'
+    const sf = (p.balanceSkilledFilter as StatusFilter) ?? 'ALL'
+    const ef = (p.balanceEliteFilter as StatusFilter) ?? 'ALL'
+    if (!statusMatches(row.globalStatus, gf)) return false
+    if (!statusMatches(row.average.status, af)) return false
+    if (!statusMatches(row.skilled.status, sf)) return false
+    if (!statusMatches(row.elite.status, ef)) return false
     return true
   })
 
   out.sort((a, b) => {
-    const s = rankStatus(a.globalStatus) - rankStatus(b.globalStatus)
-    if (s !== 0) return s
     const an = String(p.championName(a.championId) || a.championId).toLowerCase()
     const bn = String(p.championName(b.championId) || b.championId).toLowerCase()
     if (an === bn) return 0
@@ -135,59 +151,6 @@ const filteredRows = computed<BalanceRow[]>(() => {
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
     <template v-else>
-      <div
-        class="grid grid-cols-1 gap-2 rounded-lg border border-primary/30 bg-surface/30 p-3 md:grid-cols-4"
-      >
-        <label class="text-xs text-text/80">
-          {{ p.t('statisticsPage.balanceGlobalStatus') }}
-          <select
-            v-model="globalFilter"
-            class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-          >
-            <option value="ALL">{{ filterLabel('ALL') }}</option>
-            <option value="OVERPOWERED">{{ filterLabel('OVERPOWERED') }}</option>
-            <option value="UNDERPOWERED">{{ filterLabel('UNDERPOWERED') }}</option>
-            <option value="BALANCED">{{ filterLabel('BALANCED') }}</option>
-          </select>
-        </label>
-        <label class="text-xs text-text/80">
-          Average
-          <select
-            v-model="averageFilter"
-            class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-          >
-            <option value="ALL">{{ filterLabel('ALL') }}</option>
-            <option value="OVERPOWERED">{{ filterLabel('OVERPOWERED') }}</option>
-            <option value="UNDERPOWERED">{{ filterLabel('UNDERPOWERED') }}</option>
-            <option value="BALANCED">{{ filterLabel('BALANCED') }}</option>
-          </select>
-        </label>
-        <label class="text-xs text-text/80">
-          Skilled
-          <select
-            v-model="skilledFilter"
-            class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-          >
-            <option value="ALL">{{ filterLabel('ALL') }}</option>
-            <option value="OVERPOWERED">{{ filterLabel('OVERPOWERED') }}</option>
-            <option value="UNDERPOWERED">{{ filterLabel('UNDERPOWERED') }}</option>
-            <option value="BALANCED">{{ filterLabel('BALANCED') }}</option>
-          </select>
-        </label>
-        <label class="text-xs text-text/80">
-          Elite
-          <select
-            v-model="eliteFilter"
-            class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-          >
-            <option value="ALL">{{ filterLabel('ALL') }}</option>
-            <option value="OVERPOWERED">{{ filterLabel('OVERPOWERED') }}</option>
-            <option value="UNDERPOWERED">{{ filterLabel('UNDERPOWERED') }}</option>
-            <option value="BALANCED">{{ filterLabel('BALANCED') }}</option>
-          </select>
-        </label>
-      </div>
-
       <div
         v-if="filteredRows.length"
         class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
@@ -260,7 +223,7 @@ const filteredRows = computed<BalanceRow[]>(() => {
           <tbody class="divide-y divide-primary/20">
             <tr
               v-for="row in filteredRows"
-              :key="row.championId"
+              :key="`${row.championId}-${row.role}`"
               class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
             >
               <td class="px-3 py-2">
@@ -292,7 +255,7 @@ const filteredRows = computed<BalanceRow[]>(() => {
                 </div>
               </td>
               <td class="px-3 py-2 text-xs" :class="deltaClass(row.average.delta)">
-                {{ row.average.delta || '—' }}
+                {{ formatDeltaLabel(row.average.delta) }}
               </td>
               <td class="px-3 py-2 font-medium" :class="statusClass(row.skilled.status)">
                 <div>{{ statusLabel(row.skilled.status) }}</div>
@@ -304,7 +267,7 @@ const filteredRows = computed<BalanceRow[]>(() => {
                 </div>
               </td>
               <td class="px-3 py-2 text-xs" :class="deltaClass(row.skilled.delta)">
-                {{ row.skilled.delta || '—' }}
+                {{ formatDeltaLabel(row.skilled.delta) }}
               </td>
               <td class="px-3 py-2 font-medium" :class="statusClass(row.elite.status)">
                 <div>{{ statusLabel(row.elite.status) }}</div>
@@ -316,13 +279,13 @@ const filteredRows = computed<BalanceRow[]>(() => {
                 </div>
               </td>
               <td class="px-3 py-2 text-xs" :class="deltaClass(row.elite.delta)">
-                {{ row.elite.delta || '—' }}
+                {{ formatDeltaLabel(row.elite.delta) }}
               </td>
               <td class="px-3 py-2 font-semibold" :class="statusClass(row.globalStatus)">
                 {{ statusLabel(row.globalStatus) }}
               </td>
               <td class="px-3 py-2 text-xs" :class="deltaClass(row.globalDelta)">
-                {{ row.globalDelta || '—' }}
+                {{ formatDeltaLabel(row.globalDelta) }}
               </td>
             </tr>
           </tbody>

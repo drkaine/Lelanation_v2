@@ -33,6 +33,7 @@ import {
   getOverviewProgressionStats,
   getOverviewProgressionFullStats,
   getInfosPatchDivisionMatrix,
+  getInfosMetaCounts,
 } from '../services/StatsOverviewService.js'
 import { getOverviewAbandons } from '../services/StatsAbandonsService.js'
 import {
@@ -172,6 +173,45 @@ function filterChampionRowsByOtp<T extends { pickrate?: number }>(rows: T[], mod
   const filtered = rows.filter((row) =>
     keepByOtpPickratePercent(parsePickrateNumber(row.pickrate), mode)
   )
+  return filtered.length > 0 ? filtered : rows
+}
+
+/** Balance : pickrate pilotée par la plus haute exposition parmi average/skilled/elite (en %). */
+function filterBalanceRowsByOtp<
+  T extends {
+    average?: { pickrate?: number }
+    skilled?: { pickrate?: number }
+    elite?: { pickrate?: number }
+  },
+>(rows: T[], mode: OtpMode, hasRoleFilter: boolean): T[] {
+  if (mode === 'oui' || rows.length === 0) return rows
+  const filtered = rows.filter((row) => {
+    const a = parsePickrateNumber(row.average?.pickrate)
+    const s = parsePickrateNumber(row.skilled?.pickrate)
+    const e = parsePickrateNumber(row.elite?.pickrate)
+    // When role filter is not set, pickrate is diluted by all 5 roles.
+    // Re-scale for OTP filtering to keep behavior consistent with role-scoped view.
+    const basePick = Math.max(a, s, e)
+    const p = hasRoleFilter ? basePick : Math.min(100, basePick * 5)
+    return keepByOtpPickratePercent(p, mode)
+  })
+  return filtered.length > 0 ? filtered : rows
+}
+
+/** Champion global table: pickrate pilotée par le max entre côté bleu et rouge (en %). */
+function filterChampionGlobalRowsByOtp<
+  T extends {
+    blue?: { pickrate?: number }
+    red?: { pickrate?: number }
+  },
+>(rows: T[], mode: OtpMode): T[] {
+  if (mode === 'oui' || rows.length === 0) return rows
+  const filtered = rows.filter((row) => {
+    const pBlue = parsePickrateNumber(row.blue?.pickrate)
+    const pRed = parsePickrateNumber(row.red?.pickrate)
+    const p = Math.max(pBlue, pRed)
+    return keepByOtpPickratePercent(p, mode)
+  })
   return filtered.length > 0 ? filtered : rows
 }
 
@@ -471,17 +511,24 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
   try {
     const data = await getChampionGlobalTable(
       version.length ? version : null,
-      rankTier.length ? rankTier : null
+      rankTier.length ? rankTier : null,
+      role
     )
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
     if (!data) {
       return res.status(200).json({ matchCount: 0, rows: [], message: 'Database not configured.' })
     }
-    return res.json(data)
+    const rows = filterChampionGlobalRowsByOtp(data.rows ?? [], otpMode)
+    return res.json({
+      ...data,
+      rows,
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[champions/global-table]', message, err)
@@ -1103,11 +1150,12 @@ router.get('/balance-framework', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryString(req.query.version)
   const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const data = await getBalanceFramework({
     version,
     role,
   })
-  return res.json(
+  const response =
     data ?? {
       rules: null,
       currentPatch: version ?? '',
@@ -1115,7 +1163,8 @@ router.get('/balance-framework', async (req: Request, res: Response) => {
       abrByLevel: { average: 0, skilled: 0, elite: 0 },
       rows: [],
     }
-  )
+  response.rows = filterBalanceRowsByOtp(response.rows ?? [], otpMode, Boolean(role))
+  return res.json(response)
 })
 
 /** New API: /api/stats/summoners/duos and /solo */
@@ -1149,13 +1198,16 @@ router.get('/infos/meta', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const [overview, meta] = await Promise.all([
+  const [overview, counts] = await Promise.all([
     getOverviewStats(version, rankTier, role),
-    getOverviewMeta(version, rankTier),
+    getInfosMetaCounts(),
   ])
   return res.json({
     totalGames: overview?.totalMatches ?? 0,
-    playerCount: meta?.playerCount ?? overview?.playerCount ?? 0,
+    playerCount: overview?.playerCount ?? 0,
+    totalMatches: counts?.totalMatches ?? 0,
+    totalPlayers: counts?.totalPlayers ?? 0,
+    playersWithoutLastSeen: counts?.playersWithoutLastSeen ?? 0,
     matchesByDivision: overview?.matchesByDivision ?? [],
     matchesByVersion: overview?.matchesByVersion ?? [],
     otpPickrateThreshold: STATS_OTP_PICKRATE_THRESHOLD,

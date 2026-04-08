@@ -70,12 +70,53 @@
           </div>
         </div>
       </div>
+      <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+        <h3 class="text-sm font-semibold text-text">
+          {{ p.t('statisticsPage.balanceAbbreviationsTitle') }}
+        </h3>
+        <div class="mt-2 grid grid-cols-1 gap-1 text-xs text-text/80 md:grid-cols-2">
+          <p>
+            <span class="font-semibold text-text">OP</span>:
+            {{ p.t('statisticsPage.balanceAbbrevOp') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">UP</span>:
+            {{ p.t('statisticsPage.balanceAbbrevUp') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">WR</span>:
+            {{ p.t('statisticsPage.balanceAbbrevWr') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">BR</span>:
+            {{ p.t('statisticsPage.balanceAbbrevBr') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">PR</span>:
+            {{ p.t('statisticsPage.balanceAbbrevPr') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">PRÉS</span>:
+            {{ p.t('statisticsPage.balanceAbbrevPresence') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">ABR</span>:
+            {{ p.t('statisticsPage.balanceAbbrevAbr') }}
+          </p>
+          <p>
+            <span class="font-semibold text-text">Δ</span>:
+            {{ p.t('statisticsPage.balanceAbbrevDelta') }}
+          </p>
+        </div>
+      </div>
 
-      <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+      <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
           <div class="text-xs text-text/70">{{ p.t('statisticsPage.overviewTotalMatches') }}</div>
           <div class="text-lg font-semibold text-text">
-            {{ (p.overviewData?.totalMatches ?? 0).toLocaleString() }}
+            {{
+              (p.infosMetaData?.totalMatches ?? p.overviewData?.totalMatches ?? 0).toLocaleString()
+            }}
           </div>
         </div>
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
@@ -83,7 +124,17 @@
             {{ p.t('statisticsPage.overviewPlayerCountDistinct') }}
           </div>
           <div class="text-lg font-semibold text-text">
-            {{ (p.overviewData?.playerCount ?? 0).toLocaleString() }}
+            {{
+              (p.infosMetaData?.totalPlayers ?? p.overviewData?.playerCount ?? 0).toLocaleString()
+            }}
+          </div>
+        </div>
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
+          <div class="text-xs text-text/70">
+            {{ p.t('statisticsPage.overviewPlayersWithoutLastSeen') }}
+          </div>
+          <div class="text-lg font-semibold text-text">
+            {{ (p.infosMetaData?.playersWithoutLastSeen ?? 0).toLocaleString() }}
           </div>
         </div>
       </div>
@@ -97,22 +148,7 @@
                 class="w-12 px-2 py-1.5 text-center font-semibold text-text"
                 :title="p.t('statisticsPage.infosMatrixPatchHeader')"
               >
-                <span class="sr-only">{{ p.t('statisticsPage.infosMatrixPatchHeader') }}</span>
-                <svg
-                  class="mx-auto h-5 w-5 text-text/85"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  aria-hidden="true"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-                  />
-                </svg>
+                {{ p.t('statisticsPage.infosMatrixPatchHeader') }}
               </th>
               <th
                 v-for="division in p.infosMatrixColumns ?? []"
@@ -137,22 +173,12 @@
                     alt=""
                     class="h-5 w-5 object-contain"
                   />
-                  <svg
+                  <span
                     v-else
-                    class="h-5 w-5 text-text/85"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    aria-hidden="true"
+                    class="text-[11px] font-semibold uppercase tracking-wide text-text/85"
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-                    />
-                  </svg>
+                    {{ p.t('statisticsPage.overviewVersionAll') }}
+                  </span>
                 </div>
               </th>
             </tr>
@@ -163,7 +189,7 @@
               <td
                 v-for="division in p.infosMatrixColumns ?? []"
                 :key="'infos-cell-' + row.version + '-' + division"
-                class="px-3 py-1 text-text/90"
+                class="px-2 py-1 text-center tabular-nums text-text/90"
               >
                 {{ Number(p.infosMatrixCell(row, division)).toLocaleString() }}
               </td>

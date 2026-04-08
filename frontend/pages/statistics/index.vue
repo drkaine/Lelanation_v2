@@ -146,7 +146,7 @@
               </option>
             </select>
           </div>
-          <div>
+          <div v-if="activeTab !== 'balance'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.overviewMatchesByDivision') }}
             </div>
@@ -190,6 +190,71 @@
                   height="12"
                 />
               </button>
+            </div>
+          </div>
+          <div v-else>
+            <div class="mb-1 text-sm font-medium text-text">
+              {{ t('statisticsPage.balanceGlobalStatus') }}
+            </div>
+            <div class="grid grid-cols-1 gap-1">
+              <select
+                v-model="balanceGlobalFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">{{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option value="OVERPOWERED">
+                  {{ t('statisticsPage.balanceStatusOverpowered') }}
+                </option>
+                <option value="UNDERPOWERED">
+                  {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                </option>
+                <option value="BALANCED">{{ t('statisticsPage.balanceStatusBalanced') }}</option>
+              </select>
+              <select
+                v-model="balanceAverageFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">Average · {{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option value="OVERPOWERED">
+                  Average · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                </option>
+                <option value="UNDERPOWERED">
+                  Average · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                </option>
+                <option value="BALANCED">
+                  Average · {{ t('statisticsPage.balanceStatusBalanced') }}
+                </option>
+              </select>
+              <select
+                v-model="balanceSkilledFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">Skilled · {{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option value="OVERPOWERED">
+                  Skilled · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                </option>
+                <option value="UNDERPOWERED">
+                  Skilled · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                </option>
+                <option value="BALANCED">
+                  Skilled · {{ t('statisticsPage.balanceStatusBalanced') }}
+                </option>
+              </select>
+              <select
+                v-model="balanceEliteFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">Elite · {{ t('statisticsPage.overviewVersionAll') }}</option>
+                <option value="OVERPOWERED">
+                  Elite · {{ t('statisticsPage.balanceStatusOverpowered') }}
+                </option>
+                <option value="UNDERPOWERED">
+                  Elite · {{ t('statisticsPage.balanceStatusUnderpowered') }}
+                </option>
+                <option value="BALANCED">
+                  Elite · {{ t('statisticsPage.balanceStatusBalanced') }}
+                </option>
+              </select>
             </div>
           </div>
           <div>
@@ -1199,6 +1264,10 @@ const statsVersionFilter = ref('')
 const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
+const balanceGlobalFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
+const balanceAverageFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
+const balanceSkilledFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
+const balanceEliteFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
 const progressionFromVersionOverride = ref('')
 const isApplyingQueryState = ref(false)
 const isSyncingQueryState = ref(false)
@@ -1365,6 +1434,13 @@ const infosMatrixData = ref<{
   divisions: string[]
   rows: Array<{ version: string; all: number; byDivision: Record<string, number> }>
 } | null>(null)
+const infosMetaPending = ref(false)
+const infosMetaError = ref<string | null>(null)
+const infosMetaData = ref<{
+  totalMatches: number
+  totalPlayers: number
+  playersWithoutLastSeen: number
+} | null>(null)
 const infosMatrixColumns = computed(() => {
   const rankOrder = rankTiers
   const present = new Set(
@@ -1435,6 +1511,7 @@ function onStatsFilterChange() {
   balanceFrameworkError.value = false
   if (activeTab.value === 'overview') loadOverview()
   if (activeTab.value === 'infos') loadOverview()
+  if (activeTab.value === 'infos') loadInfosMeta()
   if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'bans') bansTab.loadBansTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
@@ -1462,6 +1539,10 @@ function resetStatsFilters() {
   statsDivisionFilter.value = []
   statsRoleFilter.value = ''
   statsOtpFilter.value = 'non'
+  balanceGlobalFilter.value = 'ALL'
+  balanceAverageFilter.value = 'ALL'
+  balanceSkilledFilter.value = 'ALL'
+  balanceEliteFilter.value = 'ALL'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
   onStatsFilterChange()
@@ -1492,6 +1573,8 @@ async function loadBalanceFramework() {
     const params = new URLSearchParams()
     if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
     if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    if (statsOtpFilter.value && statsOtpFilter.value !== 'non')
+      params.set('otp', statsOtpFilter.value)
     const q = params.toString()
     balanceFrameworkData.value = await statsFetch(
       apiUrl('/api/stats/balance-framework' + (q ? `?${q}` : '')),
@@ -1688,6 +1771,22 @@ async function loadInfosPatchDivisionMatrix() {
     infosMatrixError.value = err instanceof Error ? err.message : String(err)
   } finally {
     infosMatrixPending.value = false
+  }
+}
+
+async function loadInfosMeta() {
+  if (infosMetaPending.value) return
+  infosMetaPending.value = true
+  infosMetaError.value = null
+  try {
+    infosMetaData.value = await statsFetch<typeof infosMetaData.value>(
+      apiUrl('/api/stats/infos/meta')
+    )
+  } catch (err) {
+    infosMetaData.value = null
+    infosMetaError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    infosMetaPending.value = false
   }
 }
 
@@ -3828,6 +3927,7 @@ watch(activeTab, async tab => {
   if (tab === 'tierlist') loadChampions()
   if (tab === 'tierlist') loadTierList()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
+  if (tab === 'infos') loadInfosMeta()
   if (tab === 'infos') loadBalanceFramework()
   if (tab === 'championTable') loadChampionGlobalTable()
   if (tab === 'balance') loadBalanceFramework()
@@ -3879,6 +3979,7 @@ onMounted(async () => {
   statsPerfEnd('version', tVersion)
   await loadKnownVersionsFromGameData()
   await loadOverview()
+  await loadInfosMeta()
   await loadInfosPatchDivisionMatrix()
   const defaultsApplied = applyDefaultVersionFiltersFromKnownVersions()
   if (defaultsApplied) onStatsFilterChange()
@@ -3923,6 +4024,10 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   totalChampionGlobalPages,
   championName,
   championSearchQuery,
+  balanceAverageFilter,
+  balanceEliteFilter,
+  balanceGlobalFilter,
+  balanceSkilledFilter,
   balanceFrameworkData,
   balanceFrameworkError,
   balanceFrameworkPending,
@@ -3959,6 +4064,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   infosMatrixCell,
   infosMatrixColumns,
   infosMatrixError,
+  infosMetaData,
+  infosMetaError,
+  infosMetaPending,
   infosMatrixPending,
   infosMatrixRows,
   itemEconomicForItem,

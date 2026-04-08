@@ -1666,6 +1666,35 @@ export async function getOverviewMeta(
   }
 }
 
+export interface InfosMetaCounts {
+  totalMatches: number
+  totalPlayers: number
+  playersWithoutLastSeen: number
+}
+
+/**
+ * Raw global counters for Infos tab (all patches combined):
+ * - total matches:      SELECT COUNT(*) FROM matchs
+ * - total players:      SELECT COUNT(*) FROM players
+ * - players not polled: SELECT COUNT(*) FROM players WHERE last_seen IS NULL
+ */
+export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const totalMatches = await prisma.match.count()
+    const totalPlayers = await prisma.player.count()
+    const playersWithoutLastSeen = await prisma.player.count({ where: { lastSeen: null } })
+    return {
+      totalMatches,
+      totalPlayers,
+      playersWithoutLastSeen,
+    }
+  } catch (err) {
+    console.error('[getInfosMetaCounts]', err)
+    return null
+  }
+}
+
 export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionMatrix | null> {
   if (!isDatabaseConfigured()) return null
   type RawRow = { version: string; rank_tier: string; match_count: bigint }

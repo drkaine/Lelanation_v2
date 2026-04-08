@@ -81,9 +81,20 @@ function emptySide(): SideAgg {
 
 export async function getChampionGlobalTable(
   version?: string | string[] | null,
-  rankTier?: string | string[] | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<{ matchCount: number; rows: ChampionGlobalTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
+  const roleFilterRaw = String(role ?? '').trim().toUpperCase()
+  const roleFilter =
+    roleFilterRaw === 'MID'
+      ? 'MIDDLE'
+      : roleFilterRaw === 'ADC'
+        ? 'BOTTOM'
+        : roleFilterRaw === 'UTILITY'
+          ? 'SUPPORT'
+          : roleFilterRaw
+
   const matchCondMatchOutcome = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')
   const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
     SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
@@ -115,6 +126,8 @@ export async function getChampionGlobalTable(
   }
 
   const matchCondSide = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const roleSql =
+    roleFilter !== '' ? ` AND mv.role_norm = '${roleFilter.replace(/'/g, "''")}'` : ''
   const aggSql = `
     SELECT
       mv.team_num AS team_id,
@@ -133,6 +146,7 @@ export async function getChampionGlobalTable(
       SUM(mv.sum_assists)::bigint AS sum_a
     FROM mv_champion_side_stats mv
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
+    ${roleSql}
     GROUP BY mv.team_num, mv.champion_id
   `
   const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)

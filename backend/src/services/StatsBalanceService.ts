@@ -2,6 +2,7 @@ import { prisma, isDatabaseConfigured } from '../db.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
 
 type BalanceStatus = 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
+const BALANCE_ALLOWED_ROLES = new Set(['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'])
 
 type ChampionAgg = {
   games: number
@@ -10,8 +11,9 @@ type ChampionAgg = {
 }
 
 type LevelSnapshotChampion = {
+  key: string
   championId: number
-  mainRole: string
+  role: string
   games: number
   wins: number
   pickrate: number
@@ -22,7 +24,7 @@ type LevelSnapshotChampion = {
 
 type LevelSnapshot = {
   abr: number
-  byChampion: Map<number, LevelSnapshotChampion>
+  byChampionRole: Map<string, LevelSnapshotChampion>
 }
 
 type PatchSnapshot = {
@@ -118,6 +120,7 @@ function normalizeRoleFilter(role: string | null | undefined): string | null {
   if (!v) return null
   if (v === 'MIDDLE') return 'MID'
   if (v === 'BOTTOM') return 'ADC'
+  if (!BALANCE_ALLOWED_ROLES.has(v)) return null
   return v
 }
 
@@ -128,11 +131,20 @@ function roleForClient(role: string): string {
   return v
 }
 
-function initChampionAggMap(championId: number, map: Map<number, ChampionAgg>): ChampionAgg {
-  let row = map.get(championId)
+function makeChampionRoleKey(championId: number, role: string): string {
+  return `${championId}:${role}`
+}
+
+function parseChampionRoleKey(key: string): { championId: number; role: string } {
+  const [cid, role] = key.split(':')
+  return { championId: Number(cid), role: role ?? 'UNKNOWN' }
+}
+
+function initChampionAggMap(key: string, map: Map<string, ChampionAgg>): ChampionAgg {
+  let row = map.get(key)
   if (!row) {
     row = { games: 0, wins: 0, bans: 0 }
-    map.set(championId, row)
+    map.set(key, row)
   }
   return row
 }
@@ -200,7 +212,7 @@ async function buildPatchSnapshot(
     },
   })
 
-  const byLevel: Record<BalanceLevelKey, Map<number, ChampionAgg>> = {
+  const byLevel: Record<BalanceLevelKey, Map<string, ChampionAgg>> = {
     average: new Map(),
     skilled: new Map(),
     elite: new Map(),
@@ -210,27 +222,20 @@ async function buildPatchSnapshot(
     skilled: 0,
     elite: 0,
   }
-  const roleByChampion = new Map<number, Map<string, number>>()
-
   for (const r of coreRows) {
     const rankTier = String(r.rankTier).toUpperCase()
     const roleNorm = String(r.role ?? '').toUpperCase()
+    if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
     const cid = r.championId
+    const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
     const games = r.countGame
     const wins = r.countWin
     const bans = r.countBan
 
-    let roleMap = roleByChampion.get(cid)
-    if (!roleMap) {
-      roleMap = new Map()
-      roleByChampion.set(cid, roleMap)
-    }
-    roleMap.set(roleNorm, (roleMap.get(roleNorm) ?? 0) + games)
-
     ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
       if (!rules.levels[lvl].tiers.includes(rankTier)) return
       participantsByLevel[lvl] += games
-      const agg = initChampionAggMap(cid, byLevel[lvl])
+      const agg = initChampionAggMap(key, byLevel[lvl])
       agg.games += games
       agg.wins += wins
       agg.bans += bans
@@ -242,23 +247,18 @@ async function buildPatchSnapshot(
     const perMatchFactor = role ? 2 : 10
     const matchTotal = participantTotal > 0 ? participantTotal / perMatchFactor : 0
 
-    const byChampion = new Map<number, LevelSnapshotChampion>()
-    for (const [championId, a] of byLevel[lvl].entries()) {
+    const byChampionRole = new Map<string, LevelSnapshotChampion>()
+    for (const [key, a] of byLevel[lvl].entries()) {
+      const { championId, role: championRole } = parseChampionRoleKey(key)
       const pickrate = participantTotal > 0 ? (a.games / participantTotal) * 100 : 0
       const winrate = a.games > 0 ? (a.wins / a.games) * 100 : 0
       const banrate = matchTotal > 0 ? (a.bans / (2 * matchTotal)) * 100 : 0
       const presence = pickrate + banrate
 
-      const roleMap = roleByChampion.get(championId)
-      let mainRole = role ?? 'UNKNOWN'
-      if (!role && roleMap && roleMap.size > 0) {
-        const sorted = [...roleMap.entries()].sort((x, y) => y[1] - x[1])
-        mainRole = sorted[0]?.[0] ?? 'UNKNOWN'
-      }
-
-      byChampion.set(championId, {
+      byChampionRole.set(key, {
+        key,
         championId,
-        mainRole,
+        role: championRole || role || 'UNKNOWN',
         games: a.games,
         wins: a.wins,
         pickrate: round2(pickrate),
@@ -268,11 +268,11 @@ async function buildPatchSnapshot(
       })
     }
 
-    const rates = [...byChampion.values()]
+    const rates = [...byChampionRole.values()]
       .filter((r) => r.games >= rules.levels[lvl].overpowered.minGames)
       .map((r) => r.banrate)
     const abr = rates.length > 0 ? rates.reduce((s, v) => s + v, 0) / rates.length : 0
-    acc[lvl] = { abr: round2(abr), byChampion }
+    acc[lvl] = { abr: round2(abr), byChampionRole }
     return acc
   }, {} as Record<BalanceLevelKey, LevelSnapshot>)
 
@@ -335,27 +335,25 @@ export async function getBalanceFramework(
     ? await buildPatchSnapshot(beforePreviousPatch, role, rules)
     : null
 
-  const championIds = new Set<number>()
+  const championRoleKeys = new Set<string>()
   ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
-    for (const id of currentSnapshot.levels[lvl].byChampion.keys()) championIds.add(id)
-    if (previousSnapshot) {
-      for (const id of previousSnapshot.levels[lvl].byChampion.keys()) championIds.add(id)
-    }
+    for (const key of currentSnapshot.levels[lvl].byChampionRole.keys()) championRoleKeys.add(key)
   })
 
-  const rows: BalanceApiRow[] = [...championIds]
-    .map((championId) => {
+  const rows: BalanceApiRow[] = [...championRoleKeys]
+    .map((championRoleKey) => {
+      const { championId, role: roleFromKey } = parseChampionRoleKey(championRoleKey)
       const statusByLevel = {} as Record<BalanceLevelKey, BalanceStatus>
       const prevStatusByLevel = {} as Record<BalanceLevelKey, BalanceStatus | null>
 
       const mkLevel = (lvl: BalanceLevelKey): BalanceApiLevelRow => {
-        const currentRow = currentSnapshot.levels[lvl].byChampion.get(championId)
-        const prevRow = previousSnapshot?.levels[lvl].byChampion.get(championId)
+        const currentRow = currentSnapshot.levels[lvl].byChampionRole.get(championRoleKey)
+        const prevRow = previousSnapshot?.levels[lvl].byChampionRole.get(championRoleKey)
 
         const currentBanTwoPatch = (() => {
           if (lvl !== 'elite') return currentRow?.banrate
           const left = currentRow?.banrate
-          const right = previousSnapshot?.levels.elite.byChampion.get(championId)?.banrate
+          const right = previousSnapshot?.levels.elite.byChampionRole.get(championRoleKey)?.banrate
           if (left == null) return 0
           if (right == null) return left
           return round2((left + right) / 2)
@@ -364,7 +362,7 @@ export async function getBalanceFramework(
         const prevBanTwoPatch = (() => {
           if (lvl !== 'elite') return prevRow?.banrate
           const left = prevRow?.banrate
-          const right = beforePreviousSnapshot?.levels.elite.byChampion.get(championId)?.banrate
+          const right = beforePreviousSnapshot?.levels.elite.byChampionRole.get(championRoleKey)?.banrate
           if (left == null) return 0
           if (right == null) return left
           return round2((left + right) / 2)
@@ -417,16 +415,9 @@ export async function getBalanceFramework(
           })
         : null
 
-      const fallbackRole =
-        currentSnapshot.levels.average.byChampion.get(championId)?.mainRole ??
-        currentSnapshot.levels.skilled.byChampion.get(championId)?.mainRole ??
-        currentSnapshot.levels.elite.byChampion.get(championId)?.mainRole ??
-        role ??
-        'UNKNOWN'
-
       return {
         championId,
-        role: roleForClient(fallbackRole),
+        role: roleForClient(roleFromKey || role || 'UNKNOWN'),
         average,
         skilled,
         elite,
