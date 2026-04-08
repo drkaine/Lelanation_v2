@@ -26,7 +26,7 @@
     />
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
-    <div class="w-full flex-shrink-0 border-b border-primary/30 bg-surface/30 px-4 pb-2 pt-4">
+    <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
       <div class="flex flex-wrap gap-2">
         <button
           v-for="tab in tabs"
@@ -46,7 +46,7 @@
     </div>
 
     <!-- Filtres + contenu : même hauteur -->
-    <div class="flex min-h-0 flex-1 pt-4">
+    <div class="flex min-h-0 flex-1">
       <button
         type="button"
         class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
@@ -56,7 +56,7 @@
         @click="toggleFiltersOpen"
       >
         <svg
-          class="h-4 w-4 transition-transform duration-200"
+          class="h-2 w-2 transition-transform duration-200"
           :class="filtersOpen ? 'rotate-180' : ''"
           fill="none"
           stroke="currentColor"
@@ -490,12 +490,18 @@ function toggleFavoriteCard(cardId: string, title: string): void {
 
 const championSearchQuery = ref('')
 const searchInputLabel = computed(() =>
-  activeTab.value === 'items' ? t('statisticsPage.searchItem') : t('statisticsPage.searchChampion')
+  activeTab.value === 'items'
+    ? t('statisticsPage.searchItem')
+    : activeTab.value === 'spells'
+      ? t('statisticsPage.searchSummoner')
+      : t('statisticsPage.searchChampion')
 )
 const searchInputPlaceholder = computed(() =>
   activeTab.value === 'items'
     ? t('statisticsPage.searchItemPlaceholder')
-    : t('statisticsPage.searchChampionPlaceholder')
+    : activeTab.value === 'spells'
+      ? t('statisticsPage.searchSummonerPlaceholder')
+      : t('statisticsPage.searchChampionPlaceholder')
 )
 /** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
 const championsPageSize = ref(20)
@@ -1543,13 +1549,14 @@ const overviewDetailData = ref<{
 const overviewDetailBaselineData = ref<typeof overviewDetailData.value>(null)
 const overviewDetailBaselinePending = ref(false)
 const overviewDetailPending = ref(false)
-function overviewQueryParams(opts?: { version?: string | null }): string {
+function overviewQueryParams(opts?: { version?: string | null; includeSmite?: boolean }): string {
   const params = new URLSearchParams()
   const ver = opts?.version != null && opts.version !== '' ? opts.version : statsVersionFilter.value
   if (ver) params.set('version', ver)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   params.set('otp', statsOtpFilter.value)
+  if (opts?.includeSmite) params.set('includeSmite', '1')
   const q = params.toString()
   return q ? '?' + q : ''
 }
@@ -2066,9 +2073,10 @@ async function loadOverviewDetail(isRetry = false) {
   overviewDetailPending.value = true
   overviewDetailError.value = false
   const timeoutMs = isRetry ? OVERVIEW_DETAIL_RETRY_TIMEOUT_MS : OVERVIEW_DETAIL_TIMEOUT_MS
+  const includeSmite = activeTab.value === 'spells'
   try {
     overviewDetailData.value = await statsFetch(
-      apiUrl('/api/stats/overview-detail' + overviewQueryParams()),
+      apiUrl('/api/stats/overview-detail' + overviewQueryParams({ includeSmite })),
       { timeout: timeoutMs }
     )
   } catch {
@@ -2095,9 +2103,10 @@ async function loadOverviewDetailBaseline() {
     return
   }
   overviewDetailBaselinePending.value = true
+  const includeSmite = activeTab.value === 'spells'
   try {
     overviewDetailBaselineData.value = await statsFetch(
-      apiUrl('/api/stats/overview-detail' + overviewQueryParams({ version: cmp })),
+      apiUrl('/api/stats/overview-detail' + overviewQueryParams({ version: cmp, includeSmite })),
       { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
     )
   } catch {

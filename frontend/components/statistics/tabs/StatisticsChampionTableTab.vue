@@ -35,6 +35,7 @@ const p = inject('statisticsPageCtx') as any
           <button
             type="button"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[110px] shrink-0 cursor-pointer items-center justify-start border-b border-black px-1.5 hover:bg-primary/25"
+            :title="p.t('statisticsPage.championTableTooltipChampion')"
             @click="p.setChampionGlobalSort('champion')"
           >
             {{ p.t('statisticsPage.tierListColChampion')
@@ -349,6 +350,7 @@ const p = inject('statisticsPageCtx') as any
             <button
               type="button"
               class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              :title="p.t('statisticsPage.championTableTooltipKda')"
               @click="p.setChampionGlobalSort('deaths')"
             >
               {{ p.t('statisticsPage.championTableColDeath')
@@ -370,6 +372,7 @@ const p = inject('statisticsPageCtx') as any
             <button
               type="button"
               class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              :title="p.t('statisticsPage.championTableTooltipKda')"
               @click="p.setChampionGlobalSort('assists')"
             >
               {{ p.t('statisticsPage.championTableColAssist')

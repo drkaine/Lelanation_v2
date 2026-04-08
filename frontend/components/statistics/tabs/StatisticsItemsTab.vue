@@ -217,14 +217,21 @@ function deltaClass(value: number | null | undefined): string {
             <button
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[320px] shrink-0 items-center justify-start border-b border-black px-2 hover:bg-primary/25"
+              :title="p.t('statisticsPage.itemsTooltipItem')"
               @click="toggleSort('item')"
             >
               {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
             </button>
             <div
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[160px] shrink-0 flex-col justify-center border-b border-black px-2 py-1"
+              :title="p.t('statisticsPage.itemsTooltipType')"
             >
-              <button type="button" class="w-fit hover:bg-primary/25" @click="toggleSort('type')">
+              <button
+                type="button"
+                class="w-fit hover:bg-primary/25"
+                :title="p.t('statisticsPage.itemsTooltipType')"
+                @click="toggleSort('type')"
+              >
                 {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
               </button>
               <select
@@ -241,6 +248,7 @@ function deltaClass(value: number | null | undefined): string {
             <button
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              :title="p.t('statisticsPage.itemsTooltipPickrate')"
               @click="toggleSort('pickrate')"
             >
               {{ p.t('statisticsPage.overviewDetailPickRate') }} %{{ sortIcon('pickrate') }}
@@ -248,6 +256,7 @@ function deltaClass(value: number | null | undefined): string {
             <button
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              :title="p.t('statisticsPage.itemsTooltipDeltaPick')"
               @click="toggleSort('deltaPick')"
             >
               {{ p.t('statisticsPage.itemsColDeltaPick') }}{{ sortIcon('deltaPick') }}
@@ -255,6 +264,7 @@ function deltaClass(value: number | null | undefined): string {
             <button
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              :title="p.t('statisticsPage.itemsTooltipWinrate')"
               @click="toggleSort('winrate')"
             >
               {{ p.t('statisticsPage.overviewDetailWinRate') }} %{{ sortIcon('winrate') }}
@@ -262,6 +272,7 @@ function deltaClass(value: number | null | undefined): string {
             <button
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              :title="p.t('statisticsPage.itemsTooltipDeltaWin')"
               @click="toggleSort('deltaWin')"
             >
               {{ p.t('statisticsPage.itemsColDeltaWin') }}{{ sortIcon('deltaWin') }}
@@ -278,9 +289,9 @@ function deltaClass(value: number | null | undefined): string {
                 v-if="p.itemImageName(row.itemId)"
                 :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
                 :alt="p.itemName(row.itemId) || ''"
-                class="h-[25px] w-[25px] shrink-0 rounded border border-black/30 object-cover"
-                width="25"
-                height="25"
+                class="h-[50px] w-[50px] shrink-0 rounded border border-black/30 object-cover"
+                width="50"
+                height="50"
               />
               <span class="min-w-0 truncate text-left font-medium text-accent">{{
                 p.itemName(row.itemId) || row.itemId
