@@ -6,6 +6,7 @@ export type StatisticsMainTab =
   | 'overview'
   | 'tierlist'
   | 'championTable'
+  | 'balance'
   | 'trends'
   | 'team'
   | 'runes'
@@ -23,6 +24,7 @@ const VALID_TABS: StatisticsMainTab[] = [
   'overview',
   'tierlist',
   'championTable',
+  'balance',
   'trends',
   'team',
   'runes',

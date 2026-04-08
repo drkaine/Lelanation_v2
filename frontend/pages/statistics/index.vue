@@ -312,6 +312,11 @@
             <StatisticsChampionTableTab />
           </div>
 
+          <!-- Tab: Balance framework -->
+          <div v-show="activeTab === 'balance'" class="space-y-4">
+            <StatisticsBalanceTab />
+          </div>
+
           <!-- Tab: Durée de partie -->
           <div v-show="activeTab === 'duration'" class="space-y-4">
             <StatisticsDurationTab />
@@ -361,6 +366,7 @@ import StatisticsInfosTab from '~/components/statistics/tabs/StatisticsInfosTab.
 import StatisticsBansTab from '~/components/statistics/tabs/StatisticsBansTab.vue'
 import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
 import StatisticsChampionTableTab from '~/components/statistics/tabs/StatisticsChampionTableTab.vue'
+import StatisticsBalanceTab from '~/components/statistics/tabs/StatisticsBalanceTab.vue'
 import StatisticsDurationTab from '~/components/statistics/tabs/StatisticsDurationTab.vue'
 import StatisticsItemsTab from '~/components/statistics/tabs/StatisticsItemsTab.vue'
 import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
@@ -422,6 +428,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'overview' ||
     tab === 'tierlist' ||
     tab === 'championTable' ||
+    tab === 'balance' ||
     tab === 'trends' ||
     tab === 'team' ||
     tab === 'bans' ||
@@ -450,6 +457,7 @@ const activeTab = ref<
   | 'team'
   | 'tierlist'
   | 'championTable'
+  | 'balance'
   | 'trends'
   | 'runes'
   | 'items'
@@ -473,6 +481,7 @@ const tabs = computed(() => [
     label: t('statisticsPage.tabChampionTable'),
     widgetId: 'championTable',
   },
+  { id: 'balance' as const, label: t('statisticsPage.tabBalance'), widgetId: 'balance' },
   { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
@@ -1422,9 +1431,13 @@ function onStatsFilterChange() {
   overviewDetailData.value = null
   overviewDetailBaselineData.value = null
   overviewDetailError.value = false
+  balanceFrameworkData.value = null
+  balanceFrameworkError.value = false
   if (activeTab.value === 'overview') loadOverview()
   if (activeTab.value === 'infos') loadOverview()
+  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'bans') bansTab.loadBansTable()
+  if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
   if (['runes', 'items', 'spells'].includes(activeTab.value)) {
@@ -1452,6 +1465,44 @@ function resetStatsFilters() {
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
   onStatsFilterChange()
+}
+
+const balanceFrameworkData = ref<{
+  rules: Record<string, unknown> | null
+  currentPatch: string
+  previousPatch: string | null
+  abrByLevel: { average: number; skilled: number; elite: number }
+  rows: Array<{
+    championId: number
+    role: string
+    average: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
+    skilled: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
+    elite: { status: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'; delta: string | null }
+    globalStatus: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
+    globalDelta: string | null
+  }>
+} | null>(null)
+const balanceFrameworkPending = ref(false)
+const balanceFrameworkError = ref(false)
+
+async function loadBalanceFramework() {
+  balanceFrameworkPending.value = true
+  balanceFrameworkError.value = false
+  try {
+    const params = new URLSearchParams()
+    if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
+    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    const q = params.toString()
+    balanceFrameworkData.value = await statsFetch(
+      apiUrl('/api/stats/balance-framework' + (q ? `?${q}` : '')),
+      { timeout: OVERVIEW_DETAIL_TIMEOUT_MS }
+    )
+  } catch {
+    balanceFrameworkData.value = null
+    balanceFrameworkError.value = true
+  } finally {
+    balanceFrameworkPending.value = false
+  }
 }
 /** Overview detail (runes, items, spells) from GET /api/stats/overview-detail */
 const overviewDetailData = ref<{
@@ -3777,7 +3828,9 @@ watch(activeTab, async tab => {
   if (tab === 'tierlist') loadChampions()
   if (tab === 'tierlist') loadTierList()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
+  if (tab === 'infos') loadBalanceFramework()
   if (tab === 'championTable') loadChampionGlobalTable()
+  if (tab === 'balance') loadBalanceFramework()
   if (tab === 'bans') bansTab.loadBansTable()
   if (tab === 'items' || tab === 'spells' || tab === 'runes') {
     if (!overviewDetailData.value && !overviewDetailPending.value) loadOverviewDetail()
@@ -3792,6 +3845,8 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
+  if (activeTab.value === 'balance') loadBalanceFramework()
+  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'bans') bansTab.loadBansTable()
 })
 
@@ -3806,6 +3861,8 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
+  if (activeTab.value === 'balance') loadBalanceFramework()
+  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()
@@ -3833,6 +3890,8 @@ onMounted(async () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
+  if (activeTab.value === 'balance') loadBalanceFramework()
+  if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'bans') await bansTab.loadBansTable()
 })
 
@@ -3864,6 +3923,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   totalChampionGlobalPages,
   championName,
   championSearchQuery,
+  balanceFrameworkData,
+  balanceFrameworkError,
+  balanceFrameworkPending,
   championsPageSize,
   cycleTierListSort,
   drakeIconSrc,

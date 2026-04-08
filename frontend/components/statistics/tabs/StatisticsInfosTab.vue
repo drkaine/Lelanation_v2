@@ -13,6 +13,64 @@
       {{ p.infosMatrixError }}
     </div>
     <div v-else class="space-y-3">
+      <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+        <h3 class="text-sm font-semibold text-text">
+          {{ p.t('statisticsPage.balanceRulesTitle') }}
+        </h3>
+        <p class="mt-1 text-xs text-text/70">
+          {{
+            p.t('statisticsPage.balanceRulesSubtitle', {
+              patch: p.balanceFrameworkData?.currentPatch || '—',
+            })
+          }}
+        </p>
+        <div
+          v-if="p.balanceFrameworkData?.rules"
+          class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3"
+        >
+          <div class="rounded border border-primary/20 bg-background/40 p-3 text-xs text-text/80">
+            <div class="font-semibold text-text">Average</div>
+            <div class="mt-1">
+              OP: WR ≥ {{ p.balanceFrameworkData.rules.levels.average.overpowered.winrateHigh }}%
+              (ou {{ p.balanceFrameworkData.rules.levels.average.overpowered.winrateLow }}% si
+              banrate ≥
+              {{ p.balanceFrameworkData.rules.levels.average.overpowered.banrateMultiplier }}x ABR)
+            </div>
+            <div>
+              UP: WR &lt; {{ p.balanceFrameworkData.rules.levels.average.underpowered.winrateMax }}%
+            </div>
+          </div>
+          <div class="rounded border border-primary/20 bg-background/40 p-3 text-xs text-text/80">
+            <div class="font-semibold text-text">Skilled</div>
+            <div class="mt-1">
+              OP: WR ≥ {{ p.balanceFrameworkData.rules.levels.skilled.overpowered.winrateHigh }}%
+              (ou {{ p.balanceFrameworkData.rules.levels.skilled.overpowered.winrateLow }}% si
+              banrate ≥
+              {{ p.balanceFrameworkData.rules.levels.skilled.overpowered.banrateMultiplier }}x ABR)
+            </div>
+            <div>
+              UP: WR &lt; {{ p.balanceFrameworkData.rules.levels.skilled.underpowered.winrateMax }}%
+            </div>
+          </div>
+          <div class="rounded border border-primary/20 bg-background/40 p-3 text-xs text-text/80">
+            <div class="font-semibold text-text">Elite</div>
+            <div class="mt-1">
+              OP: WR ≥ {{ p.balanceFrameworkData.rules.levels.elite.overpowered.winrateHigh }}% (ou
+              {{ p.balanceFrameworkData.rules.levels.elite.overpowered.winrateLow }}% si banrate ≥
+              {{ p.balanceFrameworkData.rules.levels.elite.overpowered.banrateMultiplier }}x ABR)
+            </div>
+            <div>
+              OP: banrate moyen (patch courant + précédent) ≥
+              {{ p.balanceFrameworkData.rules.levels.elite.overpowered.banrateTwoPatchAvgMin }}%
+            </div>
+            <div>
+              UP: présence (pick + ban) &lt;
+              {{ p.balanceFrameworkData.rules.levels.elite.underpowered.presenceMax }}%
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
           <div class="text-xs text-text/70">{{ p.t('statisticsPage.overviewTotalMatches') }}</div>

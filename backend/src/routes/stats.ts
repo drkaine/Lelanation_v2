@@ -40,6 +40,7 @@ import {
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
+import { getBalanceFramework } from '../services/StatsBalanceService.js'
 import { isDatabaseConfigured } from '../db.js'
 
 const router = Router()
@@ -1096,6 +1097,25 @@ router.get('/tierlist-graph', async (req: Request, res: Response) => {
       winrate: r.winrate,
     })),
   })
+})
+
+router.get('/balance-framework', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryString(req.query.version)
+  const role = queryString(req.query.role)
+  const data = await getBalanceFramework({
+    version,
+    role,
+  })
+  return res.json(
+    data ?? {
+      rules: null,
+      currentPatch: version ?? '',
+      previousPatch: null,
+      abrByLevel: { average: 0, skilled: 0, elite: 0 },
+      rows: [],
+    }
+  )
 })
 
 /** New API: /api/stats/summoners/duos and /solo */

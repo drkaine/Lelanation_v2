@@ -172,6 +172,167 @@
           </p>
         </div>
 
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-3 text-lg font-semibold text-text">Balance Framework Rules</h2>
+          <p class="mb-3 text-xs text-text/70">
+            Modifie les seuils utilisés par l'onglet statistiques Balance (Average / Skilled /
+            Elite).
+          </p>
+          <p v-if="balanceRulesLoading" class="text-text/70">Chargement…</p>
+          <div v-else class="space-y-4">
+            <div class="grid gap-3 md:grid-cols-4">
+              <label class="text-xs text-text/80">
+                Average WR high
+                <input
+                  v-model.number="balanceRulesForm.averageWinrateHigh"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Average WR low
+                <input
+                  v-model.number="balanceRulesForm.averageWinrateLow"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Average ban multiplier
+                <input
+                  v-model.number="balanceRulesForm.averageBanrateMultiplier"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Average UP WR max
+                <input
+                  v-model.number="balanceRulesForm.averageWinrateMax"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+            </div>
+            <div class="grid gap-3 md:grid-cols-4">
+              <label class="text-xs text-text/80">
+                Skilled WR high
+                <input
+                  v-model.number="balanceRulesForm.skilledWinrateHigh"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Skilled WR low
+                <input
+                  v-model.number="balanceRulesForm.skilledWinrateLow"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Skilled ban multiplier
+                <input
+                  v-model.number="balanceRulesForm.skilledBanrateMultiplier"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Skilled UP WR max
+                <input
+                  v-model.number="balanceRulesForm.skilledWinrateMax"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+            </div>
+            <div class="grid gap-3 md:grid-cols-5">
+              <label class="text-xs text-text/80">
+                Elite WR high
+                <input
+                  v-model.number="balanceRulesForm.eliteWinrateHigh"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Elite WR low
+                <input
+                  v-model.number="balanceRulesForm.eliteWinrateLow"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Elite ban multiplier
+                <input
+                  v-model.number="balanceRulesForm.eliteBanrateMultiplier"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Elite 2-patch ban min
+                <input
+                  v-model.number="balanceRulesForm.eliteBanrateTwoPatchAvgMin"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+              <label class="text-xs text-text/80">
+                Elite UP presence max
+                <input
+                  v-model.number="balanceRulesForm.elitePresenceMax"
+                  type="number"
+                  step="0.1"
+                  class="mt-1 w-full rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                />
+              </label>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="rounded bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+                :disabled="balanceRulesSaving"
+                @click="saveBalanceRules"
+              >
+                {{ balanceRulesSaving ? '…' : 'Sauvegarder les règles' }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-3 py-2 text-sm font-medium text-text transition-colors hover:bg-primary/20"
+                @click="loadBalanceRules"
+              >
+                Recharger
+              </button>
+            </div>
+            <p
+              v-if="balanceRulesMessage"
+              :class="
+                balanceRulesError
+                  ? 'text-sm text-error'
+                  : 'text-sm text-green-600 dark:text-green-400'
+              "
+            >
+              {{ balanceRulesMessage }}
+            </p>
+          </div>
+        </div>
+
         <!-- Section 2: Statut des crons -->
         <div class="rounded-lg border border-primary/30 bg-surface/30">
           <button
@@ -1605,6 +1766,40 @@ const activePatchMaxInput = ref<number>(1000000)
 const activePatchSaveBusy = ref(false)
 const activePatchMessage = ref('')
 const activePatchError = ref(false)
+const balanceRulesLoading = ref(false)
+const balanceRulesSaving = ref(false)
+const balanceRulesMessage = ref('')
+const balanceRulesError = ref(false)
+type BalanceRulesForm = {
+  averageWinrateHigh: number
+  averageWinrateLow: number
+  averageBanrateMultiplier: number
+  averageWinrateMax: number
+  skilledWinrateHigh: number
+  skilledWinrateLow: number
+  skilledBanrateMultiplier: number
+  skilledWinrateMax: number
+  eliteWinrateHigh: number
+  eliteWinrateLow: number
+  eliteBanrateMultiplier: number
+  eliteBanrateTwoPatchAvgMin: number
+  elitePresenceMax: number
+}
+const balanceRulesForm = ref<BalanceRulesForm>({
+  averageWinrateHigh: 54,
+  averageWinrateLow: 52.5,
+  averageBanrateMultiplier: 5,
+  averageWinrateMax: 49,
+  skilledWinrateHigh: 53.5,
+  skilledWinrateLow: 52,
+  skilledBanrateMultiplier: 5,
+  skilledWinrateMax: 49,
+  eliteWinrateHigh: 54,
+  eliteWinrateLow: 52.5,
+  eliteBanrateMultiplier: 5,
+  eliteBanrateTwoPatchAvgMin: 50,
+  elitePresenceMax: 7.5,
+})
 const riotScriptsStatusCrons = ref<
   Array<{
     script: string
@@ -1756,6 +1951,121 @@ async function saveActivePatchMax() {
     activePatchMessage.value = 'Erreur réseau'
   } finally {
     activePatchSaveBusy.value = false
+  }
+}
+
+function applyBalanceRulesForm(rules: any) {
+  const avg = rules?.levels?.average
+  const sk = rules?.levels?.skilled
+  const el = rules?.levels?.elite
+  balanceRulesForm.value = {
+    averageWinrateHigh: Number(avg?.overpowered?.winrateHigh ?? 54),
+    averageWinrateLow: Number(avg?.overpowered?.winrateLow ?? 52.5),
+    averageBanrateMultiplier: Number(avg?.overpowered?.banrateMultiplier ?? 5),
+    averageWinrateMax: Number(avg?.underpowered?.winrateMax ?? 49),
+    skilledWinrateHigh: Number(sk?.overpowered?.winrateHigh ?? 53.5),
+    skilledWinrateLow: Number(sk?.overpowered?.winrateLow ?? 52),
+    skilledBanrateMultiplier: Number(sk?.overpowered?.banrateMultiplier ?? 5),
+    skilledWinrateMax: Number(sk?.underpowered?.winrateMax ?? 49),
+    eliteWinrateHigh: Number(el?.overpowered?.winrateHigh ?? 54),
+    eliteWinrateLow: Number(el?.overpowered?.winrateLow ?? 52.5),
+    eliteBanrateMultiplier: Number(el?.overpowered?.banrateMultiplier ?? 5),
+    eliteBanrateTwoPatchAvgMin: Number(el?.overpowered?.banrateTwoPatchAvgMin ?? 50),
+    elitePresenceMax: Number(el?.underpowered?.presenceMax ?? 7.5),
+  }
+}
+
+function buildBalanceRulesPayload() {
+  const f = balanceRulesForm.value
+  return {
+    levels: {
+      average: {
+        tiers: ['IRON', 'BRONZE', 'SILVER', 'GOLD'],
+        overpowered: {
+          winrateHigh: f.averageWinrateHigh,
+          winrateLow: f.averageWinrateLow,
+          banrateMultiplier: f.averageBanrateMultiplier,
+          minGames: 50,
+        },
+        underpowered: {
+          winrateMax: f.averageWinrateMax,
+        },
+      },
+      skilled: {
+        tiers: ['PLATINUM', 'EMERALD', 'DIAMOND'],
+        overpowered: {
+          winrateHigh: f.skilledWinrateHigh,
+          winrateLow: f.skilledWinrateLow,
+          banrateMultiplier: f.skilledBanrateMultiplier,
+          minGames: 50,
+        },
+        underpowered: {
+          winrateMax: f.skilledWinrateMax,
+        },
+      },
+      elite: {
+        tiers: ['DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
+        overpowered: {
+          winrateHigh: f.eliteWinrateHigh,
+          winrateLow: f.eliteWinrateLow,
+          banrateMultiplier: f.eliteBanrateMultiplier,
+          minGames: 30,
+          banrateTwoPatchAvgMin: f.eliteBanrateTwoPatchAvgMin,
+        },
+        underpowered: {
+          presenceMax: f.elitePresenceMax,
+        },
+      },
+    },
+  }
+}
+
+async function loadBalanceRules() {
+  balanceRulesLoading.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/balance-rules'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    applyBalanceRulesForm(data?.rules ?? {})
+  } catch {
+    // keep defaults
+  } finally {
+    balanceRulesLoading.value = false
+  }
+}
+
+async function saveBalanceRules() {
+  balanceRulesMessage.value = ''
+  balanceRulesError.value = false
+  balanceRulesSaving.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/balance-rules'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rules: buildBalanceRulesPayload() }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (!res.ok) {
+      balanceRulesError.value = true
+      balanceRulesMessage.value = data?.error ?? 'Erreur'
+      return
+    }
+    applyBalanceRulesForm(data?.rules ?? {})
+    balanceRulesMessage.value = 'Règles balance sauvegardées.'
+  } catch {
+    balanceRulesError.value = true
+    balanceRulesMessage.value = 'Erreur réseau'
+  } finally {
+    balanceRulesSaving.value = false
   }
 }
 
@@ -3019,6 +3329,7 @@ onMounted(async () => {
     loadRiotApiStats(),
     loadDataStats(),
     loadActivePatches(),
+    loadBalanceRules(),
     loadSeedPlayers(),
   ])
   if (activeTab.value === 'logs') {
@@ -3047,6 +3358,7 @@ watch(activeTab, (tab, prevTab) => {
     loadRiotApiStats()
     loadDataStats()
     loadActivePatches()
+    loadBalanceRules()
     // Seed players UI removed
     dataTabPollTimer = setInterval(() => {
       loadRiotScriptsStatus()

@@ -25,6 +25,7 @@ import {
   getUnifiedLogPathResolved,
 } from '../logging/unifiedAppLog.js'
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
+import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
 import {
   startScript,
   switchToScript,
@@ -341,6 +342,27 @@ router.put('/active-patches/:patch/max', async (req, res) => {
       },
     })
     return res.json({ success: true, patch: updated })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.get('/balance-rules', async (_req, res) => {
+  try {
+    const rules = await readBalanceRules()
+    return res.json({ rules })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.put('/balance-rules', async (req, res) => {
+  try {
+    const saved = await writeBalanceRules(req.body?.rules ?? req.body)
+    if (!saved.ok) {
+      return res.status(500).json({ error: saved.error ?? 'Unable to save balance rules' })
+    }
+    return res.json({ success: true, rules: saved.data })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
