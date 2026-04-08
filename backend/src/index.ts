@@ -20,6 +20,7 @@ import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 // import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
 import { startDefaultScript, requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
+import { ensureMaterializedViewsPopulated } from './services/MaterializedViewService.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -91,6 +92,10 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
+  // Après migrate (WITH NO DATA), les VM sont illisibles (55000) jusqu’au premier REFRESH.
+  void ensureMaterializedViewsPopulated().catch((e) =>
+    console.warn('[Server] ensureMaterializedViewsPopulated:', e instanceof Error ? e.message : e)
+  )
   // Précharger le cache overview-detail (sans filtre) pour limiter les 504
   // setTimeout(() => {
   //   Promise.all([

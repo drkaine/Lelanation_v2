@@ -750,6 +750,7 @@ model MvChampionItemSoloStat {
   itemId         Int     @map("item_id")
   countStarter   Int     @map("count_starter")
   countCore      Int     @map("count_core")
+  countFinal     Int     @map("count_final")
   countWin       Int     @map("count_win")
   countGame      Int     @map("count_game")
   sumTimestampMs Int     @map("sum_timestamp_ms")

@@ -703,7 +703,14 @@ export async function getOverviewDetailStats(
       }),
       prisma.mvChampionItemSoloStat.findMany({
         where: { championStatId: { in: statIds } },
-        select: { itemId: true, countWin: true, countGame: true, countStarter: true, countCore: true },
+        select: {
+          itemId: true,
+          countWin: true,
+          countGame: true,
+          countStarter: true,
+          countCore: true,
+          countFinal: true,
+        },
       }),
       prisma.mvChampionSummonerSpellAgg.findMany({
         where: {
@@ -841,8 +848,7 @@ export async function getOverviewDetailStats(
         OVERVIEW_STARTER_SLICE_EXCLUDED_IDS.has(r.itemId) ? 0 : r.countStarter
       )
       mergeItemSlice(itemCoreMap, r.itemId, r.countWin, r.countGame, r.countCore)
-      const otherSlots = Math.max(0, r.countGame - r.countStarter - r.countCore)
-      mergeItemSlice(itemFinalMap, r.itemId, r.countWin, r.countGame, otherSlots)
+      mergeItemSlice(itemFinalMap, r.itemId, r.countWin, r.countGame, r.countFinal)
     }
     const items = Array.from(itemMap.entries())
       .map(([itemId, e]) => ({

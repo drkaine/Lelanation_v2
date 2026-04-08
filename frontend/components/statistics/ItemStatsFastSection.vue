@@ -63,6 +63,17 @@ const minGames = computed(() => {
   return Math.min(800, Math.max(100, Math.floor(tp * 0.0008)))
 })
 
+/**
+ * Plancher « préféré » pour les cartes Δ : solo/bottes utilisent le même `games` que les achats totaux ;
+ * starter/core/final comptent des occurrences **dans la tranche** (souvent 5–20× plus faibles) — même
+ * `minGames` qu’en vue d’ensemble excluait quasiment toutes les lignes.
+ */
+const minGamesPreferredForDeltas = computed(() => {
+  const m = minGames.value
+  if (props.slice === 'solo' || props.slice === 'boots') return m
+  return Math.max(15, Math.min(180, Math.floor(m * 0.22)))
+})
+
 const enriched = computed((): EnrichedRow[] => {
   const base = props.baselineRows
   if (!base?.length) return props.rows.map(r => ({ ...r }))
@@ -102,23 +113,48 @@ function takeDeltaTopN(
   field: 'deltaPick' | 'deltaWr',
   wantPositive: boolean,
   n: number,
-  minG: number
+  preferredMinG: number
 ): EnrichedRow[] {
-  const base = rows.filter(r => r[field] != null && r.games >= minG)
-  const thresholds = [0.02, 0.01, 0.005, 0.001, 0]
-  for (const thr of thresholds) {
-    const cand = base.filter(r => {
-      const v = r[field]!
-      return wantPositive ? v > thr : v < -thr
-    })
-    const sorted = [...cand].sort((a, b) => {
-      const av = a[field]!
-      const bv = b[field]!
-      return wantPositive ? bv - av : av - bv
-    })
-    if (sorted.length >= n) return sorted.slice(0, n)
+  const minGTiers = [
+    preferredMinG,
+    Math.max(8, Math.floor(preferredMinG * 0.5)),
+    40,
+    30,
+    20,
+    15,
+    10,
+    5,
+    1,
+  ]
+  const thrTiers = [0.02, 0.01, 0.005, 0.001, 0.0001, 0]
+  let best: EnrichedRow[] = []
+  for (const minG of minGTiers) {
+    const base = rows.filter(r => r[field] != null && r.games >= minG)
+    for (const thr of thrTiers) {
+      const cand = base.filter(r => {
+        const v = r[field]!
+        return wantPositive ? v >= thr : v <= -thr
+      })
+      const sorted = [...cand].sort((a, b) => {
+        const av = a[field]!
+        const bv = b[field]!
+        return wantPositive ? bv - av : av - bv
+      })
+      if (sorted.length >= n) return sorted.slice(0, n)
+      if (sorted.length > best.length) best = sorted
+    }
   }
-  return []
+  if (best.length === 0) {
+    const all = rows
+      .filter(r => r[field] != null)
+      .sort((a, b) => {
+        const av = a[field]!
+        const bv = b[field]!
+        return wantPositive ? bv - av : av - bv
+      })
+    return all.slice(0, n)
+  }
+  return best.slice(0, n)
 }
 
 const topPick = computed(() =>
@@ -150,19 +186,25 @@ const worstWr = computed(() =>
 )
 
 const deltaPickUp = computed(() =>
-  takeDeltaTopN(enriched.value, 'deltaPick', true, ITEM_FAST_ROWS, minGames.value)
+  takeDeltaTopN(enriched.value, 'deltaPick', true, ITEM_FAST_ROWS, minGamesPreferredForDeltas.value)
 )
 
 const deltaPickDown = computed(() =>
-  takeDeltaTopN(enriched.value, 'deltaPick', false, ITEM_FAST_ROWS, minGames.value)
+  takeDeltaTopN(
+    enriched.value,
+    'deltaPick',
+    false,
+    ITEM_FAST_ROWS,
+    minGamesPreferredForDeltas.value
+  )
 )
 
 const deltaWrUp = computed(() =>
-  takeDeltaTopN(enriched.value, 'deltaWr', true, ITEM_FAST_ROWS, minGames.value)
+  takeDeltaTopN(enriched.value, 'deltaWr', true, ITEM_FAST_ROWS, minGamesPreferredForDeltas.value)
 )
 
 const deltaWrDown = computed(() =>
-  takeDeltaTopN(enriched.value, 'deltaWr', false, ITEM_FAST_ROWS, minGames.value)
+  takeDeltaTopN(enriched.value, 'deltaWr', false, ITEM_FAST_ROWS, minGamesPreferredForDeltas.value)
 )
 
 function cardIsFavorite(id: string): boolean {
@@ -181,30 +223,17 @@ function cardHeadingDelta(metricI18nKey: string): string {
   return `${sliceLabel.value} ${t(metricI18nKey, { version: props.refVersionLabel || '—' })}`
 }
 
-function pickBarWidth(row: ItemAggRow, list: ItemAggRow[]): string {
-  const max = Math.max(...list.map(r => r.pickrate), 1)
-  return Math.min(100, (row.pickrate / max) * 100) + '%'
+function formatSigned(value?: number): string {
+  if (value == null) return '—'
+  const n = Number(value)
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
 }
 
-function bestWrBarWidth(row: ItemAggRow, list: ItemAggRow[]): string {
-  const max = Math.max(...list.map(r => r.winrate), 1)
-  return Math.min(100, (row.winrate / max) * 100) + '%'
-}
-
-function worstWrBarWidth(row: ItemAggRow, list: ItemAggRow[]): string {
-  const drops = list.map(r => 100 - r.winrate)
-  const max = Math.max(...drops, 0.01)
-  return Math.min(100, ((100 - row.winrate) / max) * 100) + '%'
-}
-
-function deltaBarWidth(
-  row: EnrichedRow,
-  list: EnrichedRow[],
-  field: 'deltaWr' | 'deltaPick'
-): string {
-  const max = Math.max(...list.map(r => Math.abs(r[field] ?? 0)), 0.01)
-  const v = Math.abs(row[field] ?? 0)
-  return Math.min(100, (v / max) * 100) + '%'
+function scrollToItemsFullTable(): void {
+  if (typeof document === 'undefined') return
+  document
+    .getElementById('statistics-items-full-table')
+    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 </script>
 
@@ -212,7 +241,7 @@ function deltaBarWidth(
   <!-- 8 cartes par tranche ; racines multiples pour s’intégrer au flex parent -->
   <!-- Plus pickés -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -237,9 +266,18 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.mostPick') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeading('statisticsPage.itemFastMetricMostPick')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeading('statisticsPage.itemFastMetricMostPick') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{ t('statisticsPage.tooltipItemFastMostPick') }}
+          </span>
+        </span>
+      </span>
     </h3>
     <table v-if="topPick.length" class="fast-stat-table w-full text-xs">
       <tbody>
@@ -251,20 +289,12 @@ function deltaBarWidth(
                 v-if="gameVersion && itemImageName(row.itemId)"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
+                class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
-              <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
+              <span class="min-w-0 flex-1 truncate font-medium text-text">{{
                 itemName(row.itemId) || row.itemId
               }}</span>
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-accent transition-[width]"
-                  :style="{ width: pickBarWidth(row, topPick) }"
-                />
-              </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-text"
+              <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-text"
                 >{{ Number(row.pickrate).toFixed(2) }}%</span
               >
             </div>
@@ -275,11 +305,20 @@ function deltaBarWidth(
     <div v-else class="py-3 text-center text-text/60">
       {{ t('statisticsPage.fastStatsNoData') }}
     </div>
+    <div v-if="topPick.length" class="mt-1 text-center">
+      <button
+        type="button"
+        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+        @click="scrollToItemsFullTable"
+      >
+        {{ t('statisticsPage.fastStatsSeeMore') }}
+      </button>
+    </div>
   </div>
 
   <!-- Moins pickés -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -290,6 +329,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.leastPick')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.leastPick',
@@ -299,9 +343,18 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.leastPick') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeading('statisticsPage.itemFastMetricLeastPick')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeading('statisticsPage.itemFastMetricLeastPick') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{ t('statisticsPage.tooltipItemFastLeastPick') }}
+          </span>
+        </span>
+      </span>
     </h3>
     <table v-if="leastPick.length" class="fast-stat-table w-full text-xs">
       <tbody>
@@ -317,20 +370,12 @@ function deltaBarWidth(
                 v-if="gameVersion && itemImageName(row.itemId)"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
+                class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
-              <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
+              <span class="min-w-0 flex-1 truncate font-medium text-text">{{
                 itemName(row.itemId) || row.itemId
               }}</span>
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-accent/70 transition-[width]"
-                  :style="{ width: pickBarWidth(row, leastPick) }"
-                />
-              </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-text"
+              <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-text"
                 >{{ Number(row.pickrate).toFixed(2) }}%</span
               >
             </div>
@@ -341,11 +386,20 @@ function deltaBarWidth(
     <div v-else class="py-3 text-center text-text/60">
       {{ t('statisticsPage.fastStatsNoData') }}
     </div>
+    <div v-if="leastPick.length" class="mt-1 text-center">
+      <button
+        type="button"
+        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+        @click="scrollToItemsFullTable"
+      >
+        {{ t('statisticsPage.fastStatsSeeMore') }}
+      </button>
+    </div>
   </div>
 
   <!-- Meilleur winrate -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -356,6 +410,9 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.bestWr') ? 'Retirer des favoris' : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.bestWr',
@@ -365,9 +422,18 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.bestWr') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeading('statisticsPage.itemFastMetricBestWr')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeading('statisticsPage.itemFastMetricBestWr') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{ t('statisticsPage.tooltipItemFastBestWr') }}
+          </span>
+        </span>
+      </span>
     </h3>
     <table v-if="bestWr.length" class="fast-stat-table w-full text-xs">
       <tbody>
@@ -379,20 +445,12 @@ function deltaBarWidth(
                 v-if="gameVersion && itemImageName(row.itemId)"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
+                class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
-              <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
+              <span class="min-w-0 flex-1 truncate font-medium text-text">{{
                 itemName(row.itemId) || row.itemId
               }}</span>
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-success transition-[width]"
-                  :style="{ width: bestWrBarWidth(row, bestWr) }"
-                />
-              </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-success"
+              <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-text"
                 >{{ Number(row.winrate).toFixed(2) }}%</span
               >
             </div>
@@ -403,11 +461,20 @@ function deltaBarWidth(
     <div v-else class="py-3 text-center text-text/60">
       {{ t('statisticsPage.fastStatsNoData') }}
     </div>
+    <div v-if="bestWr.length" class="mt-1 text-center">
+      <button
+        type="button"
+        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+        @click="scrollToItemsFullTable"
+      >
+        {{ t('statisticsPage.fastStatsSeeMore') }}
+      </button>
+    </div>
   </div>
 
   <!-- Pire winrate -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -418,6 +485,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.worstWr')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.worstWr',
@@ -427,9 +499,18 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.worstWr') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeading('statisticsPage.itemFastMetricWorstWr')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeading('statisticsPage.itemFastMetricWorstWr') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{ t('statisticsPage.tooltipItemFastWorstWr') }}
+          </span>
+        </span>
+      </span>
     </h3>
     <table v-if="worstWr.length" class="fast-stat-table w-full text-xs">
       <tbody>
@@ -441,22 +522,14 @@ function deltaBarWidth(
                 v-if="gameVersion && itemImageName(row.itemId)"
                 :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
                 :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
+                class="h-5 w-5 shrink-0 rounded-full object-cover"
               />
               <span
-                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
+                class="min-w-0 flex-1 truncate font-medium text-text"
                 :title="Number(row.pickrate).toFixed(1) + '% pick'"
                 >{{ itemName(row.itemId) || row.itemId }}</span
               >
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-error transition-[width]"
-                  :style="{ width: worstWrBarWidth(row, worstWr) }"
-                />
-              </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-error"
+              <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-error"
                 >{{ Number(row.winrate).toFixed(2) }}%</span
               >
             </div>
@@ -467,11 +540,20 @@ function deltaBarWidth(
     <div v-else class="py-3 text-center text-text/60">
       {{ t('statisticsPage.fastStatsNoData') }}
     </div>
+    <div v-if="worstWr.length" class="mt-1 text-center">
+      <button
+        type="button"
+        class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+        @click="scrollToItemsFullTable"
+      >
+        {{ t('statisticsPage.fastStatsSeeMore') }}
+      </button>
+    </div>
   </div>
 
   <!-- Δ pickrate + -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -482,6 +564,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.deltaPickUp')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.deltaPickUp',
@@ -491,50 +578,66 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.deltaPickUp') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeadingDelta('statisticsPage.itemFastMetricDeltaPickUp')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeadingDelta('statisticsPage.itemFastMetricDeltaPickUp') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{
+              t('statisticsPage.tooltipItemFastDeltaPickUp', {
+                version: refVersionLabel || '—',
+              })
+            }}
+          </span>
+        </span>
+      </span>
     </h3>
     <div v-if="baselinePending" class="py-2 text-center text-xs text-text/60">
       {{ t('statisticsPage.loading') }}
     </div>
-    <table v-else-if="hasBaseline && deltaPickUp.length" class="fast-stat-table w-full text-xs">
-      <tbody>
-        <tr
-          v-for="(row, idx) in deltaPickUp"
-          :key="slice + '-dpu-' + row.itemId"
-          class="fast-stat-row"
-        >
-          <td class="py-0.5 align-middle">
-            <div class="flex items-center gap-0.5">
-              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-              <img
-                v-if="gameVersion && itemImageName(row.itemId)"
-                :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
-              />
-              <span
-                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                :title="Number(row.pickrate).toFixed(1) + '% pick'"
-                >{{ itemName(row.itemId) || row.itemId }}</span
-              >
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-accent transition-[width]"
-                  :style="{ width: deltaBarWidth(row, deltaPickUp, 'deltaPick') }"
+    <template v-else-if="hasBaseline && deltaPickUp.length">
+      <table class="fast-stat-table w-full text-xs">
+        <tbody>
+          <tr
+            v-for="(row, idx) in deltaPickUp"
+            :key="slice + '-dpu-' + row.itemId"
+            class="fast-stat-row"
+          >
+            <td class="py-0.5 align-middle">
+              <div class="flex items-center gap-0.5">
+                <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                <img
+                  v-if="gameVersion && itemImageName(row.itemId)"
+                  :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                  :alt="itemName(row.itemId) || ''"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
                 />
+                <span
+                  class="min-w-0 flex-1 truncate font-medium text-text"
+                  :title="Number(row.pickrate).toFixed(1) + '% pick'"
+                  >{{ itemName(row.itemId) || row.itemId }}</span
+                >
+                <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-accent">{{
+                  formatSigned(row.deltaPick)
+                }}</span>
               </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-accent"
-                >+{{ Number(row.deltaPick).toFixed(2) }}%</span
-              >
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="mt-1 text-center">
+        <button
+          type="button"
+          class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+          @click="scrollToItemsFullTable"
+        >
+          {{ t('statisticsPage.fastStatsSeeMore') }}
+        </button>
+      </div>
+    </template>
     <div v-else-if="!hasBaseline" class="py-3 text-center text-text/60">
       {{ t('statisticsPage.itemsDeltaNeedRefVersion') }}
     </div>
@@ -545,7 +648,7 @@ function deltaBarWidth(
 
   <!-- Δ pickrate − -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -556,6 +659,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.deltaPickDown')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.deltaPickDown',
@@ -565,50 +673,66 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.deltaPickDown') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeadingDelta('statisticsPage.itemFastMetricDeltaPickDown')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeadingDelta('statisticsPage.itemFastMetricDeltaPickDown') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{
+              t('statisticsPage.tooltipItemFastDeltaPickDown', {
+                version: refVersionLabel || '—',
+              })
+            }}
+          </span>
+        </span>
+      </span>
     </h3>
     <div v-if="baselinePending" class="py-2 text-center text-xs text-text/60">
       {{ t('statisticsPage.loading') }}
     </div>
-    <table v-else-if="hasBaseline && deltaPickDown.length" class="fast-stat-table w-full text-xs">
-      <tbody>
-        <tr
-          v-for="(row, idx) in deltaPickDown"
-          :key="slice + '-dpd-' + row.itemId"
-          class="fast-stat-row"
-        >
-          <td class="py-0.5 align-middle">
-            <div class="flex items-center gap-0.5">
-              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-              <img
-                v-if="gameVersion && itemImageName(row.itemId)"
-                :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
-              />
-              <span
-                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                :title="Number(row.pickrate).toFixed(1) + '% pick'"
-                >{{ itemName(row.itemId) || row.itemId }}</span
-              >
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-error/90 transition-[width]"
-                  :style="{ width: deltaBarWidth(row, deltaPickDown, 'deltaPick') }"
+    <template v-else-if="hasBaseline && deltaPickDown.length">
+      <table class="fast-stat-table w-full text-xs">
+        <tbody>
+          <tr
+            v-for="(row, idx) in deltaPickDown"
+            :key="slice + '-dpd-' + row.itemId"
+            class="fast-stat-row"
+          >
+            <td class="py-0.5 align-middle">
+              <div class="flex items-center gap-0.5">
+                <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                <img
+                  v-if="gameVersion && itemImageName(row.itemId)"
+                  :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                  :alt="itemName(row.itemId) || ''"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
                 />
+                <span
+                  class="min-w-0 flex-1 truncate font-medium text-text"
+                  :title="Number(row.pickrate).toFixed(1) + '% pick'"
+                  >{{ itemName(row.itemId) || row.itemId }}</span
+                >
+                <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-error">{{
+                  formatSigned(row.deltaPick)
+                }}</span>
               </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-error"
-                >{{ Number(row.deltaPick).toFixed(2) }}%</span
-              >
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="mt-1 text-center">
+        <button
+          type="button"
+          class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+          @click="scrollToItemsFullTable"
+        >
+          {{ t('statisticsPage.fastStatsSeeMore') }}
+        </button>
+      </div>
+    </template>
     <div v-else-if="!hasBaseline" class="py-3 text-center text-text/60">
       {{ t('statisticsPage.itemsDeltaNeedRefVersion') }}
     </div>
@@ -619,7 +743,7 @@ function deltaBarWidth(
 
   <!-- Δ winrate + -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -630,6 +754,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.deltaWrUp')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.deltaWrUp',
@@ -639,50 +768,66 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.deltaWrUp') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeadingDelta('statisticsPage.itemFastMetricDeltaWrUp')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeadingDelta('statisticsPage.itemFastMetricDeltaWrUp') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{
+              t('statisticsPage.tooltipItemFastDeltaWrUp', {
+                version: refVersionLabel || '—',
+              })
+            }}
+          </span>
+        </span>
+      </span>
     </h3>
     <div v-if="baselinePending" class="py-2 text-center text-xs text-text/60">
       {{ t('statisticsPage.loading') }}
     </div>
-    <table v-else-if="hasBaseline && deltaWrUp.length" class="fast-stat-table w-full text-xs">
-      <tbody>
-        <tr
-          v-for="(row, idx) in deltaWrUp"
-          :key="slice + '-dwu-' + row.itemId"
-          class="fast-stat-row"
-        >
-          <td class="py-0.5 align-middle">
-            <div class="flex items-center gap-0.5">
-              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-              <img
-                v-if="gameVersion && itemImageName(row.itemId)"
-                :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
-              />
-              <span
-                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                :title="Number(row.winrate).toFixed(1) + '% WR'"
-                >{{ itemName(row.itemId) || row.itemId }}</span
-              >
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-success transition-[width]"
-                  :style="{ width: deltaBarWidth(row, deltaWrUp, 'deltaWr') }"
+    <template v-else-if="hasBaseline && deltaWrUp.length">
+      <table class="fast-stat-table w-full text-xs">
+        <tbody>
+          <tr
+            v-for="(row, idx) in deltaWrUp"
+            :key="slice + '-dwu-' + row.itemId"
+            class="fast-stat-row"
+          >
+            <td class="py-0.5 align-middle">
+              <div class="flex items-center gap-0.5">
+                <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                <img
+                  v-if="gameVersion && itemImageName(row.itemId)"
+                  :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                  :alt="itemName(row.itemId) || ''"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
                 />
+                <span
+                  class="min-w-0 flex-1 truncate font-medium text-text"
+                  :title="Number(row.winrate).toFixed(1) + '% WR'"
+                  >{{ itemName(row.itemId) || row.itemId }}</span
+                >
+                <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-success">{{
+                  formatSigned(row.deltaWr)
+                }}</span>
               </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-success"
-                >+{{ Number(row.deltaWr).toFixed(2) }}%</span
-              >
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="mt-1 text-center">
+        <button
+          type="button"
+          class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+          @click="scrollToItemsFullTable"
+        >
+          {{ t('statisticsPage.fastStatsSeeMore') }}
+        </button>
+      </div>
+    </template>
     <div v-else-if="!hasBaseline" class="py-3 text-center text-text/60">
       {{ t('statisticsPage.itemsDeltaNeedRefVersion') }}
     </div>
@@ -693,7 +838,7 @@ function deltaBarWidth(
 
   <!-- Δ winrate − -->
   <div
-    class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+    class="fast-stat-card fast-stat-card-items w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
   >
     <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
       <button
@@ -704,6 +849,11 @@ function deltaBarWidth(
             ? 'text-amber-300 hover:text-amber-200'
             : 'text-text/45 grayscale hover:text-text/75'
         "
+        :title="
+          cardIsFavorite(favoritePrefix + '.deltaWrDown')
+            ? 'Retirer des favoris'
+            : 'Ajouter aux favoris'
+        "
         @click="
           toggleFavorite(
             favoritePrefix + '.deltaWrDown',
@@ -713,50 +863,66 @@ function deltaBarWidth(
       >
         {{ cardIsFavorite(favoritePrefix + '.deltaWrDown') ? '★' : '☆' }}
       </button>
-      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">{{
-        cardHeadingDelta('statisticsPage.itemFastMetricDeltaWrDown')
-      }}</span>
+      <span class="inline-flex min-w-0 flex-1 items-center leading-tight">
+        {{ cardHeadingDelta('statisticsPage.itemFastMetricDeltaWrDown') }}
+        <span
+          class="group/stat-tip relative ml-1 inline-flex cursor-help text-text/50"
+          aria-hidden="true"
+        >
+          ⓘ
+          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+            {{
+              t('statisticsPage.tooltipItemFastDeltaWrDown', {
+                version: refVersionLabel || '—',
+              })
+            }}
+          </span>
+        </span>
+      </span>
     </h3>
     <div v-if="baselinePending" class="py-2 text-center text-xs text-text/60">
       {{ t('statisticsPage.loading') }}
     </div>
-    <table v-else-if="hasBaseline && deltaWrDown.length" class="fast-stat-table w-full text-xs">
-      <tbody>
-        <tr
-          v-for="(row, idx) in deltaWrDown"
-          :key="slice + '-dwd-' + row.itemId"
-          class="fast-stat-row"
-        >
-          <td class="py-0.5 align-middle">
-            <div class="flex items-center gap-0.5">
-              <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
-              <img
-                v-if="gameVersion && itemImageName(row.itemId)"
-                :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
-                :alt="itemName(row.itemId) || ''"
-                class="h-5 w-5 shrink-0 rounded object-cover"
-              />
-              <span
-                class="min-w-[5.5rem] shrink-0 truncate font-medium text-text"
-                :title="Number(row.winrate).toFixed(1) + '% WR'"
-                >{{ itemName(row.itemId) || row.itemId }}</span
-              >
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded bg-error/90 transition-[width]"
-                  :style="{ width: deltaBarWidth(row, deltaWrDown, 'deltaWr') }"
+    <template v-else-if="hasBaseline && deltaWrDown.length">
+      <table class="fast-stat-table w-full text-xs">
+        <tbody>
+          <tr
+            v-for="(row, idx) in deltaWrDown"
+            :key="slice + '-dwd-' + row.itemId"
+            class="fast-stat-row"
+          >
+            <td class="py-0.5 align-middle">
+              <div class="flex items-center gap-0.5">
+                <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                <img
+                  v-if="gameVersion && itemImageName(row.itemId)"
+                  :src="getItemImageUrl(gameVersion, itemImageName(row.itemId)!)"
+                  :alt="itemName(row.itemId) || ''"
+                  class="h-5 w-5 shrink-0 rounded-full object-cover"
                 />
+                <span
+                  class="min-w-0 flex-1 truncate font-medium text-text"
+                  :title="Number(row.winrate).toFixed(1) + '% WR'"
+                  >{{ itemName(row.itemId) || row.itemId }}</span
+                >
+                <span class="ml-2 w-16 shrink-0 text-right font-medium tabular-nums text-error">{{
+                  formatSigned(row.deltaWr)
+                }}</span>
               </div>
-              <span class="w-9 shrink-0 text-right font-medium tabular-nums text-error"
-                >{{ Number(row.deltaWr).toFixed(2) }}%</span
-              >
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="mt-1 text-center">
+        <button
+          type="button"
+          class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
+          @click="scrollToItemsFullTable"
+        >
+          {{ t('statisticsPage.fastStatsSeeMore') }}
+        </button>
+      </div>
+    </template>
     <div v-else-if="!hasBaseline" class="py-3 text-center text-text/60">
       {{ t('statisticsPage.itemsDeltaNeedRefVersion') }}
     </div>

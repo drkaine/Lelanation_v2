@@ -252,13 +252,13 @@
           </div>
           <div>
             <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
-              t('statisticsPage.searchChampion')
+              searchInputLabel
             }}</label>
             <input
               id="champion-search"
               v-model.trim="championSearchQuery"
               type="text"
-              :placeholder="t('statisticsPage.searchChampionPlaceholder')"
+              :placeholder="searchInputPlaceholder"
               class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
             />
           </div>
@@ -489,6 +489,14 @@ function toggleFavoriteCard(cardId: string, title: string): void {
 }
 
 const championSearchQuery = ref('')
+const searchInputLabel = computed(() =>
+  activeTab.value === 'items' ? t('statisticsPage.searchItem') : t('statisticsPage.searchChampion')
+)
+const searchInputPlaceholder = computed(() =>
+  activeTab.value === 'items'
+    ? t('statisticsPage.searchItemPlaceholder')
+    : t('statisticsPage.searchChampionPlaceholder')
+)
 /** Pagination: page size and current page (1-based). Shared for Champions and Tier list. */
 const championsPageSize = ref(20)
 const championsPage = ref(1)
@@ -4271,6 +4279,24 @@ if (__statisticsVm?.proxy) {
   margin-left: 0 !important;
   margin-right: 0 !important;
   align-self: stretch;
+}
+
+/* Onglet Objets : pas de hauteur fixe ; barres comme la vue d’ensemble (48–80px), pas 32–54px. */
+.statistics .fast-stat-card.fast-stat-card-items {
+  width: min(100%, 340px) !important;
+  min-width: 260px !important;
+  max-width: 340px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  flex: 0 1 340px !important;
+  margin-left: auto;
+  margin-right: auto;
+  align-self: flex-start;
+}
+.statistics .fast-stat-card.fast-stat-card-items .fast-stat-bar-container {
+  flex-shrink: 1 !important;
+  min-width: 48px !important;
+  max-width: 80px !important;
 }
 .statistics .fast-stat-title {
   line-height: 1.4;

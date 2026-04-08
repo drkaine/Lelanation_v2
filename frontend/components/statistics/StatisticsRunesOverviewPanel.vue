@@ -317,7 +317,7 @@ function sortShardIdsForSet(ids: number[]): number[] {
 
 type RuneSetRow = NonNullable<DetailPayload['runeSets']>[number]
 
-/** Clé stable (runes + fragments API) pour le baseline. */
+/** Clé perks+shards (ordre shards normalisé) — match exact si le baseline expose les mêmes fragments. */
 function runeSetStableKey(set: Pick<RuneSetRow, 'runes' | 'shards'>): string {
   const { style0, style1, shards: fromRunes } = parseRuneSetParts(set.runes)
   const perkIds = [...new Set([...style0, ...style1])]
@@ -331,6 +331,15 @@ function runeSetStableKey(set: Pick<RuneSetRow, 'runes' | 'shards'>): string {
   return `${perkIds.join(',')}|${shardIds.join(',')}`
 }
 
+/** Clé runes seules — fallback delta si le patch de comparaison n’a pas les shards ou un agrégat différent. */
+function runeSetPerkKey(run: unknown): string {
+  const { style0, style1 } = parseRuneSetParts(run)
+  return [...new Set([...style0, ...style1])]
+    .filter(id => !isShardStatId(id))
+    .sort((a, b) => a - b)
+    .join(',')
+}
+
 const baselineRuneSetStatByKey = computed(() => {
   const m = new Map<string, { pickrate: number; winrate: number }>()
   for (const s of props.baseline?.runeSets ?? []) {
@@ -339,10 +348,27 @@ const baselineRuneSetStatByKey = computed(() => {
   return m
 })
 
+/** Pour un même arbre de runes, plusieurs lignes baseline (shards différents) : garder la plus représentative. */
+const baselineRuneSetStatByPerkKey = computed(() => {
+  const m = new Map<string, { pickrate: number; winrate: number; games: number }>()
+  for (const s of props.baseline?.runeSets ?? []) {
+    const k = runeSetPerkKey(s.runes)
+    const games = Number(s.games ?? 0)
+    const prev = m.get(k)
+    if (!prev || games > prev.games) {
+      m.set(k, { pickrate: s.pickrate, winrate: s.winrate, games })
+    }
+  }
+  return m
+})
+
 function baselineStatsForRuneSet(
   set: RuneSetRow
 ): { pickrate: number; winrate: number } | undefined {
-  return baselineRuneSetStatByKey.value.get(runeSetStableKey(set))
+  const exact = baselineRuneSetStatByKey.value.get(runeSetStableKey(set))
+  if (exact) return exact
+  const fb = baselineRuneSetStatByPerkKey.value.get(runeSetPerkKey(set.runes))
+  return fb ? { pickrate: fb.pickrate, winrate: fb.winrate } : undefined
 }
 
 function runeSetLayout(
@@ -615,7 +641,7 @@ function runeSetLayout(
             class="rune-set-card statistics-overview-surface relative min-w-0 rounded-lg border border-primary/30 px-4 pb-3 pt-5"
           >
             <span
-              class="absolute z-10 flex h-2 min-w-2 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
+              class="absolute left-0 top-0 z-10 flex h-5 min-w-5 items-center justify-center rounded-md bg-primary/30 px-1 text-[10px] font-bold tabular-nums text-text/90"
               aria-hidden="true"
             >
               {{ idx + 1 }}
@@ -711,7 +737,7 @@ function runeSetLayout(
               </div>
               <div
                 v-if="row.ly.shards.length"
-                class="flex flex-wrap items-center justify-center gap-1 pt-2 sm:justify-end"
+                class="rune-set-shards-row -mx-4 mt-2 flex w-[calc(100%+2rem)] max-w-none items-center justify-between self-stretch px-[3px]"
               >
                 <img
                   v-for="sid in row.ly.shards"
@@ -719,7 +745,7 @@ function runeSetLayout(
                   :src="getShardIcon(sid)"
                   :alt="shardName(sid)"
                   :title="shardName(sid)"
-                  class="rune-set-shard-img rounded-full bg-black/25 object-contain"
+                  class="rune-set-shard-img shrink-0 rounded-full bg-black/25 object-contain"
                   width="22"
                   height="22"
                 />
@@ -799,5 +825,8 @@ function runeSetLayout(
 }
 .rune-set-build-strip {
   min-height: 0;
+}
+.rune-set-shards-row {
+  box-sizing: border-box;
 }
 </style>

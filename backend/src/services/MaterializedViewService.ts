@@ -66,7 +66,12 @@ async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<MvRefre
         continue
       }
       // Some views may require an initial non-concurrent refresh (not yet populated / no suitable index).
-      if (message.includes('CONCURRENTLY') || message.includes('55000')) {
+      if (
+        message.includes('CONCURRENTLY') ||
+        message.includes('55000') ||
+        message.includes('has not been populated') ||
+        message.includes('not been populated')
+      ) {
         try {
           await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
           timings.push({ name: mvName, ms: Date.now() - t0, how: 'blocking' })
@@ -112,9 +117,18 @@ async function getUnpopulatedMaterializedViews(): Promise<Set<string>> {
   return new Set(rows.filter((r) => !r.ispopulated).map((r) => r.matviewname))
 }
 
-async function ensureMaterializedViewsPopulated(): Promise<void> {
+/**
+ * Après CREATE ... WITH NO DATA (migrate), PostgreSQL refuse tout SELECT sur la VM tant qu’un
+ * REFRESH blocking n’a pas eu lieu. Appeler au boot API et en tête de refresh planifié.
+ */
+export async function ensureMaterializedViewsPopulated(): Promise<void> {
+  if (!isDatabaseConfigured()) return
   const unpopulated = await getUnpopulatedMaterializedViews()
   if (unpopulated.size === 0) return
+  console.warn(
+    '[MaterializedViewService] Unpopulated MVs (post-migrate?):',
+    [...unpopulated].join(', ')
+  )
   // Core must be populated first because many satellite MVs depend on its key mapping.
   if (unpopulated.has('mv_champion_core_stats')) {
     await prisma.$executeRawUnsafe('REFRESH MATERIALIZED VIEW mv_champion_core_stats')
@@ -124,8 +138,9 @@ async function ensureMaterializedViewsPopulated(): Promise<void> {
     if (!unpopulated.has(mvName)) continue
     try {
       await prisma.$executeRawUnsafe(`REFRESH MATERIALIZED VIEW ${mvName}`)
-    } catch {
-      // Keep non-fatal behavior; next cycle will retry automatically.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[MaterializedViewService] REFRESH ${mvName} failed:`, msg)
     }
   }
 }
@@ -240,8 +255,8 @@ async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
     message: 'Début refresh des vues matérialisées',
   })
   try {
-    const mvTimings = await refreshAllMaterializedViewsWithoutConcurrently()
     await ensureMaterializedViewsPopulated()
+    const mvTimings = await refreshAllMaterializedViewsWithoutConcurrently()
     const durationMs = Date.now() - t0
     const missingCount = missingViews.size
     const slowest = [...mvTimings].sort((a, b) => b.ms - a.ms)[0]

@@ -1,7 +1,201 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { computed, inject, ref, watch, unref } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+
+type ItemType = 'starter' | 'core' | 'boots' | 'final'
+type ItemTypeFilter = 'all' | ItemType
+type SortKey = 'item' | 'type' | 'pickrate' | 'winrate' | 'deltaPick' | 'deltaWin'
+
+type RawItemRow = {
+  itemId: number
+  games: number
+  wins: number
+  pickrate: number
+  winrate: number
+}
+
+type TableRow = RawItemRow & {
+  type: ItemType
+  deltaPick: number | null
+  deltaWin: number | null
+}
+
+const itemTypeFilter = ref<ItemTypeFilter>('all')
+const sortBy = ref<SortKey | null>(null)
+const sortDir = ref<'asc' | 'desc'>('desc')
+const pageSize = ref<number>(20)
+const page = ref<number>(1)
+
+const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
+  Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
+    ? p.PAGE_SIZE_OPTIONS
+    : [10, 20, 50, 100]
+)
+
+const baseRows = computed<TableRow[]>(() => {
+  const d = p.overviewDetailData
+  if (!d) return []
+
+  const pushTyped = (type: ItemType, rows: RawItemRow[] | undefined, out: TableRow[]) => {
+    for (const row of rows ?? []) {
+      out.push({
+        ...row,
+        type,
+        deltaPick: null,
+        deltaWin: null,
+      })
+    }
+  }
+
+  const out: TableRow[] = []
+  pushTyped('starter', d.itemsStarters, out)
+  pushTyped('core', d.itemsCores, out)
+  pushTyped('boots', d.itemsBoots, out)
+  pushTyped('final', d.itemsFinals, out)
+  return out
+})
+
+const baselineByKey = computed<Map<string, RawItemRow>>(() => {
+  const b = p.overviewDetailBaselineData
+  const map = new Map<string, RawItemRow>()
+  if (!b) return map
+  const add = (type: ItemType, rows: RawItemRow[] | undefined) => {
+    for (const row of rows ?? []) map.set(`${type}:${row.itemId}`, row)
+  }
+  add('starter', b.itemsStarters)
+  add('core', b.itemsCores)
+  add('boots', b.itemsBoots)
+  add('final', b.itemsFinals)
+  return map
+})
+
+const tableRows = computed<TableRow[]>(() =>
+  baseRows.value.map(row => {
+    const baseline = baselineByKey.value.get(`${row.type}:${row.itemId}`)
+    return {
+      ...row,
+      deltaPick: baseline ? row.pickrate - baseline.pickrate : null,
+      deltaWin: baseline ? row.winrate - baseline.winrate : null,
+    }
+  })
+)
+
+const itemSearchQuery = computed(() =>
+  String(unref(p.championSearchQuery) ?? '')
+    .trim()
+    .toLowerCase()
+)
+
+const filteredRows = computed<TableRow[]>(() => {
+  const byType =
+    itemTypeFilter.value === 'all'
+      ? tableRows.value
+      : tableRows.value.filter(r => r.type === itemTypeFilter.value)
+  const q = itemSearchQuery.value
+  if (!q) return byType
+  return byType.filter(r => {
+    const name = (p.itemName(r.itemId) || '').toLowerCase()
+    return name.includes(q) || String(r.itemId).includes(q)
+  })
+})
+
+const typeLabel = (type: ItemType) => {
+  if (type === 'starter') return p.t('statisticsPage.itemKindStarter')
+  if (type === 'core') return p.t('statisticsPage.itemKindCore')
+  if (type === 'boots') return p.t('statisticsPage.itemKindBoots')
+  if (type === 'final') return p.t('statisticsPage.itemKindFinal')
+  return p.t('statisticsPage.itemKindFinal')
+}
+
+function sortNumber(a: number | null, b: number | null, dir: 'asc' | 'desc'): number {
+  const an = a == null ? Number.NEGATIVE_INFINITY : a
+  const bn = b == null ? Number.NEGATIVE_INFINITY : b
+  return dir === 'asc' ? an - bn : bn - an
+}
+
+const sortedRows = computed<TableRow[]>(() => {
+  const list = [...filteredRows.value]
+  if (!sortBy.value) return list
+  const dir = sortDir.value
+  const key = sortBy.value
+  list.sort((a, b) => {
+    if (key === 'item') {
+      const an = (p.itemName(a.itemId) || String(a.itemId)).toLowerCase()
+      const bn = (p.itemName(b.itemId) || String(b.itemId)).toLowerCase()
+      if (an === bn) return 0
+      return dir === 'asc' ? (an < bn ? -1 : 1) : an < bn ? 1 : -1
+    }
+    if (key === 'type') {
+      const av = typeLabel(a.type).toLowerCase()
+      const bv = typeLabel(b.type).toLowerCase()
+      if (av === bv) return 0
+      return dir === 'asc' ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
+    }
+    if (key === 'pickrate') return sortNumber(a.pickrate, b.pickrate, dir)
+    if (key === 'winrate') return sortNumber(a.winrate, b.winrate, dir)
+    if (key === 'deltaPick') return sortNumber(a.deltaPick, b.deltaPick, dir)
+    return sortNumber(a.deltaWin, b.deltaWin, dir)
+  })
+  return list
+})
+
+const totalRowsCount = computed(() => sortedRows.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value)))
+const paginatedRows = computed(() => {
+  const pnum = Math.min(page.value, totalPages.value)
+  const start = (pnum - 1) * pageSize.value
+  return sortedRows.value.slice(start, start + pageSize.value)
+})
+
+watch([itemTypeFilter, sortBy, sortDir, pageSize], () => {
+  page.value = 1
+})
+
+function toggleSort(key: SortKey) {
+  if (sortBy.value !== key) {
+    // First click: descending, as requested.
+    sortBy.value = key
+    sortDir.value = 'desc'
+    return
+  }
+  if (sortDir.value === 'desc') {
+    sortDir.value = 'asc'
+    return
+  }
+  // Third click: back to default (no explicit sort).
+  sortBy.value = null
+  sortDir.value = 'desc'
+}
+
+function fmtPct(value: number | null | undefined): string {
+  if (value == null) return '—'
+  return `${Number(value).toFixed(2)}%`
+}
+
+function fmtDelta(value: number | null | undefined): string {
+  if (value == null) return '—'
+  const n = Number(value)
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
+}
+
+function sortIcon(key: SortKey): string {
+  if (sortBy.value !== key) return ' ↕'
+  return sortDir.value === 'asc' ? ' ▲' : ' ▼'
+}
+
+function winrateClass(value: number | null | undefined): string {
+  if (value == null) return 'text-text/55'
+  if (value >= 50) return 'text-success'
+  return 'text-error'
+}
+
+function deltaClass(value: number | null | undefined): string {
+  if (value == null) return 'text-text/55'
+  if (value > 0) return 'text-success'
+  if (value < 0) return 'text-error'
+  return 'text-text/75'
+}
 </script>
 
 <template>
@@ -12,194 +206,150 @@ const p = inject('statisticsPageCtx') as any
     <div v-else-if="p.overviewDetailError" class="rounded border border-error/50 p-3 text-error">
       {{ p.t('statisticsPage.overviewDetailTimeout') }}
     </div>
-    <template
-      v-else-if="
-        p.itemFastSliceConfigs.length > 0 ||
-        (p.overviewDetailData?.items?.length ?? 0) > 0 ||
-        (p.overviewDetailData?.itemStarterSets?.length ?? 0) > 0
-      "
-    >
+    <template v-else-if="tableRows.length > 0">
       <div
-        v-if="p.itemFastSliceConfigs.length > 0"
-        class="flex flex-wrap items-start justify-center gap-x-[5px] gap-y-[10px] pb-2"
+        class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
       >
-        <StatisticsItemStatsFastSection
-          v-for="c in p.itemFastSliceConfigs"
-          :key="c.slice"
-          :slice="c.slice"
-          :rows="c.rows"
-          :baseline-rows="c.baselineRows"
-          :total-participants="p.overviewDetailData?.totalParticipants ?? 0"
-          :game-version="p.gameVersion"
-          :ref-version-label="p.progressionFromVersion"
-          :baseline-pending="p.overviewDetailBaselinePending"
-        />
-      </div>
-      <template v-if="(p.overviewDetailData?.itemStarterSets ?? []).length">
-        <h3 class="text-base font-semibold text-text-accent">
-          {{ p.t('statisticsPage.itemsStarterSetsTitle') }}
-        </h3>
-        <p class="text-xs text-text/65">{{ p.t('statisticsPage.itemsStarterSetsHint') }}</p>
-        <div
-          class="statistics-overview-surface mt-2 overflow-x-auto rounded-lg border border-primary/30"
-        >
-          <table class="w-full min-w-[320px] text-left text-sm">
-            <thead class="border-b border-primary/30 bg-black/25">
-              <tr>
-                <th class="px-3 py-2 font-semibold text-text">
-                  {{ p.t('statisticsPage.overviewDetailItems') }}
-                </th>
-                <th class="px-3 py-2 font-semibold text-text">
-                  {{ p.t('statisticsPage.overviewDetailPickRate') }} %
-                </th>
-                <th class="px-3 py-2 font-semibold text-text">
-                  {{ p.t('statisticsPage.overviewDetailWinRate') }} %
-                </th>
-                <th class="hidden px-3 py-2 font-semibold text-text sm:table-cell">
-                  {{ p.t('statisticsPage.tierListGames') }}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-primary/20">
-              <tr
-                v-for="srow in p.overviewDetailData?.itemStarterSets ?? []"
-                :key="srow.items.join('-')"
-                class="hover:bg-white/5"
+        <div class="tier-list-lolalytics w-full min-w-[980px] text-[13px]">
+          <div
+            class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
+          >
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[320px] shrink-0 items-center justify-start border-b border-black px-2 hover:bg-primary/25"
+              @click="toggleSort('item')"
+            >
+              {{ p.t('statisticsPage.overviewDetailItems') }}{{ sortIcon('item') }}
+            </button>
+            <div
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[160px] shrink-0 flex-col justify-center border-b border-black px-2 py-1"
+            >
+              <button type="button" class="w-fit hover:bg-primary/25" @click="toggleSort('type')">
+                {{ p.t('statisticsPage.itemsColType') }}{{ sortIcon('type') }}
+              </button>
+              <select
+                v-model="itemTypeFilter"
+                class="mt-1 w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-normal text-text"
               >
-                <td class="px-3 py-2">
-                  <div class="flex flex-wrap items-center gap-1">
-                    <template v-for="(iid, iidx) in srow.items" :key="iidx + '-' + iid">
-                      <img
-                        v-if="p.itemImageName(iid)"
-                        :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(iid)!)"
-                        :alt="p.itemName(iid) || ''"
-                        class="h-7 w-7 rounded border border-primary/20 object-cover"
-                        width="28"
-                        height="28"
-                      />
-                      <span
-                        v-else
-                        class="inline-flex h-7 min-w-[1.75rem] items-center justify-center rounded border border-primary/30 px-1 text-[10px] text-text/70"
-                        >{{ iid }}</span
-                      >
-                    </template>
-                  </div>
-                </td>
-                <td class="px-3 py-2 tabular-nums text-text/90">
-                  {{ Number(srow.pickrate).toFixed(2) }}
-                </td>
-                <td class="px-3 py-2 tabular-nums text-text/90">
-                  {{ Number(srow.winrate).toFixed(2) }}
-                </td>
-                <td class="hidden px-3 py-2 tabular-nums text-text/80 sm:table-cell">
-                  {{ srow.games.toLocaleString() }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                <option value="all">{{ p.t('statisticsPage.itemsTypeAll') }}</option>
+                <option value="starter">{{ p.t('statisticsPage.itemKindStarter') }}</option>
+                <option value="core">{{ p.t('statisticsPage.itemKindCore') }}</option>
+                <option value="boots">{{ p.t('statisticsPage.itemKindBoots') }}</option>
+                <option value="final">{{ p.t('statisticsPage.itemKindFinal') }}</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('pickrate')"
+            >
+              {{ p.t('statisticsPage.overviewDetailPickRate') }} %{{ sortIcon('pickrate') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('deltaPick')"
+            >
+              {{ p.t('statisticsPage.itemsColDeltaPick') }}{{ sortIcon('deltaPick') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('winrate')"
+            >
+              {{ p.t('statisticsPage.overviewDetailWinRate') }} %{{ sortIcon('winrate') }}
+            </button>
+            <button
+              type="button"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[120px] shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+              @click="toggleSort('deltaWin')"
+            >
+              {{ p.t('statisticsPage.itemsColDeltaWin') }}{{ sortIcon('deltaWin') }}
+            </button>
+          </div>
+
+          <div
+            v-for="row in paginatedRows"
+            :key="`${row.type}-${row.itemId}`"
+            class="tier-list-lolalytics-row flex min-h-[52px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
+          >
+            <div class="tier-list-lolalytics-td flex w-[320px] shrink-0 items-center gap-2 px-2">
+              <img
+                v-if="p.itemImageName(row.itemId)"
+                :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
+                :alt="p.itemName(row.itemId) || ''"
+                class="h-[25px] w-[25px] shrink-0 rounded border border-black/30 object-cover"
+                width="25"
+                height="25"
+              />
+              <span class="min-w-0 truncate text-left font-medium text-accent">{{
+                p.itemName(row.itemId) || row.itemId
+              }}</span>
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[160px] shrink-0 items-center px-2 text-text/90"
+            >
+              {{ typeLabel(row.type) }}
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums text-text/90"
+            >
+              {{ fmtPct(row.pickrate) }}
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+              :class="deltaClass(row.deltaPick)"
+            >
+              {{ fmtDelta(row.deltaPick) }}
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+              :class="winrateClass(row.winrate)"
+            >
+              {{ fmtPct(row.winrate) }}
+            </div>
+            <div
+              class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center tabular-nums"
+              :class="deltaClass(row.deltaWin)"
+            >
+              {{ fmtDelta(row.deltaWin) }}
+            </div>
+          </div>
         </div>
-      </template>
-      <h3 class="text-base font-semibold text-text-accent">
-        {{ p.t('statisticsPage.itemsFullTableTitle') }}
-      </h3>
-      <div class="statistics-overview-surface overflow-x-auto rounded-lg border border-primary/30">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-primary/30 bg-black/25">
-            <tr>
-              <th class="font-semibold text-text">
-                {{ p.t('statisticsPage.overviewDetailItems') }}
-              </th>
-              <th class="font-semibold text-text">
-                {{ p.t('statisticsPage.overviewDetailPickRate') }} %
-              </th>
-              <th class="font-semibold text-text">
-                {{ p.t('statisticsPage.overviewDetailWinRate') }} %
-              </th>
-              <th class="font-semibold text-text">
-                {{ p.t('statisticsPage.itemStats') }}
-              </th>
-              <th class="font-semibold text-text">
-                {{ p.t('statisticsPage.itemEconomy') }}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-primary/20">
-            <tr v-for="row in p.paginatedItems" :key="row.itemId" class="hover:bg-white/5">
-              <td class="px-4 py-2">
-                <div class="flex items-center gap-2">
-                  <img
-                    v-if="p.itemImageName(row.itemId)"
-                    :src="p.getItemImageUrl(p.gameVersion, p.itemImageName(row.itemId)!)"
-                    :alt="p.itemName(row.itemId) || ''"
-                    class="h-8 w-8 rounded object-cover"
-                    width="32"
-                    height="32"
-                  />
-                  <span class="text-text">{{ p.itemName(row.itemId) || row.itemId }}</span>
-                </div>
-              </td>
-              <td class="px-4 py-2 text-text/90">{{ row.pickrate?.toFixed(2) ?? '—' }}</td>
-              <td class="px-4 py-2 text-text/90">
-                {{ row.winrate != null ? Number(row.winrate).toFixed(2) : '—' }}
-              </td>
-              <td class="max-w-[200px] px-4 py-2 text-text/80">
-                <span
-                  v-if="p.itemStatsForItem(row.itemId).length"
-                  :title="p.itemStatsForItem(row.itemId).join(', ')"
-                  class="line-clamp-2 text-xs"
-                >
-                  {{ p.itemStatsForItem(row.itemId).join(', ') }}
-                </span>
-                <span v-else class="text-text/50">—</span>
-              </td>
-              <td class="max-w-[160px] px-4 py-2 text-text/80">
-                <span
-                  v-if="p.itemEconomicForItem(row.itemId).length"
-                  :title="p.itemEconomicForItem(row.itemId).join(', ')"
-                  class="line-clamp-2 text-xs"
-                >
-                  {{ p.itemEconomicForItem(row.itemId).join(', ') }}
-                </span>
-                <span v-else class="text-text/50">—</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+
         <div
-          v-if="p.totalItemsCount > 0"
+          v-if="totalRowsCount > 0"
           class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
         >
-          <span>{{ p.totalItemsCount }} {{ p.t('statisticsPage.overviewDetailItems') }}</span>
+          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailItems') }}</span>
           <div class="flex items-center gap-3">
             <label class="flex items-center gap-1.5">
               <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
               <select
-                v-model.number="p.itemsPageSize"
+                v-model.number="pageSize"
                 class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
               >
-                <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+                <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
               </select>
             </label>
             <span class="text-text/70">
-              {{ (p.itemsPage - 1) * p.itemsPageSize + 1 }}-{{
-                Math.min(p.itemsPage * p.itemsPageSize, p.totalItemsCount)
-              }}
-              / {{ p.totalItemsCount }}
+              {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
+              {{ totalRowsCount }}
             </span>
             <div class="flex gap-1">
               <button
                 type="button"
                 class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                :disabled="p.itemsPage <= 1"
-                @click="p.itemsPage = Math.max(1, p.itemsPage - 1)"
+                :disabled="page <= 1"
+                @click="page = Math.max(1, page - 1)"
               >
                 ‹
               </button>
               <button
                 type="button"
                 class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
-                :disabled="p.itemsPage >= p.totalItemsPages"
-                @click="p.itemsPage = Math.min(p.totalItemsPages, p.itemsPage + 1)"
+                :disabled="page >= totalPages"
+                @click="page = Math.min(totalPages, page + 1)"
               >
                 ›
               </button>
