@@ -331,6 +331,10 @@ export async function getChampionTierSnapshotsForCharts(options: {
   const { championId, rankTier, fromDate, toDate, limit = 365 } = options
   let role = options.role
   if (role && role.toUpperCase() === 'UTILITY') role = 'SUPPORT'
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
+    (LIKE champion_tier_daily_snapshots INCLUDING ALL)
+  `)
 
   const rows = await prisma.$queryRaw<Array<{
     date_of_game: Date
@@ -342,6 +346,48 @@ export async function getChampionTierSnapshotsForCharts(options: {
     ban_rate_pct: number
     pick_rate_pct: number
   }>>`
+    WITH source_rows AS (
+      SELECT
+        date_of_game,
+        rank_tier,
+        role,
+        champion_id,
+        games,
+        wins,
+        ban_rate_pct,
+        pick_rate_pct
+      FROM champion_tier_daily_snapshots
+      UNION ALL
+      SELECT
+        date_of_game,
+        rank_tier,
+        role,
+        champion_id,
+        games,
+        wins,
+        ban_rate_pct,
+        pick_rate_pct
+      FROM champion_tier_daily_snapshots_archive
+    ),
+    merged AS (
+      SELECT
+        date_of_game,
+        rank_tier,
+        role,
+        champion_id,
+        SUM(games)::int AS games,
+        SUM(wins)::int AS wins,
+        CASE WHEN SUM(games) > 0
+          THEN SUM((ban_rate_pct::float8 * games::float8)) / SUM(games::float8)
+          ELSE 0::float8
+        END AS ban_rate_pct,
+        CASE WHEN SUM(games) > 0
+          THEN SUM((pick_rate_pct::float8 * games::float8)) / SUM(games::float8)
+          ELSE 0::float8
+        END AS pick_rate_pct
+      FROM source_rows
+      GROUP BY date_of_game, rank_tier, role, champion_id
+    )
     SELECT
       date_of_game,
       rank_tier,
@@ -351,7 +397,7 @@ export async function getChampionTierSnapshotsForCharts(options: {
       wins,
       ban_rate_pct,
       pick_rate_pct
-    FROM champion_tier_daily_snapshots
+    FROM merged
     WHERE champion_id = ${championId}
       AND (${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text IS NULL OR rank_tier = ${rankTier ? rankTier.toUpperCase().split('_')[0] : null}::text)
       AND (${role ? role.toUpperCase() : null}::text IS NULL OR role = ${role ? role.toUpperCase() : null}::text)

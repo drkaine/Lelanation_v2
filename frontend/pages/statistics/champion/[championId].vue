@@ -24,51 +24,74 @@
       @click="championFiltersOpen = false"
     />
 
-    <!-- Retour au-dessus de la box filtre -->
-    <div class="shrink-0 px-4 pt-4 lg:px-4 lg:pb-2">
-      <NuxtLink
-        :to="localePath('/statistics')"
-        class="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
-      >
-        ← {{ t('statisticsPage.championStatsBack') }}
-      </NuxtLink>
+    <div class="w-full flex-shrink-0 px-4 pb-2 pt-4">
+      <div class="flex w-full items-end gap-3">
+        <NuxtLink
+          :to="localePath('/statistics')"
+          class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap pb-2 text-sm font-medium text-accent hover:underline"
+        >
+          ← {{ t('statisticsPage.championStatsBack') }}
+        </NuxtLink>
+        <nav v-if="championStats" class="champion-tabs block min-w-0 flex-1" role="tablist">
+          <div class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2">
+            <button
+              v-for="tab in championTabs"
+              :key="tab.id"
+              type="button"
+              role="tab"
+              :aria-selected="activeChampionTab === tab.id"
+              :class="[
+                'champion-tab-btn rounded px-3 py-1.5 text-sm font-medium transition-colors',
+                activeChampionTab === tab.id
+                  ? 'border border-accent/50 bg-accent/20 text-accent'
+                  : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+              ]"
+              @click="activeChampionTab = tab.id"
+            >
+              {{ t(tab.label) }}
+            </button>
+          </div>
+        </nav>
+      </div>
     </div>
 
-    <div class="flex w-full min-w-0 flex-col lg:flex-row">
+    <div class="flex w-full min-w-0 flex-col lg:flex-row lg:items-start">
       <!-- Sidebar (même charte que page stats) -->
       <aside
         :class="[
-          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200 lg:static lg:z-0 lg:translate-x-0 lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
+          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200 lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:translate-x-0 lg:self-start lg:overflow-hidden lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
           championFiltersOpen ? 'translate-x-0' : '-translate-x-full',
         ]"
       >
-        <div class="flex items-center justify-between p-2">
-          <h2 class="text-lg font-semibold text-text-accent">
-            {{ t('statisticsPage.filtersTitle') }}
-          </h2>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
-            @click="resetChampionFilters"
-          >
-            <span class="iconify i-mdi:refresh" aria-hidden="true" />
-            Reset
-          </button>
-          <button
-            type="button"
-            class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
-            :aria-label="t('statisticsPage.closeFilters')"
-            @click="championFiltersOpen = false"
-          >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
+        <div class="p-2">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-text-accent">
+              {{ t('statisticsPage.filtersTitle') }}
+            </h2>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+              @click="resetChampionFilters"
+            >
+              <span class="iconify i-mdi:refresh" aria-hidden="true" />
+              Reset
+            </button>
+            <button
+              type="button"
+              class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
+              :aria-label="t('statisticsPage.closeFilters')"
+              @click="championFiltersOpen = false"
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
         <div class="flex flex-1 flex-col gap-6 overflow-y-auto p-4">
           <div>
@@ -188,7 +211,7 @@
       </aside>
 
       <!-- Contenu principal : pleine largeur à côté des filtres (comme page stats) -->
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:pl-4 lg:pt-4">
+      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-4 lg:pb-4 lg:pt-2">
         <div class="w-full">
           <!-- Loading / error -->
           <div
@@ -201,28 +224,6 @@
             <p class="text-red-500">{{ error }}</p>
           </div>
           <template v-else-if="championStats">
-            <!-- Onglets -->
-            <nav
-              class="champion-tabs mb-4 flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
-              role="tablist"
-            >
-              <button
-                v-for="tab in championTabs"
-                :key="tab.id"
-                type="button"
-                role="tab"
-                :aria-selected="activeChampionTab === tab.id"
-                :class="[
-                  'champion-tab-btn rounded px-3 py-1.5 text-sm font-medium transition-colors',
-                  activeChampionTab === tab.id
-                    ? 'border border-accent/50 bg-accent/20 text-accent'
-                    : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
-                ]"
-                @click="activeChampionTab = tab.id"
-              >
-                {{ t(tab.label) }}
-              </button>
-            </nav>
             <!-- Header: image + nom + KPI principaux -->
             <div
               class="champion-header-band mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-surface/30 px-3 py-2"
@@ -236,9 +237,25 @@
                 height="40"
               />
               <div class="min-w-[140px] flex-1">
-                <h1 class="truncate text-base font-semibold text-text">
+                <h1 class="truncate text-base font-semibold text-accent">
                   {{ championName(championId) || championId }}
                 </h1>
+                <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
+                  <span
+                    v-for="role in roleDistribution"
+                    :key="role.role"
+                    class="inline-flex items-center gap-1 rounded border border-primary/30 bg-surface/40 px-1.5 py-0.5"
+                  >
+                    <img
+                      :src="roleIconPath(role.role)"
+                      :alt="roleLabel(role.role)"
+                      class="h-3 w-3 object-contain"
+                      width="12"
+                      height="12"
+                    />
+                    <span>{{ formatDonutPercent(role.pickrate) }}%</span>
+                  </span>
+                </div>
               </div>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85">
                 <span
@@ -253,130 +270,299 @@
                   >{{ t('statisticsPage.championStatsBanrateTitle') }}:
                   <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
                 >
-                <span v-if="mainRole"
-                  >{{ t('statisticsPage.championStatsMainRole') }}:
-                  <strong
-                    >{{ roleLabel(mainRole.role) }} ({{
-                      formatDonutPercent(mainRolePickrate)
-                    }}%)</strong
-                  ></span
-                >
               </div>
             </div>
+            <section class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-4">
+              <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-base font-semibold text-text">
+                  {{ t('statisticsPage.championStatsTrendsTitle') }}
+                </h2>
+                <div class="flex flex-wrap items-center gap-2">
+                  <label class="inline-flex items-center gap-2 text-xs text-text/80">
+                    <span>{{ t('statisticsPage.championStatsTrendsGranularity') }}</span>
+                    <select
+                      v-model="trendGranularity"
+                      class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                    >
+                      <option value="day">{{ t('statisticsPage.championStatsTrendsDay') }}</option>
+                      <option value="week">
+                        {{ t('statisticsPage.championStatsTrendsWeek') }}
+                      </option>
+                      <option value="month">
+                        {{ t('statisticsPage.championStatsTrendsMonth') }}
+                      </option>
+                      <option value="patch">
+                        {{ t('statisticsPage.championStatsTrendsPatch') }}
+                      </option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendRangeMode === '7d'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendRangeMode = '7d'"
+                >
+                  {{ t('statisticsPage.championStatsTrendsRange7d') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendRangeMode === '14d'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendRangeMode = '14d'"
+                >
+                  {{ t('statisticsPage.championStatsTrendsRange14d') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendRangeMode === 'months'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendRangeMode = 'months'"
+                >
+                  {{ t('statisticsPage.championStatsTrendsRangeMonths') }}
+                </button>
+                <label
+                  v-if="trendRangeMode === 'months'"
+                  class="inline-flex items-center gap-1 text-text/80"
+                >
+                  <span>{{ t('statisticsPage.championStatsTrendsMonthsLabel') }}</span>
+                  <input
+                    v-model.number="trendMonthsWindow"
+                    type="number"
+                    min="1"
+                    max="24"
+                    class="w-16 rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+                  />
+                </label>
+              </div>
+              <div class="mb-3 flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendDivisionPreset === 'selected'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendDivisionPreset = 'selected'"
+                >
+                  {{ t('statisticsPage.championStatsTrendsPresetSelected') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendDivisionPreset === 'average'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendDivisionPreset = 'average'"
+                >
+                  Average
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendDivisionPreset === 'skilled'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendDivisionPreset = 'skilled'"
+                >
+                  Skilled
+                </button>
+                <button
+                  type="button"
+                  class="rounded px-2 py-1 font-medium transition-colors"
+                  :class="
+                    trendDivisionPreset === 'elite'
+                      ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                      : 'bg-black/20 text-text/85 hover:bg-white/10'
+                  "
+                  @click="trendDivisionPreset = 'elite'"
+                >
+                  Elite
+                </button>
+                <label class="ml-2 inline-flex items-center gap-1 text-text/80">
+                  <input
+                    v-model="trendShowGlobalLine"
+                    type="checkbox"
+                    class="rounded border-primary/50"
+                  />
+                  <span>{{ t('statisticsPage.championStatsTrendsGlobalLine') }}</span>
+                </label>
+              </div>
+              <div v-if="trendPending" class="py-4 text-text/70">
+                {{ t('statisticsPage.loading') }}
+              </div>
+              <p v-else-if="trendError" class="py-2 text-sm text-red-400">{{ trendError }}</p>
+              <div v-else-if="trendChartCards.length" class="grid gap-4 lg:grid-cols-2">
+                <article
+                  v-for="card in trendChartCards"
+                  :key="card.metricId"
+                  class="rounded border border-primary/20 bg-background/30 p-3"
+                >
+                  <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
+                  <div class="overflow-x-auto">
+                    <svg
+                      :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
+                      :width="TREND_CHART_W"
+                      :height="TREND_CHART_H"
+                      class="h-auto w-full min-w-[480px]"
+                      preserveAspectRatio="xMidYMid meet"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <linearGradient
+                          :id="`trend-bg-${card.metricId}`"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
+                          <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
+                        </linearGradient>
+                      </defs>
+                      <rect
+                        :x="TREND_CHART_PAD.left"
+                        :y="TREND_CHART_PAD.top"
+                        :width="TREND_PLOT_W"
+                        :height="TREND_PLOT_H"
+                        :fill="`url(#trend-bg-${card.metricId})`"
+                      />
+                      <g v-for="tick in card.yTicks" :key="`${card.metricId}-y-${tick.value}`">
+                        <line
+                          :x1="TREND_CHART_PAD.left"
+                          :y1="tick.y"
+                          :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                          :y2="tick.y"
+                          class="text-text/25"
+                          stroke="currentColor"
+                          stroke-width="1"
+                        />
+                        <text
+                          :x="TREND_CHART_PAD.left - 6"
+                          :y="tick.y + 4"
+                          text-anchor="end"
+                          class="fill-text/70 text-[10px]"
+                        >
+                          {{ tick.label }}
+                        </text>
+                      </g>
+                      <line
+                        :x1="TREND_CHART_PAD.left"
+                        :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                        :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                        :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                        class="text-text/35"
+                        stroke="currentColor"
+                        stroke-width="1"
+                      />
+                      <line
+                        :x1="TREND_CHART_PAD.left"
+                        :y1="TREND_CHART_PAD.top"
+                        :x2="TREND_CHART_PAD.left"
+                        :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                        class="text-text/35"
+                        stroke="currentColor"
+                        stroke-width="1"
+                      />
+                      <path
+                        v-for="serie in card.series"
+                        :key="`${card.metricId}-${serie.tier}`"
+                        :d="serie.path"
+                        fill="none"
+                        :stroke="serie.color"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <g
+                        v-for="serie in card.series"
+                        :key="`${card.metricId}-${serie.tier}-points`"
+                      >
+                        <circle
+                          v-for="pt in serie.points"
+                          :key="`${card.metricId}-${serie.tier}-${pt.idx}`"
+                          :cx="pt.x"
+                          :cy="pt.y"
+                          r="3"
+                          :fill="serie.color"
+                          class="cursor-pointer"
+                          @mouseenter="onTrendPointHover($event, card.metricId, serie.tier, pt)"
+                          @mousemove="onTrendPointHover($event, card.metricId, serie.tier, pt)"
+                          @mouseleave="trendTooltip = null"
+                        />
+                      </g>
+                      <g v-for="tick in card.xTicks" :key="`${card.metricId}-x-${tick.index}`">
+                        <line
+                          :x1="tick.x"
+                          :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                          :x2="tick.x"
+                          :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
+                          class="text-text/40"
+                          stroke="currentColor"
+                          stroke-width="1"
+                        />
+                        <text
+                          :x="tick.x"
+                          :y="TREND_CHART_H - 6"
+                          text-anchor="middle"
+                          class="fill-text/70 text-[10px]"
+                        >
+                          {{ tick.label }}
+                        </text>
+                      </g>
+                    </svg>
+                  </div>
+                  <div
+                    v-if="trendTooltip && trendTooltip.metricId === card.metricId"
+                    class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+                    :style="{
+                      left: `${trendTooltip.mouseX}px`,
+                      top: `${trendTooltip.mouseY}px`,
+                      transform: 'translate(-50%, -110%)',
+                    }"
+                  >
+                    <strong>{{ trendTooltip.tier }}</strong> · {{ trendTooltip.bucketLabel }} ·
+                    {{ formatTrendValue(card.metricId, trendTooltip.value) }}
+                  </div>
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
+                    <span
+                      v-for="serie in card.series"
+                      :key="`${card.metricId}-legend-${serie.tier}`"
+                      class="inline-flex items-center gap-1"
+                    >
+                      <span
+                        class="inline-block h-2.5 w-2.5 rounded-full"
+                        :style="{ backgroundColor: serie.color }"
+                      />
+                      {{ serie.tier }}
+                    </span>
+                  </div>
+                </article>
+              </div>
+              <p v-else class="py-2 text-text/70">{{ t('statisticsPage.noData') }}</p>
+            </section>
             <div class="champion-tab-panels">
               <!-- Vue d'ensemble -->
               <div v-show="activeChampionTab === 'overview'" role="tabpanel" class="space-y-6">
-                <!-- Donuts: Popularité (pickrate), % victoire (winrate), Taux de ban (banrate) -->
-                <div
-                  class="mb-6 flex flex-wrap justify-center gap-6 rounded-lg border border-primary/30 bg-surface/30 p-6 sm:justify-start"
-                >
-                  <div class="champion-donut flex flex-col items-center">
-                    <div class="relative inline-flex items-center justify-center">
-                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                        <circle
-                          class="champion-donut-bg"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                        />
-                        <circle
-                          class="champion-donut-fill champion-donut-pickrate"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                          stroke-dasharray="251.33 251.33"
-                          :stroke-dashoffset="
-                            251.33 -
-                            (251.33 * Math.min(100, Math.max(0, championStats.pickrate ?? 0))) / 100
-                          "
-                          stroke-linecap="butt"
-                          transform="rotate(-90 50 50)"
-                        />
-                      </svg>
-                      <span class="champion-donut-value"
-                        >{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</span
-                      >
-                    </div>
-                    <span class="champion-donut-title">{{
-                      t('statisticsPage.championStatsPopularity')
-                    }}</span>
-                  </div>
-                  <div class="champion-donut flex flex-col items-center">
-                    <div class="relative inline-flex items-center justify-center">
-                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                        <circle
-                          class="champion-donut-bg"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                        />
-                        <circle
-                          class="champion-donut-fill champion-donut-winrate"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                          stroke-dasharray="251.33 251.33"
-                          :stroke-dashoffset="
-                            251.33 -
-                            (251.33 * Math.min(100, Math.max(0, championStats.winrate ?? 0))) / 100
-                          "
-                          stroke-linecap="butt"
-                          transform="rotate(-90 50 50)"
-                        />
-                      </svg>
-                      <span class="champion-donut-value"
-                        >{{ formatDonutPercent(championStats.winrate ?? 0) }}%</span
-                      >
-                    </div>
-                    <span class="champion-donut-title">{{
-                      t('statisticsPage.championStatsWinratePercent')
-                    }}</span>
-                  </div>
-                  <div class="champion-donut flex flex-col items-center">
-                    <div class="relative inline-flex items-center justify-center">
-                      <svg class="champion-donut-svg" viewBox="0 0 100 100" aria-hidden="true">
-                        <circle
-                          class="champion-donut-bg"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                        />
-                        <circle
-                          class="champion-donut-fill champion-donut-banrate"
-                          cx="50"
-                          cy="50"
-                          r="40"
-                          fill="none"
-                          stroke-width="12"
-                          stroke-dasharray="251.33 251.33"
-                          :stroke-dashoffset="
-                            251.33 -
-                            (251.33 * Math.min(100, Math.max(0, championStats.banrate ?? 0))) / 100
-                          "
-                          stroke-linecap="butt"
-                          transform="rotate(-90 50 50)"
-                        />
-                      </svg>
-                      <span class="champion-donut-value"
-                        >{{ formatDonutPercent(championStats.banrate ?? 0) }}%</span
-                      >
-                    </div>
-                    <span class="champion-donut-title">{{
-                      t('statisticsPage.championStatsBanrateTitle')
-                    }}</span>
-                  </div>
-                </div>
-
                 <!-- Matchups 3 best / 3 worst dans Vue d'ensemble -->
                 <div
                   v-show="activeChampionTab === 'overview'"
@@ -466,38 +652,6 @@
                     </button>
                   </template>
                   <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
-                </div>
-
-                <!-- Rôle principal (most played role) -->
-                <div
-                  v-if="mainRole"
-                  class="mb-6 flex flex-wrap items-center gap-4 rounded-lg border border-primary/30 bg-surface/30 p-6"
-                >
-                  <div class="flex items-center gap-3">
-                    <img
-                      :src="roleIconPath(mainRole.role)"
-                      :alt="roleLabel(mainRole.role)"
-                      class="h-12 w-12 object-contain"
-                      width="48"
-                      height="48"
-                    />
-                    <div>
-                      <div class="text-sm font-medium text-text/70">
-                        {{ t('statisticsPage.championStatsMainRole') }}
-                      </div>
-                      <div class="text-lg font-semibold text-text">
-                        {{ roleLabel(mainRole.role) }}
-                      </div>
-                      <div class="text-sm text-text/80">
-                        {{
-                          t('statisticsPage.championStatsMainRoleStats', {
-                            games: mainRole.games,
-                            winrate: mainRole.winrate,
-                          })
-                        }}
-                      </div>
-                    </div>
-                  </div>
                 </div>
 
                 <!-- Graph winrate selon durée (dans Vue d'ensemble) -->
@@ -1629,18 +1783,14 @@ const byRoleList = computed(() => {
 /** Rôles pour lesquels on a des données (pour griser/désactiver les autres). */
 const rolesWithData = computed(() => new Set(byRoleList.value.map(r => r.role)))
 
-/** Role with the most games (main role). */
-const mainRole = computed(() => {
+const roleDistribution = computed(() => {
   const list = byRoleList.value
-  if (!list.length) return null
-  const sorted = [...list].sort((a, b) => b.games - a.games)
-  return sorted[0] ?? null
-})
-const mainRolePickrate = computed(() => {
-  const role = mainRole.value
-  const totalGames = championStats.value?.games ?? 0
-  if (!role || totalGames <= 0) return 0
-  return (100 * role.games) / totalGames
+  if (!list.length) return []
+  const totalGames = championStats.value?.games ?? list.reduce((sum, r) => sum + r.games, 0)
+  if (totalGames <= 0) return []
+  return [...list]
+    .sort((a, b) => b.games - a.games)
+    .map(r => ({ ...r, pickrate: (100 * r.games) / totalGames }))
 })
 
 const ROLE_LABELS: Record<string, string> = {
@@ -1757,6 +1907,28 @@ const matchupsData = ref<{
 } | null>(null)
 const matchupsSectionRef = ref<HTMLElement | null>(null)
 
+type TrendSnapshotPoint = {
+  dateOfGame: string
+  rankTier: string
+  role: string
+  championId: number
+  games: number
+  wins: number
+  banRatePct: number
+  pickRatePct: number
+}
+type TrendGranularity = 'day' | 'week' | 'month' | 'patch'
+type TrendDivisionPreset = 'selected' | 'average' | 'skilled' | 'elite'
+const trendGranularity = ref<TrendGranularity>('day')
+const trendRangeMode = ref<'7d' | '14d' | 'months'>('7d')
+const trendMonthsWindow = ref(1)
+const trendDivisionPreset = ref<TrendDivisionPreset>('selected')
+const trendShowGlobalLine = ref(true)
+const trendPending = ref(false)
+const trendError = ref<string | null>(null)
+const trendPoints = ref<TrendSnapshotPoint[]>([])
+const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
+
 const activeChampionTab = ref<
   'overview' | 'stats' | 'counters' | 'runes' | 'skills' | 'items' | 'spells'
 >('overview')
@@ -1811,6 +1983,28 @@ function patchFromVersion(version: string): string | null {
   const minor = Number(parts[1])
   if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
   return `${major}.${minor}`
+}
+
+function dateToIso(value: Date): string {
+  return value.toISOString().slice(0, 10)
+}
+
+function patchWindowFromFilterVersion(version: string): { from: string; to?: string } | null {
+  const patch = patchFromVersion(version) ?? version.trim()
+  if (!patch) return null
+  const catalog = trendVersionsCatalog.value
+  const idx = catalog.findIndex(v => v.patchLabel === patch)
+  if (idx < 0) return null
+  const current = catalog[idx]
+  if (!current) return null
+  const next = idx + 1 < catalog.length ? catalog[idx + 1] : null
+  const from = current.releaseDate
+  if (!from) return null
+  if (!next?.releaseDate) return { from }
+  const nextStart = new Date(`${next.releaseDate}T00:00:00.000Z`)
+  if (Number.isNaN(nextStart.getTime())) return { from }
+  const end = new Date(nextStart.getTime() - 24 * 60 * 60 * 1000)
+  return { from, to: dateToIso(end) }
 }
 
 function overviewQueryParams() {
@@ -2014,6 +2208,36 @@ async function loadDuration() {
   }
 }
 
+async function loadTrendSnapshots() {
+  if (!championId.value) return
+  const t = statsPerfStart('loadTrendSnapshots')
+  trendPending.value = true
+  trendError.value = null
+  try {
+    const params = new URLSearchParams()
+    if (filterRole.value) params.set('role', filterRole.value)
+    const patchWindow = filterVersion.value
+      ? patchWindowFromFilterVersion(filterVersion.value)
+      : null
+    if (patchWindow?.from) params.set('from', patchWindow.from)
+    if (patchWindow?.to) params.set('to', patchWindow.to)
+    params.set('limit', '1200')
+    const query = params.toString()
+    const data = await statsFetch<{ points?: TrendSnapshotPoint[] }>(
+      apiUrl(
+        `/api/stats/champions/${championId.value}/tier-trend-snapshots${query ? `?${query}` : ''}`
+      )
+    )
+    trendPoints.value = Array.isArray(data?.points) ? data.points : []
+  } catch (e) {
+    trendPoints.value = []
+    trendError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    trendPending.value = false
+    statsPerfEnd('loadTrendSnapshots', t)
+  }
+}
+
 async function loadPlayers() {
   if (!championId.value) return
   const t = statsPerfStart('loadPlayers')
@@ -2138,6 +2362,361 @@ const durationChartTooltip = ref<{
 } | null>(null)
 const durationChartSvgRef = ref<SVGSVGElement | null>(null)
 
+const TREND_CHART_W = 620
+const TREND_CHART_H = 220
+const TREND_CHART_PAD = { left: 40, right: 16, top: 12, bottom: 30 }
+const TREND_PLOT_W = TREND_CHART_W - TREND_CHART_PAD.left - TREND_CHART_PAD.right
+const TREND_PLOT_H = TREND_CHART_H - TREND_CHART_PAD.top - TREND_CHART_PAD.bottom
+
+type TrendMetricId = 'games' | 'winrate' | 'pickrate' | 'banrate'
+type TrendMetricDef = { id: TrendMetricId; title: string }
+type TrendTooltipState = {
+  metricId: TrendMetricId
+  tier: string
+  bucketLabel: string
+  value: number
+  mouseX: number
+  mouseY: number
+}
+
+const trendMetricDefs = computed<TrendMetricDef[]>(() => [
+  { id: 'games', title: t('statisticsPage.championStatsTrendGames') },
+  { id: 'winrate', title: t('statisticsPage.championStatsTrendWinrate') },
+  { id: 'pickrate', title: t('statisticsPage.championStatsTrendPickrate') },
+  { id: 'banrate', title: t('statisticsPage.championStatsTrendBanrate') },
+])
+const trendTooltip = ref<TrendTooltipState | null>(null)
+
+const RANK_COLOR_MAP: Record<string, string> = {
+  IRON: '#6b7280',
+  BRONZE: '#92400e',
+  SILVER: '#94a3b8',
+  GOLD: '#a16207',
+  PLATINUM: '#0f766e',
+  EMERALD: '#166534',
+  DIAMOND: '#1d4ed8',
+  MASTER: '#6d28d9',
+  GRANDMASTER: '#991b1b',
+  CHALLENGER: '#9a3412',
+  GLOBAL: '#c084fc',
+}
+
+function normalizeRankTier(value: string): string {
+  const normalized = String(value || '')
+    .trim()
+    .toUpperCase()
+    .split('_')[0]!
+  if (!normalized || normalized === 'UNRANKED') return ''
+  return normalized
+}
+
+function isoWeekBucket(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00.000Z`)
+  if (Number.isNaN(d.getTime())) return dateIso
+  const day = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() - day + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function resolvePatchLabelForDate(dateIso: string): string {
+  const catalog = trendVersionsCatalog.value
+  if (!catalog.length) return dateIso.slice(0, 7)
+  const ts = new Date(`${dateIso}T00:00:00.000Z`).getTime()
+  if (!Number.isFinite(ts)) return dateIso.slice(0, 7)
+  let match: string | null = null
+  for (const entry of catalog) {
+    const ets = new Date(`${entry.releaseDate}T00:00:00.000Z`).getTime()
+    if (!Number.isFinite(ets)) continue
+    if (ets <= ts) match = entry.patchLabel
+    else break
+  }
+  return match ?? catalog[0]?.patchLabel ?? dateIso.slice(0, 7)
+}
+
+const TREND_PRESET_TIERS: Record<Exclude<TrendDivisionPreset, 'selected'>, string[]> = {
+  average: ['IRON', 'BRONZE', 'SILVER', 'GOLD'],
+  skilled: ['PLATINUM', 'EMERALD', 'DIAMOND'],
+  elite: ['DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER'],
+}
+
+const trendTiersFromFilterOrData = computed(() => {
+  const selected = Array.from(new Set(filterRank.value.map(normalizeRankTier))).filter(Boolean)
+  if (selected.length) return selected
+  const fromData = Array.from(
+    new Set(trendPoints.value.map(p => normalizeRankTier(p.rankTier)))
+  ).filter(Boolean)
+  return fromData.sort(
+    (a, b) =>
+      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
+      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
+  )
+})
+
+const trendSelectedTiers = computed(() => {
+  if (trendDivisionPreset.value === 'selected') return trendTiersFromFilterOrData.value
+  const preset = TREND_PRESET_TIERS[trendDivisionPreset.value]
+  return preset.filter(t => t !== 'UNRANKED')
+})
+
+type TrendBucket = {
+  key: string
+  label: string
+  ts: number
+  byTier: Map<
+    string,
+    { games: number; wins: number; pickNum: number; banNum: number; weight: number }
+  >
+}
+
+const trendBuckets = computed(() => {
+  const map = new Map<string, TrendBucket>()
+  for (const p of trendPoints.value) {
+    const tier = normalizeRankTier(p.rankTier)
+    if (!tier) continue
+    const dateIso = p.dateOfGame
+    let key = dateIso
+    let label = dateIso.slice(5)
+    if (trendGranularity.value === 'week') {
+      key = isoWeekBucket(dateIso)
+      label = key
+    } else if (trendGranularity.value === 'month') {
+      key = `${dateIso.slice(0, 7)}-01`
+      label = dateIso.slice(0, 7)
+    } else if (trendGranularity.value === 'patch') {
+      key = resolvePatchLabelForDate(dateIso)
+      label = key
+    }
+    const ts =
+      trendGranularity.value === 'patch'
+        ? new Date(`${dateIso}T00:00:00.000Z`).getTime()
+        : new Date(`${key}T00:00:00.000Z`).getTime()
+    if (!map.has(key)) map.set(key, { key, label, ts, byTier: new Map() })
+    const bucket = map.get(key)
+    if (!bucket) continue
+    bucket.ts = Number.isFinite(bucket.ts) ? Math.min(bucket.ts, ts) : ts
+    const prev = bucket.byTier.get(tier) ?? { games: 0, wins: 0, pickNum: 0, banNum: 0, weight: 0 }
+    const games = Number(p.games) || 0
+    prev.games += games
+    prev.wins += Number(p.wins) || 0
+    prev.pickNum += (Number(p.pickRatePct) || 0) * games
+    prev.banNum += (Number(p.banRatePct) || 0) * games
+    prev.weight += games
+    bucket.byTier.set(tier, prev)
+  }
+  const sorted = Array.from(map.values()).sort((a, b) => a.ts - b.ts)
+  if (!sorted.length) return sorted
+  const latestTs = sorted[sorted.length - 1]?.ts ?? 0
+  if (!Number.isFinite(latestTs) || latestTs <= 0) return sorted
+  const daysBack =
+    trendRangeMode.value === '7d'
+      ? 7
+      : trendRangeMode.value === '14d'
+        ? 14
+        : Math.max(1, Math.min(24, Number(trendMonthsWindow.value) || 1)) * 30
+  const minTs = latestTs - (daysBack - 1) * 24 * 60 * 60 * 1000
+  return sorted.filter(b => b.ts >= minTs)
+})
+
+type TrendSeriesPoint = { idx: number; x: number; y: number; value: number; bucketLabel: string }
+type TrendSeries = { tier: string; color: string; path: string; points: TrendSeriesPoint[] }
+type TrendChartCard = {
+  metricId: TrendMetricId
+  title: string
+  series: TrendSeries[]
+  xTicks: Array<{ index: number; x: number; label: string }>
+  yTicks: Array<{ value: number; y: number; label: string }>
+}
+
+function buildPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return ''
+  if (points.length === 1)
+    return `M ${points[0]!.x},${points[0]!.y} L ${points[0]!.x + 0.1},${points[0]!.y}`
+  return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ')
+}
+
+function smoothSeries(values: number[], window = 3): number[] {
+  if (values.length <= 2) return values
+  const w = Math.max(1, window | 0)
+  return values.map((_, idx) => {
+    const from = Math.max(0, idx - (w - 1))
+    const slice = values.slice(from, idx + 1)
+    const sum = slice.reduce((acc, v) => acc + v, 0)
+    return slice.length ? sum / slice.length : values[idx]!
+  })
+}
+
+function metricValue(
+  metric: TrendMetricId,
+  raw: { games: number; wins: number; pickNum: number; banNum: number; weight: number }
+): number {
+  if (metric === 'games') return raw.games
+  if (metric === 'winrate') return raw.games > 0 ? (100 * raw.wins) / raw.games : 0
+  if (metric === 'pickrate') return raw.weight > 0 ? raw.pickNum / raw.weight : 0
+  return raw.weight > 0 ? raw.banNum / raw.weight : 0
+}
+
+function formatTrendValue(metric: TrendMetricId, value: number): string {
+  if (metric === 'games') return `${Math.round(value)}`
+  return `${Number(value).toFixed(2)}%`
+}
+
+function onTrendPointHover(
+  event: MouseEvent,
+  metricId: TrendMetricId,
+  tier: string,
+  pt: { bucketLabel: string; value: number }
+) {
+  trendTooltip.value = {
+    metricId,
+    tier,
+    bucketLabel: pt.bucketLabel,
+    value: pt.value,
+    mouseX: event.clientX,
+    mouseY: event.clientY,
+  }
+}
+
+const trendChartCards = computed<TrendChartCard[]>(() => {
+  const buckets = trendBuckets.value
+  const tiers = trendSelectedTiers.value
+  if (!buckets.length || !tiers.length) return []
+  const n = buckets.length
+  const xAt = (index: number) =>
+    TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * TREND_PLOT_W
+  return trendMetricDefs.value.map(metric => {
+    const globalRawByIndex: Array<{
+      games: number
+      wins: number
+      pickNum: number
+      banNum: number
+      weight: number
+    }> = buckets.map(() => ({ games: 0, wins: 0, pickNum: 0, banNum: 0, weight: 0 }))
+
+    type PendingSerie = {
+      tier: string
+      color: string
+      rawValues: Array<{ idx: number; value: number; bucketLabel: string }>
+    }
+    const pendingSeries: PendingSerie[] = tiers.map(tier => {
+      const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
+      buckets.forEach((bucket, index) => {
+        const raw = bucket.byTier.get(tier)
+        if (!raw) return
+        rawValues.push({
+          idx: index,
+          value: metricValue(metric.id, raw),
+          bucketLabel: bucket.label,
+        })
+        const global = globalRawByIndex[index]
+        if (global) {
+          global.games += raw.games
+          global.wins += raw.wins
+          global.pickNum += raw.pickNum
+          global.banNum += raw.banNum
+          global.weight += raw.weight
+        }
+      })
+      return {
+        tier,
+        color: RANK_COLOR_MAP[tier] ?? '#64748b',
+        rawValues,
+      }
+    })
+
+    if (trendShowGlobalLine.value) {
+      const rawValues: Array<{ idx: number; value: number; bucketLabel: string }> = []
+      globalRawByIndex.forEach((raw, idx) => {
+        if (raw.weight <= 0 && raw.games <= 0) return
+        rawValues.push({
+          idx,
+          value: metricValue(metric.id, raw),
+          bucketLabel: buckets[idx]?.label ?? '',
+        })
+      })
+      if (rawValues.length) {
+        pendingSeries.push({
+          tier: 'GLOBAL',
+          color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+          rawValues,
+        })
+      }
+    }
+
+    const smoothedByTier = pendingSeries.map(serie => {
+      const smoothed = smoothSeries(
+        serie.rawValues.map(v => v.value),
+        3
+      )
+      return {
+        ...serie,
+        smoothValues: smoothed,
+      }
+    })
+
+    const allValues = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
+    let minVal = allValues.length ? Math.min(...allValues) : 0
+    let maxVal = allValues.length ? Math.max(...allValues) : 1
+    if (!Number.isFinite(minVal)) minVal = 0
+    if (!Number.isFinite(maxVal) || maxVal <= 0) maxVal = 1
+    if (metric.id === 'games') minVal = 0
+    const spread = Math.max(1e-6, maxVal - minVal)
+    const domainMin = metric.id === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
+    const domainMax = maxVal + spread * 0.08
+    const domainSpan = Math.max(1e-6, domainMax - domainMin)
+
+    const series: TrendSeries[] = smoothedByTier.map(serie => {
+      const points: TrendSeriesPoint[] = serie.rawValues.map((v, i) => {
+        const value = serie.smoothValues[i] ?? v.value
+        return {
+          idx: v.idx,
+          x: xAt(v.idx),
+          y: TREND_CHART_PAD.top + (1 - (value - domainMin) / domainSpan) * TREND_PLOT_H,
+          value,
+          bucketLabel: v.bucketLabel,
+        }
+      })
+      return {
+        tier: serie.tier,
+        color: serie.color,
+        path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+        points,
+      }
+    })
+
+    const yTicks: Array<{ value: number; y: number; label: string }> = []
+    for (let i = 0; i <= 4; i += 1) {
+      const value = domainMin + (domainSpan * i) / 4
+      const y = TREND_CHART_PAD.top + (1 - i / 4) * TREND_PLOT_H
+      yTicks.push({
+        value,
+        y,
+        label: metric.id === 'games' ? `${Math.round(value)}` : `${value.toFixed(1)}%`,
+      })
+    }
+    const tickCount = Math.min(6, Math.max(2, buckets.length))
+    const step =
+      buckets.length <= 1 ? 1 : Math.max(1, Math.floor((buckets.length - 1) / (tickCount - 1)))
+    const xTicks: Array<{ index: number; x: number; label: string }> = []
+    for (let i = 0; i < buckets.length; i += step) {
+      const b = buckets[i]
+      if (!b) continue
+      xTicks.push({ index: i, x: xAt(i), label: b.label })
+    }
+    const lastIdx = buckets.length - 1
+    if (!xTicks.some(t => t.index === lastIdx)) {
+      const b = buckets[lastIdx]
+      if (b) xTicks.push({ index: lastIdx, x: xAt(lastIdx), label: b.label })
+    }
+    return {
+      metricId: metric.id,
+      title: metric.title,
+      series: series.filter(s => s.path.length > 0),
+      xTicks,
+      yTicks,
+    }
+  })
+})
+
 watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlus], () => {
   if (!championId.value || Number.isNaN(championId.value)) return
   loadChampion()
@@ -2147,6 +2726,7 @@ watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlu
   loadPlayers()
   loadDetail()
   loadDuration()
+  loadTrendSnapshots()
   championSpellsData.value = null
   championSpellsDuosData.value = null
   if (activeChampionTab.value === 'spells') loadChampionSpells()
@@ -2184,6 +2764,21 @@ async function loadVersionsForFilter() {
   } finally {
     statsPerfEnd('loadVersionsForFilter', t)
   }
+  try {
+    const versionsData = await statsFetch<{
+      versions?: Array<{ version?: string; patchLabel?: string; releaseDate?: string }>
+    }>(apiUrl('/api/game-data/versions'))
+    const rows =
+      versionsData?.versions
+        ?.map(v => ({
+          patchLabel: String(v.patchLabel ?? v.version ?? '').trim(),
+          releaseDate: String(v.releaseDate ?? '').trim(),
+        }))
+        .filter(v => v.patchLabel && /^\d{4}-\d{2}-\d{2}$/.test(v.releaseDate)) ?? []
+    trendVersionsCatalog.value = rows.sort((a, b) => a.releaseDate.localeCompare(b.releaseDate))
+  } catch {
+    trendVersionsCatalog.value = []
+  }
 }
 
 onMounted(async () => {
@@ -2206,6 +2801,7 @@ onMounted(async () => {
     loadPlayers()
     loadDetail()
     loadDuration()
+    loadTrendSnapshots()
   }
 })
 

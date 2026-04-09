@@ -27,16 +27,16 @@
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
     <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           type="button"
           :class="[
-            'rounded px-4 py-2 text-sm font-medium transition-colors',
+            'rounded px-3 py-1.5 text-sm font-medium transition-colors',
             activeTab === tab.id
-              ? 'bg-accent text-background'
-              : 'bg-surface/50 text-text/80 hover:bg-primary/20 hover:text-text',
+              ? 'border border-accent/50 bg-accent/20 text-accent'
+              : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
           ]"
           @click="activeTab = tab.id"
         >
