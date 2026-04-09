@@ -1116,6 +1116,11 @@
           </div>
         </div>
         <div class="back-description-panel">
+          <DescriptionVideoPreviews
+            v-if="activeDescriptionValue?.trim()"
+            class="back-description-previews"
+            :text="activeDescriptionValue"
+          />
           <DescriptionEditor
             v-if="!readonly"
             :model-value="activeDescriptionValue"
@@ -1345,6 +1350,7 @@ import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
+import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 
 interface RegionsPayload {
   regionsData: Record<string, [string, string]>
@@ -3224,6 +3230,14 @@ defineExpose({
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.back-description-previews {
+  margin-bottom: 8px;
+  max-height: 165px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .back-description-textarea {

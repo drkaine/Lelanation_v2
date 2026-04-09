@@ -266,6 +266,7 @@
                     <!-- eslint-disable vue/no-v-html -->
                     <p class="whitespace-pre-wrap" v-html="linkifyDescription(section.text)" />
                     <!-- eslint-enable vue/no-v-html -->
+                    <DescriptionVideoPreviews class="mt-3" :text="section.text" />
                   </div>
                 </div>
               </div>
@@ -341,6 +342,7 @@ import { useVoteStore } from '~/stores/VoteStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildCard from '~/components/Build/BuildCard.vue'
+import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
 import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
