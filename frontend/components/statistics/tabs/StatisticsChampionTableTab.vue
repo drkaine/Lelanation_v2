@@ -398,16 +398,24 @@ const p = inject('statisticsPageCtx') as any
           <div
             class="tier-list-lolalytics-td flex w-[110px] shrink-0 flex-col items-center justify-center gap-0.5 px-1 py-0.5 text-center"
           >
-            <img
+            <NuxtLink
               v-if="p.gameVersion && p.championByKey(row.championId)"
-              :src="
-                p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
+              :to="
+                p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
               "
-              :alt="p.championName(row.championId) || ''"
-              class="h-8 w-8 shrink-0 border border-black object-cover"
-              width="32"
-              height="32"
-            />
+              class="inline-flex rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+              :title="p.championName(row.championId) || String(row.championId)"
+            >
+              <img
+                :src="
+                  p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
+                "
+                :alt="p.championName(row.championId) || ''"
+                class="h-8 w-8 shrink-0 cursor-pointer border border-black object-cover transition-opacity hover:opacity-85"
+                width="32"
+                height="32"
+              />
+            </NuxtLink>
             <span
               class="line-clamp-2 max-w-full text-[10px] font-medium leading-tight text-accent"
               :title="p.championName(row.championId) || String(row.championId)"

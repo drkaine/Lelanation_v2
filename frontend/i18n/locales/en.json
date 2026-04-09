@@ -14,9 +14,11 @@
     "disableTooltips": "Disable tooltips"
   },
   "commandBar": {
-    "builderLabel": "Builder",
+    "builderLabel": "Builder and statistics",
     "previousStep": "previous step",
     "nextStep": "next step",
+    "showBar": "show bar",
+    "hideBar": "hide bar",
     "championSplash": "Champion splash",
     "presentationZoom": "Presentation zoom"
   },

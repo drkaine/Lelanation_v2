@@ -539,18 +539,17 @@ const activeTab = ref<
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
-  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
+  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
   {
     id: 'championTable' as const,
     label: t('statisticsPage.tabChampionTable'),
     widgetId: 'championTable',
   },
   { id: 'balance' as const, label: t('statisticsPage.tabBalance'), widgetId: 'balance' },
-  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
-  { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
+  { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
 

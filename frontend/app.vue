@@ -32,22 +32,14 @@
           class="command-bar"
           :class="{ 'command-bar-collapsed': !isHomeRoute && commandsCollapsed }"
         >
-          <button
-            v-if="!isHomeRoute"
-            type="button"
-            class="command-collapse-button"
-            :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
-            :aria-expanded="!commandsCollapsed"
-            @click="commandsCollapsed = !commandsCollapsed"
-          >
-            {{ commandsCollapsed ? '▾' : '▴' }}
-          </button>
           <div v-show="!commandsCollapsed" class="command-bar-content">
             <p class="command-help" aria-live="polite">
               {{ t('commandBar.builderLabel') }}: <span class="command-shortcut">Ctrl + ←</span>
               {{ t('commandBar.previousStep') }}, <span class="command-shortcut">Ctrl + →</span>
               {{ t('commandBar.nextStep') }}
               <span class="command-help-separator">|</span>
+              <span class="command-shortcut">Ctrl + ↓</span> {{ t('commandBar.showBar') }},
+              <span class="command-shortcut">Ctrl + ↑</span> {{ t('commandBar.hideBar') }}
             </p>
             <label class="command-toggle">
               <input
@@ -99,6 +91,16 @@
               <span class="command-shortcut">Alt + S</span>
             </button>
           </div>
+          <button
+            v-if="!isHomeRoute"
+            type="button"
+            class="command-collapse-button"
+            :title="commandsCollapsed ? 'Afficher les commandes' : 'Masquer les commandes'"
+            :aria-expanded="!commandsCollapsed"
+            @click="commandsCollapsed = !commandsCollapsed"
+          >
+            {{ commandsCollapsed ? '▾' : '▴' }}
+          </button>
         </div>
       </div>
     </div>
@@ -168,6 +170,7 @@ const commandsCollapsed = useState<boolean>('commands-collapsed', () => true)
 const commandBarRef = ref<HTMLElement | null>(null)
 const commandBarHiddenByScroll = ref(false)
 const COMMAND_BAR_SCROLL_THRESHOLD = 80
+
 const appShellVars = computed(() => ({
   '--build-create-page-padding-top': !isLayoutScaled.value ? '6px' : '1rem',
   '--build-create-card-top-gap': '11px',
@@ -217,6 +220,33 @@ const toggleStreamerPanels = () => {
 
 const onKeyDown = (event: KeyboardEvent) => {
   const key = event.key.toLowerCase()
+  const target = event.target as HTMLElement | null
+  const tagName = target?.tagName?.toUpperCase()
+  const isEditableTarget =
+    !!target &&
+    (target.isContentEditable ||
+      tagName === 'INPUT' ||
+      tagName === 'TEXTAREA' ||
+      tagName === 'SELECT')
+
+  if (
+    event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    (event.key === 'ArrowDown' || event.key === 'ArrowUp')
+  ) {
+    if (!isEditableTarget && !isHomeRoute.value) {
+      event.preventDefault()
+      if (event.key === 'ArrowDown') {
+        commandsCollapsed.value = false
+        commandBarHiddenByScroll.value = false
+      } else {
+        commandsCollapsed.value = true
+      }
+    }
+    return
+  }
 
   if (event.altKey && key === 'p') {
     event.preventDefault()
@@ -245,15 +275,41 @@ const onKeyDown = (event: KeyboardEvent) => {
   if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return
   if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
 
-  const target = event.target as HTMLElement | null
-  const tagName = target?.tagName?.toUpperCase()
-  const isEditableTarget =
-    !!target &&
-    (target.isContentEditable ||
-      tagName === 'INPUT' ||
-      tagName === 'TEXTAREA' ||
-      tagName === 'SELECT')
   if (isEditableTarget) return
+
+  const statisticsRootMatch = String(route.path).match(/^\/(?:fr\/|en\/)?statistics\/?$/)
+  if (statisticsRootMatch) {
+    const tabOrder = [
+      'overview',
+      'team',
+      'bans',
+      'tierlist',
+      'championTable',
+      'balance',
+      'runes',
+      'spells',
+      'items',
+      'infos',
+    ] as const
+    const currentTabRaw = route.query.tab
+    const currentTab = typeof currentTabRaw === 'string' ? currentTabRaw : 'overview'
+    const currentIndex = tabOrder.includes(currentTab as (typeof tabOrder)[number])
+      ? tabOrder.indexOf(currentTab as (typeof tabOrder)[number])
+      : 0
+    const nextIndex = event.key === 'ArrowLeft' ? currentIndex - 1 : currentIndex + 1
+    if (nextIndex >= 0 && nextIndex < tabOrder.length) {
+      event.preventDefault()
+      const nextTab = tabOrder[nextIndex]!
+      const nextQuery = { ...route.query } as Record<string, string>
+      if (nextTab === 'overview') {
+        delete nextQuery.tab
+      } else {
+        nextQuery.tab = nextTab
+      }
+      router.push(localePath({ path: '/statistics', query: nextQuery }))
+    }
+    return
+  }
 
   const match = String(route.path).match(/\/builds\/create\/(champion|rune|item|info)(?:\/|$)/)
   if (!match) return
@@ -449,6 +505,7 @@ if (import.meta.client) {
   left: 0;
   right: 0;
   display: flex;
+  justify-content: flex-end;
   padding: 0 6px;
   pointer-events: none;
 }
@@ -470,7 +527,7 @@ if (import.meta.client) {
 
 .command-bar.command-bar-collapsed {
   width: auto;
-  justify-content: flex-start;
+  justify-content: flex-end;
   padding: 2px 0 0;
   background: transparent;
   border-bottom: none;
@@ -506,6 +563,7 @@ if (import.meta.client) {
 }
 
 .command-collapse-button {
+  flex-shrink: 0;
   width: 24px;
   height: 24px;
   display: inline-flex;
@@ -533,7 +591,8 @@ if (import.meta.client) {
 .command-collapse-floating {
   position: absolute;
   top: 0;
-  left: 6px;
+  right: 6px;
+  left: auto;
   z-index: 56;
   width: 24px;
   height: 24px;

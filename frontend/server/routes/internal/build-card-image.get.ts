@@ -8,38 +8,52 @@ import { useRuntimeConfig } from '#imports'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-function apiBuildJsonUrl(event: H3Event): string {
+function resolveApiRoots(event: H3Event): string[] {
   const cfg = useRuntimeConfig(event)
-  const fromEnv = (process.env.NUXT_PUBLIC_API_BASE || '').trim().replace(/\/$/, '')
-  const fromCfg = (cfg.public.apiBase as string | undefined)?.trim().replace(/\/$/, '') || ''
-  const base = fromEnv || fromCfg
-  if (base) return base
-  const site =
-    (cfg.public.siteUrl as string | undefined)?.trim().replace(/\/$/, '') || 'http://127.0.0.1:3000'
-  return site
+  const fromEnv = (process.env.NUXT_PUBLIC_API_BASE || '').trim()
+  const fromCfg = (cfg.public.apiBase as string | undefined)?.trim() || ''
+  const req = getRequestURL(event)
+  const requestOrigin = `${req.protocol}//${req.host}`
+  const roots: string[] = []
+
+  const configuredBase = (fromEnv || fromCfg).replace(/\/$/, '')
+  if (configuredBase) {
+    // Accept relative apiBase values (e.g. "/api") and resolve against current request origin.
+    if (configuredBase.startsWith('/')) {
+      roots.push(`${requestOrigin}${configuredBase}`.replace(/\/$/, ''))
+    } else {
+      roots.push(configuredBase)
+    }
+  }
+  roots.push(requestOrigin)
+  return Array.from(new Set(roots))
 }
 
 async function fetchBuildForCacheRevision(
   event: H3Event,
   buildId: string
 ): Promise<{ cacheRev: string; subBuildsLen: number } | null> {
-  const root = apiBuildJsonUrl(event)
-  const url = `${root}/api/builds/${encodeURIComponent(buildId)}`
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const json = (await res.json()) as {
-      updatedAt?: string
-      savedAt?: string
-      id?: string
-      subBuilds?: unknown[]
+  const apiRoots = resolveApiRoots(event)
+  for (const apiRoot of apiRoots) {
+    const prefix = apiRoot.endsWith('/api') ? '' : '/api'
+    const url = `${apiRoot}${prefix}/builds/${encodeURIComponent(buildId)}`
+    try {
+      const res = await fetch(url)
+      if (!res.ok) continue
+      const json = (await res.json()) as {
+        updatedAt?: string
+        savedAt?: string
+        id?: string
+        subBuilds?: unknown[]
+      }
+      const rev = String(json.updatedAt || json.savedAt || json.id || buildId)
+      const subBuildsLen = Array.isArray(json.subBuilds) ? json.subBuilds.length : 0
+      return { cacheRev: rev, subBuildsLen }
+    } catch {
+      // Try next candidate root.
     }
-    const rev = String(json.updatedAt || json.savedAt || json.id || buildId)
-    const subBuildsLen = Array.isArray(json.subBuilds) ? json.subBuilds.length : 0
-    return { cacheRev: rev, subBuildsLen }
-  } catch {
-    return null
   }
+  return null
 }
 
 /** Incrémenter après changement de rendu capture (splash, flèches, etc.) pour invalider le cache disque. */
@@ -121,7 +135,7 @@ export default defineEventHandler(async event => {
     console.error('[build-card-image] Playwright failed:', msg)
     throw createError({
       statusCode: 503,
-      statusMessage: 'Screenshot failed (install Chromium: npx playwright install chromium)',
+      statusMessage: `Screenshot failed: ${msg}`,
     })
   }
 

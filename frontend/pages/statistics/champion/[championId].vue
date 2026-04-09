@@ -42,10 +42,18 @@
           championFiltersOpen ? 'translate-x-0' : '-translate-x-full',
         ]"
       >
-        <div class="flex items-center justify-between border-b border-primary/30 p-4 lg:border-0">
+        <div class="flex items-center justify-between p-2">
           <h2 class="text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            @click="resetChampionFilters"
+          >
+            <span class="iconify i-mdi:refresh" aria-hidden="true" />
+            Reset
+          </button>
           <button
             type="button"
             class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
@@ -70,7 +78,7 @@
             <select
               id="champion-stat-version"
               v-model="filterVersion"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
             >
               <option value="">{{ t('statisticsPage.allVersions') }}</option>
               <option v-for="v in versionsFromOverview" :key="v.version" :value="v.version">
@@ -79,19 +87,31 @@
             </select>
           </div>
           <div>
-            <div class="mb-2 text-sm font-medium text-text">
+            <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRank') }}
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap gap-1">
+              <button
+                type="button"
+                class="stats-division-btn rounded px-2 py-0.5 text-xs font-semibold transition-colors"
+                :class="
+                  filterRank.length === 0
+                    ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 text-text/85 hover:bg-white/10'
+                "
+                @click="selectAllChampionDivisions()"
+              >
+                All
+              </button>
               <button
                 v-for="tier in divisions"
                 :key="tier"
                 type="button"
-                class="champion-division-btn rounded border p-1 transition-colors"
+                class="stats-division-btn rounded p-0.5 transition-colors"
                 :class="
                   filterRank.includes(tier)
-                    ? 'border-accent bg-accent/20'
-                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80'
+                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 hover:bg-white/10'
                 "
                 :title="tier"
                 @click="toggleRankFilter(tier)"
@@ -108,19 +128,19 @@
             </div>
           </div>
           <div>
-            <div class="mb-2 text-sm font-medium text-text">
+            <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRole') }}
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap gap-1">
               <button
                 v-for="opt in roleOptions"
                 :key="opt.value"
                 type="button"
-                class="champion-role-filter-btn rounded border p-1 transition-colors"
+                class="stats-division-btn rounded p-0.5 transition-colors"
                 :class="[
                   filterRole === opt.value
-                    ? 'border-accent bg-accent/20'
-                    : 'border-primary/30 bg-surface/50 hover:bg-surface/80',
+                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 hover:bg-white/10',
                   !rolesWithData.has(opt.value) ? 'champion-role-disabled' : '',
                 ]"
                 :title="opt.label"
@@ -150,7 +170,7 @@
               {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
             </label>
           </div>
-          <div v-if="showSearchChampionFilter">
+          <div>
             <label
               for="champion-search-champion-page"
               class="mb-1 block text-sm font-medium text-text"
@@ -181,29 +201,6 @@
             <p class="text-red-500">{{ error }}</p>
           </div>
           <template v-else-if="championStats">
-            <!-- Header: bandeau fin (image + nom + infos, hauteur proche des onglets) -->
-            <div
-              class="champion-header-band mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-surface/30 px-3 py-1.5"
-            >
-              <img
-                v-if="gameVersion && championByKey(championId)"
-                :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
-                :alt="championName(championId) ?? ''"
-                class="h-8 w-8 shrink-0 rounded-full object-cover"
-                width="32"
-                height="32"
-              />
-              <div class="min-w-0 flex-1">
-                <h1 class="truncate text-base font-semibold text-text">
-                  {{ championName(championId) || championId }}
-                </h1>
-                <div class="flex flex-wrap gap-x-3 gap-y-0 text-xs text-text/80">
-                  {{ t('statisticsPage.games') }}: {{ championStats.games }} ·
-                  {{ t('statisticsPage.wins') }}: {{ championStats.wins }}
-                </div>
-              </div>
-            </div>
-
             <!-- Onglets -->
             <nav
               class="champion-tabs mb-4 flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
@@ -226,6 +223,46 @@
                 {{ t(tab.label) }}
               </button>
             </nav>
+            <!-- Header: image + nom + KPI principaux -->
+            <div
+              class="champion-header-band mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-surface/30 px-3 py-2"
+            >
+              <img
+                v-if="gameVersion && championByKey(championId)"
+                :src="getChampionImageUrl(gameVersion, championByKey(championId)!.image.full)"
+                :alt="championName(championId) ?? ''"
+                class="h-10 w-10 shrink-0 rounded-full object-cover"
+                width="40"
+                height="40"
+              />
+              <div class="min-w-[140px] flex-1">
+                <h1 class="truncate text-base font-semibold text-text">
+                  {{ championName(championId) || championId }}
+                </h1>
+              </div>
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85">
+                <span
+                  >{{ t('statisticsPage.pickrate') }}:
+                  <strong>{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong></span
+                >
+                <span
+                  >{{ t('statisticsPage.winrate') }}:
+                  <strong>{{ formatDonutPercent(championStats.winrate ?? 0) }}%</strong></span
+                >
+                <span
+                  >{{ t('statisticsPage.championStatsBanrateTitle') }}:
+                  <strong>{{ formatDonutPercent(championStats.banrate ?? 0) }}%</strong></span
+                >
+                <span v-if="mainRole"
+                  >{{ t('statisticsPage.championStatsMainRole') }}:
+                  <strong
+                    >{{ roleLabel(mainRole.role) }} ({{
+                      formatDonutPercent(mainRolePickrate)
+                    }}%)</strong
+                  ></span
+                >
+              </div>
+            </div>
             <div class="champion-tab-panels">
               <!-- Vue d'ensemble -->
               <div v-show="activeChampionTab === 'overview'" role="tabpanel" class="space-y-6">
@@ -351,7 +388,7 @@
                   <div v-if="matchupsPending" class="py-4 text-text/70">
                     {{ t('statisticsPage.loading') }}
                   </div>
-                  <template v-else-if="matchupsData?.matchups?.length">
+                  <template v-else-if="filteredMatchups.length">
                     <div class="grid gap-4 sm:grid-cols-2">
                       <div>
                         <h3 class="mb-2 text-sm font-medium text-text/80">
@@ -653,7 +690,7 @@
                 <div v-if="matchupsPending" class="py-4 text-text/70">
                   {{ t('statisticsPage.loading') }}
                 </div>
-                <template v-else-if="matchupsData?.matchups?.length">
+                <template v-else-if="filteredMatchups.length">
                   <div class="grid gap-4 sm:grid-cols-2">
                     <div>
                       <h3 class="mb-2 text-sm font-medium text-text/80">
@@ -1044,7 +1081,7 @@
                 <div v-if="matchupsPending" class="py-4 text-text/70">
                   {{ t('statisticsPage.loading') }}
                 </div>
-                <div v-else-if="matchupsData?.matchups?.length" class="overflow-x-auto">
+                <div v-else-if="filteredMatchups.length" class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
                       <tr class="border-b border-primary/30">
@@ -1061,7 +1098,7 @@
                     </thead>
                     <tbody>
                       <tr
-                        v-for="m in matchupsData.matchups"
+                        v-for="m in filteredMatchups"
                         :key="m.opponentChampionId"
                         class="border-b border-primary/20"
                       >
@@ -1513,10 +1550,26 @@ function runePathPanelStyle(icon: string): Record<string, string> {
   }
 }
 
+const normalizedChampionSearchQuery = computed(() =>
+  championSearchQueryPlaceholder.value.trim().toLowerCase()
+)
+
+function matchupMatchesSearch(opponentChampionId: number): boolean {
+  const q = normalizedChampionSearchQuery.value
+  if (!q) return true
+  const name = (championName(opponentChampionId) ?? '').toLowerCase()
+  return name.includes(q) || String(opponentChampionId).toLowerCase().includes(q)
+}
+
+/** Matchups filtrés par recherche champion (nom ou id). */
+const filteredMatchups = computed(() =>
+  (matchupsData.value?.matchups ?? []).filter(m => matchupMatchesSearch(m.opponentChampionId))
+)
+
 /** Top 3 matchups (highest winrate vs), worst 3 (lowest winrate vs). API returns sorted by winrate DESC. */
-const bestMatchups = computed(() => (matchupsData.value?.matchups ?? []).slice(0, 3))
+const bestMatchups = computed(() => filteredMatchups.value.slice(0, 3))
 const worstMatchups = computed(() => {
-  const list = matchupsData.value?.matchups ?? []
+  const list = filteredMatchups.value
   return list.length <= 3 ? list : list.slice(-3).reverse()
 })
 
@@ -1534,8 +1587,6 @@ const filterRole = ref('')
 const filterPlayersMasterPlus = ref(false)
 /** Versions chargées depuis l’overview pour le filtre (version + matchCount). */
 const versionsFromOverview = ref<Array<{ version: string; matchCount: number }>>([])
-/** Même sélection de filtres que la page stats ; on cache uniquement « Rechercher un champion ». */
-const showSearchChampionFilter = false
 const championSearchQueryPlaceholder = ref('')
 const RANK_TIERS = [
   'IRON',
@@ -1584,6 +1635,12 @@ const mainRole = computed(() => {
   if (!list.length) return null
   const sorted = [...list].sort((a, b) => b.games - a.games)
   return sorted[0] ?? null
+})
+const mainRolePickrate = computed(() => {
+  const role = mainRole.value
+  const totalGames = championStats.value?.games ?? 0
+  if (!role || totalGames <= 0) return 0
+  return (100 * role.games) / totalGames
 })
 
 const ROLE_LABELS: Record<string, string> = {
@@ -1731,6 +1788,18 @@ function toggleRankFilter(tier: string) {
   } else {
     filterRank.value = [...arr, tier]
   }
+}
+
+function selectAllChampionDivisions() {
+  filterRank.value = []
+}
+
+function resetChampionFilters() {
+  filterVersion.value = ''
+  filterRank.value = []
+  filterRole.value = ''
+  filterPlayersMasterPlus.value = false
+  championSearchQueryPlaceholder.value = ''
 }
 
 function patchFromVersion(version: string): string | null {

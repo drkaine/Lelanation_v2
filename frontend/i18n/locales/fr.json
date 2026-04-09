@@ -14,9 +14,11 @@
     "disableTooltips": "Désactiver les tooltips"
   },
   "commandBar": {
-    "builderLabel": "Builder",
+    "builderLabel": "Builder et statistiques",
     "previousStep": "étape précédente",
     "nextStep": "étape suivante",
+    "showBar": "afficher la barre",
+    "hideBar": "masquer la barre",
     "championSplash": "Splash champion",
     "presentationZoom": "Zoom présentation"
   },
