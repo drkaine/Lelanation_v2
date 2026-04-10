@@ -216,6 +216,41 @@ let lastSyncActivePatchesAt = Date.now()
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
+// ── Global rank cache (TTL 24 h) ──────────────────────────────────────────────
+// Avoids redundant League-v4 calls for players that appear in multiple matches.
+
+type CachedRankEntry = {
+  data: { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
+  expiresAt: number
+}
+const globalRankCache = new Map<string, CachedRankEntry>()
+const RANK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const RANK_CACHE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000
+let lastRankCacheCleanupMs = Date.now()
+
+function getCachedRank(puuid: string): CachedRankEntry['data'] | null {
+  const entry = globalRankCache.get(puuid)
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) {
+    globalRankCache.delete(puuid)
+    return null
+  }
+  return entry.data
+}
+
+function setCachedRank(puuid: string, data: CachedRankEntry['data']): void {
+  globalRankCache.set(puuid, { data, expiresAt: Date.now() + RANK_CACHE_TTL_MS })
+}
+
+function cleanupGlobalRankCache(): void {
+  const now = Date.now()
+  if (now - lastRankCacheCleanupMs < RANK_CACHE_CLEANUP_INTERVAL_MS) return
+  lastRankCacheCleanupMs = now
+  for (const [key, entry] of globalRankCache) {
+    if (now > entry.expiresAt) globalRankCache.delete(key)
+  }
+}
+
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
 const DISK_ALERT_THRESHOLDS = [85, 90, 95] as const
@@ -939,7 +974,7 @@ export async function upsertMatchAndParticipants(
   region: string,
   dto: RiotMatchDto,
   puuidKeyVersion: string | null,
-  counters: { matchesFetched: number; participantsFetched: number; playersFetched: number },
+  counters: { matchesFetched: number; participantsFetched: number; playersFetched: number; requestCount?: number },
   logger?: ReturnType<typeof createRiotPollerLogger>
 ): Promise<void> {
   const riotMatchId = dto.metadata?.matchId ?? dto.info?.gameId?.toString()
@@ -1016,16 +1051,29 @@ export async function upsertMatchAndParticipants(
 
   async function fetchAccountRankForParticipant(puuid: string): Promise<void> {
     if (accountRankCache.has(puuid)) return
+
+    // Check global 24h cache before making an API call
+    const cached = getCachedRank(puuid)
+    if (cached) {
+      accountRankCache.set(puuid, cached)
+      return
+    }
+
     const entriesRes = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
+    if (counters.requestCount != null) counters.requestCount++
     if (!entriesRes.ok) {
       if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
         throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
       }
-      accountRankCache.set(puuid, { rankTier: undefined, rankDivision: null, rankLp: null })
+      const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
+      accountRankCache.set(puuid, fallback)
+      setCachedRank(puuid, fallback)
       return
     }
     if (!Array.isArray(entriesRes.data)) {
-      accountRankCache.set(puuid, { rankTier: undefined, rankDivision: null, rankLp: null })
+      const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
+      accountRankCache.set(puuid, fallback)
+      setCachedRank(puuid, fallback)
       return
     }
     const entries = entriesRes.data as unknown as Array<Record<string, unknown>>
@@ -1036,7 +1084,9 @@ export async function upsertMatchAndParticipants(
     const rankTier = normalizeRankTier(solo?.tier)
     const rankDivision = normalizeRankDivision(solo?.rank)
     const rankLp = normalizeRankLp(solo?.leaguePoints)
-    accountRankCache.set(puuid, { rankTier: rankTier ?? undefined, rankDivision, rankLp })
+    const data = { rankTier: rankTier ?? undefined, rankDivision, rankLp }
+    accountRankCache.set(puuid, data)
+    setCachedRank(puuid, data)
   }
 
   try {
@@ -1894,6 +1944,8 @@ async function runStep4ForPlayer(
   type MatchWorkItem = { matchId: string; trackerIdx: number }
   const workItems: MatchWorkItem[] = []
 
+  // Validate puuids first (no API calls)
+  const validPlayers: typeof players[number][] = []
   for (const player of players) {
     counters.playersPolled++
     if (state.shouldStop) return 'ok'
@@ -1909,25 +1961,36 @@ async function runStep4ForPlayer(
       }).catch(() => undefined)
       continue
     }
+    validPlayers.push(player)
+  }
 
-    const matchIdsRes = await client.getMatchIdsByPuuid(
-      player.puuid,
-      matchIdsQueryBase,
-      riotIngestRequestOptions()
-    )
-    counters.requestCount++
-    if (!matchIdsRes.ok && matchIdsRes.status === 429) counters.error429Count++
-    if (!matchIdsRes.ok) {
-      if (matchIdsRes.message === RIOT_INGEST_ABORTED_MESSAGE) return 'ok'
-      if (matchIdsRes.status === 400 && is400Decrypt(matchIdsRes.body)) {
+  // Fetch all match IDs in parallel — Bottleneck handles the rate limiting
+  const matchIdResults = await Promise.all(
+    validPlayers.map(async (player) => {
+      const res = await client.getMatchIdsByPuuid(
+        player.puuid,
+        matchIdsQueryBase,
+        riotIngestRequestOptions()
+      )
+      counters.requestCount++
+      if (!res.ok && res.status === 429) counters.error429Count++
+      return { player, res }
+    })
+  )
+
+  // Process results sequentially (DB lookups, tracker creation)
+  for (const { player, res } of matchIdResults) {
+    if (!res.ok) {
+      if (res.message === RIOT_INGEST_ABORTED_MESSAGE) return 'ok'
+      if (res.status === 400 && is400Decrypt(res.body)) {
         counters.error400Count++
-        await logger.error('400 decrypt', matchIdsRes.body)
+        await logger.error('400 decrypt', res.body)
         return '400_decrypt'
       }
       continue
     }
 
-    const matchIds = Array.isArray(matchIdsRes.data) ? matchIdsRes.data : []
+    const matchIds = Array.isArray(res.data) ? res.data : []
     const existing = await prisma.match.findMany({
       where: { riotMatchId: { in: matchIds } },
       select: { riotMatchId: true },
@@ -2024,50 +2087,61 @@ async function runStep4ForPlayer(
     }
   })()
 
-  for (const work of workItems) {
-    if (state.shouldStop || pipelineAbort) break
-    while (ingestQueue.length >= PIPELINE_QUEUE_MAX && !state.shouldStop && !pipelineAbort) {
-      await sleep(10)
-    }
-    if (state.shouldStop || pipelineAbort) break
+  // N parallel producer workers — Bottleneck smooths the actual HTTP rate.
+  const PARALLEL_FETCHES = 5
+  let workIdx = 0
 
-    const tracker = playerTrackers[work.trackerIdx]
-    const strict = await fetchMatchAndTimelineStrict(work.matchId)
-    if (!strict.ok) {
-      if (strict.reason === '400_decrypt') { pipelineAbort = '400_decrypt'; break }
-      if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
-      if (strict.reason === 'version') {
+  const runProducerWorker = async (): Promise<void> => {
+    while (!state.shouldStop && !pipelineAbort) {
+      const idx = workIdx++
+      if (idx >= workItems.length) break
+      const work = workItems[idx]
+
+      while (ingestQueue.length >= PIPELINE_QUEUE_MAX && !state.shouldStop && !pipelineAbort) {
+        await sleep(10)
+      }
+      if (state.shouldStop || pipelineAbort) break
+
+      const tracker = playerTrackers[work.trackerIdx]
+      const strict = await fetchMatchAndTimelineStrict(work.matchId)
+      if (!strict.ok) {
+        if (strict.reason === '400_decrypt') { pipelineAbort = '400_decrypt'; break }
+        if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
+        if (strict.reason === 'version') {
+          tracker.pendingTransientIngest = true
+          await logger.info('Match skipped (game version not in allowed range)', {
+            playerId: tracker.player.id.toString(),
+            matchId: work.matchId,
+          })
+          continue
+        }
+        if (strict.reason === 'deferred_patch') {
+          await logger.info('Match deferred (latest patch priority mode)', {
+            playerId: tracker.player.id.toString(),
+            matchId: work.matchId,
+            latestPatch: patchPolicy.latestPatch,
+            allowedPatches: priorityAllowedPatches,
+          })
+          continue
+        }
         tracker.pendingTransientIngest = true
-        await logger.info('Match skipped (game version not in allowed range)', {
+        await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
           playerId: tracker.player.id.toString(),
           matchId: work.matchId,
         })
         continue
       }
-      if (strict.reason === 'deferred_patch') {
-        await logger.info('Match deferred (latest patch priority mode)', {
-          playerId: tracker.player.id.toString(),
-          matchId: work.matchId,
-          latestPatch: patchPolicy.latestPatch,
-          allowedPatches: priorityAllowedPatches,
-        })
-        continue
-      }
-      tracker.pendingTransientIngest = true
-      await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
-        playerId: tracker.player.id.toString(),
-        matchId: work.matchId,
-      })
-      continue
-    }
 
-    ingestQueue.push({
-      matchId: work.matchId,
-      trackerIdx: work.trackerIdx,
-      matchDto: strict.matchDto,
-      timelineDto: strict.timelineDto,
-    })
+      ingestQueue.push({
+        matchId: work.matchId,
+        trackerIdx: work.trackerIdx,
+        matchDto: strict.matchDto,
+        timelineDto: strict.timelineDto,
+      })
+    }
   }
+
+  await Promise.all(Array.from({ length: PARALLEL_FETCHES }, () => runProducerWorker()))
 
   producerDone = true
   await ingestConsumer
@@ -2388,6 +2462,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         await logger.alerte('Champion tier snapshot check error (non-fatal)')
         void err
       }
+
+      cleanupGlobalRankCache()
 
       const now = Date.now()
       if (now - heartbeatAtMs >= 60_000) {

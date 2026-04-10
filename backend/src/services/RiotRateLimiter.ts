@@ -1,40 +1,24 @@
 /**
- * Riot API rate limiter driven by response headers.
+ * Riot API rate limiter powered by Bottleneck.
  *
- * Strategy: fire requests at full speed, read every response's
- * `X-App-Rate-Limit-Count` / `X-Method-Rate-Limit-Count` headers,
- * and pause **just long enough** for the window to roll over when
- * the count nears the limit.
+ * Reservoir: 98 requests per 120 s (Riot limit is 100; 2 kept as safety margin).
+ * Max concurrent: 15 HTTP requests in flight at once.
+ * On 429: drain the reservoir to 0, restore after Retry-After + buffer.
  *
- * Buckets tracked (from headers):
- *   - App-level:    e.g. `X-App-Rate-Limit: 20:1,100:120`
- *   - Method-level: e.g. `X-Method-Rate-Limit: 2000:60`
- *
- * Safety margin: we stop sending at `limit - 1` (i.e. 99 of 100)
- * and wait for the remaining window seconds + a small buffer.
+ * Response headers are still parsed for monitoring / logging,
+ * but the actual throttling is handled entirely by Bottleneck.
  */
-
-/** How many requests below the limit we consider "safe". */
-const SAFETY_MARGIN = 1
-/** Extra buffer (ms) added after computed window wait to absorb clock drift. */
-const WINDOW_BUFFER_MS = 2_500
-/** Minimum pause when we approach a limit, even if window math says 0. */
-const MIN_NEAR_LIMIT_PAUSE_MS = 1_000
-/** Maximum pause from a single near-limit event (sanity cap). */
-const MAX_NEAR_LIMIT_PAUSE_MS = 125_000
-
-/** Default 429 penalty when no Retry-After header is provided. */
-const DEFAULT_429_PENALTY_MS = 5_000
-/** Cap on 429 penalty so we don't sleep forever on a stale Retry-After. */
-const MAX_429_PENALTY_MS = 120_000
-
-// ────────────────────────────────────────────────────────────────────────────
+import Bottleneck from 'bottleneck'
 
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
 export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 100_000
-export const RIOT_429_MIN_PENALTY_MS = DEFAULT_429_PENALTY_MS
+export const RIOT_429_MIN_PENALTY_MS = 5_000
 
-/** Parse `"20:1,100:120"` → `[{ limit: 20, windowSec: 1 }, { limit: 100, windowSec: 120 }]` */
+const MAX_429_PENALTY_MS = 120_000
+const PENALTY_BUFFER_MS = 2_500
+const RESERVOIR_SIZE = 98
+
+/** Parse `"20:1,100:120"` → `[{ value: 20, windowSec: 1 }, { value: 100, windowSec: 120 }]` */
 function parseRiotLimitPairs(
   header: string | null
 ): { value: number; windowSec: number }[] {
@@ -59,44 +43,61 @@ type BucketSnapshot = {
 }
 
 export class RiotRateLimiter {
-  private penaltyUntil = 0
-  private chain: Promise<void> = Promise.resolve()
+  private limiter: Bottleneck
   private nearLimitPauseCount = 0
   private http429PauseCount = 0
-
   private appBuckets: BucketSnapshot[] = []
   private methodBuckets: BucketSnapshot[] = []
+  private penaltyTimer: ReturnType<typeof setTimeout> | null = null
+
+  constructor() {
+    this.limiter = new Bottleneck({
+      reservoir: RESERVOIR_SIZE,
+      reservoirRefreshAmount: RESERVOIR_SIZE,
+      reservoirRefreshInterval: 120_000,
+      maxConcurrent: 15,
+      minTime: 0,
+    })
+  }
 
   /**
-   * After HTTP 429: block for `Retry-After` seconds (or a default).
-   * Much smaller than the old 120s floor — Riot tells us exactly how long to wait.
+   * Schedule a function to execute within Riot API rate limits.
+   * Bottleneck manages the reservoir (98 req / 120 s) and concurrency (15 in-flight max).
+   */
+  schedule<T>(fn: () => Promise<T>): Promise<T> {
+    return this.limiter.schedule(fn)
+  }
+
+  /**
+   * After HTTP 429: drain the reservoir to stop new requests,
+   * then restore after the Retry-After duration + buffer.
    */
   penalize429(retryAfterSec?: number): void {
-    let ms = DEFAULT_429_PENALTY_MS
+    let ms = RIOT_429_MIN_PENALTY_MS
     if (retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
-      ms = Math.ceil(retryAfterSec * 1000) + WINDOW_BUFFER_MS
+      ms = Math.ceil(retryAfterSec * 1000) + PENALTY_BUFFER_MS
     }
     ms = Math.min(ms, MAX_429_PENALTY_MS)
-    const until = Date.now() + ms
-    if (until > this.penaltyUntil) {
-      this.http429PauseCount += 1
-      this.penaltyUntil = until
-    }
+    this.http429PauseCount++
+    void this.limiter.updateSettings({ reservoir: 0 })
+    if (this.penaltyTimer) clearTimeout(this.penaltyTimer)
+    this.penaltyTimer = setTimeout(() => {
+      void this.limiter.updateSettings({ reservoir: RESERVOIR_SIZE })
+      this.penaltyTimer = null
+    }, ms)
   }
 
   /** @deprecated Prefer penalize429(). */
   penalize(durationMs: number): void {
-    this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + durationMs)
+    this.penalize429(durationMs / 1000)
   }
 
   /**
-   * Read all rate-limit headers from a successful response.
-   * If ANY bucket (app or method, any window) is at `limit - SAFETY_MARGIN`,
-   * compute the minimum time until that window rolls over and pause accordingly.
+   * Read rate-limit headers from a successful response for monitoring/logging.
+   * No longer triggers pauses — Bottleneck handles pacing.
    */
   syncFromResponseHeaders(headers: { get(name: string): string | null }): void {
     const now = Date.now()
-
     const appLimits = parseRiotLimitPairs(headers.get('x-app-rate-limit'))
     const appCounts = parseRiotLimitPairs(headers.get('x-app-rate-limit-count'))
     this.appBuckets = this.mergeBuckets(appLimits, appCounts, now)
@@ -104,8 +105,6 @@ export class RiotRateLimiter {
     const methodLimits = parseRiotLimitPairs(headers.get('x-method-rate-limit'))
     const methodCounts = parseRiotLimitPairs(headers.get('x-method-rate-limit-count'))
     this.methodBuckets = this.mergeBuckets(methodLimits, methodCounts, now)
-
-    this.applyNearLimitPause(now)
   }
 
   getStats(): {
@@ -123,31 +122,10 @@ export class RiotRateLimiter {
   }
 
   /**
-   * Serialise acquire() calls so only one request proceeds at a time.
-   * Waits for any active penalty to expire before releasing.
+   * @deprecated No-op kept for backward compatibility. Use schedule() instead.
    */
   async acquire(_bucketName?: string): Promise<void> {
-    let release!: () => void
-    const prev = this.chain
-    const next = new Promise<void>((res) => {
-      release = res
-    })
-    this.chain = next
-
-    await prev
-
-    try {
-      for (;;) {
-        const wait = this.penaltyUntil - Date.now()
-        if (wait > 0) {
-          await new Promise((r) => setTimeout(r, wait))
-          continue
-        }
-        break
-      }
-    } finally {
-      release()
-    }
+    // Bottleneck handles pacing via schedule(); acquire is no longer needed.
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────
@@ -166,37 +144,5 @@ export class RiotRateLimiter {
       windowSec: l.windowSec,
       recordedAt: now,
     }))
-  }
-
-  /**
-   * For each tracked bucket: if `count >= limit - SAFETY_MARGIN`, compute
-   * how long until the window resets and set penaltyUntil accordingly.
-   *
-   * The window reset time is estimated as `recordedAt + windowSec * 1000`
-   * (Riot counts reset at the end of the rolling window).
-   */
-  private applyNearLimitPause(now: number): void {
-    let neededPauseMs = 0
-
-    const allBuckets = [...this.appBuckets, ...this.methodBuckets]
-    for (const b of allBuckets) {
-      const threshold = b.limit - SAFETY_MARGIN
-      if (threshold <= 0) continue
-      if (b.count < threshold) continue
-
-      const windowEndMs = b.recordedAt + b.windowSec * 1000
-      const remainingMs = windowEndMs - now
-      const pauseMs = Math.max(MIN_NEAR_LIMIT_PAUSE_MS, remainingMs + WINDOW_BUFFER_MS)
-      const capped = Math.min(pauseMs, MAX_NEAR_LIMIT_PAUSE_MS)
-      neededPauseMs = Math.max(neededPauseMs, capped)
-    }
-
-    if (neededPauseMs > 0) {
-      const until = now + neededPauseMs
-      if (until > this.penaltyUntil) {
-        this.nearLimitPauseCount += 1
-        this.penaltyUntil = until
-      }
-    }
   }
 }

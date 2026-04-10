@@ -148,102 +148,105 @@ export class RiotHttpClient {
     url: string,
     options?: RiotRequestOptions
   ): Promise<{ ok: true; data: T; status: number } | { ok: false; status: number; message?: string; body?: unknown }> {
-    // Single global throttle (application budget); `bucket` is only for logs on 429.
-    await this.rateLimiter.acquire('app')
-
-    const headers: Record<string, string> = {
+    const reqHeaders: Record<string, string> = {
       'X-Riot-Token': this.key,
       'Accept': 'application/json',
     }
+
+    let res: Response
+    let text: string
     try {
-      const res = await fetch(url, { method, headers })
-      const text = await res.text()
-      let data: unknown
-      try {
-        data = text ? JSON.parse(text) : null
-      } catch {
-        data = text
-      }
-
-      if (res.status === 429) {
-        const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
-        const riotHeaders = pickRiotRateLimitHeaders(res.headers)
-        const effectiveRetryMs =
-          Number.isFinite(retryAfterSec) && retryAfterSec > 0
-            ? retryAfterSec * 1000
-            : RIOT_429_MIN_PENALTY_MS
-        void appendUnifiedLog({
-          section: 'back',
-          type: 'warning',
-          script: this.apiLogScript,
-          message: 'Riot API HTTP 429',
-          json: {
-            httpStatus: res.status,
-            origin: 'riot_http_response',
-            bucket,
-            url,
-            retryAfterSec,
-            effectiveRetryMs,
-            riotRateLimitHeaders: riotHeaders,
-          },
-        })
-        this.rateLimiter.penalize429(retryAfterSec)
-        if (options?.shouldAbort?.()) {
-          return { ok: false, status: 429, message: RIOT_INGEST_ABORTED_MESSAGE, body: data }
-        }
-        const retryCount = options?.retryCount ?? 0
-        const infinite = options?.infinite429Retry === true
-        // Ingest: retry until Riot accepts; other callers: up to 5 attempts per request chain.
-        if (infinite || retryCount < 5) {
-          return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
-        }
-        return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
-      }
-      // 401 reliably indicates invalid/expired key.
-      // 403 can also mean endpoint/permission/routing constraints, so do not
-      // automatically mark the key as invalid for that status.
-      if (res.status === 401) {
-        this.onInvalidKey?.()
-        return { ok: false, status: res.status, message: 'Invalid or expired API key', body: data }
-      }
-      if (res.status >= 400) {
-        const msg = typeof (data as { status?: { message?: string } })?.status?.message === 'string'
-          ? (data as { status: { message: string } }).status.message
-          : undefined
-        return { ok: false, status: res.status, message: msg, body: data }
-      }
-
-      this.rateLimiter.syncFromResponseHeaders(res.headers)
-
-      const riotHeaders = pickRiotRateLimitHeaders(res.headers)
-      if (Object.keys(riotHeaders).length > 0) {
-        this.lastRiotRateLimitHeaders = riotHeaders
-      }
-
-      const now = Date.now()
-      if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
-        this.lastRiotRateLimitSnapshotLogMs = now
-        if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
-          void appendUnifiedLog({
-            section: 'back',
-            type: 'rate_limit',
-            script: this.apiLogScript,
-            message: 'Riot rate-limit headers (dernière réponse OK)',
-            json: {
-              httpStatus: res.status,
-              bucket,
-              riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
-            },
-          })
-        }
-      }
-
-      return { ok: true, data: data as T, status: res.status }
+      const result = await this.rateLimiter.schedule(async () => {
+        const r = await fetch(url, { method, headers: reqHeaders })
+        const t = await r.text()
+        return { r, t }
+      })
+      res = result.r
+      text = result.t
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       void this._log.error('Riot API request failed', msg, url)
       return { ok: false, status: 0, message: msg }
     }
+
+    let data: unknown
+    try {
+      data = text ? JSON.parse(text) : null
+    } catch {
+      data = text
+    }
+
+    if (res.status === 429) {
+      const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
+      const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+      const effectiveRetryMs =
+        Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : RIOT_429_MIN_PENALTY_MS
+      void appendUnifiedLog({
+        section: 'back',
+        type: 'warning',
+        script: this.apiLogScript,
+        message: 'Riot API HTTP 429',
+        json: {
+          httpStatus: res.status,
+          origin: 'riot_http_response',
+          bucket,
+          url,
+          retryAfterSec,
+          effectiveRetryMs,
+          riotRateLimitHeaders: riotHeaders,
+        },
+      })
+      this.rateLimiter.penalize429(retryAfterSec)
+      if (options?.shouldAbort?.()) {
+        return { ok: false, status: 429, message: RIOT_INGEST_ABORTED_MESSAGE, body: data }
+      }
+      const retryCount = options?.retryCount ?? 0
+      const infinite = options?.infinite429Retry === true
+      if (infinite || retryCount < 5) {
+        return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
+      }
+      return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
+    }
+
+    if (res.status === 401) {
+      this.onInvalidKey?.()
+      return { ok: false, status: res.status, message: 'Invalid or expired API key', body: data }
+    }
+    if (res.status >= 400) {
+      const msg = typeof (data as { status?: { message?: string } })?.status?.message === 'string'
+        ? (data as { status: { message: string } }).status.message
+        : undefined
+      return { ok: false, status: res.status, message: msg, body: data }
+    }
+
+    this.rateLimiter.syncFromResponseHeaders(res.headers)
+
+    const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+    if (Object.keys(riotHeaders).length > 0) {
+      this.lastRiotRateLimitHeaders = riotHeaders
+    }
+
+    const now = Date.now()
+    if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
+      this.lastRiotRateLimitSnapshotLogMs = now
+      if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
+        void appendUnifiedLog({
+          section: 'back',
+          type: 'rate_limit',
+          script: this.apiLogScript,
+          message: 'Riot rate-limit headers (dernière réponse OK)',
+          json: {
+            httpStatus: res.status,
+            bucket,
+            riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
+          },
+        })
+      }
+    }
+
+    return { ok: true, data: data as T, status: res.status }
   }
 
   async getPlatformData(): Promise<
