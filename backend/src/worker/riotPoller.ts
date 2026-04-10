@@ -511,6 +511,7 @@ async function getDiskUsagePercent(path: string): Promise<number | null> {
 export type RiotPollerInit = {
   ok: true
   client: RiotHttpClient
+  rateLimiter: RiotRateLimiter
   logger: ReturnType<typeof createRiotPollerLogger>
   filters: MatchFiltersConfig
   clefType: string | null
@@ -2230,7 +2231,7 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
   })
 
   const clefType = client.getActiveKeyInfo()?.clefType ?? null
-  return { ok: true, client, logger, filters, clefType }
+  return { ok: true, client, rateLimiter, logger, filters, clefType }
 }
 
 async function runStep4Counters() {
@@ -2246,7 +2247,7 @@ async function runStep4Counters() {
 }
 
 async function runLoop(init: RiotPollerInit): Promise<void> {
-  const { client, logger, filters, clefType } = init
+  const { client, rateLimiter, logger, filters, clefType } = init
   const discord = new DiscordService()
   const hourlySummaryIntervalMs = getPollerHourlySummaryIntervalMs()
   let summaryTicker: ReturnType<typeof setInterval> | null = null
@@ -2498,6 +2499,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       clearInterval(summaryTicker)
       summaryTicker = null
     }
+    await rateLimiter.disconnect().catch(() => undefined)
     setState({ isRunning: false, shouldStop: false, lastLoopFinishedAt: new Date().toISOString() })
     const stopped = getRiotPollerStatus()
     console.log(

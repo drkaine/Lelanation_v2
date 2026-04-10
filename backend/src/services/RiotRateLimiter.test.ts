@@ -2,59 +2,64 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { RiotRateLimiter } from './RiotRateLimiter.js'
 
-test('RiotRateLimiter: schedule resolves immediately when reservoir available', async () => {
+test('RiotRateLimiter: schedule paces requests via token drip', async () => {
   const limiter = new RiotRateLimiter()
   const t0 = Date.now()
   await limiter.schedule(async () => 'a')
   await limiter.schedule(async () => 'b')
-  await limiter.schedule(async () => 'c')
   const elapsed = Date.now() - t0
-  assert.ok(elapsed < 200, `Three schedule calls should be near-instant, got ${elapsed}ms`)
+  // First call uses initial token, second waits ~1.25 s for next drip
+  assert.ok(elapsed >= 1_000, `Second call should wait for token drip, got ${elapsed}ms`)
+  assert.ok(elapsed < 3_000, `Should not wait too long, got ${elapsed}ms`)
 })
 
-test('RiotRateLimiter: penalize429 drains reservoir so schedule waits', async () => {
+test('RiotRateLimiter: penalize429 blocks schedule for retry-after duration', async () => {
   const limiter = new RiotRateLimiter()
-  limiter.penalize429(1)
+  await limiter.schedule(async () => 'init')
+  limiter.penalize429(2) // 2 s retry + 2.5 s buffer = 4.5 s penalty
   const t0 = Date.now()
   await limiter.schedule(async () => 'ok')
   const elapsed = Date.now() - t0
-  assert.ok(elapsed >= 2_500, `Schedule after 429 (1s + buffer) should wait, got ${elapsed}ms`)
+  // Wait penalty (4.5 s) + token drip (~1.25 s)
+  assert.ok(elapsed >= 4_000, `Should wait for penalty + drip, got ${elapsed}ms`)
   assert.ok(elapsed < 10_000, `Should not wait too long, got ${elapsed}ms`)
 })
 
-test('RiotRateLimiter: syncFromResponseHeaders tracks buckets for monitoring', () => {
-  const limiter = new RiotRateLimiter()
-  const headers = new Headers({
-    'x-app-rate-limit': '20:1,100:120',
-    'x-app-rate-limit-count': '1:1,98:120',
-  })
-  limiter.syncFromResponseHeaders(headers)
-  const stats = limiter.getStats()
-  assert.ok(stats.appBuckets.length === 2, 'Should track both app buckets')
-  const bucket120 = stats.appBuckets.find((b) => b.windowSec === 120)
-  assert.ok(bucket120, 'Should have a 120s bucket')
-  assert.equal(bucket120!.count, 98)
-  assert.equal(bucket120!.limit, 100)
-})
-
-test('RiotRateLimiter: getStats tracks 429 pause count', () => {
+test('RiotRateLimiter: concurrent penalize429 keeps longest penalty', () => {
   const limiter = new RiotRateLimiter()
   limiter.penalize429(2)
-  const stats = limiter.getStats()
-  assert.equal(stats.http429PauseCount, 1)
+  assert.equal(limiter.getStats().http429PauseCount, 1)
+
+  limiter.penalize429(60) // longer — replaces
+  assert.equal(limiter.getStats().http429PauseCount, 2)
+
+  limiter.penalize429(1) // shorter — no-op on timing, still counted
+  assert.equal(limiter.getStats().http429PauseCount, 3)
 })
 
-test('RiotRateLimiter: method rate limit headers are tracked', () => {
+test('RiotRateLimiter: syncFromResponseHeaders tracks buckets', () => {
   const limiter = new RiotRateLimiter()
   const headers = new Headers({
     'x-app-rate-limit': '20:1,100:120',
-    'x-app-rate-limit-count': '5:1,50:120',
-    'x-method-rate-limit': '2000:60',
-    'x-method-rate-limit-count': '1999:60',
+    'x-app-rate-limit-count': '5:1,42:120',
+    'x-method-rate-limit': '2000:10',
+    'x-method-rate-limit-count': '123:10',
   })
   limiter.syncFromResponseHeaders(headers)
   const stats = limiter.getStats()
-  assert.ok(stats.methodBuckets.length === 1, 'Should track method bucket')
-  assert.equal(stats.methodBuckets[0].count, 1999)
-  assert.equal(stats.methodBuckets[0].limit, 2000)
+  assert.equal(stats.appBuckets.length, 2)
+  assert.equal(stats.appBuckets.find((b) => b.windowSec === 120)!.count, 42)
+  assert.equal(stats.methodBuckets[0].count, 123)
+})
+
+test('RiotRateLimiter: disconnect unblocks pending schedule calls', async () => {
+  const limiter = new RiotRateLimiter()
+  limiter.penalize429(120)
+  const t0 = Date.now()
+  const promise = limiter.schedule(async () => 'fail').catch(() => 'rejected')
+  // Disconnect immediately — should unblock
+  await limiter.disconnect()
+  const result = await promise
+  assert.equal(result, 'rejected')
+  assert.ok(Date.now() - t0 < 2_000, 'Should unblock quickly')
 })

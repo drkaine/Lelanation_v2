@@ -1,12 +1,19 @@
 /**
  * Riot API rate limiter powered by Bottleneck.
  *
- * Reservoir: 98 requests per 120 s (Riot limit is 100; 2 kept as safety margin).
- * Max concurrent: 15 HTTP requests in flight at once.
- * On 429: drain the reservoir to 0, restore after Retry-After + buffer.
+ * Two Riot rate limits to respect:
+ *   - App 120 s bucket: 100 req / 120 s
+ *   - App 1 s bucket:    20 req / 1 s
  *
- * Response headers are still parsed for monitoring / logging,
- * but the actual throttling is handled entirely by Bottleneck.
+ * Strategy: token-drip via reservoirIncreaseInterval.
+ * Tokens arrive 1 at a time every 1.25 s (~2 880 req/h), accumulating
+ * up to a tiny burst buffer of 2.  In any Riot rolling 120 s window the
+ * worst-case is 2 (burst) + 97 (drip) = 99 — safely under 100.
+ *
+ * minTime: 65 ms (~15 req/s) keeps us under the 20 req/1 s bucket.
+ *
+ * On 429: schedule() blocks until Retry-After + buffer expires.
+ * Concurrent penalize429 calls only extend (never shorten) the wait.
  */
 import Bottleneck from 'bottleneck'
 
@@ -16,7 +23,11 @@ export const RIOT_429_MIN_PENALTY_MS = 5_000
 
 const MAX_429_PENALTY_MS = 120_000
 const PENALTY_BUFFER_MS = 2_500
-const RESERVOIR_SIZE = 98
+
+/** 1 token every 1.25 s ≈ 97 tokens per 120 s rolling window. */
+const TOKEN_DRIP_INTERVAL_MS = 1_250
+/** Max accumulated tokens — tiny burst allowed when the poller is idle. */
+const RESERVOIR_MAX = 2
 
 /** Parse `"20:1,100:120"` → `[{ value: 20, windowSec: 1 }, { value: 100, windowSec: 120 }]` */
 function parseRiotLimitPairs(
@@ -48,29 +59,43 @@ export class RiotRateLimiter {
   private http429PauseCount = 0
   private appBuckets: BucketSnapshot[] = []
   private methodBuckets: BucketSnapshot[] = []
-  private penaltyTimer: ReturnType<typeof setTimeout> | null = null
+  /** Timestamp (ms) until which all requests are blocked. Only extends, never shortens. */
+  private penaltyUntil = 0
+  private stopped = false
 
   constructor() {
     this.limiter = new Bottleneck({
-      reservoir: RESERVOIR_SIZE,
-      reservoirRefreshAmount: RESERVOIR_SIZE,
-      reservoirRefreshInterval: 120_000,
-      maxConcurrent: 15,
-      minTime: 0,
+      reservoir: 1,
+      reservoirIncreaseAmount: 1,
+      reservoirIncreaseInterval: TOKEN_DRIP_INTERVAL_MS,
+      reservoirIncreaseMaximum: RESERVOIR_MAX,
+      maxConcurrent: 10,
+      minTime: 65,
     })
   }
 
   /**
    * Schedule a function to execute within Riot API rate limits.
-   * Bottleneck manages the reservoir (98 req / 120 s) and concurrency (15 in-flight max).
+   *
+   * If a 429 penalty is active, waits until it expires before handing
+   * the job to Bottleneck for pacing.
    */
-  schedule<T>(fn: () => Promise<T>): Promise<T> {
+  async schedule<T>(fn: () => Promise<T>): Promise<T> {
+    // Wait for any active 429 penalty to expire
+    while (!this.stopped) {
+      const wait = this.penaltyUntil - Date.now()
+      if (wait <= 0) break
+      await new Promise<void>((r) => setTimeout(r, Math.min(wait + 50, 1_000)))
+    }
+    if (this.stopped) throw new Error('RiotRateLimiter stopped')
     return this.limiter.schedule(fn)
   }
 
   /**
-   * After HTTP 429: drain the reservoir to stop new requests,
-   * then restore after the Retry-After duration + buffer.
+   * After HTTP 429: block all future schedule() calls until
+   * Retry-After + buffer has elapsed.
+   *
+   * Concurrent 429 calls only extend the penalty (never shorten it).
    */
   penalize429(retryAfterSec?: number): void {
     let ms = RIOT_429_MIN_PENALTY_MS
@@ -79,22 +104,20 @@ export class RiotRateLimiter {
     }
     ms = Math.min(ms, MAX_429_PENALTY_MS)
     this.http429PauseCount++
-    void this.limiter.updateSettings({ reservoir: 0 })
-    if (this.penaltyTimer) clearTimeout(this.penaltyTimer)
-    this.penaltyTimer = setTimeout(() => {
-      void this.limiter.updateSettings({ reservoir: RESERVOIR_SIZE })
-      this.penaltyTimer = null
-    }, ms)
+
+    const newUntil = Date.now() + ms
+    if (newUntil > this.penaltyUntil) {
+      this.penaltyUntil = newUntil
+    }
   }
 
   /** @deprecated Prefer penalize429(). */
   penalize(durationMs: number): void {
-    this.penalize429(durationMs / 1000)
+    this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + durationMs)
   }
 
   /**
    * Read rate-limit headers from a successful response for monitoring/logging.
-   * No longer triggers pauses — Bottleneck handles pacing.
    */
   syncFromResponseHeaders(headers: { get(name: string): string | null }): void {
     const now = Date.now()
@@ -124,8 +147,16 @@ export class RiotRateLimiter {
   /**
    * @deprecated No-op kept for backward compatibility. Use schedule() instead.
    */
-  async acquire(_bucketName?: string): Promise<void> {
-    // Bottleneck handles pacing via schedule(); acquire is no longer needed.
+  async acquire(_bucketName?: string): Promise<void> {}
+
+  /**
+   * Stop the limiter and unblock all pending schedule() calls.
+   * Call when the poller is shutting down.
+   */
+  async disconnect(): Promise<void> {
+    this.stopped = true
+    this.penaltyUntil = 0
+    await this.limiter.stop({ dropWaitingJobs: true })
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────

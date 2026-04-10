@@ -148,6 +148,12 @@ export class RiotHttpClient {
     url: string,
     options?: RiotRequestOptions
   ): Promise<{ ok: true; data: T; status: number } | { ok: false; status: number; message?: string; body?: unknown }> {
+    // Bail out before queuing in Bottleneck so the poller can shut down
+    // without waiting for a penalized reservoir to restore.
+    if (options?.shouldAbort?.()) {
+      return { ok: false, status: 0, message: RIOT_INGEST_ABORTED_MESSAGE }
+    }
+
     const reqHeaders: Record<string, string> = {
       'X-Riot-Token': this.key,
       'Accept': 'application/json',
