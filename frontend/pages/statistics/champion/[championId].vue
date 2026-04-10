@@ -410,155 +410,358 @@
               <div v-if="trendPending" class="py-4 text-text/70">
                 {{ t('statisticsPage.loading') }}
               </div>
-              <p v-else-if="trendError" class="py-2 text-sm text-red-400">{{ trendError }}</p>
-              <div v-else-if="trendChartCards.length" class="grid gap-4 lg:grid-cols-2">
-                <article
-                  v-for="card in trendChartCards"
-                  :key="card.metricId"
-                  class="rounded border border-primary/20 bg-background/30 p-3"
+              <template v-else>
+                <p v-if="trendError" class="py-2 text-sm text-red-400">{{ trendError }}</p>
+                <div
+                  v-if="
+                    trendChartCards.length ||
+                    durationByTierPending ||
+                    durationTrendExtraCards.length
+                  "
+                  class="grid gap-4 lg:grid-cols-2"
                 >
-                  <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
-                  <div class="overflow-x-auto">
-                    <svg
-                      :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
-                      :width="TREND_CHART_W"
-                      :height="TREND_CHART_H"
-                      class="h-auto w-full min-w-[480px]"
-                      preserveAspectRatio="xMidYMid meet"
-                      aria-hidden="true"
-                    >
-                      <defs>
-                        <linearGradient
-                          :id="`trend-bg-${card.metricId}`"
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
-                          <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
-                        </linearGradient>
-                      </defs>
-                      <rect
-                        :x="TREND_CHART_PAD.left"
-                        :y="TREND_CHART_PAD.top"
-                        :width="TREND_PLOT_W"
-                        :height="TREND_PLOT_H"
-                        :fill="`url(#trend-bg-${card.metricId})`"
-                      />
-                      <g v-for="tick in card.yTicks" :key="`${card.metricId}-y-${tick.value}`">
+                  <article
+                    v-for="card in trendChartCards"
+                    :key="card.metricId"
+                    class="rounded border border-primary/20 bg-background/30 p-3"
+                  >
+                    <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
+                    <div class="overflow-x-auto">
+                      <svg
+                        :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
+                        :width="TREND_CHART_W"
+                        :height="TREND_CHART_H"
+                        class="h-auto w-full min-w-[480px]"
+                        preserveAspectRatio="xMidYMid meet"
+                        aria-hidden="true"
+                      >
+                        <defs>
+                          <linearGradient
+                            :id="`trend-bg-${card.metricId}`"
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
+                            <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
+                          </linearGradient>
+                        </defs>
+                        <rect
+                          :x="TREND_CHART_PAD.left"
+                          :y="TREND_CHART_PAD.top"
+                          :width="TREND_PLOT_W"
+                          :height="TREND_PLOT_H"
+                          :fill="`url(#trend-bg-${card.metricId})`"
+                        />
+                        <g v-for="tick in card.yTicks" :key="`${card.metricId}-y-${tick.value}`">
+                          <line
+                            :x1="TREND_CHART_PAD.left"
+                            :y1="tick.y"
+                            :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                            :y2="tick.y"
+                            class="text-text/25"
+                            stroke="currentColor"
+                            stroke-width="1"
+                          />
+                          <text
+                            :x="TREND_CHART_PAD.left - 6"
+                            :y="tick.y + 4"
+                            text-anchor="end"
+                            class="fill-text/70 text-[10px]"
+                          >
+                            {{ tick.label }}
+                          </text>
+                        </g>
                         <line
                           :x1="TREND_CHART_PAD.left"
-                          :y1="tick.y"
-                          :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                          :y2="tick.y"
-                          class="text-text/25"
-                          stroke="currentColor"
-                          stroke-width="1"
-                        />
-                        <text
-                          :x="TREND_CHART_PAD.left - 6"
-                          :y="tick.y + 4"
-                          text-anchor="end"
-                          class="fill-text/70 text-[10px]"
-                        >
-                          {{ tick.label }}
-                        </text>
-                      </g>
-                      <line
-                        :x1="TREND_CHART_PAD.left"
-                        :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                        :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
-                        :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                        class="text-text/35"
-                        stroke="currentColor"
-                        stroke-width="1"
-                      />
-                      <line
-                        :x1="TREND_CHART_PAD.left"
-                        :y1="TREND_CHART_PAD.top"
-                        :x2="TREND_CHART_PAD.left"
-                        :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
-                        class="text-text/35"
-                        stroke="currentColor"
-                        stroke-width="1"
-                      />
-                      <path
-                        v-for="serie in card.series"
-                        :key="`${card.metricId}-${serie.tier}`"
-                        :d="serie.path"
-                        fill="none"
-                        :stroke="serie.color"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                      <g
-                        v-for="serie in card.series"
-                        :key="`${card.metricId}-${serie.tier}-points`"
-                      >
-                        <circle
-                          v-for="pt in serie.points"
-                          :key="`${card.metricId}-${serie.tier}-${pt.idx}`"
-                          :cx="pt.x"
-                          :cy="pt.y"
-                          r="3"
-                          :fill="serie.color"
-                          class="cursor-pointer"
-                          @mouseenter="onTrendPointHover($event, card.metricId, serie.tier, pt)"
-                          @mousemove="onTrendPointHover($event, card.metricId, serie.tier, pt)"
-                          @mouseleave="trendTooltip = null"
-                        />
-                      </g>
-                      <g v-for="tick in card.xTicks" :key="`${card.metricId}-x-${tick.index}`">
-                        <line
-                          :x1="tick.x"
                           :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
-                          :x2="tick.x"
-                          :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
-                          class="text-text/40"
+                          :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                          :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                          class="text-text/35"
                           stroke="currentColor"
                           stroke-width="1"
                         />
-                        <text
-                          :x="tick.x"
-                          :y="TREND_CHART_H - 6"
-                          text-anchor="middle"
-                          class="fill-text/70 text-[10px]"
+                        <line
+                          :x1="TREND_CHART_PAD.left"
+                          :y1="TREND_CHART_PAD.top"
+                          :x2="TREND_CHART_PAD.left"
+                          :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                          class="text-text/35"
+                          stroke="currentColor"
+                          stroke-width="1"
+                        />
+                        <path
+                          v-for="serie in card.series"
+                          :key="`${card.metricId}-${serie.tier}`"
+                          :d="serie.path"
+                          fill="none"
+                          :stroke="serie.color"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        />
+                        <g
+                          v-for="serie in card.series"
+                          :key="`${card.metricId}-${serie.tier}-points`"
                         >
-                          {{ tick.label }}
-                        </text>
-                      </g>
-                    </svg>
-                  </div>
-                  <div
-                    v-if="trendTooltip && trendTooltip.metricId === card.metricId"
-                    class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
-                    :style="{
-                      left: `${trendTooltip.mouseX}px`,
-                      top: `${trendTooltip.mouseY}px`,
-                      transform: 'translate(-50%, -110%)',
-                    }"
-                  >
-                    <strong>{{ trendTooltip.tier }}</strong> · {{ trendTooltip.bucketLabel }} ·
-                    {{ formatTrendValue(card.metricId, trendTooltip.value) }}
-                  </div>
-                  <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
-                    <span
-                      v-for="serie in card.series"
-                      :key="`${card.metricId}-legend-${serie.tier}`"
-                      class="inline-flex items-center gap-1"
+                          <circle
+                            v-for="pt in serie.points"
+                            :key="`${card.metricId}-${serie.tier}-${pt.idx}`"
+                            :cx="pt.x"
+                            :cy="pt.y"
+                            r="3"
+                            :fill="serie.color"
+                            class="cursor-pointer"
+                            @mouseenter="onTrendPointHover($event, card.metricId, serie.tier, pt)"
+                            @mousemove="onTrendPointHover($event, card.metricId, serie.tier, pt)"
+                            @mouseleave="trendTooltip = null"
+                          />
+                        </g>
+                        <g v-for="tick in card.xTicks" :key="`${card.metricId}-x-${tick.index}`">
+                          <line
+                            :x1="tick.x"
+                            :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                            :x2="tick.x"
+                            :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
+                            class="text-text/40"
+                            stroke="currentColor"
+                            stroke-width="1"
+                          />
+                          <text
+                            :x="tick.x"
+                            :y="TREND_CHART_H - 6"
+                            text-anchor="middle"
+                            class="fill-text/70 text-[10px]"
+                          >
+                            {{ tick.label }}
+                          </text>
+                        </g>
+                      </svg>
+                    </div>
+                    <div
+                      v-if="trendTooltip && trendTooltip.metricId === card.metricId"
+                      class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+                      :style="{
+                        left: `${trendTooltip.mouseX}px`,
+                        top: `${trendTooltip.mouseY}px`,
+                        transform: 'translate(-50%, -110%)',
+                      }"
                     >
+                      <strong>{{ trendTooltip.tier }}</strong> · {{ trendTooltip.bucketLabel }} ·
+                      {{ formatTrendValue(card.metricId, trendTooltip.value) }}
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
                       <span
-                        class="inline-block h-2.5 w-2.5 rounded-full"
-                        :style="{ backgroundColor: serie.color }"
-                      />
-                      {{ serie.tier }}
-                    </span>
-                  </div>
-                </article>
-              </div>
-              <p v-else class="py-2 text-text/70">{{ t('statisticsPage.noData') }}</p>
+                        v-for="serie in card.series"
+                        :key="`${card.metricId}-legend-${serie.tier}`"
+                        class="inline-flex items-center gap-1"
+                      >
+                        <span
+                          class="inline-block h-2.5 w-2.5 rounded-full"
+                          :style="{ backgroundColor: serie.color }"
+                        />
+                        {{ serie.tier }}
+                      </span>
+                    </div>
+                  </article>
+
+                  <article
+                    v-if="durationByTierPending"
+                    class="rounded border border-primary/20 bg-background/30 p-3"
+                  >
+                    <h3 class="mb-2 text-sm font-medium text-text">
+                      {{ t('statisticsPage.championStatsDurationChartsLoading') }}
+                    </h3>
+                    <div class="py-10 text-center text-xs text-text/60">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                  </article>
+                  <template v-else>
+                    <article
+                      v-for="card in durationTrendExtraCards"
+                      :key="`duration-extra-${card.metricId}`"
+                      class="rounded border border-primary/20 bg-background/30 p-3"
+                    >
+                      <h3 class="mb-2 text-sm font-medium text-text">{{ card.title }}</h3>
+                      <div class="overflow-x-auto">
+                        <svg
+                          :viewBox="`0 0 ${TREND_CHART_W} ${TREND_CHART_H}`"
+                          :width="TREND_CHART_W"
+                          :height="TREND_CHART_H"
+                          class="h-auto w-full min-w-[480px]"
+                          preserveAspectRatio="xMidYMid meet"
+                          aria-hidden="true"
+                        >
+                          <defs>
+                            <linearGradient
+                              :id="`trend-bg-duration-${card.metricId}`"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop offset="0%" stop-color="rgb(71 85 105 / 0.28)" />
+                              <stop offset="100%" stop-color="rgb(15 23 42 / 0.08)" />
+                            </linearGradient>
+                          </defs>
+                          <rect
+                            :x="TREND_CHART_PAD.left"
+                            :y="TREND_CHART_PAD.top"
+                            :width="TREND_PLOT_W"
+                            :height="TREND_PLOT_H"
+                            :fill="`url(#trend-bg-duration-${card.metricId})`"
+                          />
+                          <g
+                            v-for="tick in card.yTicks"
+                            :key="`duration-${card.metricId}-y-${tick.value}`"
+                          >
+                            <line
+                              :x1="TREND_CHART_PAD.left"
+                              :y1="tick.y"
+                              :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                              :y2="tick.y"
+                              class="text-text/25"
+                              stroke="currentColor"
+                              stroke-width="1"
+                            />
+                            <text
+                              :x="TREND_CHART_PAD.left - 6"
+                              :y="tick.y + 4"
+                              text-anchor="end"
+                              class="fill-text/70 text-[10px]"
+                            >
+                              {{ tick.label }}
+                            </text>
+                          </g>
+                          <line
+                            :x1="TREND_CHART_PAD.left"
+                            :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                            :x2="TREND_CHART_PAD.left + TREND_PLOT_W"
+                            :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                            class="text-text/35"
+                            stroke="currentColor"
+                            stroke-width="1"
+                          />
+                          <line
+                            :x1="TREND_CHART_PAD.left"
+                            :y1="TREND_CHART_PAD.top"
+                            :x2="TREND_CHART_PAD.left"
+                            :y2="TREND_CHART_PAD.top + TREND_PLOT_H"
+                            class="text-text/35"
+                            stroke="currentColor"
+                            stroke-width="1"
+                          />
+                          <path
+                            v-for="serie in card.series"
+                            :key="`duration-${card.metricId}-${serie.tier}`"
+                            :d="serie.path"
+                            fill="none"
+                            :stroke="serie.color"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                          <g
+                            v-for="serie in card.series"
+                            :key="`duration-${card.metricId}-${serie.tier}-points`"
+                          >
+                            <circle
+                              v-for="pt in serie.points"
+                              :key="`duration-${card.metricId}-${serie.tier}-${pt.idx}`"
+                              :cx="pt.x"
+                              :cy="pt.y"
+                              r="3"
+                              :fill="serie.color"
+                              class="cursor-pointer"
+                              @mouseenter="
+                                onDurationExtraChartHover(
+                                  $event,
+                                  card.metricId === 'games' ? 'games' : 'winrate',
+                                  serie.tier,
+                                  pt
+                                )
+                              "
+                              @mousemove="
+                                onDurationExtraChartHover(
+                                  $event,
+                                  card.metricId === 'games' ? 'games' : 'winrate',
+                                  serie.tier,
+                                  pt
+                                )
+                              "
+                              @mouseleave="durationExtraTooltip = null"
+                            />
+                          </g>
+                          <g
+                            v-for="tick in card.xTicks"
+                            :key="`duration-${card.metricId}-x-${tick.index}`"
+                          >
+                            <line
+                              :x1="tick.x"
+                              :y1="TREND_CHART_PAD.top + TREND_PLOT_H"
+                              :x2="tick.x"
+                              :y2="TREND_CHART_PAD.top + TREND_PLOT_H + 4"
+                              class="text-text/40"
+                              stroke="currentColor"
+                              stroke-width="1"
+                            />
+                            <text
+                              :x="tick.x"
+                              :y="TREND_CHART_H - 6"
+                              text-anchor="middle"
+                              class="fill-text/70 text-[10px]"
+                            >
+                              {{ tick.label }}
+                            </text>
+                          </g>
+                        </svg>
+                      </div>
+                      <div
+                        v-if="
+                          durationExtraTooltip &&
+                          durationExtraTooltip.metricId ===
+                            (card.metricId === 'games' ? 'games' : 'winrate')
+                        "
+                        class="pointer-events-none fixed z-[90] rounded border border-primary/30 bg-surface/90 px-2 py-1 text-[11px] text-text/85 shadow-lg"
+                        :style="{
+                          left: `${durationExtraTooltip.mouseX}px`,
+                          top: `${durationExtraTooltip.mouseY}px`,
+                          transform: 'translate(-50%, -110%)',
+                        }"
+                      >
+                        <template v-if="durationExtraTooltip.metricId === 'winrate'">
+                          <strong>{{ durationExtraTooltip.tier }}</strong> ·
+                          {{ durationExtraTooltip.bucketLabel }} ·
+                          {{ Number(durationExtraTooltip.value).toFixed(2) }}% ·
+                          {{ durationExtraTooltip.games }}
+                          {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                        </template>
+                        <template v-else>
+                          <strong>{{ durationExtraTooltip.tier }}</strong> ·
+                          {{ durationExtraTooltip.bucketLabel }} ·
+                          {{ Math.round(durationExtraTooltip.games) }}
+                          {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
+                        </template>
+                      </div>
+                      <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text/80">
+                        <span
+                          v-for="serie in card.series"
+                          :key="`duration-${card.metricId}-legend-${serie.tier}`"
+                          class="inline-flex items-center gap-1"
+                        >
+                          <span
+                            class="inline-block h-2.5 w-2.5 rounded-full"
+                            :style="{ backgroundColor: serie.color }"
+                          />
+                          {{ serie.tier }}
+                        </span>
+                      </div>
+                    </article>
+                  </template>
+                </div>
+                <p v-else class="py-2 text-text/70">{{ t('statisticsPage.noData') }}</p>
+              </template>
             </section>
             <div class="champion-tab-panels">
               <!-- Vue d'ensemble -->
@@ -653,134 +856,6 @@
                   </template>
                   <p v-else class="text-text/70">{{ t('statisticsPage.noData') }}</p>
                 </div>
-
-                <!-- Graph winrate selon durée (dans Vue d'ensemble) -->
-                <div
-                  v-show="activeChampionTab === 'overview'"
-                  class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
-                >
-                  <h2 class="mb-3 text-lg font-semibold text-text">
-                    {{ t('statisticsPage.championStatsDurationWinrate') }}
-                  </h2>
-                  <p class="mb-3 text-xs text-text/60">
-                    {{ t('statisticsPage.championStatsDurationWinrateChampionHint') }}
-                  </p>
-                  <div v-if="durationPending" class="py-4 text-text/70">
-                    {{ t('statisticsPage.loading') }}
-                  </div>
-                  <div
-                    v-else-if="durationData?.buckets?.length"
-                    class="relative flex justify-center"
-                  >
-                    <div class="relative inline-block min-h-[260px] w-full max-w-[600px]">
-                      <svg
-                        ref="durationChartSvgRef"
-                        :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                        class="h-auto w-full"
-                        :width="CHART_W"
-                        :height="CHART_H"
-                        preserveAspectRatio="xMidYMid meet"
-                        aria-hidden="true"
-                      >
-                        <defs>
-                          <linearGradient id="duration-fill-champ" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
-                            <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
-                          </linearGradient>
-                        </defs>
-                        <path :d="durationChartData.closedPath" fill="url(#duration-fill-champ)" />
-                        <path
-                          :d="durationChartData.linePath"
-                          fill="none"
-                          stroke="rgb(var(--rgb-accent))"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
-                        <g v-for="(pt, i) in durationChartData.points" :key="'pt-' + i">
-                          <circle
-                            :cx="pt.x"
-                            :cy="pt.y"
-                            r="12"
-                            fill="transparent"
-                            class="cursor-pointer"
-                            @mouseenter="
-                              durationChartTooltip = {
-                                durationLabel: pt.durationLabel,
-                                winrate: pt.winrate,
-                                matchCount: pt.matchCount,
-                                x: pt.x,
-                                y: pt.y,
-                              }
-                            "
-                            @mouseleave="durationChartTooltip = null"
-                          />
-                          <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
-                        </g>
-                        <g v-for="(tick, i) in durationChartData.axisX.ticks" :key="'x-' + i">
-                          <line
-                            :x1="tick.x"
-                            :y1="CHART_PAD.top + PLOT_H"
-                            :x2="tick.x"
-                            :y2="CHART_PAD.top + PLOT_H + 4"
-                            stroke="currentColor"
-                            stroke-width="1"
-                            class="text-text/50"
-                          />
-                          <text
-                            :x="tick.x"
-                            :y="CHART_H - 6"
-                            text-anchor="middle"
-                            class="fill-text/70 text-[10px]"
-                          >
-                            {{ tick.value }}
-                          </text>
-                        </g>
-                        <g v-for="(tick, i) in durationChartData.axisY.ticks" :key="'y-' + i">
-                          <line
-                            :x1="CHART_PAD.left"
-                            :y1="tick.y"
-                            :x2="CHART_PAD.left - 4"
-                            :y2="tick.y"
-                            stroke="currentColor"
-                            stroke-width="1"
-                            class="text-text/50"
-                          />
-                          <text
-                            :x="CHART_PAD.left - 8"
-                            :y="tick.y + 4"
-                            text-anchor="end"
-                            class="fill-text/70 text-[10px]"
-                          >
-                            {{ tick.value }}%
-                          </text>
-                        </g>
-                      </svg>
-                      <div
-                        v-if="durationChartTooltip"
-                        class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
-                        :style="{
-                          left: (durationChartTooltip.x / CHART_W) * 100 + '%',
-                          top: (durationChartTooltip.y / CHART_H) * 100 + '%',
-                          transform: 'translate(-50%, -100%) translateY(-8px)',
-                        }"
-                      >
-                        <div class="font-medium text-text">
-                          {{ durationChartTooltip.durationLabel }}
-                        </div>
-                        <div class="text-text/80">
-                          {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
-                          {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
-                        </div>
-                        <div class="text-text/70">
-                          {{ durationChartTooltip.matchCount }}
-                          {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else class="py-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
-                </div>
               </div>
 
               <!-- Stats: by role -->
@@ -802,8 +877,9 @@
                         <th class="px-3 py-2 text-right font-medium text-text">
                           {{ t('statisticsPage.games') }}
                         </th>
-                        <th class="px-3 py-2 text-right font-medium text-text">Score</th>
-                        <th class="px-3 py-2 text-right font-medium text-text">Δ Patch</th>
+                        <th class="px-3 py-2 text-right font-medium text-text">
+                          {{ t('statisticsPage.championStatsRoleShare') }}
+                        </th>
                         <th class="px-3 py-2 text-right font-medium text-text">
                           {{ t('statisticsPage.winrate') }}
                         </th>
@@ -824,6 +900,9 @@
                           </span>
                         </td>
                         <td class="px-3 py-2 text-right text-text/90">{{ r.games }}</td>
+                        <td class="px-3 py-2 text-right text-text/90">
+                          {{ formatDonutPercent(r.pickrate) }}%
+                        </td>
                         <td class="px-3 py-2 text-right text-text/90">
                           {{ Number(r.winrate).toFixed(2) }}%
                         </td>
@@ -1369,128 +1448,6 @@
                 </template>
               </div>
 
-              <!-- Stats: duration winrate -->
-              <div
-                v-show="activeChampionTab === 'stats'"
-                class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-6"
-              >
-                <h2 class="mb-3 text-lg font-semibold text-text">
-                  {{ t('statisticsPage.championStatsDurationWinrate') }}
-                </h2>
-                <p class="mb-3 text-xs text-text/60">
-                  {{ t('statisticsPage.championStatsDurationWinrateChampionHint') }}
-                </p>
-                <div v-if="durationPending" class="py-4 text-text/70">
-                  {{ t('statisticsPage.loading') }}
-                </div>
-                <div v-else-if="durationData?.buckets?.length" class="relative flex justify-center">
-                  <div class="relative inline-block">
-                    <svg
-                      ref="durationChartSvgRef"
-                      :viewBox="`0 0 ${CHART_W} ${CHART_H}`"
-                      class="max-w-full"
-                      aria-hidden="true"
-                    >
-                      <defs>
-                        <linearGradient id="duration-fill-champ" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="0%" stop-color="rgb(var(--rgb-accent) / 0.4)" />
-                          <stop offset="100%" stop-color="rgb(var(--rgb-accent) / 0.05)" />
-                        </linearGradient>
-                      </defs>
-                      <path :d="durationChartData.closedPath" fill="url(#duration-fill-champ)" />
-                      <path
-                        :d="durationChartData.linePath"
-                        fill="none"
-                        stroke="rgb(var(--rgb-accent))"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                      />
-                      <g v-for="(pt, i) in durationChartData.points" :key="'pt-' + i">
-                        <circle
-                          :cx="pt.x"
-                          :cy="pt.y"
-                          r="12"
-                          fill="transparent"
-                          class="cursor-pointer"
-                          @mouseenter="
-                            durationChartTooltip = {
-                              durationLabel: pt.durationLabel,
-                              winrate: pt.winrate,
-                              matchCount: pt.matchCount,
-                              x: pt.x,
-                              y: pt.y,
-                            }
-                          "
-                          @mouseleave="durationChartTooltip = null"
-                        />
-                        <circle :cx="pt.x" :cy="pt.y" r="3" fill="rgb(var(--rgb-accent))" />
-                      </g>
-                      <g v-for="(tick, i) in durationChartData.axisX.ticks" :key="'x-' + i">
-                        <line
-                          :x1="tick.x"
-                          :y1="CHART_PAD.top + PLOT_H"
-                          :x2="tick.x"
-                          :y2="CHART_PAD.top + PLOT_H + 4"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          class="text-text/50"
-                        />
-                        <text
-                          :x="tick.x"
-                          :y="CHART_H - 6"
-                          text-anchor="middle"
-                          class="fill-text/70 text-[10px]"
-                        >
-                          {{ tick.value }}
-                        </text>
-                      </g>
-                      <g v-for="(tick, i) in durationChartData.axisY.ticks" :key="'y-' + i">
-                        <line
-                          :x1="CHART_PAD.left"
-                          :y1="tick.y"
-                          :x2="CHART_PAD.left - 4"
-                          :y2="tick.y"
-                          stroke="currentColor"
-                          stroke-width="1"
-                          class="text-text/50"
-                        />
-                        <text
-                          :x="CHART_PAD.left - 8"
-                          :y="tick.y + 4"
-                          text-anchor="end"
-                          class="fill-text/70 text-[10px]"
-                        >
-                          {{ tick.value }}%
-                        </text>
-                      </g>
-                    </svg>
-                    <div
-                      v-if="durationChartTooltip"
-                      class="duration-chart-tooltip pointer-events-none absolute z-10 rounded border border-primary/40 bg-surface px-2 py-1.5 text-left text-xs shadow-lg"
-                      :style="{
-                        left: (durationChartTooltip.x / CHART_W) * 100 + '%',
-                        top: (durationChartTooltip.y / CHART_H) * 100 + '%',
-                        transform: 'translate(-50%, -100%) translateY(-8px)',
-                      }"
-                    >
-                      <div class="font-medium text-text">
-                        {{ durationChartTooltip.durationLabel }}
-                      </div>
-                      <div class="text-text/80">
-                        {{ Number(durationChartTooltip.winrate).toFixed(2) }}%
-                        {{ t('statisticsPage.championStatsDurationWinrateTooltipWinrate') }}
-                      </div>
-                      <div class="text-text/70">
-                        {{ durationChartTooltip.matchCount }}
-                        {{ t('statisticsPage.championStatsDurationWinrateTooltipMatches') }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p v-else class="py-4 text-text/70">{{ t('statisticsPage.noData') }}</p>
-              </div>
-
               <!-- Stats: top players -->
               <div
                 v-show="activeChampionTab === 'stats'"
@@ -1770,28 +1727,34 @@ const championStats = ref<{
   generatedAt: string | null
 } | null>(null)
 
-const byRoleList = computed(() => {
-  const br = championStats.value?.byRole
-  if (!br || typeof br !== 'object') return []
-  return Object.entries(br).map(([role, data]) => ({
-    role,
-    games: data.games,
-    winrate: data.winrate,
-  }))
+const CHAMPION_ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
+
+type ByRoleRow = { role: string; games: number; winrate: number; pickrate: number }
+
+/** Toutes les positions (TOP…SUPPORT) : parts sur le total champion toutes positions (même avec filtre rôle sur le reste de la page). */
+const byRoleList = computed((): ByRoleRow[] => {
+  if (!championStats.value) return []
+  const br = championStats.value.byRole
+  const safe = br && typeof br === 'object' ? br : {}
+  const totalAll = CHAMPION_ROLE_ORDER.reduce((sum, role) => sum + (safe[role]?.games ?? 0), 0)
+  return CHAMPION_ROLE_ORDER.map(role => {
+    const data = safe[role]
+    const games = data?.games ?? 0
+    return {
+      role,
+      games,
+      winrate: data?.winrate ?? 0,
+      pickrate: totalAll > 0 ? (100 * games) / totalAll : 0,
+    }
+  })
 })
 
-/** Rôles pour lesquels on a des données (pour griser/désactiver les autres). */
-const rolesWithData = computed(() => new Set(byRoleList.value.map(r => r.role)))
+/** Rôles avec au moins une partie dans la répartition (hors filtre rôle courant). */
+const rolesWithData = computed(
+  () => new Set(byRoleList.value.filter(r => r.games > 0).map(r => r.role))
+)
 
-const roleDistribution = computed(() => {
-  const list = byRoleList.value
-  if (!list.length) return []
-  const totalGames = championStats.value?.games ?? list.reduce((sum, r) => sum + r.games, 0)
-  if (totalGames <= 0) return []
-  return [...list]
-    .sort((a, b) => b.games - a.games)
-    .map(r => ({ ...r, pickrate: (100 * r.games) / totalGames }))
-})
+const roleDistribution = computed(() => [...byRoleList.value].sort((a, b) => b.games - a.games))
 
 const ROLE_LABELS: Record<string, string> = {
   TOP: 'Top',
@@ -1874,9 +1837,12 @@ const championSpellsDuosData = ref<{
   duos: Array<{ spellId1: number; spellId2: number; games: number; wins: number; winrate: number }>
 } | null>(null)
 
-const durationPending = ref(false)
-const durationData = ref<{
-  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
+const durationByTierPending = ref(false)
+const durationByTierData = ref<{
+  series: Array<{
+    rankTier: string
+    buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
+  }>
 } | null>(null)
 
 const playersPending = ref(false)
@@ -2191,20 +2157,28 @@ async function loadChampionSpells() {
   }
 }
 
-async function loadDuration() {
+/** Query durée par tier : version + rôle seulement (rankTier non envoyé ; ligues = presets des graphes). */
+function durationByTierQueryParams() {
+  const p = new URLSearchParams()
+  if (filterVersion.value) p.set('version', filterVersion.value)
+  if (filterRole.value) p.set('role', filterRole.value)
+  return p.toString() ? '?' + p.toString() : ''
+}
+
+async function loadDurationByTier() {
   if (!championId.value) return
-  const t = statsPerfStart('loadDuration')
-  durationPending.value = true
+  const t = statsPerfStart('loadDurationByTier')
+  durationByTierPending.value = true
   try {
-    const q = overviewQueryParams()
-    durationData.value = await statsFetch(
-      apiUrl(`/api/stats/champions/${championId.value}/duration-winrate${q || ''}`)
+    const q = durationByTierQueryParams()
+    durationByTierData.value = await statsFetch(
+      apiUrl(`/api/stats/champions/${championId.value}/duration-winrate-by-tier${q || ''}`)
     )
   } catch {
-    durationData.value = null
+    durationByTierData.value = null
   } finally {
-    durationPending.value = false
-    statsPerfEnd('loadDuration', t)
+    durationByTierPending.value = false
+    statsPerfEnd('loadDurationByTier', t)
   }
 }
 
@@ -2258,110 +2232,6 @@ async function loadPlayers() {
   }
 }
 
-const CHART_W = 400
-const CHART_H = 260
-const CHART_PAD = { left: 44, right: 20, top: 20, bottom: 30 }
-const PLOT_W = CHART_W - CHART_PAD.left - CHART_PAD.right
-const PLOT_H = CHART_H - CHART_PAD.top - CHART_PAD.bottom
-
-function catmullRomToBezier(pts: Array<{ x: number; y: number }>): string {
-  if (pts.length < 2) return ''
-  const p0 = pts[0]
-  const p1 = pts[1]
-  if (!p0 || !p1) return ''
-  if (pts.length === 2) return `M ${p0.x},${p0.y} L ${p1.x},${p1.y}`
-  let d = `M ${p0.x},${p0.y}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const pi = pts[Math.max(0, i - 1)]
-    const pj = pts[i]
-    const pk = pts[i + 1]
-    const pl = pts[Math.min(pts.length - 1, i + 2)]
-    if (!pi || !pj || !pk || !pl) continue
-    const cp1x = pj.x + (pk.x - pi.x) / 6
-    const cp1y = pj.y + (pk.y - pi.y) / 6
-    const cp2x = pk.x - (pl.x - pj.x) / 6
-    const cp2y = pk.y - (pl.y - pj.y) / 6
-    d += ` C ${cp1x.toFixed(2)},${cp1y.toFixed(2)} ${cp2x.toFixed(2)},${cp2y.toFixed(2)} ${pk.x},${pk.y}`
-  }
-  return d
-}
-
-function durationWinrateChartScaled(
-  buckets: Array<{ durationMin: number; matchCount: number; wins: number; winrate: number }>
-) {
-  const empty = {
-    linePath: '',
-    closedPath: '',
-    points: [] as {
-      x: number
-      y: number
-      durationLabel: string
-      winrate: number
-      matchCount: number
-    }[],
-    axisX: { ticks: [] as { value: number; x: number }[] },
-    axisY: { ticks: [] as { value: number; y: number }[] },
-  }
-  if (!buckets.length) return empty
-  const sorted = [...buckets].sort((a, b) => a.durationMin - b.durationMin)
-  const minDur = Math.min(...sorted.map(b => b.durationMin))
-  const maxDur = Math.max(...sorted.map(b => b.durationMin + 5))
-  const durRange = maxDur - minDur || 1
-  const originY = CHART_PAD.top + PLOT_H
-  const pts = sorted.map(b => {
-    const midDur = b.durationMin + 2.5
-    const x = CHART_PAD.left + ((midDur - minDur) / durRange) * PLOT_W
-    const y = originY - (b.winrate / 100) * PLOT_H
-    return {
-      x,
-      y,
-      durationLabel: `${b.durationMin}–${b.durationMin + 5} min`,
-      winrate: b.winrate,
-      matchCount: b.matchCount,
-    }
-  })
-  const ptsForCurve = pts.map(p => ({ x: p.x, y: p.y }))
-  const linePath = catmullRomToBezier(ptsForCurve)
-  const firstX = pts[0]?.x ?? CHART_PAD.left
-  const lastX = pts[pts.length - 1]?.x ?? CHART_PAD.left + PLOT_W
-  const closedPath = `${linePath} L ${lastX},${originY} L ${firstX},${originY} Z`
-  const axisXTicks: { value: number; x: number }[] = []
-  const step = durRange <= 15 ? 5 : durRange <= 30 ? 10 : 15
-  for (let v = Math.ceil(minDur / step) * step; v <= maxDur; v += step) {
-    axisXTicks.push({
-      value: v,
-      x: CHART_PAD.left + ((v - minDur) / durRange) * PLOT_W,
-    })
-  }
-  const axisYTicks: { value: number; y: number }[] = []
-  for (let v = 0; v <= 100; v += 20) {
-    axisYTicks.push({
-      value: v,
-      y: originY - (v / 100) * PLOT_H,
-    })
-  }
-  return {
-    linePath,
-    closedPath,
-    points: pts,
-    axisX: { ticks: axisXTicks },
-    axisY: { ticks: axisYTicks },
-  }
-}
-
-const durationChartData = computed(() =>
-  durationWinrateChartScaled(durationData.value?.buckets ?? [])
-)
-
-const durationChartTooltip = ref<{
-  durationLabel: string
-  winrate: number
-  matchCount: number
-  x: number
-  y: number
-} | null>(null)
-const durationChartSvgRef = ref<SVGSVGElement | null>(null)
-
 const TREND_CHART_W = 620
 const TREND_CHART_H = 220
 const TREND_CHART_PAD = { left: 40, right: 16, top: 12, bottom: 30 }
@@ -2386,6 +2256,15 @@ const trendMetricDefs = computed<TrendMetricDef[]>(() => [
   { id: 'banrate', title: t('statisticsPage.championStatsTrendBanrate') },
 ])
 const trendTooltip = ref<TrendTooltipState | null>(null)
+const durationExtraTooltip = ref<{
+  metricId: 'winrate' | 'games'
+  tier: string
+  bucketLabel: string
+  value: number
+  games: number
+  mouseX: number
+  mouseY: number
+} | null>(null)
 
 const RANK_COLOR_MAP: Record<string, string> = {
   IRON: '#6b7280',
@@ -2458,6 +2337,20 @@ const trendSelectedTiers = computed(() => {
   return preset.filter(t => t !== 'UNRANKED')
 })
 
+/** Tiers affichés sur le graphe durée (fallback API si pas de snapshots tendance). */
+const durationDisplayTiers = computed(() => {
+  const sel = trendSelectedTiers.value
+  if (sel.length) return sel
+  const fromApi =
+    durationByTierData.value?.series?.map(s => normalizeRankTier(s.rankTier)).filter(Boolean) ?? []
+  const uniq = [...new Set(fromApi)]
+  return uniq.sort(
+    (a, b) =>
+      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
+      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
+  )
+})
+
 type TrendBucket = {
   key: string
   label: string
@@ -2517,7 +2410,14 @@ const trendBuckets = computed(() => {
   return sorted.filter(b => b.ts >= minTs)
 })
 
-type TrendSeriesPoint = { idx: number; x: number; y: number; value: number; bucketLabel: string }
+type TrendSeriesPoint = {
+  idx: number
+  x: number
+  y: number
+  value: number
+  bucketLabel: string
+  games?: number
+}
 type TrendSeries = { tier: string; color: string; path: string; points: TrendSeriesPoint[] }
 type TrendChartCard = {
   metricId: TrendMetricId
@@ -2576,6 +2476,23 @@ function onTrendPointHover(
   }
 }
 
+function onDurationExtraChartHover(
+  event: MouseEvent,
+  metricId: 'winrate' | 'games',
+  tier: string,
+  pt: TrendSeriesPoint
+) {
+  durationExtraTooltip.value = {
+    metricId,
+    tier,
+    bucketLabel: pt.bucketLabel,
+    value: pt.value,
+    games: pt.games ?? (metricId === 'games' ? Math.round(pt.value) : 0),
+    mouseX: event.clientX,
+    mouseY: event.clientY,
+  }
+}
+
 const trendChartCards = computed<TrendChartCard[]>(() => {
   const buckets = trendBuckets.value
   const tiers = trendSelectedTiers.value
@@ -2592,6 +2509,19 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
       weight: number
     }> = buckets.map(() => ({ games: 0, wins: 0, pickNum: 0, banNum: 0, weight: 0 }))
 
+    buckets.forEach((bucket, index) => {
+      const global = globalRawByIndex[index]
+      if (!global) return
+      for (const [tierKey, raw] of bucket.byTier) {
+        if (!normalizeRankTier(tierKey)) continue
+        global.games += raw.games
+        global.wins += raw.wins
+        global.pickNum += raw.pickNum
+        global.banNum += raw.banNum
+        global.weight += raw.weight
+      }
+    })
+
     type PendingSerie = {
       tier: string
       color: string
@@ -2607,14 +2537,6 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
           value: metricValue(metric.id, raw),
           bucketLabel: bucket.label,
         })
-        const global = globalRawByIndex[index]
-        if (global) {
-          global.games += raw.games
-          global.wins += raw.wins
-          global.pickNum += raw.pickNum
-          global.banNum += raw.banNum
-          global.weight += raw.weight
-        }
       })
       return {
         tier,
@@ -2717,6 +2639,226 @@ const trendChartCards = computed<TrendChartCard[]>(() => {
   })
 })
 
+type DurationByTierChartMode = 'winrate' | 'games'
+
+function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard | null {
+  const seriesRaw = durationByTierData.value?.series ?? []
+  const tiers = durationDisplayTiers.value
+  if (!tiers.length) return null
+
+  const tierBucketMap = new Map<
+    string,
+    Map<number, { winrate: number; games: number; wins: number }>
+  >()
+  for (const s of seriesRaw) {
+    const tier = normalizeRankTier(s.rankTier)
+    if (!tier) continue
+    let m = tierBucketMap.get(tier)
+    if (!m) {
+      m = new Map()
+      tierBucketMap.set(tier, m)
+    }
+    for (const b of s.buckets) {
+      const prev = m.get(b.durationMin) ?? { winrate: 0, games: 0, wins: 0 }
+      const games = prev.games + b.matchCount
+      const wins = prev.wins + b.wins
+      m.set(b.durationMin, {
+        games,
+        wins,
+        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
+      })
+    }
+  }
+
+  const durSet = new Set<number>()
+  for (const m of tierBucketMap.values()) {
+    for (const d of m.keys()) durSet.add(d)
+  }
+  const sortedDurations = [...durSet].sort((a, b) => a - b)
+  if (!sortedDurations.length) return null
+
+  const n = sortedDurations.length
+  const xAt = (index: number) =>
+    TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * TREND_PLOT_W
+
+  const tiersOrdered = [...tiers].sort(
+    (a, b) =>
+      (!RANK_TIERS.includes(a) ? 999 : RANK_TIERS.indexOf(a)) -
+      (!RANK_TIERS.includes(b) ? 999 : RANK_TIERS.indexOf(b))
+  )
+
+  type DurPendingSerie = {
+    tier: string
+    color: string
+    rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }>
+  }
+
+  const pendingSeries: DurPendingSerie[] = tiersOrdered
+    .map(tier => {
+      const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> =
+        []
+      const m = tierBucketMap.get(tier)
+      sortedDurations.forEach((durMin, index) => {
+        const cell = m?.get(durMin)
+        if (!cell || cell.games <= 0) return
+        const value = mode === 'winrate' ? cell.winrate : cell.games
+        rawValues.push({
+          idx: index,
+          value,
+          bucketLabel: `${durMin}–${durMin + 5} min`,
+          games: cell.games,
+        })
+      })
+      return {
+        tier,
+        color: RANK_COLOR_MAP[tier] ?? '#64748b',
+        rawValues,
+      }
+    })
+    .filter(s => s.rawValues.length > 0)
+
+  if (trendShowGlobalLine.value) {
+    const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> = []
+    sortedDurations.forEach((durMin, idx) => {
+      if (mode === 'winrate') {
+        let tw = 0
+        let tg = 0
+        for (const m of tierBucketMap.values()) {
+          const c = m.get(durMin)
+          if (c && c.games > 0) {
+            tw += c.wins
+            tg += c.games
+          }
+        }
+        if (tg > 0) {
+          rawValues.push({
+            idx,
+            value: (100 * tw) / tg,
+            bucketLabel: `${durMin}–${durMin + 5} min`,
+            games: tg,
+          })
+        }
+      } else {
+        let tg = 0
+        for (const m of tierBucketMap.values()) {
+          const c = m.get(durMin)
+          if (c && c.games > 0) tg += c.games
+        }
+        if (tg > 0) {
+          rawValues.push({
+            idx,
+            value: tg,
+            bucketLabel: `${durMin}–${durMin + 5} min`,
+            games: tg,
+          })
+        }
+      }
+    })
+    if (rawValues.length) {
+      pendingSeries.push({
+        tier: 'GLOBAL',
+        color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
+        rawValues,
+      })
+    }
+  }
+
+  if (!pendingSeries.length) return null
+
+  const smoothedByTier = pendingSeries.map(serie => ({
+    ...serie,
+    smoothValues: smoothSeries(
+      serie.rawValues.map(v => v.value),
+      3
+    ),
+  }))
+
+  const allValues = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
+  let minVal = allValues.length ? Math.min(...allValues) : 0
+  let maxVal = allValues.length ? Math.max(...allValues) : 1
+  if (!Number.isFinite(minVal)) minVal = 0
+  if (!Number.isFinite(maxVal) || maxVal <= 0) maxVal = 1
+  const spread = Math.max(1e-6, maxVal - minVal)
+  const domainMin = mode === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
+  const domainMax = maxVal + spread * 0.08
+  const domainSpan = Math.max(1e-6, domainMax - domainMin)
+
+  const series: TrendSeries[] = smoothedByTier.map(serie => {
+    const points: TrendSeriesPoint[] = serie.rawValues.map((v, i) => {
+      const value = serie.smoothValues[i] ?? v.value
+      return {
+        idx: v.idx,
+        x: xAt(v.idx),
+        y: TREND_CHART_PAD.top + (1 - (value - domainMin) / domainSpan) * TREND_PLOT_H,
+        value,
+        bucketLabel: v.bucketLabel,
+        games: v.games,
+      }
+    })
+    return {
+      tier: serie.tier,
+      color: serie.color,
+      path: buildPath(points.map(p => ({ x: p.x, y: p.y }))),
+      points,
+    }
+  })
+
+  const yTicks: Array<{ value: number; y: number; label: string }> = []
+  for (let i = 0; i <= 4; i += 1) {
+    const value = domainMin + (domainSpan * i) / 4
+    const y = TREND_CHART_PAD.top + (1 - i / 4) * TREND_PLOT_H
+    yTicks.push({
+      value,
+      y,
+      label: mode === 'games' ? `${Math.round(value)}` : `${value.toFixed(1)}%`,
+    })
+  }
+
+  const tickCount = Math.min(6, Math.max(2, n))
+  const step = n <= 1 ? 1 : Math.max(1, Math.floor((n - 1) / (tickCount - 1)))
+  const xTicks: Array<{ index: number; x: number; label: string }> = []
+  for (let i = 0; i < n; i += step) {
+    const durMin = sortedDurations[i]
+    if (durMin === undefined) continue
+    xTicks.push({
+      index: i,
+      x: xAt(i),
+      label: `${durMin}`,
+    })
+  }
+  const lastIdx = n - 1
+  if (!xTicks.some(t => t.index === lastIdx)) {
+    const durMin = sortedDurations[lastIdx]
+    if (durMin !== undefined) {
+      xTicks.push({ index: lastIdx, x: xAt(lastIdx), label: `${durMin}` })
+    }
+  }
+
+  const metricId: TrendMetricId = mode === 'games' ? 'games' : 'winrate'
+  return {
+    metricId,
+    title:
+      mode === 'games'
+        ? t('statisticsPage.championStatsDurationGamesDistribution')
+        : t('statisticsPage.championStatsDurationWinrate'),
+    series: series.filter(s => s.path.length > 0),
+    xTicks,
+    yTicks,
+  }
+}
+
+const durationWinrateChartCard = computed(() => buildDurationByTierChart('winrate'))
+const durationGamesChartCard = computed(() => buildDurationByTierChart('games'))
+
+const durationTrendExtraCards = computed((): TrendChartCard[] => {
+  const out: TrendChartCard[] = []
+  const wr = durationWinrateChartCard.value
+  const g = durationGamesChartCard.value
+  if (wr) out.push(wr)
+  if (g) out.push(g)
+  return out
+})
+
 watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlus], () => {
   if (!championId.value || Number.isNaN(championId.value)) return
   loadChampion()
@@ -2725,7 +2867,7 @@ watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlu
   loadMatchups()
   loadPlayers()
   loadDetail()
-  loadDuration()
+  loadDurationByTier()
   loadTrendSnapshots()
   championSpellsData.value = null
   championSpellsDuosData.value = null
@@ -2800,7 +2942,7 @@ onMounted(async () => {
     loadMatchups()
     loadPlayers()
     loadDetail()
-    loadDuration()
+    loadDurationByTier()
     loadTrendSnapshots()
   }
 })

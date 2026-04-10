@@ -205,9 +205,28 @@ export interface ObjectiveWithDistribution {
 
 export interface OverviewDurationWinrateStats {
   buckets: Array<{
-    durationMinutes: number
-    matches: number
+    durationMin: number
+    matchCount: number
+    wins: number
     winrate: number
+    // Legacy keys kept for API backward compatibility.
+    durationMinutes?: number
+    matches?: number
+  }>
+}
+
+/** Winrate par tranches de durée, une série par ligue (rank tier de base). */
+export interface ChampionDurationWinrateByTier {
+  series: Array<{
+    rankTier: string
+    buckets: Array<{
+      durationMin: number
+      matchCount: number
+      wins: number
+      winrate: number
+      durationMinutes?: number
+      matches?: number
+    }>
   }>
 }
 
@@ -1390,9 +1409,12 @@ export async function getOverviewDurationWinrateStats(
     const buckets = Array.from(bucketMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([durationBucket, e]) => ({
+        durationMin: durationBucket,
+        matchCount: e.games,
+        wins: e.wins,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
         durationMinutes: durationBucket,
         matches: e.games,
-        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
 
     const result: OverviewDurationWinrateStats = { buckets }
@@ -1438,12 +1460,122 @@ export async function getDurationWinrateByChampion(
     const buckets = Array.from(bucketMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([durationBucket, e]) => ({
+        durationMin: durationBucket,
+        matchCount: e.games,
+        wins: e.wins,
+        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
         durationMinutes: durationBucket,
         matches: e.games,
-        winrate: e.games > 0 ? Math.round((e.wins / e.games) * 10000) / 100 : 0,
       }))
 
     return { buckets }
+  } catch {
+    return null
+  }
+}
+
+const DURATION_TIER_ORDER = [
+  'IRON',
+  'BRONZE',
+  'SILVER',
+  'GOLD',
+  'PLATINUM',
+  'EMERALD',
+  'DIAMOND',
+  'MASTER',
+  'GRANDMASTER',
+  'CHALLENGER',
+] as const
+
+function sortDurationTierKey(a: string, b: string): number {
+  const ia = DURATION_TIER_ORDER.indexOf(a as (typeof DURATION_TIER_ORDER)[number])
+  const ib = DURATION_TIER_ORDER.indexOf(b as (typeof DURATION_TIER_ORDER)[number])
+  return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+}
+
+/** Buckets de durée agrégés par ligue (tier de base), optionnellement filtrés par version / role / rankTier. */
+export async function getDurationWinrateByChampionByTier(
+  championId: number,
+  version?: string | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): Promise<ChampionDurationWinrateByTier | null> {
+  if (!isDatabaseConfigured()) return null
+  try {
+    const coreWhere: Record<string, unknown> = { championId }
+    if (version) coreWhere.gameVersion = { startsWith: version }
+    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
+    let roleNorm = role != null && String(role).trim() !== '' ? String(role).trim().toUpperCase() : null
+    if (roleNorm === 'UTILITY') roleNorm = 'SUPPORT'
+    if (roleNorm) coreWhere.role = roleNorm
+
+    const coreStats = await prisma.mvChampionCoreStat.findMany({
+      where: coreWhere,
+      select: { id: true, rankTier: true },
+    })
+    const idToTier = new Map<bigint, string>()
+    for (const row of coreStats) {
+      const base = String(row.rankTier ?? '')
+        .trim()
+        .toUpperCase()
+        .split('_')[0]!
+      if (!base || base === 'UNRANKED') continue
+      idToTier.set(row.id, base)
+    }
+    const statIds = [...idToTier.keys()]
+    if (statIds.length === 0) return { series: [] }
+
+    const bucketRows = await prisma.mvChampionBucket.findMany({
+      where: { championStatId: { in: statIds } },
+      select: { championStatId: true, durationBucket: true, countWin: true, countGame: true },
+    })
+
+    const cellMap = new Map<string, { wins: number; games: number }>()
+    for (const row of bucketRows) {
+      const tier = idToTier.get(row.championStatId)
+      if (!tier) continue
+      const key = `${tier}\0${row.durationBucket}`
+      let e = cellMap.get(key)
+      if (!e) {
+        e = { wins: 0, games: 0 }
+        cellMap.set(key, e)
+      }
+      e.wins += row.countWin
+      e.games += row.countGame
+    }
+
+    const byTier = new Map<string, Map<number, { wins: number; games: number }>>()
+    for (const [key, e] of cellMap) {
+      const sep = key.indexOf('\0')
+      const tier = key.slice(0, sep)
+      const dur = Number(key.slice(sep + 1))
+      if (!Number.isFinite(dur)) continue
+      let m = byTier.get(tier)
+      if (!m) {
+        m = new Map()
+        byTier.set(tier, m)
+      }
+      const prev = m.get(dur) ?? { wins: 0, games: 0 }
+      m.set(dur, { wins: prev.wins + e.wins, games: prev.games + e.games })
+    }
+
+    const series = [...byTier.entries()]
+      .sort(([a], [b]) => sortDurationTierKey(a, b))
+      .map(([rankTierKey, durMap]) => ({
+        rankTier: rankTierKey,
+        buckets: [...durMap.entries()]
+          .sort(([d1], [d2]) => d1 - d2)
+          .map(([durationMin, agg]) => ({
+            durationMin,
+            matchCount: agg.games,
+            wins: agg.wins,
+            winrate: agg.games > 0 ? Math.round((agg.wins / agg.games) * 10000) / 100 : 0,
+            durationMinutes: durationMin,
+            matches: agg.games,
+          })),
+      }))
+
+    return { series }
   } catch {
     return null
   }

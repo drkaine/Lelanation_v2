@@ -336,10 +336,12 @@
             <div v-else class="champion-portrait-placeholder"></div>
           </div>
 
-          <!-- Titre du build / variante (fallback = nom du champion) -->
-          <h2 class="champion-name">
-            {{ cardTitle }}
-          </h2>
+          <!-- Titre du build / variante (fallback = nom du champion) — zone hauteur fixe + police ajustée -->
+          <div ref="championTitleBoxRef" class="champion-name-box">
+            <h2 ref="championNameRef" class="champion-name" :title="cardTitle || undefined">
+              {{ cardTitle }}
+            </h2>
+          </div>
 
           <!-- Sorts d'invocateur (juste sous le nom) - Toujours visible -->
           <div
@@ -1445,6 +1447,8 @@ watch(
 const variantsPopoverOpen = ref(false)
 const variantsPopoverRef = ref<HTMLElement | null>(null)
 const variantsTriggerRef = ref<HTMLElement | null>(null)
+const championTitleBoxRef = ref<HTMLElement | null>(null)
+const championNameRef = ref<HTMLElement | null>(null)
 const copyPickerOpen = ref(false)
 const copySource = ref<'main' | number>('main')
 const copyDestinations = ref<('main' | number)[]>([])
@@ -2046,6 +2050,62 @@ const cardTitle = computed(() => {
   return selectedChampion.value ? selectedChampion.value.name.toUpperCase() : ''
 })
 
+const CHAMPION_TITLE_FONT_MAX_PX = 15
+const CHAMPION_TITLE_FONT_MIN_PX = 8
+let championTitleFitRaf = 0
+let championTitleResizeObserver: ResizeObserver | null = null
+
+/** Force layout so scrollWidth/scrollHeight reflect the latest font/size. */
+function flushLayout(node: HTMLElement): number {
+  return node.offsetHeight
+}
+
+function fitsChampionTitleInBox(el: HTMLElement, box: HTMLElement): boolean {
+  flushLayout(box)
+  const tol = 1
+  return el.scrollHeight <= box.clientHeight + tol && el.scrollWidth <= box.clientWidth + tol
+}
+
+function fitChampionTitle() {
+  if (!import.meta.client) return
+  const box = championTitleBoxRef.value
+  const el = championNameRef.value
+  if (!box || !el) return
+
+  el.style.fontSize = `${CHAMPION_TITLE_FONT_MAX_PX}px`
+  flushLayout(box)
+
+  if (fitsChampionTitleInBox(el, box)) return
+
+  let low = CHAMPION_TITLE_FONT_MIN_PX
+  let high = CHAMPION_TITLE_FONT_MAX_PX
+  let best = low
+  while (low <= high - 0.25) {
+    const mid = (low + high) / 2
+    el.style.fontSize = `${mid}px`
+    flushLayout(el)
+    if (fitsChampionTitleInBox(el, box)) {
+      best = mid
+      low = mid + 0.25
+    } else {
+      high = mid - 0.25
+    }
+  }
+  el.style.fontSize = `${best}px`
+}
+
+function scheduleFitChampionTitle() {
+  if (!import.meta.client) return
+  cancelAnimationFrame(championTitleFitRaf)
+  championTitleFitRaf = requestAnimationFrame(() => {
+    nextTick(() => fitChampionTitle())
+  })
+}
+
+watch(cardTitle, () => nextTick(() => scheduleFitChampionTitle()))
+watch(isLayoutScaled, () => nextTick(() => scheduleFitChampionTitle()))
+watch(showChampionSplashArt, () => nextTick(() => scheduleFitChampionTitle()))
+
 const { version: defaultVersion } = useGameVersion()
 // Version affichée (build ou courante)
 const version = computed(() => displayBuild.value?.gameVersion || defaultVersion.value)
@@ -2466,6 +2526,9 @@ onUnmounted(() => {
   window.removeEventListener('scroll', calculateTooltipPosition, true)
   window.removeEventListener('resize', calculateTooltipPosition)
   document.removeEventListener('mousedown', onDocumentPointerDown)
+  championTitleResizeObserver?.disconnect()
+  championTitleResizeObserver = null
+  cancelAnimationFrame(championTitleFitRaf)
 })
 
 // Reset build function
@@ -2725,6 +2788,15 @@ onMounted(() => {
     buildStore.ensureCurrentBuild()
   }
   document.addEventListener('mousedown', onDocumentPointerDown)
+
+  nextTick(() => {
+    scheduleFitChampionTitle()
+    const box = championTitleBoxRef.value
+    if (box && typeof ResizeObserver !== 'undefined') {
+      championTitleResizeObserver = new ResizeObserver(() => scheduleFitChampionTitle())
+      championTitleResizeObserver.observe(box)
+    }
+  })
 })
 
 watch(locale, () => {
@@ -3590,22 +3662,35 @@ defineExpose({
   z-index: 1;
 }
 
+.champion-name-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 6px;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
 .champion-name {
+  width: 100%;
+  margin: 0;
   font-size: 15px;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--color-primary-light);
   text-align: center;
-  margin: 0 4px 6px 4px;
   letter-spacing: 1px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  max-width: 100%;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  overflow-wrap: anywhere;
   word-break: break-word;
-  min-height: 36px;
+  hyphens: auto;
+  overflow: hidden;
 }
 
 .separator-line {

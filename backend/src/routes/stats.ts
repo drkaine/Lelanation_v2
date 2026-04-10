@@ -30,6 +30,7 @@ import {
   getOverviewSidesProgressionFullStats,
   getOverviewDurationWinrateStats,
   getDurationWinrateByChampion,
+  getDurationWinrateByChampionByTier,
   getOverviewProgressionStats,
   getOverviewProgressionFullStats,
   getInfosPatchDivisionMatrix,
@@ -584,7 +585,9 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   }
   const rankTier = rankTierParam(req.query.rankTier)
   const role = (req.query.role as string) || undefined
-  const data = await aggregator.load({ rankTier, role: role ?? null })
+  const version = queryString(req.query.version)
+  const loadBase = { rankTier, version: version ?? null }
+  const data = await aggregator.load({ ...loadBase, role: role ?? null })
   if (!data) {
     return res.status(404).json({ error: 'No stats available' })
   }
@@ -592,15 +595,32 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   if (!row) {
     return res.status(404).json({ error: 'Champion not found in stats' })
   }
+  let byRole = row.byRole
+  /** Taux de ban : agrégat global (tous rôles), le dénominateur ne doit pas suivre le filtre rôle. */
+  let banrate = row.banrate
+  let presence = row.presence
+  if (role) {
+    const dataAllRoles = await aggregator.load({ ...loadBase, role: null })
+    const rowAll = dataAllRoles?.champions.find(
+      (c: { championId: number }) => c.championId === championId
+    )
+    if (rowAll) {
+      if (rowAll.byRole && Object.keys(rowAll.byRole).length > 0) {
+        byRole = rowAll.byRole
+      }
+      if (rowAll.banrate != null) banrate = rowAll.banrate
+      if (rowAll.presence != null) presence = rowAll.presence
+    }
+  }
   return res.json({
     championId: row.championId,
     games: row.games,
     wins: row.wins,
     winrate: row.winrate,
     pickrate: row.pickrate,
-    banrate: row.banrate,
-    presence: row.presence,
-    byRole: row.byRole,
+    banrate,
+    presence,
+    byRole,
     totalGames: data.totalGames,
     generatedAt: data.generatedAt
   })
@@ -617,6 +637,22 @@ router.get('/champions/:championId/duration-winrate', async (req: Request, res: 
   const data = await getDurationWinrateByChampion(championId, version, rankTier)
   if (!data) {
     return res.status(200).json({ buckets: [] })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/duration-winrate-by-tier — courbes par ligue (même buckets 5 min). Query: ?version=…&role=…&rankTier=… */
+router.get('/champions/:championId/duration-winrate-by-tier', async (req: Request, res: Response) => {
+  const championId = parseInt(String(req.params.championId), 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getDurationWinrateByChampionByTier(championId, version, rankTier, role)
+  if (!data) {
+    return res.status(200).json({ series: [] })
   }
   return res.json(data)
 })

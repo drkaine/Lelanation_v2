@@ -13,9 +13,14 @@ const championsCache = new Map<
   string,
   { data: AggregatedStats; expiresAt: number }
 >()
-function championsCacheKey(rankTier: string | string[] | null, pRole: string | null): string {
+function championsCacheKey(
+  rankTier: string | string[] | null,
+  pRole: string | null,
+  pVersion: string | null
+): string {
   const rt = Array.isArray(rankTier) ? [...rankTier].sort().join(',') : rankTier ?? ''
-  return `${rt}|${pRole ?? ''}`
+  const v = pVersion ?? ''
+  return `${rt}|${pRole ?? ''}|${v}`
 }
 
 export interface ChampionStats {
@@ -56,14 +61,14 @@ export class RiotStatsAggregator {
       const pRegion = region != null && region !== '' ? region : null
 
       const now = Date.now()
-      const cacheKey = championsCacheKey(rankTier ?? null, pRole)
+      const cacheKey = championsCacheKey(rankTier ?? null, pRole, pVersion)
       const cached = championsCache.get(cacheKey)
       if (cached && cached.expiresAt > now) return cached.data
 
       const where: Record<string, unknown> = {}
       applyRankTierWhere(where, rankTier, { excludeUnrankedWhenEmpty: true })
       if (pRole) where.role = pRole
-      if (pVersion) where.gameVersion = pVersion
+      if (pVersion) where.gameVersion = { startsWith: pVersion }
       if (pRegion) where.region = pRegion
 
       const rows = await prisma.mvChampionCoreStat.findMany({
