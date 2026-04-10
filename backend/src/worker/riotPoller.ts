@@ -30,12 +30,162 @@ import {
   type RiotTimelineEventDragonSoulGiven,
   type RiotTimelineEventSkillLevelUp,
 } from '../services/RiotHttpClient.js'
+
+/** Mutable windows for poller_30m / poller_hourly (updated by emitPollerSummariesIfDue). */
+type PollerSummaryWindows = {
+  summary30mWindowStartedAtMs: number
+  summary30mPlayersPolled: number
+  summary30mPlayersFetched: number
+  summary30mMatchesFetched: number
+  summary30mRequestCount: number
+  summary30mError429Count: number
+  summary30mParticipantsFetched: number
+  summary30mNearLimitPauseCount: number
+  summary30mHttp429PauseCount: number
+  hourlyWindowStartedAtMs: number
+  hourlyPlayersPolled: number
+  hourlyPlayersFetched: number
+  hourlyMatchesFetched: number
+  hourlyRequestCount: number
+  hourlyError429Count: number
+  hourlyParticipantsFetched: number
+  hourlyNearLimitPauseCount: number
+  hourlyHttp429PauseCount: number
+}
+
+/** Emit 30m/hourly lines to unified log when windows elapse (runs on a timer so long MV refresh does not block summaries). */
+async function emitPollerSummariesIfDue(
+  client: RiotHttpClient,
+  hourlySummaryIntervalMs: number,
+  sw: PollerSummaryWindows
+): Promise<void> {
+  const now = Date.now()
+  if (now - sw.summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
+    const elapsedMs = Math.max(1, now - sw.summary30mWindowStartedAtMs)
+    const playersPolledDelta = state.playersPolled - sw.summary30mPlayersPolled
+    const playersFetchedDelta = state.playersFetched - sw.summary30mPlayersFetched
+    const matchesDelta = state.matchesFetched - sw.summary30mMatchesFetched
+    const requestsDelta = state.requestCount - sw.summary30mRequestCount
+    const error429Delta = state.error429Count - sw.summary30mError429Count
+    const participantsDelta = state.participantsFetched - sw.summary30mParticipantsFetched
+    const limiterStats = client.getRateLimiterStats()
+    const nearLimitPauseDelta =
+      limiterStats.nearLimitPauseCount - sw.summary30mNearLimitPauseCount
+    const http429PauseDelta = limiterStats.http429PauseCount - sw.summary30mHttp429PauseCount
+    const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const lastRlHeaders30m = client.getLastRiotRateLimitHeaders()
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'info',
+      script: 'poller_30m',
+      message: `Resume 30 min — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
+      json: {
+        windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
+        windowEndIso: new Date(now).toISOString(),
+        elapsedMs,
+        delta: {
+          playersPolled: playersPolledDelta,
+          newPlayers: playersFetchedDelta,
+          matches: matchesDelta,
+          participants: participantsDelta,
+          requests: requestsDelta,
+          error429: error429Delta,
+        },
+        requestsPerHour,
+        rateLimitRefreshPauses: nearLimitPauseDelta,
+        rateLimit429Pauses: http429PauseDelta,
+        totals: {
+          playersPolled: state.playersPolled,
+          newPlayers: state.playersFetched,
+          matches: state.matchesFetched,
+          participants: state.participantsFetched,
+          requests: state.requestCount,
+          error429: state.error429Count,
+          error400: state.error400Count,
+        },
+        riotRateLimitBuckets: {
+          app: limiterStats.appBuckets,
+          method: limiterStats.methodBuckets,
+        },
+        lastRiotRateLimitHeaders: lastRlHeaders30m,
+      },
+    })
+    sw.summary30mWindowStartedAtMs = now
+    sw.summary30mPlayersPolled = state.playersPolled
+    sw.summary30mPlayersFetched = state.playersFetched
+    sw.summary30mMatchesFetched = state.matchesFetched
+    sw.summary30mRequestCount = state.requestCount
+    sw.summary30mError429Count = state.error429Count
+    sw.summary30mParticipantsFetched = state.participantsFetched
+    sw.summary30mNearLimitPauseCount = limiterStats.nearLimitPauseCount
+    sw.summary30mHttp429PauseCount = limiterStats.http429PauseCount
+  }
+  if (now - sw.hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
+    const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
+    const playersPolledDelta = state.playersPolled - sw.hourlyPlayersPolled
+    const playersFetchedDelta = state.playersFetched - sw.hourlyPlayersFetched
+    const matchesDelta = state.matchesFetched - sw.hourlyMatchesFetched
+    const requestsDelta = state.requestCount - sw.hourlyRequestCount
+    const error429Delta = state.error429Count - sw.hourlyError429Count
+    const participantsDelta = state.participantsFetched - sw.hourlyParticipantsFetched
+    const limiterStats = client.getRateLimiterStats()
+    const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - sw.hourlyNearLimitPauseCount
+    const http429PauseDelta = limiterStats.http429PauseCount - sw.hourlyHttp429PauseCount
+    const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'info',
+      script: 'poller_hourly',
+      message: `Résumé horaire — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
+      json: {
+        windowStartIso: new Date(sw.hourlyWindowStartedAtMs).toISOString(),
+        windowEndIso: new Date(now).toISOString(),
+        elapsedMs,
+        delta: {
+          playersPolled: playersPolledDelta,
+          newPlayers: playersFetchedDelta,
+          matches: matchesDelta,
+          participants: participantsDelta,
+          requests: requestsDelta,
+          error429: error429Delta,
+        },
+        requestsPerHour,
+        rateLimitRefreshPauses: nearLimitPauseDelta,
+        rateLimit429Pauses: http429PauseDelta,
+        totals: {
+          playersPolled: state.playersPolled,
+          newPlayers: state.playersFetched,
+          matches: state.matchesFetched,
+          participants: state.participantsFetched,
+          requests: state.requestCount,
+          error429: state.error429Count,
+          error400: state.error400Count,
+        },
+        riotRateLimitBuckets: {
+          app: limiterStats.appBuckets,
+          method: limiterStats.methodBuckets,
+        },
+        lastRiotRateLimitHeaders: lastRlHeadersH,
+      },
+    })
+    sw.hourlyWindowStartedAtMs = now
+    sw.hourlyPlayersPolled = state.playersPolled
+    sw.hourlyPlayersFetched = state.playersFetched
+    sw.hourlyMatchesFetched = state.matchesFetched
+    sw.hourlyRequestCount = state.requestCount
+    sw.hourlyError429Count = state.error429Count
+    sw.hourlyParticipantsFetched = state.participantsFetched
+    sw.hourlyNearLimitPauseCount = limiterStats.nearLimitPauseCount
+    sw.hourlyHttp429PauseCount = limiterStats.http429PauseCount
+  }
+}
 import { Prisma } from '../generated/prisma/index.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
-import { syncActivePatches, refreshAllMaterializedViews } from '../services/MaterializedViewService.js'
+import { syncActivePatches } from '../services/MaterializedViewService.js'
 import {
   isKeptMatchPlayerDurationBucket,
   timelineTimestampMsToGameMinute,
@@ -49,7 +199,7 @@ const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
 const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 40
-const MV_REFRESH_EVERY_MS = 4 * 60 * 60 * 1000
+const SYNC_ACTIVE_PATCHES_EVERY_MS = 4 * 60 * 60 * 1000
 const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
 
 /** Ragrégateur `poller_hourly` : défaut 1h ; ex. `POLLER_HOURLY_SUMMARY_MS=60000` pour tester (min 60s, max 24h). */
@@ -61,8 +211,8 @@ function getPollerHourlySummaryIntervalMs(): number {
   const maxMs = 24 * 60 * 60 * 1000
   return Math.min(maxMs, Math.max(minMs, raw))
 }
-/** Dernière exécution du refresh MV (process). Initialisé à « maintenant » pour qu’un redémarrage (ex. `make build` → pm2) ne déclenche pas un refresh tout de suite : avec `0`, `Date.now()-0` dépassait toujours 4h. */
-let lastMvRefreshAt = Date.now()
+/** Dernière sync `active_patches` depuis les matchs (process). Même logique anti-burst qu’avant pour le refresh MV. */
+let lastSyncActivePatchesAt = Date.now()
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
@@ -2025,6 +2175,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
   const { client, logger, filters, clefType } = init
   const discord = new DiscordService()
   const hourlySummaryIntervalMs = getPollerHourlySummaryIntervalMs()
+  let summaryTicker: ReturnType<typeof setInterval> | null = null
   setState({
     isRunning: true,
     shouldStop: false,
@@ -2073,24 +2224,34 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
     const initLimiterStats = client.getRateLimiterStats()
-    let summary30mWindowStartedAtMs = Date.now()
-    let summary30mPlayersPolled = state.playersPolled
-    let summary30mPlayersFetched = state.playersFetched
-    let summary30mMatchesFetched = state.matchesFetched
-    let summary30mRequestCount = state.requestCount
-    let summary30mError429Count = state.error429Count
-    let summary30mParticipantsFetched = state.participantsFetched
-    let summary30mNearLimitPauseCount = initLimiterStats.nearLimitPauseCount
-    let summary30mHttp429PauseCount = initLimiterStats.http429PauseCount
-    let hourlyWindowStartedAtMs = Date.now()
-    let hourlyPlayersPolled = state.playersPolled
-    let hourlyPlayersFetched = state.playersFetched
-    let hourlyMatchesFetched = state.matchesFetched
-    let hourlyRequestCount = state.requestCount
-    let hourlyError429Count = state.error429Count
-    let hourlyParticipantsFetched = state.participantsFetched
-    let hourlyNearLimitPauseCount = initLimiterStats.nearLimitPauseCount
-    let hourlyHttp429PauseCount = initLimiterStats.http429PauseCount
+    const sw: PollerSummaryWindows = {
+      summary30mWindowStartedAtMs: Date.now(),
+      summary30mPlayersPolled: state.playersPolled,
+      summary30mPlayersFetched: state.playersFetched,
+      summary30mMatchesFetched: state.matchesFetched,
+      summary30mRequestCount: state.requestCount,
+      summary30mError429Count: state.error429Count,
+      summary30mParticipantsFetched: state.participantsFetched,
+      summary30mNearLimitPauseCount: initLimiterStats.nearLimitPauseCount,
+      summary30mHttp429PauseCount: initLimiterStats.http429PauseCount,
+      hourlyWindowStartedAtMs: Date.now(),
+      hourlyPlayersPolled: state.playersPolled,
+      hourlyPlayersFetched: state.playersFetched,
+      hourlyMatchesFetched: state.matchesFetched,
+      hourlyRequestCount: state.requestCount,
+      hourlyError429Count: state.error429Count,
+      hourlyParticipantsFetched: state.participantsFetched,
+      hourlyNearLimitPauseCount: initLimiterStats.nearLimitPauseCount,
+      hourlyHttp429PauseCount: initLimiterStats.http429PauseCount,
+    }
+
+    let summaryEmitChain: Promise<void> = Promise.resolve()
+    const scheduleSummaryEmit = (): void => {
+      summaryEmitChain = summaryEmitChain
+        .then(() => emitPollerSummariesIfDue(client, hourlySummaryIntervalMs, sw))
+        .catch(() => undefined)
+    }
+    summaryTicker = setInterval(scheduleSummaryEmit, 60_000)
 
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
@@ -2198,17 +2359,15 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         })
       }
 
-      // ── Sync active_patches puis refresh vues matérialisées (cadence réelle: 4h) ──
-      if (Date.now() - lastMvRefreshAt >= MV_REFRESH_EVERY_MS) {
+      // ── Sync active_patches (cadence: 4h) — refresh MV délégué au cron API (groupes décalés) ──
+      if (Date.now() - lastSyncActivePatchesAt >= SYNC_ACTIVE_PATCHES_EVERY_MS) {
         try {
           await syncActivePatches()
-          await refreshAllMaterializedViews()
-          lastMvRefreshAt = Date.now()
+          lastSyncActivePatchesAt = Date.now()
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : String(err)
-          await logger.alerte('Refresh MVs error (non-fatal)', errorMessage)
-          // Keep refresh cadence stable even on failures to avoid per-loop retry storms.
-          lastMvRefreshAt = Date.now()
+          await logger.alerte('syncActivePatches error (non-fatal)', errorMessage)
+          lastSyncActivePatchesAt = Date.now()
         }
       }
 
@@ -2231,125 +2390,6 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
 
       const now = Date.now()
-      if (now - summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
-        const elapsedMs = Math.max(1, now - summary30mWindowStartedAtMs)
-        const playersPolledDelta = state.playersPolled - summary30mPlayersPolled
-        const playersFetchedDelta = state.playersFetched - summary30mPlayersFetched
-        const matchesDelta = state.matchesFetched - summary30mMatchesFetched
-        const requestsDelta = state.requestCount - summary30mRequestCount
-        const error429Delta = state.error429Count - summary30mError429Count
-        const participantsDelta = state.participantsFetched - summary30mParticipantsFetched
-        const limiterStats = client.getRateLimiterStats()
-        const nearLimitPauseDelta =
-          limiterStats.nearLimitPauseCount - summary30mNearLimitPauseCount
-        const http429PauseDelta = limiterStats.http429PauseCount - summary30mHttp429PauseCount
-        const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
-        const lastRlHeaders30m = client.getLastRiotRateLimitHeaders()
-        await appendUnifiedLog({
-          section: 'back',
-          type: 'info',
-          script: 'poller_30m',
-          message: `Resume 30 min — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
-          json: {
-            windowStartIso: new Date(summary30mWindowStartedAtMs).toISOString(),
-            windowEndIso: new Date(now).toISOString(),
-            elapsedMs,
-            delta: {
-              playersPolled: playersPolledDelta,
-              newPlayers: playersFetchedDelta,
-              matches: matchesDelta,
-              participants: participantsDelta,
-              requests: requestsDelta,
-              error429: error429Delta,
-            },
-            requestsPerHour,
-            rateLimitRefreshPauses: nearLimitPauseDelta,
-            rateLimit429Pauses: http429PauseDelta,
-            totals: {
-              playersPolled: state.playersPolled,
-              newPlayers: state.playersFetched,
-              matches: state.matchesFetched,
-              participants: state.participantsFetched,
-              requests: state.requestCount,
-              error429: state.error429Count,
-              error400: state.error400Count,
-            },
-            riotRateLimitBuckets: {
-              app: limiterStats.appBuckets,
-              method: limiterStats.methodBuckets,
-            },
-            lastRiotRateLimitHeaders: lastRlHeaders30m,
-          },
-        })
-        summary30mWindowStartedAtMs = now
-        summary30mPlayersPolled = state.playersPolled
-        summary30mPlayersFetched = state.playersFetched
-        summary30mMatchesFetched = state.matchesFetched
-        summary30mRequestCount = state.requestCount
-        summary30mError429Count = state.error429Count
-        summary30mParticipantsFetched = state.participantsFetched
-        summary30mNearLimitPauseCount = limiterStats.nearLimitPauseCount
-        summary30mHttp429PauseCount = limiterStats.http429PauseCount
-      }
-      if (now - hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
-        const elapsedMs = Math.max(1, now - hourlyWindowStartedAtMs)
-        const playersPolledDelta = state.playersPolled - hourlyPlayersPolled
-        const playersFetchedDelta = state.playersFetched - hourlyPlayersFetched
-        const matchesDelta = state.matchesFetched - hourlyMatchesFetched
-        const requestsDelta = state.requestCount - hourlyRequestCount
-        const error429Delta = state.error429Count - hourlyError429Count
-        const participantsDelta = state.participantsFetched - hourlyParticipantsFetched
-        const limiterStats = client.getRateLimiterStats()
-        const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - hourlyNearLimitPauseCount
-        const http429PauseDelta = limiterStats.http429PauseCount - hourlyHttp429PauseCount
-        const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
-        const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
-        await appendUnifiedLog({
-          section: 'back',
-          type: 'info',
-          script: 'poller_hourly',
-          message: `Résumé horaire — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
-          json: {
-            windowStartIso: new Date(hourlyWindowStartedAtMs).toISOString(),
-            windowEndIso: new Date(now).toISOString(),
-            elapsedMs,
-            delta: {
-              playersPolled: playersPolledDelta,
-              newPlayers: playersFetchedDelta,
-              matches: matchesDelta,
-              participants: participantsDelta,
-              requests: requestsDelta,
-              error429: error429Delta,
-            },
-            requestsPerHour,
-            rateLimitRefreshPauses: nearLimitPauseDelta,
-            rateLimit429Pauses: http429PauseDelta,
-            totals: {
-              playersPolled: state.playersPolled,
-              newPlayers: state.playersFetched,
-              matches: state.matchesFetched,
-              participants: state.participantsFetched,
-              requests: state.requestCount,
-              error429: state.error429Count,
-              error400: state.error400Count,
-            },
-            riotRateLimitBuckets: {
-              app: limiterStats.appBuckets,
-              method: limiterStats.methodBuckets,
-            },
-            lastRiotRateLimitHeaders: lastRlHeadersH,
-          },
-        })
-        hourlyWindowStartedAtMs = now
-        hourlyPlayersPolled = state.playersPolled
-        hourlyPlayersFetched = state.playersFetched
-        hourlyMatchesFetched = state.matchesFetched
-        hourlyRequestCount = state.requestCount
-        hourlyError429Count = state.error429Count
-        hourlyParticipantsFetched = state.participantsFetched
-        hourlyNearLimitPauseCount = limiterStats.nearLimitPauseCount
-        hourlyHttp429PauseCount = limiterStats.http429PauseCount
-      }
       if (now - heartbeatAtMs >= 60_000) {
         const deltaPlayersPolled = state.playersPolled - heartbeatPlayersPolled
         const deltaPlayersFetched = state.playersFetched - heartbeatPlayersFetched
@@ -2378,6 +2418,10 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     await logger.error('Poller loop error', msg)
     setState({ lastError: msg })
   } finally {
+    if (summaryTicker != null) {
+      clearInterval(summaryTicker)
+      summaryTicker = null
+    }
     setState({ isRunning: false, shouldStop: false, lastLoopFinishedAt: new Date().toISOString() })
     const stopped = getRiotPollerStatus()
     console.log(

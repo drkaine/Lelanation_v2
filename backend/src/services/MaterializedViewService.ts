@@ -18,7 +18,7 @@ import { prisma, isDatabaseConfigured } from '../db.js'
 import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { loadMatchFilters } from './RiotConfigService.js'
 
-const MV_NAMES = [
+export const MV_NAMES = [
   'mv_champion_core_stats',
   'mv_champion_vs_stats',
   'mv_champion_duo_role_stats',
@@ -46,11 +46,50 @@ const MV_NAMES = [
   'mv_champion_summoner_spell_pair_stats',
   'mv_champion_item_starter_set_stats',
 ] as const
+
+/** Partition de `MV_NAMES` pour refresh décalé (cron API). */
+export const MV_REFRESH_GROUPS: readonly (readonly string[])[] = [
+  [
+    'mv_champion_core_stats',
+    'mv_champion_vs_stats',
+    'mv_champion_duo_role_stats',
+    'mv_botlane_duo_vs_duo_stats',
+    'mv_team_core_stats',
+    'mv_champion_first_objectif_stats',
+  ],
+  [
+    'mv_champion_objectif_stats',
+    'mv_champion_vision_stats',
+    'mv_champion_combat_stats',
+    'mv_champion_matchup_stats',
+    'mv_champion_challenge_stats',
+    'mv_champion_shard_solo_stats',
+  ],
+  [
+    'mv_champion_runes_solo_stats',
+    'mv_champion_shard_stats',
+    'mv_champion_runes_stats',
+    'mv_champion_item_solo_stats',
+    'mv_champion_item_stats',
+    'mv_champion_spell_solo_stats',
+  ],
+  [
+    'mv_champion_summoner_spells',
+    'mv_champion_bucket',
+    'mv_champion_bans_by_banner',
+    'mv_team_bucket',
+    'mv_match_outcome_stats',
+    'mv_champion_side_stats',
+    'mv_champion_summoner_spell_pair_stats',
+    'mv_champion_item_starter_set_stats',
+  ],
+]
+
 const missingViews = new Set<string>()
 
-async function refreshAllMaterializedViewsWithoutConcurrently(): Promise<MvRefreshTimingRow[]> {
+async function refreshMvList(names: readonly string[]): Promise<MvRefreshTimingRow[]> {
   const timings: MvRefreshTimingRow[] = []
-  for (const mvName of MV_NAMES) {
+  for (const mvName of names) {
     if (missingViews.has(mvName)) continue
     const t0 = Date.now()
     try {
@@ -243,8 +282,17 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
   return touched
 }
 
-/** Un seul refresh à la fois : évite deux `debut` sans `fin` cohérent si poller + snapshot (ou autres) se chevauchent. */
-let mvRefreshInFlight: Promise<void> | null = null
+/**
+ * Enfile les refresh MV : chaque job s’exécute après le précédent (succès ou échec),
+ * sans perdre un refresh déclenché pendant qu’un autre tourne.
+ */
+let mvRefreshTail: Promise<unknown> = Promise.resolve()
+
+function enqueueMvRefresh(fn: () => Promise<void>): Promise<void> {
+  const next = mvRefreshTail.then(() => fn())
+  mvRefreshTail = next.catch(() => undefined)
+  return next
+}
 
 async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
   const t0 = Date.now()
@@ -256,7 +304,7 @@ async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
   })
   try {
     await ensureMaterializedViewsPopulated()
-    const mvTimings = await refreshAllMaterializedViewsWithoutConcurrently()
+    const mvTimings = await refreshMvList(MV_NAMES)
     const durationMs = Date.now() - t0
     const missingCount = missingViews.size
     const slowest = [...mvTimings].sort((a, b) => b.ms - a.ms)[0]
@@ -287,22 +335,70 @@ async function runRefreshAllMaterializedViewsOnce(): Promise<void> {
   }
 }
 
+async function runRefreshMaterializedViewGroupOnce(groupIndex: number): Promise<void> {
+  const group = MV_REFRESH_GROUPS[groupIndex]
+  if (!group?.length) return
+  const t0 = Date.now()
+  await appendUnifiedLog({
+    section: 'db',
+    type: 'debut',
+    script: 'mv_refresh',
+    message: `Début refresh MV groupe ${groupIndex}`,
+    json: { groupIndex, groupSize: group.length },
+  })
+  try {
+    await ensureMaterializedViewsPopulated()
+    const mvTimings = await refreshMvList(group)
+    const durationMs = Date.now() - t0
+    const missingCount = missingViews.size
+    const slowest = [...mvTimings].sort((a, b) => b.ms - a.ms)[0]
+    await appendUnifiedLog({
+      section: 'db',
+      type: 'fin',
+      script: 'mv_refresh',
+      message: `Fin refresh MV groupe ${groupIndex} (${Math.round(durationMs / 1000)}s)`,
+      json: {
+        groupIndex,
+        groupSize: group.length,
+        durationMs,
+        missingSkipped: missingCount,
+        mvTimings,
+        slowestMv: slowest ? { name: slowest.name, ms: slowest.ms, how: slowest.how } : undefined,
+      },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    await appendUnifiedLog({
+      section: 'db',
+      type: 'erreur',
+      script: 'mv_refresh',
+      message: msg,
+      json: {
+        durationMs: Date.now() - t0,
+        groupIndex,
+        queryHint: 'REFRESH MATERIALIZED VIEW',
+      },
+    })
+    throw err
+  }
+}
+
 /**
- * Lance le refresh des vues matérialisées (CONCURRENTLY).
- * À appeler périodiquement (ex. toutes les 2h ou après chaque batch d'agrégation, selon charge).
- * Les appels concurrents partagent la même exécution (pas de second `debut` ni refresh DB en double).
+ * Refresh d’un groupe (indices alignés sur `MV_REFRESH_GROUPS`). Pass par la file sérialisée.
+ */
+export async function refreshMaterializedViewGroup(groupIndex: number): Promise<void> {
+  if (!isDatabaseConfigured()) return
+  if (groupIndex < 0 || groupIndex >= MV_REFRESH_GROUPS.length) return
+  return enqueueMvRefresh(() => runRefreshMaterializedViewGroupOnce(groupIndex))
+}
+
+/**
+ * Lance le refresh de toutes les vues matérialisées (CONCURRENTLY par vue).
+ * Les appels sont sérialisés : un refresh complet après l’autre si plusieurs demandes se chevauchent.
  */
 export async function refreshAllMaterializedViews(): Promise<void> {
   if (!isDatabaseConfigured()) return
-  if (mvRefreshInFlight) return mvRefreshInFlight
-  mvRefreshInFlight = (async () => {
-    try {
-      await runRefreshAllMaterializedViewsOnce()
-    } finally {
-      mvRefreshInFlight = null
-    }
-  })()
-  return mvRefreshInFlight
+  return enqueueMvRefresh(runRefreshAllMaterializedViewsOnce)
 }
 
 /**

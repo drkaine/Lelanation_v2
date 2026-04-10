@@ -15,6 +15,7 @@ import shareBuildsRoutes from './routes/shareBuilds.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
+import { setupMaterializedViewStaggeredRefresh } from './cron/materializedViewRefresh.js'
 // import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
@@ -61,6 +62,7 @@ try {
   setupDataDragonSync()
   setupYouTubeSync()
   setupCommunityDragonSync()
+  setupMaterializedViewStaggeredRefresh()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

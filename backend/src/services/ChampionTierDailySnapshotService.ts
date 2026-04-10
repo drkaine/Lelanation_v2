@@ -12,8 +12,6 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
-import { refreshAllMaterializedViews } from './MaterializedViewService.js'
-
 type Logger = ReturnType<typeof createRiotPollerLogger>
 let lastActiveRefreshAtMs = 0
 const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM'] as const
@@ -287,7 +285,6 @@ export async function tryRunChampionTierDailySnapshot(logger?: Logger): Promise<
       totalRowsTouched += insertedEstimate
     }
 
-    await refreshAllMaterializedViews().catch(() => undefined)
     const archivedDays = await archiveSnapshotsForCompletedPatches(logger)
     lastActiveRefreshAtMs = Date.now()
     await appendUnifiedLog({
