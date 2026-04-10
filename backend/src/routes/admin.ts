@@ -37,6 +37,11 @@ import {
   type LeagueXpOptions,
 } from '../worker/scriptOrchestrator.js'
 import { getRiotPollerStatus } from '../worker/riotPoller.js'
+import { buildRiotPollerAdminPayload } from '../services/PollerAdminView.js'
+import {
+  aggregatePollerMetricsFromUnifiedLog,
+  type PollerLogSource,
+} from '../services/PollerMetricsFromLog.js'
 import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 
@@ -426,37 +431,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
 
   const orchestratorStatus = getOrchestratorStatus()
   const lastFinished = getLastFinishedInfo()
-  const pollerStatus = getRiotPollerStatus()
-  const latestPlayerSeen = await prisma.player.findFirst({
-    where: { lastSeen: { not: null } },
-    orderBy: { lastSeen: 'desc' },
-    select: { lastSeen: true },
-  }).catch(() => null)
-  const startedAt = pollerStatus.lastLoopStartedAt ? new Date(pollerStatus.lastLoopStartedAt).getTime() : 0
-  const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
-  const requestsPerMinute =
-    elapsedMin >= 1 / 60 ? Math.round((pollerStatus.requestCount / elapsedMin) * 10) / 10 : null
-  const requestsPer2Min = requestsPerMinute != null ? Math.round(requestsPerMinute * 2 * 10) / 10 : null
-
-  const riotPoller = {
-    isRunning: pollerStatus.isRunning,
-    status: pollerStatus.isRunning ? 'running' : (pollerStatus.lastError ? 'error' : 'stopped'),
-    lastError: pollerStatus.lastError,
-    lastLoopStartedAt: pollerStatus.lastLoopStartedAt,
-    lastLoopFinishedAt: pollerStatus.lastLoopFinishedAt,
-    requestCount: pollerStatus.requestCount,
-    error429Count: pollerStatus.error429Count,
-    requestsPerMinute,
-    requestsPer2Min,
-    error400Count: pollerStatus.error400Count,
-    matchesFetched: pollerStatus.matchesFetched,
-    playersFetched: pollerStatus.playersFetched,
-    participantsFetched: pollerStatus.participantsFetched,
-    matchesRankFixed: pollerStatus.matchesRankFixed,
-    participantsRankFixed: pollerStatus.participantsRankFixed,
-    participantsRoleFixed: pollerStatus.participantsRoleFixed,
-    latestPlayerLastSeenAt: latestPlayerSeen?.lastSeen?.toISOString() ?? null,
-  }
+  const riotPoller = await buildRiotPollerAdminPayload()
 
   const orchestrator = {
     activeScript: orchestratorStatus.activeScript,
@@ -473,7 +448,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
   const scripts = [
     {
       script: 'poller',
-      status: orchestratorStatus.activeScript === 'poller' && orchestratorStatus.isRunning ? 'running' : 'stopped',
+      status: riotPoller.isRunning ? 'running' : 'stopped',
     },
     {
       script: 'puuid-migration',
@@ -501,22 +476,71 @@ const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
 
 router.get('/riot-poller/status', async (_req, res) => {
-  const s = getRiotPollerStatus()
-  const startedAt = s.lastLoopStartedAt ? new Date(s.lastLoopStartedAt).getTime() : 0
-  const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
-  const requestsPerMinute = elapsedMin >= 1 / 60 ? Math.round((s.requestCount / elapsedMin) * 10) / 10 : null
-  const requestsPer2Min = requestsPerMinute != null ? Math.round(requestsPerMinute * 2 * 10) / 10 : null
-  const latestPlayerSeen = await prisma.player.findFirst({
-    where: { lastSeen: { not: null } },
-    orderBy: { lastSeen: 'desc' },
-    select: { lastSeen: true },
-  }).catch(() => null)
-  return res.json({
-    ...s,
-    requestsPerMinute,
-    requestsPer2Min,
-    latestPlayerLastSeenAt: latestPlayerSeen?.lastSeen?.toISOString() ?? null,
-  })
+  const payload = await buildRiotPollerAdminPayload()
+  return res.json(payload)
+})
+
+/** GET /api/admin/riot-poller/metrics — aggregate poller_hourly / poller_30m from unified log */
+router.get('/riot-poller/metrics', async (req, res) => {
+  try {
+    const granularity = req.query.granularity === 'day' ? 'day' : 'hour'
+    const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'both'
+    let sources: PollerLogSource[] = ['poller_hourly', 'poller_30m']
+    if (sourceParam === 'hourly') sources = ['poller_hourly']
+    else if (sourceParam === '30m' || sourceParam === 'poller_30m') sources = ['poller_30m']
+
+    const now = new Date()
+    const toIso =
+      typeof req.query.to === 'string' && req.query.to.trim()
+        ? req.query.to.trim()
+        : now.toISOString()
+    let fromIso: string
+    if (typeof req.query.from === 'string' && req.query.from.trim()) {
+      fromIso = req.query.from.trim()
+    } else if (granularity === 'day') {
+      const days = Math.min(Math.max(parseInt(String(req.query.days ?? '14'), 10) || 14, 1), 90)
+      fromIso = new Date(now.getTime() - days * 86_400_000).toISOString()
+    } else {
+      const hours = Math.min(Math.max(parseInt(String(req.query.hours ?? '72'), 10) || 72, 1), 168)
+      fromIso = new Date(now.getTime() - hours * 3_600_000).toISOString()
+    }
+
+    const { buckets, logPath, linesScanned, matched } = await aggregatePollerMetricsFromUnifiedLog({
+      granularity,
+      fromIso,
+      toIso,
+      sources,
+    })
+
+    const sum = (fn: (b: (typeof buckets)[0]) => number) => buckets.reduce((a, b) => a + fn(b), 0)
+    return res.json({
+      granularity,
+      fromIso,
+      toIso,
+      sources,
+      logPath,
+      linesScanned,
+      matchedLines: matched,
+      buckets,
+      totals: {
+        requests: sum((b) => b.requests),
+        error429: sum((b) => b.error429),
+        error400: sum((b) => b.error400),
+        matches: sum((b) => b.matches),
+        participants: sum((b) => b.participants),
+        playersPolled: sum((b) => b.playersPolled),
+        newPlayers: sum((b) => b.newPlayers),
+        rateLimitRefreshPauses: sum((b) => b.rateLimitRefreshPauses),
+        rateLimit429Pauses: sum((b) => b.rateLimit429Pauses),
+        sampleCount: sum((b) => b.sampleCount),
+      },
+    })
+  } catch (err) {
+    return res.status(500).json({
+      error: err instanceof Error ? err.message : String(err),
+      buckets: [],
+    })
+  }
 })
 
 /** GET /api/admin/riot-script/status — unified orchestrator status (all scripts). */

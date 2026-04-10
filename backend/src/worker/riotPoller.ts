@@ -2272,6 +2272,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
               participants: state.participantsFetched,
               requests: state.requestCount,
               error429: state.error429Count,
+              error400: state.error400Count,
             },
             riotRateLimitBuckets: {
               app: limiterStats.appBuckets,
@@ -2378,15 +2379,16 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     setState({ lastError: msg })
   } finally {
     setState({ isRunning: false, shouldStop: false, lastLoopFinishedAt: new Date().toISOString() })
+    const stopped = getRiotPollerStatus()
     console.log(
       '[RiotPoller] Poller stopped',
       JSON.stringify({
-        requestCount: state.requestCount,
-        error429: state.error429Count,
-        matchesFetched: state.matchesFetched,
-        playersFetched: state.playersFetched,
-        playersPolled: state.playersPolled,
-        participantsFetched: state.participantsFetched,
+        requestCount: stopped.requestCount,
+        error429: stopped.error429Count,
+        matchesFetched: stopped.matchesFetched,
+        playersFetched: stopped.playersFetched,
+        playersPolled: stopped.playersPolled,
+        participantsFetched: stopped.participantsFetched,
       })
     )
   }

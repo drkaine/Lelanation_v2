@@ -441,12 +441,33 @@
             <span class="text-text/60">{{ dataSectionPoller ? '▼' : '▶' }}</span>
           </button>
           <div v-show="dataSectionPoller" class="border-t border-primary/20 px-4 pb-4 pt-2">
+            <p v-if="riotPollerStatus?.pollerExternal" class="mb-2 text-xs text-text/70">
+              Poller dans un process PM2 séparé (<code class="rounded bg-background px-1"
+                >lelanation-poller</code
+              >) — contrôle :
+              <code class="rounded bg-background px-1">pm2 stop|restart lelanation-poller</code>.
+              Les boutons ci-dessous ne s’appliquent qu’au poller intégré au backend (sans
+              POLLER_EXTERNAL).
+            </p>
+            <p
+              v-if="riotPollerStatus?.heartbeatStale"
+              class="mb-2 text-xs text-amber-700 dark:text-amber-400"
+            >
+              Dernier résumé poller dans le log unifié (poller_30m / poller_hourly) trop ancien — le
+              process est peut-être arrêté. Totaux = dernier résumé connu.
+              <span v-if="riotPollerStatus?.snapshotAgeMs != null" class="text-text/60">
+                (âge {{ Math.round(riotPollerStatus.snapshotAgeMs / 1000) }} s)
+              </span>
+            </p>
             <div class="mb-3 flex flex-wrap items-center gap-2">
               <span
                 :class="riotPollerStatusClass(riotPollerStatus?.status)"
                 class="rounded px-2 py-0.5 text-xs font-medium"
               >
                 {{ riotPollerStatusLabel(riotPollerStatus?.status) }}
+              </span>
+              <span v-if="riotPollerStatus?.statusSource" class="text-xs text-text/50">
+                source: {{ riotPollerStatus.statusSource }}
               </span>
               <span
                 v-if="riotPollerStatus?.lastError"
@@ -456,9 +477,9 @@
                 {{ riotPollerStatus.lastError }}
               </span>
             </div>
-            <div class="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div class="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:grid-cols-6">
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Requêtes</span>
+                <span class="text-text/70">Requêtes (session)</span>
                 <div class="font-medium text-text">{{ riotPollerStatus?.requestCount ?? '—' }}</div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
@@ -472,9 +493,27 @@
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">429</span>
+                <span class="text-text/70">429 (session)</span>
                 <div class="font-medium text-text">
                   {{ riotPollerStatus?.error429Count ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">400 (session)</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.error400Count ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Pauses near-limit</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.nearLimitPauseCount ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Pauses 429</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.http429PauseCount ?? '—' }}
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
@@ -484,13 +523,19 @@
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Players</span>
+                <span class="text-text/70">Joueurs pollers</span>
+                <div class="font-medium text-text">
+                  {{ riotPollerStatus?.playersPolled ?? '—' }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-2">
+                <span class="text-text/70">Nouveaux players</span>
                 <div class="font-medium text-text">
                   {{ riotPollerStatus?.playersFetched ?? '—' }}
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Dernière boucle</span>
+                <span class="text-text/70">Dernier lastSeen (DB)</span>
                 <div class="font-medium text-text">
                   {{ formatRiotDate(riotPollerStatus?.latestPlayerLastSeenAt ?? null) }}
                 </div>
@@ -508,7 +553,11 @@
               <button
                 type="button"
                 class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
-                :disabled="!riotPollerStatus?.isRunning || riotPollerStopBusy"
+                :disabled="
+                  riotPollerStatus?.pollerExternal ||
+                  !riotPollerStatus?.isRunning ||
+                  riotPollerStopBusy
+                "
                 @click="stopRiotPoller"
               >
                 {{ riotPollerStopBusy ? '…' : 'Arrêter proprement' }}
@@ -516,7 +565,11 @@
               <button
                 type="button"
                 class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="riotPollerStatus?.isRunning || riotPollerStartBusy"
+                :disabled="
+                  riotPollerStatus?.pollerExternal ||
+                  riotPollerStatus?.isRunning ||
+                  riotPollerStartBusy
+                "
                 @click="startRiotPoller"
               >
                 {{ riotPollerStartBusy ? '…' : 'Relancer' }}
@@ -532,6 +585,138 @@
             >
               {{ riotPollerActionMessage }}
             </p>
+
+            <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
+              <h3 class="mb-2 text-sm font-semibold text-text">Historique (log unifié)</h3>
+              <p class="mb-2 text-xs text-text/60">
+                Agrégation des lignes <code class="rounded bg-surface px-1">poller_hourly</code> et
+                <code class="rounded bg-surface px-1">poller_30m</code> (deltas par période).
+              </p>
+              <div class="mb-2 flex flex-wrap items-end gap-2">
+                <label class="flex flex-col gap-0.5 text-xs text-text/70">
+                  Pas
+                  <select
+                    v-model="pollerMetricsGranularity"
+                    class="rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                  >
+                    <option value="hour">Par heure</option>
+                    <option value="day">Par jour</option>
+                  </select>
+                </label>
+                <label
+                  v-if="pollerMetricsGranularity === 'hour'"
+                  class="flex flex-col gap-0.5 text-xs text-text/70"
+                >
+                  Fenêtre (h)
+                  <input
+                    v-model.number="pollerMetricsHours"
+                    type="number"
+                    min="1"
+                    max="168"
+                    class="w-20 rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                  />
+                </label>
+                <label v-else class="flex flex-col gap-0.5 text-xs text-text/70">
+                  Fenêtre (j)
+                  <input
+                    v-model.number="pollerMetricsDays"
+                    type="number"
+                    min="1"
+                    max="90"
+                    class="w-20 rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                  />
+                </label>
+                <label class="flex flex-col gap-0.5 text-xs text-text/70">
+                  Source
+                  <select
+                    v-model="pollerMetricsSource"
+                    class="rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
+                  >
+                    <option value="both">Résumés horaires + 30 min</option>
+                    <option value="hourly">Résumés horaires seulement</option>
+                    <option value="30m">Résumés 30 min seulement</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text hover:bg-primary/20 disabled:opacity-50"
+                  :disabled="pollerMetricsLoading"
+                  @click="loadPollerMetrics"
+                >
+                  {{ pollerMetricsLoading ? '…' : 'Actualiser' }}
+                </button>
+              </div>
+              <p v-if="pollerMetricsError" class="mb-2 text-sm text-error">
+                {{ pollerMetricsError }}
+              </p>
+              <div
+                v-if="pollerMetricsTotals && !pollerMetricsLoading"
+                class="mb-2 grid grid-cols-2 gap-1 text-xs sm:grid-cols-4"
+              >
+                <div>
+                  <span class="text-text/60">Σ requêtes</span>
+                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.requests }}</span>
+                </div>
+                <div>
+                  <span class="text-text/60">Σ 429</span>
+                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.error429 }}</span>
+                </div>
+                <div>
+                  <span class="text-text/60">Σ matchs</span>
+                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.matches }}</span>
+                </div>
+                <div>
+                  <span class="text-text/60">Lignes lues</span>
+                  <span class="ml-1 font-medium text-text">{{ pollerMetricsMatchedLines }}</span>
+                </div>
+              </div>
+              <div class="max-h-72 overflow-auto rounded border border-primary/15">
+                <table class="w-full min-w-[640px] text-left text-xs">
+                  <thead class="sticky top-0 bg-surface/90 text-text/70">
+                    <tr>
+                      <th class="px-2 py-1.5">Période (UTC)</th>
+                      <th class="px-2 py-1.5 text-right">Req</th>
+                      <th class="px-2 py-1.5 text-right">429</th>
+                      <th class="px-2 py-1.5 text-right">400</th>
+                      <th class="px-2 py-1.5 text-right">Matchs</th>
+                      <th class="px-2 py-1.5 text-right">Participants</th>
+                      <th class="px-2 py-1.5 text-right">Pollers</th>
+                      <th class="px-2 py-1.5 text-right">Échant.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="row in pollerMetricsBuckets"
+                      :key="row.key"
+                      class="border-t border-primary/10 odd:bg-background/20"
+                    >
+                      <td class="px-2 py-1 font-mono text-text">
+                        {{ formatPollerMetricPeriod(row) }}
+                      </td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.requests }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.error429 }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.error400 }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.matches }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.participants }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">{{ row.playersPolled }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-text/60">
+                        {{ row.sampleCount }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p
+                  v-if="
+                    !pollerMetricsLoading &&
+                    pollerMetricsBuckets.length === 0 &&
+                    !pollerMetricsError
+                  "
+                  class="p-3 text-text/60"
+                >
+                  Aucune donnée dans la plage — cliquez sur Actualiser.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1823,12 +2008,104 @@ const riotPollerStatus = ref<{
   error400Count: number
   matchesFetched: number
   playersFetched: number
+  playersPolled?: number
   participantsFetched: number
   matchesRankFixed: number
   participantsRankFixed: number
   participantsRoleFixed: number
   latestPlayerLastSeenAt?: string | null
+  statusSource?: 'process' | 'unified_log' | 'unified_log_stale'
+  snapshotUpdatedAt?: string | null
+  snapshotAgeMs?: number | null
+  heartbeatStale?: boolean
+  pollerExternal?: boolean
+  nearLimitPauseCount?: number
+  http429PauseCount?: number
 } | null>(null)
+
+type PollerMetricsBucketRow = {
+  key: string
+  periodStartIso: string
+  requests: number
+  error429: number
+  error400: number
+  matches: number
+  participants: number
+  playersPolled: number
+  newPlayers: number
+  rateLimitRefreshPauses: number
+  rateLimit429Pauses: number
+  sampleCount: number
+}
+
+const pollerMetricsGranularity = ref<'hour' | 'day'>('hour')
+const pollerMetricsHours = ref(72)
+const pollerMetricsDays = ref(14)
+const pollerMetricsSource = ref<'both' | 'hourly' | '30m'>('both')
+const pollerMetricsLoading = ref(false)
+const pollerMetricsError = ref('')
+const pollerMetricsBuckets = ref<PollerMetricsBucketRow[]>([])
+const pollerMetricsTotals = ref<{
+  requests: number
+  error429: number
+  error400: number
+  matches: number
+  participants: number
+  playersPolled: number
+  newPlayers: number
+  rateLimitRefreshPauses: number
+  rateLimit429Pauses: number
+  sampleCount: number
+} | null>(null)
+const pollerMetricsMatchedLines = ref(0)
+
+function formatPollerMetricPeriod(row: PollerMetricsBucketRow): string {
+  const g = pollerMetricsGranularity.value
+  if (g === 'day') return row.key
+  if (row.key.length >= 13) {
+    const d = row.key.slice(0, 10)
+    const h = row.key.slice(11, 13)
+    return `${d} ${h}h`
+  }
+  return row.key
+}
+
+async function loadPollerMetrics() {
+  pollerMetricsLoading.value = true
+  pollerMetricsError.value = ''
+  try {
+    const params = new URLSearchParams()
+    params.set('granularity', pollerMetricsGranularity.value)
+    params.set('source', pollerMetricsSource.value)
+    if (pollerMetricsGranularity.value === 'hour') {
+      params.set('hours', String(Math.min(168, Math.max(1, pollerMetricsHours.value || 72))))
+    } else {
+      params.set('days', String(Math.min(90, Math.max(1, pollerMetricsDays.value || 14))))
+    }
+    const res = await fetchWithAuth(apiUrl(`/api/admin/riot-poller/metrics?${params.toString()}`))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      pollerMetricsError.value = data?.error ?? `Erreur ${res.status}`
+      pollerMetricsBuckets.value = []
+      pollerMetricsTotals.value = null
+      return
+    }
+    pollerMetricsBuckets.value = Array.isArray(data?.buckets) ? data.buckets : []
+    pollerMetricsTotals.value = data?.totals ?? null
+    pollerMetricsMatchedLines.value = typeof data?.matchedLines === 'number' ? data.matchedLines : 0
+  } catch (e) {
+    pollerMetricsError.value = e instanceof Error ? e.message : 'Erreur réseau'
+    pollerMetricsBuckets.value = []
+    pollerMetricsTotals.value = null
+  } finally {
+    pollerMetricsLoading.value = false
+  }
+}
 const riotScriptStatusRows = computed(() => {
   const s = riotScriptsStatus.value
   return [
@@ -3336,6 +3613,9 @@ onMounted(async () => {
     unifiedLogOffset.value = 0
     loadUnifiedLogs().catch(() => {})
   }
+  if (activeTab.value === 'data' && dataSectionPoller.value) {
+    loadPollerMetrics().catch(() => {})
+  }
 })
 
 // Sync URL when tab changes (refresh will restore the tab)
@@ -3359,6 +3639,7 @@ watch(activeTab, (tab, prevTab) => {
     loadDataStats()
     loadActivePatches()
     loadBalanceRules()
+    if (dataSectionPoller.value) loadPollerMetrics().catch(() => {})
     // Seed players UI removed
     dataTabPollTimer = setInterval(() => {
       loadRiotScriptsStatus()

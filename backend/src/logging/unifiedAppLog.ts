@@ -68,6 +68,7 @@ export function formatUnifiedLogLine(input: UnifiedLogAppendInput): string {
   return `[${input.section}] [${input.type}] [${script}]\t${iso}\t${msg}\t${jsonPart}`
 }
 
+/** Exported for poller metrics aggregation (admin). */
 export function parseUnifiedLogLine(line: string, lineNumber: number): ParsedUnifiedLogEntry | null {
   const trimmed = line.trim()
   if (!trimmed) return null
@@ -103,6 +104,54 @@ export function parseUnifiedLogLine(line: string, lineNumber: number): ParsedUni
     json,
     lineNumber,
   }
+}
+
+/** Read last `maxBytes` of unified log (avoids loading huge files for admin poller status). */
+export async function readUnifiedLogTail(maxBytes = 4 * 1024 * 1024): Promise<string> {
+  const file = logPath()
+  let fh: Awaited<ReturnType<typeof fs.open>> | undefined
+  try {
+    fh = await fs.open(file, 'r')
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return ''
+    throw e
+  }
+  try {
+    const st = await fh.stat()
+    if (st.size === 0) return ''
+    const readLen = Math.min(Number(st.size), maxBytes)
+    const pos = Number(st.size) - readLen
+    const buf = Buffer.alloc(readLen)
+    await fh.read(buf, 0, readLen, pos)
+    let s = buf.toString('utf-8')
+    if (pos > 0) {
+      const firstNl = s.indexOf('\n')
+      if (firstNl !== -1) s = s.slice(firstNl + 1)
+    }
+    return s
+  } finally {
+    await fh.close()
+  }
+}
+
+/** Latest poller_30m / poller_hourly lines near end of file (for admin when poller runs in another process). */
+export async function findLatestPollerSummaryEntries(): Promise<{
+  last30m: ParsedUnifiedLogEntry | null
+  lastHourly: ParsedUnifiedLogEntry | null
+}> {
+  const tail = await readUnifiedLogTail()
+  if (!tail.trim()) return { last30m: null, lastHourly: null }
+  const lines = tail.split(/\r?\n/)
+  let last30m: ParsedUnifiedLogEntry | null = null
+  let lastHourly: ParsedUnifiedLogEntry | null = null
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const p = parseUnifiedLogLine(lines[i], i + 1)
+    if (!p) continue
+    if (!last30m && p.script === 'poller_30m') last30m = p
+    if (!lastHourly && p.script === 'poller_hourly') lastHourly = p
+    if (last30m && lastHourly) break
+  }
+  return { last30m, lastHourly }
 }
 
 let appendChain: Promise<void> = Promise.resolve()
