@@ -114,8 +114,12 @@ app.listen(PORT, () => {
   //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   // )
   // Poller Riot (ingestion) — lance le script `poller` après RIOT_POLLER_STARTUP_DELAY_MS (défaut 2 min).
-  // Logs résumé `poller_hourly` : voir riotPoller.ts + env POLLER_HOURLY_SUMMARY_MS.
-  startDefaultScript()
+  // Quand POLLER_EXTERNAL=1 (ecosystem.config.js), le poller tourne dans son propre process PM2 (lelanation-poller).
+  if (!process.env.POLLER_EXTERNAL) {
+    startDefaultScript()
+  } else {
+    console.log('[Server] POLLER_EXTERNAL=1 — poller runs in separate PM2 process (lelanation-poller)')
+  }
 })
 
 export default app

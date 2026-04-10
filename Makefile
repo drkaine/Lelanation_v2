@@ -1,5 +1,5 @@
-.PHONY: help setup dev dev-backend dev-frontend build build-backend build-frontend build-companion build-companion-exe exe-windows \
-	pm2-status pm2-start pm2-restart pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-frontend \
+.PHONY: help setup dev dev-backend dev-frontend build build-all build-backend build-frontend build-companion build-companion-exe exe-windows \
+	pm2-status pm2-start pm2-restart pm2-restart-no-poller pm2-stop pm2-delete pm2-logs pm2-logs-backend pm2-logs-poller pm2-restart-poller pm2-logs-frontend \
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean
 
@@ -33,7 +33,8 @@ help:
 	@echo "  make dev-frontend       Run frontend dev server only"
 	@echo ""
 	@echo "Build"
-	@echo "  make build              Build backend + frontend + companion app"
+	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller untouched)"
+	@echo "  make build-all          Same as build + PM2 restart all apps (incl. lelanation-poller)"
 	@echo "  make build-backend      Build backend only"
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
@@ -43,11 +44,14 @@ help:
 	@echo "PM2"
 	@echo "  make pm2-status         Show PM2 status"
 	@echo "  make pm2-start          Start apps from ecosystem config"
-	@echo "  make pm2-restart        Restart apps from ecosystem config"
+	@echo "  make pm2-restart        Restart all apps from ecosystem config"
+	@echo "  make pm2-restart-no-poller  Restart lelanation-backend + lelanation-frontend only"
 	@echo "  make deploy             Build then pm2 startOrRestart"
 	@echo "  make pm2-logs           Tail all PM2 logs"
 	@echo "  make pm2-logs-backend   Tail backend logs"
+	@echo "  make pm2-logs-poller    Tail poller logs"
 	@echo "  make pm2-logs-frontend  Tail frontend logs"
+	@echo "  make pm2-restart-poller Restart poller only (preserves pipeline queue via drain)"
 	@echo ""
 	@echo "Quality"
 	@echo "  make typecheck          Typecheck backend + frontend + companion"
@@ -79,7 +83,9 @@ dev-frontend:
 	$(NPM) --prefix "$(FRONTEND_DIR)" run dev
 
 # ─── Build ───────────────────────────────────────────────────────────────────────
-build: test-packages build-backend build-frontend build-companion pm2-restart
+build: test-packages build-backend build-frontend build-companion pm2-restart-no-poller
+
+build-all: test-packages build-backend build-frontend build-companion pm2-restart
 
 build-backend:
 	cd "$(BACKEND_DIR)" && npx prisma migrate deploy
@@ -116,6 +122,9 @@ pm2-start:
 pm2-restart:
 	$(PM2) restart "$(ECOSYSTEM_FILE)" --update-env
 
+pm2-restart-no-poller:
+	$(PM2) restart lelanation-backend lelanation-frontend --update-env
+
 pm2-stop:
 	$(PM2) stop "$(ECOSYSTEM_FILE)"
 
@@ -127,6 +136,12 @@ pm2-logs:
 
 pm2-logs-backend:
 	$(PM2) logs lelanation-backend
+
+pm2-logs-poller:
+	$(PM2) logs lelanation-poller
+
+pm2-restart-poller:
+	$(PM2) restart lelanation-poller
 
 pm2-logs-frontend:
 	$(PM2) logs lelanation-frontend

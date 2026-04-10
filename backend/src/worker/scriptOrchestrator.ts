@@ -197,6 +197,9 @@ export async function startScript(
   }
 
   if (name === 'poller') {
+    if (process.env.POLLER_EXTERNAL) {
+      return { ok: false, error: 'Poller runs as external PM2 process (lelanation-poller). Use: pm2 restart lelanation-poller' }
+    }
     activePoller = true
     startRiotPoller()
     // Clear activePoller flag once the loop finishes; if 400_decrypt triggered, start puuid-migration

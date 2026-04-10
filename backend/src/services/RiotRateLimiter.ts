@@ -1,122 +1,130 @@
 /**
- * Riot API throttle driven by response headers + HTTP 429.
- * - No local request counting: we send at full speed and read `X-App-Rate-Limit-Count` /
- *   `X-Method-Rate-Limit-Count` vs the matching limit headers.
- * - When the 120s application bucket reports ≥99 uses (e.g. 99/100), pause ~1 minute before more calls.
- * - On HTTP 429: block at least 5s, or half of Retry-After when provided (whichever is greater).
+ * Riot API rate limiter driven by response headers.
+ *
+ * Strategy: fire requests at full speed, read every response's
+ * `X-App-Rate-Limit-Count` / `X-Method-Rate-Limit-Count` headers,
+ * and pause **just long enough** for the window to roll over when
+ * the count nears the limit.
+ *
+ * Buckets tracked (from headers):
+ *   - App-level:    e.g. `X-App-Rate-Limit: 20:1,100:120`
+ *   - Method-level: e.g. `X-Method-Rate-Limit: 2000:60`
+ *
+ * Safety margin: we stop sending at `limit - 1` (i.e. 99 of 100)
+ * and wait for the remaining window seconds + a small buffer.
  */
-/** Pause when a 120s bucket count reaches this usage (Riot app limit is typically 100/120s). */
+
+/** How many requests below the limit we consider "safe". */
+const SAFETY_MARGIN = 1
+/** Extra buffer (ms) added after computed window wait to absorb clock drift. */
+const WINDOW_BUFFER_MS = 2_500
+/** Minimum pause when we approach a limit, even if window math says 0. */
+const MIN_NEAR_LIMIT_PAUSE_MS = 1_000
+/** Maximum pause from a single near-limit event (sanity cap). */
+const MAX_NEAR_LIMIT_PAUSE_MS = 125_000
+
+/** Default 429 penalty when no Retry-After header is provided. */
+const DEFAULT_429_PENALTY_MS = 5_000
+/** Cap on 429 penalty so we don't sleep forever on a stale Retry-After. */
+const MAX_429_PENALTY_MS = 120_000
+
+// ────────────────────────────────────────────────────────────────────────────
+
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
-/** Cooldown after hitting near-limit on the 120s bucket (ms). */
 export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 100_000
-/** Minimum pause after a real HTTP 429 from Riot (Retry-After is applied at half duration). */
-export const RIOT_429_MIN_PENALTY_MS = 120_000
+export const RIOT_429_MIN_PENALTY_MS = DEFAULT_429_PENALTY_MS
 
-const PENALTY_429_MS = RIOT_429_MIN_PENALTY_MS
-
-/** Parse Riot header like `20:1,100:120` → Map<windowSeconds, limitOrCount> */
-function parseRiotLimitPairs(header: string | null): Map<number, number> {
-  const m = new Map<number, number>()
-  if (!header?.trim()) return m
+/** Parse `"20:1,100:120"` → `[{ limit: 20, windowSec: 1 }, { limit: 100, windowSec: 120 }]` */
+function parseRiotLimitPairs(
+  header: string | null
+): { value: number; windowSec: number }[] {
+  if (!header?.trim()) return []
+  const result: { value: number; windowSec: number }[] = []
   for (const part of header.split(',')) {
     const [a, b] = part.trim().split(':')
-    const v = Number(a)
-    const w = Number(b)
-    if (Number.isFinite(v) && Number.isFinite(w) && w > 0) m.set(w, v)
-  }
-  return m
-}
-
-function applyNearLimitFromBuckets(
-  limitByWin: Map<number, number>,
-  countByWin: Map<number, number>,
-  setPenalty: (ms: number) => void
-): void {
-  for (const [winSec, used] of countByWin) {
-    if (winSec !== 120) continue
-    const lim = limitByWin.get(winSec)
-    if (lim == null || lim <= 0) continue
-    if (used >= RIOT_HEADER_APP_120S_NEAR_LIMIT) {
-      setPenalty(RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS)
-      return
+    const value = Number(a)
+    const windowSec = Number(b)
+    if (Number.isFinite(value) && Number.isFinite(windowSec) && windowSec > 0) {
+      result.push({ value, windowSec })
     }
   }
+  return result
+}
+
+type BucketSnapshot = {
+  limit: number
+  count: number
+  windowSec: number
+  recordedAt: number
 }
 
 export class RiotRateLimiter {
-  private readonly penalty429Ms: number
   private penaltyUntil = 0
   private chain: Promise<void> = Promise.resolve()
   private nearLimitPauseCount = 0
   private http429PauseCount = 0
 
-  constructor() {
-    this.penalty429Ms = PENALTY_429_MS
-  }
+  private appBuckets: BucketSnapshot[] = []
+  private methodBuckets: BucketSnapshot[] = []
 
   /**
-   * After an HTTP 429 from Riot: block for at least {@link RIOT_429_MIN_PENALTY_MS},
-   * or half of `Retry-After` (seconds) in ms when that is higher.
+   * After HTTP 429: block for `Retry-After` seconds (or a default).
+   * Much smaller than the old 120s floor — Riot tells us exactly how long to wait.
    */
   penalize429(retryAfterSec?: number): void {
-    const fromHeader =
-      retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0
-        ? Math.ceil((retryAfterSec * 1000) / 2)
-        : 0
-    const ms = Math.max(this.penalty429Ms, fromHeader)
-    const nextPenaltyUntil = Date.now() + ms
-    if (nextPenaltyUntil > this.penaltyUntil) {
+    let ms = DEFAULT_429_PENALTY_MS
+    if (retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
+      ms = Math.ceil(retryAfterSec * 1000) + WINDOW_BUFFER_MS
+    }
+    ms = Math.min(ms, MAX_429_PENALTY_MS)
+    const until = Date.now() + ms
+    if (until > this.penaltyUntil) {
       this.http429PauseCount += 1
-      this.penaltyUntil = nextPenaltyUntil
+      this.penaltyUntil = until
     }
   }
 
-  /**
-   * @deprecated Prefer penalize429(). Kept for callers that pass a custom duration.
-   */
+  /** @deprecated Prefer penalize429(). */
   penalize(durationMs: number): void {
     this.penaltyUntil = Math.max(this.penaltyUntil, Date.now() + durationMs)
   }
 
   /**
-   * Read Riot rate-limit headers on successful responses. If the 120s bucket is at ≥99 uses,
-   * enqueue a cooldown (see {@link RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS}).
+   * Read all rate-limit headers from a successful response.
+   * If ANY bucket (app or method, any window) is at `limit - SAFETY_MARGIN`,
+   * compute the minimum time until that window rolls over and pause accordingly.
    */
   syncFromResponseHeaders(headers: { get(name: string): string | null }): void {
-    const appLimit = headers.get('x-app-rate-limit')
-    const appCount = headers.get('x-app-rate-limit-count')
-    if (appLimit && appCount) {
-      applyNearLimitFromBuckets(parseRiotLimitPairs(appLimit), parseRiotLimitPairs(appCount), (ms) => {
-        const nextPenaltyUntil = Date.now() + ms
-        if (nextPenaltyUntil > this.penaltyUntil) {
-          this.nearLimitPauseCount += 1
-          this.penaltyUntil = nextPenaltyUntil
-        }
-      })
-    }
-    const methodLimit = headers.get('x-method-rate-limit')
-    const methodCount = headers.get('x-method-rate-limit-count')
-    if (methodLimit && methodCount) {
-      applyNearLimitFromBuckets(parseRiotLimitPairs(methodLimit), parseRiotLimitPairs(methodCount), (ms) => {
-        const nextPenaltyUntil = Date.now() + ms
-        if (nextPenaltyUntil > this.penaltyUntil) {
-          this.nearLimitPauseCount += 1
-          this.penaltyUntil = nextPenaltyUntil
-        }
-      })
-    }
+    const now = Date.now()
+
+    const appLimits = parseRiotLimitPairs(headers.get('x-app-rate-limit'))
+    const appCounts = parseRiotLimitPairs(headers.get('x-app-rate-limit-count'))
+    this.appBuckets = this.mergeBuckets(appLimits, appCounts, now)
+
+    const methodLimits = parseRiotLimitPairs(headers.get('x-method-rate-limit'))
+    const methodCounts = parseRiotLimitPairs(headers.get('x-method-rate-limit-count'))
+    this.methodBuckets = this.mergeBuckets(methodLimits, methodCounts, now)
+
+    this.applyNearLimitPause(now)
   }
 
-  getStats(): { nearLimitPauseCount: number; http429PauseCount: number } {
+  getStats(): {
+    nearLimitPauseCount: number
+    http429PauseCount: number
+    appBuckets: BucketSnapshot[]
+    methodBuckets: BucketSnapshot[]
+  } {
     return {
       nearLimitPauseCount: this.nearLimitPauseCount,
       http429PauseCount: this.http429PauseCount,
+      appBuckets: [...this.appBuckets],
+      methodBuckets: [...this.methodBuckets],
     }
   }
 
   /**
-   * Wait until any penalty (429 or header-driven cooldown) expires, then proceed.
-   * Bucket name is ignored (single global gate).
+   * Serialise acquire() calls so only one request proceeds at a time.
+   * Waits for any active penalty to expire before releasing.
    */
   async acquire(_bucketName?: string): Promise<void> {
     let release!: () => void
@@ -130,16 +138,65 @@ export class RiotRateLimiter {
 
     try {
       for (;;) {
-        const now = Date.now()
-        const penaltyWait = this.penaltyUntil - now
-        if (penaltyWait > 0) {
-          await new Promise((r) => setTimeout(r, penaltyWait))
+        const wait = this.penaltyUntil - Date.now()
+        if (wait > 0) {
+          await new Promise((r) => setTimeout(r, wait))
           continue
         }
         break
       }
     } finally {
       release()
+    }
+  }
+
+  // ── Private helpers ─────────────────────────────────────────────────────
+
+  private mergeBuckets(
+    limits: { value: number; windowSec: number }[],
+    counts: { value: number; windowSec: number }[],
+    now: number
+  ): BucketSnapshot[] {
+    const countByWindow = new Map<number, number>()
+    for (const c of counts) countByWindow.set(c.windowSec, c.value)
+
+    return limits.map((l) => ({
+      limit: l.value,
+      count: countByWindow.get(l.windowSec) ?? 0,
+      windowSec: l.windowSec,
+      recordedAt: now,
+    }))
+  }
+
+  /**
+   * For each tracked bucket: if `count >= limit - SAFETY_MARGIN`, compute
+   * how long until the window resets and set penaltyUntil accordingly.
+   *
+   * The window reset time is estimated as `recordedAt + windowSec * 1000`
+   * (Riot counts reset at the end of the rolling window).
+   */
+  private applyNearLimitPause(now: number): void {
+    let neededPauseMs = 0
+
+    const allBuckets = [...this.appBuckets, ...this.methodBuckets]
+    for (const b of allBuckets) {
+      const threshold = b.limit - SAFETY_MARGIN
+      if (threshold <= 0) continue
+      if (b.count < threshold) continue
+
+      const windowEndMs = b.recordedAt + b.windowSec * 1000
+      const remainingMs = windowEndMs - now
+      const pauseMs = Math.max(MIN_NEAR_LIMIT_PAUSE_MS, remainingMs + WINDOW_BUFFER_MS)
+      const capped = Math.min(pauseMs, MAX_NEAR_LIMIT_PAUSE_MS)
+      neededPauseMs = Math.max(neededPauseMs, capped)
+    }
+
+    if (neededPauseMs > 0) {
+      const until = now + neededPauseMs
+      if (until > this.penaltyUntil) {
+        this.nearLimitPauseCount += 1
+        this.penaltyUntil = until
+      }
     }
   }
 }

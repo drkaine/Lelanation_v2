@@ -1719,13 +1719,34 @@ async function runStep4ForPlayer(
 
   const flags = { foundPrismaError: false }
 
-  nextPlayer: for (const player of players) {
-    counters.playersPolled++
-    if (state.shouldStop) {
-      return 'ok'
-    }
+  const matchIdsQueryBase: {
+    queue: number; count: number; start: number; startTime?: number; endTime?: number
+  } = { queue: filters.queue, count: filters.count, start: 0 }
+  if (latestPatchDateWindow) {
+    matchIdsQueryBase.startTime = latestPatchDateWindow.startTime
+    matchIdsQueryBase.endTime = latestPatchDateWindow.endTime
+  } else if (matchListTimeWindow) {
+    matchIdsQueryBase.startTime = matchListTimeWindow.startTime
+    matchIdsQueryBase.endTime = matchListTimeWindow.endTime
+  }
 
-    const playersFetchedBefore = counters.playersFetched
+  // ── Phase 1: Collect match work items across all players ──────────────
+
+  type PlayerTracker = {
+    player: typeof players[number]
+    matchIds: string[]
+    toFetchCount: number
+    pendingTransientIngest: boolean
+    ingestedIds: string[]
+    playersFetchedBefore: number
+  }
+  const playerTrackers: PlayerTracker[] = []
+  type MatchWorkItem = { matchId: string; trackerIdx: number }
+  const workItems: MatchWorkItem[] = []
+
+  for (const player of players) {
+    counters.playersPolled++
+    if (state.shouldStop) return 'ok'
 
     if (!isLikelyRiotPuuid(player.puuid)) {
       await logger.info('Skip player with invalid puuid format', {
@@ -1739,35 +1760,15 @@ async function runStep4ForPlayer(
       continue
     }
 
-    const matchIdsQuery: {
-      queue: number
-      count: number
-      start: number
-      startTime?: number
-      endTime?: number
-    } = {
-      queue: filters.queue,
-      count: filters.count,
-      start: 0,
-    }
-    if (latestPatchDateWindow) {
-      matchIdsQuery.startTime = latestPatchDateWindow.startTime
-      matchIdsQuery.endTime = latestPatchDateWindow.endTime
-    } else if (matchListTimeWindow) {
-      matchIdsQuery.startTime = matchListTimeWindow.startTime
-      matchIdsQuery.endTime = matchListTimeWindow.endTime
-    }
     const matchIdsRes = await client.getMatchIdsByPuuid(
       player.puuid,
-      matchIdsQuery,
+      matchIdsQueryBase,
       riotIngestRequestOptions()
     )
     counters.requestCount++
     if (!matchIdsRes.ok && matchIdsRes.status === 429) counters.error429Count++
     if (!matchIdsRes.ok) {
-      if (matchIdsRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
-        return 'ok'
-      }
+      if (matchIdsRes.message === RIOT_INGEST_ABORTED_MESSAGE) return 'ok'
       if (matchIdsRes.status === 400 && is400Decrypt(matchIdsRes.body)) {
         counters.error400Count++
         await logger.error('400 decrypt', matchIdsRes.body)
@@ -1783,143 +1784,188 @@ async function runStep4ForPlayer(
     })
     const existingSet = new Set(existing.map((m) => m.riotMatchId))
     const nowMs = Date.now()
-    const toFetch = matchIds.filter((id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs))
+    const toFetch = matchIds.filter(
+      (id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs)
+    )
+
+    const trackerIdx = playerTrackers.length
+    const tracker: PlayerTracker = {
+      player,
+      matchIds,
+      toFetchCount: toFetch.length,
+      pendingTransientIngest: false,
+      ingestedIds: [],
+      playersFetchedBefore: counters.playersFetched,
+    }
+    playerTrackers.push(tracker)
 
     if (toFetch.length === 0) {
       await prisma.player.update({
         where: { id: player.id },
         data: { lastSeen: new Date() },
       })
-      const newPlayersFromPlayer0 = counters.playersFetched - playersFetchedBefore
       await logger.step('Player matches fetched', {
         playerId: player.id.toString(),
         region,
         matchesCount: matchIds.length,
-        newPlayersCount: newPlayersFromPlayer0,
+        newPlayersCount: 0,
       })
       continue
     }
 
-    /** Any match still not fully ingested (transient API failure, version filter, or DB error) — do not advance lastSeen. */
-    let pendingTransientIngest = false
-    const ingestedIds: string[] = []
-
     for (const matchId of toFetch) {
-      if (state.shouldStop) {
-        return 'ok'
-      }
+      workItems.push({ matchId, trackerIdx })
+    }
+  }
 
-      const strict = await fetchMatchAndTimelineStrict(matchId)
-      if (!strict.ok) {
-        if (strict.reason === '400_decrypt') {
-          return '400_decrypt'
-        }
-        if (strict.reason === 'abort') {
-          return 'ok'
-        }
-        if (strict.reason === 'version') {
-          pendingTransientIngest = true
-          await logger.info('Match skipped (game version not in allowed range)', {
-            playerId: player.id.toString(),
-            matchId,
-          })
-          continue
-        }
-        if (strict.reason === 'deferred_patch') {
-          await logger.info('Match deferred (latest patch priority mode)', {
-            playerId: player.id.toString(),
-            matchId,
-            latestPatch: patchPolicy.latestPatch,
-            allowedPatches: priorityAllowedPatches,
-          })
-          continue
-        }
-        pendingTransientIngest = true
-        await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
-          playerId: player.id.toString(),
-          matchId,
-        })
-        continue
-      }
+  if (workItems.length === 0) return flags.foundPrismaError ? 'prisma_error' : 'ok'
 
-      try {
-        await upsertMatchAndParticipants(
-          client,
-          region,
-          strict.matchDto,
-          puuidKeyVersion,
-          counters,
-          logger
-        )
-        const matchRow = await prisma.match.findUnique({
-          where: { riotMatchId: matchId },
-          select: { id: true },
-        })
-        if (!matchRow) {
-          throw new Error(`match missing after upsert: ${matchId}`)
+  // ── Phase 2: Pipeline — concurrent API fetch + sequential DB ingest ───
+  // Producer fires API calls at max rate-limiter speed.
+  // Consumer ingests into DB concurrently — so DB work never blocks the API.
+
+  const PIPELINE_QUEUE_MAX = 8
+  const ingestQueue: Array<{
+    matchId: string
+    trackerIdx: number
+    matchDto: RiotMatchDto
+    timelineDto: RiotMatchTimelineDto
+  }> = []
+  let producerDone = false
+  let pipelineAbort: '400_decrypt' | 'abort' | null = null
+
+  const ingestConsumer = (async () => {
+    while (true) {
+      if (pipelineAbort || state.shouldStop) break
+      if (ingestQueue.length > 0) {
+        const item = ingestQueue.shift()!
+        const tracker = playerTrackers[item.trackerIdx]
+        try {
+          await upsertMatchAndParticipants(
+            client, region, item.matchDto, puuidKeyVersion, counters, logger
+          )
+          const matchRow = await prisma.match.findUnique({
+            where: { riotMatchId: item.matchId },
+            select: { id: true },
+          })
+          if (!matchRow) throw new Error(`match missing after upsert: ${item.matchId}`)
+          await extractAndInsertJungleFirstClear(matchRow.id, item.matchId, item.timelineDto, logger)
+          await extractAndInsertTimelineExtras(
+            matchRow.id, item.matchId, item.timelineDto,
+            item.matchDto.info?.participants ?? [], logger
+          )
+          tracker.ingestedIds.push(item.matchId)
+        } catch (err) {
+          await prisma.match.deleteMany({ where: { riotMatchId: item.matchId } }).catch(() => undefined)
+          if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) return
+          tracker.pendingTransientIngest = true
+          await logger.error('Player match ingest failed', {
+            playerId: tracker.player.id.toString(),
+            matchId: item.matchId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          flags.foundPrismaError = true
         }
-        await extractAndInsertJungleFirstClear(matchRow.id, matchId, strict.timelineDto, logger)
-        await extractAndInsertTimelineExtras(
-          matchRow.id,
-          matchId,
-          strict.timelineDto,
-          strict.matchDto.info?.participants ?? [],
-          logger
-        )
-        ingestedIds.push(matchId)
-      } catch (err) {
-        await prisma.match.deleteMany({ where: { riotMatchId: matchId } }).catch(() => undefined)
-        if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
-          return 'ok'
-        }
-        pendingTransientIngest = true
-        await logger.error('Player match ingest failed', {
-          playerId: player.id.toString(),
-          matchId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        flags.foundPrismaError = true
-        continue
+      } else if (producerDone) {
+        break
+      } else {
+        await sleep(10)
       }
     }
+  })()
 
-    if (ingestedIds.length > 0) {
-      const dbCount = await prisma.match.count({
-        where: { riotMatchId: { in: ingestedIds } },
+  for (const work of workItems) {
+    if (state.shouldStop || pipelineAbort) break
+    while (ingestQueue.length >= PIPELINE_QUEUE_MAX && !state.shouldStop && !pipelineAbort) {
+      await sleep(10)
+    }
+    if (state.shouldStop || pipelineAbort) break
+
+    const tracker = playerTrackers[work.trackerIdx]
+    const strict = await fetchMatchAndTimelineStrict(work.matchId)
+    if (!strict.ok) {
+      if (strict.reason === '400_decrypt') { pipelineAbort = '400_decrypt'; break }
+      if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
+      if (strict.reason === 'version') {
+        tracker.pendingTransientIngest = true
+        await logger.info('Match skipped (game version not in allowed range)', {
+          playerId: tracker.player.id.toString(),
+          matchId: work.matchId,
+        })
+        continue
+      }
+      if (strict.reason === 'deferred_patch') {
+        await logger.info('Match deferred (latest patch priority mode)', {
+          playerId: tracker.player.id.toString(),
+          matchId: work.matchId,
+          latestPatch: patchPolicy.latestPatch,
+          allowedPatches: priorityAllowedPatches,
+        })
+        continue
+      }
+      tracker.pendingTransientIngest = true
+      await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
+        playerId: tracker.player.id.toString(),
+        matchId: work.matchId,
       })
-      if (dbCount !== ingestedIds.length) {
+      continue
+    }
+
+    ingestQueue.push({
+      matchId: work.matchId,
+      trackerIdx: work.trackerIdx,
+      matchDto: strict.matchDto,
+      timelineDto: strict.timelineDto,
+    })
+  }
+
+  producerDone = true
+  await ingestConsumer
+
+  if (pipelineAbort === '400_decrypt') return '400_decrypt'
+  if (pipelineAbort === 'abort') return 'ok'
+
+  // ── Phase 3: Post-processing — verify ingested, lastSeen, logging ─────
+
+  for (const tracker of playerTrackers) {
+    if (tracker.toFetchCount === 0) continue
+
+    if (tracker.ingestedIds.length > 0) {
+      const dbCount = await prisma.match.count({
+        where: { riotMatchId: { in: tracker.ingestedIds } },
+      })
+      if (dbCount !== tracker.ingestedIds.length) {
         await appendUnifiedLog({
           section: 'db',
           type: 'warning',
           script: 'poller',
-          message: `Écart DB: ${ingestedIds.length} match(s) attendus, ${dbCount} présents`,
+          message: `Écart DB: ${tracker.ingestedIds.length} match(s) attendus, ${dbCount} présents`,
           json: {
-            playerId: player.id.toString(),
+            playerId: tracker.player.id.toString(),
             region,
-            expected: ingestedIds.length,
+            expected: tracker.ingestedIds.length,
             dbCount,
-            riotMatchIdsSample: ingestedIds.slice(0, 32),
+            riotMatchIdsSample: tracker.ingestedIds.slice(0, 32),
           },
         })
       }
     }
 
-    if (!pendingTransientIngest && !state.shouldStop) {
+    if (!tracker.pendingTransientIngest && !state.shouldStop) {
       await prisma.player.update({
-        where: { id: player.id },
+        where: { id: tracker.player.id },
         data: { lastSeen: new Date() },
       })
     }
 
-    const newPlayersFromPlayer = counters.playersFetched - playersFetchedBefore
+    const newPlayersFromPlayer = counters.playersFetched - tracker.playersFetchedBefore
     await logger.step('Player matches fetched', {
-      playerId: player.id.toString(),
+      playerId: tracker.player.id.toString(),
       region,
-      matchesCount: matchIds.length,
+      matchesCount: tracker.matchIds.length,
       newPlayersCount: newPlayersFromPlayer,
-      pendingTransientIngest,
+      pendingTransientIngest: tracker.pendingTransientIngest,
     })
-    void newPlayersFromPlayer
   }
 
   return flags.foundPrismaError ? 'prisma_error' : 'ok'
@@ -2026,18 +2072,25 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersPolled = 0
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
+    const initLimiterStats = client.getRateLimiterStats()
     let summary30mWindowStartedAtMs = Date.now()
+    let summary30mPlayersPolled = state.playersPolled
     let summary30mPlayersFetched = state.playersFetched
     let summary30mMatchesFetched = state.matchesFetched
     let summary30mRequestCount = state.requestCount
-    let summary30mNearLimitPauseCount = client.getRateLimiterStats().nearLimitPauseCount
-    let summary30mHttp429PauseCount = client.getRateLimiterStats().http429PauseCount
+    let summary30mError429Count = state.error429Count
+    let summary30mParticipantsFetched = state.participantsFetched
+    let summary30mNearLimitPauseCount = initLimiterStats.nearLimitPauseCount
+    let summary30mHttp429PauseCount = initLimiterStats.http429PauseCount
     let hourlyWindowStartedAtMs = Date.now()
+    let hourlyPlayersPolled = state.playersPolled
     let hourlyPlayersFetched = state.playersFetched
     let hourlyMatchesFetched = state.matchesFetched
     let hourlyRequestCount = state.requestCount
-    let hourlyNearLimitPauseCount = client.getRateLimiterStats().nearLimitPauseCount
-    let hourlyHttp429PauseCount = client.getRateLimiterStats().http429PauseCount
+    let hourlyError429Count = state.error429Count
+    let hourlyParticipantsFetched = state.participantsFetched
+    let hourlyNearLimitPauseCount = initLimiterStats.nearLimitPauseCount
+    let hourlyHttp429PauseCount = initLimiterStats.http429PauseCount
 
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
@@ -2180,68 +2233,119 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       const now = Date.now()
       if (now - summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
         const elapsedMs = Math.max(1, now - summary30mWindowStartedAtMs)
-        const playersDelta = state.playersFetched - summary30mPlayersFetched
+        const playersPolledDelta = state.playersPolled - summary30mPlayersPolled
+        const playersFetchedDelta = state.playersFetched - summary30mPlayersFetched
         const matchesDelta = state.matchesFetched - summary30mMatchesFetched
         const requestsDelta = state.requestCount - summary30mRequestCount
+        const error429Delta = state.error429Count - summary30mError429Count
+        const participantsDelta = state.participantsFetched - summary30mParticipantsFetched
         const limiterStats = client.getRateLimiterStats()
         const nearLimitPauseDelta =
           limiterStats.nearLimitPauseCount - summary30mNearLimitPauseCount
         const http429PauseDelta = limiterStats.http429PauseCount - summary30mHttp429PauseCount
         const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+        const lastRlHeaders30m = client.getLastRiotRateLimitHeaders()
         await appendUnifiedLog({
           section: 'back',
           type: 'info',
           script: 'poller_30m',
-          message: `Resume 30 min poller — players:+${playersDelta}, matches:+${matchesDelta}, req/h:${requestsPerHour}, pauses rate-limit refresh:${nearLimitPauseDelta}`,
+          message: `Resume 30 min — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
           json: {
             windowStartIso: new Date(summary30mWindowStartedAtMs).toISOString(),
             windowEndIso: new Date(now).toISOString(),
             elapsedMs,
-            playersDelta,
-            matchesDelta,
-            requestsDelta,
+            delta: {
+              playersPolled: playersPolledDelta,
+              newPlayers: playersFetchedDelta,
+              matches: matchesDelta,
+              participants: participantsDelta,
+              requests: requestsDelta,
+              error429: error429Delta,
+            },
             requestsPerHour,
             rateLimitRefreshPauses: nearLimitPauseDelta,
             rateLimit429Pauses: http429PauseDelta,
+            totals: {
+              playersPolled: state.playersPolled,
+              newPlayers: state.playersFetched,
+              matches: state.matchesFetched,
+              participants: state.participantsFetched,
+              requests: state.requestCount,
+              error429: state.error429Count,
+            },
+            riotRateLimitBuckets: {
+              app: limiterStats.appBuckets,
+              method: limiterStats.methodBuckets,
+            },
+            lastRiotRateLimitHeaders: lastRlHeaders30m,
           },
         })
         summary30mWindowStartedAtMs = now
+        summary30mPlayersPolled = state.playersPolled
         summary30mPlayersFetched = state.playersFetched
         summary30mMatchesFetched = state.matchesFetched
         summary30mRequestCount = state.requestCount
+        summary30mError429Count = state.error429Count
+        summary30mParticipantsFetched = state.participantsFetched
         summary30mNearLimitPauseCount = limiterStats.nearLimitPauseCount
         summary30mHttp429PauseCount = limiterStats.http429PauseCount
       }
       if (now - hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
         const elapsedMs = Math.max(1, now - hourlyWindowStartedAtMs)
-        const playersDelta = state.playersFetched - hourlyPlayersFetched
+        const playersPolledDelta = state.playersPolled - hourlyPlayersPolled
+        const playersFetchedDelta = state.playersFetched - hourlyPlayersFetched
         const matchesDelta = state.matchesFetched - hourlyMatchesFetched
         const requestsDelta = state.requestCount - hourlyRequestCount
+        const error429Delta = state.error429Count - hourlyError429Count
+        const participantsDelta = state.participantsFetched - hourlyParticipantsFetched
         const limiterStats = client.getRateLimiterStats()
         const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - hourlyNearLimitPauseCount
         const http429PauseDelta = limiterStats.http429PauseCount - hourlyHttp429PauseCount
         const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+        const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
         await appendUnifiedLog({
           section: 'back',
           type: 'info',
           script: 'poller_hourly',
-          message: `Résumé horaire poller — players:+${playersDelta}, matches:+${matchesDelta}, req/h:${requestsPerHour}, pauses rate-limit refresh:${nearLimitPauseDelta}`,
+          message: `Résumé horaire — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
           json: {
             windowStartIso: new Date(hourlyWindowStartedAtMs).toISOString(),
             windowEndIso: new Date(now).toISOString(),
             elapsedMs,
-            playersDelta,
-            matchesDelta,
-            requestsDelta,
+            delta: {
+              playersPolled: playersPolledDelta,
+              newPlayers: playersFetchedDelta,
+              matches: matchesDelta,
+              participants: participantsDelta,
+              requests: requestsDelta,
+              error429: error429Delta,
+            },
             requestsPerHour,
             rateLimitRefreshPauses: nearLimitPauseDelta,
             rateLimit429Pauses: http429PauseDelta,
+            totals: {
+              playersPolled: state.playersPolled,
+              newPlayers: state.playersFetched,
+              matches: state.matchesFetched,
+              participants: state.participantsFetched,
+              requests: state.requestCount,
+              error429: state.error429Count,
+              error400: state.error400Count,
+            },
+            riotRateLimitBuckets: {
+              app: limiterStats.appBuckets,
+              method: limiterStats.methodBuckets,
+            },
+            lastRiotRateLimitHeaders: lastRlHeadersH,
           },
         })
         hourlyWindowStartedAtMs = now
+        hourlyPlayersPolled = state.playersPolled
         hourlyPlayersFetched = state.playersFetched
         hourlyMatchesFetched = state.matchesFetched
         hourlyRequestCount = state.requestCount
+        hourlyError429Count = state.error429Count
+        hourlyParticipantsFetched = state.participantsFetched
         hourlyNearLimitPauseCount = limiterStats.nearLimitPauseCount
         hourlyHttp429PauseCount = limiterStats.http429PauseCount
       }
