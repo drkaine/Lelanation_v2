@@ -2,6 +2,16 @@
   <div class="build-filters flex flex-1 flex-wrap items-center gap-2">
     <div class="role-filter-row flex items-center gap-0 overflow-x-auto whitespace-nowrap">
       <button
+        type="button"
+        :class="roleChipClass(selectedRole === null)"
+        :title="t('statisticsPage.allRoles')"
+        :aria-label="t('statisticsPage.allRoles')"
+        :aria-pressed="selectedRole === null"
+        @click="setRole(null)"
+      >
+        <img src="/icons/roles/all-role.png" alt="" class="h-5 w-5" role="presentation" />
+      </button>
+      <button
         v-for="role in roleOptions"
         :key="role.value"
         type="button"

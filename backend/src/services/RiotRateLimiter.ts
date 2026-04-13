@@ -5,10 +5,12 @@
  *   - App 120 s bucket: 100 req / 120 s
  *   - App 1 s bucket:    20 req / 1 s
  *
- * Strategy: token-drip via reservoirIncreaseInterval.
- * Tokens arrive 1 at a time every 1.25 s (~2 880 req/h), accumulating
- * up to a tiny burst buffer of 2.  In any Riot rolling 120 s window the
- * worst-case is 2 (burst) + 97 (drip) = 99 — safely under 100.
+ * Strategy: token-drip via reservoirIncreaseInterval targeting ~99 uses / 120 s
+ * (120_000 / 99 ≈ 1.21 s between tokens), with a small burst buffer so parallel
+ * producers do not stall when idle. This is as close as practical to the cap
+ * under a fixed drip; `syncFromResponseHeaders` applies short pauses when
+ * `x-app-rate-limit-count` for the 120 s bucket reaches the near-limit threshold
+ * so in-flight parallelism does not push over 100.
  *
  * minTime: 65 ms (~15 req/s) keeps us under the 20 req/1 s bucket.
  *
@@ -17,17 +19,27 @@
  */
 import Bottleneck from 'bottleneck'
 
+/**
+ * Standard development application limit is 100 / 120 s; breathing triggers at `limit - 1`
+ * (i.e. count ≥ 99). Kept as a named constant for metrics and docs.
+ */
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
+/** If headers report count ≥ limit (should be rare on 200), pause ~until bucket rolls. */
 export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 100_000
+/** Short pause when at the 120 s near-limit, to drain parallel requests. */
+export const RIOT_HEADER_APP_120S_BREATH_MS = 2_500
+/** At most one breath every N ms while headers stay hot (avoids stalling every response). */
+export const RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS = 5_000
 export const RIOT_429_MIN_PENALTY_MS = 5_000
 
 const MAX_429_PENALTY_MS = 120_000
 const PENALTY_BUFFER_MS = 2_500
 
-/** 1 token every 1.25 s ≈ 97 tokens per 120 s rolling window. */
-const TOKEN_DRIP_INTERVAL_MS = 1_250
-/** Max accumulated tokens — tiny burst allowed when the poller is idle. */
-const RESERVOIR_MAX = 2
+/** Target sustained app throughput: ~99 requests per 120 s rolling budget. */
+const TARGET_APP_REQUESTS_PER_120S = 99
+const TOKEN_DRIP_INTERVAL_MS = Math.floor(120_000 / TARGET_APP_REQUESTS_PER_120S)
+/** Small burst when idle; header-based breath prevents overshoot with parallel fetches. */
+const RESERVOIR_MAX = 4
 
 /** Parse `"20:1,100:120"` → `[{ value: 20, windowSec: 1 }, { value: 100, windowSec: 120 }]` */
 function parseRiotLimitPairs(
@@ -61,6 +73,8 @@ export class RiotRateLimiter {
   private methodBuckets: BucketSnapshot[] = []
   /** Timestamp (ms) until which all requests are blocked. Only extends, never shortens. */
   private penaltyUntil = 0
+  /** Last time we applied a 120 s near-limit breath (debounce). */
+  private lastApp120BreathAtMs = 0
   private stopped = false
 
   constructor() {
@@ -128,6 +142,23 @@ export class RiotRateLimiter {
     const methodLimits = parseRiotLimitPairs(headers.get('x-method-rate-limit'))
     const methodCounts = parseRiotLimitPairs(headers.get('x-method-rate-limit-count'))
     this.methodBuckets = this.mergeBuckets(methodLimits, methodCounts, now)
+
+    const app120 = this.appBuckets.find((b) => b.windowSec === 120)
+    if (app120 && app120.limit > 0) {
+      // remaining120 <= 1 ⟺ count >= limit - 1 (e.g. ≥ RIOT_HEADER_APP_120S_NEAR_LIMIT when limit is 100).
+      const remaining120 = app120.limit - app120.count
+      if (remaining120 <= 0) {
+        this.nearLimitPauseCount++
+        this.penaltyUntil = Math.max(this.penaltyUntil, now + RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS)
+      } else if (
+        remaining120 <= 1 &&
+        now - this.lastApp120BreathAtMs >= RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS
+      ) {
+        this.lastApp120BreathAtMs = now
+        this.nearLimitPauseCount++
+        this.penaltyUntil = Math.max(this.penaltyUntil, now + RIOT_HEADER_APP_120S_BREATH_MS)
+      }
+    }
   }
 
   getStats(): {

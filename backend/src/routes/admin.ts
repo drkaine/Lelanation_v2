@@ -527,6 +527,7 @@ router.get('/riot-poller/metrics', async (req, res) => {
         error429: sum((b) => b.error429),
         error400: sum((b) => b.error400),
         matches: sum((b) => b.matches),
+        matchesApiIngestComplete: sum((b) => b.matchesApiIngestComplete),
         participants: sum((b) => b.participants),
         playersPolled: sum((b) => b.playersPolled),
         newPlayers: sum((b) => b.newPlayers),

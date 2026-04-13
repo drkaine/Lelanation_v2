@@ -587,11 +587,28 @@
             </p>
 
             <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
-              <h3 class="mb-2 text-sm font-semibold text-text">Historique (log unifié)</h3>
-              <p class="mb-2 text-xs text-text/60">
-                Agrégation des lignes <code class="rounded bg-surface px-1">poller_hourly</code> et
-                <code class="rounded bg-surface px-1">poller_30m</code> (deltas par période).
+              <h3 class="mb-1 text-sm font-semibold text-text">
+                Activité poller — agrégation des résumés (log unifié)
+              </h3>
+              <p class="mb-3 text-xs text-text/60">
+                Somme des <strong>deltas</strong> des lignes
+                <code class="rounded bg-surface px-1">poller_hourly</code> /
+                <code class="rounded bg-surface px-1">poller_30m</code> sur la plage choisie. Les
+                totaux correspondent à la somme des colonnes du tableau (pas au cumul absolu Riot
+                affiché dans un seul résumé).
               </p>
+              <div class="mb-3 flex flex-wrap gap-2">
+                <button
+                  v-for="p in pollerMetricsPresets"
+                  :key="p.id"
+                  type="button"
+                  class="rounded border border-primary/35 bg-surface/70 px-2.5 py-1 text-xs font-medium text-text hover:bg-primary/15 disabled:opacity-50"
+                  :disabled="pollerMetricsLoading"
+                  @click="applyPollerMetricsPreset(p.id)"
+                >
+                  {{ p.label }}
+                </button>
+              </div>
               <div class="mb-2 flex flex-wrap items-end gap-2">
                 <label class="flex flex-col gap-0.5 text-xs text-text/70">
                   Pas
@@ -632,9 +649,9 @@
                     v-model="pollerMetricsSource"
                     class="rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
                   >
-                    <option value="both">Résumés horaires + 30 min</option>
-                    <option value="hourly">Résumés horaires seulement</option>
-                    <option value="30m">Résumés 30 min seulement</option>
+                    <option value="both">Horaires + 30 min</option>
+                    <option value="hourly">Horaires seulement</option>
+                    <option value="30m">30 min seulement</option>
                   </select>
                 </label>
                 <button
@@ -646,40 +663,149 @@
                   {{ pollerMetricsLoading ? '…' : 'Actualiser' }}
                 </button>
               </div>
+              <p v-if="pollerMetricsRangeLabel" class="mb-2 font-mono text-xs text-text/70">
+                Plage UTC : {{ pollerMetricsRangeLabel }}
+              </p>
               <p v-if="pollerMetricsError" class="mb-2 text-sm text-error">
                 {{ pollerMetricsError }}
               </p>
               <div
                 v-if="pollerMetricsTotals && !pollerMetricsLoading"
-                class="mb-2 grid grid-cols-2 gap-1 text-xs sm:grid-cols-4"
+                class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
               >
-                <div>
-                  <span class="text-text/60">Σ requêtes</span>
-                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.requests }}</span>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Requêtes HTTP
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.requests) }}
+                  </div>
                 </div>
-                <div>
-                  <span class="text-text/60">Σ 429</span>
-                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.error429 }}</span>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Paires match+timeline OK
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.matchesApiIngestComplete ?? 0) }}
+                  </div>
                 </div>
-                <div>
-                  <span class="text-text/60">Σ matchs</span>
-                  <span class="ml-1 font-medium text-text">{{ pollerMetricsTotals.matches }}</span>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Matchs DB (nouvelles lignes)
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.matches) }}
+                  </div>
                 </div>
-                <div>
-                  <span class="text-text/60">Lignes lues</span>
-                  <span class="ml-1 font-medium text-text">{{ pollerMetricsMatchedLines }}</span>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Participants
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.participants) }}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Joueurs pollers (Δ)
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.playersPolled) }}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Nouveaux joueurs DB
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ formatPollerCompact(pollerMetricsTotals.newPlayers) }}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    HTTP 429 / 400
+                  </div>
+                  <div class="text-lg font-semibold tabular-nums text-text">
+                    {{ pollerMetricsTotals.error429 }} /
+                    {{ pollerMetricsTotals.error400 }}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
+                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
+                    Lignes log agrégées
+                  </div>
+                  <div class="text-xl font-semibold tabular-nums text-text">
+                    {{ pollerMetricsMatchedLines }}
+                  </div>
                 </div>
               </div>
+              <div
+                v-if="pollerChartGeometry && pollerMetricsTotals && !pollerMetricsLoading"
+                class="mb-4 rounded border border-primary/15 bg-background/40 p-2"
+              >
+                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <span class="text-xs font-medium text-text/80">Graphique (par période)</span>
+                  <label class="flex items-center gap-1.5 text-xs text-text/70">
+                    Série
+                    <select
+                      v-model="pollerChartMetric"
+                      class="rounded border border-primary/30 bg-background px-2 py-1 text-sm text-text"
+                    >
+                      <option value="requests">Requêtes HTTP</option>
+                      <option value="matchesApi">Paires match+timeline</option>
+                      <option value="matches">Matchs DB</option>
+                    </select>
+                  </label>
+                </div>
+                <svg
+                  class="h-52 w-full text-primary"
+                  :viewBox="`0 0 ${pollerChartGeometry.W} ${pollerChartGeometry.H}`"
+                  preserveAspectRatio="xMidYMid meet"
+                  role="img"
+                  :aria-label="'Histogramme ' + pollerChartMetricLabel"
+                >
+                  <line
+                    :x1="pollerChartGeometry.padL"
+                    :y1="pollerChartGeometry.baselineY"
+                    :x2="pollerChartGeometry.W - pollerChartGeometry.padR"
+                    :y2="pollerChartGeometry.baselineY"
+                    class="stroke-current text-text/25"
+                    stroke-width="1"
+                  />
+                  <text
+                    :x="pollerChartGeometry.padL"
+                    y="14"
+                    class="fill-current text-[11px] text-text/50"
+                  >
+                    max {{ formatPollerCompact(pollerChartGeometry.maxV) }} ·
+                    {{ pollerChartGeometry.bars.length }} barres
+                  </text>
+                  <rect
+                    v-for="(b, idx) in pollerChartGeometry.bars"
+                    :key="b.key + '-' + idx"
+                    :x="b.x"
+                    :y="b.y"
+                    :width="b.w"
+                    :height="b.h"
+                    class="fill-primary/75"
+                    rx="0.5"
+                  />
+                </svg>
+              </div>
+              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wide text-text/60">
+                Détail par période
+              </h4>
               <div class="max-h-72 overflow-auto rounded border border-primary/15">
-                <table class="w-full min-w-[640px] text-left text-xs">
+                <table class="w-full min-w-[720px] text-left text-xs">
                   <thead class="sticky top-0 bg-surface/90 text-text/70">
                     <tr>
                       <th class="px-2 py-1.5">Période (UTC)</th>
                       <th class="px-2 py-1.5 text-right">Req</th>
                       <th class="px-2 py-1.5 text-right">429</th>
                       <th class="px-2 py-1.5 text-right">400</th>
-                      <th class="px-2 py-1.5 text-right">Matchs</th>
-                      <th class="px-2 py-1.5 text-right">Participants</th>
+                      <th class="px-2 py-1.5 text-right">Pairs API</th>
+                      <th class="px-2 py-1.5 text-right">Matchs DB</th>
+                      <th class="px-2 py-1.5 text-right">Part.</th>
                       <th class="px-2 py-1.5 text-right">Pollers</th>
                       <th class="px-2 py-1.5 text-right">Échant.</th>
                     </tr>
@@ -696,6 +822,9 @@
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.requests }}</td>
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.error429 }}</td>
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.error400 }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums">
+                        {{ row.matchesApiIngestComplete ?? 0 }}
+                      </td>
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.matches }}</td>
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.participants }}</td>
                       <td class="px-2 py-1 text-right tabular-nums">{{ row.playersPolled }}</td>
@@ -2030,6 +2159,7 @@ type PollerMetricsBucketRow = {
   error429: number
   error400: number
   matches: number
+  matchesApiIngestComplete?: number
   participants: number
   playersPolled: number
   newPlayers: number
@@ -2038,10 +2168,18 @@ type PollerMetricsBucketRow = {
   sampleCount: number
 }
 
+type PollerMetricsPresetId = '24h' | '7d' | '30d'
+
+const pollerMetricsPresets: Array<{ id: PollerMetricsPresetId; label: string }> = [
+  { id: '24h', label: '24 h (horaire)' },
+  { id: '7d', label: '7 jours' },
+  { id: '30d', label: '30 jours' },
+]
+
 const pollerMetricsGranularity = ref<'hour' | 'day'>('hour')
-const pollerMetricsHours = ref(72)
+const pollerMetricsHours = ref(24)
 const pollerMetricsDays = ref(14)
-const pollerMetricsSource = ref<'both' | 'hourly' | '30m'>('both')
+const pollerMetricsSource = ref<'both' | 'hourly' | '30m'>('hourly')
 const pollerMetricsLoading = ref(false)
 const pollerMetricsError = ref('')
 const pollerMetricsBuckets = ref<PollerMetricsBucketRow[]>([])
@@ -2050,6 +2188,7 @@ const pollerMetricsTotals = ref<{
   error429: number
   error400: number
   matches: number
+  matchesApiIngestComplete?: number
   participants: number
   playersPolled: number
   newPlayers: number
@@ -2058,6 +2197,87 @@ const pollerMetricsTotals = ref<{
   sampleCount: number
 } | null>(null)
 const pollerMetricsMatchedLines = ref(0)
+const pollerMetricsRange = ref<{ fromIso: string; toIso: string } | null>(null)
+const pollerChartMetric = ref<'requests' | 'matches' | 'matchesApi'>('requests')
+
+function formatPollerCompact(n: number): string {
+  if (!Number.isFinite(n)) return '0'
+  const x = Math.round(n)
+  if (x >= 1_000_000) return `${(x / 1_000_000).toFixed(1)}M`
+  if (x >= 10_000) return `${Math.round(x / 1000)}k`
+  if (x >= 1000) return `${(x / 1000).toFixed(1)}k`
+  return String(x)
+}
+
+const pollerMetricsRangeLabel = computed(() => {
+  const r = pollerMetricsRange.value
+  if (!r?.fromIso || !r?.toIso) return ''
+  try {
+    const a = new Date(r.fromIso)
+    const b = new Date(r.toIso)
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${r.fromIso} → ${r.toIso}`
+    const fmt = (d: Date) => d.toISOString().replace('T', ' ').slice(0, 19)
+    return `${fmt(a)} → ${fmt(b)}`
+  } catch {
+    return `${r.fromIso} → ${r.toIso}`
+  }
+})
+
+const pollerChartMetricLabel = computed(() => {
+  if (pollerChartMetric.value === 'requests') return 'requêtes HTTP'
+  if (pollerChartMetric.value === 'matchesApi') return 'paires match + timeline'
+  return 'matchs insérés en DB'
+})
+
+const pollerChartGeometry = computed(() => {
+  const rows = pollerMetricsBuckets.value
+  const metric = pollerChartMetric.value
+  if (rows.length === 0) return null
+  const W = 880
+  const H = 208
+  const padL = 8
+  const padR = 8
+  const padT = 22
+  const padB = 6
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+  const values = rows.map(r => {
+    if (metric === 'requests') return r.requests
+    if (metric === 'matches') return r.matches
+    return r.matchesApiIngestComplete ?? 0
+  })
+  const maxV = Math.max(1, ...values)
+  const n = rows.length
+  const gap = n > 160 ? 0 : n > 80 ? 0.25 : n > 40 ? 0.5 : 1
+  const barW = Math.max(0.35, (innerW - gap * Math.max(0, n - 1)) / n)
+  const baselineY = padT + innerH
+  const bars = rows.map((row, i) => {
+    const v = values[i] ?? 0
+    const hRaw = (v / maxV) * innerH
+    const hVis = v > 0 ? Math.max(hRaw, 0.8) : 0
+    const x = padL + i * (barW + gap)
+    const y = baselineY - hVis
+    return { x, y, w: barW, h: hVis, key: row.key, v }
+  })
+  return { W, H, padL, padR, padT, padB, innerH, baselineY, bars, maxV }
+})
+
+function applyPollerMetricsPreset(id: PollerMetricsPresetId) {
+  if (id === '24h') {
+    pollerMetricsGranularity.value = 'hour'
+    pollerMetricsHours.value = 24
+    pollerMetricsSource.value = 'hourly'
+  } else if (id === '7d') {
+    pollerMetricsGranularity.value = 'day'
+    pollerMetricsDays.value = 7
+    pollerMetricsSource.value = 'hourly'
+  } else {
+    pollerMetricsGranularity.value = 'day'
+    pollerMetricsDays.value = 30
+    pollerMetricsSource.value = 'hourly'
+  }
+  loadPollerMetrics().catch(() => undefined)
+}
 
 function formatPollerMetricPeriod(row: PollerMetricsBucketRow): string {
   const g = pollerMetricsGranularity.value
@@ -2093,15 +2313,22 @@ async function loadPollerMetrics() {
       pollerMetricsError.value = data?.error ?? `Erreur ${res.status}`
       pollerMetricsBuckets.value = []
       pollerMetricsTotals.value = null
+      pollerMetricsRange.value = null
       return
     }
     pollerMetricsBuckets.value = Array.isArray(data?.buckets) ? data.buckets : []
     pollerMetricsTotals.value = data?.totals ?? null
     pollerMetricsMatchedLines.value = typeof data?.matchedLines === 'number' ? data.matchedLines : 0
+    if (typeof data?.fromIso === 'string' && typeof data?.toIso === 'string') {
+      pollerMetricsRange.value = { fromIso: data.fromIso, toIso: data.toIso }
+    } else {
+      pollerMetricsRange.value = null
+    }
   } catch (e) {
     pollerMetricsError.value = e instanceof Error ? e.message : 'Erreur réseau'
     pollerMetricsBuckets.value = []
     pollerMetricsTotals.value = null
+    pollerMetricsRange.value = null
   } finally {
     pollerMetricsLoading.value = false
   }

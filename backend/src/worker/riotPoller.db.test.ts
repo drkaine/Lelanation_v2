@@ -2,8 +2,15 @@ import 'dotenv/config'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { prisma, isDatabaseConfigured } from '../db.js'
-import type { RiotMatchDto } from '../services/RiotHttpClient.js'
+import type { RiotHttpClient, RiotMatchDto } from '../services/RiotHttpClient.js'
 import { upsertMatchAndParticipants } from './riotPoller.js'
+
+/** Minimal stub: upsert only needs league entries when rank API is triggered. */
+const mockRiotClient = {
+  async getLeagueEntriesByPuuid() {
+    return { ok: true as const, status: 200, data: [] }
+  },
+} as unknown as RiotHttpClient
 
 const dbAvailable = isDatabaseConfigured()
 const skipDbReason = dbAvailable ? false : 'DATABASE_URL not set (add backend/.env with DATABASE_URL to run)'
@@ -17,7 +24,7 @@ test('upsertMatchAndParticipants inserts match, players and participants', { ski
     info: {
       gameId: 123456789,
       gameDuration: 1800,
-      gameVersion: '15.1.1',
+      gameVersion: '16.1.1',
       queueId: 420,
       endOfGameResult: 'GameComplete',
       participants: puuids.map((puuid, idx) => ({
@@ -32,18 +39,18 @@ test('upsertMatchAndParticipants inserts match, players and participants', { ski
   const counters = { matchesFetched: 0, participantsFetched: 0, playersFetched: 0 }
 
   try {
-    await upsertMatchAndParticipants('euw1', dto, 'perso', counters)
+    await upsertMatchAndParticipants(mockRiotClient, 'euw1', matchId, dto, 'perso', counters)
 
     assert.equal(counters.matchesFetched, 1)
     assert.equal(counters.playersFetched, 10)
     assert.equal(counters.participantsFetched, 10)
 
     const match = await prisma.match.findUnique({
-      where: { matchId },
-      include: { participants: true },
+      where: { riotMatchId: matchId },
+      include: { matchPlayers: true },
     })
     assert.ok(match, 'match should be created')
-    assert.equal(match!.participants.length, 10)
+    assert.equal(match!.matchPlayers.length, 10)
 
     const players = await prisma.player.findMany({
       where: { puuid: { in: puuids } },
@@ -51,9 +58,8 @@ test('upsertMatchAndParticipants inserts match, players and participants', { ski
     assert.equal(players.length, 10)
   } finally {
     // Cleanup: remove test data from DB so tests don't pollute production stats.
-    const match = await prisma.match.findUnique({ where: { matchId } })
+    const match = await prisma.match.findUnique({ where: { riotMatchId: matchId } })
     if (match) {
-      await prisma.participant.deleteMany({ where: { matchId: match.id } })
       await prisma.match.delete({ where: { id: match.id } })
     }
     await prisma.player.deleteMany({ where: { puuid: { in: puuids } } })
@@ -69,7 +75,7 @@ test('upsertMatchAndParticipants is idempotent on existing matchId', { skip: ski
     info: {
       gameId: 987654321,
       gameDuration: 1500,
-      gameVersion: '15.1.1',
+      gameVersion: '16.1.1',
       queueId: 420,
       endOfGameResult: 'GameComplete',
       participants: puuids.map((puuid, idx) => ({
@@ -85,8 +91,8 @@ test('upsertMatchAndParticipants is idempotent on existing matchId', { skip: ski
   const counters2 = { matchesFetched: 0, participantsFetched: 0, playersFetched: 0 }
 
   try {
-    await upsertMatchAndParticipants('euw1', dto, 'perso', counters1)
-    await upsertMatchAndParticipants('euw1', dto, 'perso', counters2)
+    await upsertMatchAndParticipants(mockRiotClient, 'euw1', matchId, dto, 'perso', counters1)
+    await upsertMatchAndParticipants(mockRiotClient, 'euw1', matchId, dto, 'perso', counters2)
 
     assert.equal(counters1.matchesFetched, 1)
     assert.equal(counters1.playersFetched, 10)
@@ -98,19 +104,17 @@ test('upsertMatchAndParticipants is idempotent on existing matchId', { skip: ski
     assert.equal(counters2.participantsFetched, 0)
 
     const match = await prisma.match.findUnique({
-      where: { matchId },
-      include: { participants: true },
+      where: { riotMatchId: matchId },
+      include: { matchPlayers: true },
     })
     assert.ok(match, 'match should exist')
-    assert.equal(match!.participants.length, 10)
+    assert.equal(match!.matchPlayers.length, 10)
   } finally {
-    const match = await prisma.match.findUnique({ where: { matchId } })
+    const match = await prisma.match.findUnique({ where: { riotMatchId: matchId } })
     if (match) {
-      await prisma.participant.deleteMany({ where: { matchId: match.id } })
       await prisma.match.delete({ where: { id: match.id } })
     }
     await prisma.player.deleteMany({ where: { puuid: { in: puuids } } })
   }
-}
-)
+})
 

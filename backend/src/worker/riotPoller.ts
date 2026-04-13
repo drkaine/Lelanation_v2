@@ -37,6 +37,8 @@ type PollerSummaryWindows = {
   summary30mPlayersPolled: number
   summary30mPlayersFetched: number
   summary30mMatchesFetched: number
+  summary30mMatchesApiIngestComplete: number
+  summary30mPlayersRankUpdatedLeague: number
   summary30mRequestCount: number
   summary30mError429Count: number
   summary30mParticipantsFetched: number
@@ -46,6 +48,8 @@ type PollerSummaryWindows = {
   hourlyPlayersPolled: number
   hourlyPlayersFetched: number
   hourlyMatchesFetched: number
+  hourlyMatchesApiIngestComplete: number
+  hourlyPlayersRankUpdatedLeague: number
   hourlyRequestCount: number
   hourlyError429Count: number
   hourlyParticipantsFetched: number
@@ -64,42 +68,59 @@ async function emitPollerSummariesIfDue(
     const elapsedMs = Math.max(1, now - sw.summary30mWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.summary30mPlayersPolled
     const playersFetchedDelta = state.playersFetched - sw.summary30mPlayersFetched
-    const matchesDelta = state.matchesFetched - sw.summary30mMatchesFetched
-    const requestsDelta = state.requestCount - sw.summary30mRequestCount
+    const matchesDbDelta = state.matchesFetched - sw.summary30mMatchesFetched
+    const matchesApiDelta =
+      state.matchesApiIngestComplete - sw.summary30mMatchesApiIngestComplete
+    const playersRankDelta =
+      state.playersRankUpdatedLeague - sw.summary30mPlayersRankUpdatedLeague
+    const httpRequestsDelta = state.requestCount - sw.summary30mRequestCount
     const error429Delta = state.error429Count - sw.summary30mError429Count
     const participantsDelta = state.participantsFetched - sw.summary30mParticipantsFetched
     const limiterStats = client.getRateLimiterStats()
     const nearLimitPauseDelta =
       limiterStats.nearLimitPauseCount - sw.summary30mNearLimitPauseCount
     const http429PauseDelta = limiterStats.http429PauseCount - sw.summary30mHttp429PauseCount
-    const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const windowHours = elapsedMs / (60 * 60 * 1000)
+    const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
     const lastRlHeaders30m = client.getLastRiotRateLimitHeaders()
     await appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_30m',
-      message: `Resume 30 min — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
+      message: `Resume 30 min — polled:+${playersPolledDelta} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} newPlayers:+${playersFetchedDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h si régulier) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
         elapsedMs,
+        windowHoursApprox: Math.round(windowHours * 1000) / 1000,
+        note:
+          'http = chaque réponse HTTP Riot (dont chaque retry 429). ~…/h = extrapolation si le débit restait constant sur 1 h (la fenêtre réelle est elapsedMs).',
         delta: {
           playersPolled: playersPolledDelta,
           newPlayers: playersFetchedDelta,
-          matches: matchesDelta,
+          matchesInsertedDb: matchesDbDelta,
+          matchesApiIngestComplete: matchesApiDelta,
+          playersRankLeagueUpdated: playersRankDelta,
           participants: participantsDelta,
-          requests: requestsDelta,
+          httpRequests: httpRequestsDelta,
+          requests: httpRequestsDelta,
           error429: error429Delta,
+          matches: matchesDbDelta,
         },
-        requestsPerHour,
+        httpRequestsProjectedPerHour,
+        requestsPerHour: httpRequestsProjectedPerHour,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
         totals: {
           playersPolled: state.playersPolled,
           newPlayers: state.playersFetched,
-          matches: state.matchesFetched,
+          matchesInsertedDb: state.matchesFetched,
+          matchesApiIngestComplete: state.matchesApiIngestComplete,
+          playersRankLeagueUpdated: state.playersRankUpdatedLeague,
           participants: state.participantsFetched,
+          httpRequests: state.requestCount,
           requests: state.requestCount,
+          matches: state.matchesFetched,
           error429: state.error429Count,
           error400: state.error400Count,
         },
@@ -114,6 +135,8 @@ async function emitPollerSummariesIfDue(
     sw.summary30mPlayersPolled = state.playersPolled
     sw.summary30mPlayersFetched = state.playersFetched
     sw.summary30mMatchesFetched = state.matchesFetched
+    sw.summary30mMatchesApiIngestComplete = state.matchesApiIngestComplete
+    sw.summary30mPlayersRankUpdatedLeague = state.playersRankUpdatedLeague
     sw.summary30mRequestCount = state.requestCount
     sw.summary30mError429Count = state.error429Count
     sw.summary30mParticipantsFetched = state.participantsFetched
@@ -124,41 +147,59 @@ async function emitPollerSummariesIfDue(
     const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.hourlyPlayersPolled
     const playersFetchedDelta = state.playersFetched - sw.hourlyPlayersFetched
-    const matchesDelta = state.matchesFetched - sw.hourlyMatchesFetched
-    const requestsDelta = state.requestCount - sw.hourlyRequestCount
+    const matchesDbDelta = state.matchesFetched - sw.hourlyMatchesFetched
+    const matchesApiDelta =
+      state.matchesApiIngestComplete - sw.hourlyMatchesApiIngestComplete
+    const playersRankDelta =
+      state.playersRankUpdatedLeague - sw.hourlyPlayersRankUpdatedLeague
+    const httpRequestsDelta = state.requestCount - sw.hourlyRequestCount
     const error429Delta = state.error429Count - sw.hourlyError429Count
     const participantsDelta = state.participantsFetched - sw.hourlyParticipantsFetched
     const limiterStats = client.getRateLimiterStats()
     const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - sw.hourlyNearLimitPauseCount
     const http429PauseDelta = limiterStats.http429PauseCount - sw.hourlyHttp429PauseCount
-    const requestsPerHour = Math.round((requestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const windowHours = elapsedMs / (60 * 60 * 1000)
+    const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
     const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
     await appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_hourly',
-      message: `Résumé horaire — polled:+${playersPolledDelta}, matches:+${matchesDelta}, participants:+${participantsDelta}, req:+${requestsDelta} (${requestsPerHour}/h), 429:${error429Delta}, pauses:${nearLimitPauseDelta}`,
+      message: `Résumé horaire — joueurs interrogés:+${playersPolledDelta} matchs récupérés (détail+timeline OK):+${matchesApiDelta} matchs ajoutés en DB:+${matchesDbDelta} nouveaux joueurs en DB:+${playersFetchedDelta} joueurs rang League API mis à jour:+${playersRankDelta} participants:+${participantsDelta} requêtes HTTP:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h si débit constant) 429:+${error429Delta} pauses near-limit:+${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.hourlyWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
         elapsedMs,
+        windowHoursApprox: Math.round(windowHours * 1000) / 1000,
+        hourlySummaryIntervalMsConfigured: hourlySummaryIntervalMs,
+        note:
+          'requêtes HTTP = une unité par réponse Riot reçue (match ids, détail, timeline, league…), y compris chaque réponse 429 avant retry. La limite Riot est surtout 100 appels / 120 s et 20 / 1 s, pas un plafond fixe 3000/h. ~…/h = extrapolation linéaire sur 1 h à partir de la fenêtre elapsedMs (si la fenêtre < 1 h, la projection peut dépasser la moyenne réelle sur 60 min).',
         delta: {
           playersPolled: playersPolledDelta,
           newPlayers: playersFetchedDelta,
-          matches: matchesDelta,
+          matchesInsertedDb: matchesDbDelta,
+          matchesApiIngestComplete: matchesApiDelta,
+          playersRankLeagueUpdated: playersRankDelta,
           participants: participantsDelta,
-          requests: requestsDelta,
+          httpRequests: httpRequestsDelta,
+          requests: httpRequestsDelta,
           error429: error429Delta,
+          matches: matchesDbDelta,
         },
-        requestsPerHour,
+        httpRequestsProjectedPerHour,
+        requestsPerHour: httpRequestsProjectedPerHour,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
         totals: {
           playersPolled: state.playersPolled,
           newPlayers: state.playersFetched,
-          matches: state.matchesFetched,
+          matchesInsertedDb: state.matchesFetched,
+          matchesApiIngestComplete: state.matchesApiIngestComplete,
+          playersRankLeagueUpdated: state.playersRankUpdatedLeague,
           participants: state.participantsFetched,
+          httpRequests: state.requestCount,
           requests: state.requestCount,
+          matches: state.matchesFetched,
           error429: state.error429Count,
           error400: state.error400Count,
         },
@@ -173,6 +214,8 @@ async function emitPollerSummariesIfDue(
     sw.hourlyPlayersPolled = state.playersPolled
     sw.hourlyPlayersFetched = state.playersFetched
     sw.hourlyMatchesFetched = state.matchesFetched
+    sw.hourlyMatchesApiIngestComplete = state.matchesApiIngestComplete
+    sw.hourlyPlayersRankUpdatedLeague = state.playersRankUpdatedLeague
     sw.hourlyRequestCount = state.requestCount
     sw.hourlyError429Count = state.error429Count
     sw.hourlyParticipantsFetched = state.participantsFetched
@@ -267,10 +310,15 @@ export interface RiotPollerStatus {
   requestCount: number
   error429Count: number
   error400Count: number
+  /** New rows in `matchs` (ingest). */
   matchesFetched: number
+  /** Match + timeline API pair completed successfully for ingest. */
+  matchesApiIngestComplete: number
   playersFetched: number
   playersPolled: number
   participantsFetched: number
+  /** Successful League-v4-by-puuid responses that fed rank data during ingest. */
+  playersRankUpdatedLeague: number
   matchesRankFixed: number
   participantsRankFixed: number
   participantsRoleFixed: number
@@ -286,9 +334,11 @@ const defaultStatus: RiotPollerStatus = {
   error429Count: 0,
   error400Count: 0,
   matchesFetched: 0,
+  matchesApiIngestComplete: 0,
   playersFetched: 0,
   playersPolled: 0,
   participantsFetched: 0,
+  playersRankUpdatedLeague: 0,
   matchesRankFixed: 0,
   participantsRankFixed: 0,
   participantsRoleFixed: 0,
@@ -347,6 +397,30 @@ function riotIngestRequestOptions(): {
   shouldAbort: () => boolean
 } {
   return { infinite429Retry: true, shouldAbort: () => state.shouldStop }
+}
+
+/**
+ * Upsert returned without persisting this match on purpose (remake, version filter, empty DTO, etc.).
+ * Not a DB failure — consumer must not flag prisma_error for these cases.
+ */
+class MatchIngestSkippedError extends Error {
+  readonly reason: string
+  constructor(reason: string) {
+    super(`Match ingest skipped (${reason})`)
+    this.name = 'MatchIngestSkippedError'
+    this.reason = reason
+  }
+}
+
+function isMatchIngestSkippedError(e: unknown): e is MatchIngestSkippedError {
+  return e instanceof MatchIngestSkippedError
+}
+
+/** Prisma may wrap errors thrown inside `$transaction` — unwrap `cause` chain. */
+function unwrapMatchIngestSkipped(err: unknown): MatchIngestSkippedError | null {
+  if (isMatchIngestSkippedError(err)) return err
+  if (err instanceof Error && err.cause != null) return unwrapMatchIngestSkipped(err.cause)
+  return null
 }
 
 function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolean {
@@ -494,6 +568,92 @@ function clearTimelineRetry(matchId: string): void {
   timelineRetryState.delete(matchId)
 }
 
+/**
+ * Some match ids can fail ingest repeatedly (e.g. before a deploy fix). Without backoff, those ids
+ * stay in toFetch forever, block lastSeen, and `newMatches` stays 0 while the loop burns quota.
+ */
+const matchIngestBackoffUntilMs = new Map<string, number>()
+const matchIngestConsecutiveFails = new Map<string, number>()
+const MATCH_INGEST_FAILS_BEFORE_BACKOFF = 4
+const MATCH_INGEST_BACKOFF_MS = 45 * 60 * 1000
+
+function clearMatchIngestCooldownKeys(matchIdFromList: string, canonicalRiotMatchId: string): void {
+  for (const k of [matchIdFromList, canonicalRiotMatchId]) {
+    matchIngestBackoffUntilMs.delete(k)
+    matchIngestConsecutiveFails.delete(k)
+  }
+}
+
+function canAttemptMatchIngestNow(matchId: string, nowMs: number): boolean {
+  const until = matchIngestBackoffUntilMs.get(matchId)
+  if (until == null) return true
+  if (until <= nowMs) {
+    matchIngestBackoffUntilMs.delete(matchId)
+    matchIngestConsecutiveFails.delete(matchId)
+    return true
+  }
+  return false
+}
+
+async function recordMatchIngestFailure(
+  matchIdFromList: string,
+  logger: ReturnType<typeof createRiotPollerLogger>
+): Promise<void> {
+  const fails = (matchIngestConsecutiveFails.get(matchIdFromList) ?? 0) + 1
+  matchIngestConsecutiveFails.set(matchIdFromList, fails)
+  if (fails >= MATCH_INGEST_FAILS_BEFORE_BACKOFF) {
+    const until = Date.now() + MATCH_INGEST_BACKOFF_MS
+    matchIngestBackoffUntilMs.set(matchIdFromList, until)
+    matchIngestConsecutiveFails.delete(matchIdFromList)
+    await logger.info('Match ingest suspended temporarily (repeated failures)', {
+      matchId: matchIdFromList,
+      failsBeforeSuspend: fails,
+      retryNotBefore: new Date(until).toISOString(),
+      backoffMinutes: Math.round(MATCH_INGEST_BACKOFF_MS / 60_000),
+    })
+  }
+}
+
+/**
+ * Paramètres pour GET match-v5 `/matches/by-puuid/{puuid}/ids` :
+ * - `lastSeen` null → liste des matchs **sur la fenêtre patch** (match-filters + versions.json, ou mode priorité live).
+ * - `lastSeen` défini → matchs **depuis le dernier poll** [lastSeen, maintenant], **bornés** à la fenêtre patch si elle existe.
+ * Retourne `null` si l’intervalle est vide (rien à demander à l’API).
+ */
+function buildMatchIdsQueryForPlayer(
+  player: { lastSeen: Date | null },
+  filters: MatchFiltersConfig,
+  patchWindow: { startTime: number; endTime: number } | null
+): { queue: number; count: number; start: number; startTime?: number; endTime?: number } | null {
+  const q: { queue: number; count: number; start: number; startTime?: number; endTime?: number } = {
+    queue: filters.queue,
+    count: filters.count,
+    start: 0,
+  }
+  const nowSec = Math.floor(Date.now() / 1000)
+
+  if (player.lastSeen == null) {
+    if (patchWindow) {
+      q.startTime = patchWindow.startTime
+      q.endTime = Math.min(patchWindow.endTime, nowSec)
+    }
+    return q
+  }
+
+  const lastPollSec = Math.floor(player.lastSeen.getTime() / 1000)
+  let startSec = lastPollSec
+  let endSec = nowSec
+  if (patchWindow) {
+    startSec = Math.max(startSec, patchWindow.startTime)
+    endSec = Math.min(endSec, patchWindow.endTime, nowSec)
+  }
+  if (endSec <= startSec) return null
+
+  q.startTime = startSec
+  q.endTime = endSec
+  return q
+}
+
 async function getDiskUsagePercent(path: string): Promise<number | null> {
   try {
     const s = await statfs(path)
@@ -627,9 +787,7 @@ export async function runPhase2(
         if (!riotMatchId) continue
 
         const matchRes = await client.getMatch(riotMatchId)
-        setState({ requestCount: state.requestCount + 1 })
         if (!matchRes.ok) {
-          if (matchRes.status === 429) setState({ error429Count: state.error429Count + 1 })
           continue
         }
 
@@ -970,19 +1128,36 @@ function buildBucketRows(
   return out
 }
 
+/** Canonical `riot_match_id` used in DB: trimmed queue id, else metadata.matchId, else info.gameId string. */
+function resolveRiotMatchIdForIngest(queueRiotMatchId: string, dto: RiotMatchDto): string {
+  const fromMeta = dto.metadata?.matchId?.trim() ?? ''
+  const fromGameId = dto.info?.gameId != null ? String(dto.info.gameId) : ''
+  return queueRiotMatchId.trim() || fromMeta || fromGameId
+}
+
 export async function upsertMatchAndParticipants(
   client: RiotHttpClient,
   region: string,
+  /** Match id from the poller queue / Riot URL (e.g. EUW1_…). */
+  queueRiotMatchId: string,
   dto: RiotMatchDto,
   puuidKeyVersion: string | null,
-  counters: { matchesFetched: number; participantsFetched: number; playersFetched: number; requestCount?: number },
+  counters: {
+    matchesFetched: number
+    participantsFetched: number
+    playersFetched: number
+    matchesApiIngestComplete: number
+    playersRankUpdatedLeague: number
+  },
   logger?: ReturnType<typeof createRiotPollerLogger>
-): Promise<void> {
-  const riotMatchId = dto.metadata?.matchId ?? dto.info?.gameId?.toString()
-  if (!riotMatchId) return
+): Promise<{ matchDbId: bigint; canonicalRiotMatchId: string }> {
+  const riotMatchId = resolveRiotMatchIdForIngest(queueRiotMatchId, dto)
+  if (!riotMatchId) throw new MatchIngestSkippedError('no_riot_match_id')
   const info = dto.info
-  if (!info?.participants?.length) return
-  if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') return
+  if (!info?.participants?.length) throw new MatchIngestSkippedError('no_participants')
+  if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') {
+    throw new MatchIngestSkippedError('not_game_complete')
+  }
 
   const gameDuration = info.gameDuration ?? 0
   const infoAny = info as Record<string, unknown>
@@ -1061,7 +1236,6 @@ export async function upsertMatchAndParticipants(
     }
 
     const entriesRes = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
-    if (counters.requestCount != null) counters.requestCount++
     if (!entriesRes.ok) {
       if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
         throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
@@ -1071,6 +1245,7 @@ export async function upsertMatchAndParticipants(
       setCachedRank(puuid, fallback)
       return
     }
+    counters.playersRankUpdatedLeague++
     if (!Array.isArray(entriesRes.data)) {
       const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
       accountRankCache.set(puuid, fallback)
@@ -1095,11 +1270,11 @@ export async function upsertMatchAndParticipants(
       const pid = p.puuid
       if (!pid) continue
       if (!needsLeagueRankApiFromDto(p)) continue
-      if (!isNewestStoredMatchForPuuid(pid)) continue
+      // DTO sans rang complet → League v4 (dédup par cache global 24h + cache de ce match).
       await fetchAccountRankForParticipant(pid)
     }
   } catch (e) {
-    if (e instanceof Error && e.message === RIOT_INGEST_ABORTED_MESSAGE) return
+    if (e instanceof Error && e.message === RIOT_INGEST_ABORTED_MESSAGE) throw e
     throw e
   }
 
@@ -1121,13 +1296,15 @@ export async function upsertMatchAndParticipants(
     (p) => (p as { gameEndedInEarlySurrender?: boolean }).gameEndedInEarlySurrender === true
   )
 
-  await prisma.$transaction(
+  const matchDbId = await prisma.$transaction(
     async (tx) => {
       const existing = await tx.match.findUnique({ where: { riotMatchId }, select: { id: true } })
-      if (existing) return
+      if (existing) return existing.id
 
       const gameVersion = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(info))
-      if (!isAllowedGameVersion(gameVersion)) return
+      if (!isAllowedGameVersion(gameVersion)) {
+        throw new MatchIngestSkippedError('game_version_not_allowed')
+      }
 
       const existingPlayers = await tx.player.findMany({
         where: { puuid: { in: puuids } },
@@ -1536,9 +1713,12 @@ export async function upsertMatchAndParticipants(
   })
 
       if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
+      return match.id
     },
     { maxWait: 15_000, timeout: 180_000 }
   )
+
+  return { matchDbId, canonicalRiotMatchId: riotMatchId }
 }
 
 /**
@@ -1804,13 +1984,13 @@ async function runStep4ForPlayer(
   region: string,
   puuidKeyVersion: string | null,
   counters: {
-    requestCount: number
-    error429Count: number
     error400Count: number
     matchesFetched: number
+    matchesApiIngestComplete: number
     playersFetched: number
     playersPolled: number
     participantsFetched: number
+    playersRankUpdatedLeague: number
   },
   matchListTimeWindow: { startTime: number; endTime: number } | null
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
@@ -1851,8 +2031,6 @@ async function runStep4ForPlayer(
       attempts++
 
       const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
-      counters.requestCount++
-      if (!matchRes.ok && matchRes.status === 429) counters.error429Count++
       if (!matchRes.ok) {
         if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
           counters.error400Count++
@@ -1882,8 +2060,6 @@ async function runStep4ForPlayer(
       }
 
       const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
-      counters.requestCount++
-      if (!timelineRes.ok && timelineRes.status === 429) counters.error429Count++
       if (!timelineRes.ok) {
         if (timelineRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
           return { ok: false, reason: 'abort' }
@@ -1899,6 +2075,7 @@ async function runStep4ForPlayer(
         continue
       }
       clearTimelineRetry(matchId)
+      counters.matchesApiIngestComplete++
       return { ok: true, matchDto: matchRes.data, timelineDto: timelineRes.data }
     }
 
@@ -1920,16 +2097,7 @@ async function runStep4ForPlayer(
 
   const flags = { foundPrismaError: false }
 
-  const matchIdsQueryBase: {
-    queue: number; count: number; start: number; startTime?: number; endTime?: number
-  } = { queue: filters.queue, count: filters.count, start: 0 }
-  if (latestPatchDateWindow) {
-    matchIdsQueryBase.startTime = latestPatchDateWindow.startTime
-    matchIdsQueryBase.endTime = latestPatchDateWindow.endTime
-  } else if (matchListTimeWindow) {
-    matchIdsQueryBase.startTime = matchListTimeWindow.startTime
-    matchIdsQueryBase.endTime = matchListTimeWindow.endTime
-  }
+  const patchWindowForMatchList = latestPatchDateWindow ?? matchListTimeWindow
 
   // ── Phase 1: Collect match work items across all players ──────────────
 
@@ -1965,16 +2133,17 @@ async function runStep4ForPlayer(
     validPlayers.push(player)
   }
 
-  // Fetch all match IDs in parallel — Bottleneck handles the rate limiting
+  // Fetch all match IDs in parallel — requête par joueur (fenêtre patch vs depuis lastSeen).
   const matchIdResults = await Promise.all(
     validPlayers.map(async (player) => {
-      const res = await client.getMatchIdsByPuuid(
-        player.puuid,
-        matchIdsQueryBase,
-        riotIngestRequestOptions()
-      )
-      counters.requestCount++
-      if (!res.ok && res.status === 429) counters.error429Count++
+      const query = buildMatchIdsQueryForPlayer(player, filters, patchWindowForMatchList)
+      if (query == null) {
+        return {
+          player,
+          res: { ok: true as const, status: 200, data: [] as string[] },
+        }
+      }
+      const res = await client.getMatchIdsByPuuid(player.puuid, query, riotIngestRequestOptions())
       return { player, res }
     })
   )
@@ -1999,7 +2168,10 @@ async function runStep4ForPlayer(
     const existingSet = new Set(existing.map((m) => m.riotMatchId))
     const nowMs = Date.now()
     const toFetch = matchIds.filter(
-      (id) => !existingSet.has(id) && canAttemptTimelineFetchNow(id, nowMs)
+      (id) =>
+        !existingSet.has(id) &&
+        canAttemptTimelineFetchNow(id, nowMs) &&
+        canAttemptMatchIngestNow(id, nowMs)
     )
 
     const trackerIdx = playerTrackers.length
@@ -2055,22 +2227,30 @@ async function runStep4ForPlayer(
         const item = ingestQueue.shift()!
         const tracker = playerTrackers[item.trackerIdx]
         try {
-          await upsertMatchAndParticipants(
-            client, region, item.matchDto, puuidKeyVersion, counters, logger
+          const { matchDbId, canonicalRiotMatchId } = await upsertMatchAndParticipants(
+            client, region, item.matchId, item.matchDto, puuidKeyVersion, counters, logger
           )
-          const matchRow = await prisma.match.findUnique({
-            where: { riotMatchId: item.matchId },
-            select: { id: true },
-          })
-          if (!matchRow) throw new Error(`match missing after upsert: ${item.matchId}`)
-          await extractAndInsertJungleFirstClear(matchRow.id, item.matchId, item.timelineDto, logger)
+          await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)
           await extractAndInsertTimelineExtras(
-            matchRow.id, item.matchId, item.timelineDto,
+            matchDbId, canonicalRiotMatchId, item.timelineDto,
             item.matchDto.info?.participants ?? [], logger
           )
-          tracker.ingestedIds.push(item.matchId)
+          tracker.ingestedIds.push(canonicalRiotMatchId)
+          clearMatchIngestCooldownKeys(item.matchId, canonicalRiotMatchId)
         } catch (err) {
-          await prisma.match.deleteMany({ where: { riotMatchId: item.matchId } }).catch(() => undefined)
+          const skipped = unwrapMatchIngestSkipped(err)
+          if (skipped) {
+            await logger.info('Match ingest skipped', {
+              playerId: tracker.player.id.toString(),
+              matchId: item.matchId,
+              reason: skipped.reason,
+            })
+            continue
+          }
+          const cleanupId = resolveRiotMatchIdForIngest(item.matchId, item.matchDto)
+          if (cleanupId) {
+            await prisma.match.deleteMany({ where: { riotMatchId: cleanupId } }).catch(() => undefined)
+          }
           if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) return
           tracker.pendingTransientIngest = true
           await logger.error('Player match ingest failed', {
@@ -2078,6 +2258,7 @@ async function runStep4ForPlayer(
             matchId: item.matchId,
             error: err instanceof Error ? err.message : String(err),
           })
+          await recordMatchIngestFailure(item.matchId, logger)
           flags.foundPrismaError = true
         }
       } else if (producerDone) {
@@ -2223,6 +2404,13 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
   client.setKey(resolved.key, resolved.source, resolved.clefType)
   await logger.step('API key loaded', { source: resolved.source, keyLen: resolved.key.length })
 
+  client.setOnHttpResponse(({ httpStatus }) => {
+    setState({
+      requestCount: state.requestCount + 1,
+      ...(httpStatus === 429 ? { error429Count: state.error429Count + 1 } : {}),
+    })
+  })
+
   client.setOnInvalidKey(() => {
     const msg = 'API key invalid or expired — stopping poller'
     if (state.shouldStop && state.lastError === msg) return
@@ -2236,13 +2424,13 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
 
 async function runStep4Counters() {
   return {
-    requestCount: state.requestCount,
-    error429Count: state.error429Count,
     error400Count: state.error400Count,
     matchesFetched: state.matchesFetched,
+    matchesApiIngestComplete: state.matchesApiIngestComplete,
     playersFetched: state.playersFetched,
     playersPolled: state.playersPolled,
     participantsFetched: state.participantsFetched,
+    playersRankUpdatedLeague: state.playersRankUpdatedLeague,
   }
 }
 
@@ -2260,9 +2448,11 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     error429Count: 0,
     error400Count: 0,
     matchesFetched: 0,
+    matchesApiIngestComplete: 0,
     playersFetched: 0,
     playersPolled: 0,
     participantsFetched: 0,
+    playersRankUpdatedLeague: 0,
     matchesRankFixed: 0,
     participantsRankFixed: 0,
     participantsRoleFixed: 0,
@@ -2298,12 +2488,15 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersPolled = 0
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
+    let heartbeatMatchesApiIngestComplete = 0
     const initLimiterStats = client.getRateLimiterStats()
     const sw: PollerSummaryWindows = {
       summary30mWindowStartedAtMs: Date.now(),
       summary30mPlayersPolled: state.playersPolled,
       summary30mPlayersFetched: state.playersFetched,
       summary30mMatchesFetched: state.matchesFetched,
+      summary30mMatchesApiIngestComplete: state.matchesApiIngestComplete,
+      summary30mPlayersRankUpdatedLeague: state.playersRankUpdatedLeague,
       summary30mRequestCount: state.requestCount,
       summary30mError429Count: state.error429Count,
       summary30mParticipantsFetched: state.participantsFetched,
@@ -2313,6 +2506,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       hourlyPlayersPolled: state.playersPolled,
       hourlyPlayersFetched: state.playersFetched,
       hourlyMatchesFetched: state.matchesFetched,
+      hourlyMatchesApiIngestComplete: state.matchesApiIngestComplete,
+      hourlyPlayersRankUpdatedLeague: state.playersRankUpdatedLeague,
       hourlyRequestCount: state.requestCount,
       hourlyError429Count: state.error429Count,
       hourlyParticipantsFetched: state.participantsFetched,
@@ -2365,7 +2560,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       // EUW1 collection
       client.setPlatform('euw1')
       const countersEuw = await runStep4Counters()
-      const requestCountBeforeEuw = countersEuw.requestCount
+      const requestCountBeforeEuw = state.requestCount
       const resultEuw = await runStep4ForPlayer(
         client,
         logger,
@@ -2376,13 +2571,13 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         matchListTimeWindow
       )
       setState({
-        requestCount: countersEuw.requestCount,
-        error429Count: countersEuw.error429Count,
         error400Count: countersEuw.error400Count,
         matchesFetched: countersEuw.matchesFetched,
+        matchesApiIngestComplete: countersEuw.matchesApiIngestComplete,
         playersFetched: countersEuw.playersFetched,
         playersPolled: countersEuw.playersPolled,
         participantsFetched: countersEuw.participantsFetched,
+        playersRankUpdatedLeague: countersEuw.playersRankUpdatedLeague,
       })
       if (resultEuw === '400_decrypt') {
         setTriggerPuuidMigrationOnPollerExit(true)
@@ -2393,15 +2588,15 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         await logger.alerte('Prisma error in step 4 (euw1), continuing', {
           region: 'euw1',
           loopIteration,
-          requestCountTotal: countersEuw.requestCount,
-          requestsDeltaThisRegion: countersEuw.requestCount - requestCountBeforeEuw,
+          httpRequestsTotal: state.requestCount,
+          httpRequestsDeltaThisRegion: state.requestCount - requestCountBeforeEuw,
         })
       }
 
       // EUN1 collection
       client.setPlatform('eun1')
       const countersEun = await runStep4Counters()
-      const requestCountBeforeEun = countersEun.requestCount
+      const requestCountBeforeEun = state.requestCount
       const resultEun = await runStep4ForPlayer(
         client,
         logger,
@@ -2412,13 +2607,13 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         matchListTimeWindow
       )
       setState({
-        requestCount: countersEun.requestCount,
-        error429Count: countersEun.error429Count,
         error400Count: countersEun.error400Count,
         matchesFetched: countersEun.matchesFetched,
+        matchesApiIngestComplete: countersEun.matchesApiIngestComplete,
         playersFetched: countersEun.playersFetched,
         playersPolled: countersEun.playersPolled,
         participantsFetched: countersEun.participantsFetched,
+        playersRankUpdatedLeague: countersEun.playersRankUpdatedLeague,
       })
       if (resultEun === '400_decrypt') {
         setTriggerPuuidMigrationOnPollerExit(true)
@@ -2429,8 +2624,8 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         await logger.alerte('Prisma error in step 4 (eun1), continuing', {
           region: 'eun1',
           loopIteration,
-          requestCountTotal: countersEun.requestCount,
-          requestsDeltaThisRegion: countersEun.requestCount - requestCountBeforeEun,
+          httpRequestsTotal: state.requestCount,
+          httpRequestsDeltaThisRegion: state.requestCount - requestCountBeforeEun,
         })
       }
 
@@ -2471,22 +2666,27 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         const deltaPlayersPolled = state.playersPolled - heartbeatPlayersPolled
         const deltaPlayersFetched = state.playersFetched - heartbeatPlayersFetched
         const deltaMatchesFetched = state.matchesFetched - heartbeatMatchesFetched
+        const deltaMatchesApi = state.matchesApiIngestComplete - heartbeatMatchesApiIngestComplete
+        // newMatches = nouvelles lignes en DB ; matchPairsApiOk = détail+timeline OK (activité API même sans nouvelle ligne).
         console.log(
           '[RiotPoller] Ping 60s',
           JSON.stringify({
             playersPolled: deltaPlayersPolled,
             newPlayersAdded: deltaPlayersFetched,
             newMatches: deltaMatchesFetched,
+            matchPairsApiOk: deltaMatchesApi,
             totals: {
               playersPolled: state.playersPolled,
               newPlayersAdded: state.playersFetched,
               newMatches: state.matchesFetched,
+              matchPairsApiOk: state.matchesApiIngestComplete,
             },
           })
         )
         heartbeatPlayersPolled = state.playersPolled
         heartbeatPlayersFetched = state.playersFetched
         heartbeatMatchesFetched = state.matchesFetched
+        heartbeatMatchesApiIngestComplete = state.matchesApiIngestComplete
         heartbeatAtMs = now
       }
     }

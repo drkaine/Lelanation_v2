@@ -106,10 +106,14 @@ function payloadFromUnifiedLogEntry(
     lastError: null,
     lastLoopStartedAt: winStart,
     lastLoopFinishedAt: winEnd,
-    requestCount: num(totals['requests']),
+    requestCount:
+      typeof totals['httpRequests'] === 'number' ? num(totals['httpRequests']) : num(totals['requests']),
     error429Count: num(totals['error429']),
     error400Count: num(totals['error400']),
-    matchesFetched: num(totals['matches']),
+    matchesFetched:
+      typeof totals['matchesInsertedDb'] === 'number'
+        ? num(totals['matchesInsertedDb'])
+        : num(totals['matches']),
     playersFetched: num(totals['newPlayers']),
     playersPolled: num(totals['playersPolled']),
     participantsFetched: num(totals['participants']),

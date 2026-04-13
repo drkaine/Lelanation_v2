@@ -8,9 +8,9 @@ test('RiotRateLimiter: schedule paces requests via token drip', async () => {
   await limiter.schedule(async () => 'a')
   await limiter.schedule(async () => 'b')
   const elapsed = Date.now() - t0
-  // First call uses initial token, second waits ~1.25 s for next drip
+  // First call uses initial token, second waits ~1200 ms for next drip (99/120 s target)
   assert.ok(elapsed >= 1_000, `Second call should wait for token drip, got ${elapsed}ms`)
-  assert.ok(elapsed < 3_000, `Should not wait too long, got ${elapsed}ms`)
+  assert.ok(elapsed < 3_500, `Should not wait too long, got ${elapsed}ms`)
 })
 
 test('RiotRateLimiter: penalize429 blocks schedule for retry-after duration', async () => {
@@ -20,7 +20,7 @@ test('RiotRateLimiter: penalize429 blocks schedule for retry-after duration', as
   const t0 = Date.now()
   await limiter.schedule(async () => 'ok')
   const elapsed = Date.now() - t0
-  // Wait penalty (4.5 s) + token drip (~1.25 s)
+  // Wait penalty (4.5 s) + token drip (~1.21 s)
   assert.ok(elapsed >= 4_000, `Should wait for penalty + drip, got ${elapsed}ms`)
   assert.ok(elapsed < 10_000, `Should not wait too long, got ${elapsed}ms`)
 })
@@ -35,6 +35,22 @@ test('RiotRateLimiter: concurrent penalize429 keeps longest penalty', () => {
 
   limiter.penalize429(1) // shorter — no-op on timing, still counted
   assert.equal(limiter.getStats().http429PauseCount, 3)
+})
+
+test('RiotRateLimiter: syncFromResponseHeaders applies breath when 120s bucket has one slot left', async () => {
+  const limiter = new RiotRateLimiter()
+  await limiter.schedule(async () => 'init')
+  const headers = new Headers({
+    'x-app-rate-limit': '20:1,100:120',
+    'x-app-rate-limit-count': '99:120',
+  })
+  limiter.syncFromResponseHeaders(headers)
+  const t0 = Date.now()
+  await limiter.schedule(async () => 'after')
+  const elapsed = Date.now() - t0
+  assert.ok(elapsed >= 2_350, `Should wait header breath (2.5s) + token refill, got ${elapsed}ms`)
+  assert.ok(elapsed < 10_000)
+  assert.equal(limiter.getStats().nearLimitPauseCount, 1)
 })
 
 test('RiotRateLimiter: syncFromResponseHeaders tracks buckets', () => {

@@ -13,6 +13,8 @@ export type PollerMetricsBucket = {
   error429: number
   error400: number
   matches: number
+  /** Paires match + timeline OK (delta), distinct des matchs insérés en DB. */
+  matchesApiIngestComplete: number
   participants: number
   playersPolled: number
   newPlayers: number
@@ -88,6 +90,7 @@ export async function aggregatePollerMetricsFromUnifiedLog(options: {
         error429: 0,
         error400: 0,
         matches: 0,
+        matchesApiIngestComplete: 0,
         participants: 0,
         playersPolled: 0,
         newPlayers: 0,
@@ -98,10 +101,12 @@ export async function aggregatePollerMetricsFromUnifiedLog(options: {
       buckets.set(key, b)
     }
 
-    b.requests += num(delta['requests'])
+    const httpReq = delta['httpRequests']
+    b.requests += typeof httpReq === 'number' ? num(httpReq) : num(delta['requests'])
     b.error429 += num(delta['error429'])
     b.error400 += num(delta['error400'])
     b.matches += num(delta['matches'])
+    b.matchesApiIngestComplete += num(delta['matchesApiIngestComplete'])
     b.participants += num(delta['participants'])
     b.playersPolled += num(delta['playersPolled'])
     b.newPlayers += num(delta['newPlayers'])

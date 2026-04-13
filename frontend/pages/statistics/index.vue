@@ -153,15 +153,27 @@
             <div class="flex flex-wrap gap-1">
               <button
                 type="button"
-                class="stats-division-btn rounded px-2 py-0.5 text-xs font-semibold transition-colors"
+                class="stats-division-btn rounded p-0.5 transition-colors"
                 :class="
                   statsDivisionFilter.length === 0
-                    ? 'bg-blue-500/20 text-blue-200 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 text-text/85 hover:bg-white/10'
+                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
+                    : 'bg-black/20 hover:bg-white/10'
                 "
+                :title="t('statisticsPage.allRanks')"
                 @click="selectAllDivisions()"
               >
-                All
+                <img
+                  src="/data/community-dragon/ranked-emblem/Unranked.png"
+                  :alt="t('statisticsPage.allRanks')"
+                  class="h-3 w-3 object-contain"
+                  :class="
+                    statsDivisionFilter.length === 0
+                      ? 'saturate-110 opacity-100'
+                      : 'brightness-125 grayscale'
+                  "
+                  width="12"
+                  height="12"
+                />
               </button>
               <button
                 v-for="tier in rankTiers"
@@ -264,15 +276,21 @@
             <div class="flex flex-wrap gap-1">
               <button
                 type="button"
-                class="stats-role-btn rounded px-2 py-0.5 text-xs font-semibold transition-colors"
-                :class="
-                  !statsRoleFilter
-                    ? 'bg-blue-500/20 text-blue-200'
-                    : 'bg-black/20 text-text/85 hover:bg-white/10'
-                "
+                class="stats-role-btn rounded p-0.5 transition-colors"
+                :class="!statsRoleFilter ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
+                :title="t('statisticsPage.allRoles')"
                 @click="selectAllRoles()"
               >
-                All
+                <img
+                  src="/icons/roles/all-role.png"
+                  :alt="t('statisticsPage.allRoles')"
+                  class="h-3 w-3 object-contain"
+                  :class="
+                    !statsRoleFilter ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                  "
+                  width="12"
+                  height="12"
+                />
               </button>
               <button
                 v-for="r in roles"

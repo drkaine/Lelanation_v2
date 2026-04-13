@@ -96,12 +96,17 @@ export async function resolveRiotApiKey(): Promise<
 
 const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 120_000
 
+/** Fired once per completed `fetch` (every HTTP round-trip), including 4xx/5xx and 429 before retry. */
+export type RiotHttpResponseObserver = (info: { bucket: string; httpStatus: number }) => void
+
 export class RiotHttpClient {
   private key: string = ''
   private keySource: RiotKeySource = 'env'
   private clefType: string | null = null
   private platform: string = 'euw1'
   private onInvalidKey?: () => void
+  /** Optional: poller uses this to count every Riot HTTP response (accurate request totals). */
+  private onHttpResponse?: RiotHttpResponseObserver
   /** Throttle unified logs that include Riot rate-limit headers from successful responses. */
   private lastRiotRateLimitSnapshotLogMs = 0
   /** Last observed rate-limit header set (OK responses). */
@@ -112,6 +117,11 @@ export class RiotHttpClient {
     private readonly _log: RiotPollerLogger,
     private readonly apiLogScript: string = 'poller'
   ) {}
+
+  /** Count every Riot API HTTP response (200, 429, etc.); each 429 retry is another response. */
+  setOnHttpResponse(cb: RiotHttpResponseObserver | undefined): void {
+    this.onHttpResponse = cb
+  }
 
   /** Latest rate-limit headers from the last successful Riot response (for poller snapshots). */
   getLastRiotRateLimitHeaders(): Record<string, string> {
@@ -174,6 +184,8 @@ export class RiotHttpClient {
       void this._log.error('Riot API request failed', msg, url)
       return { ok: false, status: 0, message: msg }
     }
+
+    this.onHttpResponse?.({ bucket, httpStatus: res.status })
 
     let data: unknown
     try {
