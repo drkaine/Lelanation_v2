@@ -241,7 +241,7 @@ const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
 const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
 const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MATCH_FETCH_RETRY_DELAY_MS = 2_000
-const MATCH_FETCH_MAX_ATTEMPTS = 40
+const MATCH_FETCH_MAX_ATTEMPTS = 3
 const SYNC_ACTIVE_PATCHES_EVERY_MS = 4 * 60 * 60 * 1000
 const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
 
@@ -2036,7 +2036,8 @@ async function runStep4ForPlayer(
 
   type StrictFetchResult =
     | { ok: true; matchDto: RiotMatchDto; timelineDto: RiotMatchTimelineDto }
-    | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'transient' | 'deferred_patch' }
+    | { ok: false; reason: '400_decrypt' | 'abort' | 'version' | 'deferred_patch' }
+    | { ok: false; reason: 'transient'; matchDto: RiotMatchDto | null }
 
   const patchPolicy = await resolvePatchPollingPolicy()
   let latestPatchDateWindow: { startTime: number; endTime: number } | null = null
@@ -2143,18 +2144,17 @@ async function runStep4ForPlayer(
       return { ok: true, matchDto: cachedMatchDto, timelineDto: timelineRes.data }
     }
 
-    scheduleTimelineRetry(matchId)
-    if (!state.shouldStop && attempts >= MATCH_FETCH_MAX_ATTEMPTS) {
-      logPollerRiotApiToUnified('Riot match+timeline abandonné (max tentatives)', {
+    // Timeline exhausted retries but we have the match detail → return it
+    // so the match data is still ingested (no wasted getMatch request).
+    if (cachedMatchDto) {
+      logPollerRiotApiToUnified('Timeline indisponible — match ingéré sans timeline', {
         region,
         matchId,
         maxAttempts: MATCH_FETCH_MAX_ATTEMPTS,
         lastAttempt: attempts,
-        hadCachedMatchDto: cachedMatchDto != null,
       })
     }
-    await logger.info('Skip match ingest after retry exhaustion', { matchId, maxAttempts: MATCH_FETCH_MAX_ATTEMPTS })
-    return { ok: false, reason: 'transient' }
+    return { ok: false, reason: 'transient', matchDto: cachedMatchDto }
   }
 
   const players = await prisma.player.findMany({
@@ -2207,23 +2207,35 @@ async function runStep4ForPlayer(
   }
 
   // Fetch all match IDs in parallel — requête par joueur (fenêtre patch vs depuis lastSeen).
+  let phase1QueryNull = 0
   const matchIdResults = await Promise.all(
     validPlayers.map(async (player) => {
       const query = buildMatchIdsQueryForPlayer(player, filters, patchWindowForMatchList)
       if (query == null) {
+        phase1QueryNull++
         return {
           player,
           res: { ok: true as const, status: 200, data: [] as string[] },
+          queryNull: true,
         }
       }
       const res = await client.getMatchIdsByPuuid(player.puuid, query, riotIngestRequestOptions())
-      return { player, res }
+      return { player, res, queryNull: false }
     })
   )
 
+  // Phase 1 diagnostics
+  let phase1TotalIds = 0
+  let phase1InDb = 0
+  let phase1InBackoff = 0
+  let phase1InTimelineRetry = 0
+  let phase1ToFetch = 0
+  let phase1ApiError = 0
+
   // Process results sequentially (DB lookups, tracker creation)
-  for (const { player, res } of matchIdResults) {
+  for (const { player, res, queryNull } of matchIdResults) {
     if (!res.ok) {
+      phase1ApiError++
       if (res.message === RIOT_INGEST_ABORTED_MESSAGE) return 'ok'
       if (res.status === 400 && is400Decrypt(res.body)) {
         counters.error400Count++
@@ -2241,18 +2253,21 @@ async function runStep4ForPlayer(
     }
 
     const matchIds = Array.isArray(res.data) ? res.data : []
+    phase1TotalIds += matchIds.length
     const existing = await prisma.match.findMany({
       where: { riotMatchId: { in: matchIds } },
       select: { riotMatchId: true },
     })
     const existingSet = new Set(existing.map((m) => m.riotMatchId))
+    phase1InDb += existingSet.size
     const nowMs = Date.now()
-    const toFetch = matchIds.filter(
-      (id) =>
-        !existingSet.has(id) &&
-        canAttemptTimelineFetchNow(id, nowMs) &&
-        canAttemptMatchIngestNow(id, nowMs)
-    )
+    const toFetch = matchIds.filter((id) => {
+      if (existingSet.has(id)) return false
+      if (!canAttemptTimelineFetchNow(id, nowMs)) { phase1InTimelineRetry++; return false }
+      if (!canAttemptMatchIngestNow(id, nowMs)) { phase1InBackoff++; return false }
+      return true
+    })
+    phase1ToFetch += toFetch.length
 
     const trackerIdx = playerTrackers.length
     const tracker: PlayerTracker = {
@@ -2275,6 +2290,7 @@ async function runStep4ForPlayer(
         region,
         matchesCount: matchIds.length,
         newPlayersCount: 0,
+        queryNull,
       })
       continue
     }
@@ -2283,6 +2299,28 @@ async function runStep4ForPlayer(
       workItems.push({ matchId, trackerIdx })
     }
   }
+
+  // Log Phase 1 summary to unified log for diagnostics
+  void appendUnifiedLog({
+    section: 'back',
+    type: 'info',
+    script: 'poller_diag',
+    message: `Phase1 ${region} — players:${validPlayers.length} queryNull:${phase1QueryNull} idsFromApi:${phase1TotalIds} inDb:${phase1InDb} inBackoff:${phase1InBackoff} inTimelineRetry:${phase1InTimelineRetry} toFetch:${phase1ToFetch} apiErr:${phase1ApiError} workItems:${workItems.length}`,
+    json: {
+      region,
+      players: validPlayers.length,
+      queryNull: phase1QueryNull,
+      idsFromApi: phase1TotalIds,
+      inDb: phase1InDb,
+      inBackoff: phase1InBackoff,
+      inTimelineRetry: phase1InTimelineRetry,
+      toFetch: phase1ToFetch,
+      apiError: phase1ApiError,
+      workItems: workItems.length,
+      timelineRetryMapSize: timelineRetryState.size,
+      matchIngestBackoffMapSize: matchIngestBackoffUntilMs.size,
+    },
+  })
 
   if (workItems.length === 0) return flags.foundPrismaError ? 'prisma_error' : 'ok'
 
@@ -2295,7 +2333,7 @@ async function runStep4ForPlayer(
     matchId: string
     trackerIdx: number
     matchDto: RiotMatchDto
-    timelineDto: RiotMatchTimelineDto
+    timelineDto: RiotMatchTimelineDto | null
   }> = []
   let producerDone = false
   let pipelineAbort: '400_decrypt' | 'abort' | null = null
@@ -2310,11 +2348,13 @@ async function runStep4ForPlayer(
           const { matchDbId, canonicalRiotMatchId } = await upsertMatchAndParticipants(
             client, region, item.matchId, item.matchDto, puuidKeyVersion, counters, logger
           )
-          await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)
-          await extractAndInsertTimelineExtras(
-            matchDbId, canonicalRiotMatchId, item.timelineDto,
-            item.matchDto.info?.participants ?? [], logger
-          )
+          if (item.timelineDto) {
+            await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)
+            await extractAndInsertTimelineExtras(
+              matchDbId, canonicalRiotMatchId, item.timelineDto,
+              item.matchDto.info?.participants ?? [], logger
+            )
+          }
           tracker.ingestedIds.push(canonicalRiotMatchId)
           clearMatchIngestCooldownKeys(item.matchId, canonicalRiotMatchId)
         } catch (err) {
@@ -2370,7 +2410,8 @@ async function runStep4ForPlayer(
         if (strict.reason === '400_decrypt') { pipelineAbort = '400_decrypt'; break }
         if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
         if (strict.reason === 'version') {
-          tracker.pendingTransientIngest = true
+          // Permanent skip — DO NOT block lastSeen. This match will never pass
+          // the version check; blocking lastSeen would re-poll the same player forever.
           await logger.info('Match skipped (game version not in allowed range)', {
             playerId: tracker.player.id.toString(),
             matchId: work.matchId,
@@ -2378,6 +2419,7 @@ async function runStep4ForPlayer(
           continue
         }
         if (strict.reason === 'deferred_patch') {
+          // Intentional defer (live-patch priority) — not a transient error.
           await logger.info('Match deferred (latest patch priority mode)', {
             playerId: tracker.player.id.toString(),
             matchId: work.matchId,
@@ -2386,11 +2428,26 @@ async function runStep4ForPlayer(
           })
           continue
         }
-        tracker.pendingTransientIngest = true
-        await logger.info('Player ingest: match not ready (API), will retry on a later loop', {
-          playerId: tracker.player.id.toString(),
-          matchId: work.matchId,
-        })
+        if (strict.reason === 'transient') {
+          // transient = match detail fetch may have succeeded even though timeline failed.
+          if (!strict.matchDto) {
+            await recordMatchIngestFailure(work.matchId, logger)
+            await logger.info('Match detail fetch failed (API), will retry later', {
+              playerId: tracker.player.id.toString(),
+              matchId: work.matchId,
+            })
+            continue
+          }
+          // Match detail OK but timeline failed → still ingest the match.
+          // Don't waste the getMatch request — the match data is valuable.
+          ingestQueue.push({
+            matchId: work.matchId,
+            trackerIdx: work.trackerIdx,
+            matchDto: strict.matchDto,
+            timelineDto: null,
+          })
+          continue
+        }
         continue
       }
 
