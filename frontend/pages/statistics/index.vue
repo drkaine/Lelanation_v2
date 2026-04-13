@@ -375,6 +375,10 @@
             <StatisticsTeamTab />
           </div>
 
+          <div v-show="activeTab === 'objectives'" class="space-y-6">
+            <StatisticsObjectivesTab />
+          </div>
+
           <!-- Tab: Infos -->
           <div v-show="activeTab === 'infos'">
             <StatisticsInfosTab />
@@ -445,6 +449,7 @@ import StatisticsOverviewTab from '~/components/statistics/tabs/StatisticsOvervi
 import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
 import StatisticsTrendsTab from '~/components/statistics/tabs/StatisticsTrendsTab.vue'
 import StatisticsTeamTab from '~/components/statistics/tabs/StatisticsTeamTab.vue'
+import StatisticsObjectivesTab from '~/components/statistics/tabs/StatisticsObjectivesTab.vue'
 import StatisticsInfosTab from '~/components/statistics/tabs/StatisticsInfosTab.vue'
 import StatisticsBansTab from '~/components/statistics/tabs/StatisticsBansTab.vue'
 import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
@@ -514,6 +519,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'balance' ||
     tab === 'trends' ||
     tab === 'team' ||
+    tab === 'objectives' ||
     tab === 'bans' ||
     tab === 'runes' ||
     tab === 'items' ||
@@ -538,6 +544,7 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 const activeTab = ref<
   | 'overview'
   | 'team'
+  | 'objectives'
   | 'tierlist'
   | 'championTable'
   | 'balance'
@@ -557,6 +564,11 @@ const activeTab = ref<
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
+  {
+    id: 'objectives' as const,
+    label: t('statisticsPage.tabObjectives'),
+    widgetId: 'objectives',
+  },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
   {
@@ -1543,6 +1555,10 @@ function onStatsFilterChange() {
   if (activeTab.value === 'team') {
     loadOverviewSides()
     loadOverviewTeams()
+  }
+  if (activeTab.value === 'objectives') {
+    loadOverview()
+    loadOverviewSides()
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
@@ -3962,6 +3978,10 @@ function itemEconomicForItem(itemId: number): string[] {
 
 watch(activeTab, async tab => {
   if (tab === 'overview') loadOverview()
+  if (tab === 'objectives') {
+    if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
+    loadOverviewSides()
+  }
   if (tab === 'trends') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
     if (!progressionFromVersion.value && !versionStore.currentVersion)
@@ -3988,6 +4008,10 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadOverviewSides()
     loadOverviewTeams()
   }
+  if (activeTab.value === 'objectives') {
+    loadOverviewSides()
+    loadOverviewTeams()
+  }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
@@ -4009,6 +4033,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'team') loadOverviewSides()
+  if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()
   }
@@ -4033,6 +4058,7 @@ onMounted(async () => {
   runesStore.loadRunes(riotLocale.value)
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
   if (activeTab.value === 'team') loadOverviewSides()
+  if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()

@@ -50,6 +50,75 @@ function pickRiotRateLimitHeaders(h: Headers): Record<string, string> {
   return out
 }
 
+/** Riot format: "100:120,20:1" → limit or current count per window (seconds). */
+function parseRiotLimitPairs(raw: string): Array<{ value: number; windowSec: number }> {
+  const out: Array<{ value: number; windowSec: number }> = []
+  for (const part of raw.split(',')) {
+    const seg = part.trim()
+    if (!seg) continue
+    const [a, b] = seg.split(':').map((s) => s.trim())
+    const value = Number(a)
+    const windowSec = Number(b)
+    if (Number.isFinite(value) && Number.isFinite(windowSec) && windowSec > 0) {
+      out.push({ value, windowSec })
+    }
+  }
+  return out
+}
+
+const RIOT_WINDOW_2MIN_SEC = 120
+
+export type RiotNearLimit120sInfo = {
+  /** Which header family matched (app vs method). */
+  scope: 'app' | 'method'
+  limit: number
+  count: number
+  remaining: number
+  utilization: number
+  windowSec: number
+  pairIndex: number
+}
+
+/**
+ * Among limit/count pairs with a 120s window, pick the one whose usage is closest to the limit
+ * (highest count/limit). Aligns pairs by index between *-limit and *-count headers.
+ */
+export function pickNearestLimit120sBucket(headers: Record<string, string>): RiotNearLimit120sInfo | null {
+  const candidates: RiotNearLimit120sInfo[] = []
+
+  const tryScope = (scope: 'app' | 'method', limitKey: string, countKey: string) => {
+    const limitRaw = headers[limitKey]
+    const countRaw = headers[countKey]
+    if (!limitRaw || !countRaw) return
+    const limits = parseRiotLimitPairs(limitRaw)
+    const counts = parseRiotLimitPairs(countRaw)
+    const n = Math.min(limits.length, counts.length)
+    for (let i = 0; i < n; i++) {
+      const L = limits[i]
+      const C = counts[i]
+      if (L.windowSec !== RIOT_WINDOW_2MIN_SEC || C.windowSec !== RIOT_WINDOW_2MIN_SEC) continue
+      if (L.value <= 0) continue
+      const remaining = Math.max(0, L.value - C.value)
+      const utilization = C.value / L.value
+      candidates.push({
+        scope,
+        limit: L.value,
+        count: C.value,
+        remaining,
+        utilization,
+        windowSec: RIOT_WINDOW_2MIN_SEC,
+        pairIndex: i,
+      })
+    }
+  }
+
+  tryScope('app', 'x-app-rate-limit', 'x-app-rate-limit-count')
+  tryScope('method', 'x-method-rate-limit', 'x-method-rate-limit-count')
+
+  if (candidates.length === 0) return null
+  return candidates.reduce((best, cur) => (cur.utilization > best.utilization ? cur : best))
+}
+
 export interface RiotHttpResponse<T = unknown> {
   status: number
   data: T
@@ -250,14 +319,21 @@ export class RiotHttpClient {
     if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
       this.lastRiotRateLimitSnapshotLogMs = now
       if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
+        const near120 = pickNearestLimit120sBucket(this.lastRiotRateLimitHeaders)
+        const pctUsed = near120 != null ? Math.round(near120.utilization * 1000) / 10 : null
+        const message =
+          near120 != null
+            ? `Riot rate-limit 120s (bucket le plus proche de la limite) — ${near120.scope}: ${near120.count}/${near120.limit} utilisés, ${near120.remaining} restants (${pctUsed}% de la fenêtre)`
+            : 'Riot rate-limit headers (dernière réponse OK) — pas de paire 120s dans les en-têtes'
         void appendUnifiedLog({
           section: 'back',
           type: 'rate_limit',
           script: this.apiLogScript,
-          message: 'Riot rate-limit headers (dernière réponse OK)',
+          message,
           json: {
             httpStatus: res.status,
             bucket,
+            nearLimit120s: near120,
             riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
           },
         })
