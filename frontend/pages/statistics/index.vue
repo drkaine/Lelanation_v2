@@ -1741,6 +1741,24 @@ function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch
   }) as Promise<T>
 }
 
+/** Évite deux GET identiques si plusieurs watchers appellent la même charge en parallèle. */
+const statsInflightByKey = new Map<string, Promise<unknown>>()
+function dedupedStatsFetch<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const hit = statsInflightByKey.get(key)
+  if (hit) return hit as Promise<T>
+  const p = run().finally(() => {
+    if (statsInflightByKey.get(key) === p) statsInflightByKey.delete(key)
+  }) as Promise<T>
+  statsInflightByKey.set(key, p)
+  return p
+}
+
+function progressionRequestKey(prefix: string, oldest: string): string {
+  const div = (overviewDivisionFilter.value ?? []).join(',')
+  const role = statsRoleFilter.value || ''
+  return `${prefix}:${oldest}|${div}|${role}`
+}
+
 async function loadOverview() {
   const t = statsPerfStart('loadOverview')
   overviewPending.value = true
@@ -1918,21 +1936,26 @@ async function loadOverviewProgression() {
     overviewProgressionData.value = null
     return
   }
-  const t = statsPerfStart('loadOverviewProgression')
-  const params = new URLSearchParams()
-  params.set('version', oldest)
-  if (overviewDivisionFilter.value) {
-    for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
-  }
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  const q = params.toString() ? '?' + params.toString() : ''
-  try {
-    overviewProgressionData.value = await statsFetch(apiUrl('/api/stats/overview-progression' + q))
-  } catch {
-    overviewProgressionData.value = null
-  } finally {
-    statsPerfEnd('loadOverviewProgression', t)
-  }
+  const key = progressionRequestKey('overview-progression', oldest)
+  await dedupedStatsFetch(key, async () => {
+    const t = statsPerfStart('loadOverviewProgression')
+    const params = new URLSearchParams()
+    params.set('version', oldest)
+    if (overviewDivisionFilter.value) {
+      for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
+    }
+    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    const q = params.toString() ? '?' + params.toString() : ''
+    try {
+      overviewProgressionData.value = await statsFetch(
+        apiUrl('/api/stats/overview-progression' + q)
+      )
+    } catch {
+      overviewProgressionData.value = null
+    } finally {
+      statsPerfEnd('loadOverviewProgression', t)
+    }
+  })
 }
 /** Normalise une version (ex. "16.3.123") en préfixe pour l’API (ex. "16.3"). */
 function normalizeVersionToPrefix(v: string | null | undefined): string | null {
@@ -2034,23 +2057,28 @@ async function loadProgressionsFull() {
     progressionFullData.value = null
     return
   }
-  const t = statsPerfStart('loadProgressionsFull')
-  progressionFullPending.value = true
-  const params = new URLSearchParams()
-  params.set('version', oldest)
-  if (overviewDivisionFilter.value) {
-    for (const t of overviewDivisionFilter.value) params.append('rankTier', t)
-  }
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  const q = params.toString() ? '?' + params.toString() : ''
-  try {
-    progressionFullData.value = await statsFetch(apiUrl('/api/stats/overview-progression-full' + q))
-  } catch {
-    progressionFullData.value = null
-  } finally {
-    progressionFullPending.value = false
-    statsPerfEnd('loadProgressionsFull', t)
-  }
+  const key = progressionRequestKey('overview-progression-full', oldest)
+  await dedupedStatsFetch(key, async () => {
+    const t = statsPerfStart('loadProgressionsFull')
+    progressionFullPending.value = true
+    const params = new URLSearchParams()
+    params.set('version', oldest)
+    if (overviewDivisionFilter.value) {
+      for (const tier of overviewDivisionFilter.value) params.append('rankTier', tier)
+    }
+    if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
+    const q = params.toString() ? '?' + params.toString() : ''
+    try {
+      progressionFullData.value = await statsFetch(
+        apiUrl('/api/stats/overview-progression-full' + q)
+      )
+    } catch {
+      progressionFullData.value = null
+    } finally {
+      progressionFullPending.value = false
+      statsPerfEnd('loadProgressionsFull', t)
+    }
+  })
 }
 /** Même liste que progressionFullData.champions mais triée par delta pickrate (pour table popularité). */
 const progressionFullByPickrate = computed(() => {
@@ -3995,11 +4023,10 @@ onMounted(async () => {
   await versionPromise
   statsPerfEnd('version', tVersion)
   await loadKnownVersionsFromGameData()
+  applyDefaultVersionFiltersFromKnownVersions()
   await loadOverview()
   await loadInfosMeta()
   await loadInfosPatchDivisionMatrix()
-  const defaultsApplied = applyDefaultVersionFiltersFromKnownVersions()
-  if (defaultsApplied) onStatsFilterChange()
   statsPerfEnd('page mount', tPage)
   championsStore.loadChampions(riotLocale.value)
   itemsStore.loadItems(riotLocale.value)
@@ -4477,7 +4504,7 @@ if (__statisticsVm?.proxy) {
   align-self: stretch;
 }
 
-/* Onglet Objets : pas de hauteur fixe ; barres comme la vue d’ensemble (48–80px), pas 32–54px. */
+/* Onglet Objets : pas de hauteur fixe (cartes items). */
 .statistics .fast-stat-card.fast-stat-card-items {
   width: min(100%, 340px) !important;
   min-width: 260px !important;
@@ -4488,11 +4515,6 @@ if (__statisticsVm?.proxy) {
   margin-left: auto;
   margin-right: auto;
   align-self: flex-start;
-}
-.statistics .fast-stat-card.fast-stat-card-items .fast-stat-bar-container {
-  flex-shrink: 1 !important;
-  min-width: 48px !important;
-  max-width: 80px !important;
 }
 .statistics .fast-stat-title {
   line-height: 1.4;
@@ -4506,12 +4528,6 @@ if (__statisticsVm?.proxy) {
 }
 .statistics .fast-stat-row:last-child {
   border-bottom: none;
-}
-.statistics .fast-stat-bar-container {
-  flex-shrink: 0;
-  min-width: 32px !important;
-  max-width: 54px !important;
-  margin-right: 5px;
 }
 .statistics .fast-stat-button {
   font-weight: 500;

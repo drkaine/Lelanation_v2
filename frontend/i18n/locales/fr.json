@@ -667,6 +667,8 @@
     "championStatsMatchupsBestAgainst": "Meilleur contre",
     "championStatsMatchupsWorstAgainst": "Pire contre",
     "championStatsMatchupsSeeMore": "Voir plus",
+    "championStatsMatchupSearchLabel": "Recherche matchup",
+    "championStatsMatchupSearchPlaceholder": "Filtrer les adversaires (nom ou id)",
     "championStatsPlayersMasterPlus": "Meilleurs joueurs : Master → Challenger uniquement",
     "championStatsTabOverview": "Vue d'ensemble",
     "championStatsTabStats": "Stats",

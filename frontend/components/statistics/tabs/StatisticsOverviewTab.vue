@@ -80,8 +80,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -96,28 +96,7 @@ const p = inject('statisticsPageCtx') as any
                       <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                         p.championName(row.championId) || row.championId
                       }}</span>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-accent transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (row.pickrate /
-                                  Math.max(
-                                    ...p.overviewTopPickrateChampionsFiltered.map(
-                                      (c: { pickrate: number }) => c.pickrate
-                                    ),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-9 shrink-0 text-right font-medium text-text"
+                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
                         >{{ Number(row.pickrate).toFixed(2) }}%</span
                       >
                     </div>
@@ -193,8 +172,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -209,26 +188,7 @@ const p = inject('statisticsPageCtx') as any
                       <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                         p.championName(row.championId) || row.championId
                       }}</span>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-success transition-[width]"
-                          :style="{
-                            width: (() => {
-                              const list = p.overviewEffectiveTopWinrateChampions
-                              const minWr = Math.min(...list.map(c => c.winrate), 50)
-                              const maxWr = Math.max(...list.map(c => c.winrate), 52)
-                              const range = maxWr - minWr || 1
-                              return (
-                                Math.min(100, Math.max(0, ((row.winrate - minWr) / range) * 100)) +
-                                '%'
-                              )
-                            })(),
-                          }"
-                        />
-                      </div>
-                      <span class="w-9 shrink-0 text-right font-medium text-text"
+                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
                         >{{ Number(row.winrate).toFixed(2) }}%</span
                       >
                     </div>
@@ -304,8 +264,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -320,28 +280,7 @@ const p = inject('statisticsPageCtx') as any
                       <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                         p.championName(row.championId) || row.championId
                       }}</span>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (row.banrate /
-                                  Math.max(
-                                    ...p.overviewEffectiveTopBanrateChampions.map(
-                                      (c: { banrate: number }) => c.banrate
-                                    ),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-9 shrink-0 text-right font-medium text-text"
+                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text"
                         >{{ Number(row.banrate).toFixed(2) }}%</span
                       >
                     </div>
@@ -422,8 +361,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -446,23 +385,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.wrSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-success transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (row.deltaWr /
-                                  Math.max(...p.overviewTopWinrateSince.map(x => x.deltaWr), 1)) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-success"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-success"
                         >+{{ Number(row.deltaWr).toFixed(2) }}%</span
                       >
                     </div>
@@ -539,8 +462,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -563,26 +486,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.pickrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-accent transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (row.deltaPick /
-                                  Math.max(
-                                    ...p.overviewTopPickrateSince.map(x => x.deltaPick),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-accent"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-accent"
                         >+{{ Number(row.deltaPick).toFixed(2) }}%</span
                       >
                     </div>
@@ -659,8 +563,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -683,23 +587,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.banrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (row.deltaBan /
-                                  Math.max(...p.overviewTopBanrateSince.map(x => x.deltaBan), 1)) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-error"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-error"
                         >+{{ Number(row.deltaBan).toFixed(2) }}%</span
                       >
                     </div>
@@ -779,8 +667,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -803,26 +691,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.wrSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (Math.abs(row.deltaWr) /
-                                  Math.max(
-                                    ...p.overviewBottomWinrateSince.map(x => Math.abs(x.deltaWr)),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-error"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-error"
                         >{{ Number(row.deltaWr).toFixed(2) }}%</span
                       >
                     </div>
@@ -902,8 +771,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -926,28 +795,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.pickrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (Math.abs(row.deltaPick) /
-                                  Math.max(
-                                    ...p.overviewBottomPickrateSince.map(x =>
-                                      Math.abs(x.deltaPick)
-                                    ),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-error"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-error"
                         >{{ Number(row.deltaPick).toFixed(2) }}%</span
                       >
                     </div>
@@ -1027,8 +875,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5 align-middle">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(row.championId)"
                         :src="
@@ -1051,26 +899,7 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.banrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                (Math.abs(row.deltaBan) /
-                                  Math.max(
-                                    ...p.overviewBottomBanrateSince.map(x => Math.abs(x.deltaBan)),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-10 shrink-0 text-right font-medium text-error"
+                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-error"
                         >{{ Number(row.deltaBan).toFixed(2) }}%</span
                       >
                     </div>
@@ -1221,8 +1050,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(b.championId)"
                         :src="
@@ -1237,29 +1066,7 @@ const p = inject('statisticsPageCtx') as any
                       <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                         p.championName(b.championId) || b.championId
                       }}</span>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-success transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                ((parseFloat(String(b.banRatePercent).replace(',', '.')) || 0) /
-                                  Math.max(
-                                    ...(p.overviewTeamsData.bans.byWin ?? []).map(
-                                      x =>
-                                        parseFloat(String(x.banRatePercent).replace(',', '.')) || 0
-                                    ),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-9 shrink-0 text-right font-medium text-text">{{
+                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text">{{
                         b.banRatePercent
                       }}</span>
                     </div>
@@ -1322,8 +1129,8 @@ const p = inject('statisticsPageCtx') as any
                   class="fast-stat-row"
                 >
                   <td class="py-0.5">
-                    <div class="flex items-center gap-0.5">
-                      <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
+                    <div class="flex w-full min-w-0 items-center gap-0.5">
+                      <span class="w-4 shrink-0 text-text/70">{{ Number(idx) + 1 }}.</span>
                       <img
                         v-if="p.gameVersion && p.championByKey(b.championId)"
                         :src="
@@ -1338,29 +1145,7 @@ const p = inject('statisticsPageCtx') as any
                       <span class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">{{
                         p.championName(b.championId) || b.championId
                       }}</span>
-                      <div
-                        class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-                      >
-                        <div
-                          class="h-full rounded bg-error transition-[width]"
-                          :style="{
-                            width:
-                              Math.min(
-                                100,
-                                ((parseFloat(String(b.banRatePercent).replace(',', '.')) || 0) /
-                                  Math.max(
-                                    ...(p.overviewTeamsData.bans.byLoss ?? []).map(
-                                      x =>
-                                        parseFloat(String(x.banRatePercent).replace(',', '.')) || 0
-                                    ),
-                                    1
-                                  )) *
-                                  100
-                              ) + '%',
-                          }"
-                        />
-                      </div>
-                      <span class="w-9 shrink-0 text-right font-medium text-text">{{
+                      <span class="ml-auto w-9 shrink-0 text-right font-medium text-text">{{
                         b.banRatePercent
                       }}</span>
                     </div>

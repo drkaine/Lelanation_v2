@@ -346,8 +346,8 @@ const patchNotesUrl = computed(() => {
 })
 
 onMounted(() => {
-  if (!versionStore.currentVersion && versionStore.status === 'idle') {
-    versionStore.loadCurrentVersion()
+  if (!versionStore.currentVersion) {
+    versionStore.loadCurrentVersion().catch(() => undefined)
   }
   favoritesStore.init()
   statisticsCustomStore.init()

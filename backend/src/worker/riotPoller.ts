@@ -568,6 +568,32 @@ function clearTimelineRetry(matchId: string): void {
   timelineRetryState.delete(matchId)
 }
 
+/** After first unified log when EUN has 0 pollable players, suppress repeat until EUN has players again. */
+let eunRegionSkipInfoLogged = false
+
+function logPollerRiotApiToUnified(message: string, json: Record<string, unknown>): void {
+  void appendUnifiedLog({
+    section: 'back',
+    type: 'warning',
+    script: 'poller_riot_api',
+    message: message.replace(/\r?\n/g, ' ').replace(/\t/g, ' '),
+    json,
+  })
+}
+
+/** Throttle retry lines in unified log (still log attempt 1 and every 5th). */
+function shouldLogPollerRiotAttempt(attempt: number, maxAttempts: number): boolean {
+  if (attempt <= 1) return true
+  if (attempt >= maxAttempts) return true
+  return attempt % 5 === 0
+}
+
+function puuidLogTag(puuid: string): string {
+  const t = (puuid ?? '').trim()
+  if (t.length <= 10) return t
+  return `${t.slice(0, 6)}…${t.slice(-4)}`
+}
+
 /**
  * Some match ids can fail ingest repeatedly (e.g. before a deploy fix). Without backoff, those ids
  * stay in toFetch forever, block lastSeen, and `newMatches` stays 0 while the loop burns quota.
@@ -610,6 +636,18 @@ async function recordMatchIngestFailure(
       failsBeforeSuspend: fails,
       retryNotBefore: new Date(until).toISOString(),
       backoffMinutes: Math.round(MATCH_INGEST_BACKOFF_MS / 60_000),
+    })
+    void appendUnifiedLog({
+      section: 'back',
+      type: 'warning',
+      script: 'poller_ingest',
+      message: 'Ingest match suspendu temporairement (échecs répétés)',
+      json: {
+        matchId: matchIdFromList,
+        failsBeforeSuspend: fails,
+        retryNotBeforeIso: new Date(until).toISOString(),
+        backoffMinutes: Math.round(MATCH_INGEST_BACKOFF_MS / 60_000),
+      },
     })
   }
 }
@@ -2027,36 +2065,51 @@ async function runStep4ForPlayer(
 
   const fetchMatchAndTimelineStrict = async (matchId: string): Promise<StrictFetchResult> => {
     let attempts = 0
+    /** Match-v5 OK + version OK: reuse on timeline-only retries (avoids ~2× HTTP when timeline flakes). */
+    let cachedMatchDto: RiotMatchDto | null = null
     while (!state.shouldStop && attempts < MATCH_FETCH_MAX_ATTEMPTS) {
       attempts++
 
-      const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
-      if (!matchRes.ok) {
-        if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
-          counters.error400Count++
-          await logger.error('400 decrypt on match', matchRes.body)
-          return { ok: false, reason: '400_decrypt' }
+      if (cachedMatchDto == null) {
+        const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
+        if (!matchRes.ok) {
+          if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
+            counters.error400Count++
+            await logger.error('400 decrypt on match', matchRes.body)
+            return { ok: false, reason: '400_decrypt' }
+          }
+          if (matchRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
+            return { ok: false, reason: 'abort' }
+          }
+          if (shouldLogPollerRiotAttempt(attempts, MATCH_FETCH_MAX_ATTEMPTS)) {
+            logPollerRiotApiToUnified('Riot match-v5 fetch échoué ou en retry', {
+              region,
+              matchId,
+              attempt: attempts,
+              maxAttempts: MATCH_FETCH_MAX_ATTEMPTS,
+              httpStatus: matchRes.status,
+              message: matchRes.message ?? null,
+            })
+          }
+          await logger.info('Retry match detail fetch', { matchId, attempt: attempts, status: matchRes.status })
+          await sleep(MATCH_FETCH_RETRY_DELAY_MS)
+          continue
         }
-        if (matchRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
-          return { ok: false, reason: 'abort' }
+        if (
+          !isAllowedGameVersion(
+            normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
+          )
+        ) {
+          return { ok: false, reason: 'version' }
         }
-        await logger.info('Retry match detail fetch', { matchId, attempt: attempts, status: matchRes.status })
-        await sleep(MATCH_FETCH_RETRY_DELAY_MS)
-        continue
-      }
-      if (
-        !isAllowedGameVersion(
-          normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
-        )
-      ) {
-        return { ok: false, reason: 'version' }
-      }
-      if (patchPolicy.latestPatchOnly) {
-        const matchPatch = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
-        const allowed = priorityAllowedPatches ?? []
-        if (!allowed.includes(matchPatch)) {
-          return { ok: false, reason: 'deferred_patch' }
+        if (patchPolicy.latestPatchOnly) {
+          const matchPatch = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
+          const allowed = priorityAllowedPatches ?? []
+          if (!allowed.includes(matchPatch)) {
+            return { ok: false, reason: 'deferred_patch' }
+          }
         }
+        cachedMatchDto = matchRes.data as RiotMatchDto
       }
 
       const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
@@ -2065,6 +2118,17 @@ async function runStep4ForPlayer(
           return { ok: false, reason: 'abort' }
         }
         const retry = scheduleTimelineRetry(matchId)
+        if (shouldLogPollerRiotAttempt(attempts, MATCH_FETCH_MAX_ATTEMPTS)) {
+          logPollerRiotApiToUnified('Riot timeline fetch échoué ou en retry', {
+            region,
+            matchId,
+            attempt: attempts,
+            maxAttempts: MATCH_FETCH_MAX_ATTEMPTS,
+            httpStatus: timelineRes.status,
+            message: timelineRes.message ?? null,
+            timelineRetryStateAttempts: retry.attempts,
+          })
+        }
         await logger.info('Retry timeline fetch', {
           matchId,
           attempt: attempts,
@@ -2076,10 +2140,19 @@ async function runStep4ForPlayer(
       }
       clearTimelineRetry(matchId)
       counters.matchesApiIngestComplete++
-      return { ok: true, matchDto: matchRes.data, timelineDto: timelineRes.data }
+      return { ok: true, matchDto: cachedMatchDto, timelineDto: timelineRes.data }
     }
 
     scheduleTimelineRetry(matchId)
+    if (!state.shouldStop && attempts >= MATCH_FETCH_MAX_ATTEMPTS) {
+      logPollerRiotApiToUnified('Riot match+timeline abandonné (max tentatives)', {
+        region,
+        matchId,
+        maxAttempts: MATCH_FETCH_MAX_ATTEMPTS,
+        lastAttempt: attempts,
+        hadCachedMatchDto: cachedMatchDto != null,
+      })
+    }
     await logger.info('Skip match ingest after retry exhaustion', { matchId, maxAttempts: MATCH_FETCH_MAX_ATTEMPTS })
     return { ok: false, reason: 'transient' }
   }
@@ -2157,6 +2230,13 @@ async function runStep4ForPlayer(
         await logger.error('400 decrypt', res.body)
         return '400_decrypt'
       }
+      logPollerRiotApiToUnified('Riot liste match ids by puuid échouée', {
+        region,
+        playerId: player.id.toString(),
+        puuid: puuidLogTag(player.puuid),
+        httpStatus: res.status,
+        message: res.message ?? null,
+      })
       continue
     }
 
@@ -2593,40 +2673,63 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         })
       }
 
-      // EUN1 collection
-      client.setPlatform('eun1')
-      const countersEun = await runStep4Counters()
-      const requestCountBeforeEun = state.requestCount
-      const resultEun = await runStep4ForPlayer(
-        client,
-        logger,
-        filters,
-        'eun1',
-        clefType,
-        countersEun,
-        matchListTimeWindow
-      )
-      setState({
-        error400Count: countersEun.error400Count,
-        matchesFetched: countersEun.matchesFetched,
-        matchesApiIngestComplete: countersEun.matchesApiIngestComplete,
-        playersFetched: countersEun.playersFetched,
-        playersPolled: countersEun.playersPolled,
-        participantsFetched: countersEun.participantsFetched,
-        playersRankUpdatedLeague: countersEun.playersRankUpdatedLeague,
-      })
-      if (resultEun === '400_decrypt') {
-        setTriggerPuuidMigrationOnPollerExit(true)
-        requestStopRiotPoller()
-        continue
-      }
-      if (resultEun === 'prisma_error') {
-        await logger.alerte('Prisma error in step 4 (eun1), continuing', {
+      // EUN1 collection — skip when no pollable rows (tout le monde en euw1, etc.)
+      const eunPollableCount = await prisma.player.count({
+        where: {
           region: 'eun1',
-          loopIteration,
-          httpRequestsTotal: state.requestCount,
-          httpRequestsDeltaThisRegion: state.requestCount - requestCountBeforeEun,
+          ...(clefType
+            ? { puuidKeyVersion: clefType }
+            : { puuidKeyVersion: { notIn: ['erreur', 'perdu'] } }),
+        },
+      })
+      if (eunPollableCount === 0) {
+        if (!eunRegionSkipInfoLogged) {
+          eunRegionSkipInfoLogged = true
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller',
+            message:
+              'Collecte EUN1 ignorée — aucun joueur avec players.region=eun1 (hors puuidKeyVersion erreur/perdu)',
+            json: { eunPollableCount: 0 },
+          })
+        }
+      } else {
+        eunRegionSkipInfoLogged = false
+        client.setPlatform('eun1')
+        const countersEun = await runStep4Counters()
+        const requestCountBeforeEun = state.requestCount
+        const resultEun = await runStep4ForPlayer(
+          client,
+          logger,
+          filters,
+          'eun1',
+          clefType,
+          countersEun,
+          matchListTimeWindow
+        )
+        setState({
+          error400Count: countersEun.error400Count,
+          matchesFetched: countersEun.matchesFetched,
+          matchesApiIngestComplete: countersEun.matchesApiIngestComplete,
+          playersFetched: countersEun.playersFetched,
+          playersPolled: countersEun.playersPolled,
+          participantsFetched: countersEun.participantsFetched,
+          playersRankUpdatedLeague: countersEun.playersRankUpdatedLeague,
         })
+        if (resultEun === '400_decrypt') {
+          setTriggerPuuidMigrationOnPollerExit(true)
+          requestStopRiotPoller()
+          continue
+        }
+        if (resultEun === 'prisma_error') {
+          await logger.alerte('Prisma error in step 4 (eun1), continuing', {
+            region: 'eun1',
+            loopIteration,
+            httpRequestsTotal: state.requestCount,
+            httpRequestsDeltaThisRegion: state.requestCount - requestCountBeforeEun,
+          })
+        }
       }
 
       // ── Sync active_patches (cadence: 4h) — refresh MV délégué au cron API (groupes décalés) ──

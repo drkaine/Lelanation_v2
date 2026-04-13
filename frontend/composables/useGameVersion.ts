@@ -6,8 +6,8 @@ export function useGameVersion() {
   const versionStore = useVersionStore()
 
   onMounted(() => {
-    if (!versionStore.currentVersion && versionStore.status === 'idle') {
-      versionStore.loadCurrentVersion()
+    if (!versionStore.currentVersion) {
+      versionStore.loadCurrentVersion().catch(() => undefined)
     }
   })
 

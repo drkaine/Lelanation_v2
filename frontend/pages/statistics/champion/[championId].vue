@@ -21,7 +21,7 @@
       v-show="championFiltersOpen"
       class="fixed inset-0 z-30 bg-black/50 lg:hidden"
       aria-hidden="true"
-      @click="championFiltersOpen = false"
+      @click="closeChampionFilters"
     />
 
     <div class="w-full flex-shrink-0 px-4 pb-2 pt-4">
@@ -55,63 +55,111 @@
       </div>
     </div>
 
-    <div class="flex w-full min-w-0 flex-col lg:flex-row lg:items-start">
-      <!-- Sidebar (même charte que page stats) -->
+    <div class="flex min-h-0 w-full min-w-0 flex-1">
+      <button
+        type="button"
+        class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
+        :aria-label="
+          championFiltersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')
+        "
+        @click="toggleChampionFiltersOpen"
+      >
+        <svg
+          class="h-2 w-2 transition-transform duration-200"
+          :class="championFiltersOpen ? 'rotate-180' : ''"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          />
+        </svg>
+      </button>
       <aside
         :class="[
-          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg border border-l-0 border-primary/30 bg-surface/30 shadow-lg transition-transform duration-200 lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:translate-x-0 lg:self-start lg:overflow-hidden lg:rounded-lg lg:border lg:border-primary/30 lg:shadow-none',
-          championFiltersOpen ? 'translate-x-0' : '-translate-x-full',
+          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
+          'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
+          championFiltersOpen
+            ? 'translate-x-0 lg:w-64 lg:opacity-100'
+            : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
         ]"
       >
-        <div class="p-2">
-          <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-text-accent">
-              {{ t('statisticsPage.filtersTitle') }}
-            </h2>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
-              @click="resetChampionFilters"
-            >
-              <span class="iconify i-mdi:refresh" aria-hidden="true" />
-              Reset
-            </button>
-            <button
-              type="button"
-              class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
-              :aria-label="t('statisticsPage.closeFilters')"
-              @click="championFiltersOpen = false"
-            >
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
+        <div class="flex items-center justify-between p-2">
+          <h2 class="text-lg font-semibold text-text-accent">
+            {{ t('statisticsPage.filtersTitle') }}
+          </h2>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            @click="resetChampionFilters"
+          >
+            <span class="iconify i-mdi:refresh" aria-hidden="true" />
+            Reset
+          </button>
+          <button
+            type="button"
+            class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
+            :aria-label="t('statisticsPage.closeFilters')"
+            @click="closeChampionFilters"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
         </div>
-        <div class="flex flex-1 flex-col gap-6 overflow-y-auto p-4">
+        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
           <div>
-            <label for="champion-stat-version" class="mb-1 block text-sm font-medium text-text">
-              {{ t('statisticsPage.filterVersion') }}
+            <label
+              for="champion-stats-filter-version"
+              class="mb-1 block text-sm font-medium text-text"
+            >
+              {{ t('statisticsPage.overviewFilterByVersion') }}
             </label>
             <select
-              id="champion-stat-version"
+              id="champion-stats-filter-version"
               v-model="filterVersion"
               class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
             >
-              <option value="">{{ t('statisticsPage.allVersions') }}</option>
+              <option value="">{{ t('statisticsPage.overviewVersionAll') }}</option>
               <option v-for="v in versionsFromOverview" :key="v.version" :value="v.version">
-                {{ v.version }} ({{ v.matchCount }})
+                {{ v.version }}
+              </option>
+            </select>
+          </div>
+          <div v-if="championProgressionSelectableVersions.length">
+            <label
+              for="champion-stats-progression-version"
+              class="mb-1 block text-sm font-medium text-text"
+            >
+              {{ t('statisticsPage.progressionsReferenceVersion') }}
+            </label>
+            <select
+              id="champion-stats-progression-version"
+              v-model="championProgressionFromVersionModel"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            >
+              <option
+                v-for="v in championProgressionSelectableVersions"
+                :key="'champion-delta-from-' + v.version"
+                :value="v.version"
+              >
+                {{ v.version }}
               </option>
             </select>
           </div>
           <div>
             <div class="mb-1 text-sm font-medium text-text">
-              {{ t('statisticsPage.filterRank') }}
+              {{ t('statisticsPage.overviewMatchesByDivision') }}
             </div>
             <div class="flex flex-wrap gap-1">
               <button
@@ -139,7 +187,7 @@
                 />
               </button>
               <button
-                v-for="tier in divisions"
+                v-for="tier in rankTiers"
                 :key="tier"
                 type="button"
                 class="stats-division-btn rounded p-0.5 transition-colors"
@@ -148,7 +196,7 @@
                     ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
                     : 'bg-black/20 hover:bg-white/10'
                 "
-                :title="tier"
+                :title="formatDivisionLabel(tier)"
                 @click="toggleRankFilter(tier)"
               >
                 <img
@@ -156,6 +204,11 @@
                   :src="getRankedEmblemUrl(tier)!"
                   :alt="tier"
                   class="h-3 w-3 object-contain"
+                  :class="
+                    filterRank.includes(tier)
+                      ? 'saturate-110 opacity-100'
+                      : 'brightness-125 grayscale'
+                  "
                   width="12"
                   height="12"
                 />
@@ -169,45 +222,40 @@
             <div class="flex flex-wrap gap-1">
               <button
                 type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
-                :class="
-                  !filterRole
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10'
-                "
+                class="stats-role-btn rounded p-0.5 transition-colors"
+                :class="!filterRole ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10'"
                 :title="t('statisticsPage.allRoles')"
-                @click="filterRole = ''"
+                @click="selectAllChampionRoles()"
               >
                 <img
                   src="/icons/roles/all-role.png"
                   :alt="t('statisticsPage.allRoles')"
                   class="h-3 w-3 object-contain"
+                  :class="!filterRole ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'"
                   width="12"
                   height="12"
                 />
               </button>
               <button
-                v-for="opt in roleOptions"
-                :key="opt.value"
+                v-for="r in roles"
+                :key="r.value"
                 type="button"
-                class="stats-division-btn rounded p-0.5 transition-colors"
+                class="stats-role-btn rounded p-0.5 transition-colors"
                 :class="[
-                  filterRole === opt.value
-                    ? 'bg-blue-500/20 ring-1 ring-blue-400/60'
-                    : 'bg-black/20 hover:bg-white/10',
-                  !rolesWithData.has(opt.value) ? 'champion-role-disabled' : '',
+                  filterRole === r.value ? 'bg-blue-500/20' : 'bg-black/20 hover:bg-white/10',
+                  !rolesWithData.has(r.value) ? 'champion-role-disabled' : '',
                 ]"
-                :title="opt.label"
-                :disabled="!rolesWithData.has(opt.value)"
-                @click="
-                  rolesWithData.has(opt.value) &&
-                  (filterRole = filterRole === opt.value ? '' : opt.value)
-                "
+                :title="r.label"
+                :disabled="!rolesWithData.has(r.value)"
+                @click="toggleChampionRoleFilter(r)"
               >
                 <img
-                  :src="opt.icon"
-                  :alt="opt.label"
+                  :src="r.icon"
+                  :alt="r.label"
                   class="h-3 w-3 object-contain"
+                  :class="
+                    filterRole === r.value ? 'saturate-110 opacity-100' : 'brightness-125 grayscale'
+                  "
                   width="12"
                   height="12"
                 />
@@ -215,7 +263,7 @@
             </div>
           </div>
           <div>
-            <label class="flex cursor-pointer items-center gap-2 text-sm text-text">
+            <label class="flex cursor-pointer items-center gap-2 text-sm font-medium text-text">
               <input
                 v-model="filterPlayersMasterPlus"
                 type="checkbox"
@@ -226,23 +274,22 @@
           </div>
           <div>
             <label
-              for="champion-search-champion-page"
+              for="champion-search-matchups"
               class="mb-1 block text-sm font-medium text-text"
-              >{{ t('statisticsPage.searchChampion') }}</label
+              >{{ t('statisticsPage.championStatsMatchupSearchLabel') }}</label
             >
             <input
-              id="champion-search-champion-page"
+              id="champion-search-matchups"
               v-model.trim="championSearchQueryPlaceholder"
               type="text"
-              :placeholder="t('statisticsPage.searchChampionPlaceholder')"
-              class="w-full rounded border border-primary/50 bg-background px-3 py-2 text-text placeholder:text-text/50"
+              :placeholder="t('statisticsPage.championStatsMatchupSearchPlaceholder')"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
             />
           </div>
         </div>
       </aside>
 
-      <!-- Contenu principal : pleine largeur à côté des filtres (comme page stats) -->
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-4 lg:pb-4 lg:pt-2">
+      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-2">
         <div class="w-full">
           <!-- Loading / error -->
           <div
@@ -1722,7 +1769,7 @@ function spellImageName(spellId: number) {
   return summonerSpellsStore.getSpellById(String(spellId))?.image?.full ?? null
 }
 
-const championFiltersOpen = ref(false)
+const championFiltersOpen = ref(true)
 const filterVersion = ref('')
 const filterRank = ref<string[]>([])
 const filterRole = ref('')
@@ -1742,7 +1789,65 @@ const RANK_TIERS = [
   'GRANDMASTER',
   'CHALLENGER',
 ]
-const divisions = RANK_TIERS
+const rankTiers = RANK_TIERS
+
+function formatDivisionLabel(tier: string): string {
+  return tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase()
+}
+
+function toggleChampionFiltersOpen() {
+  championFiltersOpen.value = !championFiltersOpen.value
+}
+function closeChampionFilters() {
+  championFiltersOpen.value = false
+}
+
+/** Référence patch pour fenêtre temporelle des graphes tendances (aligné page stats). */
+const championProgressionFromVersionOverride = ref('')
+function normalizeVersionToPrefix(v: string | null | undefined): string | null {
+  if (!v || typeof v !== 'string') return null
+  const parts = v.trim().split('.')
+  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
+  return parts[0] || null
+}
+function syncChampionProgressionDeltaToVersionBeforeFilter(): boolean {
+  const filter = filterVersion.value.trim()
+  const list = versionsFromOverview.value
+  const before = championProgressionFromVersionOverride.value
+  if (!filter) {
+    if (before !== '') {
+      championProgressionFromVersionOverride.value = ''
+      return true
+    }
+    return false
+  }
+  const idx = list.findIndex(v => v.version === filter)
+  if (idx < 0) return false
+  const prev = list[idx + 1]?.version ?? ''
+  if (before === prev) return false
+  championProgressionFromVersionOverride.value = prev
+  return true
+}
+const championProgressionFromVersion = computed(() => {
+  if (championProgressionFromVersionOverride.value)
+    return championProgressionFromVersionOverride.value
+  const versions = versionsFromOverview.value
+  if (versions.length >= 2) return versions[1]?.version ?? null
+  if (versions.length === 1) return versions[0]?.version ?? null
+  return normalizeVersionToPrefix(versionStore.currentVersion)
+})
+const championProgressionSelectableVersions = computed(() => {
+  const versions = versionsFromOverview.value
+  if (!filterVersion.value) return versions
+  const filtered = versions.filter(v => v.version !== filterVersion.value)
+  return filtered.length > 0 ? filtered : versions
+})
+const championProgressionFromVersionModel = computed({
+  get: () => championProgressionFromVersion.value ?? '',
+  set: (value: string) => {
+    championProgressionFromVersionOverride.value = value || ''
+  },
+})
 
 const pending = ref(true)
 const error = ref<string | null>(null)
@@ -1808,6 +1913,16 @@ const roleOptions = [
   { value: 'BOTTOM', label: 'ADC', icon: '/icons/roles/bot.png' },
   { value: 'SUPPORT', label: 'Support', icon: '/icons/roles/support.png' },
 ]
+const roles = roleOptions
+
+function selectAllChampionRoles() {
+  filterRole.value = ''
+}
+function toggleChampionRoleFilter(r: (typeof roleOptions)[number]) {
+  if (!rolesWithData.value.has(r.value)) return
+  filterRole.value = filterRole.value === r.value ? '' : r.value
+}
+
 function roleLabel(role: string) {
   return ROLE_LABELS[role] ?? role
 }
@@ -1947,6 +2062,8 @@ function queryParams() {
   }
   for (const t of filterRank.value) p.append('rankTier', t)
   if (filterRole.value) p.set('role', filterRole.value)
+  // Fiche champion : pas de filtre OTP côté UI ; API sans exclusion pickrate niche.
+  p.set('otp', 'oui')
   return p.toString() ? '?' + p.toString() : ''
 }
 function toggleRankFilter(tier: string) {
@@ -1968,6 +2085,7 @@ function resetChampionFilters() {
   filterRank.value = []
   filterRole.value = ''
   filterPlayersMasterPlus.value = false
+  championProgressionFromVersionOverride.value = ''
   championSearchQueryPlaceholder.value = ''
 }
 
@@ -2221,9 +2339,8 @@ async function loadTrendSnapshots() {
   try {
     const params = new URLSearchParams()
     if (filterRole.value) params.set('role', filterRole.value)
-    const patchWindow = filterVersion.value
-      ? patchWindowFromFilterVersion(filterVersion.value)
-      : null
+    const trendPatch = (championProgressionFromVersion.value ?? '').trim()
+    const patchWindow = trendPatch ? patchWindowFromFilterVersion(trendPatch) : null
     if (patchWindow?.from) params.set('from', patchWindow.from)
     if (patchWindow?.to) params.set('to', patchWindow.to)
     params.set('limit', '1200')
@@ -2705,10 +2822,20 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
   for (const m of tierBucketMap.values()) {
     for (const d of m.keys()) durSet.add(d)
   }
-  const sortedDurations = [...durSet].sort((a, b) => a - b)
-  if (!sortedDurations.length) return null
+  if (!durSet.size) return null
 
-  const n = sortedDurations.length
+  /** Axe X : toujours partir de 0 min, puis pas de 5 min (aligné backend) + toute clé présente dans les données. */
+  const maxDur = Math.max(...durSet)
+  const durationAxisMinutes = new Set<number>([0])
+  for (let d = 5; d <= maxDur; d += 5) {
+    durationAxisMinutes.add(d)
+  }
+  for (const d of durSet) {
+    durationAxisMinutes.add(d)
+  }
+  const fullDurations = [...durationAxisMinutes].sort((a, b) => a - b)
+
+  const n = fullDurations.length
   const xAt = (index: number) =>
     TREND_CHART_PAD.left + (n <= 1 ? 0 : index / (n - 1)) * TREND_PLOT_W
 
@@ -2729,7 +2856,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
       const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> =
         []
       const m = tierBucketMap.get(tier)
-      sortedDurations.forEach((durMin, index) => {
+      fullDurations.forEach((durMin, index) => {
         const cell = m?.get(durMin)
         if (!cell || cell.games <= 0) return
         const value = mode === 'winrate' ? cell.winrate : cell.games
@@ -2750,7 +2877,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
 
   if (trendShowGlobalLine.value) {
     const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> = []
-    sortedDurations.forEach((durMin, idx) => {
+    fullDurations.forEach((durMin, idx) => {
       if (mode === 'winrate') {
         let tw = 0
         let tg = 0
@@ -2849,7 +2976,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
   const step = n <= 1 ? 1 : Math.max(1, Math.floor((n - 1) / (tickCount - 1)))
   const xTicks: Array<{ index: number; x: number; label: string }> = []
   for (let i = 0; i < n; i += step) {
-    const durMin = sortedDurations[i]
+    const durMin = fullDurations[i]
     if (durMin === undefined) continue
     xTicks.push({
       index: i,
@@ -2859,7 +2986,7 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
   }
   const lastIdx = n - 1
   if (!xTicks.some(t => t.index === lastIdx)) {
-    const durMin = sortedDurations[lastIdx]
+    const durMin = fullDurations[lastIdx]
     if (durMin !== undefined) {
       xTicks.push({ index: lastIdx, x: xAt(lastIdx), label: `${durMin}` })
     }
@@ -2890,20 +3017,30 @@ const durationTrendExtraCards = computed((): TrendChartCard[] => {
   return out
 })
 
-watch([championId, filterVersion, filterRank, filterRole, filterPlayersMasterPlus], () => {
-  if (!championId.value || Number.isNaN(championId.value)) return
-  loadChampion()
-  loadBuilds()
-  loadRunes()
-  loadMatchups()
-  loadPlayers()
-  loadDetail()
-  loadDurationByTier()
-  loadTrendSnapshots()
-  championSpellsData.value = null
-  championSpellsDuosData.value = null
-  if (activeChampionTab.value === 'spells') loadChampionSpells()
-})
+watch(
+  [
+    championId,
+    filterVersion,
+    filterRank,
+    filterRole,
+    filterPlayersMasterPlus,
+    championProgressionFromVersion,
+  ],
+  () => {
+    if (!championId.value || Number.isNaN(championId.value)) return
+    loadChampion()
+    loadBuilds()
+    loadRunes()
+    loadMatchups()
+    loadPlayers()
+    loadDetail()
+    loadDurationByTier()
+    loadTrendSnapshots()
+    championSpellsData.value = null
+    championSpellsDuosData.value = null
+    if (activeChampionTab.value === 'spells') loadChampionSpells()
+  }
+)
 
 watch(activeChampionTab, tab => {
   if (
@@ -2915,6 +3052,20 @@ watch(activeChampionTab, tab => {
     loadChampionSpells()
   }
 })
+
+if (import.meta.client) {
+  watch(filterVersion, () => {
+    syncChampionProgressionDeltaToVersionBeforeFilter()
+  })
+  watch(
+    () => versionsFromOverview.value.map(v => v.version).join('\n'),
+    () => {
+      if (!filterVersion.value) return
+      if (championProgressionFromVersionOverride.value !== '') return
+      syncChampionProgressionDeltaToVersionBeforeFilter()
+    }
+  )
+}
 
 async function loadVersionsForFilter() {
   const t = statsPerfStart('loadVersionsForFilter')
@@ -2987,6 +3138,29 @@ useHead({
 </script>
 
 <style scoped>
+.filters-collapse-floating {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--rgb-accent) / 0.28);
+  border-radius: 4px;
+  background: #08101f;
+  color: var(--color-blue-50);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+.filters-collapse-floating:hover {
+  background: rgb(var(--rgb-background) / 0.3);
+  border-color: rgb(var(--rgb-accent) / 0.45);
+}
+.champion-stats aside {
+  background: #08101f !important;
+}
+
 .champion-donut-svg {
   width: 100px;
   height: 100px;

@@ -8,6 +8,9 @@ interface VersionState {
   error: string | null
 }
 
+/** Single-flight: parallel `loadCurrentVersion()` share one fetch (navbar + page + composables). */
+let loadCurrentVersionInflight: Promise<void> | null = null
+
 export const useVersionStore = defineStore('version', {
   state: (): VersionState => ({
     currentVersion: null,
@@ -17,69 +20,83 @@ export const useVersionStore = defineStore('version', {
 
   actions: {
     async loadCurrentVersion() {
-      try {
-        this.status = 'loading'
-        this.error = null
+      if (this.status === 'success' && this.currentVersion) {
+        return
+      }
+      if (loadCurrentVersionInflight) {
+        await loadCurrentVersionInflight
+        return
+      }
 
-        // Try static file first (only in browser, not SSR)
-        if (process.client) {
-          try {
-            // Add cache-busting parameter to force reload after sync
-            const staticUrl = getVersionUrl()
-            const urlWithCacheBust = `${staticUrl}?_t=${Date.now()}`
-            const staticResponse = await fetch(urlWithCacheBust, {
-              cache: 'no-cache',
-            })
-            if (staticResponse.ok) {
-              const staticData = await staticResponse.json()
-              // Static file uses 'currentVersion', API uses 'version'
-              const version = staticData.currentVersion || staticData.version
-              if (version) {
-                this.currentVersion = version
-                this.status = 'success'
-                return
-              }
-            }
-          } catch (staticError) {
-            // Network error or other issue - will try API - silently continue
-          }
-        }
-
-        // Fallback to API if static file not available or failed
+      loadCurrentVersionInflight = (async () => {
         try {
-          const apiUrlValue = apiUrl('/api/game-data/version')
-          const response = await fetch(apiUrlValue, {
-            signal: AbortSignal.timeout(5000),
-          })
-          if (!response.ok) {
-            throw new Error(`API returned ${response.status}`)
+          this.status = 'loading'
+          this.error = null
+
+          // Try static file first (only in browser, not SSR)
+          if (process.client) {
+            try {
+              // Add cache-busting parameter to force reload after sync
+              const staticUrl = getVersionUrl()
+              const urlWithCacheBust = `${staticUrl}?_t=${Date.now()}`
+              const staticResponse = await fetch(urlWithCacheBust, {
+                cache: 'no-cache',
+              })
+              if (staticResponse.ok) {
+                const staticData = await staticResponse.json()
+                // Static file uses 'currentVersion', API uses 'version'
+                const version = staticData.currentVersion || staticData.version
+                if (version) {
+                  this.currentVersion = version
+                  this.status = 'success'
+                  return
+                }
+              }
+            } catch {
+              // Network error or other issue - will try API - silently continue
+            }
           }
-          const apiData = await response.json()
-          // API uses 'version' field
-          const version = apiData.version
-          if (version) {
-            this.currentVersion = version
-            this.status = 'success'
+
+          // Fallback to API if static file not available or failed
+          try {
+            const apiUrlValue = apiUrl('/api/game-data/version')
+            const response = await fetch(apiUrlValue, {
+              signal: AbortSignal.timeout(5000),
+            })
+            if (!response.ok) {
+              throw new Error(`API returned ${response.status}`)
+            }
+            const apiData = await response.json()
+            // API uses 'version' field
+            const version = apiData.version
+            if (version) {
+              this.currentVersion = version
+              this.status = 'success'
+              return
+            }
+          } catch (apiError) {
+            // Both static file and API failed
+            this.error = apiError instanceof Error ? apiError.message : 'Failed to load version'
+            this.status = 'error'
+            // Don't set a default version - let calling code handle null gracefully
+            this.currentVersion = null
             return
           }
-        } catch (apiError) {
-          // Both static file and API failed
-          this.error = apiError instanceof Error ? apiError.message : 'Failed to load version'
-          this.status = 'error'
-          // Don't set a default version - let calling code handle null gracefully
-          this.currentVersion = null
-          return
-        }
 
-        // Should not reach here
-        this.status = 'error'
-        this.error = 'No version data found'
-        this.currentVersion = null
-      } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Failed to load version'
-        this.status = 'error'
-        this.currentVersion = null
-      }
+          // Should not reach here
+          this.status = 'error'
+          this.error = 'No version data found'
+          this.currentVersion = null
+        } catch (error) {
+          this.error = error instanceof Error ? error.message : 'Failed to load version'
+          this.status = 'error'
+          this.currentVersion = null
+        } finally {
+          loadCurrentVersionInflight = null
+        }
+      })()
+
+      await loadCurrentVersionInflight
     },
   },
 })

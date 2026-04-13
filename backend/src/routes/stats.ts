@@ -595,6 +595,12 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
   if (!row) {
     return res.status(404).json({ error: 'Champion not found in stats' })
   }
+  const otpMode = otpModeFromQuery(req.query.otp)
+  if (!keepByOtpPickratePercent(parsePickrateNumber(row.pickrate), otpMode)) {
+    return res.status(404).json({
+      error: 'Champion does not match the OTP (pick rate) filter for this cohort.',
+    })
+  }
   let byRole = row.byRole
   /** Taux de ban : agrégat global (tous rôles), le dénominateur ne doit pas suivre le filtre rôle. */
   let banrate = row.banrate

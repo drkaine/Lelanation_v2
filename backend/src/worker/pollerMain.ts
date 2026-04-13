@@ -40,12 +40,25 @@ let shutdownRequested = false
 function requestShutdown(signal: string): void {
   if (shutdownRequested) return
   shutdownRequested = true
-  console.log(`[PollerProcess] ${signal} — draining pipeline then exiting…`)
+  const pid = process.pid
+  const ppid = process.ppid
+  console.log(
+    `[PollerProcess] ${signal} — draining pipeline then exiting… (pid=${pid} ppid=${ppid})`
+  )
+  console.log(
+    '[PollerProcess] Cause typique: PM2 restart/stop, déploiement, systemd, Ctrl+C — pas une erreur applicative.'
+  )
   void appendUnifiedLog({
     section: 'back',
     type: 'info',
     script: 'poller_process',
-    message: `${signal} reçu — drain du pipeline en cours`,
+    message: `${signal} reçu — arrêt demandé depuis l’OS ou le superviseur (drain pipeline)`,
+    json: {
+      signal,
+      pid,
+      ppid,
+      note: 'SIGINT/SIGTERM viennent du parent (ex. pm2, shell, CI). Chercher pm2 logs / déploiements / reboot serveur à cette heure.',
+    },
   })
   requestStopRiotPoller()
 }

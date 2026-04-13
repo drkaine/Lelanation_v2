@@ -105,56 +105,10 @@ const tooltipTriggerClass = computed(() => {
   return 'group/stat-tip relative ml-1 inline-flex cursor-help text-text/50'
 })
 
-const barClass = computed(() => {
-  if (props.side === 'blue') {
-    switch (props.variant) {
-      case 'pick':
-      case 'dPick':
-        return 'bg-sky-400/95'
-      case 'wr':
-      case 'dWr':
-        return 'bg-blue-500/95'
-      case 'ban':
-      case 'dBan':
-        return 'bg-blue-700/90'
-      default:
-        return 'bg-blue-500/95'
-    }
-  }
-  if (props.side === 'red') {
-    switch (props.variant) {
-      case 'pick':
-      case 'dPick':
-        return 'bg-rose-400/95'
-      case 'wr':
-      case 'dWr':
-        return 'bg-red-500/95'
-      case 'ban':
-      case 'dBan':
-        return 'bg-red-700/90'
-      default:
-        return 'bg-red-500/95'
-    }
-  }
-  switch (props.variant) {
-    case 'pick':
-    case 'dPick':
-      return 'bg-accent'
-    case 'wr':
-    case 'dWr':
-      return 'bg-success'
-    case 'ban':
-    case 'dBan':
-      return 'bg-error'
-    default:
-      return 'bg-accent'
-  }
-})
-
 /** Même largeurs que la page stats : w-9 (pick/wr/ban), w-10 (deltas) + couleurs bleu/rouge. */
 const valueCellClass = computed(() => {
-  const s = 'w-9 shrink-0 text-right font-medium tabular-nums'
-  const d = 'w-10 shrink-0 text-right font-medium tabular-nums'
+  const s = 'ml-auto w-9 shrink-0 text-right font-medium tabular-nums'
+  const d = 'ml-auto w-10 shrink-0 text-right font-medium tabular-nums'
   if (props.variant === 'dWr') {
     if (props.side === 'blue') return `${d} text-sky-300`
     if (props.side === 'red') return `${d} text-rose-300`
@@ -186,21 +140,6 @@ const displayRows = computed(() => props.rows.slice(0, FAST_SIDE_STAT_ROWS))
 const isProgression = computed(
   () => props.variant === 'dWr' || props.variant === 'dPick' || props.variant === 'dBan'
 )
-
-const barDenom = computed(() => {
-  const vals = displayRows.value.map(r =>
-    isProgression.value ? Math.abs(metricForRow(r)) : metricForRow(r)
-  )
-  return Math.max(...vals, 0.01)
-})
-
-function barWidthPct(row: Record<string, unknown>): number {
-  const m = metricForRow(row)
-  const prog = isProgression.value
-  const base = prog ? Math.abs(m) : m
-  const d = barDenom.value
-  return Math.min(100, (base / d) * 100)
-}
 
 /** Même sous-ligne que la vue d’ensemble (patch réf. → patch filtré). */
 function progressionBeforeAfterLine(row: Record<string, unknown>): string {
@@ -252,7 +191,7 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
       <tbody>
         <tr v-for="(row, idx) in displayRows" :key="'r-' + row.championId" class="fast-stat-row">
           <td class="py-0.5 align-middle">
-            <div class="flex items-center gap-0.5">
+            <div class="flex w-full min-w-0 items-center gap-0.5">
               <span class="w-4 shrink-0 text-text/70">{{ idx + 1 }}.</span>
               <img
                 v-if="gameVersion && championByKey(Number(row.championId))"
@@ -277,15 +216,6 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
               <span v-else class="min-w-[5.5rem] shrink-0 truncate font-medium text-text">
                 {{ championName(Number(row.championId)) || row.championId }}
               </span>
-              <div
-                class="fast-stat-bar-container h-1.5 min-w-[48px] max-w-[80px] flex-1 overflow-hidden rounded bg-surface/80"
-              >
-                <div
-                  class="h-full rounded transition-[width]"
-                  :class="barClass"
-                  :style="{ width: barWidthPct(row) + '%' }"
-                />
-              </div>
               <span :class="valueCellClass">{{ displayValue(row) }}</span>
             </div>
           </td>
@@ -330,7 +260,7 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
   line-height: 1.4;
   color: rgb(252 211 77) !important;
 }
-/* Comme `.fast-stat-table` / `.fast-stat-bar-container` sur la page stats (scoped). */
+/* Comme `.fast-stat-table` sur la page stats (scoped). */
 .team-side-fast-stat .fast-stat-table {
   border-collapse: collapse;
 }
@@ -339,12 +269,6 @@ function progressionBeforeAfterLine(row: Record<string, unknown>): string {
 }
 .team-side-fast-stat .fast-stat-row:last-child {
   border-bottom: none;
-}
-.team-side-fast-stat .fast-stat-bar-container {
-  flex-shrink: 0;
-  min-width: 32px !important;
-  max-width: 54px !important;
-  margin-right: 5px;
 }
 
 /* Même bulle que la page stats (composant isolé, pas de styles scoped parent). */
