@@ -8,7 +8,7 @@ test('RiotRateLimiter: schedule paces requests via token drip', async () => {
   await limiter.schedule(async () => 'a')
   await limiter.schedule(async () => 'b')
   const elapsed = Date.now() - t0
-  // First call uses initial token, second waits ~1212 ms for next drip (default 99/120 s target)
+  // First call uses initial token, second waits ~1200 ms for next drip (default 100/120 s target)
   assert.ok(elapsed >= 900, `Second call should wait for token drip, got ${elapsed}ms`)
   assert.ok(elapsed < 4_000, `Should not wait too long, got ${elapsed}ms`)
 })

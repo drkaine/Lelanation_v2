@@ -5,7 +5,7 @@
  *   - App 120 s bucket: 100 req / 120 s
  *   - App 1 s bucket:    20 req / 1 s
  *
- * Strategy: token-drip via reservoirIncreaseInterval targeting ~99 uses / 120 s by default
+ * Strategy: token-drip via reservoirIncreaseInterval targeting 100 uses / 120 s by default
  * (`RIOT_APP_TARGET_PER_120S`), with a burst buffer (`RIOT_RESERVOIR_MAX`) so parallel
  * producers do not stall when idle.
  *
@@ -14,7 +14,7 @@
  * (disabled) so sustained throughput stays closer to the drip target; set to 1 for the
  * old conservative behaviour.
  *
- * minTime: 65 ms (~15 req/s) keeps us under the 20 req/1 s bucket.
+ * minTime: 50 ms (20 req/s) uses the 1 s bucket fully; do not lower further.
  *
  * On 429: schedule() blocks until Retry-After + buffer expires.
  * Concurrent penalize429 calls only extend (never shorten) the wait.
@@ -39,7 +39,7 @@ const PENALTY_BUFFER_MS = 2_500
 
 function readTargetAppRequestsPer120s(): number {
   const raw = Number.parseInt(process.env.RIOT_APP_TARGET_PER_120S ?? '', 10)
-  if (!Number.isFinite(raw)) return 99
+  if (!Number.isFinite(raw)) return 100
   return Math.min(100, Math.max(1, raw))
 }
 
@@ -50,13 +50,13 @@ export function getRiotAppTargetPer120s(): number {
 
 function readReservoirMax(): number {
   const raw = Number.parseInt(process.env.RIOT_RESERVOIR_MAX ?? '', 10)
-  if (!Number.isFinite(raw)) return 8
+  if (!Number.isFinite(raw)) return 12
   return Math.min(32, Math.max(1, raw))
 }
 
 function readMaxConcurrent(): number {
   const raw = Number.parseInt(process.env.RIOT_LIMITER_MAX_CONCURRENT ?? '', 10)
-  if (!Number.isFinite(raw)) return 16
+  if (!Number.isFinite(raw)) return 24
   return Math.min(64, Math.max(1, raw))
 }
 
@@ -113,7 +113,7 @@ export class RiotRateLimiter {
       reservoirIncreaseInterval: dripMs,
       reservoirIncreaseMaximum: readReservoirMax(),
       maxConcurrent: readMaxConcurrent(),
-      minTime: 65,
+      minTime: 50,
     })
   }
 
