@@ -5,12 +5,14 @@
  *   - App 120 s bucket: 100 req / 120 s
  *   - App 1 s bucket:    20 req / 1 s
  *
- * Strategy: token-drip via reservoirIncreaseInterval targeting ~99 uses / 120 s
- * (120_000 / 99 ≈ 1.21 s between tokens), with a small burst buffer so parallel
- * producers do not stall when idle. This is as close as practical to the cap
- * under a fixed drip; `syncFromResponseHeaders` applies short pauses when
- * `x-app-rate-limit-count` for the 120 s bucket reaches the near-limit threshold
- * so in-flight parallelism does not push over 100.
+ * Strategy: token-drip via reservoirIncreaseInterval targeting ~99 uses / 120 s by default
+ * (`RIOT_APP_TARGET_PER_120S`), with a burst buffer (`RIOT_RESERVOIR_MAX`) so parallel
+ * producers do not stall when idle.
+ *
+ * Optional header "breath": when `RIOT_APP_120S_BREATH_REMAINING_MAX` is 1, a short pause
+ * applies if the 120 s bucket has at most that many slots left (e.g. 99/100). Default is 0
+ * (disabled) so sustained throughput stays closer to the drip target; set to 1 for the
+ * old conservative behaviour.
  *
  * minTime: 65 ms (~15 req/s) keeps us under the 20 req/1 s bucket.
  *
@@ -37,15 +39,33 @@ const PENALTY_BUFFER_MS = 2_500
 
 function readTargetAppRequestsPer120s(): number {
   const raw = Number.parseInt(process.env.RIOT_APP_TARGET_PER_120S ?? '', 10)
-  if (!Number.isFinite(raw)) return 95
+  if (!Number.isFinite(raw)) return 99
   return Math.min(100, Math.max(1, raw))
 }
 
-/** Target sustained app throughput: ~95 requests per 120 s rolling budget (configurable). */
-const TARGET_APP_REQUESTS_PER_120S = readTargetAppRequestsPer120s()
-const TOKEN_DRIP_INTERVAL_MS = Math.floor(120_000 / TARGET_APP_REQUESTS_PER_120S)
-/** Small burst when idle; header-based breath prevents overshoot with parallel fetches. */
-const RESERVOIR_MAX = 4
+/** Exported for poller summaries / budget lines (reads env each time). */
+export function getRiotAppTargetPer120s(): number {
+  return readTargetAppRequestsPer120s()
+}
+
+function readReservoirMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_RESERVOIR_MAX ?? '', 10)
+  if (!Number.isFinite(raw)) return 8
+  return Math.min(32, Math.max(1, raw))
+}
+
+function readMaxConcurrent(): number {
+  const raw = Number.parseInt(process.env.RIOT_LIMITER_MAX_CONCURRENT ?? '', 10)
+  if (!Number.isFinite(raw)) return 16
+  return Math.min(64, Math.max(1, raw))
+}
+
+/** If 1, apply short breath when 120s bucket has ≤1 slot left (99/100). If 0, disabled. */
+function readApp120sBreathRemainingMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_BREATH_REMAINING_MAX ?? '', 10)
+  if (!Number.isFinite(raw)) return 0
+  return Math.min(5, Math.max(0, raw))
+}
 
 /** Parse `"20:1,100:120"` → `[{ value: 20, windowSec: 1 }, { value: 100, windowSec: 120 }]` */
 function parseRiotLimitPairs(
@@ -85,12 +105,14 @@ export class RiotRateLimiter {
   private stopped = false
 
   constructor() {
+    const target = readTargetAppRequestsPer120s()
+    const dripMs = Math.max(1, Math.floor(120_000 / target))
     this.limiter = new Bottleneck({
       reservoir: 1,
       reservoirIncreaseAmount: 1,
-      reservoirIncreaseInterval: TOKEN_DRIP_INTERVAL_MS,
-      reservoirIncreaseMaximum: RESERVOIR_MAX,
-      maxConcurrent: 10,
+      reservoirIncreaseInterval: dripMs,
+      reservoirIncreaseMaximum: readReservoirMax(),
+      maxConcurrent: readMaxConcurrent(),
       minTime: 65,
     })
   }
@@ -155,11 +177,13 @@ export class RiotRateLimiter {
       this.maxApp120CountObserved = Math.max(this.maxApp120CountObserved, app120.count)
       // remaining120 <= 1 ⟺ count >= limit - 1 (e.g. ≥ RIOT_HEADER_APP_120S_NEAR_LIMIT when limit is 100).
       const remaining120 = app120.limit - app120.count
+      const breathRemainingMax = readApp120sBreathRemainingMax()
       if (remaining120 <= 0) {
         this.nearLimitPauseCount++
         this.penaltyUntil = Math.max(this.penaltyUntil, now + RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS)
       } else if (
-        remaining120 <= 1 &&
+        breathRemainingMax > 0 &&
+        remaining120 <= breathRemainingMax &&
         now - this.lastApp120BreathAtMs >= RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS
       ) {
         this.lastApp120BreathAtMs = now

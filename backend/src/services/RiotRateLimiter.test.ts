@@ -8,8 +8,8 @@ test('RiotRateLimiter: schedule paces requests via token drip', async () => {
   await limiter.schedule(async () => 'a')
   await limiter.schedule(async () => 'b')
   const elapsed = Date.now() - t0
-  // First call uses initial token, second waits ~1263 ms for next drip (95/120 s target)
-  assert.ok(elapsed >= 1_000, `Second call should wait for token drip, got ${elapsed}ms`)
+  // First call uses initial token, second waits ~1212 ms for next drip (default 99/120 s target)
+  assert.ok(elapsed >= 900, `Second call should wait for token drip, got ${elapsed}ms`)
   assert.ok(elapsed < 4_000, `Should not wait too long, got ${elapsed}ms`)
 })
 
@@ -38,6 +38,7 @@ test('RiotRateLimiter: concurrent penalize429 keeps longest penalty', () => {
 })
 
 test('RiotRateLimiter: syncFromResponseHeaders applies breath when 120s bucket has one slot left', async () => {
+  process.env.RIOT_APP_120S_BREATH_REMAINING_MAX = '1'
   const limiter = new RiotRateLimiter()
   await limiter.schedule(async () => 'init')
   const headers = new Headers({
@@ -51,6 +52,7 @@ test('RiotRateLimiter: syncFromResponseHeaders applies breath when 120s bucket h
   assert.ok(elapsed >= 2_350, `Should wait header breath (2.5s) + token refill, got ${elapsed}ms`)
   assert.ok(elapsed < 10_000)
   assert.equal(limiter.getStats().nearLimitPauseCount, 1)
+  delete process.env.RIOT_APP_120S_BREATH_REMAINING_MAX
 })
 
 test('RiotRateLimiter: syncFromResponseHeaders tracks buckets', () => {

@@ -165,6 +165,13 @@ export async function resolveRiotApiKey(): Promise<
 
 const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 120_000
 
+type RiotCountPeak = {
+  peak: number
+  last: number
+  windowSec: number
+  pairIndex: number
+}
+
 /** Fired once per completed `fetch` (every HTTP round-trip), including 4xx/5xx and 429 before retry. */
 export type RiotHttpResponseObserver = (info: { bucket: string; httpStatus: number }) => void
 
@@ -180,6 +187,12 @@ export class RiotHttpClient {
   private lastRiotRateLimitSnapshotLogMs = 0
   /** Last observed rate-limit header set (OK responses). */
   private lastRiotRateLimitHeaders: Record<string, string> = {}
+  /** Rolling max per header pair until a drop is seen (reset/new window). */
+  private appCountPeaks = new Map<string, RiotCountPeak>()
+  private methodCountPeaks = new Map<string, RiotCountPeak>()
+  /** Peak captured for the previous completed window (when counter drops/resets). */
+  private appCountLastCompletedPeaks = new Map<string, RiotCountPeak>()
+  private methodCountLastCompletedPeaks = new Map<string, RiotCountPeak>()
 
   constructor(
     private readonly rateLimiter: RiotRateLimiter,
@@ -199,6 +212,60 @@ export class RiotHttpClient {
 
   getRateLimiterStats() {
     return this.rateLimiter.getStats()
+  }
+
+  private updateCountPeaks(
+    raw: string | undefined,
+    target: Map<string, RiotCountPeak>,
+    completedTarget: Map<string, RiotCountPeak>
+  ): void {
+    if (!raw) return
+    const pairs = parseRiotLimitPairs(raw)
+    for (let i = 0; i < pairs.length; i++) {
+      const p = pairs[i]
+      const key = `${i}:${p.windowSec}`
+      const current = Math.max(0, Math.trunc(p.value))
+      const prev = target.get(key)
+      if (!prev) {
+        target.set(key, { peak: current, last: current, windowSec: p.windowSec, pairIndex: i })
+        continue
+      }
+      // Riot counters are monotonic within a window and drop at reset.
+      if (current < prev.last) {
+        completedTarget.set(key, { ...prev })
+        target.set(key, { ...prev, peak: current, last: current })
+      } else {
+        target.set(key, { ...prev, peak: Math.max(prev.peak, current), last: current })
+      }
+    }
+  }
+
+  private formatCountPeaks(
+    target: Map<string, RiotCountPeak>,
+    completedTarget: Map<string, RiotCountPeak>
+  ): string | null {
+    const list = Array.from(target.values()).sort((a, b) => a.pairIndex - b.pairIndex)
+    if (list.length === 0 && completedTarget.size === 0) return null
+    const out: string[] = []
+    const keys = new Set<string>([
+      ...Array.from(target.keys()),
+      ...Array.from(completedTarget.keys()),
+    ])
+    const sortedKeys = Array.from(keys).sort((a, b) => {
+      const [ai, aw] = a.split(':').map(Number)
+      const [bi, bw] = b.split(':').map(Number)
+      if (ai !== bi) return ai - bi
+      return aw - bw
+    })
+    for (const key of sortedKeys) {
+      const current = target.get(key)
+      const completed = completedTarget.get(key)
+      const best = Math.max(current?.peak ?? 0, completed?.peak ?? 0)
+      const windowSec = current?.windowSec ?? completed?.windowSec
+      if (!windowSec || best <= 0) continue
+      out.push(`${best}:${windowSec}`)
+    }
+    return out.length > 0 ? out.join(',') : null
   }
 
   /** Register a callback invoked whenever the API returns 401 or 403 (key invalid/expired). */
@@ -313,6 +380,16 @@ export class RiotHttpClient {
     const riotHeaders = pickRiotRateLimitHeaders(res.headers)
     if (Object.keys(riotHeaders).length > 0) {
       this.lastRiotRateLimitHeaders = riotHeaders
+      this.updateCountPeaks(
+        riotHeaders['x-app-rate-limit-count'],
+        this.appCountPeaks,
+        this.appCountLastCompletedPeaks
+      )
+      this.updateCountPeaks(
+        riotHeaders['x-method-rate-limit-count'],
+        this.methodCountPeaks,
+        this.methodCountLastCompletedPeaks
+      )
     }
 
     const now = Date.now()
@@ -321,10 +398,18 @@ export class RiotHttpClient {
       if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
         const near120 = pickNearestLimit120sBucket(this.lastRiotRateLimitHeaders)
         const pctUsed = near120 != null ? Math.round(near120.utilization * 1000) / 10 : null
+        const appCountPeakHeader = this.formatCountPeaks(
+          this.appCountPeaks,
+          this.appCountLastCompletedPeaks
+        )
+        const methodCountPeakHeader = this.formatCountPeaks(
+          this.methodCountPeaks,
+          this.methodCountLastCompletedPeaks
+        )
         const message =
           near120 != null
-            ? `Riot rate-limit 120s (bucket le plus proche de la limite) — ${near120.scope}: ${near120.count}/${near120.limit} utilisés, ${near120.remaining} restants (${pctUsed}% de la fenêtre)`
-            : 'Riot rate-limit headers (dernière réponse OK) — pas de paire 120s dans les en-têtes'
+            ? `Riot rate-limit 120s (bucket le plus proche de la limite) — ${near120.scope}: ${near120.count}/${near120.limit} utilisés, ${near120.remaining} restants (${pctUsed}% de la fenêtre) | peaks x-app-rate-limit-count=${appCountPeakHeader ?? 'n/a'} x-method-rate-limit-count=${methodCountPeakHeader ?? 'n/a'}`
+            : `Riot rate-limit headers (dernière réponse OK) — pas de paire 120s dans les en-têtes | peaks x-app-rate-limit-count=${appCountPeakHeader ?? 'n/a'} x-method-rate-limit-count=${methodCountPeakHeader ?? 'n/a'}`
         void appendUnifiedLog({
           section: 'back',
           type: 'rate_limit',
@@ -334,6 +419,10 @@ export class RiotHttpClient {
             httpStatus: res.status,
             bucket,
             nearLimit120s: near120,
+            rateLimitCountPeaks: {
+              app: appCountPeakHeader,
+              method: methodCountPeakHeader,
+            },
             riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
           },
         })
