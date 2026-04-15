@@ -35,8 +35,14 @@ export const RIOT_429_MIN_PENALTY_MS = 5_000
 const MAX_429_PENALTY_MS = 120_000
 const PENALTY_BUFFER_MS = 2_500
 
-/** Target sustained app throughput: ~99 requests per 120 s rolling budget. */
-const TARGET_APP_REQUESTS_PER_120S = 99
+function readTargetAppRequestsPer120s(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_TARGET_PER_120S ?? '', 10)
+  if (!Number.isFinite(raw)) return 95
+  return Math.min(100, Math.max(1, raw))
+}
+
+/** Target sustained app throughput: ~95 requests per 120 s rolling budget (configurable). */
+const TARGET_APP_REQUESTS_PER_120S = readTargetAppRequestsPer120s()
 const TOKEN_DRIP_INTERVAL_MS = Math.floor(120_000 / TARGET_APP_REQUESTS_PER_120S)
 /** Small burst when idle; header-based breath prevents overshoot with parallel fetches. */
 const RESERVOIR_MAX = 4
@@ -71,6 +77,7 @@ export class RiotRateLimiter {
   private http429PauseCount = 0
   private appBuckets: BucketSnapshot[] = []
   private methodBuckets: BucketSnapshot[] = []
+  private maxApp120CountObserved = 0
   /** Timestamp (ms) until which all requests are blocked. Only extends, never shortens. */
   private penaltyUntil = 0
   /** Last time we applied a 120 s near-limit breath (debounce). */
@@ -145,6 +152,7 @@ export class RiotRateLimiter {
 
     const app120 = this.appBuckets.find((b) => b.windowSec === 120)
     if (app120 && app120.limit > 0) {
+      this.maxApp120CountObserved = Math.max(this.maxApp120CountObserved, app120.count)
       // remaining120 <= 1 ⟺ count >= limit - 1 (e.g. ≥ RIOT_HEADER_APP_120S_NEAR_LIMIT when limit is 100).
       const remaining120 = app120.limit - app120.count
       if (remaining120 <= 0) {
@@ -166,12 +174,14 @@ export class RiotRateLimiter {
     http429PauseCount: number
     appBuckets: BucketSnapshot[]
     methodBuckets: BucketSnapshot[]
+    maxApp120CountObserved: number
   } {
     return {
       nearLimitPauseCount: this.nearLimitPauseCount,
       http429PauseCount: this.http429PauseCount,
       appBuckets: [...this.appBuckets],
       methodBuckets: [...this.methodBuckets],
+      maxApp120CountObserved: this.maxApp120CountObserved,
     }
   }
 

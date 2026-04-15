@@ -267,6 +267,35 @@ export const useBuildStore = defineStore('build', {
         return null
       }
     },
+
+    /**
+     * Upsert a shared/imported build in localStorage without changing its ID or name.
+     * Used for cross-browser linking so public builds keep ownership/editability.
+     */
+    upsertImportedBuild(build: Build): string | null {
+      try {
+        if (!build?.id) return null
+        const savedBuilds = this.getSavedBuilds()
+        const index = savedBuilds.findIndex(b => b.id === build.id)
+        if (index >= 0) {
+          const existing = savedBuilds[index]
+          if (!existing) return null
+          savedBuilds[index] = {
+            ...existing,
+            ...build,
+            id: build.id,
+          }
+        } else {
+          savedBuilds.push(build)
+        }
+        const toStore = savedBuilds.map(b => serializeBuild(b))
+        localStorage.setItem('lelanation_builds', JSON.stringify(toStore))
+        this.savedBuildsVersion++
+        return build.id
+      } catch {
+        return null
+      }
+    },
     createNewBuild() {
       this.currentBuild = {
         id: crypto.randomUUID(),

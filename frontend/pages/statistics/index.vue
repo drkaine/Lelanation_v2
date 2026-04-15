@@ -431,7 +431,7 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-unused-vars -- setup bindings are used by tab SFCs via provide('statisticsPageCtx'), not this file's template */
-import { ref, computed, watch, nextTick, getCurrentInstance, provide, unref } from 'vue'
+import { ref, computed, watch, nextTick, getCurrentInstance, provide, unref, isRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -4313,6 +4313,14 @@ if (__statisticsVm?.proxy) {
         return unref((__statisticsVm.proxy as any)[key])
       },
       set(_target, key: string | symbol, value: unknown) {
+        if (typeof key === 'string') {
+          const inst = __statisticsVm as { setupState?: Record<string, unknown> }
+          const binding = inst.setupState?.[key]
+          if (isRef(binding)) {
+            ;(binding as { value: unknown }).value = value
+            return true
+          }
+        }
         ;(__statisticsVm.proxy as any)[key] = value
         return true
       },

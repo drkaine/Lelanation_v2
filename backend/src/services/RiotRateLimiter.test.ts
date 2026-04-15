@@ -8,9 +8,9 @@ test('RiotRateLimiter: schedule paces requests via token drip', async () => {
   await limiter.schedule(async () => 'a')
   await limiter.schedule(async () => 'b')
   const elapsed = Date.now() - t0
-  // First call uses initial token, second waits ~1200 ms for next drip (99/120 s target)
+  // First call uses initial token, second waits ~1263 ms for next drip (95/120 s target)
   assert.ok(elapsed >= 1_000, `Second call should wait for token drip, got ${elapsed}ms`)
-  assert.ok(elapsed < 3_500, `Should not wait too long, got ${elapsed}ms`)
+  assert.ok(elapsed < 4_000, `Should not wait too long, got ${elapsed}ms`)
 })
 
 test('RiotRateLimiter: penalize429 blocks schedule for retry-after duration', async () => {
@@ -66,6 +66,7 @@ test('RiotRateLimiter: syncFromResponseHeaders tracks buckets', () => {
   assert.equal(stats.appBuckets.length, 2)
   assert.equal(stats.appBuckets.find((b) => b.windowSec === 120)!.count, 42)
   assert.equal(stats.methodBuckets[0].count, 123)
+  assert.equal(stats.maxApp120CountObserved, 42)
 })
 
 test('RiotRateLimiter: disconnect unblocks pending schedule calls', async () => {

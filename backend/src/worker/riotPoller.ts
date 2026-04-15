@@ -44,6 +44,9 @@ type PollerSummaryWindows = {
   summary30mParticipantsFetched: number
   summary30mNearLimitPauseCount: number
   summary30mHttp429PauseCount: number
+  summary30mMatchIdsFromApi: number
+  summary30mExistingMatchesSkipped: number
+  summary30mTimeoutCount: number
   hourlyWindowStartedAtMs: number
   hourlyPlayersPolled: number
   hourlyPlayersFetched: number
@@ -55,6 +58,9 @@ type PollerSummaryWindows = {
   hourlyParticipantsFetched: number
   hourlyNearLimitPauseCount: number
   hourlyHttp429PauseCount: number
+  hourlyMatchIdsFromApi: number
+  hourlyExistingMatchesSkipped: number
+  hourlyTimeoutCount: number
 }
 
 /** Emit 30m/hourly lines to unified log when windows elapse (runs on a timer so long MV refresh does not block summaries). */
@@ -76,6 +82,10 @@ async function emitPollerSummariesIfDue(
     const httpRequestsDelta = state.requestCount - sw.summary30mRequestCount
     const error429Delta = state.error429Count - sw.summary30mError429Count
     const participantsDelta = state.participantsFetched - sw.summary30mParticipantsFetched
+    const matchIdsFromApiDelta = state.matchIdsFromApi - sw.summary30mMatchIdsFromApi
+    const existingMatchesSkippedDelta =
+      state.existingMatchesSkipped - sw.summary30mExistingMatchesSkipped
+    const timeoutDelta = state.timeoutCount - sw.summary30mTimeoutCount
     const limiterStats = client.getRateLimiterStats()
     const nearLimitPauseDelta =
       limiterStats.nearLimitPauseCount - sw.summary30mNearLimitPauseCount
@@ -98,6 +108,8 @@ async function emitPollerSummariesIfDue(
         delta: {
           playersPolled: playersPolledDelta,
           newPlayers: playersFetchedDelta,
+          matchIdsFromApi: matchIdsFromApiDelta,
+          existingMatchesSkipped: existingMatchesSkippedDelta,
           matchesInsertedDb: matchesDbDelta,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
@@ -105,6 +117,7 @@ async function emitPollerSummariesIfDue(
           httpRequests: httpRequestsDelta,
           requests: httpRequestsDelta,
           error429: error429Delta,
+          timeout: timeoutDelta,
           matches: matchesDbDelta,
         },
         httpRequestsProjectedPerHour,
@@ -118,11 +131,14 @@ async function emitPollerSummariesIfDue(
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
           participants: state.participantsFetched,
+          matchIdsFromApi: state.matchIdsFromApi,
+          existingMatchesSkipped: state.existingMatchesSkipped,
           httpRequests: state.requestCount,
           requests: state.requestCount,
           matches: state.matchesFetched,
           error429: state.error429Count,
           error400: state.error400Count,
+          timeout: state.timeoutCount,
         },
         riotRateLimitBuckets: {
           app: limiterStats.appBuckets,
@@ -142,6 +158,9 @@ async function emitPollerSummariesIfDue(
     sw.summary30mParticipantsFetched = state.participantsFetched
     sw.summary30mNearLimitPauseCount = limiterStats.nearLimitPauseCount
     sw.summary30mHttp429PauseCount = limiterStats.http429PauseCount
+    sw.summary30mMatchIdsFromApi = state.matchIdsFromApi
+    sw.summary30mExistingMatchesSkipped = state.existingMatchesSkipped
+    sw.summary30mTimeoutCount = state.timeoutCount
   }
   if (now - sw.hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
     const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
@@ -155,17 +174,39 @@ async function emitPollerSummariesIfDue(
     const httpRequestsDelta = state.requestCount - sw.hourlyRequestCount
     const error429Delta = state.error429Count - sw.hourlyError429Count
     const participantsDelta = state.participantsFetched - sw.hourlyParticipantsFetched
+    const matchIdsFromApiDelta = state.matchIdsFromApi - sw.hourlyMatchIdsFromApi
+    const existingMatchesSkippedDelta =
+      state.existingMatchesSkipped - sw.hourlyExistingMatchesSkipped
+    const timeoutDelta = state.timeoutCount - sw.hourlyTimeoutCount
     const limiterStats = client.getRateLimiterStats()
     const nearLimitPauseDelta = limiterStats.nearLimitPauseCount - sw.hourlyNearLimitPauseCount
     const http429PauseDelta = limiterStats.http429PauseCount - sw.hourlyHttp429PauseCount
     const windowHours = elapsedMs / (60 * 60 * 1000)
     const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const discoveryRate = playersPolledDelta > 0 ? matchIdsFromApiDelta / playersPolledDelta : 0
+    const efficiency = matchIdsFromApiDelta > 0 ? (matchesDbDelta / matchIdsFromApiDelta) * 100 : 0
+    const requestBudget = Math.max(
+      POLLER_API_TARGET_PER_120S,
+      Math.floor(elapsedMs / 120_000) * POLLER_API_TARGET_PER_120S
+    )
+    const requestUsagePct = requestBudget > 0 ? (httpRequestsDelta / requestBudget) * 100 : 0
+    const peakOk = limiterStats.maxApp120CountObserved <= POLLER_API_TARGET_PER_120S
+    const tsLabel = formatSummaryTimestamp(new Date(now))
     const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
+    const formattedMessage = [
+      `[${tsLabel}] RESUME HORAIRE`,
+      `- Joueurs polles: ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
+      `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesDbDelta} nouveaux en DB | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
+      `- API Requests: ${httpRequestsDelta}/${requestBudget} (Usage: ${requestUsagePct.toFixed(1)}%)`,
+      `- Max Token Peak: ${limiterStats.maxApp120CountObserved}/${POLLER_API_TARGET_PER_120S} (Safety Margin: ${peakOk ? 'OK' : 'HIGH'})`,
+      `- Participants indexes: ${playersFetchedDelta} nouveaux PUUIDs`,
+      `- Erreurs: ${error429Delta + timeoutDelta} (429: ${error429Delta}, Timeout: ${timeoutDelta})`,
+    ].join('\n')
     await appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_hourly',
-      message: `Résumé horaire — joueurs interrogés:+${playersPolledDelta} matchs récupérés (détail+timeline OK):+${matchesApiDelta} matchs ajoutés en DB:+${matchesDbDelta} nouveaux joueurs en DB:+${playersFetchedDelta} joueurs rang League API mis à jour:+${playersRankDelta} participants:+${participantsDelta} requêtes HTTP:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h si débit constant) 429:+${error429Delta} pauses near-limit:+${nearLimitPauseDelta}`,
+      message: formattedMessage,
       json: {
         windowStartIso: new Date(sw.hourlyWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
@@ -177,6 +218,8 @@ async function emitPollerSummariesIfDue(
         delta: {
           playersPolled: playersPolledDelta,
           newPlayers: playersFetchedDelta,
+          matchIdsFromApi: matchIdsFromApiDelta,
+          existingMatchesSkipped: existingMatchesSkippedDelta,
           matchesInsertedDb: matchesDbDelta,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
@@ -184,15 +227,21 @@ async function emitPollerSummariesIfDue(
           httpRequests: httpRequestsDelta,
           requests: httpRequestsDelta,
           error429: error429Delta,
+          timeout: timeoutDelta,
           matches: matchesDbDelta,
         },
         httpRequestsProjectedPerHour,
         requestsPerHour: httpRequestsProjectedPerHour,
+        requestBudget,
+        requestUsagePct,
+        maxTokenPeak: limiterStats.maxApp120CountObserved,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
         totals: {
           playersPolled: state.playersPolled,
           newPlayers: state.playersFetched,
+          matchIdsFromApi: state.matchIdsFromApi,
+          existingMatchesSkipped: state.existingMatchesSkipped,
           matchesInsertedDb: state.matchesFetched,
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
@@ -202,6 +251,7 @@ async function emitPollerSummariesIfDue(
           matches: state.matchesFetched,
           error429: state.error429Count,
           error400: state.error400Count,
+          timeout: state.timeoutCount,
         },
         riotRateLimitBuckets: {
           app: limiterStats.appBuckets,
@@ -210,6 +260,28 @@ async function emitPollerSummariesIfDue(
         lastRiotRateLimitHeaders: lastRlHeadersH,
       },
     })
+    const matchLoss = matchIdsFromApiDelta - matchesDbDelta
+    if (
+      matchLoss >= POLLER_MATCH_LOSS_ALERT_ABSOLUTE &&
+      matchIdsFromApiDelta > 0 &&
+      matchLoss / matchIdsFromApiDelta >= POLLER_MATCH_LOSS_ALERT_RATIO
+    ) {
+      await appendUnifiedLog({
+        section: 'back',
+        type: 'warning',
+        script: 'poller_hourly',
+        message: `Alerte perte matchs: trouves=${matchIdsFromApiDelta} inseresDb=${matchesDbDelta} perte=${matchLoss}`,
+        json: {
+          matchIdsFromApiDelta,
+          matchesInsertedDbDelta: matchesDbDelta,
+          existingMatchesSkippedDelta,
+          matchesApiIngestCompleteDelta: matchesApiDelta,
+          timeoutDelta,
+          error429Delta,
+          lossRatio: matchLoss / matchIdsFromApiDelta,
+        },
+      })
+    }
     sw.hourlyWindowStartedAtMs = now
     sw.hourlyPlayersPolled = state.playersPolled
     sw.hourlyPlayersFetched = state.playersFetched
@@ -221,6 +293,9 @@ async function emitPollerSummariesIfDue(
     sw.hourlyParticipantsFetched = state.participantsFetched
     sw.hourlyNearLimitPauseCount = limiterStats.nearLimitPauseCount
     sw.hourlyHttp429PauseCount = limiterStats.http429PauseCount
+    sw.hourlyMatchIdsFromApi = state.matchIdsFromApi
+    sw.hourlyExistingMatchesSkipped = state.existingMatchesSkipped
+    sw.hourlyTimeoutCount = state.timeoutCount
   }
 }
 import { Prisma } from '../generated/prisma/index.js'
@@ -235,7 +310,7 @@ import {
 } from './matchPlayerBucketPolicy.js'
 import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
-const PLAYERS_PER_LOOP = 20
+const PLAYERS_PER_LOOP = 100
 
 const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
 const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
@@ -244,6 +319,9 @@ const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 3
 const SYNC_ACTIVE_PATCHES_EVERY_MS = 4 * 60 * 60 * 1000
 const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
+const POLLER_API_TARGET_PER_120S = 95
+const POLLER_MATCH_LOSS_ALERT_ABSOLUTE = 20
+const POLLER_MATCH_LOSS_ALERT_RATIO = 0.2
 
 /** Ragrégateur `poller_hourly` : défaut 1h ; ex. `POLLER_HOURLY_SUMMARY_MS=60000` pour tester (min 60s, max 24h). */
 function getPollerHourlySummaryIntervalMs(): number {
@@ -253,6 +331,11 @@ function getPollerHourlySummaryIntervalMs(): number {
   const minMs = 60_000
   const maxMs = 24 * 60 * 60 * 1000
   return Math.min(maxMs, Math.max(minMs, raw))
+}
+
+function formatSummaryTimestamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 /** Dernière sync `active_patches` depuis les matchs (process). Même logique anti-burst qu’avant pour le refresh MV. */
 let lastSyncActivePatchesAt = Date.now()
@@ -270,6 +353,8 @@ const globalRankCache = new Map<string, CachedRankEntry>()
 const RANK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const RANK_CACHE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000
 let lastRankCacheCleanupMs = Date.now()
+const priorityPuuidQueue: string[] = []
+const priorityPuuidSet = new Set<string>()
 
 function getCachedRank(puuid: string): CachedRankEntry['data'] | null {
   const entry = globalRankCache.get(puuid)
@@ -292,6 +377,33 @@ function cleanupGlobalRankCache(): void {
   for (const [key, entry] of globalRankCache) {
     if (now > entry.expiresAt) globalRankCache.delete(key)
   }
+}
+
+function enqueuePriorityPuuid(puuid: string): void {
+  if (!puuid || priorityPuuidSet.has(puuid)) return
+  priorityPuuidSet.add(puuid)
+  priorityPuuidQueue.push(puuid)
+}
+
+function dequeuePriorityPuuids(maxCount: number): string[] {
+  const out: string[] = []
+  while (out.length < maxCount && priorityPuuidQueue.length > 0) {
+    const puuid = priorityPuuidQueue.shift()
+    if (!puuid) break
+    priorityPuuidSet.delete(puuid)
+    out.push(puuid)
+  }
+  return out
+}
+
+function isRankUpdateRequired(
+  player: { rankSnapshotGameDate: Date | null } | null,
+  matchGameDate: Date | null
+): boolean {
+  if (!player) return true
+  if (!player.rankSnapshotGameDate) return true
+  if (!matchGameDate) return false
+  return player.rankSnapshotGameDate.getTime() < matchGameDate.getTime()
 }
 
 const MIN_ALLOWED_MAJOR = 16
@@ -319,6 +431,12 @@ export interface RiotPollerStatus {
   participantsFetched: number
   /** Successful League-v4-by-puuid responses that fed rank data during ingest. */
   playersRankUpdatedLeague: number
+  /** Match IDs returned by Riot `by-puuid` API. */
+  matchIdsFromApi: number
+  /** Match IDs skipped because already in DB. */
+  existingMatchesSkipped: number
+  /** Riot HTTP failures with status 0 (timeout/network). */
+  timeoutCount: number
   matchesRankFixed: number
   participantsRankFixed: number
   participantsRoleFixed: number
@@ -339,6 +457,9 @@ const defaultStatus: RiotPollerStatus = {
   playersPolled: 0,
   participantsFetched: 0,
   playersRankUpdatedLeague: 0,
+  matchIdsFromApi: 0,
+  existingMatchesSkipped: 0,
+  timeoutCount: 0,
   matchesRankFixed: 0,
   participantsRankFixed: 0,
   participantsRoleFixed: 0,
@@ -1207,6 +1328,7 @@ export async function upsertMatchAndParticipants(
   const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
 
   const maxGameByPuuid = new Map<string, Date>()
+  const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
   if (puuids.length > 0) {
     const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
       SELECT pl.puuid, MAX(m.game_date) AS max_game
@@ -1218,6 +1340,13 @@ export async function upsertMatchAndParticipants(
     `
     for (const r of rows) {
       if (r.max_game) maxGameByPuuid.set(r.puuid, r.max_game)
+    }
+    const playerRows = await prisma.player.findMany({
+      where: { puuid: { in: puuids } },
+      select: { puuid: true, rankSnapshotGameDate: true },
+    })
+    for (const row of playerRows) {
+      playerRankSnapshotByPuuid.set(row.puuid, { rankSnapshotGameDate: row.rankSnapshotGameDate })
     }
   }
 
@@ -1303,17 +1432,31 @@ export async function upsertMatchAndParticipants(
     setCachedRank(puuid, data)
   }
 
-  try {
-    for (const p of participantDtos) {
-      const pid = p.puuid
-      if (!pid) continue
-      if (!needsLeagueRankApiFromDto(p)) continue
-      // DTO sans rang complet → League v4 (dédup par cache global 24h + cache de ce match).
-      await fetchAccountRankForParticipant(pid)
-    }
-  } catch (e) {
-    if (e instanceof Error && e.message === RIOT_INGEST_ABORTED_MESSAGE) throw e
-    throw e
+  const participantDtoByPuuid = new Map<string, RiotParticipantDto>()
+  for (const p of participantDtos) {
+    if (p.puuid && !participantDtoByPuuid.has(p.puuid)) participantDtoByPuuid.set(p.puuid, p)
+  }
+  const leagueFetchPuuids = Array.from(
+    new Set(
+      participantDtos
+        .map((p) => p.puuid)
+        .filter((pid): pid is string => Boolean(pid))
+        .filter((pid) => {
+          const dto = participantDtoByPuuid.get(pid)
+          if (!dto || !needsLeagueRankApiFromDto(dto)) return false
+          const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
+          return isRankUpdateRequired(playerRow, gameDate)
+        })
+    )
+  )
+  const leagueFetchResults = await Promise.allSettled(
+    leagueFetchPuuids.map((pid) => fetchAccountRankForParticipant(pid))
+  )
+  for (const res of leagueFetchResults) {
+    if (res.status === 'fulfilled') continue
+    const reason = res.reason instanceof Error ? res.reason.message : String(res.reason)
+    if (reason === RIOT_INGEST_ABORTED_MESSAGE) throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
+    await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
   }
 
   const resolvedRanks: ResolvedParticipantRank[] = participantDtos.map((p) => {
@@ -1429,7 +1572,10 @@ export async function upsertMatchAndParticipants(
         puuidKeyVersion: playerRow.puuidKeyVersion,
         gameName: playerRow.gameName,
       })
-      if (createdNow) counters.playersFetched++
+      if (createdNow) {
+        counters.playersFetched++
+        enqueuePriorityPuuid(puuid)
+      }
     } else {
       playerId = existingPlayer.id
       const playerUpdates: Record<string, unknown> = {}
@@ -1453,7 +1599,22 @@ export async function upsertMatchAndParticipants(
     const finalRankDivision = rr.division
     const finalRankLp = rr.lp
     const riotTeamId = p.teamId ?? 100
-    const teamDbId = teamIdByRiotTeam.get(riotTeamId) ?? teamIdByRiotTeam.values().next().value!
+    let teamDbId = teamIdByRiotTeam.get(riotTeamId)
+    if (!teamDbId) {
+      const fallbackTeam = await tx.team.upsert({
+        where: { matchId_team: { matchId: match.id, team: riotTeamId } },
+        create: {
+          matchId: match.id,
+          team: riotTeamId,
+          rankTier: 'UNRANKED',
+          win: false,
+        },
+        update: {},
+        select: { id: true },
+      })
+      teamDbId = fallbackTeam.id
+      teamIdByRiotTeam.set(riotTeamId, teamDbId)
+    }
 
     const runes = (p as { perks?: unknown }).perks ?? (p as { runes?: unknown }).runes ?? null
     const summoner1Id = (p as { summoner1Id?: number }).summoner1Id ?? null
@@ -2029,6 +2190,9 @@ async function runStep4ForPlayer(
     playersPolled: number
     participantsFetched: number
     playersRankUpdatedLeague: number
+    matchIdsFromApi: number
+    existingMatchesSkipped: number
+    timeoutCount: number
   },
   matchListTimeWindow: { startTime: number; endTime: number } | null
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
@@ -2072,8 +2236,12 @@ async function runStep4ForPlayer(
       attempts++
 
       if (cachedMatchDto == null) {
-        const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
+        const [matchRes, timelineResFirst] = await Promise.all([
+          client.getMatch(matchId, riotIngestRequestOptions()),
+          client.getMatchTimeline(matchId, riotIngestRequestOptions()),
+        ])
         if (!matchRes.ok) {
+          if (matchRes.status === 0) counters.timeoutCount++
           if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
             counters.error400Count++
             await logger.error('400 decrypt on match', matchRes.body)
@@ -2111,10 +2279,40 @@ async function runStep4ForPlayer(
           }
         }
         cachedMatchDto = matchRes.data as RiotMatchDto
+        if (!timelineResFirst.ok) {
+          if (timelineResFirst.status === 0) counters.timeoutCount++
+          if (timelineResFirst.message === RIOT_INGEST_ABORTED_MESSAGE) {
+            return { ok: false, reason: 'abort' }
+          }
+          const retry = scheduleTimelineRetry(matchId)
+          if (shouldLogPollerRiotAttempt(attempts, MATCH_FETCH_MAX_ATTEMPTS)) {
+            logPollerRiotApiToUnified('Riot timeline fetch échoué ou en retry', {
+              region,
+              matchId,
+              attempt: attempts,
+              maxAttempts: MATCH_FETCH_MAX_ATTEMPTS,
+              httpStatus: timelineResFirst.status,
+              message: timelineResFirst.message ?? null,
+              timelineRetryStateAttempts: retry.attempts,
+            })
+          }
+          await logger.info('Retry timeline fetch', {
+            matchId,
+            attempt: attempts,
+            status: timelineResFirst.status,
+            retryAttempts: retry.attempts,
+          })
+          await sleep(MATCH_FETCH_RETRY_DELAY_MS)
+          continue
+        }
+        clearTimelineRetry(matchId)
+        counters.matchesApiIngestComplete++
+        return { ok: true, matchDto: cachedMatchDto, timelineDto: timelineResFirst.data }
       }
 
       const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
       if (!timelineRes.ok) {
+        if (timelineRes.status === 0) counters.timeoutCount++
         if (timelineRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
           return { ok: false, reason: 'abort' }
         }
@@ -2157,16 +2355,65 @@ async function runStep4ForPlayer(
     return { ok: false, reason: 'transient', matchDto: cachedMatchDto }
   }
 
-  const players = await prisma.player.findMany({
-    where: {
-      region,
-      ...(puuidKeyVersion
-        ? { puuidKeyVersion }
-        : { puuidKeyVersion: { notIn: ['erreur', 'perdu'] } }),
-    },
-    orderBy: [{ lastSeen: { sort: 'asc', nulls: 'first' } }, { createdAt: 'asc' }],
-    take: PLAYERS_PER_LOOP,
-  })
+  const playerWhere = {
+    region,
+    ...(puuidKeyVersion
+      ? { puuidKeyVersion }
+      : { puuidKeyVersion: { notIn: ['erreur', 'perdu'] as string[] } }),
+  }
+  const selectedPlayers: Array<{
+    id: bigint
+    puuid: string
+    lastSeen: Date | null
+    createdAt: Date
+    region: string
+    puuidKeyVersion: string | null
+  }> = []
+  const selectedIds = new Set<bigint>()
+
+  const priorityPuuids = dequeuePriorityPuuids(PLAYERS_PER_LOOP * 3)
+  if (priorityPuuids.length > 0) {
+    const priorityRows = await prisma.player.findMany({
+      where: { ...playerWhere, puuid: { in: priorityPuuids } },
+      select: {
+        id: true,
+        puuid: true,
+        lastSeen: true,
+        createdAt: true,
+        region: true,
+        puuidKeyVersion: true,
+      },
+      take: PLAYERS_PER_LOOP,
+    })
+    const order = new Map(priorityPuuids.map((puuid, idx) => [puuid, idx]))
+    priorityRows.sort((a, b) => (order.get(a.puuid) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.puuid) ?? Number.MAX_SAFE_INTEGER))
+    for (const row of priorityRows) {
+      selectedPlayers.push(row)
+      selectedIds.add(row.id)
+      if (selectedPlayers.length >= PLAYERS_PER_LOOP) break
+    }
+  }
+
+  if (selectedPlayers.length < PLAYERS_PER_LOOP) {
+    const fallbackRows = await prisma.player.findMany({
+      where: {
+        ...playerWhere,
+        ...(selectedIds.size > 0 ? { id: { notIn: Array.from(selectedIds) } } : {}),
+      },
+      orderBy: [{ lastSeen: { sort: 'asc', nulls: 'first' } }, { createdAt: 'asc' }],
+      take: PLAYERS_PER_LOOP - selectedPlayers.length,
+      select: {
+        id: true,
+        puuid: true,
+        lastSeen: true,
+        createdAt: true,
+        region: true,
+        puuidKeyVersion: true,
+      },
+    })
+    selectedPlayers.push(...fallbackRows)
+  }
+  const players = selectedPlayers
 
   const flags = { foundPrismaError: false }
 
@@ -2236,6 +2483,7 @@ async function runStep4ForPlayer(
   for (const { player, res, queryNull } of matchIdResults) {
     if (!res.ok) {
       phase1ApiError++
+      if (res.status === 0) counters.timeoutCount++
       if (res.message === RIOT_INGEST_ABORTED_MESSAGE) return 'ok'
       if (res.status === 400 && is400Decrypt(res.body)) {
         counters.error400Count++
@@ -2299,6 +2547,8 @@ async function runStep4ForPlayer(
       workItems.push({ matchId, trackerIdx })
     }
   }
+  counters.matchIdsFromApi += phase1TotalIds
+  counters.existingMatchesSkipped += phase1InDb
 
   // Log Phase 1 summary to unified log for diagnostics
   void appendUnifiedLog({
@@ -2328,7 +2578,7 @@ async function runStep4ForPlayer(
   // Producer fires API calls at max rate-limiter speed.
   // Consumer ingests into DB concurrently — so DB work never blocks the API.
 
-  const PIPELINE_QUEUE_MAX = 8
+  const PIPELINE_QUEUE_MAX = 90
   const ingestQueue: Array<{
     matchId: string
     trackerIdx: number
@@ -2390,7 +2640,7 @@ async function runStep4ForPlayer(
   })()
 
   // N parallel producer workers — Bottleneck smooths the actual HTTP rate.
-  const PARALLEL_FETCHES = 5
+  const PARALLEL_FETCHES = 20
   let workIdx = 0
 
   const runProducerWorker = async (): Promise<void> => {
@@ -2568,6 +2818,9 @@ async function runStep4Counters() {
     playersPolled: state.playersPolled,
     participantsFetched: state.participantsFetched,
     playersRankUpdatedLeague: state.playersRankUpdatedLeague,
+    matchIdsFromApi: state.matchIdsFromApi,
+    existingMatchesSkipped: state.existingMatchesSkipped,
+    timeoutCount: state.timeoutCount,
   }
 }
 
@@ -2590,6 +2843,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     playersPolled: 0,
     participantsFetched: 0,
     playersRankUpdatedLeague: 0,
+    matchIdsFromApi: 0,
+    existingMatchesSkipped: 0,
+    timeoutCount: 0,
     matchesRankFixed: 0,
     participantsRankFixed: 0,
     participantsRoleFixed: 0,
@@ -2639,6 +2895,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       summary30mParticipantsFetched: state.participantsFetched,
       summary30mNearLimitPauseCount: initLimiterStats.nearLimitPauseCount,
       summary30mHttp429PauseCount: initLimiterStats.http429PauseCount,
+      summary30mMatchIdsFromApi: state.matchIdsFromApi,
+      summary30mExistingMatchesSkipped: state.existingMatchesSkipped,
+      summary30mTimeoutCount: state.timeoutCount,
       hourlyWindowStartedAtMs: Date.now(),
       hourlyPlayersPolled: state.playersPolled,
       hourlyPlayersFetched: state.playersFetched,
@@ -2650,6 +2909,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       hourlyParticipantsFetched: state.participantsFetched,
       hourlyNearLimitPauseCount: initLimiterStats.nearLimitPauseCount,
       hourlyHttp429PauseCount: initLimiterStats.http429PauseCount,
+      hourlyMatchIdsFromApi: state.matchIdsFromApi,
+      hourlyExistingMatchesSkipped: state.existingMatchesSkipped,
+      hourlyTimeoutCount: state.timeoutCount,
     }
 
     let summaryEmitChain: Promise<void> = Promise.resolve()
@@ -2715,6 +2977,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         playersPolled: countersEuw.playersPolled,
         participantsFetched: countersEuw.participantsFetched,
         playersRankUpdatedLeague: countersEuw.playersRankUpdatedLeague,
+        matchIdsFromApi: countersEuw.matchIdsFromApi,
+        existingMatchesSkipped: countersEuw.existingMatchesSkipped,
+        timeoutCount: countersEuw.timeoutCount,
       })
       if (resultEuw === '400_decrypt') {
         setTriggerPuuidMigrationOnPollerExit(true)
@@ -2773,6 +3038,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           playersPolled: countersEun.playersPolled,
           participantsFetched: countersEun.participantsFetched,
           playersRankUpdatedLeague: countersEun.playersRankUpdatedLeague,
+          matchIdsFromApi: countersEun.matchIdsFromApi,
+          existingMatchesSkipped: countersEun.existingMatchesSkipped,
+          timeoutCount: countersEun.timeoutCount,
         })
         if (resultEun === '400_decrypt') {
           setTriggerPuuidMigrationOnPollerExit(true)

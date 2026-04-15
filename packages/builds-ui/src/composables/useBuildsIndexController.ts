@@ -10,6 +10,7 @@ export interface BuildStoreLike {
   getSavedBuilds: () => Build[]
   deleteBuild: (buildId: string) => Promise<boolean>
   setSavedBuildVisibility: (buildId: string, visibility: 'public' | 'private') => Promise<boolean>
+  upsertImportedBuild?: (build: Build) => string | null
 }
 
 export interface BuildDiscoveryStoreLike {
@@ -41,6 +42,8 @@ export interface UseBuildsIndexControllerOptions {
   voteStore: VoteStoreLike
   serializeBuild: (build: Build) => unknown
   shareBuildsRequest: (payload: { builds: unknown[]; favoriteIds: string[] }) => Promise<{ code: string }>
+  importBuildsByCodeRequest: (code: string) => Promise<{ builds: unknown[]; favoriteIds?: string[] }>
+  hydrateSharedBuild: (raw: unknown) => Build | null
 }
 
 const isTabValue = (value: string): value is TabValue => {
@@ -60,11 +63,16 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     voteStore,
     serializeBuild,
     shareBuildsRequest,
+    importBuildsByCodeRequest,
+    hydrateSharedBuild,
   } = options
 
   const buildToDelete = ref<string | null>(null)
+  const shareModalOpen = ref(false)
   const shareCode = ref<string | null>(null)
+  const importCode = ref('')
   const shareLoading = ref(false)
+  const importLoading = ref(false)
   const shareError = ref<string | null>(null)
   const shareCopied = ref(false)
   const myBuildsVisibilityFilter = ref<VisibilityFilterValue>('all')
@@ -146,12 +154,19 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
   )
 
   const shareBuilds = async () => {
-    const allBuilds = buildStore.getSavedBuilds()
+    shareModalOpen.value = true
+    const localBuilds = buildStore.getSavedBuilds()
+    const byId = new Map<string, Build>()
+    for (const build of localBuilds) {
+      byId.set(build.id, build)
+    }
+    for (const build of favoriteBuilds.value) {
+      if (!byId.has(build.id)) byId.set(build.id, build)
+    }
+    const allBuilds = Array.from(byId.values())
     if (allBuilds.length === 0) {
-      shareError.value = t('buildsPage.shareNoBuilds')
-      setTimeout(() => {
-        shareError.value = null
-      }, 3000)
+      shareCode.value = null
+      shareCopied.value = false
       return
     }
 
@@ -159,8 +174,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     shareError.value = null
     try {
       const stored = allBuilds.map(b => serializeBuild(b))
-      const buildIds = new Set(allBuilds.map(b => b.id))
-      const favoriteIds = favoritesStore.favoriteBuildIds.filter(id => buildIds.has(id))
+      const favoriteIds = favoritesStore.favoriteBuildIds.filter(id => byId.has(id))
       const res = await shareBuildsRequest({ builds: stored, favoriteIds })
       shareCode.value = res.code
       shareCopied.value = false
@@ -185,6 +199,73 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     } catch {
       // fallback: no-op, user can copy manually
     }
+  }
+
+  const importBuildsByCode = async () => {
+    const code = importCode.value.trim().toUpperCase()
+    if (!code) return
+    importLoading.value = true
+    shareError.value = null
+    try {
+      const payload = await importBuildsByCodeRequest(code)
+      const favoriteSourceIds = new Set(
+        Array.isArray(payload.favoriteIds)
+          ? payload.favoriteIds.filter((id): id is string => typeof id === 'string')
+          : []
+      )
+      const importedBySourceId = new Map<string, string>()
+      for (const raw of payload.builds ?? []) {
+        const build = hydrateSharedBuild(raw)
+        if (!build) continue
+        const isFavoriteSource = favoriteSourceIds.has(build.id)
+        const isPrivateBuild = (build.visibility ?? 'public') === 'private'
+        const shouldGrantOwnership = isPrivateBuild || !isFavoriteSource
+
+        if (shouldGrantOwnership) {
+          const newId =
+            buildStore.upsertImportedBuild?.(build) ??
+            (buildStore as BuildStoreLike & {
+              importBuild?: (build: Build, options?: { nameSuffix?: string }) => string | null
+            }).importBuild?.(build, { nameSuffix: '' })
+          if (newId) importedBySourceId.set(build.id, newId)
+        } else {
+          // Public favorites should remain favorites-only (no local ownership copy).
+          importedBySourceId.set(build.id, build.id)
+        }
+      }
+      if (Array.isArray(payload.favoriteIds) && payload.favoriteIds.length > 0) {
+        for (const sourceId of payload.favoriteIds) {
+          const importedId = importedBySourceId.get(sourceId)
+          if (!importedId) continue
+          if (
+            !(favoritesStore as FavoritesStoreLike & { addFavorite?: (id: string) => void }).favoriteBuildIds.includes(
+              importedId
+            )
+          ) {
+            ;(favoritesStore as FavoritesStoreLike & { addFavorite?: (id: string) => void }).addFavorite?.(
+              importedId
+            )
+          }
+        }
+      }
+      await discoveryStore.loadBuilds()
+      importCode.value = ''
+      shareModalOpen.value = false
+      shareCode.value = null
+    } catch {
+      shareError.value = t('buildsPage.shareError')
+      setTimeout(() => {
+        shareError.value = null
+      }, 4000)
+    } finally {
+      importLoading.value = false
+    }
+  }
+
+  const closeShareModal = () => {
+    shareModalOpen.value = false
+    shareCode.value = null
+    shareCopied.value = false
   }
 
   const confirmDelete = (buildId: string) => {
@@ -231,12 +312,17 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     comparisonBuilds,
     favoriteBuilds,
     buildToDelete,
+    shareModalOpen,
     shareCode,
+    importCode,
     shareLoading,
+    importLoading,
     shareError,
     shareCopied,
     shareBuilds,
+    importBuildsByCode,
     copyShareCode,
+    closeShareModal,
     confirmDelete,
     deleteBuild,
     toggleBuildVisibility,

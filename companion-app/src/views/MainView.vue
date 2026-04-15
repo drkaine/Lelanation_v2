@@ -1025,14 +1025,20 @@ watch(
       :my-builds-visibility-filter="myBuildsVisibilityFilter"
       :visibility-filter-options="visibilityFilterOptions"
       :admin-mode="false"
+      :allow-share="false"
       :share-loading="false"
+      :import-loading="false"
       :builds-filtered-by-visibility="myBuildsForTab"
       :build-to-delete="null"
+      :share-modal-open="false"
       :share-code="null"
+      :import-code="''"
       :share-copied="false"
       :share-error="null"
       @update:active-tab="activeBuildTab = $event"
       @update:my-builds-visibility-filter="myBuildsVisibilityFilter = $event"
+      @update:import-code="linkCode = $event"
+      @import-by-code="linkBuildsFromCode"
     />
 
     <section v-if="activeTab === 'settings'" class="panel settings-panel">
@@ -1113,7 +1119,7 @@ watch(
           type="text"
           class="link-input"
           :placeholder="t('settings.linkPlaceholder')"
-          maxlength="10"
+          maxlength="24"
           @keyup.enter="linkBuildsFromCode"
         />
         <button

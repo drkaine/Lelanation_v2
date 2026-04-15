@@ -9,7 +9,7 @@ const sharedDir = join(process.cwd(), 'data', 'shared')
 const privateTempDir = join(process.cwd(), 'data', 'private-temp')
 const buildsDir = join(process.cwd(), 'data', 'builds')
 
-const CODE_LENGTH = 6
+const CODE_LENGTH = 12
 const TTL_MS = 24 * 60 * 60 * 1000
 const MAX_BUILDS = 50
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -133,7 +133,7 @@ router.get('/:code', async (req, res) => {
   try {
     const code = req.params.code.toUpperCase().trim()
 
-    if (!/^[A-Z0-9]{4,10}$/.test(code)) {
+    if (!/^[A-Z0-9]{4,24}$/.test(code)) {
       return res.status(400).json({ error: 'Invalid code format' })
     }
 

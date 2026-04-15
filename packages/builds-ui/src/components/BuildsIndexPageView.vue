@@ -120,7 +120,7 @@
             </button>
           </div>
           <button
-            v-if="adminMode"
+            v-if="allowShare"
             class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
             :disabled="shareLoading"
             @click="emit('share-builds')"
@@ -139,7 +139,7 @@
               <path d="M13 5v5h5" />
               <path d="m8 14 3 3 5-5" />
             </svg>
-            {{ shareLoading ? 'Import en cours...' : "Importer dans l'app" }}
+            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
           </button>
         </div>
 
@@ -157,6 +157,28 @@
           <div class="flex flex-wrap items-center gap-2">
             <component :is="buildSearchComponent" />
             <component :is="buildFiltersComponent" />
+            <button
+              v-if="allowShare"
+              class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
+              :disabled="shareLoading"
+              @click="emit('share-builds')"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+                <path d="M13 5v5h5" />
+                <path d="m8 14 3 3 5-5" />
+              </svg>
+              {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
+            </button>
           </div>
         </div>
         <component
@@ -206,7 +228,7 @@
     </div>
 
     <div
-      v-if="shareCode"
+      v-if="shareModalOpen"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
       @click="emit('close-share-code')"
     >
@@ -220,7 +242,8 @@
           {{ t('buildsPage.shareCodeDescription') }}
         </p>
         <div
-          class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-3xl font-bold tracking-[0.3em] text-accent"
+          v-if="shareCode"
+          class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-xl font-bold tracking-[0.25em] text-accent"
         >
           {{ shareCode }}
           <button
@@ -245,6 +268,27 @@
             </svg>
           </button>
         </div>
+        <p v-else class="mb-4 text-sm text-text-secondary">
+          {{ t('buildsPage.shareNoBuilds') }}
+        </p>
+        <div class="mb-3">
+          <input
+            :value="importCode"
+            type="text"
+            class="w-full rounded-lg border border-primary/60 bg-background px-3 py-2 font-mono text-sm text-text"
+            :placeholder="t('buildsPage.shareCodeInputPlaceholder')"
+            maxlength="24"
+            @input="emit('update:import-code', ($event.target as HTMLInputElement).value.toUpperCase())"
+            @keyup.enter="emit('import-by-code')"
+          />
+        </div>
+        <button
+          class="mb-3 w-full rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-background transition-colors hover:bg-accent-dark disabled:opacity-50"
+          :disabled="importLoading || !importCode.trim()"
+          @click="emit('import-by-code')"
+        >
+          {{ importLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareCodeImportAction') }}
+        </button>
         <p v-if="shareCopied" class="mb-2 text-sm text-green-400">
           {{ t('buildsPage.shareCodeCopied') }}
         </p>
@@ -286,10 +330,14 @@ defineProps<{
   myBuildsVisibilityFilter: VisibilityFilterValue
   visibilityFilterOptions: { value: VisibilityFilterValue; label: string }[]
   adminMode: boolean
+  allowShare: boolean
   shareLoading: boolean
+  importLoading: boolean
   buildsFilteredByVisibility: Build[]
   buildToDelete: string | null
+  shareModalOpen: boolean
   shareCode: string | null
+  importCode: string
   shareCopied: boolean
   shareError: string | null
 }>()
@@ -305,6 +353,8 @@ const emit = defineEmits<{
   'close-delete-modal': []
   'close-share-code': []
   'copy-share-code': []
+  'update:import-code': [value: string]
+  'import-by-code': []
 }>()
 </script>
 

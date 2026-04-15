@@ -12,10 +12,14 @@
     :my-builds-visibility-filter="myBuildsVisibilityFilter"
     :visibility-filter-options="visibilityFilterOptions"
     :admin-mode="adminMode"
+    :allow-share="true"
     :share-loading="shareLoading"
+    :import-loading="importLoading"
     :builds-filtered-by-visibility="buildsFilteredByVisibility"
     :build-to-delete="buildToDelete"
+    :share-modal-open="shareModalOpen"
     :share-code="shareCode"
+    :import-code="importCode"
     :share-copied="shareCopied"
     :share-error="shareError"
     @update:active-tab="activeTab = $event"
@@ -26,8 +30,10 @@
     @toggle-visibility="toggleBuildVisibility"
     @delete-build="deleteBuild"
     @close-delete-modal="buildToDelete = null"
-    @close-share-code="shareCode = null"
+    @close-share-code="closeShareModal"
     @copy-share-code="copyShareCode"
+    @update:import-code="importCode = $event"
+    @import-by-code="importBuildsByCode"
   />
 </template>
 
@@ -35,6 +41,7 @@
 import { computed, resolveComponent } from 'vue'
 import { useRoute } from 'vue-router'
 import { BuildsIndexPageView, useBuildsIndexController } from '@lelanation/builds-ui'
+import type { Build } from '@lelanation/shared-types'
 import { useBuildStore } from '~/stores/BuildStore'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useVoteStore } from '~/stores/VoteStore'
@@ -42,7 +49,7 @@ import { useFavoritesStore } from '~/stores/FavoritesStore'
 import BuildSearch from '~/components/BuildDiscovery/BuildSearch.vue'
 import BuildFilters from '~/components/BuildDiscovery/BuildFilters.vue'
 import BuildGrid from '~/components/BuildDiscovery/BuildGrid.vue'
-import { serializeBuild } from '~/utils/buildSerialize'
+import { serializeBuild, hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useClientHydrated } from '~/composables/useClientHydrated'
 import { useStreamerMode } from '~/composables/useStreamerMode'
@@ -78,12 +85,17 @@ const {
   comparisonBuilds,
   favoriteBuilds,
   buildToDelete,
+  shareModalOpen,
   shareCode,
   shareLoading,
   shareError,
   shareCopied,
+  importCode,
+  importLoading,
   shareBuilds,
+  importBuildsByCode,
   copyShareCode,
+  closeShareModal,
   confirmDelete,
   deleteBuild,
   toggleBuildVisibility,
@@ -106,5 +118,14 @@ const {
       method: 'POST',
       body: payload,
     }),
+  importBuildsByCodeRequest: code =>
+    $fetch<{ builds: unknown[]; favoriteIds?: string[] }>(
+      `/api/share-builds/${encodeURIComponent(code)}`
+    ),
+  hydrateSharedBuild: raw => {
+    if (!raw || typeof raw !== 'object') return null
+    if (isStoredBuild(raw)) return hydrateBuild(raw)
+    return raw as Build
+  },
 })
 </script>
