@@ -13,40 +13,58 @@ const props = withDefaults(
   { total: 0, early: 0, surrenderOnly: 0, played: 0, sideAccent: 'default' }
 )
 
-/** Same geometry as win-share donut (Solo/Duo): viewBox 120, r=48, stroke 14 */
-const R = 48
-const circumference = 2 * Math.PI * R
+const donutData = computed<number[]>(() => {
+  const clamp = (v: number) => (Number.isFinite(v) ? Math.max(0, v) : 0)
+  return [clamp(props.early), clamp(props.surrenderOnly), clamp(props.played)]
+})
 
-const segs = computed(() => {
-  const t = props.total
-  if (!t || t <= 0) {
-    return { dE: 0, dS: 0, dP: 0, offS: 0, offP: 0, center: '0' }
-  }
-  const pE = props.early / t
-  const pS = props.surrenderOnly / t
-  const pP = props.played / t
-  const dE = circumference * pE
-  const dS = circumference * pS
-  const dP = circumference * pP
+const radius = 48
+const strokeWidth = 14
+const circleLength = 2 * Math.PI * radius
+
+const donutSegments = computed(() => {
+  const early = donutData.value[0] ?? 0
+  const surrenderOnly = donutData.value[1] ?? 0
+  const played = donutData.value[2] ?? 0
+  const total = early + surrenderOnly + played
+  if (total <= 0) return []
+
+  const colors = [
+    donutCategories.value.early.color,
+    donutCategories.value.surrender.color,
+    donutCategories.value.played.color,
+  ]
+  const values = [early, surrenderOnly, played]
+  let offset = 0
+
+  return values.map((rawValue, index) => {
+    const value = rawValue ?? 0
+    const ratio = value / total
+    const arcLength = circleLength * ratio
+    const segment = {
+      color: colors[index] ?? '#64748b',
+      arcLength,
+      offset,
+    }
+    offset += arcLength
+    return segment
+  })
+})
+
+const donutCategories = computed(() => {
+  const playedColor =
+    props.sideAccent === 'blue' ? '#38bdf8' : props.sideAccent === 'red' ? '#fb7185' : '#3b82f6'
   return {
-    dE,
-    dS,
-    dP,
-    offS: -dE,
-    offP: -(dE + dS),
-    center: String(Math.round(pP * 100)),
+    early: { name: 'Early', color: '#f59e0b' },
+    surrender: { name: 'Surrender', color: '#fde68a' },
+    played: { name: 'Played', color: playedColor },
   }
 })
 
-const playedRingClass = computed(() => {
-  switch (props.sideAccent) {
-    case 'blue':
-      return 'text-sky-500 dark:text-sky-400'
-    case 'red':
-      return 'text-rose-500 dark:text-rose-400'
-    default:
-      return 'text-blue-500 dark:text-blue-400'
-  }
+const centerPct = computed(() => {
+  const total = props.total
+  if (!total || total <= 0) return '0'
+  return String(Math.round((props.played / total) * 100))
 })
 
 const centerPctClass = computed(() => {
@@ -63,61 +81,39 @@ const centerPctClass = computed(() => {
 
 <template>
   <div
-    class="pie-chart-2 relative inline-flex h-[150px] w-[150px] shrink-0 items-center justify-center"
+    class="pie-chart-2 relative inline-flex h-[112px] w-[112px] max-w-full shrink-0 items-center justify-center overflow-hidden sm:h-[132px] sm:w-[132px] lg:h-[150px] lg:w-[150px]"
     aria-hidden="true"
   >
-    <svg class="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 120 120">
+    <svg
+      viewBox="0 0 120 120"
+      class="absolute inset-0 h-full w-full -rotate-90"
+      role="presentation"
+      focusable="false"
+    >
       <circle
         cx="60"
         cy="60"
-        :r="R"
+        :r="radius"
         fill="none"
-        stroke="currentColor"
-        stroke-width="14"
-        stroke-linecap="butt"
-        class="text-surface/50 dark:text-surface/40"
-        :stroke-dasharray="circumference + ' ' + circumference"
-        stroke-dashoffset="0"
+        stroke="rgba(148, 163, 184, 0.18)"
+        :stroke-width="strokeWidth"
       />
       <circle
+        v-for="(segment, index) in donutSegments"
+        :key="index"
         cx="60"
         cy="60"
-        :r="R"
+        :r="radius"
         fill="none"
-        stroke="currentColor"
-        stroke-width="14"
+        :stroke="segment.color"
+        :stroke-width="strokeWidth"
         stroke-linecap="butt"
-        class="text-amber-500 dark:text-amber-300"
-        :stroke-dasharray="segs.dE + ' ' + circumference"
-        stroke-dashoffset="0"
-      />
-      <circle
-        cx="60"
-        cy="60"
-        :r="R"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="14"
-        stroke-linecap="butt"
-        class="text-amber-200 dark:text-amber-100"
-        :stroke-dasharray="segs.dS + ' ' + circumference"
-        :stroke-dashoffset="segs.offS"
-      />
-      <circle
-        cx="60"
-        cy="60"
-        :r="R"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="14"
-        stroke-linecap="butt"
-        :class="playedRingClass"
-        :stroke-dasharray="segs.dP + ' ' + circumference"
-        :stroke-dashoffset="segs.offP"
+        :stroke-dasharray="`${segment.arcLength} ${circleLength - segment.arcLength}`"
+        :stroke-dashoffset="`-${segment.offset}`"
       />
     </svg>
     <div class="relative z-10 flex flex-col items-center text-center">
-      <span :class="centerPctClass">{{ segs.center }}%</span>
+      <span :class="[centerPctClass, 'text-base sm:text-lg lg:text-xl']">{{ centerPct }}%</span>
     </div>
   </div>
 </template>

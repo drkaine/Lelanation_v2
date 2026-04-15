@@ -746,6 +746,7 @@
                           >
                             <circle
                               v-for="pt in serie.points"
+                              v-show="(pt.games ?? 0) > 0"
                               :key="`duration-${card.metricId}-${serie.tier}-${pt.idx}`"
                               :cx="pt.x"
                               :cy="pt.y"
@@ -2851,68 +2852,120 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
     rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }>
   }
 
+  function buildDenseRowForTier(tier: string): {
+    rawValues: DurPendingSerie['rawValues']
+    hasData: boolean
+  } {
+    const m = tierBucketMap.get(tier)
+    const rawValues: DurPendingSerie['rawValues'] = []
+    let hasData = false
+    fullDurations.forEach((durMin, index) => {
+      const defaultLabel = `${durMin}–${durMin + 5} min`
+      /** Toujours 0 à l’origine (0 min) : ancrage pour l’axe Y et le lissage. */
+      if (index === 0) {
+        rawValues.push({ idx: index, value: 0, bucketLabel: defaultLabel, games: 0 })
+        return
+      }
+      let cell = m?.get(durMin)
+      let bucketLabel = defaultLabel
+      /** Bucket [0,5) côté API (durationMin=0) : si pas de ligne à 5 min, on l’affiche au tick 5 min. */
+      if ((!cell || cell.games <= 0) && durMin === 5) {
+        const b0 = m?.get(0)
+        if (b0 && b0.games > 0) {
+          cell = b0
+          bucketLabel = `0–5 min`
+        }
+      }
+      if (!cell || cell.games <= 0) {
+        rawValues.push({ idx: index, value: 0, bucketLabel: defaultLabel, games: 0 })
+        return
+      }
+      hasData = true
+      const value = mode === 'winrate' ? cell.winrate : cell.games
+      rawValues.push({
+        idx: index,
+        value,
+        bucketLabel,
+        games: cell.games,
+      })
+    })
+    return { rawValues, hasData }
+  }
+
   const pendingSeries: DurPendingSerie[] = tiersOrdered
     .map(tier => {
-      const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> =
-        []
-      const m = tierBucketMap.get(tier)
-      fullDurations.forEach((durMin, index) => {
-        const cell = m?.get(durMin)
-        if (!cell || cell.games <= 0) return
-        const value = mode === 'winrate' ? cell.winrate : cell.games
-        rawValues.push({
-          idx: index,
-          value,
-          bucketLabel: `${durMin}–${durMin + 5} min`,
-          games: cell.games,
-        })
-      })
+      const { rawValues, hasData } = buildDenseRowForTier(tier)
+      if (!hasData) return null
       return {
         tier,
         color: RANK_COLOR_MAP[tier] ?? '#64748b',
         rawValues,
       }
     })
-    .filter(s => s.rawValues.length > 0)
+    .filter((s): s is DurPendingSerie => s !== null)
 
   if (trendShowGlobalLine.value) {
-    const rawValues: Array<{ idx: number; value: number; bucketLabel: string; games: number }> = []
+    const rawValues: DurPendingSerie['rawValues'] = []
+    let hasData = false
     fullDurations.forEach((durMin, idx) => {
+      const bucketLabel = `${durMin}–${durMin + 5} min`
+      if (idx === 0) {
+        rawValues.push({ idx, value: 0, bucketLabel, games: 0 })
+        return
+      }
       if (mode === 'winrate') {
         let tw = 0
         let tg = 0
-        for (const m of tierBucketMap.values()) {
-          const c = m.get(durMin)
+        for (const map of tierBucketMap.values()) {
+          const c = map.get(durMin)
           if (c && c.games > 0) {
             tw += c.wins
             tg += c.games
           }
         }
-        if (tg > 0) {
-          rawValues.push({
-            idx,
-            value: (100 * tw) / tg,
-            bucketLabel: `${durMin}–${durMin + 5} min`,
-            games: tg,
-          })
+        let label = bucketLabel
+        if (tg === 0 && durMin === 5) {
+          let tw0 = 0
+          let tg0 = 0
+          for (const map of tierBucketMap.values()) {
+            const c = map.get(0)
+            if (c && c.games > 0) {
+              tw0 += c.wins
+              tg0 += c.games
+            }
+          }
+          if (tg0 > 0) {
+            tw = tw0
+            tg = tg0
+            label = `0–5 min`
+          }
         }
+        if (tg > 0) hasData = true
+        const value = tg > 0 ? (100 * tw) / tg : 0
+        rawValues.push({ idx, value, bucketLabel: label, games: tg })
       } else {
         let tg = 0
-        for (const m of tierBucketMap.values()) {
-          const c = m.get(durMin)
+        for (const map of tierBucketMap.values()) {
+          const c = map.get(durMin)
           if (c && c.games > 0) tg += c.games
         }
-        if (tg > 0) {
-          rawValues.push({
-            idx,
-            value: tg,
-            bucketLabel: `${durMin}–${durMin + 5} min`,
-            games: tg,
-          })
+        let label = bucketLabel
+        if (tg === 0 && durMin === 5) {
+          let tg0 = 0
+          for (const map of tierBucketMap.values()) {
+            const c = map.get(0)
+            if (c && c.games > 0) tg0 += c.games
+          }
+          if (tg0 > 0) {
+            tg = tg0
+            label = `0–5 min`
+          }
         }
+        if (tg > 0) hasData = true
+        rawValues.push({ idx, value: tg, bucketLabel: label, games: tg })
       }
     })
-    if (rawValues.length) {
+    if (hasData && rawValues.length) {
       pendingSeries.push({
         tier: 'GLOBAL',
         color: RANK_COLOR_MAP.GLOBAL ?? '#c084fc',
@@ -2923,22 +2976,21 @@ function buildDurationByTierChart(mode: DurationByTierChartMode): TrendChartCard
 
   if (!pendingSeries.length) return null
 
-  const smoothedByTier = pendingSeries.map(serie => ({
-    ...serie,
-    smoothValues: smoothSeries(
+  const smoothedByTier = pendingSeries.map(serie => {
+    const smoothValues = smoothSeries(
       serie.rawValues.map(v => v.value),
       3
-    ),
-  }))
+    )
+    /** Après lissage, l’origine reste exactement à 0. */
+    if (smoothValues.length) smoothValues[0] = 0
+    return { ...serie, smoothValues }
+  })
 
-  const allValues = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
-  let minVal = allValues.length ? Math.min(...allValues) : 0
-  let maxVal = allValues.length ? Math.max(...allValues) : 1
-  if (!Number.isFinite(minVal)) minVal = 0
-  if (!Number.isFinite(maxVal) || maxVal <= 0) maxVal = 1
-  const spread = Math.max(1e-6, maxVal - minVal)
-  const domainMin = mode === 'games' ? 0 : Math.max(0, minVal - spread * 0.12)
-  const domainMax = maxVal + spread * 0.08
+  const allSmoothed = smoothedByTier.flatMap(s => s.smoothValues).filter(v => Number.isFinite(v))
+  const maxVal = allSmoothed.length ? Math.max(0, ...allSmoothed) : 0
+  const domainMin = 0
+  const domainMax =
+    mode === 'games' ? Math.max(1, maxVal * 1.08) : Math.min(100, Math.max(maxVal * 1.12, 1))
   const domainSpan = Math.max(1e-6, domainMax - domainMin)
 
   const series: TrendSeries[] = smoothedByTier.map(serie => {

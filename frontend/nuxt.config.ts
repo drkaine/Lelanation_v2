@@ -260,6 +260,44 @@ export default defineNuxtConfig({
     transpile: ['@lelanation/shared-types', '@lelanation/shared-theme', '@lelanation/builds-ui'],
   },
   vite: {
+    build: {
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/vue/') || id.includes('node_modules/@vue/')) {
+              return 'vendor-vue'
+            }
+            if (id.includes('node_modules/pinia/') || id.includes('node_modules/vue-router/')) {
+              return 'vendor-state-router'
+            }
+            if (
+              id.includes('node_modules/@nuxtjs/i18n') ||
+              id.includes('/frontend/i18n/') ||
+              id.includes('/frontend/locales/')
+            ) {
+              return 'i18n'
+            }
+            if (id.includes('/frontend/stores/') && id.includes('Statistics')) {
+              return 'statistics-store'
+            }
+            if (id.includes('/frontend/composables/statistics/')) {
+              return 'statistics-composables'
+            }
+            if (
+              id.includes('frontend/pages/statistics') ||
+              id.includes('/components/statistics/')
+            ) {
+              return 'statistics'
+            }
+            if (id.includes('node_modules/@lelanation/builds-ui')) {
+              return 'builds-ui'
+            }
+            return undefined
+          },
+        },
+      },
+    },
     server: {
       allowedHosts: ['www.lelanation.fr', 'lelanation.fr', 'localhost', '127.0.0.1'],
     },

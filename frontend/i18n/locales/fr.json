@@ -213,7 +213,6 @@
     "tabTrends": "Tendance",
     "tabTeam": "Team",
     "tabObjectives": "Objectifs",
-    "objectivesCombinedIntro": "Pour chaque ligne : part des parties où l’équipe gagnante ou perdante a pris l’objectif en premier (Victoire / Défaite), puis part où le côté bleu ou rouge l’a pris en premier (Bleu / Rouge). Les pourcentages utilisent le nombre de parties de chaque source.",
     "objectivesCombinedEmpty": "Aucune donnée objectifs pour cette cohorte.",
     "tabInfos": "Infos",
     "tabBans": "Bans",

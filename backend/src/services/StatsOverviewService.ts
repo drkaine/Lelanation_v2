@@ -1261,7 +1261,7 @@ export async function getOverviewTeamsStats(
     const team200 = teamRows.find((r) => Number(r.team) === 200)
     const toN = (v: bigint | number | null | undefined) => Number(v ?? 0)
     const aggWin = {
-      firstBlood: { first: toN(team100?.count_first_blood) + toN(team200?.count_first_blood) },
+      firstBlood: { first: toN(team100?.count_first_blood) },
       baron: { first: toN(team100?.count_baron_first), kills: toN(team100?.sum_baron_kills) },
       dragon: { first: toN(team100?.count_dragon_first), kills: toN(team100?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team100?.sum_elder_kills) },
@@ -1271,7 +1271,7 @@ export async function getOverviewTeamsStats(
       horde: { first: toN(team100?.count_horde_first), kills: toN(team100?.sum_horde_kills) },
     }
     const aggLoss = {
-      firstBlood: { first: 0 },
+      firstBlood: { first: toN(team200?.count_first_blood) },
       baron: { first: toN(team200?.count_baron_first), kills: toN(team200?.sum_baron_kills) },
       dragon: { first: toN(team200?.count_dragon_first), kills: toN(team200?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team200?.sum_elder_kills) },

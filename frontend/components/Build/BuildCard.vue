@@ -4253,7 +4253,7 @@ defineExpose({
 .first-three-ups-section {
   position: absolute;
   left: 200px; /* Positionné pour avoir le même espace entre items (~120px) et skill order (~280px) */
-  top: 300px; /* Descendu pour s'aligner avec les items */
+  top: 303px; /* Descendu pour s'aligner avec les items */
   z-index: 10;
 }
 
@@ -4351,7 +4351,7 @@ defineExpose({
 .skill-order-section {
   position: absolute;
   right: 20px; /* Décalé de 20px du bord droit */
-  top: 300px; /* Descendu pour s'aligner avec les items */
+  top: 303px; /* Descendu pour s'aligner avec les items */
 }
 
 .skill-order-vertical {

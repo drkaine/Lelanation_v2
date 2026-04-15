@@ -232,7 +232,14 @@ export class RiotHttpClient {
       }
       // Riot counters are monotonic within a window and drop at reset.
       if (current < prev.last) {
-        completedTarget.set(key, { ...prev })
+        const completedPrev = completedTarget.get(key)
+        const completedPeak = Math.max(completedPrev?.peak ?? 0, prev.peak)
+        completedTarget.set(key, {
+          peak: completedPeak,
+          last: prev.last,
+          windowSec: prev.windowSec,
+          pairIndex: prev.pairIndex,
+        })
         target.set(key, { ...prev, peak: current, last: current })
       } else {
         target.set(key, { ...prev, peak: Math.max(prev.peak, current), last: current })

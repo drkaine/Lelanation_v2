@@ -21,10 +21,6 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
 
 <template>
   <div class="space-y-4">
-    <p class="text-xs text-text/65">
-      {{ p.t('statisticsPage.objectivesCombinedIntro') }}
-    </p>
-
     <div
       v-if="
         (p.overviewTeamsPending && !(p.overviewTeamsData && p.overviewTeamsData.matchCount > 0)) ||
@@ -69,26 +65,6 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
           "
         >
           {{ p.cardIsFavorite('overview.objectives') ? '★' : '☆' }}
-        </button>
-        <button
-          type="button"
-          class="shrink-0 text-base leading-none transition-colors"
-          :class="
-            p.cardIsFavorite('team.objectives')
-              ? 'text-amber-300 hover:text-amber-200'
-              : 'text-text/45 grayscale hover:text-text/75'
-          "
-          :title="
-            p.cardIsFavorite('team.objectives') ? 'Retirer des favoris' : 'Ajouter aux favoris'
-          "
-          @click="
-            p.toggleFavoriteCard(
-              'team.objectives',
-              `${p.t('statisticsPage.tabTeam')} — ${p.t('statisticsPage.sidesObjectivesBySide')}`
-            )
-          "
-        >
-          {{ p.cardIsFavorite('team.objectives') ? '★' : '☆' }}
         </button>
         <button
           type="button"

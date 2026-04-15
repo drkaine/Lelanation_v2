@@ -3,7 +3,7 @@
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
       type="button"
-      class="fixed left-4 top-4 z-40 flex w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
+      class="fixed left-3 top-16 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -73,7 +73,7 @@
       </button>
       <aside
         :class="[
-          'fixed left-0 top-0 z-40 flex h-full w-64 shrink-0 flex-col rounded-r-lg bg-surface/30 shadow-lg transition-transform duration-200',
+          'fixed left-0 top-14 z-40 flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
           'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
           filtersOpen
             ? 'translate-x-0 lg:w-64 lg:opacity-100'
@@ -345,6 +345,13 @@
               class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
             />
           </div>
+          <button
+            type="button"
+            class="mt-2 rounded border border-primary/40 bg-black/20 px-3 py-2 text-sm font-semibold text-text/90 hover:bg-primary/20 lg:hidden"
+            @click="closeFilters"
+          >
+            {{ t('statisticsPage.closeFilters') }}
+          </button>
         </div>
       </aside>
 
@@ -431,7 +438,17 @@
 
 <script setup lang="ts">
 /* eslint-disable @typescript-eslint/no-unused-vars -- setup bindings are used by tab SFCs via provide('statisticsPageCtx'), not this file's template */
-import { ref, computed, watch, nextTick, getCurrentInstance, provide, unref, isRef } from 'vue'
+import {
+  ref,
+  computed,
+  watch,
+  nextTick,
+  getCurrentInstance,
+  provide,
+  unref,
+  isRef,
+  defineAsyncComponent,
+} from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
@@ -445,20 +462,6 @@ import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useStatisticsBansTab } from '~/composables/statistics/useStatisticsBansTab'
 import { getChampionImageUrl, getItemImageUrl } from '~/utils/imageUrl'
-import StatisticsOverviewTab from '~/components/statistics/tabs/StatisticsOverviewTab.vue'
-import StatisticsRunesTab from '~/components/statistics/tabs/StatisticsRunesTab.vue'
-import StatisticsTrendsTab from '~/components/statistics/tabs/StatisticsTrendsTab.vue'
-import StatisticsTeamTab from '~/components/statistics/tabs/StatisticsTeamTab.vue'
-import StatisticsObjectivesTab from '~/components/statistics/tabs/StatisticsObjectivesTab.vue'
-import StatisticsInfosTab from '~/components/statistics/tabs/StatisticsInfosTab.vue'
-import StatisticsBansTab from '~/components/statistics/tabs/StatisticsBansTab.vue'
-import StatisticsTierListTab from '~/components/statistics/tabs/StatisticsTierListTab.vue'
-import StatisticsChampionTableTab from '~/components/statistics/tabs/StatisticsChampionTableTab.vue'
-import StatisticsBalanceTab from '~/components/statistics/tabs/StatisticsBalanceTab.vue'
-import StatisticsDurationTab from '~/components/statistics/tabs/StatisticsDurationTab.vue'
-import StatisticsItemsTab from '~/components/statistics/tabs/StatisticsItemsTab.vue'
-import StatisticsSpellsTab from '~/components/statistics/tabs/StatisticsSpellsTab.vue'
-import StatisticsAbandonsTab from '~/components/statistics/tabs/StatisticsAbandonsTab.vue'
 import { formatItemStatsForDisplay, formatItemEconomicForDisplay } from '~/utils/formatItemStats'
 import {
   scoreboardDrakeIconByKey,
@@ -470,6 +473,48 @@ import type {
   ItemAggRow,
   ItemSliceCategory,
 } from '~/components/statistics/ItemStatsFastSection.vue'
+const StatisticsOverviewTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsOverviewTab.vue')
+)
+const StatisticsRunesTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
+)
+const StatisticsTrendsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsTrendsTab.vue')
+)
+const StatisticsTeamTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsTeamTab.vue')
+)
+const StatisticsObjectivesTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsObjectivesTab.vue')
+)
+const StatisticsInfosTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsInfosTab.vue')
+)
+const StatisticsBansTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsBansTab.vue')
+)
+const StatisticsTierListTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsTierListTab.vue')
+)
+const StatisticsChampionTableTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsChampionTableTab.vue')
+)
+const StatisticsBalanceTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsBalanceTab.vue')
+)
+const StatisticsDurationTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsDurationTab.vue')
+)
+const StatisticsItemsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsItemsTab.vue')
+)
+const StatisticsSpellsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsSpellsTab.vue')
+)
+const StatisticsAbandonsTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsAbandonsTab.vue')
+)
 
 definePageMeta({
   layout: 'default',
@@ -4523,6 +4568,16 @@ if (__statisticsVm?.proxy) {
   background: #08101f !important;
   justify-self: center;
   overflow: visible;
+}
+@media (max-width: 640px) {
+  .statistics .fast-stat-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
 }
 .statistics .fast-stat-card.fast-stat-card-objectives {
   width: 100% !important;

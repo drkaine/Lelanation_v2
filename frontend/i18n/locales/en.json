@@ -213,7 +213,6 @@
     "tabTrends": "Trends",
     "tabTeam": "Team",
     "tabObjectives": "Objectives",
-    "objectivesCombinedIntro": "Each row: share of games where the winning or losing team took the objective first (Win / Loss), then share where blue or red side took it first (Blue / Red). Percentages use each source’s match count.",
     "objectivesCombinedEmpty": "No objective data for this cohort.",
     "tabInfos": "Info",
     "tabBans": "Bans",
