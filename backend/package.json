@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "test:matchups": "tsx --test src/services/MatchupTierService.test.ts",
     "test:stats": "tsx --test src/utils/statsFormulas.test.ts src/utils/statsMvBanAggregate.test.ts src/utils/statShardLegacyMerge.test.ts src/services/TierListService.test.ts src/services/StatsAbandonsService.test.ts src/services/MatchupTierService.test.ts src/services/BalanceRulesService.test.ts src/services/StatsBalanceService.test.ts",
-    "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/riotPoller.db.test.ts",
+    "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/matchIngestQueue.test.ts src/worker/riotPoller.db.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",

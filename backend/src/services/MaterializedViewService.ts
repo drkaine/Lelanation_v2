@@ -131,7 +131,7 @@ async function refreshMvList(names: readonly string[]): Promise<MvRefreshTimingR
             console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
             continue
           }
-          throw fallbackErr
+          throw new Error(`[MaterializedViewService] REFRESH ${mvName} failed: ${fallbackMessage}`)
         }
       }
       // Schema drift / partial migration: skip missing MV and keep the poller running.
@@ -141,7 +141,7 @@ async function refreshMvList(names: readonly string[]): Promise<MvRefreshTimingR
         console.warn('[MaterializedViewService] Missing MV skipped during refresh:', mvName)
         continue
       }
-      throw err
+      throw new Error(`[MaterializedViewService] REFRESH ${mvName} failed: ${message}`)
     }
   }
   return timings

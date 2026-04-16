@@ -75,7 +75,11 @@ export async function countMatchIngestQueueFiles(): Promise<number> {
   const dir = getMatchIngestQueueDir()
   const names = await readdir(dir).catch(() => [] as string[])
   return names.filter(
-    (n) => n.endsWith('.json') && !n.startsWith('.') && !n.includes('.err.')
+    (n) =>
+      n.endsWith('.json') &&
+      !n.startsWith('.') &&
+      !n.includes('.err.') &&
+      !n.includes('.processing.')
   ).length
 }
 
@@ -90,7 +94,11 @@ export async function pickOldestMatchIngestQueueFilePaths(limit: number): Promis
   const dir = getMatchIngestQueueDir()
   const names = await readdir(dir).catch(() => [] as string[])
   const jsonFiles = names.filter(
-    (n) => n.endsWith('.json') && !n.startsWith('.') && !n.includes('.err.')
+    (n) =>
+      n.endsWith('.json') &&
+      !n.startsWith('.') &&
+      !n.includes('.err.') &&
+      !n.includes('.processing.')
   )
   if (jsonFiles.length === 0) return []
   const withMtime: Array<{ name: string; mtime: number }> = []
@@ -102,4 +110,30 @@ export async function pickOldestMatchIngestQueueFilePaths(limit: number): Promis
   }
   withMtime.sort((a, b) => a.mtime - b.mtime)
   return withMtime.slice(0, limit).map((x) => path.join(dir, x.name))
+}
+
+function processingPathForQueueFile(p: string): string {
+  return p.replace(/\.json$/i, `.processing.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.json`)
+}
+
+/**
+ * Atomically claim oldest queue files by renaming them to a processing path.
+ * Claimed files are hidden from backpressure depth (`countMatchIngestQueueFiles`).
+ */
+export async function claimOldestMatchIngestQueueFilePaths(limit: number): Promise<string[]> {
+  if (limit <= 0) return []
+  const candidates = await pickOldestMatchIngestQueueFilePaths(limit * 4)
+  if (candidates.length === 0) return []
+  const claimed: string[] = []
+  for (const p of candidates) {
+    if (claimed.length >= limit) break
+    const claimedPath = processingPathForQueueFile(p)
+    try {
+      await rename(p, claimedPath)
+      claimed.push(claimedPath)
+    } catch {
+      // Another worker likely claimed/deleted it first.
+    }
+  }
+  return claimed
 }

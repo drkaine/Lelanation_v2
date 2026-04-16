@@ -118,3 +118,59 @@ test('upsertMatchAndParticipants is idempotent on existing matchId', { skip: ski
   }
 })
 
+test('upsertMatchAndParticipants handles concurrent duplicate match insert safely', { skip: skipDbReason }, async () => {
+  const suffix = Date.now()
+  const matchId = `EUW1_TEST_RACE_${suffix}`
+  const puuids = Array.from({ length: 10 }, (_, i) => `TEST_PUUID_RACE_${i}_${suffix}`)
+
+  const dto: RiotMatchDto = {
+    metadata: { matchId },
+    info: {
+      gameId: 111222333,
+      gameDuration: 1700,
+      gameVersion: '16.1.1',
+      queueId: 420,
+      endOfGameResult: 'GameComplete',
+      participants: puuids.map((puuid, idx) => ({
+        puuid,
+        championId: 200 + idx,
+        teamId: idx < 5 ? 100 : 200,
+        win: idx % 2 === 0,
+      })),
+    },
+  }
+
+  const counters1 = {
+    matchesFetched: 0,
+    participantsFetched: 0,
+    playersFetched: 0,
+    matchesApiIngestComplete: 0,
+    playersRankUpdatedLeague: 0,
+  }
+  const counters2 = {
+    matchesFetched: 0,
+    participantsFetched: 0,
+    playersFetched: 0,
+    matchesApiIngestComplete: 0,
+    playersRankUpdatedLeague: 0,
+  }
+
+  try {
+    await Promise.all([
+      upsertMatchAndParticipants(mockRiotClient, 'euw1', matchId, dto, 'perso', counters1),
+      upsertMatchAndParticipants(mockRiotClient, 'euw1', matchId, dto, 'perso', counters2),
+    ])
+
+    const matches = await prisma.match.findMany({ where: { riotMatchId: matchId } })
+    assert.equal(matches.length, 1, 'exactly one match row should exist')
+    const participants = await prisma.matchPlayer.count({ where: { matchId: matches[0]!.id } })
+    assert.equal(participants, 10, 'exactly 10 participants should be present')
+  } finally {
+    const match = await prisma.match.findUnique({ where: { riotMatchId: matchId } })
+    if (match) {
+      await prisma.match.delete({ where: { id: match.id } })
+    }
+    await prisma.player.deleteMany({ where: { puuid: { in: puuids } } })
+  }
+})
+

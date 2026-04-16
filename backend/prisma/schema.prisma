@@ -140,6 +140,8 @@ model MatchPlayer {
   shards        Int[]   @default([])
   /// Summoner spell IDs in slot order (D then F): [summoner1Id, summoner2Id].
   summonerSpells Int[]  @default([]) @map("summoner_spells")
+  /// Skill level-up sequence from timeline: [1,2,3,...] where 1=Q,2=W,3=E,4=R.
+  skillOrder    Json?   @map("skill_order")
 
   match          Match                    @relation(fields: [matchId], references: [id], onDelete: Cascade)
   player         Player                   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -150,7 +152,6 @@ model MatchPlayer {
   objectives     MatchPlayerObjectives?
   combats        MatchPlayerCombats?
   challenges     MatchPlayerChallenges?
-  spellOrders    MatchPlayerSpellOrder[]
   buckets        MatchPlayerBucket[]
 
   @@unique([matchId, playerId])
@@ -339,19 +340,6 @@ model MatchPlayerChallenges {
   matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
 
   @@map("match_player_challenges")
-}
-
-model MatchPlayerSpellOrder {
-  id            BigInt @id @default(autoincrement())
-  matchPlayerId BigInt @map("match_player_id")
-  spellSlot     Int    @map("spell_slot") // 1-4
-  order         Int    @map("order")
-  timestampMs   Int    @default(0) @map("timestamp_ms")
-
-  matchPlayer MatchPlayer @relation(fields: [matchPlayerId], references: [id], onDelete: Cascade)
-
-  @@index([matchPlayerId])
-  @@map("match_player_spell_orders")
 }
 
 model MatchPlayerBucket {

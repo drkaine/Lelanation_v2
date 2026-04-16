@@ -35,7 +35,7 @@ import {
   isMatchIngestFileQueueEnabled,
   tryEnqueueMatchIngestPayload,
   countMatchIngestQueueFiles,
-  pickOldestMatchIngestQueueFilePaths,
+  claimOldestMatchIngestQueueFilePaths,
   type MatchIngestQueuePayloadV1,
 } from './matchIngestQueue.js'
 
@@ -1568,10 +1568,9 @@ export async function upsertMatchAndParticipants(
       })
       const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
-      let match: { id: bigint }
-      try {
-        match = await tx.match.create({
-          data: {
+      const created = await tx.match.createMany({
+        data: [
+          {
             riotMatchId,
             gameVersion,
             gameDuration,
@@ -1582,21 +1581,19 @@ export async function upsertMatchAndParticipants(
             gameEndedInEarlySurrender,
             region,
           },
-        })
+        ],
+        skipDuplicates: true,
+      })
+      if (created.count > 0) {
         counters.matchesFetched++
         if (logger) await logger.info('DB: match created', { riotMatchId })
-      } catch (e) {
-        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') throw e
-        const target = (e.meta as { target?: string[] })?.target
-        const isRiotMatchIdDup =
-          target?.includes('riot_match_id') || target?.includes('riotMatchId')
-        if (!isRiotMatchIdDup) throw e
-        const raced = await tx.match.findUnique({
-          where: { riotMatchId },
-          select: { id: true },
-        })
-        if (!raced) throw e
-        return raced.id
+      }
+      const match = await tx.match.findUnique({
+        where: { riotMatchId },
+        select: { id: true },
+      })
+      if (!match) {
+        throw new Error(`Match row not found after createMany for ${riotMatchId}`)
       }
 
   // Build teams + bans
@@ -2150,22 +2147,17 @@ async function extractAndInsertTimelineExtras(
   }
 
   // ── 3. Skill level-up order (SKILL_LEVEL_UP) ────────────────────────────────
-  const skillOrderCounters = new Map<bigint, number>() // dbParticipantId → next 1-based order
-  const spellOrderRows: Array<{
-    matchPlayerId: bigint; spellSlot: number; order: number; timestampMs: number
-  }> = []
+  const skillOrderByMatchPlayerId = new Map<bigint, number[]>()
+  let skillLevelUpCount = 0
 
   for (const ev of allEvents) {
     if (ev.type !== 'SKILL_LEVEL_UP') continue
     const e = ev as unknown as RiotTimelineEventSkillLevelUp
     const dbId = riotPidToDbId.get(e.participantId)
     if (!dbId) continue
-    const order = (skillOrderCounters.get(dbId) ?? 0) + 1
-    skillOrderCounters.set(dbId, order)
-    spellOrderRows.push({ matchPlayerId: dbId, spellSlot: e.skillSlot, order, timestampMs: e.timestamp })
-  }
-  if (spellOrderRows.length > 0) {
-    await prisma.matchPlayerSpellOrder.createMany({ data: spellOrderRows, skipDuplicates: true })
+    if (!skillOrderByMatchPlayerId.has(dbId)) skillOrderByMatchPlayerId.set(dbId, [])
+    skillOrderByMatchPlayerId.get(dbId)!.push(e.skillSlot)
+    skillLevelUpCount++
   }
 
   // ── 3b. Time buckets from timeline participantFrames -> match_player_bucket ──
@@ -2276,6 +2268,7 @@ async function extractAndInsertTimelineExtras(
     })
     const tSummoner1 = (p as { summoner1Id?: number }).summoner1Id ?? null
     const tSummoner2 = (p as { summoner2Id?: number }).summoner2Id ?? null
+    const skillOrder = skillOrderByMatchPlayerId.get(dbMatchPlayerId)
     await prisma.matchPlayer.update({
       where: { id: dbMatchPlayerId },
       data: {
@@ -2287,6 +2280,7 @@ async function extractAndInsertTimelineExtras(
           timestampMs: row.timestampMs,
         })),
         summonerSpells: buildSummonerSpellIds(tSummoner1, tSummoner2),
+        ...(skillOrder?.length ? { skillOrder } : {}),
       },
     })
     itemsRowsUpserted += selected.length
@@ -2296,7 +2290,7 @@ async function extractAndInsertTimelineExtras(
     await logger.info('DB: timeline extras inserted', {
       matchId: riotMatchId,
       drakes: drakeInsertRows.length,
-      spellOrders: spellOrderRows.length,
+      skillLevelUps: skillLevelUpCount,
       buckets: bucketRows.length,
       itemsRowsUpserted,
     })
@@ -2335,7 +2329,13 @@ type MatchIngestStepContext = {
 let matchIngestStepContext: MatchIngestStepContext | null = null
 let activeMatchIngestClient: RiotHttpClient | null = null
 let matchIngestBgTimer: ReturnType<typeof setInterval> | null = null
-let matchIngestSingleFlight = false
+let matchIngestBgInFlight = 0
+let matchIngestQueueDepthEstimate = -1
+let matchIngestQueueDepthLastSyncAtMs = 0
+const MATCH_INGEST_QUEUE_DEPTH_RESYNC_MS = 2_000
+let matchIngestMetricsLastLogAtMs = 0
+let matchIngestMetricsProcessed = 0
+let matchIngestMetricsLagTotalMs = 0
 
 function getMatchIngestQueueMaxDepth(): number {
   const raw = parseInt(process.env.MATCH_INGEST_QUEUE_MAX_PENDING ?? '', 10)
@@ -2349,6 +2349,70 @@ function getMatchIngestBatchSize(): number {
   return Math.min(50, raw)
 }
 
+function getMatchIngestFileWorkers(): number {
+  const raw = parseInt(process.env.MATCH_INGEST_FILE_WORKERS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 6
+  return Math.min(32, raw)
+}
+
+async function syncMatchIngestQueueDepthEstimate(force = false): Promise<number> {
+  if (!isMatchIngestFileQueueEnabled()) return 0
+  const now = Date.now()
+  if (
+    !force &&
+    matchIngestQueueDepthEstimate >= 0 &&
+    now - matchIngestQueueDepthLastSyncAtMs < MATCH_INGEST_QUEUE_DEPTH_RESYNC_MS
+  ) {
+    return matchIngestQueueDepthEstimate
+  }
+  const depth = await countMatchIngestQueueFiles()
+  matchIngestQueueDepthEstimate = depth
+  matchIngestQueueDepthLastSyncAtMs = now
+  return depth
+}
+
+function noteMatchIngestQueueDepthDelta(delta: number): void {
+  if (matchIngestQueueDepthEstimate < 0) return
+  matchIngestQueueDepthEstimate = Math.max(0, matchIngestQueueDepthEstimate + delta)
+}
+
+function noteMatchIngestProcessed(enqueuedAt: number | null | undefined): void {
+  if (matchIngestMetricsLastLogAtMs <= 0) matchIngestMetricsLastLogAtMs = Date.now()
+  matchIngestMetricsProcessed++
+  if (typeof enqueuedAt === 'number' && Number.isFinite(enqueuedAt) && enqueuedAt > 0) {
+    const lag = Date.now() - enqueuedAt
+    if (lag > 0) matchIngestMetricsLagTotalMs += lag
+  }
+}
+
+async function maybeLogMatchIngestMetrics(): Promise<void> {
+  const now = Date.now()
+  if (now - matchIngestMetricsLastLogAtMs < 30_000 || matchIngestMetricsProcessed <= 0) return
+  const elapsedMs = Math.max(1, now - matchIngestMetricsLastLogAtMs)
+  const processed = matchIngestMetricsProcessed
+  const avgLagMs = Math.round(matchIngestMetricsLagTotalMs / processed)
+  const ingestPerSecond = Number((processed / (elapsedMs / 1000)).toFixed(2))
+  const queueDepth = await syncMatchIngestQueueDepthEstimate()
+  void appendUnifiedLog({
+    section: 'back',
+    type: 'info',
+    script: 'poller_ingest',
+    message: `Ingest queue metrics — rate:${ingestPerSecond}/s avgLag:${avgLagMs}ms depth:${queueDepth} workersBusy:${matchIngestBgInFlight}`,
+    json: {
+      ingestPerSecond,
+      avgLagMs,
+      queueDepth,
+      workersBusy: matchIngestBgInFlight,
+      workersMax: getMatchIngestFileWorkers(),
+      windowMs: elapsedMs,
+      processed,
+    },
+  })
+  matchIngestMetricsLastLogAtMs = now
+  matchIngestMetricsProcessed = 0
+  matchIngestMetricsLagTotalMs = 0
+}
+
 /**
  * One queue drain step: load up to MATCH_INGEST_BATCH_SIZE files, one DB preload for all Puuids,
  * shared League rank cache across matches in the batch.
@@ -2356,34 +2420,33 @@ function getMatchIngestBatchSize(): number {
 async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boolean> {
   const ctx = matchIngestStepContext
   if (!ctx) return false
-  if (matchIngestSingleFlight) return false
-  const paths = await pickOldestMatchIngestQueueFilePaths(getMatchIngestBatchSize())
+  const paths = await claimOldestMatchIngestQueueFilePaths(getMatchIngestBatchSize())
   if (paths.length === 0) return false
-  matchIngestSingleFlight = true
-  try {
-    type Parsed = { path: string; payload: MatchIngestQueuePayloadV1 }
-    const parsed: Parsed[] = []
-    for (const p of paths) {
-      let raw: string
-      try {
-        raw = await readFile(p, 'utf8')
-      } catch {
-        continue
-      }
-      let payload: MatchIngestQueuePayloadV1
-      try {
-        payload = JSON.parse(raw) as MatchIngestQueuePayloadV1
-      } catch {
-        await unlink(p).catch(() => undefined)
-        continue
-      }
-      if (payload.v !== 1) {
-        await unlink(p).catch(() => undefined)
-        continue
-      }
-      parsed.push({ path: p, payload })
+  noteMatchIngestQueueDepthDelta(-paths.length)
+  type Parsed = { path: string; payload: MatchIngestQueuePayloadV1 }
+  const parsed: Parsed[] = []
+  for (const p of paths) {
+    let raw: string
+    try {
+      raw = await readFile(p, 'utf8')
+    } catch {
+      await unlink(p).catch(() => undefined)
+      continue
     }
-    if (parsed.length === 0) return true
+    let payload: MatchIngestQueuePayloadV1
+    try {
+      payload = JSON.parse(raw) as MatchIngestQueuePayloadV1
+    } catch {
+      await unlink(p).catch(() => undefined)
+      continue
+    }
+    if (payload.v !== 1) {
+      await unlink(p).catch(() => undefined)
+      continue
+    }
+    parsed.push({ path: p, payload })
+  }
+  if (parsed.length === 0) return true
 
     const canonicalIds: string[] = []
     for (const { payload } of parsed) {
@@ -2436,6 +2499,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         }
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
+        noteMatchIngestProcessed(payload.enqueuedAt)
         await unlink(p).catch(() => undefined)
         continue
       }
@@ -2466,6 +2530,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         }
         clearMatchIngestCooldownKeys(matchId, canonical)
         ctx.syncLiveCounters()
+        noteMatchIngestProcessed(payload.enqueuedAt)
         await unlink(p).catch(() => undefined)
       } catch (err) {
         const skipped = unwrapMatchIngestSkipped(err)
@@ -2474,11 +2539,13 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             matchId,
             reason: skipped.reason,
           })
+          noteMatchIngestProcessed(payload.enqueuedAt)
           await unlink(p).catch(() => undefined)
           continue
         }
         if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
           const errPath = p.replace(/\.json$/i, '')
+          noteMatchIngestProcessed(payload.enqueuedAt)
           await rename(p, `${errPath}.abort.${Date.now()}.json`).catch(() => undefined)
           continue
         }
@@ -2493,32 +2560,47 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         ctx.flagsRef.foundPrismaError = true
         ctx.syncLiveCounters()
         const errPath = p.replace(/\.json$/i, '')
+        noteMatchIngestProcessed(payload.enqueuedAt)
         await rename(p, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
       }
     }
-    return true
-  } finally {
-    matchIngestSingleFlight = false
-  }
+  await maybeLogMatchIngestMetrics()
+  return true
 }
 
 async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void> {
   if (!isMatchIngestFileQueueEnabled()) return
-  let guard = 0
-  while (guard < 200_000) {
-    guard++
-    const processed = await runMatchIngestProcessOneFile(client)
-    if (!processed) break
-  }
+  await syncMatchIngestQueueDepthEstimate(true)
+  const workers = getMatchIngestFileWorkers()
+  await Promise.all(
+    Array.from({ length: workers }, async () => {
+      let guard = 0
+      while (guard < 50_000) {
+        guard++
+        const processed = await runMatchIngestProcessOneFile(client)
+        if (!processed) break
+      }
+    })
+  )
 }
 
 function startMatchIngestBackgroundProcessor(): void {
   if (matchIngestBgTimer != null) return
   if (!isMatchIngestFileQueueEnabled()) return
+  const workers = getMatchIngestFileWorkers()
   matchIngestBgTimer = setInterval(() => {
     const c = activeMatchIngestClient
     if (!c || !matchIngestStepContext) return
-    void runMatchIngestProcessOneFile(c).catch(() => undefined)
+    const availableSlots = Math.max(0, workers - matchIngestBgInFlight)
+    if (availableSlots <= 0) return
+    for (let i = 0; i < availableSlots; i++) {
+      matchIngestBgInFlight++
+      void runMatchIngestProcessOneFile(c)
+        .catch(() => undefined)
+        .finally(() => {
+          matchIngestBgInFlight = Math.max(0, matchIngestBgInFlight - 1)
+        })
+    }
   }, 50)
 }
 
@@ -2527,6 +2609,7 @@ function stopMatchIngestBackgroundProcessor(): void {
     clearInterval(matchIngestBgTimer)
     matchIngestBgTimer = null
   }
+  matchIngestBgInFlight = 0
 }
 
 async function runStep4ForPlayer(
@@ -2790,6 +2873,7 @@ async function runStep4ForPlayer(
 
   const useFileMatchIngestQueue = isMatchIngestFileQueueEnabled()
   if (useFileMatchIngestQueue) {
+    await syncMatchIngestQueueDepthEstimate(true)
     matchIngestStepContext = {
       stepId: MATCH_INGEST_ORPHAN_STEP_ID,
       counters,
@@ -3022,11 +3106,14 @@ async function runStep4ForPlayer(
     for (const item of chunk) {
       matchIngestPending.add(item.matchId)
     }
+    const fileQueueDepth = useFileMatchIngestQueue
+      ? await syncMatchIngestQueueDepthEstimate()
+      : 0
     void appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_diag',
-      message: `Phase2 chunk ${region} — offset:${chunkStart} size:${chunk.length} total:${uniqueWorkItems.length} chunkSize:${chunkSize} fileQueue:${useFileMatchIngestQueue ? 1 : 0}`,
+      message: `Phase2 chunk ${region} — offset:${chunkStart} size:${chunk.length} total:${uniqueWorkItems.length} chunkSize:${chunkSize} fileQueue:${useFileMatchIngestQueue ? 1 : 0} queueDepth:${fileQueueDepth}`,
       json: {
         region,
         chunkStart,
@@ -3034,6 +3121,7 @@ async function runStep4ForPlayer(
         totalWorkItems: uniqueWorkItems.length,
         chunkSize,
         fileQueue: useFileMatchIngestQueue,
+        fileQueueDepth,
       },
     })
 
@@ -3180,7 +3268,7 @@ async function runStep4ForPlayer(
           const work = chunk[idx]
 
           while (
-            (await countMatchIngestQueueFiles()) >= FILE_QUEUE_BACKPRESS &&
+            (await syncMatchIngestQueueDepthEstimate()) >= FILE_QUEUE_BACKPRESS &&
             !state.shouldStop &&
             !pipelineAbort
           ) {
@@ -3234,7 +3322,10 @@ async function runStep4ForPlayer(
                   enqueuedAt: Date.now(),
                 })
                 matchIngestPending.delete(work.matchId)
-                if (r === 'written') syncLiveCounters()
+                if (r === 'written') {
+                  noteMatchIngestQueueDepthDelta(1)
+                  syncLiveCounters()
+                }
               } catch (e) {
                 tracker.pendingTransientIngest = true
                 await logger.error('Match ingest queue write failed', {
@@ -3261,7 +3352,10 @@ async function runStep4ForPlayer(
               enqueuedAt: Date.now(),
             })
             matchIngestPending.delete(work.matchId)
-            if (r === 'written') syncLiveCounters()
+            if (r === 'written') {
+              noteMatchIngestQueueDepthDelta(1)
+              syncLiveCounters()
+            }
           } catch (e) {
             tracker.pendingTransientIngest = true
             await logger.error('Match ingest queue write failed', {
