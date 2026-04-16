@@ -193,16 +193,19 @@ export function patchFromGameVersion(gameVersion: string): string {
 }
 
 /**
- * Synchronise active_patches avec les patches présents dans les données brutes (matchs).
- * Une seule source de vérité : les patches actifs reflètent les matchs ingérés.
- * À appeler après ingestion pour que les nouveaux patches soient inclus dans le prochain refresh.
+ * Synchronise active_patches avec les patches présents dans les données brutes (`matchs` + `ingest_matchs`).
+ * Les MV filtrées sur active_patches doivent voir les versions ingérées en lean comme en legacy.
  */
 export async function syncActivePatches(): Promise<number> {
   if (!isDatabaseConfigured()) return 0
 
   const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
-    SELECT DISTINCT (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch
-    FROM matchs
+    SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
+    FROM (
+      SELECT game_version FROM matchs
+      UNION
+      SELECT game_version FROM ingest_matchs
+    ) v
   `
   let added = 0
   for (const { patch } of rows) {
@@ -219,7 +222,7 @@ export async function syncActivePatches(): Promise<number> {
 
 /**
  * Sync active patches from match-filters config, then update hourly counters:
- * - games_number: COUNT(*) from matchs per patch
+ * - games_number: COUNT(*) from matchs + ingest_matchs per patch (agrégé)
  * - game_number_max: maxMatches from config
  * - is_current: true while patch still collecting, false once target reached
  */
@@ -248,11 +251,22 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
   }
 
   const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
-    SELECT
-      (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
-      COUNT(*) AS cnt
-    FROM matchs
-    GROUP BY 1
+    WITH per_source AS (
+      SELECT
+        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
+        COUNT(*)::bigint AS cnt
+      FROM matchs
+      GROUP BY 1
+      UNION ALL
+      SELECT
+        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
+        COUNT(*)::bigint AS cnt
+      FROM ingest_matchs
+      GROUP BY 1
+    )
+    SELECT patch, SUM(cnt) AS cnt
+    FROM per_source
+    GROUP BY patch
   `
 
   for (const r of rows) {

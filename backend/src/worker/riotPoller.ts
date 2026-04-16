@@ -6,7 +6,7 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { readFile, rename, statfs, unlink } from 'node:fs/promises'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import {
@@ -48,6 +48,26 @@ import {
   requeueRawIngestErrors,
   deleteDoneRawIngestRows,
 } from './matchIngestRawQueue.js'
+import { MatchIngestSkippedError, unwrapMatchIngestSkipped } from './matchIngestErrors.js'
+import { resolveRiotMatchIdForIngest } from './matchIngestIds.js'
+import { buildMatchTeamData } from './matchTeamDataBuilder.js'
+import { isLeanIngestWriteArch, getIngestWriteArch } from './ingestWriteArch.js'
+import {
+  upsertIngestMatchAndParticipants,
+  extractIngestTimelineExtras,
+  preloadIngestLeanMatchDbData,
+} from './ingestMatchLean.js'
+import type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
+import {
+  getCachedRank,
+  setCachedRank,
+  cleanupGlobalRankCache,
+  enqueuePriorityPuuid,
+  dequeuePriorityPuuids,
+} from './matchIngestRankCache.js'
+
+export type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
+
 
 /** Mutable windows for poller_30m / poller_hourly (updated by emitPollerSummariesIfDue). */
 type PollerSummaryWindows = {
@@ -365,63 +385,14 @@ function formatSummaryTimestamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
-/** Dernière sync `active_patches` depuis les matchs (process). Même logique anti-burst qu’avant pour le refresh MV. */
+/** Dernière sync `active_patches` depuis `matchs` + `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
 let lastSyncActivePatchesAt = Date.now()
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
-// ── Global rank cache (TTL 24 h) ──────────────────────────────────────────────
-// Avoids redundant League-v4 calls for players that appear in multiple matches.
-
-type CachedRankEntry = {
-  data: { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
-  expiresAt: number
-}
-const globalRankCache = new Map<string, CachedRankEntry>()
-const RANK_CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const RANK_CACHE_CLEANUP_INTERVAL_MS = 10 * 60 * 1000
-let lastRankCacheCleanupMs = Date.now()
-const priorityPuuidQueue: string[] = []
-const priorityPuuidSet = new Set<string>()
-
-function getCachedRank(puuid: string): CachedRankEntry['data'] | null {
-  const entry = globalRankCache.get(puuid)
-  if (!entry) return null
-  if (Date.now() > entry.expiresAt) {
-    globalRankCache.delete(puuid)
-    return null
-  }
-  return entry.data
-}
-
-function setCachedRank(puuid: string, data: CachedRankEntry['data']): void {
-  globalRankCache.set(puuid, { data, expiresAt: Date.now() + RANK_CACHE_TTL_MS })
-}
-
-function cleanupGlobalRankCache(): void {
-  const now = Date.now()
-  if (now - lastRankCacheCleanupMs < RANK_CACHE_CLEANUP_INTERVAL_MS) return
-  lastRankCacheCleanupMs = now
-  for (const [key, entry] of globalRankCache) {
-    if (now > entry.expiresAt) globalRankCache.delete(key)
-  }
-}
-
-function enqueuePriorityPuuid(puuid: string): void {
-  if (!puuid || priorityPuuidSet.has(puuid)) return
-  priorityPuuidSet.add(puuid)
-  priorityPuuidQueue.push(puuid)
-}
-
-function dequeuePriorityPuuids(maxCount: number): string[] {
-  const out: string[] = []
-  while (out.length < maxCount && priorityPuuidQueue.length > 0) {
-    const puuid = priorityPuuidQueue.shift()
-    if (!puuid) break
-    priorityPuuidSet.delete(puuid)
-    out.push(puuid)
-  }
-  return out
+function ingestAdvisoryLockKeys(riotMatchId: string, family: 'legacy' | 'lean'): { k1: number; k2: number } {
+  const h = createHash('sha256').update(`${family}:${riotMatchId}`).digest()
+  return { k1: h.readInt32BE(0), k2: h.readInt32BE(4) }
 }
 
 function isRankUpdateRequired(
@@ -546,30 +517,6 @@ function riotIngestRequestOptions(): {
   shouldAbort: () => boolean
 } {
   return { infinite429Retry: true, shouldAbort: () => state.shouldStop }
-}
-
-/**
- * Upsert returned without persisting this match on purpose (remake, version filter, empty DTO, etc.).
- * Not a DB failure — consumer must not flag prisma_error for these cases.
- */
-class MatchIngestSkippedError extends Error {
-  readonly reason: string
-  constructor(reason: string) {
-    super(`Match ingest skipped (${reason})`)
-    this.name = 'MatchIngestSkippedError'
-    this.reason = reason
-  }
-}
-
-function isMatchIngestSkippedError(e: unknown): e is MatchIngestSkippedError {
-  return e instanceof MatchIngestSkippedError
-}
-
-/** Prisma may wrap errors thrown inside `$transaction` — unwrap `cause` chain. */
-function unwrapMatchIngestSkipped(err: unknown): MatchIngestSkippedError | null {
-  if (isMatchIngestSkippedError(err)) return err
-  if (err instanceof Error && err.cause != null) return unwrapMatchIngestSkipped(err.cause)
-  return null
 }
 
 function isAllowedGameVersion(gameVersionRaw: string | null | undefined): boolean {
@@ -1053,93 +1000,6 @@ export async function runPhase2(
 
 // ─── Normalisation helpers ────────────────────────────────────────────────────
 
-function buildMatchTeamData(
-  matchId: bigint,
-  info: RiotMatchDto['info'],
-  participantDtos: RiotParticipantDto[]
-): Array<{
-  teamRow: {
-    matchId: bigint
-    team: number
-    win: boolean
-    teamEarlySurrendered: boolean
-    baronKills: number
-    baronFirst: boolean
-    dragonKills: number
-    dragonFirst: boolean
-    towerKills: number
-    towerFirst: boolean
-    hordeKills: number
-    hordeFirst: boolean
-    riftHeraldKills: number
-    riftHeraldFirst: boolean
-    inhibitorKills: number
-    championKills: number
-    firstBlood: boolean
-    elderKills: number
-  }
-  bans: Array<{ championId: number; pickOrder: number }>
-}> {
-  if (!info?.teams || info.teams.length === 0) return []
-  const toFirst = (value: unknown): boolean => value === true
-  const toKills = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
-
-  // Pre-compute per-team teamEarlySurrendered from participants
-  const teamEarlySurrendered = new Map<number, boolean>()
-  for (const p of participantDtos) {
-    const tid = p.teamId ?? 0
-    if (!tid) continue
-    if ((p as { teamEarlySurrendered?: boolean }).teamEarlySurrendered === true) {
-      teamEarlySurrendered.set(tid, true)
-    }
-  }
-
-  return info.teams
-    .filter((t) => t.teamId === 100 || t.teamId === 200)
-    .map((t) => {
-      const obj = t.objectives ?? {}
-      const championObj = (obj['champion'] ?? {}) as { first?: unknown; kills?: unknown }
-      const baronObj = (obj['baron'] ?? {}) as { first?: unknown; kills?: unknown }
-      const dragonObj = (obj['dragon'] ?? {}) as { first?: unknown; kills?: unknown }
-      const towerObj = (obj['tower'] ?? {}) as { first?: unknown; kills?: unknown }
-      const hordeObj = (obj['horde'] ?? {}) as { first?: unknown; kills?: unknown }
-      const riftHeraldObj = (obj['riftHerald'] ?? {}) as { first?: unknown; kills?: unknown }
-      const inhibitorObj = (obj['inhibitor'] ?? {}) as { first?: unknown; kills?: unknown }
-      const elderObj = (obj['elder'] ?? {}) as { first?: unknown; kills?: unknown }
-
-      const teamBans = (t.bans ?? [])
-        .filter((b, idx) => {
-          const champId = b?.championId
-          return typeof champId === 'number' && champId > 0 && idx < 5
-        })
-        .map((b, idx) => ({ championId: b.championId as number, pickOrder: idx + 1 }))
-
-      return {
-        teamRow: {
-          matchId,
-          team: t.teamId ?? 0,
-          win: t.win === true,
-          teamEarlySurrendered: teamEarlySurrendered.get(t.teamId ?? 0) === true,
-          baronKills: toKills(baronObj.kills),
-          baronFirst: toFirst(baronObj.first),
-          dragonKills: toKills(dragonObj.kills),
-          dragonFirst: toFirst(dragonObj.first),
-          towerKills: toKills(towerObj.kills),
-          towerFirst: toFirst(towerObj.first),
-          hordeKills: toKills(hordeObj.kills),
-          hordeFirst: toFirst(hordeObj.first),
-          riftHeraldKills: toKills(riftHeraldObj.kills),
-          riftHeraldFirst: toFirst(riftHeraldObj.first),
-          inhibitorKills: toKills(inhibitorObj.kills),
-          championKills: toKills(championObj.kills),
-          firstBlood: toFirst(championObj.first),
-          elderKills: toKills(elderObj.kills),
-        },
-        bans: teamBans,
-      }
-    })
-}
-
 /** Build rune ID list preserving Riot JSON order (styles then perks). */
 function buildRunePayload(runes: unknown): { runes: number[] } {
   const perkIds: number[] = []
@@ -1318,29 +1178,6 @@ function buildBucketRows(
   return out
 }
 
-/** Canonical `riot_match_id` used in DB: trimmed queue id, else metadata.matchId, else info.gameId string. */
-function resolveRiotMatchIdForIngest(queueRiotMatchId: string, dto: RiotMatchDto): string {
-  const fromMeta = dto.metadata?.matchId?.trim() ?? ''
-  const fromGameId = dto.info?.gameId != null ? String(dto.info.gameId) : ''
-  return queueRiotMatchId.trim() || fromMeta || fromGameId
-}
-
-/** Shared across a batch of match ingests: one DB round-trip for max(game_date) + player rows. */
-export type MatchIngestDbPreload = {
-  maxGameByPuuid: Map<string, Date>
-  playerRankSnapshotByPuuid: Map<string, { rankSnapshotGameDate: Date | null }>
-}
-
-export type MatchIngestRankCache = Map<
-  string,
-  { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
->
-
-export type MatchIngestOptions = {
-  ingestPreload?: MatchIngestDbPreload
-  sharedAccountRankCache?: MatchIngestRankCache
-}
-
 export async function preloadMatchIngestDbData(puuids: string[]): Promise<MatchIngestDbPreload> {
   const maxGameByPuuid = new Map<string, Date>()
   const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
@@ -1487,7 +1324,10 @@ export async function upsertMatchAndParticipants(
       return
     }
 
-    const entriesRes = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
+    const entriesRes = await client.getLeagueEntriesByPuuid(puuid, {
+      infinite429Retry: true,
+      shouldAbort: () => (matchIngestOptions?.shouldAbort?.() ?? false) || state.shouldStop,
+    })
     if (!entriesRes.ok) {
       if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
         throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
@@ -1564,6 +1404,8 @@ export async function upsertMatchAndParticipants(
 
   const matchDbId = await prisma.$transaction(
     async (tx) => {
+      const { k1, k2 } = ingestAdvisoryLockKeys(riotMatchId, 'legacy')
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${k1}::int, ${k2}::int)`)
       const existing = await tx.match.findUnique({ where: { riotMatchId }, select: { id: true } })
       if (existing) return existing.id
 
@@ -1668,6 +1510,8 @@ export async function upsertMatchAndParticipants(
       let playerRow:
         | { id: bigint; puuid: string; puuidKeyVersion: string | null; gameName: string | null }
         | null = null
+      // SAVEPOINT: Postgres aborts the whole transaction on unique violation without a subtransaction.
+      await tx.$executeRaw(Prisma.sql`SAVEPOINT player_insert_sp`)
       try {
         const newPlayer = await tx.player.create({
           data: {
@@ -1682,9 +1526,13 @@ export async function upsertMatchAndParticipants(
         })
         playerRow = newPlayer
         createdNow = true
+        await tx.$executeRaw(Prisma.sql`RELEASE SAVEPOINT player_insert_sp`)
       } catch (e) {
-        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') throw e
-        // Race-safe fallback: another worker created this player between read and insert.
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') {
+          await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT player_insert_sp`).catch(() => undefined)
+          throw e
+        }
+        await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT player_insert_sp`)
         const existing = await tx.player.findUnique({
           where: { puuid },
           select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
@@ -2368,9 +2216,17 @@ function getMatchIngestFileWorkers(): number {
   return Math.min(32, raw)
 }
 
+/** Raw-queue normalizer concurrency (default 8). Lower to 2–3 when DB is the bottleneck. */
 function getRawIngestWorkers(): number {
   const raw = parseInt(process.env.RAW_INGEST_WORKERS ?? '', 10)
   if (!Number.isFinite(raw) || raw < 1) return 8
+  return Math.min(64, raw)
+}
+
+/** Parallel match-detail producers in Phase 2 when not using async file/raw queue (default 25). */
+function getParallelMatchIngestFetches(): number {
+  const raw = parseInt(process.env.MATCH_INGEST_PARALLEL_FETCHES ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 25
   return Math.min(64, raw)
 }
 
@@ -2476,6 +2332,8 @@ async function maybeLogMatchIngestMetrics(): Promise<void> {
       fallbackFileWrites: rawIngestFallbackWrites,
       windowMs: elapsedMs,
       processed,
+      ingestArch: getIngestWriteArch(),
+      parallelMatchFetchesMax: getParallelMatchIngestFetches(),
     },
   })
   matchIngestMetricsLastLogAtMs = now
@@ -2550,10 +2408,16 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       const dto = payload.matchDto as RiotMatchDto
       canonicalIds.push(resolveRiotMatchIdForIngest(payload.matchId, dto))
     }
-    const existingRows = await prisma.match.findMany({
-      where: { riotMatchId: { in: canonicalIds } },
-      select: { riotMatchId: true, id: true },
-    })
+    const leanWrite = isLeanIngestWriteArch()
+    const existingRows = leanWrite
+      ? await prisma.ingestMatch.findMany({
+          where: { riotMatchId: { in: canonicalIds } },
+          select: { riotMatchId: true, id: true },
+        })
+      : await prisma.match.findMany({
+          where: { riotMatchId: { in: canonicalIds } },
+          select: { riotMatchId: true, id: true },
+        })
     const existingMatchIdByRiot = new Map(existingRows.map((r) => [r.riotMatchId, r.id]))
 
     const puuidsToPreload: string[] = []
@@ -2567,8 +2431,15 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         if (p.puuid) puuidsToPreload.push(p.puuid)
       }
     }
-    const ingestPreload = await preloadMatchIngestDbData(puuidsToPreload)
+    const ingestPreload = leanWrite
+      ? await preloadIngestLeanMatchDbData(puuidsToPreload)
+      : await preloadMatchIngestDbData(puuidsToPreload)
     const sharedAccountRankCache: MatchIngestRankCache = new Map()
+    const rankIngestOpts: MatchIngestOptions = {
+      ingestPreload,
+      sharedAccountRankCache,
+      shouldAbort: () => state.shouldStop,
+    }
 
     for (let i = 0; i < parsed.length; i++) {
       const { path: p, rawId, payload } = parsed[i]
@@ -2583,13 +2454,23 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       if (existingDbId != null) {
         if (timelineDto) {
           await extractAndInsertJungleFirstClear(existingDbId, canonicalRiotMatchId, timelineDto, ctx.logger)
-          await extractAndInsertTimelineExtras(
-            existingDbId,
-            canonicalRiotMatchId,
-            timelineDto,
-            matchDto.info?.participants ?? [],
-            ctx.logger
-          )
+          if (leanWrite) {
+            await extractIngestTimelineExtras(
+              existingDbId,
+              canonicalRiotMatchId,
+              timelineDto,
+              matchDto.info?.participants ?? [],
+              ctx.logger
+            )
+          } else {
+            await extractAndInsertTimelineExtras(
+              existingDbId,
+              canonicalRiotMatchId,
+              timelineDto,
+              matchDto.info?.participants ?? [],
+              ctx.logger
+            )
+          }
         }
         if (payload.stepId === ctx.stepId) {
           ctx.onIngested(trackerIdx, canonicalRiotMatchId)
@@ -2603,25 +2484,46 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       }
 
       try {
-        const { matchDbId, canonicalRiotMatchId: canonical } = await upsertMatchAndParticipants(
-          client,
-          payload.region,
-          matchId,
-          matchDto,
-          payload.puuidKeyVersion,
-          ctx.counters,
-          ctx.logger,
-          { ingestPreload, sharedAccountRankCache }
-        )
+        const { matchDbId, canonicalRiotMatchId: canonical } = leanWrite
+          ? await upsertIngestMatchAndParticipants(
+              client,
+              payload.region,
+              matchId,
+              matchDto,
+              payload.puuidKeyVersion,
+              ctx.counters,
+              ctx.logger,
+              rankIngestOpts
+            )
+          : await upsertMatchAndParticipants(
+              client,
+              payload.region,
+              matchId,
+              matchDto,
+              payload.puuidKeyVersion,
+              ctx.counters,
+              ctx.logger,
+              rankIngestOpts
+            )
         if (timelineDto) {
           await extractAndInsertJungleFirstClear(matchDbId, canonical, timelineDto, ctx.logger)
-          await extractAndInsertTimelineExtras(
-            matchDbId,
-            canonical,
-            timelineDto,
-            matchDto.info?.participants ?? [],
-            ctx.logger
-          )
+          if (leanWrite) {
+            await extractIngestTimelineExtras(
+              matchDbId,
+              canonical,
+              timelineDto,
+              matchDto.info?.participants ?? [],
+              ctx.logger
+            )
+          } else {
+            await extractAndInsertTimelineExtras(
+              matchDbId,
+              canonical,
+              timelineDto,
+              matchDto.info?.participants ?? [],
+              ctx.logger
+            )
+          }
         }
         if (payload.stepId === ctx.stepId) {
           ctx.onIngested(trackerIdx, canonical)
@@ -3204,7 +3106,6 @@ async function runStep4ForPlayer(
 
   const PIPELINE_QUEUE_MAX = 300
   const INGEST_CONSUMERS = 6
-  const PARALLEL_FETCHES = 25
   const chunkSize = getPipelineChunkWorkItems()
   const FILE_QUEUE_BACKPRESS = getMatchIngestQueueMaxDepth()
 
@@ -3242,6 +3143,7 @@ async function runStep4ForPlayer(
         fileQueue: useFileMatchIngestQueue,
         rawQueue: useRawMatchIngestQueue,
         fileQueueDepth,
+        ingestArch: getIngestWriteArch(),
       },
     })
 
@@ -3256,6 +3158,8 @@ async function runStep4ForPlayer(
       }> = []
       let producerDone = false
 
+      const phase2IngestOpts: MatchIngestOptions = { shouldAbort: () => state.shouldStop }
+      const leanPhase2 = isLeanIngestWriteArch()
       const runIngestConsumer = async (): Promise<void> => {
         while (true) {
           if (pipelineAbort || state.shouldStop) break
@@ -3263,15 +3167,46 @@ async function runStep4ForPlayer(
             const item = ingestQueue.shift()!
             const tracker = playerTrackers[item.trackerIdx]
             try {
-              const { matchDbId, canonicalRiotMatchId } = await upsertMatchAndParticipants(
-                client, region, item.matchId, item.matchDto, puuidKeyVersion, counters, logger
-              )
+              const { matchDbId, canonicalRiotMatchId } = leanPhase2
+                ? await upsertIngestMatchAndParticipants(
+                    client,
+                    region,
+                    item.matchId,
+                    item.matchDto,
+                    puuidKeyVersion,
+                    counters,
+                    logger,
+                    phase2IngestOpts
+                  )
+                : await upsertMatchAndParticipants(
+                    client,
+                    region,
+                    item.matchId,
+                    item.matchDto,
+                    puuidKeyVersion,
+                    counters,
+                    logger,
+                    phase2IngestOpts
+                  )
               if (item.timelineDto) {
                 await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)
-                await extractAndInsertTimelineExtras(
-                  matchDbId, canonicalRiotMatchId, item.timelineDto,
-                  item.matchDto.info?.participants ?? [], logger
-                )
+                if (leanPhase2) {
+                  await extractIngestTimelineExtras(
+                    matchDbId,
+                    canonicalRiotMatchId,
+                    item.timelineDto,
+                    item.matchDto.info?.participants ?? [],
+                    logger
+                  )
+                } else {
+                  await extractAndInsertTimelineExtras(
+                    matchDbId,
+                    canonicalRiotMatchId,
+                    item.timelineDto,
+                    item.matchDto.info?.participants ?? [],
+                    logger
+                  )
+                }
               }
               tracker.ingestedIds.push(canonicalRiotMatchId)
               clearMatchIngestCooldownKeys(item.matchId, canonicalRiotMatchId)
@@ -3373,7 +3308,7 @@ async function runStep4ForPlayer(
         }
       }
 
-      await Promise.all(Array.from({ length: PARALLEL_FETCHES }, () => runProducerWorker()))
+      await Promise.all(Array.from({ length: getParallelMatchIngestFetches() }, () => runProducerWorker()))
       syncLiveCounters(true)
 
       producerDone = true
@@ -3540,7 +3475,7 @@ async function runStep4ForPlayer(
         }
       }
 
-      await Promise.all(Array.from({ length: PARALLEL_FETCHES }, () => runProducerWorkerFile()))
+      await Promise.all(Array.from({ length: getParallelMatchIngestFetches() }, () => runProducerWorkerFile()))
       syncLiveCounters(true)
     }
 

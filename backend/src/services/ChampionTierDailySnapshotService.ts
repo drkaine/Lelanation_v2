@@ -7,7 +7,7 @@
  * - pick_rate_pct : part des *picks* (slots joueurs) du **même rank_tier + role** ce jour UTC que ce champion.
  * - ban_rate_pct : part des *bans* (slots ban) du **même rank_tier** (match) ce jour UTC pour ce champion.
  *
- * Window: calendar UTC day [D 00:00, D+1 00:00), keyed by matchs.game_date.
+ * Window: calendar UTC day [D 00:00, D+1 00:00), keyed by ingest_matchs.game_date.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
@@ -57,28 +57,28 @@ export async function runChampionTierSnapshotForWindow(params: {
     ),
     picks AS (
       SELECT
-        split_part(UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.rank_tier), ''), m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
+        split_part(UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.rank_tier), ''), m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
         CASE
-          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
-          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
-          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
-          ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN')))
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
+          WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
+          ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')))
         END AS role_norm,
-        mp.champion_id,
+        imp.champion_id,
         COUNT(*)::int AS games,
         SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
-      FROM match_players mp
-      INNER JOIN matchs m ON m.id = mp.match_id
-      INNER JOIN teams t ON t.id = mp.team_id
+      FROM ingest_match_players imp
+      INNER JOIN ingest_matchs m ON m.id = imp.match_id
+      INNER JOIN ingest_teams t ON t.id = imp.team_id
       CROSS JOIN window_params wp
       WHERE m.game_date >= wp.w_start
         AND m.game_date < wp.w_end
         AND (
           CASE
-            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
-            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
-            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
-            ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(mp.role), ''), 'UNKNOWN')))
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
+            ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')))
           END
         ) IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
       GROUP BY 1, 2, 3
@@ -86,10 +86,13 @@ export async function runChampionTierSnapshotForWindow(params: {
     bans AS (
       SELECT
         split_part(UPPER(TRIM(COALESCE(m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
-        b.champion_id,
+        COALESCE((ban.elem->>'championId')::int, (ban.elem->>'champion_id')::int) AS champion_id,
         COUNT(*)::int AS ban_count
-      FROM bans b
-      INNER JOIN matchs m ON m.id = b.match_id
+      FROM ingest_teams t
+      INNER JOIN ingest_matchs m ON m.id = t.match_id
+      CROSS JOIN LATERAL jsonb_array_elements(
+        CASE WHEN jsonb_typeof(t.bans_json) = 'array' THEN t.bans_json ELSE '[]'::jsonb END
+      ) AS ban(elem)
       CROSS JOIN window_params wp
       WHERE m.game_date >= wp.w_start
         AND m.game_date < wp.w_end
@@ -193,7 +196,7 @@ async function getActiveSnapshotDates(): Promise<Date[]> {
   const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
   const dates = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT (m.game_date AT TIME ZONE 'UTC')::date AS d
-    FROM matchs m
+    FROM ingest_matchs m
     JOIN active_patches ap
       ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
     WHERE m.game_date IS NOT NULL
@@ -220,7 +223,7 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<num
   const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT c.date_of_game::date AS d
     FROM champion_tier_daily_snapshots c
-    JOIN matchs m
+    JOIN ingest_matchs m
       ON m.game_date >= c.date_of_game
      AND m.game_date < (c.date_of_game + INTERVAL '1 day')
     JOIN active_patches ap

@@ -29,7 +29,8 @@ model Player {
   rankSnapshotGameDate DateTime? @map("rank_snapshot_game_date")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  matchPlayers MatchPlayer[]
+  matchPlayers       MatchPlayer[]
+  ingestMatchPlayers IngestMatchPlayer[]
 
   @@index([region])
   @@index([puuidKeyVersion])
@@ -372,6 +373,100 @@ model MatchPlayerBucket {
   @@unique([matchPlayerId, durationBucket])
   @@index([matchPlayerId])
   @@map("match_player_bucket")
+}
+
+// ─── Lean ingest (parallel to legacy matchs / match_players; MVs aggregate ingest_* ) ──
+
+model IngestMatch {
+  id                        BigInt    @id @default(autoincrement())
+  riotMatchId               String    @unique @map("riot_match_id")
+  gameVersion               String    @map("game_version")
+  gameDuration              Int       @map("game_duration")
+  gameDate                  DateTime? @map("game_date")
+  rankTier                  String    @map("rank_tier")
+  rankDivision              String    @map("rank_division")
+  gameEndedInSurrender      Boolean   @default(false) @map("game_ended_in_surrender")
+  gameEndedInEarlySurrender Boolean   @default(false) @map("game_ended_in_early_surrender")
+  region                    String
+
+  teams        IngestTeam[]
+  matchPlayers IngestMatchPlayer[]
+
+  @@index([gameVersion])
+  @@index([rankTier])
+  @@index([region])
+  @@index([gameVersion, region, rankTier])
+  @@index([gameDate])
+  @@map("ingest_matchs")
+}
+
+model IngestTeam {
+  id                   BigInt @id @default(autoincrement())
+  matchId              BigInt @map("match_id")
+  team                 Int
+  rankTier             String @default("UNRANKED") @map("rank_tier")
+  win                  Boolean
+  teamEarlySurrendered Boolean @default(false) @map("team_early_surrendered")
+  baronKills           Int    @default(0) @map("baron_kills")
+  baronFirst           Boolean @default(false) @map("baron_first")
+  dragonKills          Int    @default(0) @map("dragon_kills")
+  dragonFirst          Boolean @default(false) @map("dragon_first")
+  towerKills           Int    @default(0) @map("tower_kills")
+  towerFirst           Boolean @default(false) @map("tower_first")
+  hordeKills           Int    @default(0) @map("horde_kills")
+  hordeFirst           Boolean @default(false) @map("horde_first")
+  riftHeraldKills      Int    @default(0) @map("rift_herald_kills")
+  riftHeraldFirst      Boolean @default(false) @map("rift_herald_first")
+  inhibitorKills       Int    @default(0) @map("inhibitor_kills")
+  championKills        Int    @default(0) @map("champion_kills")
+  firstBlood           Boolean @default(false) @map("first_blood")
+  elderKills           Int    @default(0) @map("elder_kills")
+  /// Bans from match-v5 team payload: [{ championId, pickOrder }, ...].
+  bansJson   Json @default("[]") @map("bans_json")
+  /// Drake timeline sequence: [{ drakeType, order, soul }, ...].
+  drakesJson Json @default("[]") @map("drakes_json")
+
+  match        IngestMatch         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchPlayers IngestMatchPlayer[]
+
+  @@unique([matchId, team])
+  @@index([matchId])
+  @@map("ingest_teams")
+}
+
+model IngestMatchPlayer {
+  id             BigInt  @id @default(autoincrement())
+  matchId        BigInt  @map("match_id")
+  playerId       BigInt  @map("player_id")
+  teamId         BigInt  @map("team_id")
+  championId     Int     @map("champion_id")
+  role           String
+  rankTier       String  @default("UNRANKED") @map("rank_tier")
+  rankDivision   String? @map("rank_division")
+  participantId  Int     @map("participant_id")
+  items          Json    @default("[]")
+  runes          Int[]   @default([])
+  shards         Int[]   @default([])
+  summonerSpells Int[]   @default([]) @map("summoner_spells")
+  skillOrder     Json?   @map("skill_order")
+  win            Boolean @default(false)
+  kills          Int     @default(0)
+  deaths         Int     @default(0)
+  assists        Int     @default(0)
+  /// Participant-derived payload (damage, vision, challenges, timeline buckets, etc.).
+  stats Json @default("{}")
+
+  match  IngestMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player      @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  team   IngestTeam  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([championId])
+  @@index([championId, role, rankTier])
+  @@map("ingest_match_players")
 }
 
 /// One row per (UTC day summarized, rank tier without division, champion). Filled daily by poller job.
