@@ -403,6 +403,26 @@ model ActivePatch {
   @@map("active_patches")
 }
 
+model MatchIngestRaw {
+  id                BigInt    @id @default(autoincrement())
+  riotMatchId       String    @map("riot_match_id")
+  region            String
+  payloadJson       Json      @map("payload_json")
+  timelineJson      Json?     @map("timeline_json")
+  status            String    @default("pending")
+  attemptCount      Int       @default(0) @map("attempt_count")
+  lastError         String?   @map("last_error")
+  ingestedAt        DateTime  @default(now()) @map("ingested_at")
+  normalizedAt      DateTime? @map("normalized_at")
+  processingStartedAt DateTime? @map("processing_started_at")
+  nextRetryAt       DateTime? @map("next_retry_at")
+
+  @@index([status, id], map: "idx_match_ingest_raw_status_id")
+  @@index([riotMatchId], map: "idx_match_ingest_raw_riot_match_id")
+  @@index([status, nextRetryAt, id], map: "idx_match_ingest_raw_next_retry")
+  @@map("match_ingest_raw")
+}
+
 model MvChampionCoreStat {
   id                             BigInt  @id
   championId                     Int     @map("champion_id")

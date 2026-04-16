@@ -38,6 +38,16 @@ import {
   claimOldestMatchIngestQueueFilePaths,
   type MatchIngestQueuePayloadV1,
 } from './matchIngestQueue.js'
+import {
+  isRawIngestQueueEnabled,
+  tryInsertRawIngestPayload,
+  claimRawIngestRows,
+  markRawIngestDone,
+  markRawIngestError,
+  countRawIngestByStatus,
+  requeueRawIngestErrors,
+  deleteDoneRawIngestRows,
+} from './matchIngestRawQueue.js'
 
 /** Mutable windows for poller_30m / poller_hourly (updated by emitPollerSummariesIfDue). */
 type PollerSummaryWindows = {
@@ -2333,9 +2343,12 @@ let matchIngestBgInFlight = 0
 let matchIngestQueueDepthEstimate = -1
 let matchIngestQueueDepthLastSyncAtMs = 0
 const MATCH_INGEST_QUEUE_DEPTH_RESYNC_MS = 2_000
+let rawIngestQueueDepthEstimate = -1
+let rawIngestErrorDepthEstimate = -1
 let matchIngestMetricsLastLogAtMs = 0
 let matchIngestMetricsProcessed = 0
 let matchIngestMetricsLagTotalMs = 0
+let rawIngestFallbackWrites = 0
 
 function getMatchIngestQueueMaxDepth(): number {
   const raw = parseInt(process.env.MATCH_INGEST_QUEUE_MAX_PENDING ?? '', 10)
@@ -2355,6 +2368,30 @@ function getMatchIngestFileWorkers(): number {
   return Math.min(32, raw)
 }
 
+function getRawIngestWorkers(): number {
+  const raw = parseInt(process.env.RAW_INGEST_WORKERS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 8
+  return Math.min(64, raw)
+}
+
+function getRawIngestErrorRequeueBatch(): number {
+  const raw = parseInt(process.env.RAW_INGEST_ERROR_REQUEUE_BATCH ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 100
+  return Math.min(10_000, raw)
+}
+
+function getRawIngestDoneCleanupIntervalMs(): number {
+  const raw = parseInt(process.env.RAW_INGEST_DONE_CLEANUP_INTERVAL_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 12 * 60 * 60 * 1000
+  return Math.min(7 * 24 * 60 * 60 * 1000, raw)
+}
+
+function getRawIngestDoneCleanupBatch(): number {
+  const raw = parseInt(process.env.RAW_INGEST_DONE_CLEANUP_BATCH ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 50_000
+  return Math.min(200_000, raw)
+}
+
 async function syncMatchIngestQueueDepthEstimate(force = false): Promise<number> {
   if (!isMatchIngestFileQueueEnabled()) return 0
   const now = Date.now()
@@ -2371,9 +2408,38 @@ async function syncMatchIngestQueueDepthEstimate(force = false): Promise<number>
   return depth
 }
 
+async function syncRawIngestDepthEstimates(force = false): Promise<{
+  pending: number
+  processing: number
+  error: number
+}> {
+  if (!isRawIngestQueueEnabled()) return { pending: 0, processing: 0, error: 0 }
+  const now = Date.now()
+  if (
+    !force &&
+    rawIngestQueueDepthEstimate >= 0 &&
+    now - matchIngestQueueDepthLastSyncAtMs < MATCH_INGEST_QUEUE_DEPTH_RESYNC_MS
+  ) {
+    return {
+      pending: rawIngestQueueDepthEstimate,
+      processing: Math.max(0, matchIngestBgInFlight),
+      error: Math.max(0, rawIngestErrorDepthEstimate),
+    }
+  }
+  const s = await countRawIngestByStatus()
+  rawIngestQueueDepthEstimate = s.pending
+  rawIngestErrorDepthEstimate = s.error
+  return s
+}
+
 function noteMatchIngestQueueDepthDelta(delta: number): void {
   if (matchIngestQueueDepthEstimate < 0) return
   matchIngestQueueDepthEstimate = Math.max(0, matchIngestQueueDepthEstimate + delta)
+}
+
+function noteRawIngestQueueDepthDelta(delta: number): void {
+  if (rawIngestQueueDepthEstimate < 0) return
+  rawIngestQueueDepthEstimate = Math.max(0, rawIngestQueueDepthEstimate + delta)
 }
 
 function noteMatchIngestProcessed(enqueuedAt: number | null | undefined): void {
@@ -2392,18 +2458,22 @@ async function maybeLogMatchIngestMetrics(): Promise<void> {
   const processed = matchIngestMetricsProcessed
   const avgLagMs = Math.round(matchIngestMetricsLagTotalMs / processed)
   const ingestPerSecond = Number((processed / (elapsedMs / 1000)).toFixed(2))
-  const queueDepth = await syncMatchIngestQueueDepthEstimate()
+  const rawDepths = isRawIngestQueueEnabled() ? await syncRawIngestDepthEstimates() : null
+  const queueDepth = rawDepths ? rawDepths.pending : await syncMatchIngestQueueDepthEstimate()
+  const errorDepth = rawDepths ? rawDepths.error : 0
   void appendUnifiedLog({
     section: 'back',
     type: 'info',
     script: 'poller_ingest',
-    message: `Ingest queue metrics — rate:${ingestPerSecond}/s avgLag:${avgLagMs}ms depth:${queueDepth} workersBusy:${matchIngestBgInFlight}`,
+    message: `Ingest queue metrics — rate:${ingestPerSecond}/s avgLag:${avgLagMs}ms depth:${queueDepth} errorDepth:${errorDepth} workersBusy:${matchIngestBgInFlight} fallbackWrites:${rawIngestFallbackWrites}`,
     json: {
       ingestPerSecond,
       avgLagMs,
       queueDepth,
+      errorDepth,
       workersBusy: matchIngestBgInFlight,
-      workersMax: getMatchIngestFileWorkers(),
+      workersMax: isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers(),
+      fallbackFileWrites: rawIngestFallbackWrites,
       windowMs: elapsedMs,
       processed,
     },
@@ -2420,31 +2490,58 @@ async function maybeLogMatchIngestMetrics(): Promise<void> {
 async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boolean> {
   const ctx = matchIngestStepContext
   if (!ctx) return false
-  const paths = await claimOldestMatchIngestQueueFilePaths(getMatchIngestBatchSize())
-  if (paths.length === 0) return false
-  noteMatchIngestQueueDepthDelta(-paths.length)
-  type Parsed = { path: string; payload: MatchIngestQueuePayloadV1 }
+  type Parsed = { path: string | null; rawId: bigint | null; payload: MatchIngestQueuePayloadV1 }
   const parsed: Parsed[] = []
-  for (const p of paths) {
-    let raw: string
-    try {
-      raw = await readFile(p, 'utf8')
-    } catch {
-      await unlink(p).catch(() => undefined)
-      continue
+  const useRaw = isRawIngestQueueEnabled()
+  if (useRaw) {
+    const rows = await claimRawIngestRows(getMatchIngestBatchSize())
+    if (rows.length === 0) return false
+    noteRawIngestQueueDepthDelta(-rows.length)
+    for (const row of rows) {
+      let payload: MatchIngestQueuePayloadV1
+      try {
+        payload = {
+          v: 1,
+          stepId: MATCH_INGEST_ORPHAN_STEP_ID,
+          matchId: row.riotMatchId,
+          region: row.region,
+          matchDto: row.payloadJson,
+          timelineDto: row.timelineJson,
+          puuidKeyVersion: null,
+          trackerIdx: -1,
+          enqueuedAt: row.ingestedAt.getTime(),
+        }
+      } catch {
+        await markRawIngestError(row.id, 'invalid_raw_payload_shape', 5 * 60_000)
+        continue
+      }
+      parsed.push({ path: null, rawId: row.id, payload })
     }
-    let payload: MatchIngestQueuePayloadV1
-    try {
-      payload = JSON.parse(raw) as MatchIngestQueuePayloadV1
-    } catch {
-      await unlink(p).catch(() => undefined)
-      continue
+  } else {
+    const paths = await claimOldestMatchIngestQueueFilePaths(getMatchIngestBatchSize())
+    if (paths.length === 0) return false
+    noteMatchIngestQueueDepthDelta(-paths.length)
+    for (const p of paths) {
+      let raw: string
+      try {
+        raw = await readFile(p, 'utf8')
+      } catch {
+        await unlink(p).catch(() => undefined)
+        continue
+      }
+      let payload: MatchIngestQueuePayloadV1
+      try {
+        payload = JSON.parse(raw) as MatchIngestQueuePayloadV1
+      } catch {
+        await unlink(p).catch(() => undefined)
+        continue
+      }
+      if (payload.v !== 1) {
+        await unlink(p).catch(() => undefined)
+        continue
+      }
+      parsed.push({ path: p, rawId: null, payload })
     }
-    if (payload.v !== 1) {
-      await unlink(p).catch(() => undefined)
-      continue
-    }
-    parsed.push({ path: p, payload })
   }
   if (parsed.length === 0) return true
 
@@ -2474,7 +2571,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     const sharedAccountRankCache: MatchIngestRankCache = new Map()
 
     for (let i = 0; i < parsed.length; i++) {
-      const { path: p, payload } = parsed[i]
+      const { path: p, rawId, payload } = parsed[i]
       const matchId = payload.matchId
       const matchDto = payload.matchDto as RiotMatchDto
       const timelineDto = payload.timelineDto as RiotMatchTimelineDto | null
@@ -2500,7 +2597,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)
-        await unlink(p).catch(() => undefined)
+        if (rawId != null) await markRawIngestDone(rawId)
+        else await unlink(p!).catch(() => undefined)
         continue
       }
 
@@ -2531,7 +2629,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         clearMatchIngestCooldownKeys(matchId, canonical)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)
-        await unlink(p).catch(() => undefined)
+        if (rawId != null) await markRawIngestDone(rawId)
+        else await unlink(p!).catch(() => undefined)
       } catch (err) {
         const skipped = unwrapMatchIngestSkipped(err)
         if (skipped) {
@@ -2540,13 +2639,18 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             reason: skipped.reason,
           })
           noteMatchIngestProcessed(payload.enqueuedAt)
-          await unlink(p).catch(() => undefined)
+          if (rawId != null) await markRawIngestDone(rawId)
+          else await unlink(p!).catch(() => undefined)
           continue
         }
         if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
-          const errPath = p.replace(/\.json$/i, '')
           noteMatchIngestProcessed(payload.enqueuedAt)
-          await rename(p, `${errPath}.abort.${Date.now()}.json`).catch(() => undefined)
+          if (rawId != null) {
+            await markRawIngestError(rawId, RIOT_INGEST_ABORTED_MESSAGE, 30_000)
+          } else {
+            const errPath = p!.replace(/\.json$/i, '')
+            await rename(p!, `${errPath}.abort.${Date.now()}.json`).catch(() => undefined)
+          }
           continue
         }
         if (tracker) tracker.pendingTransientIngest = true
@@ -2559,9 +2663,18 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         await recordMatchIngestFailure(matchId, ctx.logger)
         ctx.flagsRef.foundPrismaError = true
         ctx.syncLiveCounters()
-        const errPath = p.replace(/\.json$/i, '')
         noteMatchIngestProcessed(payload.enqueuedAt)
-        await rename(p, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
+        if (rawId != null) {
+          const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
+          await markRawIngestError(
+            rawId,
+            err instanceof Error ? err.message : String(err),
+            delay
+          )
+        } else {
+          const errPath = p!.replace(/\.json$/i, '')
+          await rename(p!, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
+        }
       }
     }
   await maybeLogMatchIngestMetrics()
@@ -2569,9 +2682,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
 }
 
 async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void> {
-  if (!isMatchIngestFileQueueEnabled()) return
-  await syncMatchIngestQueueDepthEstimate(true)
-  const workers = getMatchIngestFileWorkers()
+  if (!isRawIngestQueueEnabled() && !isMatchIngestFileQueueEnabled()) return
+  if (isRawIngestQueueEnabled()) await syncRawIngestDepthEstimates(true)
+  else await syncMatchIngestQueueDepthEstimate(true)
+  const workers = isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers()
   await Promise.all(
     Array.from({ length: workers }, async () => {
       let guard = 0
@@ -2586,8 +2700,8 @@ async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void
 
 function startMatchIngestBackgroundProcessor(): void {
   if (matchIngestBgTimer != null) return
-  if (!isMatchIngestFileQueueEnabled()) return
-  const workers = getMatchIngestFileWorkers()
+  if (!isRawIngestQueueEnabled() && !isMatchIngestFileQueueEnabled()) return
+  const workers = isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers()
   matchIngestBgTimer = setInterval(() => {
     const c = activeMatchIngestClient
     if (!c || !matchIngestStepContext) return
@@ -2871,9 +2985,12 @@ async function runStep4ForPlayer(
 
   const flags = { foundPrismaError: false }
 
+  const useRawMatchIngestQueue = isRawIngestQueueEnabled()
   const useFileMatchIngestQueue = isMatchIngestFileQueueEnabled()
-  if (useFileMatchIngestQueue) {
-    await syncMatchIngestQueueDepthEstimate(true)
+  const useAsyncMatchIngestQueue = useRawMatchIngestQueue || useFileMatchIngestQueue
+  if (useAsyncMatchIngestQueue) {
+    if (useRawMatchIngestQueue) await syncRawIngestDepthEstimates(true)
+    else await syncMatchIngestQueueDepthEstimate(true)
     matchIngestStepContext = {
       stepId: MATCH_INGEST_ORPHAN_STEP_ID,
       counters,
@@ -2909,7 +3026,7 @@ async function runStep4ForPlayer(
     playersFetchedBefore: number
   }
   const playerTrackers: PlayerTracker[] = []
-  if (useFileMatchIngestQueue && matchIngestStepContext) {
+  if (useAsyncMatchIngestQueue && matchIngestStepContext) {
     matchIngestStepContext.playerTrackers = playerTrackers as MatchIngestPlayerTrackerRef[]
   }
   type MatchWorkItem = { matchId: string; trackerIdx: number }
@@ -3093,7 +3210,7 @@ async function runStep4ForPlayer(
 
   let pipelineAbort: '400_decrypt' | 'abort' | null = null
 
-  if (useFileMatchIngestQueue && matchIngestStepContext) {
+  if (useAsyncMatchIngestQueue && matchIngestStepContext) {
     matchIngestStepContext.onIngested = (trackerIdx, canonicalId) => {
       const t = playerTrackers[trackerIdx]
       if (t) t.ingestedIds.push(canonicalId)
@@ -3106,14 +3223,16 @@ async function runStep4ForPlayer(
     for (const item of chunk) {
       matchIngestPending.add(item.matchId)
     }
-    const fileQueueDepth = useFileMatchIngestQueue
-      ? await syncMatchIngestQueueDepthEstimate()
-      : 0
+    const fileQueueDepth = useRawMatchIngestQueue
+      ? (await syncRawIngestDepthEstimates()).pending
+      : useFileMatchIngestQueue
+        ? await syncMatchIngestQueueDepthEstimate()
+        : 0
     void appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_diag',
-      message: `Phase2 chunk ${region} — offset:${chunkStart} size:${chunk.length} total:${uniqueWorkItems.length} chunkSize:${chunkSize} fileQueue:${useFileMatchIngestQueue ? 1 : 0} queueDepth:${fileQueueDepth}`,
+      message: `Phase2 chunk ${region} — offset:${chunkStart} size:${chunk.length} total:${uniqueWorkItems.length} chunkSize:${chunkSize} asyncQueue:${useAsyncMatchIngestQueue ? 1 : 0} rawQueue:${useRawMatchIngestQueue ? 1 : 0} queueDepth:${fileQueueDepth}`,
       json: {
         region,
         chunkStart,
@@ -3121,13 +3240,14 @@ async function runStep4ForPlayer(
         totalWorkItems: uniqueWorkItems.length,
         chunkSize,
         fileQueue: useFileMatchIngestQueue,
+        rawQueue: useRawMatchIngestQueue,
         fileQueueDepth,
       },
     })
 
     pipelineAbort = null
 
-    if (!useFileMatchIngestQueue) {
+    if (!useAsyncMatchIngestQueue) {
       const ingestQueue: Array<{
         matchId: string
         trackerIdx: number
@@ -3268,7 +3388,9 @@ async function runStep4ForPlayer(
           const work = chunk[idx]
 
           while (
-            (await syncMatchIngestQueueDepthEstimate()) >= FILE_QUEUE_BACKPRESS &&
+            (useRawMatchIngestQueue
+              ? (await syncRawIngestDepthEstimates()).pending
+              : await syncMatchIngestQueueDepthEstimate()) >= FILE_QUEUE_BACKPRESS &&
             !state.shouldStop &&
             !pipelineAbort
           ) {
@@ -3310,7 +3432,7 @@ async function runStep4ForPlayer(
                 continue
               }
               try {
-                const r = await tryEnqueueMatchIngestPayload({
+                const payload: MatchIngestQueuePayloadV1 = {
                   v: 1,
                   stepId: fileQueueStepId,
                   matchId: work.matchId,
@@ -3320,14 +3442,40 @@ async function runStep4ForPlayer(
                   puuidKeyVersion,
                   trackerIdx: work.trackerIdx,
                   enqueuedAt: Date.now(),
-                })
+                }
+                const r = useRawMatchIngestQueue
+                  ? await tryInsertRawIngestPayload(payload)
+                  : await tryEnqueueMatchIngestPayload(payload)
                 matchIngestPending.delete(work.matchId)
                 if (r === 'written') {
-                  noteMatchIngestQueueDepthDelta(1)
+                  if (useRawMatchIngestQueue) noteRawIngestQueueDepthDelta(1)
+                  else noteMatchIngestQueueDepthDelta(1)
                   syncLiveCounters()
                 }
               } catch (e) {
                 tracker.pendingTransientIngest = true
+                if (useRawMatchIngestQueue && useFileMatchIngestQueue) {
+                  try {
+                    await tryEnqueueMatchIngestPayload({
+                      v: 1,
+                      stepId: fileQueueStepId,
+                      matchId: work.matchId,
+                      region,
+                      matchDto: strict.matchDto,
+                      timelineDto: null,
+                      puuidKeyVersion,
+                      trackerIdx: work.trackerIdx,
+                      enqueuedAt: Date.now(),
+                    })
+                    rawIngestFallbackWrites++
+                    noteMatchIngestQueueDepthDelta(1)
+                    matchIngestPending.delete(work.matchId)
+                    syncLiveCounters()
+                    continue
+                  } catch {
+                    // keep original error logging path
+                  }
+                }
                 await logger.error('Match ingest queue write failed', {
                   matchId: work.matchId,
                   error: e instanceof Error ? e.message : String(e),
@@ -3340,7 +3488,7 @@ async function runStep4ForPlayer(
           }
 
           try {
-            const r = await tryEnqueueMatchIngestPayload({
+            const payload: MatchIngestQueuePayloadV1 = {
               v: 1,
               stepId: fileQueueStepId,
               matchId: work.matchId,
@@ -3350,14 +3498,40 @@ async function runStep4ForPlayer(
               puuidKeyVersion,
               trackerIdx: work.trackerIdx,
               enqueuedAt: Date.now(),
-            })
+            }
+            const r = useRawMatchIngestQueue
+              ? await tryInsertRawIngestPayload(payload)
+              : await tryEnqueueMatchIngestPayload(payload)
             matchIngestPending.delete(work.matchId)
             if (r === 'written') {
-              noteMatchIngestQueueDepthDelta(1)
+              if (useRawMatchIngestQueue) noteRawIngestQueueDepthDelta(1)
+              else noteMatchIngestQueueDepthDelta(1)
               syncLiveCounters()
             }
           } catch (e) {
             tracker.pendingTransientIngest = true
+            if (useRawMatchIngestQueue && useFileMatchIngestQueue) {
+              try {
+                await tryEnqueueMatchIngestPayload({
+                  v: 1,
+                  stepId: fileQueueStepId,
+                  matchId: work.matchId,
+                  region,
+                  matchDto: strict.matchDto,
+                  timelineDto: strict.timelineDto,
+                  puuidKeyVersion,
+                  trackerIdx: work.trackerIdx,
+                  enqueuedAt: Date.now(),
+                })
+                rawIngestFallbackWrites++
+                noteMatchIngestQueueDepthDelta(1)
+                matchIngestPending.delete(work.matchId)
+                syncLiveCounters()
+                continue
+              } catch {
+                // keep original error logging path
+              }
+            }
             await logger.error('Match ingest queue write failed', {
               matchId: work.matchId,
               error: e instanceof Error ? e.message : String(e),
@@ -3378,7 +3552,7 @@ async function runStep4ForPlayer(
     if (pipelineAbort === 'abort') return 'ok'
   }
 
-  if (useFileMatchIngestQueue) {
+  if (useAsyncMatchIngestQueue) {
     await drainMatchIngestQueueFolder(client)
     matchIngestStepContext = null
   }
@@ -3565,6 +3739,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let heartbeatPlayersFetched = 0
     let heartbeatMatchesFetched = 0
     let heartbeatMatchesApiIngestComplete = 0
+    const rawDoneCleanupIntervalMs = getRawIngestDoneCleanupIntervalMs()
+    const rawDoneCleanupBatch = getRawIngestDoneCleanupBatch()
+    let nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
     const initLimiterStats = client.getRateLimiterStats()
     const sw: PollerSummaryWindows = {
       summary30mWindowStartedAtMs: Date.now(),
@@ -3607,6 +3784,34 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
 
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
+      if (isRawIngestQueueEnabled()) {
+        const moved = await requeueRawIngestErrors(getRawIngestErrorRequeueBatch()).catch(() => 0)
+        if (moved > 0) {
+          noteRawIngestQueueDepthDelta(moved)
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller_ingest',
+            message: `Raw ingest requeue: ${moved} ligne(s) error -> pending`,
+            json: { moved },
+          })
+        }
+        if (Date.now() >= nextRawDoneCleanupAtMs) {
+          const deleted = await deleteDoneRawIngestRows(rawDoneCleanupBatch).catch(() => 0)
+          nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller_ingest',
+            message: `Raw ingest cleanup done rows: ${deleted}`,
+            json: {
+              deleted,
+              batch: rawDoneCleanupBatch,
+              cleanupIntervalMs: rawDoneCleanupIntervalMs,
+            },
+          })
+        }
+      }
 
       const diskUsage = await getDiskUsagePercent(process.cwd())
       if (diskUsage != null) {
