@@ -1,5 +1,5 @@
 /**
- * Stats d'abandon : surrender (early / normal) from the matchs table.
+ * Stats d'abandon : surrender (early / normal) depuis la vue matérialisée `mv_match_outcome_stats`.
  * Remake = match où au moins un participant n'a aucun item (déco / non connecté).
  * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */

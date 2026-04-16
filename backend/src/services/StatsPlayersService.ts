@@ -1,5 +1,5 @@
 /**
- * Top players and champion stats: computed on the fly from match_players (new schema).
+ * Top players and champion stats: computed on the fly from ingest_match_players.
  */
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
@@ -49,12 +49,12 @@ function rankTierMatchPlayerSql(
   highRankOnly: boolean
 ): Prisma.Sql {
   const tiers = toQueryStringArrayParam(rankTier).map((t) => t.toUpperCase())
-  if (tiers.length === 1) return Prisma.sql`AND mp.rank_tier = ${tiers[0]}`
+  if (tiers.length === 1) return Prisma.sql`AND imp.rank_tier = ${tiers[0]}`
   if (tiers.length > 1) {
-    return Prisma.sql`AND mp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
+    return Prisma.sql`AND imp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
   }
   return highRankOnly
-    ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
+    ? Prisma.sql`AND imp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
     : Prisma.sql``
 }
 
@@ -87,14 +87,14 @@ export async function getTopPlayers(options: {
           pl.game_name,
           pl.tag_name,
           pl.region,
-          COUNT(mp.id) AS total_games,
+          COUNT(imp.id) AS total_games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END) AS total_wins
         FROM players pl
-        INNER JOIN match_players mp ON mp.player_id = pl.id
-        INNER JOIN teams t ON t.id = mp.team_id
+        INNER JOIN ingest_match_players imp ON imp.player_id = pl.id
+        INNER JOIN ingest_teams t ON t.id = imp.team_id
         WHERE 1=1 ${rankTierFilter}
         GROUP BY pl.id
-        HAVING COUNT(mp.id) >= ${minGames}
+        HAVING COUNT(imp.id) >= ${minGames}
         ORDER BY total_wins DESC
         LIMIT ${limit}
       `
@@ -146,11 +146,11 @@ export async function getPlayerBySummonerName(summonerName: string): Promise<Pla
           pl.game_name,
           pl.tag_name,
           pl.region,
-          COUNT(mp.id) AS total_games,
+          COUNT(imp.id) AS total_games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END) AS total_wins
         FROM players pl
-        INNER JOIN match_players mp ON mp.player_id = pl.id
-        INNER JOIN teams t ON t.id = mp.team_id
+        INNER JOIN ingest_match_players imp ON imp.player_id = pl.id
+        INNER JOIN ingest_teams t ON t.id = imp.team_id
         WHERE pl.game_name ILIKE ${pattern} OR pl.tag_name ILIKE ${pattern}
         GROUP BY pl.puuid, pl.game_name, pl.tag_name, pl.region
         LIMIT 1
@@ -188,14 +188,14 @@ export async function getChampionStatsForPlayer(
     const rows = await prisma.$queryRaw<Row[]>(
       Prisma.sql`
         SELECT
-          mp.champion_id AS "championId",
-          COUNT(mp.id)::int AS games,
+          imp.champion_id AS "championId",
+          COUNT(imp.id)::int AS games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins,
-          ROUND(100.0 * SUM(CASE WHEN t.win THEN 1 ELSE 0 END) / NULLIF(COUNT(mp.id), 0), 2)::double precision AS winrate
-        FROM match_players mp
-        INNER JOIN teams t ON t.id = mp.team_id
-        WHERE mp.player_id = ${player.id}
-        GROUP BY mp.champion_id
+          ROUND(100.0 * SUM(CASE WHEN t.win THEN 1 ELSE 0 END) / NULLIF(COUNT(imp.id), 0), 2)::double precision AS winrate
+        FROM ingest_match_players imp
+        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        WHERE imp.player_id = ${player.id}
+        GROUP BY imp.champion_id
         ORDER BY games DESC
         LIMIT ${limit}
       `
@@ -238,42 +238,41 @@ export async function getTopPlayersByChampion(options: {
     const tiers = toQueryStringArrayParam(rankTier).map((t) => t.toUpperCase())
     const rankTierFilter =
       tiers.length === 1
-        ? Prisma.sql`AND mp.rank_tier = ${tiers[0]}`
+        ? Prisma.sql`AND imp.rank_tier = ${tiers[0]}`
         : tiers.length > 1
-          ? Prisma.sql`AND mp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
+          ? Prisma.sql`AND imp.rank_tier IN (${Prisma.join(tiers.map((t) => Prisma.sql`${t}`))})`
           : highRankOnly
-            ? Prisma.sql`AND mp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
+            ? Prisma.sql`AND imp.rank_tier IN ('MASTER', 'GRANDMASTER', 'CHALLENGER')`
             : Prisma.sql``
 
     const rows = await prisma.$queryRaw<Row[]>(
       Prisma.sql`
         WITH latest_rank AS (
-          SELECT DISTINCT ON (mp2.player_id) mp2.player_id, mp2.rank_tier
-          FROM match_players mp2
-          WHERE mp2.champion_id = ${championId}
-          ORDER BY mp2.player_id, mp2.match_id DESC
+          SELECT DISTINCT ON (imp2.player_id) imp2.player_id, imp2.rank_tier
+          FROM ingest_match_players imp2
+          WHERE imp2.champion_id = ${championId}
+          ORDER BY imp2.player_id, imp2.match_id DESC
         )
         SELECT
           pl.puuid,
           pl.game_name,
           pl.tag_name,
           pl.region,
-          COUNT(mp.id)::int AS games,
+          COUNT(imp.id)::int AS games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins,
-          ROUND(100.0 * SUM(CASE WHEN t.win THEN 1 ELSE 0 END) / NULLIF(COUNT(mp.id), 0), 2)::double precision AS winrate,
+          ROUND(100.0 * SUM(CASE WHEN t.win THEN 1 ELSE 0 END) / NULLIF(COUNT(imp.id), 0), 2)::double precision AS winrate,
           MAX(lr.rank_tier) AS rank_tier,
-          ROUND(AVG(mpc.kills)::numeric, 2)::double precision AS avg_kills,
-          ROUND(AVG(mpc.deaths)::numeric, 2)::double precision AS avg_deaths,
-          ROUND(AVG(mpc.assists)::numeric, 2)::double precision AS avg_assists
-        FROM match_players mp
-        INNER JOIN teams t ON t.id = mp.team_id
-        JOIN players pl ON pl.id = mp.player_id
-        LEFT JOIN match_player_core mpc ON mpc.match_player_id = mp.id
-        LEFT JOIN latest_rank lr ON lr.player_id = mp.player_id
-        WHERE mp.champion_id = ${championId}
+          ROUND(AVG(imp.kills)::numeric, 2)::double precision AS avg_kills,
+          ROUND(AVG(imp.deaths)::numeric, 2)::double precision AS avg_deaths,
+          ROUND(AVG(imp.assists)::numeric, 2)::double precision AS avg_assists
+        FROM ingest_match_players imp
+        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        JOIN players pl ON pl.id = imp.player_id
+        LEFT JOIN latest_rank lr ON lr.player_id = imp.player_id
+        WHERE imp.champion_id = ${championId}
           ${rankTierFilter}
         GROUP BY pl.puuid, pl.game_name, pl.tag_name, pl.region
-        HAVING COUNT(mp.id) >= ${minGames}
+        HAVING COUNT(imp.id) >= ${minGames}
         ORDER BY winrate DESC, games DESC
         LIMIT ${limit}
       `

@@ -30,7 +30,7 @@ const fullCounters = () => ({
   playersRankUpdatedLeague: 0,
 })
 
-test('lean ingest creates ingest_* rows and not legacy match_players for new riot id', { skip: skipDbReason }, async (t) => {
+test('lean ingest creates ingest_* rows for new riot id', { skip: skipDbReason }, async (t) => {
   try {
     await prisma.$queryRaw`SELECT 1 FROM ingest_matchs LIMIT 1`
   } catch {
@@ -82,8 +82,6 @@ test('lean ingest creates ingest_* rows and not legacy match_players for new rio
     assert.equal(typeof oneP.kills, 'number')
     assert.ok(oneP.stats != null)
 
-    const legacy = await prisma.match.findUnique({ where: { riotMatchId: matchId } })
-    assert.equal(legacy, null)
   } finally {
     const row = await prisma.ingestMatch.findUnique({ where: { riotMatchId: matchId } })
     if (row) await prisma.ingestMatch.delete({ where: { id: row.id } })

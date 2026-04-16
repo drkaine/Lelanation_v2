@@ -19,8 +19,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
-    "script:league-xp": "tsx src/worker/runScript.ts league-xp",
-    "script:migrate-legacy-to-lean": "tsx src/scripts/migrateLegacyToIngestLean.ts"
+    "script:league-xp": "tsx src/worker/runScript.ts league-xp"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

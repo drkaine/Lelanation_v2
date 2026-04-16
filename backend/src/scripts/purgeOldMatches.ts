@@ -16,11 +16,11 @@ async function main(): Promise<void> {
   `
 
   const before = await prisma.$queryRawUnsafe<Array<{ c: number }>>(
-    `SELECT COUNT(*)::int AS c FROM matchs WHERE ${whereSql}`
+    `SELECT COUNT(*)::int AS c FROM ingest_matchs WHERE ${whereSql}`
   )
-  const deleted = await prisma.$executeRawUnsafe(`DELETE FROM matchs WHERE ${whereSql}`)
+  const deleted = await prisma.$executeRawUnsafe(`DELETE FROM ingest_matchs WHERE ${whereSql}`)
   const after = await prisma.$queryRawUnsafe<Array<{ c: number }>>(
-    `SELECT COUNT(*)::int AS c FROM matchs WHERE ${whereSql}`
+    `SELECT COUNT(*)::int AS c FROM ingest_matchs WHERE ${whereSql}`
   )
 
   console.log(

@@ -16,7 +16,7 @@ type LoggerType = ReturnType<typeof createRiotPollerLogger>
 /**
  * Load active patch counters and close patches that have reached their target.
  * Contrainte : on ne clôture un patch que si games_number >= game_number_max.
- * Utilise close_patch() SQL : snapshot des MVs vers archive_*, retrait du patch des actifs, suppression des matchs bruts.
+ * Utilise close_patch() SQL : snapshot des MVs vers archive_*, retrait du patch des actifs, suppression des lignes `ingest_matchs` du patch.
  */
 export async function runPatchCleanupFromConfig(logger?: LoggerType): Promise<void> {
   if (!isDatabaseConfigured()) return

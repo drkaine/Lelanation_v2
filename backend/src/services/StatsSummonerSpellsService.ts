@@ -1,6 +1,6 @@
 /**
  * Summoner spell stats by champion from champion_summoner_spells_agg aggregate table.
- * Individual spell stats from MV; duos from raw match_players.summoner_spells.
+ * Individual spell stats from MV; duos from raw ingest_match_players.summoner_spells.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -122,13 +122,12 @@ export async function getSummonerSpellsDuosByChampion(
     const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     if (statIds.length === 0) return { totalGames: 0, duos: [] }
 
-    // Duos from match_players.summoner_spells (ordered D/F)
+    // Duos from ingest_match_players.summoner_spells (ordered D/F)
     const matchRankWhere: Record<string, unknown> = {}
     if (pVersion) matchRankWhere.gameVersion = pVersion
     applyRankTierWhere(matchRankWhere, rankTier)
 
-    // Get match_player IDs for this champion with filters
-    const matchPlayersRows = await prisma.matchPlayer.findMany({
+    const matchPlayersRows = await prisma.ingestMatchPlayer.findMany({
       where: {
         championId,
         match: matchRankWhere,

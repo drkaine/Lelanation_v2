@@ -14,7 +14,7 @@
  *
  * Restart safety:
  *   - lastSeen is only updated after ALL matches for a player are ingested.
- *   - upsertMatchAndParticipants is idempotent (skips existing matches).
+ *   - upsertIngestMatchAndParticipants is idempotent (skips existing riot_match_id).
  *   - On ungraceful kill, the same players are re-polled on next startup
  *     (ordered by lastSeen ASC NULLS FIRST). A few API calls may be re-spent
  *     but data consistency is guaranteed.

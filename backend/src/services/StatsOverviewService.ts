@@ -1,8 +1,7 @@
 /**
  * Overview stats for the statistics page: total matches, last update, top winrate champions,
- * matches per division, distinct participant count (unique player_id in match_players).
- * Uses new aggregate tables (champion_core_stats, team_core_stats, champion_bucket, etc.)
- * and raw tables (matchs, match_players, teams, bans) with the new schema.
+ * matches per division, distinct participant count (unique player_id in ingest_match_players).
+ * Uses materialized views built from `ingest_*` plus aggregate helpers where applicable.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -116,7 +115,7 @@ export interface OverviewDetailStats {
     highEloWinrate?: number
     highEloRank?: number
   }>
-  /** Paires D→F (ordre Riot) depuis match_players. */
+  /** Paires D→F (ordre Riot) depuis ingest_match_players. */
   summonerSpellSets: Array<{
     spellIdD: number
     spellIdF: number
@@ -1806,14 +1805,14 @@ export interface InfosMetaCounts {
 
 /**
  * Raw global counters for Infos tab (all patches combined):
- * - total matches:      SELECT COUNT(*) FROM matchs
+ * - total matches:      SELECT COUNT(*) FROM ingest_matchs
  * - total players:      SELECT COUNT(*) FROM players
  * - players not polled: SELECT COUNT(*) FROM players WHERE last_seen IS NULL
  */
 export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const totalMatches = await prisma.match.count()
+    const totalMatches = await prisma.ingestMatch.count()
     const totalPlayers = await prisma.player.count()
     const playersWithoutLastSeen = await prisma.player.count({ where: { lastSeen: null } })
     return {

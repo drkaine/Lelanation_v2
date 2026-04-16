@@ -267,7 +267,7 @@ router.get('/data-stats', async (_req, res) => {
     const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
-      prisma.match.count(),
+      prisma.ingestMatch.count(),
       prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {
@@ -416,7 +416,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.count(),
-      prisma.match.count(),
+      prisma.ingestMatch.count(),
       prisma.player.count({ where: { puuidKeyVersion: null } }),
     ])
     dataStats = {

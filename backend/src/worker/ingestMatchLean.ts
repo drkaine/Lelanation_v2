@@ -1,6 +1,5 @@
 /**
- * Lean match ingest: `ingest_matchs` / `ingest_teams` / `ingest_match_players` with JSON stats.
- * Parallel to legacy `matchs` path; no satellite tables.
+ * Match ingest: `ingest_matchs` / `ingest_teams` / `ingest_match_players` with JSON stats (no satellite tables).
  */
 import { createHash } from 'node:crypto'
 import { prisma } from '../db.js'
@@ -33,8 +32,8 @@ import { isKeptMatchPlayerDurationBucket, timelineTimestampMsToGameMinute } from
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
 
-function ingestAdvisoryLockKeys(riotMatchId: string, family: 'legacy' | 'lean'): { k1: number; k2: number } {
-  const h = createHash('sha256').update(`${family}:${riotMatchId}`).digest()
+function ingestAdvisoryLockKeys(riotMatchId: string): { k1: number; k2: number } {
+  const h = createHash('sha256').update(`ingest:${riotMatchId}`).digest()
   return { k1: h.readInt32BE(0), k2: h.readInt32BE(4) }
 }
 
@@ -443,7 +442,7 @@ export async function upsertIngestMatchAndParticipants(
 
   const matchDbId = await prisma.$transaction(
     async (tx) => {
-      const { k1, k2 } = ingestAdvisoryLockKeys(riotMatchId, 'lean')
+      const { k1, k2 } = ingestAdvisoryLockKeys(riotMatchId)
       await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${k1}::int, ${k2}::int)`)
       const existing = await tx.ingestMatch.findUnique({ where: { riotMatchId }, select: { id: true } })
       if (existing) return existing.id

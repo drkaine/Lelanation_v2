@@ -6,7 +6,7 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { readFile, rename, statfs, unlink } from 'node:fs/promises'
-import { createHash, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import {
@@ -27,9 +27,6 @@ import {
   type RiotMatchDto,
   type RiotParticipantDto,
   type RiotMatchTimelineDto,
-  type RiotTimelineEventEliteMonsterKill,
-  type RiotTimelineEventDragonSoulGiven,
-  type RiotTimelineEventSkillLevelUp,
 } from '../services/RiotHttpClient.js'
 import {
   isMatchIngestFileQueueEnabled,
@@ -48,23 +45,15 @@ import {
   requeueRawIngestErrors,
   deleteDoneRawIngestRows,
 } from './matchIngestRawQueue.js'
-import { MatchIngestSkippedError, unwrapMatchIngestSkipped } from './matchIngestErrors.js'
+import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
 import { resolveRiotMatchIdForIngest } from './matchIngestIds.js'
-import { buildMatchTeamData } from './matchTeamDataBuilder.js'
-import { isLeanIngestWriteArch, getIngestWriteArch } from './ingestWriteArch.js'
 import {
   upsertIngestMatchAndParticipants,
   extractIngestTimelineExtras,
   preloadIngestLeanMatchDbData,
 } from './ingestMatchLean.js'
-import type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
-import {
-  getCachedRank,
-  setCachedRank,
-  cleanupGlobalRankCache,
-  enqueuePriorityPuuid,
-  dequeuePriorityPuuids,
-} from './matchIngestRankCache.js'
+import type { MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
+import { cleanupGlobalRankCache, dequeuePriorityPuuids } from './matchIngestRankCache.js'
 
 export type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
 
@@ -341,17 +330,10 @@ async function emitPollerSummariesIfDue(
   }
 }
 import { Prisma } from '../generated/prisma/index.js'
-import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches } from '../services/MaterializedViewService.js'
-import {
-  isKeptMatchPlayerDurationBucket,
-  timelineTimestampMsToGameMinute,
-} from './matchPlayerBucketPolicy.js'
-import { selectMatchPlayerItems } from './itemBuildSelection.js'
-
 const PLAYERS_PER_LOOP = 150
 
 const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
@@ -385,25 +367,10 @@ function formatSummaryTimestamp(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
-/** Dernière sync `active_patches` depuis `matchs` + `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
+/** Dernière sync `active_patches` depuis `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
 let lastSyncActivePatchesAt = Date.now()
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
-
-function ingestAdvisoryLockKeys(riotMatchId: string, family: 'legacy' | 'lean'): { k1: number; k2: number } {
-  const h = createHash('sha256').update(`${family}:${riotMatchId}`).digest()
-  return { k1: h.readInt32BE(0), k2: h.readInt32BE(4) }
-}
-
-function isRankUpdateRequired(
-  player: { rankSnapshotGameDate: Date | null } | null,
-  matchGameDate: Date | null
-): boolean {
-  if (!player) return true
-  if (!player.rankSnapshotGameDate) return true
-  if (!matchGameDate) return false
-  return player.rankSnapshotGameDate.getTime() < matchGameDate.getTime()
-}
 
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
@@ -421,7 +388,7 @@ export interface RiotPollerStatus {
   requestCount: number
   error429Count: number
   error400Count: number
-  /** New rows in `matchs` (ingest). */
+  /** New rows in `ingest_matchs` (ingest). */
   matchesFetched: number
   /** Match + timeline API pair completed successfully for ingest. */
   matchesApiIngestComplete: number
@@ -491,16 +458,6 @@ function is400Decrypt(body: unknown): boolean {
     return msg.includes('decrypt') || msg.includes('Bad Request')
   }
   return false
-}
-
-function roleFromPosition(individualPosition?: string, teamPosition?: string): string | null {
-  const p = individualPosition ?? teamPosition ?? ''
-  if (/^TOP$/i.test(p)) return 'TOP'
-  if (/^JUNGLE/i.test(p)) return 'JUNGLE'
-  if (/^MIDDLE|^MID/i.test(p)) return 'MIDDLE'
-  if (/^BOTTOM|^ADC/i.test(p)) return 'BOTTOM'
-  if (/^UTILITY|^SUPPORT/i.test(p)) return 'SUPPORT'
-  return p || null
 }
 
 function isLikelyRiotPuuid(value: string | null | undefined): boolean {
@@ -576,70 +533,6 @@ async function resolvePatchPollingPolicy(): Promise<{
   }
 
   return { latestPatch, latestPatchOnly }
-}
-
-function averageRankFromScores(scores: number[]): { tier: string; division: string } {
-  if (scores.length === 0) return { tier: 'UNRANKED', division: '' }
-  const avg = scores.reduce((a, b) => a + b, 0) / scores.length
-  return scoreToRank(avg)
-}
-
-/** Rank fields from match-v5 participant payload (may be incomplete for historical games). */
-function participantRankFromDto(p: RiotParticipantDto): {
-  tier: string
-  division: string | null
-  lp: number | null
-} {
-  const tier = (p as { tier?: string }).tier ?? (p as { rankTier?: string }).rankTier ?? 'UNRANKED'
-  const division = (p as { rank?: string }).rank ?? (p as { rankDivision?: string }).rankDivision ?? null
-  const lp = (p as { leaguePoints?: number }).leaguePoints ?? (p as { rankLp?: number }).rankLp ?? null
-  return { tier, division, lp }
-}
-
-function needsLeagueRankApiFromDto(p: RiotParticipantDto): boolean {
-  const { tier, division, lp } = participantRankFromDto(p)
-  return division == null || lp == null || tier === 'UNRANKED'
-}
-
-type ResolvedParticipantRank = { tier: string; division: string | null; lp: number | null }
-
-function mergeDtoWithAccountCache(
-  p: RiotParticipantDto,
-  puuid: string,
-  accountRankCache: Map<
-    string,
-    { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
-  >
-): ResolvedParticipantRank {
-  let { tier, division, lp } = participantRankFromDto(p)
-  if (division == null || lp == null || tier === 'UNRANKED') {
-    const acc = accountRankCache.get(puuid)
-    if (acc?.rankTier && acc.rankTier !== 'UNRANKED') tier = acc.rankTier
-    if (division == null && acc?.rankDivision != null) division = acc.rankDivision
-    if (lp == null && acc?.rankLp != null) lp = acc.rankLp
-  }
-  return { tier, division, lp }
-}
-
-function needsRankPeerFill(r: ResolvedParticipantRank): boolean {
-  return r.division == null || r.lp == null || r.tier === 'UNRANKED'
-}
-
-function fillParticipantRankFromPeers(
-  idx: number,
-  ranks: ResolvedParticipantRank[]
-): ResolvedParticipantRank {
-  const scores: number[] = []
-  for (let i = 0; i < ranks.length; i++) {
-    if (i === idx) continue
-    const b = ranks[i]
-    if (b.tier !== 'UNRANKED') {
-      scores.push(rankToScore(b.tier, b.division ?? '', b.lp))
-    }
-  }
-  if (scores.length === 0) return { tier: 'UNRANKED', division: null, lp: null }
-  const avg = averageRankFromScores(scores)
-  return { tier: avg.tier, division: avg.division || null, lp: null }
 }
 
 function canAttemptTimelineFetchNow(matchId: string, nowMs: number): boolean {
@@ -899,7 +792,7 @@ export async function runPhase2(
     const pendingIds = new Set(playerIds)
 
     // Find matches where these players participated, prioritise highest coverage
-    const partRows = await prisma.matchPlayer.findMany({
+    const partRows = await prisma.ingestMatchPlayer.findMany({
       where: { playerId: { in: playerIds } },
       select: { matchId: true },
     })
@@ -912,7 +805,7 @@ export async function runPhase2(
       .map(([id]) => id)
 
     if (sortedInternalIds.length > 0) {
-      const matchRows = await prisma.match.findMany({
+      const matchRows = await prisma.ingestMatch.findMany({
         where: { id: { in: sortedInternalIds } },
         select: { id: true, riotMatchId: true },
       })
@@ -928,8 +821,8 @@ export async function runPhase2(
           continue
         }
 
-        // Positional matching: DB match_players ordered by id == Riot insertion order
-        const dbMatchPlayers = await prisma.matchPlayer.findMany({
+        // Positional matching: DB ingest_match_players ordered by id == Riot insertion order
+        const dbMatchPlayers = await prisma.ingestMatchPlayer.findMany({
           where: { matchId: internalId },
           select: { id: true, playerId: true },
           orderBy: { id: 'asc' },
@@ -998,1161 +891,16 @@ export async function runPhase2(
   await logger.step('Phase 2 end', { totalSynced, totalPlaceholder })
 }
 
-// ─── Normalisation helpers ────────────────────────────────────────────────────
-
-/** Build rune ID list preserving Riot JSON order (styles then perks). */
-function buildRunePayload(runes: unknown): { runes: number[] } {
-  const perkIds: number[] = []
-  const styleIds: number[] = []
-  const styles = (() => {
-    if (!runes || typeof runes !== 'object') return []
-    const r = runes as Record<string, unknown>
-    if (Array.isArray(r['styles'])) return r['styles']
-    if (Array.isArray(runes)) return runes as unknown[]
-    return []
-  })()
-  for (const style of styles) {
-    if (!style || typeof style !== 'object') continue
-    const s = style as Record<string, unknown>
-    const styleIdRaw = s['id'] ?? s['styleId'] ?? s['style_id'] ?? s['style']
-    const styleId = Number(styleIdRaw)
-    if (!Number.isFinite(styleId)) continue
-    styleIds.push(styleId)
-    const selections =
-      Array.isArray(s['selections']) ? s['selections'] : Array.isArray(s['selection']) ? s['selection'] : []
-    for (const sel of selections) {
-      if (typeof sel === 'number' && Number.isFinite(sel)) {
-        perkIds.push(sel)
-        continue
-      }
-      const selObj = sel as Record<string, unknown>
-      if (!selObj || typeof selObj !== 'object') continue
-      const perkIdRaw = selObj['perk'] ?? selObj['perkId'] ?? selObj['perk_id'] ?? selObj['id']
-      const perkId = Number(perkIdRaw)
-      if (!Number.isFinite(perkId)) continue
-      perkIds.push(perkId)
-    }
-  }
-  return { runes: [...styleIds, ...perkIds] }
-}
-
-/** Summoner spell IDs in D-then-F order (Riot summoner1Id, summoner2Id). */
-function buildSummonerSpellIds(summoner1Id: number | null, summoner2Id: number | null): number[] {
-  const out: number[] = []
-  if (summoner1Id != null && summoner1Id > 0) out.push(summoner1Id)
-  if (summoner2Id != null && summoner2Id > 0) out.push(summoner2Id)
-  return out
-}
-
-/** Build shard list from stat_perks in Riot order: offense, flex, defense. */
-function buildShardList(statPerks: unknown): number[] {
-  if (!statPerks || typeof statPerks !== 'object') return []
-  const sp = statPerks as Record<string, unknown>
-  const shards: number[] = []
-  const keys = ['offense', 'flex', 'defense'] as const
-  for (let slot = 0; slot < keys.length; slot++) {
-    const id = Number(sp[keys[slot]])
-    if (Number.isFinite(id) && id > 0) shards.push(id)
-  }
-  return shards
-}
-
-function durationBucketFromRaw(raw: unknown): number | null {
-  const d = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
-  if (!Number.isFinite(d)) return null
-  // Heuristic:
-  // - if Riot returns seconds (e.g. 300, 600, 900), convert to minutes
-  // - if Riot already returns minutes/buckets (e.g. 0,5,10), keep as-is
-  if (d > 120) return Math.floor(d / 60)
-  return Math.floor(d)
-}
-
-function toIntOr0(raw: unknown): number {
-  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
-  if (typeof raw === 'string') {
-    const n = Number(raw)
-    return Number.isFinite(n) ? Math.trunc(n) : 0
-  }
-  return 0
-}
-
-function buildBucketRows(
-  matchPlayerId: bigint,
-  bucketsRaw: unknown
-): Array<{
-  matchPlayerId: bigint
-  durationBucket: number
-  currentGold: number
-  magicDamageDone: number
-  magicDamageDoneToChampion: number
-  magicDamageTaken: number
-  physicalDamageDone: number
-  physicalDamageDoneToChampion: number
-  physicalDamageTaken: number
-  totalDamageDone: number
-  totalDamageDoneToChampion: number
-  totalDamageTaken: number
-  trueDamageDone: number
-  trueDamageDoneToChampion: number
-  trueDamageTaken: number
-  goldPerSecond: number
-  jungleMinionsKilled: number
-  level: number
-  minionsKilled: number
-  timeEnemySpentControlled: number
-  totalGold: number
-  xp: number
-}> {
-  if (!Array.isArray(bucketsRaw)) return []
-
-  const out: Array<{
-    matchPlayerId: bigint
-    durationBucket: number
-    currentGold: number
-    magicDamageDone: number
-    magicDamageDoneToChampion: number
-    magicDamageTaken: number
-    physicalDamageDone: number
-    physicalDamageDoneToChampion: number
-    physicalDamageTaken: number
-    totalDamageDone: number
-    totalDamageDoneToChampion: number
-    totalDamageTaken: number
-    trueDamageDone: number
-    trueDamageDoneToChampion: number
-    trueDamageTaken: number
-    goldPerSecond: number
-    jungleMinionsKilled: number
-    level: number
-    minionsKilled: number
-    timeEnemySpentControlled: number
-    totalGold: number
-    xp: number
-  }> = []
-
-  for (const b of bucketsRaw) {
-    if (b == null || typeof b !== 'object') continue
-    const br = b as Record<string, unknown>
-    const durationBucket = durationBucketFromRaw(br.duration ?? br.time ?? br.timestamp)
-    if (durationBucket == null) continue
-    if (!isKeptMatchPlayerDurationBucket(durationBucket)) continue
-
-    out.push({
-      matchPlayerId,
-      durationBucket,
-      currentGold: toIntOr0(br.currentGold ?? br.current_gold),
-      magicDamageDone: toIntOr0(br.magicDamageDone ?? br.magic_damage_done),
-      magicDamageDoneToChampion: toIntOr0(
-        br.magicDamageDoneToChampion ?? br.magic_damage_done_to_champion
-      ),
-      magicDamageTaken: toIntOr0(br.magicDamageTaken ?? br.magic_damage_taken),
-      physicalDamageDone: toIntOr0(br.physicalDamageDone ?? br.physical_damage_done),
-      physicalDamageDoneToChampion: toIntOr0(
-        br.physicalDamageDoneToChampion ?? br.physical_damage_done_to_champion
-      ),
-      physicalDamageTaken: toIntOr0(br.physicalDamageTaken ?? br.physical_damage_taken),
-      totalDamageDone: toIntOr0(br.totalDamageDone ?? br.total_damage_done),
-      totalDamageDoneToChampion: toIntOr0(
-        br.totalDamageDoneToChampion ?? br.total_damage_done_to_champion
-      ),
-      totalDamageTaken: toIntOr0(br.totalDamageTaken ?? br.total_damage_taken),
-      trueDamageDone: toIntOr0(br.trueDamageDone ?? br.true_damage_done),
-      trueDamageDoneToChampion: toIntOr0(
-        br.trueDamageDoneToChampion ?? br.true_damage_done_to_champion
-      ),
-      trueDamageTaken: toIntOr0(br.trueDamageTaken ?? br.true_damage_taken),
-      goldPerSecond: toIntOr0(br.goldPerSecond ?? br.gold_per_second),
-      jungleMinionsKilled: toIntOr0(
-        br.jungleMinionsKilled ?? br.jungle_minions_killed
-      ),
-      level: toIntOr0(br.level),
-      minionsKilled: toIntOr0(br.minionsKilled ?? br.minions_killed),
-      timeEnemySpentControlled: toIntOr0(
-        br.timeEnemySpentControlled ?? br.time_enemy_spent_controlled
-      ),
-      totalGold: toIntOr0(br.totalGold ?? br.total_gold),
-      xp: toIntOr0(br.xp),
-    })
-  }
-
-  return out
-}
-
-export async function preloadMatchIngestDbData(puuids: string[]): Promise<MatchIngestDbPreload> {
-  const maxGameByPuuid = new Map<string, Date>()
-  const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
-  const unique = [...new Set(puuids.filter(Boolean))]
-  if (unique.length === 0) return { maxGameByPuuid, playerRankSnapshotByPuuid }
-
-  const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
-    SELECT pl.puuid, MAX(m.game_date) AS max_game
-    FROM players pl
-    INNER JOIN match_players mp ON mp.player_id = pl.id
-    INNER JOIN matchs m ON m.id = mp.match_id
-    WHERE pl.puuid IN (${Prisma.join(unique)})
-    GROUP BY pl.puuid
-  `
-  for (const r of rows) {
-    if (r.max_game) maxGameByPuuid.set(r.puuid, r.max_game)
-  }
-  const playerRows = await prisma.player.findMany({
-    where: { puuid: { in: unique } },
-    select: { puuid: true, rankSnapshotGameDate: true },
-  })
-  for (const row of playerRows) {
-    playerRankSnapshotByPuuid.set(row.puuid, { rankSnapshotGameDate: row.rankSnapshotGameDate })
-  }
-  return { maxGameByPuuid, playerRankSnapshotByPuuid }
-}
-
-export async function upsertMatchAndParticipants(
-  client: RiotHttpClient,
-  region: string,
-  /** Match id from the poller queue / Riot URL (e.g. EUW1_…). */
-  queueRiotMatchId: string,
-  dto: RiotMatchDto,
-  puuidKeyVersion: string | null,
-  counters: {
-    matchesFetched: number
-    participantsFetched: number
-    playersFetched: number
-    matchesApiIngestComplete: number
-    playersRankUpdatedLeague: number
-  },
-  logger?: ReturnType<typeof createRiotPollerLogger>,
-  matchIngestOptions?: MatchIngestOptions
-): Promise<{ matchDbId: bigint; canonicalRiotMatchId: string }> {
-  const riotMatchId = resolveRiotMatchIdForIngest(queueRiotMatchId, dto)
-  if (!riotMatchId) throw new MatchIngestSkippedError('no_riot_match_id')
-  const info = dto.info
-  if (!info?.participants?.length) throw new MatchIngestSkippedError('no_participants')
-  if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') {
-    throw new MatchIngestSkippedError('not_game_complete')
-  }
-
-  const gameDuration = info.gameDuration ?? 0
-  const infoAny = info as Record<string, unknown>
-  const rawGameStartTs =
-    (typeof infoAny['gameStartTimestamp'] === 'number' ? (infoAny['gameStartTimestamp'] as number) : null) ??
-    (typeof info.gameCreation === 'number' ? info.gameCreation : null)
-  const gameDate = rawGameStartTs != null ? new Date(rawGameStartTs) : null
-  const participantDtos = info.participants as RiotParticipantDto[]
-  const puuids = participantDtos.map((p) => p.puuid).filter(Boolean) as string[]
-
-  const maxGameByPuuid = new Map<string, Date>()
-  const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
-  if (puuids.length > 0) {
-    const preload = matchIngestOptions?.ingestPreload
-    if (preload) {
-      for (const p of puuids) {
-        const g = preload.maxGameByPuuid.get(p)
-        if (g) maxGameByPuuid.set(p, g)
-        if (preload.playerRankSnapshotByPuuid.has(p)) {
-          playerRankSnapshotByPuuid.set(p, preload.playerRankSnapshotByPuuid.get(p)!)
-        }
-      }
-    } else {
-      const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
-        SELECT pl.puuid, MAX(m.game_date) AS max_game
-        FROM players pl
-        INNER JOIN match_players mp ON mp.player_id = pl.id
-        INNER JOIN matchs m ON m.id = mp.match_id
-        WHERE pl.puuid IN (${Prisma.join(puuids)})
-        GROUP BY pl.puuid
-      `
-      for (const r of rows) {
-        if (r.max_game) maxGameByPuuid.set(r.puuid, r.max_game)
-      }
-      const playerRows = await prisma.player.findMany({
-        where: { puuid: { in: puuids } },
-        select: { puuid: true, rankSnapshotGameDate: true },
-      })
-      for (const row of playerRows) {
-        playerRankSnapshotByPuuid.set(row.puuid, { rankSnapshotGameDate: row.rankSnapshotGameDate })
-      }
-    }
-  }
-
-  function isNewestStoredMatchForPuuid(puuid: string): boolean {
-    if (!gameDate) return false
-    const max = maxGameByPuuid.get(puuid)
-    if (!max) return true
-    return gameDate.getTime() > max.getTime()
-  }
-
-  // League-v4 rank lookups run outside the DB transaction so we don't hold connections during HTTP / 429 waits.
-  const accountRankCache =
-    matchIngestOptions?.sharedAccountRankCache ??
-    new Map<string, { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }>()
-  const debugBucketIngest = process.env.DEBUG_BUCKET_INGEST === '1'
-  let bucketDebugLogged = false
-  const debugItemIngest = process.env.DEBUG_ITEM_INGEST === '1'
-  let itemDebugLogged = false
-
-  function normalizeRankTier(raw: unknown): string | null {
-    if (typeof raw !== 'string') return null
-    const t = raw.trim().toUpperCase()
-    if (!t || t === 'UNRANKED') return null
-    return t.split('_')[0]?.trim() || null
-  }
-
-  function normalizeRankDivision(raw: unknown): string | null {
-    if (raw == null) return null
-    if (typeof raw !== 'string') return null
-    const d = raw.trim()
-    if (!d || d.toUpperCase() === 'UNRANKED') return null
-    return d
-  }
-
-  function normalizeRankLp(raw: unknown): number | null {
-    if (raw == null) return null
-    if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
-    if (typeof raw === 'string') {
-      const n = Number(raw)
-      return Number.isFinite(n) ? Math.trunc(n) : null
-    }
-    return null
-  }
-
-  async function fetchAccountRankForParticipant(puuid: string): Promise<void> {
-    if (accountRankCache.has(puuid)) return
-
-    // Check global 24h cache before making an API call
-    const cached = getCachedRank(puuid)
-    if (cached) {
-      accountRankCache.set(puuid, cached)
-      return
-    }
-
-    const entriesRes = await client.getLeagueEntriesByPuuid(puuid, {
-      infinite429Retry: true,
-      shouldAbort: () => (matchIngestOptions?.shouldAbort?.() ?? false) || state.shouldStop,
-    })
-    if (!entriesRes.ok) {
-      if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) {
-        throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
-      }
-      const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
-      accountRankCache.set(puuid, fallback)
-      setCachedRank(puuid, fallback)
-      return
-    }
-    counters.playersRankUpdatedLeague++
-    if (!Array.isArray(entriesRes.data)) {
-      const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
-      accountRankCache.set(puuid, fallback)
-      setCachedRank(puuid, fallback)
-      return
-    }
-    const entries = entriesRes.data as unknown as Array<Record<string, unknown>>
-    const solo =
-      entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
-      entries.find((e) => String(e.queueType ?? '').toUpperCase().includes('RANKED_SOLO')) ??
-      entries[0]
-    const rankTier = normalizeRankTier(solo?.tier)
-    const rankDivision = normalizeRankDivision(solo?.rank)
-    const rankLp = normalizeRankLp(solo?.leaguePoints)
-    const data = { rankTier: rankTier ?? undefined, rankDivision, rankLp }
-    accountRankCache.set(puuid, data)
-    setCachedRank(puuid, data)
-  }
-
-  const participantDtoByPuuid = new Map<string, RiotParticipantDto>()
-  for (const p of participantDtos) {
-    if (p.puuid && !participantDtoByPuuid.has(p.puuid)) participantDtoByPuuid.set(p.puuid, p)
-  }
-  const leagueFetchPuuids = Array.from(
-    new Set(
-      participantDtos
-        .map((p) => p.puuid)
-        .filter((pid): pid is string => Boolean(pid))
-        .filter((pid) => {
-          const dto = participantDtoByPuuid.get(pid)
-          if (!dto || !needsLeagueRankApiFromDto(dto)) return false
-          const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
-          return isRankUpdateRequired(playerRow, gameDate)
-        })
-    )
-  )
-  const leagueFetchResults = await Promise.allSettled(
-    leagueFetchPuuids.map((pid) => fetchAccountRankForParticipant(pid))
-  )
-  for (const res of leagueFetchResults) {
-    if (res.status === 'fulfilled') continue
-    const reason = res.reason instanceof Error ? res.reason.message : String(res.reason)
-    if (reason === RIOT_INGEST_ABORTED_MESSAGE) throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
-    await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
-  }
-
-  const resolvedRanks: ResolvedParticipantRank[] = participantDtos.map((p) => {
-    const pid = p.puuid
-    if (!pid) return { tier: 'UNRANKED', division: null, lp: null }
-    return mergeDtoWithAccountCache(p, pid, accountRankCache)
-  })
-  for (let ri = 0; ri < resolvedRanks.length; ri++) {
-    if (needsRankPeerFill(resolvedRanks[ri])) {
-      resolvedRanks[ri] = fillParticipantRankFromPeers(ri, resolvedRanks)
-    }
-  }
-
-  const gameEndedInSurrender = participantDtos.some(
-    (p) => (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender === true
-  )
-  const gameEndedInEarlySurrender = participantDtos.some(
-    (p) => (p as { gameEndedInEarlySurrender?: boolean }).gameEndedInEarlySurrender === true
-  )
-
-  const matchDbId = await prisma.$transaction(
-    async (tx) => {
-      const { k1, k2 } = ingestAdvisoryLockKeys(riotMatchId, 'legacy')
-      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${k1}::int, ${k2}::int)`)
-      const existing = await tx.match.findUnique({ where: { riotMatchId }, select: { id: true } })
-      if (existing) return existing.id
-
-      const gameVersion = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(info))
-      if (!isAllowedGameVersion(gameVersion)) {
-        throw new MatchIngestSkippedError('game_version_not_allowed')
-      }
-
-      const existingPlayers = await tx.player.findMany({
-        where: { puuid: { in: puuids } },
-        select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
-      })
-      const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
-
-      const created = await tx.match.createMany({
-        data: [
-          {
-            riotMatchId,
-            gameVersion,
-            gameDuration,
-            gameDate,
-            rankTier: 'UNRANKED',
-            rankDivision: '',
-            gameEndedInSurrender,
-            gameEndedInEarlySurrender,
-            region,
-          },
-        ],
-        skipDuplicates: true,
-      })
-      if (created.count > 0) {
-        counters.matchesFetched++
-        if (logger) await logger.info('DB: match created', { riotMatchId })
-      }
-      const match = await tx.match.findUnique({
-        where: { riotMatchId },
-        select: { id: true },
-      })
-      if (!match) {
-        throw new Error(`Match row not found after createMany for ${riotMatchId}`)
-      }
-
-  // Build teams + bans
-  const teamDataItems = buildMatchTeamData(match.id, info, participantDtos)
-  const teamIdByRiotTeam = new Map<number, bigint>()
-  const teamRankScoresByRiotTeam = new Map<number, number[]>()
-  const matchRankScores: number[] = []
-  const matchPlayerCoreRows: Prisma.MatchPlayerCoreCreateManyInput[] = []
-  const matchPlayerVisionRows: Prisma.MatchPlayerVisionsCreateManyInput[] = []
-  const matchPlayerMatchupRows: Prisma.MatchPlayerMatchupCreateManyInput[] = []
-  const matchPlayerObjectiveRows: Prisma.MatchPlayerObjectivesCreateManyInput[] = []
-  const matchPlayerCombatRows: Prisma.MatchPlayerCombatsCreateManyInput[] = []
-  const matchPlayerChallengeRows: Prisma.MatchPlayerChallengesCreateManyInput[] = []
-  const allBucketRows: Array<{
-    matchPlayerId: bigint
-    durationBucket: number
-    currentGold: number
-    magicDamageDone: number
-    magicDamageDoneToChampion: number
-    magicDamageTaken: number
-    physicalDamageDone: number
-    physicalDamageDoneToChampion: number
-    physicalDamageTaken: number
-    totalDamageDone: number
-    totalDamageDoneToChampion: number
-    totalDamageTaken: number
-    trueDamageDone: number
-    trueDamageDoneToChampion: number
-    trueDamageTaken: number
-    goldPerSecond: number
-    jungleMinionsKilled: number
-    level: number
-    minionsKilled: number
-    timeEnemySpentControlled: number
-    totalGold: number
-    xp: number
-  }> = []
-  for (const { teamRow, bans } of teamDataItems) {
-    const created = await tx.team.create({ data: teamRow })
-    teamIdByRiotTeam.set(teamRow.team, created.id)
-    if (bans.length > 0) {
-      await tx.ban.createMany({
-        data: bans.map((b) => ({
-          teamId: created.id,
-          matchId: match.id,
-          championId: b.championId,
-          pickOrder: b.pickOrder,
-        })),
-      })
-    }
-  }
-
-  for (let pIdx = 0; pIdx < participantDtos.length; pIdx++) {
-    const p = participantDtos[pIdx]
-    const puuid = p.puuid
-    if (!puuid) continue
-    const { gn: partGameName, tl: partTagName } = participantNames(p)
-    const existingPlayer = existingByPuuid.get(puuid)
-    let playerId: bigint
-    if (existingPlayer == null) {
-      let createdNow = false
-      let playerRow:
-        | { id: bigint; puuid: string; puuidKeyVersion: string | null; gameName: string | null }
-        | null = null
-      // SAVEPOINT: Postgres aborts the whole transaction on unique violation without a subtransaction.
-      await tx.$executeRaw(Prisma.sql`SAVEPOINT player_insert_sp`)
-      try {
-        const newPlayer = await tx.player.create({
-          data: {
-            puuid,
-            region,
-            puuidKeyVersion,
-            gameName: partGameName || null,
-            tagName: partTagName || null,
-            lastSeen: null,
-          },
-          select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
-        })
-        playerRow = newPlayer
-        createdNow = true
-        await tx.$executeRaw(Prisma.sql`RELEASE SAVEPOINT player_insert_sp`)
-      } catch (e) {
-        if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') {
-          await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT player_insert_sp`).catch(() => undefined)
-          throw e
-        }
-        await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT player_insert_sp`)
-        const existing = await tx.player.findUnique({
-          where: { puuid },
-          select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true },
-        })
-        if (!existing) throw e
-        playerRow = existing
-      }
-      playerId = playerRow.id
-      existingByPuuid.set(puuid, {
-        id: playerRow.id,
-        puuid: playerRow.puuid,
-        puuidKeyVersion: playerRow.puuidKeyVersion,
-        gameName: playerRow.gameName,
-      })
-      if (createdNow) {
-        counters.playersFetched++
-        enqueuePriorityPuuid(puuid)
-      }
-    } else {
-      playerId = existingPlayer.id
-      const playerUpdates: Record<string, unknown> = {}
-      if (existingPlayer.puuidKeyVersion === 'perdu' && puuidKeyVersion) {
-        playerUpdates['puuidKeyVersion'] = puuidKeyVersion
-        existingPlayer.puuidKeyVersion = puuidKeyVersion
-      }
-      if (partGameName && existingPlayer.gameName !== partGameName) {
-        playerUpdates['gameName'] = partGameName
-        playerUpdates['tagName'] = partTagName || null
-        existingPlayer.gameName = partGameName
-      }
-      if (Object.keys(playerUpdates).length > 0) {
-        await tx.player.update({ where: { id: existingPlayer.id }, data: playerUpdates })
-      }
-    }
-
-    const role = roleFromPosition(p.teamPosition, p.individualPosition) ?? 'FILL'
-    const rr = resolvedRanks[pIdx]
-    const finalRankTier = rr.tier
-    const finalRankDivision = rr.division
-    const finalRankLp = rr.lp
-    const riotTeamId = p.teamId ?? 100
-    let teamDbId = teamIdByRiotTeam.get(riotTeamId)
-    if (!teamDbId) {
-      const fallbackTeam = await tx.team.upsert({
-        where: { matchId_team: { matchId: match.id, team: riotTeamId } },
-        create: {
-          matchId: match.id,
-          team: riotTeamId,
-          rankTier: 'UNRANKED',
-          win: false,
-        },
-        update: {},
-        select: { id: true },
-      })
-      teamDbId = fallbackTeam.id
-      teamIdByRiotTeam.set(riotTeamId, teamDbId)
-    }
-
-    const runes = (p as { perks?: unknown }).perks ?? (p as { runes?: unknown }).runes ?? null
-    const summoner1Id = (p as { summoner1Id?: number }).summoner1Id ?? null
-    const summoner2Id = (p as { summoner2Id?: number }).summoner2Id ?? null
-    const statPerks = (() => {
-      const perks = (p as { perks?: Record<string, unknown> }).perks
-      if (perks && typeof perks === 'object' && 'statPerks' in perks) return perks['statPerks'] ?? null
-      return (p as { statPerks?: unknown }).statPerks ?? null
-    })()
-    const runePayload = buildRunePayload(runes)
-    const shardList = buildShardList(statPerks)
-    const challenges = (p as { challenges?: unknown }).challenges ?? null
-    const ch = (challenges && typeof challenges === 'object' && !Array.isArray(challenges))
-      ? challenges as Record<string, unknown>
-      : {}
-
-    const n = (key: string, fallback = 0): number => {
-      const v = (p as Record<string, unknown>)[key] ?? ch[key]
-      return typeof v === 'number' && Number.isFinite(v) ? v : fallback
-    }
-    const b = (key: string): boolean => (p as Record<string, unknown>)[key] === true
-
-    if (gameDate && isNewestStoredMatchForPuuid(puuid)) {
-      await tx.player.update({
-        where: { id: playerId },
-        data: {
-          rankTier: finalRankTier === 'UNRANKED' ? null : finalRankTier,
-          rankDivision: finalRankDivision,
-          rankLp: finalRankLp,
-          rankSnapshotGameDate: gameDate,
-        },
-      })
-    }
-
-    const matchPlayer = await tx.matchPlayer.create({
-      data: {
-        matchId: match.id,
-        playerId,
-        teamId: teamDbId,
-        championId: p.championId ?? 0,
-        role,
-        rankTier: finalRankTier,
-        rankDivision: finalRankDivision,
-        participantId: pIdx + 1,
-        runes: runePayload.runes,
-        shards: shardList,
-        summonerSpells: buildSummonerSpellIds(summoner1Id, summoner2Id),
-      },
-    })
-    counters.participantsFetched++
-
-    if (finalRankTier && finalRankTier !== 'UNRANKED') {
-      const score = rankToScore(finalRankTier, finalRankDivision ?? '', finalRankLp ?? null)
-      matchRankScores.push(score)
-      const list = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
-      list.push(score)
-      teamRankScoresByRiotTeam.set(riotTeamId, list)
-    }
-
-    const mpId = matchPlayer.id
-
-    // ── Sub-table writes (batched createMany at end of participant loop) ─────
-    matchPlayerCoreRows.push({
-      matchPlayerId: mpId,
-      kills: n('kills'),
-      deaths: n('deaths'),
-      assists: n('assists'),
-      champLevel: n('champLevel'),
-      champExperience: n('champExperience'),
-      goldEarned: n('goldEarned'),
-      goldSpent: n('goldSpent'),
-      itemsPurchased: n('itemsPurchased'),
-      consumablesPurchased: n('consumablesPurchased'),
-      totalMinionsKilled: n('totalMinionsKilled'),
-      roleBoundItem: n('roleBoundItem'),
-    })
-
-    matchPlayerVisionRows.push({
-      matchPlayerId: mpId,
-      visionScore: n('visionScore'),
-      wardsKilled: n('wardsKilled'),
-      wardsPlaced: n('wardsPlaced'),
-      visionWardsBoughtInGame: n('visionWardsBoughtInGame'),
-      detectorWardsPlaced: n('detectorWardsPlaced'),
-      controlWardsPlaced: n('sightWardsBoughtInGame'),
-      unseenRecalls: n('unseenRecalls'),
-      visionScoreAdvantageLaneOpponent: n('visionScoreAdvantageLaneOpponent'),
-      wardTakedowns: n('wardTakedowns'),
-      wardTakedownsBefore20M: n('wardTakedownsBefore20M'),
-      wardsGuarded: n('wardsGuarded'),
-    })
-
-    matchPlayerMatchupRows.push({
-      matchPlayerId: mpId,
-      bountyGold: n('bountyGold'),
-      completeSupportQuestInTime: n('completeSupportQuestInTime'),
-      deathsByEnemyChamps: n('deathsByEnemyChamps'),
-      earlyLaningPhaseGoldExpAdvantage: n('earlyLaningPhaseGoldExpAdvantage'),
-      initialCrabCount: n('initialCrabCount'),
-      jungleCsBefore10Minutes: n('jungleCsBefore10Minutes'),
-      killsNearEnemyTurret: n('killsNearEnemyTurret'),
-      killsOnOtherLanesEarlyJungleAsLaner: n('killsOnOtherLanesEarlyJungleAsLaner'),
-      killsUnderOwnTurret: n('killsUnderOwnTurret'),
-      landSkillShotsEarlyGame: n('landSkillShotsEarlyGame'),
-      laneMinionsFirst10Minutes: n('laneMinionsFirst10Minutes'),
-      laningPhaseGoldExpAdvantage: n('laningPhaseGoldExpAdvantage'),
-      maxCsAdvantageOnLaneOpponent: n('maxCsAdvantageOnLaneOpponent'),
-      maxKillDeficit: n('maxKillDeficit'),
-      maxLevelLeadLaneOpponent: n('maxLevelLeadLaneOpponent'),
-      outnumberedKills: n('outnumberedKills'),
-      quickSoloKills: n('quickSoloKills'),
-      soloKills: n('soloKills'),
-      takedownsAfterGainingLevelAdvantage: n('takedownsAfterGainingLevelAdvantage'),
-      moreEnemyJungleThanOpponent: n('moreEnemyJungleThanOpponent'),
-      totalAllyJungleMinionsKilled: n('totalAllyJungleMinionsKilled'),
-      totalEnemyJungleMinionsKilled: n('totalEnemyJungleMinionsKilled'),
-      neutralMinionsKilled: n('neutralMinionsKilled'),
-    })
-
-    matchPlayerObjectiveRows.push({
-      matchPlayerId: mpId,
-      dragonKills: n('dragonKills'),
-      firstBloodKill: b('firstBloodKill'),
-      firstBloodAssist: b('firstBloodAssist'),
-      firstTowerKill: b('firstTowerKill'),
-      firstTowerAssist: b('firstTowerAssist'),
-      inhibitorKills: n('inhibitorKills'),
-      inhibitorTakedowns: n('inhibitorTakedowns'),
-      inhibitorsLost: n('inhibitorsLost'),
-      objectivesStolen: n('objectivesStolen'),
-      objectivesStolenAssists: n('objectivesStolenAssists'),
-      turretKills: n('turretKills'),
-      turretTakedowns: n('turretTakedowns'),
-      turretsLost: n('turretsLost'),
-      dragonTakedowns: n('dragonTakedowns'),
-      earliestBaron: n('earliestBaron'),
-      elderDragonKillsWithOpposingSoul: n('elderDragonKillsWithOpposingSoul'),
-      elderDragonMultikills: n('elderDragonMultikills'),
-      epicMonsterKillsNearEnemyJungler: n('epicMonsterKillsNearEnemyJungler'),
-      epicMonsterKillsWithin30SecondsOfSpawn: n('epicMonsterKillsWithin30SecondsOfSpawn'),
-      epicMonsterSteals: n('epicMonsterSteals'),
-      epicMonsterStolenWithoutSmite: n('epicMonsterStolenWithoutSmite'),
-      firstTurretKilledTime: n('firstTurretKilledTime'),
-      riftHeraldTakedowns: n('riftHeraldTakedowns'),
-      turretPlatesTaken: n('turretPlatesTaken'),
-      turretsTakenWithRiftHerald: n('turretsTakenWithRiftHerald'),
-      baronTakedowns: n('baronTakedowns'),
-      quickFirstTurret: n('quickFirstTurret'),
-      soloBaronKills: n('soloBaronKills'),
-      soloTurretsLategame: n('soloTurretsLategame'),
-      takedownOnFirstTurret: n('takedownOnFirstTurret'),
-      multiTurretRiftHeraldCount: n('multiTurretRiftHeraldCount'),
-    })
-
-    matchPlayerCombatRows.push({
-      matchPlayerId: mpId,
-      damageDealtToBuildings: n('damageDealtToBuildings'),
-      damageDealtToEpicMonsters: n('damageDealtToEpicMonsters'),
-      damageDealtToObjectives: n('damageDealtToObjectives'),
-      damageDealtToTurrets: n('damageDealtToTurrets'),
-      damageSelfMitigated: n('damageSelfMitigated'),
-      doubleKills: n('doubleKills'),
-      killingSprees: n('killingSprees'),
-      largestCriticalStrike: n('largestCriticalStrike'),
-      largestKillingSpree: n('largestKillingSpree'),
-      longestTimeSpentLiving: n('longestTimeSpentLiving'),
-      magicDamageDealt: n('magicDamageDealt'),
-      magicDamageDealtToChampions: n('magicDamageDealtToChampions'),
-      magicDamageTaken: n('magicDamageTaken'),
-      pentaKills: n('pentaKills'),
-      physicalDamageDealt: n('physicalDamageDealt'),
-      physicalDamageDealtToChampions: n('physicalDamageDealtToChampions'),
-      physicalDamageTaken: n('physicalDamageTaken'),
-      quadraKills: n('quadraKills'),
-      totalDamageShieldedOnTeammates: n('totalDamageShieldedOnTeammates'),
-      totalDamageTaken: n('totalDamageTaken'),
-      totalHeal: n('totalHeal'),
-      totalHealsOnTeammates: n('totalHealsOnTeammates'),
-      totalTimeCcDealt: n('totalTimeCCDealt') || n('timeCCingOthers'),
-      totalUnitsHealed: n('totalUnitsHealed'),
-      tripleKills: n('tripleKills'),
-      trueDamageDealt: n('trueDamageDealt'),
-      trueDamageDealtToChampions: n('trueDamageDealtToChampions'),
-      trueDamageTaken: n('trueDamageTaken'),
-      effectiveHealAndShielding: n('effectiveHealAndShielding'),
-      timeCcingOthers: n('timeCCingOthers'),
-      enemyChampionImmobilizations: n('enemyChampionImmobilizations'),
-    })
-
-    if (ch && Object.keys(ch).length > 0) {
-      matchPlayerChallengeRows.push({
-        matchPlayerId: mpId,
-        healFromMapSources: n('HealFromMapSources'),
-        buffsStolen: n('buffsStolen'),
-        dodgeSkillShotsSmallWindow: n('dodgeSkillShotsSmallWindow'),
-        hadOpenNexus: n('hadOpenNexus'),
-        immobilizeAndKillWithAlly: n('immobilizeAndKillWithAlly'),
-        junglerTakedownsNearDamagedEpicMonster: n('junglerTakedownsNearDamagedEpicMonster'),
-        killAfterHiddenWithAlly: n('killAfterHiddenWithAlly'),
-        killedChampTookFullTeamDamageSurvived: n('killedChampTookFullTeamDamageSurvived'),
-        killsWithHelpFromEpicMonster: n('killsWithHelpFromEpicMonster'),
-        knockEnemyIntoTeamAndKill: n('knockEnemyIntoTeamAndKill'),
-        mejaisFullStackInTime: n('mejaisFullStackInTime'),
-        multikillsAfterAggressiveFlash: n('multikillsAfterAggressiveFlash'),
-        quickCleanse: n('quickCleanse'),
-        saveAllyFromDeath: n('saveAllyFromDeath'),
-        scuttleCrabKills: n('scuttleCrabKills'),
-        skillshotsDodged: n('skillshotsDodged'),
-        skillshotsHit: n('skillshotsHit'),
-        stealthWardsPlaced: n('stealthWardsPlaced'),
-        survivedSingleDigitHpCount: n('survivedSingleDigitHpCount'),
-        survivedThreeImmobilizesInFight: n('survivedThreeImmobilizesInFight'),
-        takedownsBeforeJungleMinionSpawn: n('takedownsBeforeJungleMinionSpawn'),
-        takedownsInAlcove: n('takedownsInAlcove'),
-        takedownsInEnemyFountain: n('takedownsInEnemyFountain'),
-        tookLargeDamageSurvived: n('tookLargeDamageSurvived'),
-      })
-    }
-
-    // Items are persisted from timeline reconstruction in extractAndInsertTimelineExtras().
-    // Avoid writing placeholder starter/core=false rows here.
-    if (debugItemIngest && !itemDebugLogged && logger) {
-      itemDebugLogged = true
-      const anyObj = p as Record<string, unknown>
-      const scalarKeys: string[] = []
-      for (let slot = 0; slot <= 6; slot++) {
-        if (anyObj[`item${slot}`] != null) scalarKeys.push(`item${slot}`)
-      }
-      void logger.step('DEBUG item ingest', {
-        hasItemsArray: anyObj['items'] != null,
-        scalarKeys: scalarKeys.slice(0, 20),
-        sampleItem0: anyObj['item0'] ?? null,
-      })
-    }
-
-    // match_player_bucket (duration buckets of gold/damage/time stats)
-    // Source expected: participants[].buckets from match-v5 detail.
-    const bucketsRaw = (p as Record<string, unknown>).buckets ?? (p as Record<string, unknown>).bucket ?? null
-    if (debugBucketIngest && !bucketDebugLogged && logger) {
-      bucketDebugLogged = true
-      const isArray = Array.isArray(bucketsRaw)
-      const sample0 = isArray && bucketsRaw.length > 0 ? bucketsRaw[0] : null
-      const sampleKeys = sample0 && typeof sample0 === 'object' ? Object.keys(sample0 as Record<string, unknown>).slice(0, 25) : []
-      const sampleDuration =
-        sample0 && typeof sample0 === 'object'
-          ? (sample0 as Record<string, unknown>).duration ??
-            (sample0 as Record<string, unknown>).time ??
-            (sample0 as Record<string, unknown>).timestamp ??
-            (sample0 as Record<string, unknown>).endTime ??
-            null
-          : null
-      void logger.step('DEBUG bucket ingest (participant.buckets)', {
-        bucketsPresent: bucketsRaw != null,
-        bucketsType: bucketsRaw == null ? null : typeof bucketsRaw,
-        bucketsIsArray: isArray,
-        sampleDuration,
-        sampleKeys,
-      })
-    }
-    const bucketRows = buildBucketRows(mpId, bucketsRaw)
-    if (bucketRows.length > 0) allBucketRows.push(...bucketRows)
-
-  }
-
-  if (matchPlayerCoreRows.length > 0) {
-    await tx.matchPlayerCore.createMany({ data: matchPlayerCoreRows, skipDuplicates: true })
-  }
-  if (matchPlayerVisionRows.length > 0) {
-    await tx.matchPlayerVisions.createMany({ data: matchPlayerVisionRows, skipDuplicates: true })
-  }
-  if (matchPlayerMatchupRows.length > 0) {
-    await tx.matchPlayerMatchup.createMany({ data: matchPlayerMatchupRows, skipDuplicates: true })
-  }
-  if (matchPlayerObjectiveRows.length > 0) {
-    await tx.matchPlayerObjectives.createMany({ data: matchPlayerObjectiveRows, skipDuplicates: true })
-  }
-  if (matchPlayerCombatRows.length > 0) {
-    await tx.matchPlayerCombats.createMany({ data: matchPlayerCombatRows, skipDuplicates: true })
-  }
-  if (matchPlayerChallengeRows.length > 0) {
-    await tx.matchPlayerChallenges.createMany({ data: matchPlayerChallengeRows, skipDuplicates: true })
-  }
-  if (allBucketRows.length > 0) {
-    await tx.matchPlayerBucket.createMany({ data: allBucketRows, skipDuplicates: true })
-  }
-
-  // Update team rank_tier as average of team participants (tier only on teams row).
-  for (const [riotTeamId, teamDbId] of teamIdByRiotTeam.entries()) {
-    const scores = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
-    const avg = averageRankFromScores(scores)
-    await tx.team.update({
-      where: { id: teamDbId },
-      data: { rankTier: avg.tier },
-    })
-  }
-
-  // Update match rank_tier/rank_division from averaged participant ranks.
-  const avgMatch = averageRankFromScores(matchRankScores)
-  await tx.match.update({
-    where: { id: match.id },
-    data: { rankTier: avgMatch.tier, rankDivision: avgMatch.division },
-  })
-
-      if (logger) await logger.info('DB: match_players created', { riotMatchId, count: participantDtos.length })
-      return match.id
-    },
-    { maxWait: 15_000, timeout: 180_000 }
-  )
-
-  return { matchDbId, canonicalRiotMatchId: riotMatchId }
-}
-
-/**
- * Extract jungle first-clear path order from a timeline and persist it.
- * One row per camp kill, ordered by kill sequence (orderIndex 0, 1, 2, …).
- * Only populates rows for participants with role='JUNGLE'. Capped at JUNGLE_FIRST_CLEAR_MAX_CAMPS.
- * Idempotent: uses skipDuplicates (ON CONFLICT DO NOTHING on the unique index).
- *
- * Source: participantFrames[riotPid].jungleMinionsKilled per frame.
- * Resolution: 1 frame = 1 min, so kills within the same minute share the same timestampMs.
- */
 async function extractAndInsertJungleFirstClear(
   matchDbId: bigint,
   riotMatchId: string,
   timeline: RiotMatchTimelineDto,
   logger?: ReturnType<typeof createRiotPollerLogger>
 ): Promise<void> {
-  // Jungle first clear table was removed from the new schema — nothing to do.
-  void matchDbId; void riotMatchId; void timeline; void logger
-}
-
-/**
- * Extract and persist drake kills, dragon soul, skill level-up order, and
- * match_players.items payload (starter/core/timestamps) from a match timeline.
- * Idempotent via skipDuplicates / updateMany.
- */
-async function extractAndInsertTimelineExtras(
-  matchDbId: bigint,
-  riotMatchId: string,
-  timeline: RiotMatchTimelineDto,
-  participantDtos: RiotParticipantDto[],
-  logger?: ReturnType<typeof createRiotPollerLogger>
-): Promise<void> {
-  const frames = timeline.info?.frames
-  if (!frames?.length) return
-
-  // Build Riot participantId (1-10) → DB matchPlayer.id
-  const allMatchPlayers2 = await prisma.matchPlayer.findMany({
-    where: { matchId: matchDbId },
-    select: { id: true, participantId: true },
-    orderBy: { participantId: 'asc' },
-  })
-  const riotPidToDbId = new Map<number, bigint>()
-  for (const mp of allMatchPlayers2) {
-    riotPidToDbId.set(mp.participantId, mp.id)
-  }
-
-  // Build Riot teamId (100/200) → DB team.id
-  const teams = await prisma.team.findMany({
-    where: { matchId: matchDbId },
-    select: { id: true, team: true },
-  })
-  const matchTeamIdByTeamId = new Map<number, bigint>()
-  for (const t of teams) matchTeamIdByTeamId.set(t.team, t.id)
-
-  // Collect all events in chronological order
-  const allEvents: Array<{ type: string; [key: string]: unknown }> = []
-  for (const frame of frames) {
-    if (frame.events) {
-      for (const ev of frame.events) allEvents.push(ev as (typeof allEvents)[number])
-    }
-  }
-
-  // ── 1 + 2. Drake kills (ELITE_MONSTER_KILL) + soul (DRAGON_SOUL_GIVEN) ────
-  // Intermediate: per-team ordered list of {drakeType, order, soul?}
-  type DrakeEntry = { drakeType: string; order: number; matchTeamId: bigint; soul: string | null }
-  const drakesByTeam = new Map<number, DrakeEntry[]>()
-  let globalDrakeOrder = 1
-
-  for (const ev of allEvents) {
-    if (ev.type === 'ELITE_MONSTER_KILL') {
-      const e = ev as unknown as RiotTimelineEventEliteMonsterKill
-      if (e.monsterType !== 'DRAGON') continue
-      const teamId = e.killerTeamId
-      if (!teamId) continue
-      const matchTeamId = matchTeamIdByTeamId.get(teamId)
-      if (!matchTeamId) continue
-      const drakeType = e.monsterSubType ?? 'DRAGON'
-      if (!drakesByTeam.has(teamId)) drakesByTeam.set(teamId, [])
-      drakesByTeam.get(teamId)!.push({ drakeType, order: globalDrakeOrder, matchTeamId, soul: null })
-      globalDrakeOrder++
-      continue
-    }
-    if (ev.type === 'DRAGON_SOUL_GIVEN') {
-      const e = ev as unknown as RiotTimelineEventDragonSoulGiven
-      const teamRows = drakesByTeam.get(e.teamId)
-      if (!teamRows?.length) continue
-      // Mark soul on the last drake of this team
-      teamRows[teamRows.length - 1].soul = e.name
-    }
-  }
-
-  const drakeInsertRows: Array<{
-    matchId: bigint; teamId: bigint; drakeType: string; order: number; soul: string
-  }> = []
-  for (const rows of drakesByTeam.values()) {
-    for (const r of rows) {
-      drakeInsertRows.push({ matchId: matchDbId, teamId: r.matchTeamId, drakeType: r.drakeType, order: r.order, soul: r.soul ?? 'none' })
-    }
-  }
-  if (drakeInsertRows.length > 0) {
-    await prisma.drakeDetail.createMany({ data: drakeInsertRows, skipDuplicates: true })
-  }
-
-  // ── 3. Skill level-up order (SKILL_LEVEL_UP) ────────────────────────────────
-  const skillOrderByMatchPlayerId = new Map<bigint, number[]>()
-  let skillLevelUpCount = 0
-
-  for (const ev of allEvents) {
-    if (ev.type !== 'SKILL_LEVEL_UP') continue
-    const e = ev as unknown as RiotTimelineEventSkillLevelUp
-    const dbId = riotPidToDbId.get(e.participantId)
-    if (!dbId) continue
-    if (!skillOrderByMatchPlayerId.has(dbId)) skillOrderByMatchPlayerId.set(dbId, [])
-    skillOrderByMatchPlayerId.get(dbId)!.push(e.skillSlot)
-    skillLevelUpCount++
-  }
-
-  // ── 3b. Time buckets from timeline participantFrames -> match_player_bucket ──
-  const toInt = (v: unknown): number => {
-    if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
-    if (typeof v === 'string') {
-      const n = Number(v)
-      return Number.isFinite(n) ? Math.trunc(n) : 0
-    }
-    return 0
-  }
-  const bucketRows: Array<{
-    matchPlayerId: bigint
-    durationBucket: number
-    currentGold: number
-    magicDamageDone: number
-    magicDamageDoneToChampion: number
-    magicDamageTaken: number
-    physicalDamageDone: number
-    physicalDamageDoneToChampion: number
-    physicalDamageTaken: number
-    totalDamageDone: number
-    totalDamageDoneToChampion: number
-    totalDamageTaken: number
-    trueDamageDone: number
-    trueDamageDoneToChampion: number
-    trueDamageTaken: number
-    goldPerSecond: number
-    jungleMinionsKilled: number
-    level: number
-    minionsKilled: number
-    timeEnemySpentControlled: number
-    totalGold: number
-    xp: number
-  }> = []
-  for (const frame of frames) {
-    const durationBucket = timelineTimestampMsToGameMinute(toInt(frame.timestamp))
-    if (!isKeptMatchPlayerDurationBucket(durationBucket)) continue
-    const pf = frame.participantFrames ?? {}
-    for (const [riotPidRaw, pfRaw] of Object.entries(pf)) {
-      const riotPid = Number(riotPidRaw)
-      if (!Number.isFinite(riotPid) || riotPid <= 0) continue
-      const dbId = riotPidToDbId.get(riotPid)
-      if (!dbId) continue
-      if (!pfRaw || typeof pfRaw !== 'object') continue
-      const pfo = pfRaw as Record<string, unknown>
-      const damageStats = (pfo['damageStats'] && typeof pfo['damageStats'] === 'object')
-        ? (pfo['damageStats'] as Record<string, unknown>)
-        : {}
-      const championStats = (pfo['championStats'] && typeof pfo['championStats'] === 'object')
-        ? (pfo['championStats'] as Record<string, unknown>)
-        : {}
-
-      const totalGold = toInt(pfo['totalGold'] ?? pfo['total_gold'])
-      const timestampSeconds = Math.max(1, Math.floor(toInt(frame.timestamp) / 1000))
-
-      bucketRows.push({
-        matchPlayerId: dbId,
-        durationBucket,
-        currentGold: toInt(pfo['currentGold'] ?? pfo['current_gold']),
-        magicDamageDone: toInt(damageStats['magicDamageDone'] ?? damageStats['magic_damage_done']),
-        magicDamageDoneToChampion: toInt(
-          damageStats['magicDamageDoneToChampions'] ?? damageStats['magicDamageDoneToChampion'] ?? damageStats['magic_damage_done_to_champion']
-        ),
-        magicDamageTaken: toInt(damageStats['magicDamageTaken'] ?? damageStats['magic_damage_taken']),
-        physicalDamageDone: toInt(damageStats['physicalDamageDone'] ?? damageStats['physical_damage_done']),
-        physicalDamageDoneToChampion: toInt(
-          damageStats['physicalDamageDoneToChampions'] ?? damageStats['physicalDamageDoneToChampion'] ?? damageStats['physical_damage_done_to_champion']
-        ),
-        physicalDamageTaken: toInt(damageStats['physicalDamageTaken'] ?? damageStats['physical_damage_taken']),
-        totalDamageDone: toInt(damageStats['totalDamageDone'] ?? damageStats['total_damage_done']),
-        totalDamageDoneToChampion: toInt(
-          damageStats['totalDamageDoneToChampions'] ?? damageStats['totalDamageDoneToChampion'] ?? damageStats['total_damage_done_to_champion']
-        ),
-        totalDamageTaken: toInt(damageStats['totalDamageTaken'] ?? damageStats['total_damage_taken']),
-        trueDamageDone: toInt(damageStats['trueDamageDone'] ?? damageStats['true_damage_done']),
-        trueDamageDoneToChampion: toInt(
-          damageStats['trueDamageDoneToChampions'] ?? damageStats['trueDamageDoneToChampion'] ?? damageStats['true_damage_done_to_champion']
-        ),
-        trueDamageTaken: toInt(damageStats['trueDamageTaken'] ?? damageStats['true_damage_taken']),
-        goldPerSecond: Math.floor(totalGold / timestampSeconds),
-        jungleMinionsKilled: toInt(pfo['jungleMinionsKilled'] ?? pfo['jungle_minions_killed']),
-        level: toInt(pfo['level']),
-        minionsKilled: toInt(pfo['minionsKilled'] ?? pfo['minions_killed']),
-        timeEnemySpentControlled: toInt(
-          championStats['timeEnemySpentControlled'] ?? championStats['time_enemy_spent_controlled']
-        ),
-        totalGold,
-        xp: toInt(pfo['xp']),
-      })
-    }
-  }
-  if (bucketRows.length > 0) {
-    await prisma.matchPlayerBucket.createMany({ data: bucketRows, skipDuplicates: true })
-  }
-
-  // ── 4. Build items from timeline + final inventory (starter/boots/core/timestamps) ──
-  let itemsRowsUpserted = 0
-  for (let idx = 0; idx < participantDtos.length; idx++) {
-    const p = participantDtos[idx] as unknown as Record<string, unknown>
-    const participantId = idx + 1
-    const dbMatchPlayerId = riotPidToDbId.get(participantId)
-    if (!dbMatchPlayerId) continue
-    const selected = await selectMatchPlayerItems({
-      participant: p,
-      participantId,
-      events: allEvents,
-    })
-    const tSummoner1 = (p as { summoner1Id?: number }).summoner1Id ?? null
-    const tSummoner2 = (p as { summoner2Id?: number }).summoner2Id ?? null
-    const skillOrder = skillOrderByMatchPlayerId.get(dbMatchPlayerId)
-    await prisma.matchPlayer.update({
-      where: { id: dbMatchPlayerId },
-      data: {
-        items: selected.map((row) => ({
-          itemId: row.itemId,
-          starter: row.starter,
-          core: row.core,
-          order: row.order,
-          timestampMs: row.timestampMs,
-        })),
-        summonerSpells: buildSummonerSpellIds(tSummoner1, tSummoner2),
-        ...(skillOrder?.length ? { skillOrder } : {}),
-      },
-    })
-    itemsRowsUpserted += selected.length
-  }
-
-  if (logger) {
-    await logger.info('DB: timeline extras inserted', {
-      matchId: riotMatchId,
-      drakes: drakeInsertRows.length,
-      skillLevelUps: skillLevelUpCount,
-      buckets: bucketRows.length,
-      itemsRowsUpserted,
-    })
-  }
+  void matchDbId
+  void riotMatchId
+  void timeline
+  void logger
 }
 
 const MATCH_INGEST_ORPHAN_STEP_ID = '__orphan__'
@@ -2332,7 +1080,6 @@ async function maybeLogMatchIngestMetrics(): Promise<void> {
       fallbackFileWrites: rawIngestFallbackWrites,
       windowMs: elapsedMs,
       processed,
-      ingestArch: getIngestWriteArch(),
       parallelMatchFetchesMax: getParallelMatchIngestFetches(),
     },
   })
@@ -2403,182 +1150,139 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   }
   if (parsed.length === 0) return true
 
-    const canonicalIds: string[] = []
-    for (const { payload } of parsed) {
-      const dto = payload.matchDto as RiotMatchDto
-      canonicalIds.push(resolveRiotMatchIdForIngest(payload.matchId, dto))
-    }
-    const leanWrite = isLeanIngestWriteArch()
-    const existingRows = leanWrite
-      ? await prisma.ingestMatch.findMany({
-          where: { riotMatchId: { in: canonicalIds } },
-          select: { riotMatchId: true, id: true },
-        })
-      : await prisma.match.findMany({
-          where: { riotMatchId: { in: canonicalIds } },
-          select: { riotMatchId: true, id: true },
-        })
-    const existingMatchIdByRiot = new Map(existingRows.map((r) => [r.riotMatchId, r.id]))
+  const canonicalIds: string[] = []
+  for (const { payload } of parsed) {
+    const dto = payload.matchDto as RiotMatchDto
+    canonicalIds.push(resolveRiotMatchIdForIngest(payload.matchId, dto))
+  }
+  const existingRows = await prisma.ingestMatch.findMany({
+    where: { riotMatchId: { in: canonicalIds } },
+    select: { riotMatchId: true, id: true },
+  })
+  const existingMatchIdByRiot = new Map(existingRows.map((r) => [r.riotMatchId, r.id]))
 
-    const puuidsToPreload: string[] = []
-    for (let i = 0; i < parsed.length; i++) {
-      const { payload } = parsed[i]
-      const cid = canonicalIds[i]
-      if (existingMatchIdByRiot.has(cid)) continue
-      const dto = payload.matchDto as RiotMatchDto
-      const part = dto.info?.participants as RiotParticipantDto[] | undefined
-      for (const p of part ?? []) {
-        if (p.puuid) puuidsToPreload.push(p.puuid)
+  const puuidsToPreload: string[] = []
+  for (let i = 0; i < parsed.length; i++) {
+    const { payload } = parsed[i]
+    const cid = canonicalIds[i]
+    if (existingMatchIdByRiot.has(cid)) continue
+    const dto = payload.matchDto as RiotMatchDto
+    const part = dto.info?.participants as RiotParticipantDto[] | undefined
+    for (const p of part ?? []) {
+      if (p.puuid) puuidsToPreload.push(p.puuid)
+    }
+  }
+  const ingestPreload = await preloadIngestLeanMatchDbData(puuidsToPreload)
+  const sharedAccountRankCache: MatchIngestRankCache = new Map()
+  const rankIngestOpts: MatchIngestOptions = {
+    ingestPreload,
+    sharedAccountRankCache,
+    shouldAbort: () => state.shouldStop,
+  }
+
+  for (let i = 0; i < parsed.length; i++) {
+    const { path: p, rawId, payload } = parsed[i]
+    const matchId = payload.matchId
+    const matchDto = payload.matchDto as RiotMatchDto
+    const timelineDto = payload.timelineDto as RiotMatchTimelineDto | null
+    const trackerIdx = payload.trackerIdx
+    const tracker = ctx.playerTrackers?.[trackerIdx]
+    const canonicalRiotMatchId = canonicalIds[i]
+
+    const existingDbId = existingMatchIdByRiot.get(canonicalRiotMatchId)
+    if (existingDbId != null) {
+      if (timelineDto) {
+        await extractAndInsertJungleFirstClear(existingDbId, canonicalRiotMatchId, timelineDto, ctx.logger)
+        await extractIngestTimelineExtras(
+          existingDbId,
+          canonicalRiotMatchId,
+          timelineDto,
+          matchDto.info?.participants ?? [],
+          ctx.logger
+        )
       }
-    }
-    const ingestPreload = leanWrite
-      ? await preloadIngestLeanMatchDbData(puuidsToPreload)
-      : await preloadMatchIngestDbData(puuidsToPreload)
-    const sharedAccountRankCache: MatchIngestRankCache = new Map()
-    const rankIngestOpts: MatchIngestOptions = {
-      ingestPreload,
-      sharedAccountRankCache,
-      shouldAbort: () => state.shouldStop,
+      if (payload.stepId === ctx.stepId) {
+        ctx.onIngested(trackerIdx, canonicalRiotMatchId)
+      }
+      clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
+      ctx.syncLiveCounters()
+      noteMatchIngestProcessed(payload.enqueuedAt)
+      if (rawId != null) await markRawIngestDone(rawId)
+      else await unlink(p!).catch(() => undefined)
+      continue
     }
 
-    for (let i = 0; i < parsed.length; i++) {
-      const { path: p, rawId, payload } = parsed[i]
-      const matchId = payload.matchId
-      const matchDto = payload.matchDto as RiotMatchDto
-      const timelineDto = payload.timelineDto as RiotMatchTimelineDto | null
-      const trackerIdx = payload.trackerIdx
-      const tracker = ctx.playerTrackers?.[trackerIdx]
-      const canonicalRiotMatchId = canonicalIds[i]
-
-      const existingDbId = existingMatchIdByRiot.get(canonicalRiotMatchId)
-      if (existingDbId != null) {
-        if (timelineDto) {
-          await extractAndInsertJungleFirstClear(existingDbId, canonicalRiotMatchId, timelineDto, ctx.logger)
-          if (leanWrite) {
-            await extractIngestTimelineExtras(
-              existingDbId,
-              canonicalRiotMatchId,
-              timelineDto,
-              matchDto.info?.participants ?? [],
-              ctx.logger
-            )
-          } else {
-            await extractAndInsertTimelineExtras(
-              existingDbId,
-              canonicalRiotMatchId,
-              timelineDto,
-              matchDto.info?.participants ?? [],
-              ctx.logger
-            )
-          }
-        }
-        if (payload.stepId === ctx.stepId) {
-          ctx.onIngested(trackerIdx, canonicalRiotMatchId)
-        }
-        clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
-        ctx.syncLiveCounters()
+    try {
+      const { matchDbId, canonicalRiotMatchId: canonical } = await upsertIngestMatchAndParticipants(
+        client,
+        payload.region,
+        matchId,
+        matchDto,
+        payload.puuidKeyVersion,
+        ctx.counters,
+        ctx.logger,
+        rankIngestOpts
+      )
+      if (timelineDto) {
+        await extractAndInsertJungleFirstClear(matchDbId, canonical, timelineDto, ctx.logger)
+        await extractIngestTimelineExtras(
+          matchDbId,
+          canonical,
+          timelineDto,
+          matchDto.info?.participants ?? [],
+          ctx.logger
+        )
+      }
+      if (payload.stepId === ctx.stepId) {
+        ctx.onIngested(trackerIdx, canonical)
+      }
+      clearMatchIngestCooldownKeys(matchId, canonical)
+      ctx.syncLiveCounters()
+      noteMatchIngestProcessed(payload.enqueuedAt)
+      if (rawId != null) await markRawIngestDone(rawId)
+      else await unlink(p!).catch(() => undefined)
+    } catch (err) {
+      const skipped = unwrapMatchIngestSkipped(err)
+      if (skipped) {
+        await ctx.logger.info('Match ingest skipped (queue)', {
+          matchId,
+          reason: skipped.reason,
+        })
         noteMatchIngestProcessed(payload.enqueuedAt)
         if (rawId != null) await markRawIngestDone(rawId)
         else await unlink(p!).catch(() => undefined)
         continue
       }
-
-      try {
-        const { matchDbId, canonicalRiotMatchId: canonical } = leanWrite
-          ? await upsertIngestMatchAndParticipants(
-              client,
-              payload.region,
-              matchId,
-              matchDto,
-              payload.puuidKeyVersion,
-              ctx.counters,
-              ctx.logger,
-              rankIngestOpts
-            )
-          : await upsertMatchAndParticipants(
-              client,
-              payload.region,
-              matchId,
-              matchDto,
-              payload.puuidKeyVersion,
-              ctx.counters,
-              ctx.logger,
-              rankIngestOpts
-            )
-        if (timelineDto) {
-          await extractAndInsertJungleFirstClear(matchDbId, canonical, timelineDto, ctx.logger)
-          if (leanWrite) {
-            await extractIngestTimelineExtras(
-              matchDbId,
-              canonical,
-              timelineDto,
-              matchDto.info?.participants ?? [],
-              ctx.logger
-            )
-          } else {
-            await extractAndInsertTimelineExtras(
-              matchDbId,
-              canonical,
-              timelineDto,
-              matchDto.info?.participants ?? [],
-              ctx.logger
-            )
-          }
-        }
-        if (payload.stepId === ctx.stepId) {
-          ctx.onIngested(trackerIdx, canonical)
-        }
-        clearMatchIngestCooldownKeys(matchId, canonical)
-        ctx.syncLiveCounters()
-        noteMatchIngestProcessed(payload.enqueuedAt)
-        if (rawId != null) await markRawIngestDone(rawId)
-        else await unlink(p!).catch(() => undefined)
-      } catch (err) {
-        const skipped = unwrapMatchIngestSkipped(err)
-        if (skipped) {
-          await ctx.logger.info('Match ingest skipped (queue)', {
-            matchId,
-            reason: skipped.reason,
-          })
-          noteMatchIngestProcessed(payload.enqueuedAt)
-          if (rawId != null) await markRawIngestDone(rawId)
-          else await unlink(p!).catch(() => undefined)
-          continue
-        }
-        if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
-          noteMatchIngestProcessed(payload.enqueuedAt)
-          if (rawId != null) {
-            await markRawIngestError(rawId, RIOT_INGEST_ABORTED_MESSAGE, 30_000)
-          } else {
-            const errPath = p!.replace(/\.json$/i, '')
-            await rename(p!, `${errPath}.abort.${Date.now()}.json`).catch(() => undefined)
-          }
-          continue
-        }
-        if (tracker) tracker.pendingTransientIngest = true
-        const pid = tracker?.player.id.toString() ?? '?'
-        await ctx.logger.error('Player match ingest failed (queue)', {
-          playerId: pid,
-          matchId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        await recordMatchIngestFailure(matchId, ctx.logger)
-        ctx.flagsRef.foundPrismaError = true
-        ctx.syncLiveCounters()
+      if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
         noteMatchIngestProcessed(payload.enqueuedAt)
         if (rawId != null) {
-          const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
-          await markRawIngestError(
-            rawId,
-            err instanceof Error ? err.message : String(err),
-            delay
-          )
+          await markRawIngestError(rawId, RIOT_INGEST_ABORTED_MESSAGE, 30_000)
         } else {
           const errPath = p!.replace(/\.json$/i, '')
-          await rename(p!, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
+          await rename(p!, `${errPath}.abort.${Date.now()}.json`).catch(() => undefined)
         }
+        continue
+      }
+      if (tracker) tracker.pendingTransientIngest = true
+      const pid = tracker?.player.id.toString() ?? '?'
+      await ctx.logger.error('Player match ingest failed (queue)', {
+        playerId: pid,
+        matchId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      await recordMatchIngestFailure(matchId, ctx.logger)
+      ctx.flagsRef.foundPrismaError = true
+      ctx.syncLiveCounters()
+      noteMatchIngestProcessed(payload.enqueuedAt)
+      if (rawId != null) {
+        const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
+        await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
+      } else {
+        const errPath = p!.replace(/\.json$/i, '')
+        await rename(p!, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
       }
     }
+  }
   await maybeLogMatchIngestMetrics()
   return true
 }
@@ -3007,7 +1711,7 @@ async function runStep4ForPlayer(
 
     const matchIds = Array.isArray(res.data) ? res.data : []
     phase1TotalIds += matchIds.length
-    const existing = await prisma.match.findMany({
+    const existing = await prisma.ingestMatch.findMany({
       where: { riotMatchId: { in: matchIds } },
       select: { riotMatchId: true },
     })
@@ -3143,7 +1847,6 @@ async function runStep4ForPlayer(
         fileQueue: useFileMatchIngestQueue,
         rawQueue: useRawMatchIngestQueue,
         fileQueueDepth,
-        ingestArch: getIngestWriteArch(),
       },
     })
 
@@ -3159,7 +1862,6 @@ async function runStep4ForPlayer(
       let producerDone = false
 
       const phase2IngestOpts: MatchIngestOptions = { shouldAbort: () => state.shouldStop }
-      const leanPhase2 = isLeanIngestWriteArch()
       const runIngestConsumer = async (): Promise<void> => {
         while (true) {
           if (pipelineAbort || state.shouldStop) break
@@ -3167,46 +1869,25 @@ async function runStep4ForPlayer(
             const item = ingestQueue.shift()!
             const tracker = playerTrackers[item.trackerIdx]
             try {
-              const { matchDbId, canonicalRiotMatchId } = leanPhase2
-                ? await upsertIngestMatchAndParticipants(
-                    client,
-                    region,
-                    item.matchId,
-                    item.matchDto,
-                    puuidKeyVersion,
-                    counters,
-                    logger,
-                    phase2IngestOpts
-                  )
-                : await upsertMatchAndParticipants(
-                    client,
-                    region,
-                    item.matchId,
-                    item.matchDto,
-                    puuidKeyVersion,
-                    counters,
-                    logger,
-                    phase2IngestOpts
-                  )
+              const { matchDbId, canonicalRiotMatchId } = await upsertIngestMatchAndParticipants(
+                client,
+                region,
+                item.matchId,
+                item.matchDto,
+                puuidKeyVersion,
+                counters,
+                logger,
+                phase2IngestOpts
+              )
               if (item.timelineDto) {
                 await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)
-                if (leanPhase2) {
-                  await extractIngestTimelineExtras(
-                    matchDbId,
-                    canonicalRiotMatchId,
-                    item.timelineDto,
-                    item.matchDto.info?.participants ?? [],
-                    logger
-                  )
-                } else {
-                  await extractAndInsertTimelineExtras(
-                    matchDbId,
-                    canonicalRiotMatchId,
-                    item.timelineDto,
-                    item.matchDto.info?.participants ?? [],
-                    logger
-                  )
-                }
+                await extractIngestTimelineExtras(
+                  matchDbId,
+                  canonicalRiotMatchId,
+                  item.timelineDto,
+                  item.matchDto.info?.participants ?? [],
+                  logger
+                )
               }
               tracker.ingestedIds.push(canonicalRiotMatchId)
               clearMatchIngestCooldownKeys(item.matchId, canonicalRiotMatchId)
@@ -3498,7 +2179,7 @@ async function runStep4ForPlayer(
     if (tracker.toFetchCount === 0) continue
 
     if (tracker.ingestedIds.length > 0) {
-      const dbCount = await prisma.match.count({
+      const dbCount = await prisma.ingestMatch.count({
         where: { riotMatchId: { in: tracker.ingestedIds } },
       })
       if (dbCount !== tracker.ingestedIds.length) {

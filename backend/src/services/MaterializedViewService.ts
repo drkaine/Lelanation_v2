@@ -193,8 +193,63 @@ export function patchFromGameVersion(gameVersion: string): string {
 }
 
 /**
- * Synchronise active_patches avec les patches présents dans les données brutes (`matchs` + `ingest_matchs`).
- * Les MV filtrées sur active_patches doivent voir les versions ingérées en lean comme en legacy.
+ * Met à jour `games_number` / `is_current` pour chaque ligne `active_patches` à partir de
+ * `ingest_matchs` (un match = un `riot_match_id`).
+ */
+async function applyActivePatchGameCountsFromDb(): Promise<void> {
+  if (!isDatabaseConfigured()) return
+
+  const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
+    WITH unified_matches AS (
+      SELECT riot_match_id, game_version FROM ingest_matchs
+    ),
+    per_patch AS (
+      SELECT
+        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
+        COUNT(*)::bigint AS cnt
+      FROM unified_matches
+      GROUP BY 1
+    )
+    SELECT patch, cnt FROM per_patch
+  `
+
+  const countByPatch = new Map<string, number>()
+  for (const r of rows) {
+    const p = (r.patch ?? '').trim()
+    if (!p) continue
+    countByPatch.set(p, typeof r.cnt === 'bigint' ? Number(r.cnt) : Number(r.cnt ?? 0))
+  }
+
+  const existing = await prisma.activePatch.findMany({
+    select: { gameVersion: true, gameNumberMax: true },
+  })
+
+  const patches = new Set<string>()
+  for (const r of existing) patches.add(r.gameVersion.trim())
+  for (const p of countByPatch.keys()) patches.add(p)
+
+  for (const patch of patches) {
+    const count = countByPatch.get(patch) ?? 0
+    const row = existing.find((e) => e.gameVersion === patch)
+    const max = row?.gameNumberMax ?? 0
+    await prisma.activePatch.upsert({
+      where: { gameVersion: patch },
+      create: {
+        gameVersion: patch,
+        gamesNumber: count,
+        gameNumberMax: max,
+        isCurrent: max <= 0 ? true : count < max,
+      },
+      update: {
+        gamesNumber: count,
+        isCurrent: max <= 0 ? true : count < max,
+      },
+    })
+  }
+}
+
+/**
+ * Synchronise active_patches avec les patches présents dans les données brutes (`ingest_matchs`).
  */
 export async function syncActivePatches(): Promise<number> {
   if (!isDatabaseConfigured()) return 0
@@ -202,8 +257,6 @@ export async function syncActivePatches(): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
     SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
     FROM (
-      SELECT game_version FROM matchs
-      UNION
       SELECT game_version FROM ingest_matchs
     ) v
   `
@@ -217,12 +270,13 @@ export async function syncActivePatches(): Promise<number> {
     })
     added++
   }
+  await applyActivePatchGameCountsFromDb()
   return added
 }
 
 /**
  * Sync active patches from match-filters config, then update hourly counters:
- * - games_number: COUNT(*) from matchs + ingest_matchs per patch (agrégé)
+ * - games_number: ingest_matchs par patch
  * - game_number_max: maxMatches from config
  * - is_current: true while patch still collecting, false once target reached
  */
@@ -250,48 +304,7 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
     touched++
   }
 
-  const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
-    WITH per_source AS (
-      SELECT
-        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
-        COUNT(*)::bigint AS cnt
-      FROM matchs
-      GROUP BY 1
-      UNION ALL
-      SELECT
-        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
-        COUNT(*)::bigint AS cnt
-      FROM ingest_matchs
-      GROUP BY 1
-    )
-    SELECT patch, SUM(cnt) AS cnt
-    FROM per_source
-    GROUP BY patch
-  `
-
-  for (const r of rows) {
-    const patch = (r.patch ?? '').trim()
-    if (!patch) continue
-    const count = typeof r.cnt === 'bigint' ? Number(r.cnt) : Number(r.cnt ?? 0)
-    const existing = await prisma.activePatch.findUnique({
-      where: { gameVersion: patch },
-      select: { gameNumberMax: true },
-    })
-    const max = existing?.gameNumberMax ?? 0
-    await prisma.activePatch.upsert({
-      where: { gameVersion: patch },
-      create: {
-        gameVersion: patch,
-        gamesNumber: count,
-        gameNumberMax: max,
-        isCurrent: max <= 0 ? true : count < max,
-      },
-      update: {
-        gamesNumber: count,
-        isCurrent: max <= 0 ? true : count < max,
-      },
-    })
-  }
+  await applyActivePatchGameCountsFromDb()
 
   return touched
 }
