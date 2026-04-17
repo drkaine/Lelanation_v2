@@ -518,6 +518,8 @@ export async function upsertIngestMatchAndParticipants(
         const p = participantDtos[pIdx]
         const puuid = p.puuid
         if (!puuid) continue
+        // Decoupled rank-refresh pipeline: every seen participant is queued for async league-v4 refresh.
+        enqueuePriorityPuuid(puuid)
         const { gn: partGameName, tl: partTagName } = participantNames(p)
         const existingPlayer = existingByPuuid.get(puuid)
         let playerId: bigint
@@ -564,7 +566,6 @@ export async function upsertIngestMatchAndParticipants(
           })
           if (createdNow) {
             counters.playersFetched++
-            enqueuePriorityPuuid(puuid)
           }
         } else {
           playerId = existingPlayer.id

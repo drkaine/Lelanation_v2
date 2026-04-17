@@ -24,6 +24,7 @@ import {
   RiotHttpClient,
   resolveRiotApiKey,
   RIOT_INGEST_ABORTED_MESSAGE,
+  type RiotLeagueEntryDto,
   type RiotMatchDto,
   type RiotParticipantDto,
   type RiotMatchTimelineDto,
@@ -33,6 +34,7 @@ import {
   tryEnqueueMatchIngestPayload,
   countMatchIngestQueueFiles,
   claimOldestMatchIngestQueueFilePaths,
+  recoverAbortedAndStaleFileQueueFiles,
   type MatchIngestQueuePayloadV1,
 } from './matchIngestQueue.js'
 import {
@@ -54,7 +56,7 @@ import {
   preloadIngestLeanMatchDbData,
 } from './ingestMatchLean.js'
 import type { MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
-import { cleanupGlobalRankCache, dequeuePriorityPuuids } from './matchIngestRankCache.js'
+import { cleanupGlobalRankCache, dequeuePriorityPuuids, setCachedRank } from './matchIngestRankCache.js'
 
 export type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
 
@@ -1065,6 +1067,36 @@ function isMatchIngestLeagueLookupForcedPerParticipant(): boolean {
   return raw === '1' || raw === 'true' || raw === 'on'
 }
 
+function isAsyncPriorityRankRefreshEnabled(): boolean {
+  const raw = (process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH ?? '').trim().toLowerCase()
+  if (!raw) return true
+  return !(raw === '0' || raw === 'false' || raw === 'off')
+}
+
+function getAsyncPriorityRankRefreshPerLoop(): number {
+  const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_PER_LOOP ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 40
+  return Math.min(500, raw)
+}
+
+function getAsyncPriorityRankRefreshConcurrency(): number {
+  const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_CONCURRENCY ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 4
+  return Math.min(32, raw)
+}
+
+function getFileQueueRecoveryIntervalMs(): number {
+  const raw = parseInt(process.env.MATCH_INGEST_FILE_QUEUE_RECOVERY_INTERVAL_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 10_000) return 60_000
+  return Math.min(60 * 60_000, raw)
+}
+
+function getFileQueueStaleProcessingMaxAgeMs(): number {
+  const raw = parseInt(process.env.MATCH_INGEST_FILE_QUEUE_STALE_PROCESSING_MAX_AGE_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 10 * 60_000
+  return Math.min(24 * 60 * 60 * 1000, raw)
+}
+
 async function syncMatchIngestQueueDepthEstimate(force = false): Promise<number> {
   if (!isMatchIngestFileQueueEnabled()) return 0
   const now = Date.now()
@@ -1171,31 +1203,37 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   type Parsed = { path: string | null; rawId: bigint | null; payload: MatchIngestQueuePayloadV1 }
   const parsed: Parsed[] = []
   const useRaw = isRawIngestQueueEnabled()
+  const useFile = isMatchIngestFileQueueEnabled()
   if (useRaw) {
     const rows = await claimRawIngestRows(getMatchIngestBatchSize())
-    if (rows.length === 0) return false
-    noteRawIngestQueueDepthDelta(-rows.length)
-    for (const row of rows) {
-      let payload: MatchIngestQueuePayloadV1
-      try {
-        payload = {
-          v: 1,
-          stepId: MATCH_INGEST_ORPHAN_STEP_ID,
-          matchId: row.riotMatchId,
-          region: row.region,
-          matchDto: row.payloadJson,
-          timelineDto: row.timelineJson,
-          puuidKeyVersion: null,
-          trackerIdx: -1,
-          enqueuedAt: row.ingestedAt.getTime(),
+    if (rows.length > 0) {
+      noteRawIngestQueueDepthDelta(-rows.length)
+      for (const row of rows) {
+        let payload: MatchIngestQueuePayloadV1
+        try {
+          payload = {
+            v: 1,
+            stepId: MATCH_INGEST_ORPHAN_STEP_ID,
+            matchId: row.riotMatchId,
+            region: row.region,
+            matchDto: row.payloadJson,
+            timelineDto: row.timelineJson,
+            puuidKeyVersion: null,
+            trackerIdx: -1,
+            enqueuedAt: row.ingestedAt.getTime(),
+          }
+        } catch {
+          await markRawIngestError(row.id, 'invalid_raw_payload_shape', 5 * 60_000)
+          continue
         }
-      } catch {
-        await markRawIngestError(row.id, 'invalid_raw_payload_shape', 5 * 60_000)
-        continue
+        parsed.push({ path: null, rawId: row.id, payload })
       }
-      parsed.push({ path: null, rawId: row.id, payload })
+    } else if (!useFile) {
+      return false
     }
-  } else {
+  }
+
+  if (parsed.length === 0 && useFile) {
     const paths = await claimOldestMatchIngestQueueFilePaths(getMatchIngestBatchSize())
     if (paths.length === 0) return false
     noteMatchIngestQueueDepthDelta(-paths.length)
@@ -2375,6 +2413,96 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
   return { ok: true, client, rateLimiter, logger, filters, clefType }
 }
 
+function normalizeRankTier(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const t = raw.trim().toUpperCase()
+  if (!t || t === 'UNRANKED') return null
+  return t.split('_')[0]?.trim() || null
+}
+
+function normalizeRankDivision(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const d = raw.trim().toUpperCase()
+  if (!d || d === 'UNRANKED') return null
+  return d
+}
+
+function normalizeRankLp(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number' && Number.isFinite(raw)) return Math.trunc(raw)
+  if (typeof raw === 'string') {
+    const n = Number(raw)
+    return Number.isFinite(n) ? Math.trunc(n) : null
+  }
+  return null
+}
+
+async function refreshPriorityRanksOffCriticalIngestPath(
+  client: RiotHttpClient
+): Promise<number> {
+  if (!isAsyncPriorityRankRefreshEnabled()) return 0
+  const maxPerLoop = getAsyncPriorityRankRefreshPerLoop()
+  if (maxPerLoop <= 0) return 0
+
+  const priorityPuuids = dequeuePriorityPuuids(maxPerLoop)
+  if (priorityPuuids.length === 0) return 0
+
+  const players = await prisma.player.findMany({
+    where: { puuid: { in: priorityPuuids } },
+    select: { puuid: true, region: true },
+  })
+  if (players.length === 0) return 0
+
+  const queue = players.slice()
+  const workerCount = Math.min(getAsyncPriorityRankRefreshConcurrency(), queue.length)
+  if (workerCount <= 0) return 0
+  let updated = 0
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (queue.length > 0 && !state.shouldStop) {
+        const next = queue.shift()
+        if (!next) break
+        client.setPlatform(next.region.toLowerCase())
+        const entriesRes = await client.getLeagueEntriesByPuuid(next.puuid, {
+          infinite429Retry: true,
+          shouldAbort: () => state.shouldStop,
+        })
+        if (!entriesRes.ok) {
+          if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) break
+          continue
+        }
+        const entries: RiotLeagueEntryDto[] = Array.isArray(entriesRes.data) ? entriesRes.data : []
+        const solo = entries.find(
+          (entry) =>
+            String((entry['queueType'] as string | undefined) ?? '').toUpperCase() ===
+            'RANKED_SOLO_5X5'
+        )
+        const rankTier = normalizeRankTier(solo?.tier)
+        const rankDivision = normalizeRankDivision(solo?.rank)
+        const rankLp = normalizeRankLp(solo?.leaguePoints)
+        setCachedRank(next.puuid, {
+          rankTier: rankTier ?? undefined,
+          rankDivision,
+          rankLp,
+        })
+        const res = await prisma.player.updateMany({
+          where: { puuid: next.puuid },
+          data: {
+            rankTier,
+            rankDivision,
+            rankLp,
+            rankSnapshotGameDate: new Date(),
+          },
+        })
+        if (res.count > 0) updated += res.count
+      }
+    })
+  )
+
+  return updated
+}
+
 async function runStep4Counters() {
   return {
     error400Count: state.error400Count,
@@ -2493,8 +2621,31 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     }
     summaryTicker = setInterval(scheduleSummaryEmit, 60_000)
 
+    let nextFileQueueRecoveryAtMs = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
+      if (isMatchIngestFileQueueEnabled() && Date.now() >= nextFileQueueRecoveryAtMs) {
+        const recovery = await recoverAbortedAndStaleFileQueueFiles(
+          getFileQueueStaleProcessingMaxAgeMs()
+        ).catch(() => ({ abortRequeued: 0, staleProcessingRequeued: 0, skipped: 0 }))
+        nextFileQueueRecoveryAtMs = Date.now() + getFileQueueRecoveryIntervalMs()
+        if (recovery.abortRequeued > 0 || recovery.staleProcessingRequeued > 0) {
+          matchIngestQueueDepthEstimate = -1
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller_ingest',
+            message: `File queue recovery — abort:+${recovery.abortRequeued} staleProcessing:+${recovery.staleProcessingRequeued} skipped:${recovery.skipped}`,
+            json: {
+              abortRequeued: recovery.abortRequeued,
+              staleProcessingRequeued: recovery.staleProcessingRequeued,
+              skipped: recovery.skipped,
+              staleProcessingMaxAgeMs: getFileQueueStaleProcessingMaxAgeMs(),
+              nextRecoveryInMs: getFileQueueRecoveryIntervalMs(),
+            },
+          })
+        }
+      }
       if (isRawIngestQueueEnabled()) {
         const recovered = await requeueRawIngestStaleProcessing(
           getRawIngestStaleProcessingMaxAgeMs(),
@@ -2570,6 +2721,15 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           requestStopRiotPoller()
           continue
         }
+      }
+
+      const refreshedPriorityRanks = await refreshPriorityRanksOffCriticalIngestPath(client).catch(
+        () => 0
+      )
+      if (refreshedPriorityRanks > 0) {
+        setState({
+          playersRankUpdatedLeague: state.playersRankUpdatedLeague + refreshedPriorityRanks,
+        })
       }
 
       // EUW1 collection
