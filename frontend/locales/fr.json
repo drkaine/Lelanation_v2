@@ -4,6 +4,7 @@
     "builds": "Les Builds",
     "createBuild": "Créer un Build",
     "videos": "Vidéos",
+    "map": "Map",
     "admin": "Admin",
     "language": "Langue"
   },
@@ -61,6 +62,29 @@
     "loading": "Chargement…",
     "noCreatorsTitle": "Aucun créateur configuré",
     "noCreatorsText": "Demande à un admin d’ajouter des chaînes."
+  },
+  "mapPlanner": {
+    "metaTitle": "Map Planner",
+    "title": "Map Planner",
+    "boardName": "Nom du plan",
+    "savedBoards": "Plans sauvegardés",
+    "deleteBoard": "Supprimer le plan",
+    "map": "Carte",
+    "brush": "Pinceau",
+    "eraser": "Gomme",
+    "iconTool": "Icônes",
+    "brushColor": "Couleur",
+    "brushSize": "Épaisseur",
+    "zoom": "Zoom",
+    "layers": "Calques",
+    "addLayer": "Ajouter calque",
+    "resetLayer": "Reset calque",
+    "resetAll": "Reset global",
+    "saveBoard": "Sauvegarder",
+    "newBoard": "Nouveau plan",
+    "share": "Partager",
+    "screenshot": "Screenshot",
+    "visible": "Visible"
   }
 }
 

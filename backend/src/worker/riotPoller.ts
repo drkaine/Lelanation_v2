@@ -337,7 +337,12 @@ import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../u
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches } from '../services/MaterializedViewService.js'
-const PLAYERS_PER_LOOP = 150
+
+function getPlayersPerLoop(): number {
+  const raw = parseInt(process.env.POLLER_PLAYERS_PER_LOOP ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 25) return 150
+  return Math.min(2_000, raw)
+}
 
 const TIMELINE_RETRY_BASE_DELAY_MS = 60_000
 const TIMELINE_RETRY_MAX_DELAY_MS = 15 * 60_000
@@ -1471,6 +1476,7 @@ async function runStep4ForPlayer(
   matchListTimeWindow: { startTime: number; endTime: number } | null
 ): Promise<'ok' | '400_decrypt' | 'prisma_error'> {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  const playersPerLoop = getPlayersPerLoop()
   let lastCountersSyncAtMs = 0
   const syncLiveCounters = (force = false): void => {
     const now = Date.now()
@@ -1663,7 +1669,7 @@ async function runStep4ForPlayer(
   }> = []
   const selectedIds = new Set<bigint>()
 
-  const priorityPuuids = dequeuePriorityPuuids(PLAYERS_PER_LOOP * 3)
+  const priorityPuuids = dequeuePriorityPuuids(playersPerLoop * 3)
   if (priorityPuuids.length > 0) {
     const priorityRows = await prisma.player.findMany({
       where: { ...playerWhere, puuid: { in: priorityPuuids } },
@@ -1675,25 +1681,25 @@ async function runStep4ForPlayer(
         region: true,
         puuidKeyVersion: true,
       },
-      take: PLAYERS_PER_LOOP,
+      take: playersPerLoop,
     })
     const order = new Map(priorityPuuids.map((puuid, idx) => [puuid, idx]))
     priorityRows.sort((a, b) => (order.get(a.puuid) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.puuid) ?? Number.MAX_SAFE_INTEGER))
     for (const row of priorityRows) {
       selectedPlayers.push(row)
       selectedIds.add(row.id)
-      if (selectedPlayers.length >= PLAYERS_PER_LOOP) break
+      if (selectedPlayers.length >= playersPerLoop) break
     }
   }
 
-  if (selectedPlayers.length < PLAYERS_PER_LOOP) {
+  if (selectedPlayers.length < playersPerLoop) {
     const fallbackRows = await prisma.player.findMany({
       where: {
         ...playerWhere,
         ...(selectedIds.size > 0 ? { id: { notIn: Array.from(selectedIds) } } : {}),
       },
       orderBy: [{ lastSeen: { sort: 'asc', nulls: 'first' } }, { createdAt: 'asc' }],
-      take: PLAYERS_PER_LOOP - selectedPlayers.length,
+      take: playersPerLoop - selectedPlayers.length,
       select: {
         id: true,
         puuid: true,

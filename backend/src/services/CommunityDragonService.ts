@@ -55,6 +55,8 @@ const CD_RANKED_EMBLEM_BASE =
   'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-static-assets/global/default/images/ranked-emblem'
 const CD_SCOREBOARD_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/scoreboard'
 const CD_MINIMAP_ICONS_BASE = 'https://raw.communitydragon.org/latest/game/assets/ux/minimap/icons'
+const CD_MATCH_HISTORY_BASE =
+  'https://raw.communitydragon.org/latest/plugins/rcp-fe-lol-match-history/global/default'
 
 const RANKED_EMBLEM_FILES = [
   'emblem-iron.png',
@@ -86,6 +88,21 @@ const MINIMAP_OBJECTIVE_ICONS: Array<{ source: string; target: string }> = [
   { source: 'kindred_minimap_icon.png', target: 'kindred_minimap_icon.png' },
   { source: 'kindred_minimap_icon_enemy.png', target: 'kindred_minimap_icon_enemy.png' },
   { source: 'grub.png', target: 'grub.png' },
+]
+const MAP_PLANNER_FILES: Array<{ source: string; target: string }> = [
+  { source: 'map11.png', target: 'map11.png' },
+  { source: 'inhibitor-200.png', target: 'inhibitor-200.png' },
+  { source: 'inhibitor-100.png', target: 'inhibitor-100.png' },
+  { source: 'herald-200.png', target: 'herald-200.png' },
+  { source: 'herald-100.png', target: 'herald-100.png' },
+  { source: 'dead_blue.png', target: 'dead_blue.png' },
+  { source: 'dead_red.png', target: 'dead_red.png' },
+  { source: 'baron-200.png', target: 'baron-200.png' },
+  { source: 'baron-100.png', target: 'baron-100.png' },
+  { source: 'nexus_building_blue.png', target: 'nexus_building_blue.png' },
+  { source: 'nexus_building_red.png', target: 'nexus_building_red.png' },
+  { source: 'tower-100.png', target: 'tower-100.png' },
+  { source: 'tower-200.png', target: 'tower-200.png' },
 ]
 
 /**
@@ -517,6 +534,56 @@ export class CommunityDragonService {
         const errorMessage = error instanceof Error ? error.message : String(error)
         errors.push({ file: icon.source, error: errorMessage })
         console.error(`[CommunityDragon] Failed to sync minimap icon ${icon.source}: ${errorMessage}`)
+      }
+    }
+
+    return Result.ok({ synced, failed, errors })
+  }
+
+  /**
+   * Sync map planner assets from Community Dragon match-history package.
+   * Saves to {dataDir}/map-planner/*.png for frontend tactical board usage.
+   */
+  async syncMapPlannerAssets(): Promise<
+    Result<
+      { synced: number; failed: number; errors: Array<{ file: string; error: string }> },
+      AppError
+    >
+  > {
+    const mapPlannerDir = join(this.dataDir, 'map-planner')
+    const dirResult = await FileManager.ensureDir(mapPlannerDir)
+    if (dirResult.isErr()) {
+      return Result.err(dirResult.unwrapErr())
+    }
+
+    let synced = 0
+    let failed = 0
+    const errors: Array<{ file: string; error: string }> = []
+
+    const axiosMapPlanner = axios.create({
+      baseURL: CD_MATCH_HISTORY_BASE,
+      timeout: 30000,
+      responseType: 'arraybuffer',
+      headers: { 'User-Agent': 'Lelanation/1.0' },
+    })
+
+    for (const asset of MAP_PLANNER_FILES) {
+      try {
+        const response = await axiosMapPlanner.get<ArrayBuffer | Buffer>(`/${asset.source}`)
+        const data = response.data
+        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+          failed++
+          errors.push({ file: asset.source, error: 'No data returned' })
+          continue
+        }
+        const targetPath = join(mapPlannerDir, asset.target)
+        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        synced++
+      } catch (error) {
+        failed++
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        errors.push({ file: asset.source, error: errorMessage })
+        console.error(`[CommunityDragon] Failed to sync map planner asset ${asset.source}: ${errorMessage}`)
       }
     }
 

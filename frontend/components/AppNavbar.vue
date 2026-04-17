@@ -85,6 +85,15 @@
         >
           {{ t('nav.videos') }}
         </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/map')"
+          :title="t('nav.map')"
+          class="version"
+          @click="toggleMenu"
+        >
+          {{ t('nav.map') }}
+        </NuxtLink>
         <div class="mobile-builds-menu">
           <button
             v-if="isAdminLoggedIn"
@@ -202,6 +211,14 @@
         </div>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
           {{ t('nav.videos') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="localePath('/map')"
+          :title="t('nav.map')"
+          class="version"
+        >
+          {{ t('nav.map') }}
         </NuxtLink>
         <div
           class="builds-menu"

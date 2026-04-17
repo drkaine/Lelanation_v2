@@ -4,6 +4,7 @@
     "builds": "Builds",
     "createBuild": "Create Build",
     "videos": "Videos",
+    "map": "Map",
     "admin": "Admin",
     "language": "Language"
   },
@@ -61,6 +62,29 @@
     "loading": "Loading…",
     "noCreatorsTitle": "No creator configured",
     "noCreatorsText": "Ask an admin to add channels."
+  },
+  "mapPlanner": {
+    "metaTitle": "Map Planner",
+    "title": "Map Planner",
+    "boardName": "Board name",
+    "savedBoards": "Saved boards",
+    "deleteBoard": "Delete board",
+    "map": "Map",
+    "brush": "Brush",
+    "eraser": "Eraser",
+    "iconTool": "Icons",
+    "brushColor": "Color",
+    "brushSize": "Brush size",
+    "zoom": "Zoom",
+    "layers": "Layers",
+    "addLayer": "Add layer",
+    "resetLayer": "Reset layer",
+    "resetAll": "Reset all",
+    "saveBoard": "Save board",
+    "newBoard": "New board",
+    "share": "Share",
+    "screenshot": "Screenshot",
+    "visible": "Visible"
   }
 }
 

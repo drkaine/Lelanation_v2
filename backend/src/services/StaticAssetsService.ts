@@ -843,63 +843,31 @@ export class StaticAssetsService {
         return Result.ok({ copied: 0, deleted: 0 })
       }
 
-      const entries = await fs.readdir(this.backendCommunityDragonDir, { withFileTypes: true })
-
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.json')) {
-          const sourcePath = join(this.backendCommunityDragonDir, entry.name)
-          const targetPath = join(targetCommunityDragonDir, entry.name)
-          const content = await fs.readFile(sourcePath, 'utf-8')
-          await fs.writeFile(targetPath, content, 'utf-8')
+      const copyRecursive = async (sourceDir: string, targetDir: string): Promise<void> => {
+        const entries = await fs.readdir(sourceDir, { withFileTypes: true })
+        for (const entry of entries) {
+          const sourcePath = join(sourceDir, entry.name)
+          const targetPath = join(targetDir, entry.name)
+          if (entry.isDirectory()) {
+            const dirResult = await FileManager.ensureDir(targetPath)
+            if (dirResult.isErr()) {
+              continue
+            }
+            await copyRecursive(sourcePath, targetPath)
+            continue
+          }
+          if (!entry.isFile()) {
+            continue
+          }
+          const content = await fs.readFile(sourcePath)
+          await fs.writeFile(targetPath, content)
           copied++
           await fs.unlink(sourcePath).catch(() => {})
           deleted++
-          continue
-        }
-
-        if (entry.isDirectory() && entry.name === 'ranked-emblem') {
-          const sourceEmblemDir = join(this.backendCommunityDragonDir, 'ranked-emblem')
-          const targetEmblemDir = join(targetCommunityDragonDir, 'ranked-emblem')
-          const emblemDirResult = await FileManager.ensureDir(targetEmblemDir)
-          if (emblemDirResult.isErr()) {
-            continue
-          }
-          const emblemFiles = await fs.readdir(sourceEmblemDir, { withFileTypes: true })
-          for (const f of emblemFiles) {
-            if (!f.isFile()) continue
-            const src = join(sourceEmblemDir, f.name)
-            const tgt = join(targetEmblemDir, f.name)
-            const buf = await fs.readFile(src)
-            await fs.writeFile(tgt, buf)
-            copied++
-            await fs.unlink(src).catch(() => {})
-            deleted++
-          }
-          await fs.rm(sourceEmblemDir, { recursive: true, force: true }).catch(() => {})
-          continue
-        }
-
-        if (entry.isDirectory() && entry.name === 'scoreboard-objectives') {
-          const sourceObjectivesDir = join(this.backendCommunityDragonDir, 'scoreboard-objectives')
-          const targetObjectivesDir = join(targetCommunityDragonDir, 'scoreboard-objectives')
-          const objectivesDirResult = await FileManager.ensureDir(targetObjectivesDir)
-          if (objectivesDirResult.isErr()) {
-            continue
-          }
-          const objectiveFiles = await fs.readdir(sourceObjectivesDir, { withFileTypes: true })
-          for (const f of objectiveFiles) {
-            if (!f.isFile()) continue
-            const src = join(sourceObjectivesDir, f.name)
-            const tgt = join(targetObjectivesDir, f.name)
-            const buf = await fs.readFile(src)
-            await fs.writeFile(tgt, buf)
-            copied++
-            await fs.unlink(src).catch(() => {})
-            deleted++
-          }
-          await fs.rm(sourceObjectivesDir, { recursive: true, force: true }).catch(() => {})
         }
       }
+
+      await copyRecursive(this.backendCommunityDragonDir, targetCommunityDragonDir)
 
       if (deleted > 0) {
         try {

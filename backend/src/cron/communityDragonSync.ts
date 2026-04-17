@@ -87,6 +87,21 @@ export async function runCommunityDragonSyncOnce(): Promise<
     )
   }
 
+  await log.step('Syncing map planner assets')
+  const mapPlannerResult = await communityDragonService.syncMapPlannerAssets()
+  if (mapPlannerResult.isErr()) {
+    await log.warn('Map planner assets sync failed:', mapPlannerResult.unwrapErr())
+  } else {
+    const mapPlannerData = mapPlannerResult.unwrap()
+    await log.info(
+      'Map planner assets:',
+      mapPlannerData.synced,
+      'synced,',
+      mapPlannerData.failed,
+      'failed'
+    )
+  }
+
   await cronStatus.markSuccess('communityDragonSync')
 
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
