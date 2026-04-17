@@ -173,7 +173,11 @@ type RiotCountPeak = {
 }
 
 /** Fired once per completed `fetch` (every HTTP round-trip), including 4xx/5xx and 429 before retry. */
-export type RiotHttpResponseObserver = (info: { bucket: string; httpStatus: number }) => void
+export type RiotHttpResponseObserver = (info: {
+  bucket: string
+  httpStatus: number
+  retryAfterSec?: number
+}) => void
 
 export class RiotHttpClient {
   private key: string = ''
@@ -328,7 +332,9 @@ export class RiotHttpClient {
       return { ok: false, status: 0, message: msg }
     }
 
-    this.onHttpResponse?.({ bucket, httpStatus: res.status })
+    const retryAfterRaw = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
+    const retryAfterSec = Number.isFinite(retryAfterRaw) ? retryAfterRaw : undefined
+    this.onHttpResponse?.({ bucket, httpStatus: res.status, retryAfterSec })
 
     let data: unknown
     try {
@@ -338,11 +344,12 @@ export class RiotHttpClient {
     }
 
     if (res.status === 429) {
-      const retryAfterSec = parseInt(res.headers.get('Retry-After') ?? '1', 10)
       const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+      const effectiveRetryAfterSec =
+        retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : 1
       const effectiveRetryMs =
-        Number.isFinite(retryAfterSec) && retryAfterSec > 0
-          ? retryAfterSec * 1000
+        Number.isFinite(effectiveRetryAfterSec) && effectiveRetryAfterSec > 0
+          ? effectiveRetryAfterSec * 1000
           : RIOT_429_MIN_PENALTY_MS
       void appendUnifiedLog({
         section: 'back',
@@ -354,12 +361,12 @@ export class RiotHttpClient {
           origin: 'riot_http_response',
           bucket,
           url,
-          retryAfterSec,
+          retryAfterSec: effectiveRetryAfterSec,
           effectiveRetryMs,
           riotRateLimitHeaders: riotHeaders,
         },
       })
-      this.rateLimiter.penalize429(retryAfterSec)
+      this.rateLimiter.penalize429(effectiveRetryAfterSec)
       if (options?.shouldAbort?.()) {
         return { ok: false, status: 429, message: RIOT_INGEST_ABORTED_MESSAGE, body: data }
       }

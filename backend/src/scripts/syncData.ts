@@ -141,6 +141,18 @@ async function main(): Promise<void> {
     }
   }
 
+  const mapPlannerSync = await communityDragonService.syncMapPlannerAssets()
+  if (mapPlannerSync.isErr()) {
+    console.warn('[sync:data] Map planner assets sync failed:', mapPlannerSync.unwrapErr())
+  } else {
+    const mapPlannerData = mapPlannerSync.unwrap()
+    if (mapPlannerData.failed > 0) {
+      console.warn(
+        `[sync:data] Map planner assets sync completed with ${mapPlannerData.failed} failures`
+      )
+    }
+  }
+
   // --- YouTube ---
   const youtubeChannelsFile = join(process.cwd(), 'data', 'youtube', 'channels.json')
   const youtubeService = new YouTubeService()
@@ -236,6 +248,7 @@ async function main(): Promise<void> {
     communityDragonObjectiveIconsSynced: objectiveIconsSync.isOk()
       ? objectiveIconsSync.unwrap().synced
       : 0,
+    communityDragonMapPlannerSynced: mapPlannerSync.isOk() ? mapPlannerSync.unwrap().synced : 0,
     youtubeChannels: `${ytSyncData.syncedChannels}/${channels.length}`,
     youtubeVideos: ytSyncData.totalVideos,
     assetsDataFiles: copyStats.dataCopied,

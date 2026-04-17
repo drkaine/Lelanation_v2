@@ -28,10 +28,14 @@ import Bottleneck from 'bottleneck'
 export const RIOT_HEADER_APP_120S_NEAR_LIMIT = 99
 /** If headers report count ≥ limit (should be rare on 200), pause ~until bucket rolls. */
 export const RIOT_HEADER_NEAR_LIMIT_COOLDOWN_MS = 100_000
-/** Short pause when at the 120 s near-limit, to drain parallel requests. */
-export const RIOT_HEADER_APP_120S_BREATH_MS = 2_500
-/** At most one breath every N ms while headers stay hot (avoids stalling every response). */
-export const RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS = 5_000
+/** Default short pause when at the 120 s near-limit, to drain parallel requests. */
+export const RIOT_HEADER_APP_120S_BREATH_MS_DEFAULT = 2_500
+/** Default debounce for near-limit breath pauses. */
+export const RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS_DEFAULT = 5_000
+/** Hard-stop threshold on remaining slots for app 120s bucket (e.g. 1 => stop at 99/100). */
+export const RIOT_HEADER_APP_120S_HARD_STOP_REMAINING_MAX_DEFAULT = 1
+/** Hard-stop cooldown when threshold is hit (gives time for 120s window to drain). */
+export const RIOT_HEADER_APP_120S_HARD_STOP_MS_DEFAULT = 40_000
 export const RIOT_429_MIN_PENALTY_MS = 5_000
 
 const MAX_429_PENALTY_MS = 120_000
@@ -67,6 +71,34 @@ function readApp120sBreathRemainingMax(): number {
   return Math.min(5, Math.max(0, raw))
 }
 
+/** Near-limit pause duration (ms) when remaining<=threshold. */
+function readApp120sBreathMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_BREATH_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return RIOT_HEADER_APP_120S_BREATH_MS_DEFAULT
+  return Math.min(60_000, Math.max(250, raw))
+}
+
+/** Debounce between two near-limit breaths (ms). */
+function readApp120sBreathMinIntervalMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_BREATH_MIN_INTERVAL_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS_DEFAULT
+  return Math.min(60_000, Math.max(250, raw))
+}
+
+/** Header-driven hard stop threshold on remaining app slots in 120s window. */
+function readApp120sHardStopRemainingMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX ?? '', 10)
+  if (!Number.isFinite(raw)) return RIOT_HEADER_APP_120S_HARD_STOP_REMAINING_MAX_DEFAULT
+  return Math.min(10, Math.max(0, raw))
+}
+
+/** Header-driven hard stop duration when threshold is reached. */
+function readApp120sHardStopMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_HARD_STOP_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return RIOT_HEADER_APP_120S_HARD_STOP_MS_DEFAULT
+  return Math.min(120_000, Math.max(1_000, raw))
+}
+
 /** Parse `"20:1,100:120"` → `[{ value: 20, windowSec: 1 }, { value: 100, windowSec: 120 }]` */
 function parseRiotLimitPairs(
   header: string | null
@@ -98,6 +130,7 @@ export class RiotRateLimiter {
   private appBuckets: BucketSnapshot[] = []
   private methodBuckets: BucketSnapshot[] = []
   private maxApp120CountObserved = 0
+  private headerHardStopPauseCount = 0
   /** Timestamp (ms) until which all requests are blocked. Only extends, never shortens. */
   private penaltyUntil = 0
   /** Last time we applied a 120 s near-limit breath (debounce). */
@@ -124,14 +157,22 @@ export class RiotRateLimiter {
    * the job to Bottleneck for pacing.
    */
   async schedule<T>(fn: () => Promise<T>): Promise<T> {
-    // Wait for any active 429 penalty to expire
-    while (!this.stopped) {
-      const wait = this.penaltyUntil - Date.now()
-      if (wait <= 0) break
-      await new Promise<void>((r) => setTimeout(r, Math.min(wait + 50, 1_000)))
+    const waitForPenalty = async (): Promise<void> => {
+      while (!this.stopped) {
+        const wait = this.penaltyUntil - Date.now()
+        if (wait <= 0) break
+        await new Promise<void>((r) => setTimeout(r, Math.min(wait + 50, 1_000)))
+      }
+      if (this.stopped) throw new Error('RiotRateLimiter stopped')
     }
-    if (this.stopped) throw new Error('RiotRateLimiter stopped')
-    return this.limiter.schedule(fn)
+
+    // 1) Before entering Bottleneck queue.
+    await waitForPenalty()
+    // 2) Just before executing the HTTP call, so jobs queued before a fresh 429 also respect penalty.
+    return this.limiter.schedule(async () => {
+      await waitForPenalty()
+      return fn()
+    })
   }
 
   /**
@@ -177,6 +218,12 @@ export class RiotRateLimiter {
       this.maxApp120CountObserved = Math.max(this.maxApp120CountObserved, app120.count)
       // remaining120 <= 1 ⟺ count >= limit - 1 (e.g. ≥ RIOT_HEADER_APP_120S_NEAR_LIMIT when limit is 100).
       const remaining120 = app120.limit - app120.count
+      const hardStopRemainingMax = readApp120sHardStopRemainingMax()
+      if (hardStopRemainingMax > 0 && remaining120 <= hardStopRemainingMax) {
+        this.headerHardStopPauseCount++
+        this.penaltyUntil = Math.max(this.penaltyUntil, now + readApp120sHardStopMs())
+        return
+      }
       const breathRemainingMax = readApp120sBreathRemainingMax()
       if (remaining120 <= 0) {
         this.nearLimitPauseCount++
@@ -184,17 +231,18 @@ export class RiotRateLimiter {
       } else if (
         breathRemainingMax > 0 &&
         remaining120 <= breathRemainingMax &&
-        now - this.lastApp120BreathAtMs >= RIOT_HEADER_APP_120S_BREATH_MIN_INTERVAL_MS
+        now - this.lastApp120BreathAtMs >= readApp120sBreathMinIntervalMs()
       ) {
         this.lastApp120BreathAtMs = now
         this.nearLimitPauseCount++
-        this.penaltyUntil = Math.max(this.penaltyUntil, now + RIOT_HEADER_APP_120S_BREATH_MS)
+        this.penaltyUntil = Math.max(this.penaltyUntil, now + readApp120sBreathMs())
       }
     }
   }
 
   getStats(): {
     nearLimitPauseCount: number
+    headerHardStopPauseCount: number
     http429PauseCount: number
     appBuckets: BucketSnapshot[]
     methodBuckets: BucketSnapshot[]
@@ -202,6 +250,7 @@ export class RiotRateLimiter {
   } {
     return {
       nearLimitPauseCount: this.nearLimitPauseCount,
+      headerHardStopPauseCount: this.headerHardStopPauseCount,
       http429PauseCount: this.http429PauseCount,
       appBuckets: [...this.appBuckets],
       methodBuckets: [...this.methodBuckets],

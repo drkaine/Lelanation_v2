@@ -18,7 +18,11 @@ import {
   resolveLatestPatchPriorityWindow,
 } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
-import { getRiotAppTargetPer120s, RiotRateLimiter } from '../services/RiotRateLimiter.js'
+import {
+  getRiotAppTargetPer120s,
+  RIOT_429_MIN_PENALTY_MS,
+  RiotRateLimiter,
+} from '../services/RiotRateLimiter.js'
 import { DiscordService } from '../services/DiscordService.js'
 import {
   RiotHttpClient,
@@ -441,6 +445,79 @@ const defaultStatus: RiotPollerStatus = {
 
 let state: RiotPollerStatus = { ...defaultStatus }
 let loopPromise: Promise<void> | null = null
+let riotGlobalCooldownUntilMs = 0
+let riotGlobalCooldownLastLogAtMs = 0
+let riotLast429AtMs = 0
+
+const RIOT_GLOBAL_429_COOLDOWN_BUFFER_MS_DEFAULT = 10_000
+const RIOT_GLOBAL_429_COOLDOWN_LOG_INTERVAL_MS = 5_000
+
+function getRiotGlobal429CooldownBufferMs(): number {
+  const raw = parseInt(process.env.RIOT_GLOBAL_429_COOLDOWN_BUFFER_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return RIOT_GLOBAL_429_COOLDOWN_BUFFER_MS_DEFAULT
+  return Math.min(120_000, Math.max(0, raw))
+}
+
+function getRiotPost429SerialModeMs(): number {
+  const raw = parseInt(process.env.RIOT_POST_429_SERIAL_MODE_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return 120_000
+  return Math.min(600_000, Math.max(0, raw))
+}
+
+function isRiotPost429SerialModeActive(): boolean {
+  const holdMs = getRiotPost429SerialModeMs()
+  if (holdMs <= 0) return false
+  return Date.now() - riotLast429AtMs < holdMs
+}
+
+function noteRiotGlobalCooldownFrom429(retryAfterSec?: number): void {
+  const now = Date.now()
+  riotLast429AtMs = now
+  const retryMs =
+    retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0
+      ? Math.ceil(retryAfterSec * 1000)
+      : RIOT_429_MIN_PENALTY_MS
+  const cooldownMs = retryMs + getRiotGlobal429CooldownBufferMs()
+  const until = now + cooldownMs
+  if (until <= riotGlobalCooldownUntilMs) return
+  riotGlobalCooldownUntilMs = until
+  void appendUnifiedLog({
+    section: 'back',
+    type: 'warning',
+    script: 'poller',
+    message: `Global Riot cooldown activé (${cooldownMs}ms)`,
+    json: {
+      trigger: 'http_429',
+      retryAfterSec: retryAfterSec ?? null,
+      minPenaltyMs: RIOT_429_MIN_PENALTY_MS,
+      configuredBufferMs: getRiotGlobal429CooldownBufferMs(),
+      cooldownMs,
+      cooldownUntilIso: new Date(until).toISOString(),
+    },
+  })
+}
+
+async function waitForRiotGlobalCooldownIfNeeded(reason: string): Promise<void> {
+  while (!state.shouldStop) {
+    const remainingMs = riotGlobalCooldownUntilMs - Date.now()
+    if (remainingMs <= 0) return
+    if (Date.now() - riotGlobalCooldownLastLogAtMs >= RIOT_GLOBAL_429_COOLDOWN_LOG_INTERVAL_MS) {
+      riotGlobalCooldownLastLogAtMs = Date.now()
+      void appendUnifiedLog({
+        section: 'back',
+        type: 'info',
+        script: 'poller',
+        message: `Global Riot cooldown actif (${Math.ceil(remainingMs / 1000)}s restantes)`,
+        json: {
+          reason,
+          remainingMs,
+          cooldownUntilIso: new Date(riotGlobalCooldownUntilMs).toISOString(),
+        },
+      })
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, Math.min(remainingMs, 1_000)))
+  }
+}
 
 /** When true, orchestrator will start puuid-migration script after poller loop exits (e.g. on 400_decrypt). */
 let triggerPuuidMigrationOnPollerExit = false
@@ -663,9 +740,10 @@ function buildMatchIdsQueryForPlayer(
   filters: MatchFiltersConfig,
   patchWindow: { startTime: number; endTime: number } | null
 ): { queue: number; count: number; start: number; startTime?: number; endTime?: number } | null {
+  const cappedCount = Math.max(1, Math.min(filters.count, getMatchIdsPerSummonerCap()))
   const q: { queue: number; count: number; start: number; startTime?: number; endTime?: number } = {
     queue: filters.queue,
-    count: filters.count,
+    count: cappedCount,
     start: 0,
   }
   const nowSec = Math.floor(Date.now() / 1000)
@@ -1017,8 +1095,9 @@ function getRawIngestWorkers(): number {
 /** Parallel match-detail producers in Phase 2 when not using async file/raw queue (default 25). */
 function getParallelMatchIngestFetches(): number {
   const raw = parseInt(process.env.MATCH_INGEST_PARALLEL_FETCHES ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 1) return 25
-  return Math.min(64, raw)
+  const configured = !Number.isFinite(raw) || raw < 1 ? 25 : Math.min(64, raw)
+  if (isRiotPost429SerialModeActive()) return 1
+  return configured
 }
 
 /** Max concurrent Phase-1 match-id lookups (league-v4 + match-v5 ids) to avoid bursty 429 waves. */
@@ -1026,6 +1105,12 @@ function getMatchIdsLookupConcurrency(): number {
   const raw = parseInt(process.env.RIOT_MATCH_IDS_LOOKUP_CONCURRENCY ?? '', 10)
   if (!Number.isFinite(raw) || raw < 1) return 6
   return Math.min(32, raw)
+}
+
+function getMatchIdsPerSummonerCap(): number {
+  const raw = parseInt(process.env.RIOT_MATCH_IDS_PER_SUMMONER ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 20
+  return Math.min(100, raw)
 }
 
 function getRawIngestErrorRequeueBatch(): number {
@@ -1534,10 +1619,8 @@ async function runStep4ForPlayer(
       attempts++
 
       if (cachedMatchDto == null) {
-        const [matchRes, timelineResFirst] = await Promise.all([
-          client.getMatch(matchId, riotIngestRequestOptions()),
-          client.getMatchTimeline(matchId, riotIngestRequestOptions()),
-        ])
+        await waitForRiotGlobalCooldownIfNeeded('match-v5-detail')
+        const matchRes = await client.getMatch(matchId, riotIngestRequestOptions())
         if (!matchRes.ok) {
           if (matchRes.status === 0) counters.timeoutCount++
           if (matchRes.status === 400 && is400Decrypt(matchRes.body)) {
@@ -1577,6 +1660,8 @@ async function runStep4ForPlayer(
           }
         }
         cachedMatchDto = matchRes.data as RiotMatchDto
+        await waitForRiotGlobalCooldownIfNeeded('match-v5-timeline')
+        const timelineResFirst = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
         if (!timelineResFirst.ok) {
           if (timelineResFirst.status === 0) counters.timeoutCount++
           if (timelineResFirst.message === RIOT_INGEST_ABORTED_MESSAGE) {
@@ -1608,6 +1693,7 @@ async function runStep4ForPlayer(
         return { ok: true, matchDto: cachedMatchDto, timelineDto: timelineResFirst.data }
       }
 
+      await waitForRiotGlobalCooldownIfNeeded('match-v5-timeline-retry')
       const timelineRes = await client.getMatchTimeline(matchId, riotIngestRequestOptions())
       if (!timelineRes.ok) {
         if (timelineRes.status === 0) counters.timeoutCount++
@@ -1812,6 +1898,7 @@ async function runStep4ForPlayer(
           }
           continue
         }
+        await waitForRiotGlobalCooldownIfNeeded('match-v5-ids')
         const res = await client.getMatchIdsByPuuid(player.puuid, query, riotIngestRequestOptions())
         matchIdResults[idx] = { player, res, queryNull: false }
       }
@@ -2401,7 +2488,10 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
   client.setKey(resolved.key, resolved.source, resolved.clefType)
   await logger.step('API key loaded', { source: resolved.source, keyLen: resolved.key.length })
 
-  client.setOnHttpResponse(({ httpStatus }) => {
+  client.setOnHttpResponse(({ httpStatus, retryAfterSec }) => {
+    if (httpStatus === 429) {
+      noteRiotGlobalCooldownFrom429(retryAfterSec)
+    }
     setState({
       requestCount: state.requestCount + 1,
       ...(httpStatus === 429 ? { error429Count: state.error429Count + 1 } : {}),
@@ -2470,6 +2560,7 @@ async function refreshPriorityRanksOffCriticalIngestPath(
         const next = queue.shift()
         if (!next) break
         client.setPlatform(next.region.toLowerCase())
+        await waitForRiotGlobalCooldownIfNeeded('league-v4-entries-by-puuid')
         const entriesRes = await client.getLeagueEntriesByPuuid(next.puuid, {
           infinite429Retry: true,
           shouldAbort: () => state.shouldStop,

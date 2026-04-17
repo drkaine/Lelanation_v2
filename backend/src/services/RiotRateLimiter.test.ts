@@ -39,6 +39,7 @@ test('RiotRateLimiter: concurrent penalize429 keeps longest penalty', () => {
 
 test('RiotRateLimiter: syncFromResponseHeaders applies breath when 120s bucket has one slot left', async () => {
   process.env.RIOT_APP_120S_BREATH_REMAINING_MAX = '1'
+  process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX = '0'
   const limiter = new RiotRateLimiter()
   await limiter.schedule(async () => 'init')
   const headers = new Headers({
@@ -52,6 +53,29 @@ test('RiotRateLimiter: syncFromResponseHeaders applies breath when 120s bucket h
   assert.ok(elapsed >= 2_350, `Should wait header breath (2.5s) + token refill, got ${elapsed}ms`)
   assert.ok(elapsed < 10_000)
   assert.equal(limiter.getStats().nearLimitPauseCount, 1)
+  delete process.env.RIOT_APP_120S_BREATH_REMAINING_MAX
+  delete process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX
+})
+
+test('RiotRateLimiter: syncFromResponseHeaders hard-stops near 120s cap', async () => {
+  process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX = '1'
+  process.env.RIOT_APP_120S_HARD_STOP_MS = '1500'
+  process.env.RIOT_APP_120S_BREATH_REMAINING_MAX = '0'
+  const limiter = new RiotRateLimiter()
+  await limiter.schedule(async () => 'init')
+  const headers = new Headers({
+    'x-app-rate-limit': '20:1,100:120',
+    'x-app-rate-limit-count': '99:120',
+  })
+  limiter.syncFromResponseHeaders(headers)
+  const t0 = Date.now()
+  await limiter.schedule(async () => 'after')
+  const elapsed = Date.now() - t0
+  assert.ok(elapsed >= 1_400, `Should wait for hard-stop window, got ${elapsed}ms`)
+  assert.ok(elapsed < 8_000)
+  assert.equal(limiter.getStats().headerHardStopPauseCount, 1)
+  delete process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX
+  delete process.env.RIOT_APP_120S_HARD_STOP_MS
   delete process.env.RIOT_APP_120S_BREATH_REMAINING_MAX
 })
 
