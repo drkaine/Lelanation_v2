@@ -251,9 +251,7 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
 /**
  * Synchronise active_patches avec les patches présents dans les données brutes (`ingest_matchs`).
  */
-export async function syncActivePatches(): Promise<number> {
-  if (!isDatabaseConfigured()) return 0
-
+async function syncActivePatchesImpl(): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
     SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
     FROM (
@@ -275,13 +273,21 @@ export async function syncActivePatches(): Promise<number> {
 }
 
 /**
+ * Même logique que `syncActivePatchesImpl`, mais enfilée derrière la même file que les `REFRESH
+ * MATERIALIZED VIEW` pour éviter courses / verrous avec le cron MV ou un refresh manuel.
+ */
+export async function syncActivePatches(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  return enqueueMvRefresh(() => syncActivePatchesImpl())
+}
+
+/**
  * Sync active patches from match-filters config, then update hourly counters:
  * - games_number: ingest_matchs par patch
  * - game_number_max: maxMatches from config
  * - is_current: true while patch still collecting, false once target reached
  */
-export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
-  if (!isDatabaseConfigured()) return 0
+async function syncActivePatchesFromConfigAndCountsImpl(): Promise<number> {
   const filtersRes = await loadMatchFilters()
   if (filtersRes.isErr()) return 0
   const filters = filtersRes.unwrap()
@@ -309,15 +315,24 @@ export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
   return touched
 }
 
+/** Idem `syncActivePatches` : une seule charge lourde DB (MV / active_patches) à la fois. */
+export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  return enqueueMvRefresh(() => syncActivePatchesFromConfigAndCountsImpl())
+}
+
 /**
  * Enfile les refresh MV : chaque job s’exécute après le précédent (succès ou échec),
  * sans perdre un refresh déclenché pendant qu’un autre tourne.
  */
 let mvRefreshTail: Promise<unknown> = Promise.resolve()
 
-function enqueueMvRefresh(fn: () => Promise<void>): Promise<void> {
-  const next = mvRefreshTail.then(() => fn())
-  mvRefreshTail = next.catch(() => undefined)
+function enqueueMvRefresh<T>(fn: () => Promise<T>): Promise<T> {
+  const next = mvRefreshTail.then(fn) as Promise<T>
+  mvRefreshTail = next.then(
+    () => undefined,
+    () => undefined
+  )
   return next
 }
 

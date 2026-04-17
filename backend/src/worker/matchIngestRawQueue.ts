@@ -139,6 +139,30 @@ export async function requeueRawIngestErrors(limit: number): Promise<number> {
   return Number(moved ?? 0)
 }
 
+export async function requeueRawIngestStaleProcessing(maxAgeMs: number, limit: number): Promise<number> {
+  const cappedLimit = Math.max(1, Math.min(10_000, limit))
+  const cappedAgeSec = Math.max(1, Math.ceil(maxAgeMs / 1000))
+  const moved = await prisma.$executeRaw`
+    WITH candidates AS (
+      SELECT id
+      FROM match_ingest_raw
+      WHERE status = 'processing'
+        AND processing_started_at IS NOT NULL
+        AND processing_started_at <= NOW() - (${cappedAgeSec} * INTERVAL '1 second')
+      ORDER BY processing_started_at, id
+      LIMIT ${cappedLimit}
+    )
+    UPDATE match_ingest_raw q
+    SET status = 'pending',
+        processing_started_at = NULL,
+        next_retry_at = NULL,
+        last_error = COALESCE(NULLIF(q.last_error, ''), 'stale_processing_recovered')
+    FROM candidates
+    WHERE q.id = candidates.id
+  `
+  return Number(moved ?? 0)
+}
+
 export async function deleteDoneRawIngestRows(batchSize: number): Promise<number> {
   const capped = Math.max(1, Math.min(200_000, batchSize))
   const deleted = await prisma.$executeRaw`

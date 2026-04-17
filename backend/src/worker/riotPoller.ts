@@ -43,6 +43,7 @@ import {
   markRawIngestError,
   countRawIngestByStatus,
   requeueRawIngestErrors,
+  requeueRawIngestStaleProcessing,
   deleteDoneRawIngestRows,
 } from './matchIngestRawQueue.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
@@ -946,6 +947,41 @@ let matchIngestMetricsProcessed = 0
 let matchIngestMetricsLagTotalMs = 0
 let rawIngestFallbackWrites = 0
 
+/** Limite les écritures ingest concurrentes (contention DB / MV). Défaut 1 = séquentiel. */
+const matchIngestDbSlot = {
+  active: 0,
+  waiters: [] as Array<() => void>,
+}
+
+function getMatchIngestDbConcurrency(): number {
+  const raw = parseInt(process.env.MATCH_INGEST_DB_CONCURRENCY ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 1
+  return Math.min(32, raw)
+}
+
+async function acquireMatchIngestDbSlot(): Promise<void> {
+  const max = getMatchIngestDbConcurrency()
+  while (matchIngestDbSlot.active >= max) {
+    await new Promise<void>((resolve) => {
+      matchIngestDbSlot.waiters.push(resolve)
+    })
+  }
+  matchIngestDbSlot.active++
+}
+
+function releaseMatchIngestDbSlot(): void {
+  matchIngestDbSlot.active--
+  const wake = matchIngestDbSlot.waiters.shift()
+  if (wake) wake()
+}
+
+/** Workers file/raw plafonnés par `MATCH_INGEST_DB_CONCURRENCY` pour éviter N ingest DB en parallèle. */
+function getMatchIngestParallelJobs(): number {
+  const cap = getMatchIngestDbConcurrency()
+  const w = isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers()
+  return Math.min(w, cap)
+}
+
 function getMatchIngestQueueMaxDepth(): number {
   const raw = parseInt(process.env.MATCH_INGEST_QUEUE_MAX_PENDING ?? '', 10)
   if (!Number.isFinite(raw) || raw < 100) return 5000
@@ -960,14 +996,14 @@ function getMatchIngestBatchSize(): number {
 
 function getMatchIngestFileWorkers(): number {
   const raw = parseInt(process.env.MATCH_INGEST_FILE_WORKERS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 1) return 6
+  if (!Number.isFinite(raw) || raw < 1) return 1
   return Math.min(32, raw)
 }
 
-/** Raw-queue normalizer concurrency (default 8). Lower to 2–3 when DB is the bottleneck. */
+/** Raw-queue normalizer concurrency (défaut 1 pour limiter la pression sur la DB). */
 function getRawIngestWorkers(): number {
   const raw = parseInt(process.env.RAW_INGEST_WORKERS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 1) return 8
+  if (!Number.isFinite(raw) || raw < 1) return 1
   return Math.min(64, raw)
 }
 
@@ -978,9 +1014,28 @@ function getParallelMatchIngestFetches(): number {
   return Math.min(64, raw)
 }
 
+/** Max concurrent Phase-1 match-id lookups (league-v4 + match-v5 ids) to avoid bursty 429 waves. */
+function getMatchIdsLookupConcurrency(): number {
+  const raw = parseInt(process.env.RIOT_MATCH_IDS_LOOKUP_CONCURRENCY ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 6
+  return Math.min(32, raw)
+}
+
 function getRawIngestErrorRequeueBatch(): number {
   const raw = parseInt(process.env.RAW_INGEST_ERROR_REQUEUE_BATCH ?? '', 10)
   if (!Number.isFinite(raw) || raw < 1) return 100
+  return Math.min(10_000, raw)
+}
+
+function getRawIngestStaleProcessingMaxAgeMs(): number {
+  const raw = parseInt(process.env.RAW_INGEST_STALE_PROCESSING_MAX_AGE_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 10 * 60_000
+  return Math.min(24 * 60 * 60 * 1000, raw)
+}
+
+function getRawIngestStaleProcessingRequeueBatch(): number {
+  const raw = parseInt(process.env.RAW_INGEST_STALE_PROCESSING_REQUEUE_BATCH ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 500
   return Math.min(10_000, raw)
 }
 
@@ -1076,7 +1131,11 @@ async function maybeLogMatchIngestMetrics(): Promise<void> {
       queueDepth,
       errorDepth,
       workersBusy: matchIngestBgInFlight,
-      workersMax: isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers(),
+      workersMax: getMatchIngestParallelJobs(),
+      configuredFileOrRawWorkers: isRawIngestQueueEnabled()
+        ? getRawIngestWorkers()
+        : getMatchIngestFileWorkers(),
+      matchIngestDbConcurrency: getMatchIngestDbConcurrency(),
       fallbackFileWrites: rawIngestFallbackWrites,
       windowMs: elapsedMs,
       processed,
@@ -1150,6 +1209,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   }
   if (parsed.length === 0) return true
 
+  await acquireMatchIngestDbSlot()
+  try {
   const canonicalIds: string[] = []
   for (const { payload } of parsed) {
     const dto = payload.matchDto as RiotMatchDto
@@ -1285,13 +1346,16 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   }
   await maybeLogMatchIngestMetrics()
   return true
+  } finally {
+    releaseMatchIngestDbSlot()
+  }
 }
 
 async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void> {
   if (!isRawIngestQueueEnabled() && !isMatchIngestFileQueueEnabled()) return
   if (isRawIngestQueueEnabled()) await syncRawIngestDepthEstimates(true)
   else await syncMatchIngestQueueDepthEstimate(true)
-  const workers = isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers()
+  const workers = getMatchIngestParallelJobs()
   await Promise.all(
     Array.from({ length: workers }, async () => {
       let guard = 0
@@ -1307,7 +1371,7 @@ async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void
 function startMatchIngestBackgroundProcessor(): void {
   if (matchIngestBgTimer != null) return
   if (!isRawIngestQueueEnabled() && !isMatchIngestFileQueueEnabled()) return
-  const workers = isRawIngestQueueEnabled() ? getRawIngestWorkers() : getMatchIngestFileWorkers()
+  const workers = getMatchIngestParallelJobs()
   matchIngestBgTimer = setInterval(() => {
     const c = activeMatchIngestClient
     if (!c || !matchIngestStepContext) return
@@ -1661,21 +1725,36 @@ async function runStep4ForPlayer(
   }
   syncLiveCounters(true)
 
-  // Fetch all match IDs in parallel — requête par joueur (fenêtre patch vs depuis lastSeen).
+  // Fetch match IDs with bounded parallelism to avoid burst waves on league-v4.
   let phase1QueryNull = 0
-  const matchIdResults = await Promise.all(
-    validPlayers.map(async (player) => {
-      const query = buildMatchIdsQueryForPlayer(player, filters, patchWindowForMatchList)
-      if (query == null) {
-        phase1QueryNull++
-        return {
-          player,
-          res: { ok: true as const, status: 200, data: [] as string[] },
-          queryNull: true,
+  const matchIdResults: Array<{
+    player: (typeof validPlayers)[number]
+    res:
+      | { ok: true; data: string[] }
+      | { ok: false; status: number; message?: string; body?: unknown }
+    queryNull: boolean
+  }> = new Array(validPlayers.length)
+  let nextPlayerIdx = 0
+  const lookupWorkers = Math.min(getMatchIdsLookupConcurrency(), Math.max(1, validPlayers.length))
+  await Promise.all(
+    Array.from({ length: lookupWorkers }, async () => {
+      while (true) {
+        const idx = nextPlayerIdx++
+        if (idx >= validPlayers.length) break
+        const player = validPlayers[idx]
+        const query = buildMatchIdsQueryForPlayer(player, filters, patchWindowForMatchList)
+        if (query == null) {
+          phase1QueryNull++
+          matchIdResults[idx] = {
+            player,
+            res: { ok: true, data: [] as string[] },
+            queryNull: true,
+          }
+          continue
         }
+        const res = await client.getMatchIdsByPuuid(player.puuid, query, riotIngestRequestOptions())
+        matchIdResults[idx] = { player, res, queryNull: false }
       }
-      const res = await client.getMatchIdsByPuuid(player.puuid, query, riotIngestRequestOptions())
-      return { player, res, queryNull: false }
     })
   )
 
@@ -2401,6 +2480,23 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
       if (isRawIngestQueueEnabled()) {
+        const recovered = await requeueRawIngestStaleProcessing(
+          getRawIngestStaleProcessingMaxAgeMs(),
+          getRawIngestStaleProcessingRequeueBatch()
+        ).catch(() => 0)
+        if (recovered > 0) {
+          noteRawIngestQueueDepthDelta(recovered)
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'warning',
+            script: 'poller_ingest',
+            message: `Raw ingest recovery: ${recovered} ligne(s) stale processing -> pending`,
+            json: {
+              recovered,
+              staleMaxAgeMs: getRawIngestStaleProcessingMaxAgeMs(),
+            },
+          })
+        }
         const moved = await requeueRawIngestErrors(getRawIngestErrorRequeueBatch()).catch(() => 0)
         if (moved > 0) {
           noteRawIngestQueueDepthDelta(moved)

@@ -7,6 +7,7 @@ import {
   markRawIngestDone,
   markRawIngestError,
   requeueRawIngestErrors,
+  requeueRawIngestStaleProcessing,
   tryInsertRawIngestPayload,
 } from './matchIngestRawQueue.js'
 
@@ -27,7 +28,7 @@ test('matchIngestRawQueue: lifecycle pending->processing->error->pending->done',
     enqueuedAt: Date.now(),
   })
 
-  const claimed = await claimRawIngestRows(10)
+  const claimed = await claimRawIngestRows(10_000)
   const row = claimed.find((r) => r.riotMatchId === matchId)
   assert.ok(row, 'row should be claimable')
 
@@ -35,7 +36,7 @@ test('matchIngestRawQueue: lifecycle pending->processing->error->pending->done',
   const requeued = await requeueRawIngestErrors(100)
   assert.ok(requeued >= 1, 'should requeue at least one error row')
 
-  const claimedAgain = await claimRawIngestRows(10)
+  const claimedAgain = await claimRawIngestRows(10_000)
   const rowAgain = claimedAgain.find((r) => r.riotMatchId === matchId)
   assert.ok(rowAgain, 'row should be claimable again after requeue')
 
@@ -49,4 +50,37 @@ test('matchIngestRawQueue: lifecycle pending->processing->error->pending->done',
   `
   const cnt = typeof doneCount[0]?.cnt === 'bigint' ? Number(doneCount[0].cnt) : Number(doneCount[0]?.cnt ?? 0)
   assert.ok(cnt >= 1, 'done status should be persisted')
+})
+
+test('matchIngestRawQueue: stale processing rows are requeued', { skip: skipDbReason }, async () => {
+  const matchId = `EUW1_RAW_STALE_${Date.now()}`
+  await tryInsertRawIngestPayload({
+    v: 1,
+    stepId: 'test',
+    matchId,
+    region: 'euw1',
+    matchDto: { metadata: { matchId }, info: { participants: [] } },
+    timelineDto: null,
+    puuidKeyVersion: null,
+    trackerIdx: -1,
+    enqueuedAt: Date.now(),
+  })
+
+  const claimed = await claimRawIngestRows(10_000)
+  const row = claimed.find((r) => r.riotMatchId === matchId)
+  assert.ok(row, 'row should be claimable before stale-requeue test')
+
+  await prisma.$executeRaw`
+    UPDATE match_ingest_raw
+    SET processing_started_at = NOW() - INTERVAL '2 hours'
+    WHERE id = ${row!.id}
+  `
+  const moved = await requeueRawIngestStaleProcessing(10 * 60 * 1000, 100)
+  assert.ok(moved >= 1, 'should recover at least one stale processing row')
+
+  const claimedAgain = await claimRawIngestRows(10_000)
+  const rowAgain = claimedAgain.find((r) => r.riotMatchId === matchId)
+  assert.ok(rowAgain, 'stale processing row should be claimable again after recovery')
+
+  await markRawIngestDone(rowAgain!.id)
 })
