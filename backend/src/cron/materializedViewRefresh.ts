@@ -10,10 +10,6 @@ import {
 } from '../services/MaterializedViewService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { countMatchIngestQueueFiles } from '../worker/matchIngestQueue.js'
-import {
-  countRawIngestByStatus,
-  isRawIngestQueueEnabled,
-} from '../worker/matchIngestRawQueue.js'
 
 const DEFAULT_GROUP_CRONS = [
   '0 */4 * * *',
@@ -32,22 +28,11 @@ async function shouldSkipMvRefreshDueToIngestBacklog(groupIndex: number): Promis
   const threshold = getMvRefreshQueueGateThreshold()
   if (threshold <= 0) return false
 
-  let pending = 0
-  let processing = 0
-  let error = 0
-  if (isRawIngestQueueEnabled()) {
-    const raw = await countRawIngestByStatus()
-    pending = raw.pending
-    processing = raw.processing
-    error = raw.error
-  } else {
-    pending = await countMatchIngestQueueFiles()
-  }
+  // User policy: block MV refresh while match-ingest-queue has more than N files.
+  const fileBacklog = await countMatchIngestQueueFiles()
+  if (fileBacklog <= threshold) return false
 
-  const backlog = pending + processing + error
-  if (backlog < threshold) return false
-
-  const message = `MV refresh groupe ${groupIndex} ignoré (ingest backlog=${backlog} >= seuil ${threshold})`
+  const message = `MV refresh groupe ${groupIndex} ignoré (match-ingest-queue=${fileBacklog} > seuil ${threshold})`
   console.log(`[Cron] ${message}`)
   await appendUnifiedLog({
     section: 'db',
@@ -57,11 +42,8 @@ async function shouldSkipMvRefreshDueToIngestBacklog(groupIndex: number): Promis
     json: {
       groupIndex,
       threshold,
-      backlog,
-      pending,
-      processing,
-      error,
-      rawQueueEnabled: isRawIngestQueueEnabled(),
+      backlog: fileBacklog,
+      fileQueueDepth: fileBacklog,
     },
   })
   return true

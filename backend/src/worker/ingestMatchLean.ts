@@ -329,6 +329,9 @@ export async function upsertIngestMatchAndParticipants(
     matchIngestOptions?.sharedAccountRankCache ??
     new Map<string, { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }>()
   const shouldAbort = matchIngestOptions?.shouldAbort ?? (() => false)
+  const allowLeagueRankApiFetch = matchIngestOptions?.allowLeagueRankApiFetch ?? true
+  const forceLeagueRankApiForEachParticipant =
+    matchIngestOptions?.forceLeagueRankApiForEachParticipant ?? false
 
   function normalizeRankTier(raw: unknown): string | null {
     if (typeof raw !== 'string') return null
@@ -356,11 +359,13 @@ export async function upsertIngestMatchAndParticipants(
   }
 
   async function fetchAccountRankForParticipant(puuid: string): Promise<void> {
-    if (accountRankCache.has(puuid)) return
-    const cached = getCachedRank(puuid)
-    if (cached) {
-      accountRankCache.set(puuid, cached)
-      return
+    if (!forceLeagueRankApiForEachParticipant) {
+      if (accountRankCache.has(puuid)) return
+      const cached = getCachedRank(puuid)
+      if (cached) {
+        accountRankCache.set(puuid, cached)
+        return
+      }
     }
     const entriesRes = await client.getLeagueEntriesByPuuid(puuid, {
       infinite429Retry: true,
@@ -399,27 +404,31 @@ export async function upsertIngestMatchAndParticipants(
   for (const p of participantDtos) {
     if (p.puuid && !participantDtoByPuuid.has(p.puuid)) participantDtoByPuuid.set(p.puuid, p)
   }
-  const leagueFetchPuuids = Array.from(
-    new Set(
-      participantDtos
-        .map((p) => p.puuid)
-        .filter((pid): pid is string => Boolean(pid))
-        .filter((pid) => {
-          const dtoP = participantDtoByPuuid.get(pid)
-          if (!dtoP || !needsLeagueRankApiFromDto(dtoP)) return false
-          const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
-          return isRankUpdateRequired(playerRow, gameDate)
-        })
+  const leagueFetchPuuids = forceLeagueRankApiForEachParticipant
+    ? Array.from(new Set(participantDtos.map((p) => p.puuid).filter((pid): pid is string => Boolean(pid))))
+    : Array.from(
+        new Set(
+          participantDtos
+            .map((p) => p.puuid)
+            .filter((pid): pid is string => Boolean(pid))
+            .filter((pid) => {
+              const dtoP = participantDtoByPuuid.get(pid)
+              if (!dtoP || !needsLeagueRankApiFromDto(dtoP)) return false
+              const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
+              return isRankUpdateRequired(playerRow, gameDate)
+            })
+        )
+      )
+  if (allowLeagueRankApiFetch) {
+    const leagueFetchResults = await Promise.allSettled(
+      leagueFetchPuuids.map((pid) => fetchAccountRankForParticipant(pid))
     )
-  )
-  const leagueFetchResults = await Promise.allSettled(
-    leagueFetchPuuids.map((pid) => fetchAccountRankForParticipant(pid))
-  )
-  for (const res of leagueFetchResults) {
-    if (res.status === 'fulfilled') continue
-    const reason = res.reason instanceof Error ? res.reason.message : String(res.reason)
-    if (reason === RIOT_INGEST_ABORTED_MESSAGE) throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
-    await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
+    for (const res of leagueFetchResults) {
+      if (res.status === 'fulfilled') continue
+      const reason = res.reason instanceof Error ? res.reason.message : String(res.reason)
+      if (reason === RIOT_INGEST_ABORTED_MESSAGE) throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
+      await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
+    }
   }
 
   const resolvedRanks: ResolvedParticipantRank[] = participantDtos.map((p) => {

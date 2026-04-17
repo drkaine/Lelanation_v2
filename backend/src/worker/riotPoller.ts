@@ -1051,6 +1051,20 @@ function getRawIngestDoneCleanupBatch(): number {
   return Math.min(200_000, raw)
 }
 
+function isMatchIngestLeagueLookupEnabled(): boolean {
+  const raw = (process.env.MATCH_INGEST_LEAGUE_LOOKUPS ?? '').trim().toLowerCase()
+  if (!raw) return true
+  return !(raw === '0' || raw === 'false' || raw === 'off')
+}
+
+function isMatchIngestLeagueLookupForcedPerParticipant(): boolean {
+  const raw = (process.env.MATCH_INGEST_FORCE_LEAGUE_LOOKUP_EACH_PARTICIPANT ?? '')
+    .trim()
+    .toLowerCase()
+  if (!raw) return false
+  return raw === '1' || raw === 'true' || raw === 'on'
+}
+
 async function syncMatchIngestQueueDepthEstimate(force = false): Promise<number> {
   if (!isMatchIngestFileQueueEnabled()) return 0
   const now = Date.now()
@@ -1239,6 +1253,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     ingestPreload,
     sharedAccountRankCache,
     shouldAbort: () => state.shouldStop,
+    allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
+    forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
   }
 
   for (let i = 0; i < parsed.length; i++) {
