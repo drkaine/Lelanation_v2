@@ -1,8 +1,9 @@
+import { Prisma } from '../generated/prisma/index.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
 
 type BalanceStatus = 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
-const BALANCE_ALLOWED_ROLES = new Set(['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'])
+const BALANCE_ALLOWED_ROLES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'])
 
 type ChampionAgg = {
   games: number
@@ -102,14 +103,14 @@ function findPreviousPatch(current: string, available: string[]): string | null 
 }
 
 async function listAvailablePatches(): Promise<string[]> {
-  const rows = await prisma.mvChampionCoreStat.findMany({
-    select: { gameVersion: true },
-    distinct: ['gameVersion'],
-  })
+  const rows = await prisma.$queryRaw<Array<{ game_version: string }>>`
+    SELECT DISTINCT game_version
+    FROM agg_champion_core_stats
+  `
   return [
     ...new Set(
       rows
-        .map((r) => patchLabel(r.gameVersion))
+        .map((r) => patchLabel(r.game_version))
         .filter((v): v is string => Boolean(v))
     ),
   ]
@@ -118,8 +119,8 @@ async function listAvailablePatches(): Promise<string[]> {
 function normalizeRoleFilter(role: string | null | undefined): string | null {
   const v = String(role ?? '').trim().toUpperCase()
   if (!v) return null
-  if (v === 'MIDDLE') return 'MID'
-  if (v === 'BOTTOM') return 'ADC'
+  if (v === 'MID') return 'MIDDLE'
+  if (v === 'ADC') return 'BOTTOM'
   if (!BALANCE_ALLOWED_ROLES.has(v)) return null
   return v
 }
@@ -190,27 +191,31 @@ async function buildPatchSnapshot(
   role: string | null,
   rules: BalanceRulesConfig
 ): Promise<PatchSnapshot> {
+  type CoreRow = {
+    champion_id: number
+    rank_tier: string
+    role: string
+    count_game: number
+    count_win: number
+    count_ban: number
+  }
   const allTiers = new Set<string>()
   ;(['average', 'skilled', 'elite'] as const).forEach((k) => {
     for (const tier of rules.levels[k].tiers) allTiers.add(tier)
   })
   const tiers = [...allTiers]
 
-  const coreRows = await prisma.mvChampionCoreStat.findMany({
-    where: {
-      gameVersion: { startsWith: patch },
-      rankTier: { in: tiers },
-      ...(role ? { role } : {}),
-    },
-    select: {
-      championId: true,
-      rankTier: true,
-      role: true,
-      countGame: true,
-      countWin: true,
-      countBan: true,
-    },
-  })
+  const tiersSql = Prisma.join(tiers.map((t) => Prisma.sql`${t}`))
+  const roleFilter = role ? Prisma.sql`AND role = ${role}` : Prisma.sql``
+  const coreRows = await prisma.$queryRaw<CoreRow[]>(
+    Prisma.sql`
+      SELECT champion_id, rank_tier, role, count_game, count_win, count_ban
+      FROM agg_champion_core_stats
+      WHERE game_version LIKE ${`${patch}%`}
+        AND rank_tier IN (${tiersSql})
+        ${roleFilter}
+    `
+  )
 
   const byLevel: Record<BalanceLevelKey, Map<string, ChampionAgg>> = {
     average: new Map(),
@@ -223,14 +228,14 @@ async function buildPatchSnapshot(
     elite: 0,
   }
   for (const r of coreRows) {
-    const rankTier = String(r.rankTier).toUpperCase()
+    const rankTier = String(r.rank_tier).toUpperCase()
     const roleNorm = String(r.role ?? '').toUpperCase()
     if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
-    const cid = r.championId
+    const cid = r.champion_id
     const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
-    const games = r.countGame
-    const wins = r.countWin
-    const bans = r.countBan
+    const games = r.count_game
+    const wins = r.count_win
+    const bans = r.count_ban
 
     ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
       if (!rules.levels[lvl].tiers.includes(rankTier)) return

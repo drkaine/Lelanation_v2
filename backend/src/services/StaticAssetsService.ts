@@ -467,11 +467,14 @@ export class StaticAssetsService {
     try {
 
       // Execute npm run build in frontend directory
-      const { stderr } = await runBuild()
+      const { stdout, stderr } = await runBuild()
 
       if (stderr && !stderr.includes('built')) {
         // Some warnings might go to stderr, but check for actual errors
         console.warn(`[StaticAssets] Frontend build warning: ${stderr}`)
+      }
+      if (stdout && stdout.trim().length > 0) {
+        console.log(`[StaticAssets] Frontend build output: ${stdout}`)
       }
 
       return Result.ok(undefined)
@@ -506,6 +509,10 @@ export class StaticAssetsService {
         }
       }
       console.error(`[StaticAssets] Failed to build frontend: ${errorMessage}`)
+      const stdout = typeof error?.stdout === 'string' ? error.stdout : ''
+      if (stdout) {
+        console.error(`[StaticAssets] Frontend build stdout: ${stdout}`)
+      }
       if (stderr) {
         console.error(`[StaticAssets] Frontend build stderr: ${stderr}`)
       }

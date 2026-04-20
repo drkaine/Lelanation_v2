@@ -15,12 +15,26 @@ type RawParticipant = {
   totalDamageDealtToChampions?: number
   tier?: string
   rankTier?: string
+  summoner1Id?: number
+  summoner2Id?: number
+  runes?: number[]
+  shards?: number[]
+  perks?: {
+    styles?: Array<{ style?: number; selections?: Array<{ perk?: number }> }>
+    statPerks?: { offense?: number; flex?: number; defense?: number }
+  }
+  item0?: number
+  item1?: number
+  item2?: number
+  item3?: number
+  item4?: number
+  item5?: number
 }
 
 type RawTeam = {
   teamId?: number
   win?: boolean
-  bans?: Array<{ championId?: number }>
+  bans?: Array<{ championId?: number; pickOrder?: number; pickTurn?: number }>
   objectives?: Record<string, { first?: boolean; kills?: number }>
 }
 
@@ -117,6 +131,61 @@ function toObjectiveBucket(value: number): number {
   return Math.min(20, Math.max(0, Math.trunc(value)))
 }
 
+function extractRunesAndShards(p: RawParticipant): { runes: number[]; shards: number[]; stylesByRune: Map<number, string> } {
+  const stylesByRune = new Map<number, string>()
+  const runesFromFlat = Array.isArray(p.runes) ? p.runes.map((x) => toSafeInt(x)).filter((x) => x > 0) : []
+  const shardsFromFlat = Array.isArray(p.shards) ? p.shards.map((x) => toSafeInt(x)).filter((x) => x > 0) : []
+
+  const perks = p.perks
+  const runesFromPerks: number[] = []
+  if (Array.isArray(perks?.styles)) {
+    for (const st of perks.styles) {
+      const styleStr = String(toSafeInt(st?.style))
+      for (const sel of st?.selections ?? []) {
+        const perkId = toSafeInt(sel?.perk)
+        if (perkId > 0) {
+          runesFromPerks.push(perkId)
+          stylesByRune.set(perkId, styleStr)
+        }
+      }
+    }
+  }
+
+  const statPerks = perks?.statPerks
+  const shardsFromPerks = [toSafeInt(statPerks?.offense), toSafeInt(statPerks?.flex), toSafeInt(statPerks?.defense)].filter((x) => x > 0)
+
+  const runes = (runesFromFlat.length > 0 ? runesFromFlat : runesFromPerks).filter((x) => x > 0)
+  const shards = (shardsFromFlat.length > 0 ? shardsFromFlat : shardsFromPerks).filter((x) => x > 0)
+  return { runes, shards, stylesByRune }
+}
+
+function extractFinalItems(p: RawParticipant): number[] {
+  const ids = [p.item0, p.item1, p.item2, p.item3, p.item4, p.item5]
+    .map((v) => toSafeInt(v))
+    .filter((v) => v > 0)
+  return ids
+}
+
+function toDurationBucket(gameDurationSeconds: number): number {
+  if (!Number.isFinite(gameDurationSeconds) || gameDurationSeconds <= 0) return 0
+  return Math.max(0, Math.trunc(gameDurationSeconds / 60))
+}
+
+function bannerRoleFromPickOrder(pickOrderRaw: unknown): string {
+  const pickOrder = toSafeInt(pickOrderRaw)
+  if (pickOrder === 1) return 'TOP'
+  if (pickOrder === 2) return 'JUNGLE'
+  if (pickOrder === 3) return 'MIDDLE'
+  if (pickOrder === 4) return 'BOTTOM'
+  if (pickOrder === 5) return 'SUPPORT'
+  return 'UNKNOWN'
+}
+
+function isRetryableTxError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return message.includes('40P01') || message.toLowerCase().includes('deadlock detected')
+}
+
 export async function processRawAggregateAndBurn(
   rawId: bigint,
   payload: MatchIngestQueuePayloadV1,
@@ -131,10 +200,12 @@ export async function processRawAggregateAndBurn(
   const infoAny = payload.matchDto as {
     info?: {
       gameVersion?: string
+      gameDuration?: number
       teams?: RawTeam[]
     }
   }
   const gameVersion = normalizeGameVersion(infoAny.info?.gameVersion)
+  const durationBucket = toDurationBucket(toSafeInt(infoAny.info?.gameDuration))
   const region = String(payload.region ?? '').trim().toLowerCase() || 'euw1'
   const bannedChampions = new Set<number>()
   for (const team of infoAny.info?.teams ?? []) {
@@ -144,7 +215,9 @@ export async function processRawAggregateAndBurn(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await prisma.$transaction(async (tx) => {
     const resolvedRoles = resolveParticipantRoles(participants)
     const participantByTeamRole = new Map<string, RawParticipant[]>()
     const teamRoleByChampion = new Map<string, string>()
@@ -169,12 +242,13 @@ export async function processRawAggregateAndBurn(
 
       const wins = p.win === true ? 1 : 0
       const rankTier = normalizeRankTier(p)
+      if (rankTier === 'UNRANKED') continue
       const role = resolvedRoles[idx] ?? roleFromPosition(p)
       if (!isAllowedRole(role)) continue
-      const statId = coreStatId(championId, role, rankTier, gameVersion, region)
+      const statIdCandidate = coreStatId(championId, role, rankTier, gameVersion, region)
       const countBan = bannedChampions.has(championId) ? 1 : 0
 
-      await tx.$executeRaw`
+      const coreRows = await tx.$queryRaw<Array<{ id: bigint }>>`
         INSERT INTO agg_champion_core_stats (
           id,
           champion_id,
@@ -188,7 +262,7 @@ export async function processRawAggregateAndBurn(
           updated_at
         )
         VALUES (
-          ${statId},
+          ${statIdCandidate},
           ${championId},
           ${role},
           ${rankTier},
@@ -199,12 +273,15 @@ export async function processRawAggregateAndBurn(
           ${countBan},
           NOW()
         )
-        ON CONFLICT (id) DO UPDATE
+        ON CONFLICT (champion_id, role, rank_tier, game_version, region) DO UPDATE
         SET count_game = agg_champion_core_stats.count_game + EXCLUDED.count_game,
             count_win = agg_champion_core_stats.count_win + EXCLUDED.count_win,
             count_ban = agg_champion_core_stats.count_ban + EXCLUDED.count_ban,
             updated_at = NOW()
+        RETURNING id
       `
+      const statId = coreRows[0]?.id
+      if (statId == null) continue
 
       const teamId = toSafeInt(p.teamId)
       const opponentTeamId = teamId === 100 ? 200 : 100
@@ -241,18 +318,296 @@ export async function processRawAggregateAndBurn(
         `
       }
 
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_bucket (
+          champion_stat_id,
+          duration_bucket,
+          count_win,
+          count_game,
+          updated_at
+        )
+        VALUES (
+          ${statId},
+          ${durationBucket},
+          ${wins},
+          1,
+          NOW()
+        )
+        ON CONFLICT (champion_stat_id, duration_bucket) DO UPDATE
+        SET count_game = agg_champion_bucket.count_game + EXCLUDED.count_game,
+            count_win = agg_champion_bucket.count_win + EXCLUDED.count_win,
+            updated_at = NOW()
+      `
+
+      const spellD = toSafeInt((p as RawParticipant).summoner1Id)
+      const spellF = toSafeInt((p as RawParticipant).summoner2Id)
+      if (spellD > 0) {
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_summoner_spells (
+            champion_stat_id,
+            spell_id,
+            count_win,
+            count_game,
+            count_slot0,
+            count_slot1,
+            updated_at
+          )
+          VALUES (
+            ${statId},
+            ${spellD},
+            ${wins},
+            1,
+            1,
+            0,
+            NOW()
+          )
+          ON CONFLICT (champion_stat_id, spell_id) DO UPDATE
+          SET count_game = agg_champion_summoner_spells.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_summoner_spells.count_win + EXCLUDED.count_win,
+              count_slot0 = agg_champion_summoner_spells.count_slot0 + EXCLUDED.count_slot0,
+              count_slot1 = agg_champion_summoner_spells.count_slot1 + EXCLUDED.count_slot1,
+              updated_at = NOW()
+        `
+      }
+      if (spellF > 0) {
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_summoner_spells (
+            champion_stat_id,
+            spell_id,
+            count_win,
+            count_game,
+            count_slot0,
+            count_slot1,
+            updated_at
+          )
+          VALUES (
+            ${statId},
+            ${spellF},
+            ${wins},
+            1,
+            0,
+            1,
+            NOW()
+          )
+          ON CONFLICT (champion_stat_id, spell_id) DO UPDATE
+          SET count_game = agg_champion_summoner_spells.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_summoner_spells.count_win + EXCLUDED.count_win,
+              count_slot0 = agg_champion_summoner_spells.count_slot0 + EXCLUDED.count_slot0,
+              count_slot1 = agg_champion_summoner_spells.count_slot1 + EXCLUDED.count_slot1,
+              updated_at = NOW()
+        `
+      }
+
+      const { runes, shards, stylesByRune } = extractRunesAndShards(p)
+      if (runes.length > 0 || shards.length > 0) {
+        const runeList = JSON.stringify(runes)
+        const shardList = shards.join(',')
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_runes_stats (
+            champion_stat_id,
+            rune_list,
+            shard_list,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (${statId}, ${runeList}, ${shardList}, ${wins}, 1, NOW())
+          ON CONFLICT (champion_stat_id, rune_list, shard_list) DO UPDATE
+          SET count_game = agg_champion_runes_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_runes_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
+
+      for (const runeId of runes) {
+        const style = stylesByRune.get(runeId) ?? ''
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_runes_solo_stats (
+            champion_stat_id,
+            perk_id,
+            style,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (${statId}, ${runeId}, ${style}, ${wins}, 1, NOW())
+          ON CONFLICT (champion_stat_id, perk_id, style) DO UPDATE
+          SET count_game = agg_champion_runes_solo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_runes_solo_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
+
+      for (let slot = 0; slot < shards.length; slot++) {
+        const shardId = shards[slot]!
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_shard_solo_stats (
+            champion_stat_id,
+            shard_id,
+            slot,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (${statId}, ${shardId}, ${slot}, ${wins}, 1, NOW())
+          ON CONFLICT (champion_stat_id, shard_id, slot) DO UPDATE
+          SET count_game = agg_champion_shard_solo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_shard_solo_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
+
+      const finalItems = extractFinalItems(p)
+      const itemList = JSON.stringify(finalItems)
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_item_stats (
+          champion_stat_id,
+          item_list,
+          count_win,
+          count_game,
+          sum_timestamp_ms,
+          updated_at
+        )
+        VALUES (${statId}, ${itemList}, ${wins}, 1, 0, NOW())
+        ON CONFLICT (champion_stat_id, item_list) DO UPDATE
+        SET count_game = agg_champion_item_stats.count_game + EXCLUDED.count_game,
+            count_win = agg_champion_item_stats.count_win + EXCLUDED.count_win,
+            sum_timestamp_ms = agg_champion_item_stats.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
+            updated_at = NOW()
+      `
+
+      for (const itemId of finalItems) {
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_item_solo_stats (
+            champion_stat_id,
+            item_id,
+            count_starter,
+            count_core,
+            count_final,
+            count_win,
+            count_game,
+            sum_timestamp_ms,
+            updated_at
+          )
+          VALUES (${statId}, ${itemId}, 0, 0, 1, ${wins}, 1, 0, NOW())
+          ON CONFLICT (champion_stat_id, item_id) DO UPDATE
+          SET count_starter = agg_champion_item_solo_stats.count_starter + EXCLUDED.count_starter,
+              count_core = agg_champion_item_solo_stats.count_core + EXCLUDED.count_core,
+              count_final = agg_champion_item_solo_stats.count_final + EXCLUDED.count_final,
+              count_game = agg_champion_item_solo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_item_solo_stats.count_win + EXCLUDED.count_win,
+              sum_timestamp_ms = agg_champion_item_solo_stats.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
+              updated_at = NOW()
+        `
+      }
+
+    }
+
+    const pairRows = await tx.$queryRaw<
+      Array<{ rank_tier: string; role_norm: string; champion_id: number; spell_d: number; spell_f: number; count_game: bigint; count_win: bigint }>
+    >`
+      SELECT
+        COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') AS rank_tier,
+        UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) AS role_norm,
+        imp.champion_id,
+        imp.summoner_spells[1]::int AS spell_d,
+        imp.summoner_spells[2]::int AS spell_f,
+        COUNT(*)::bigint AS count_game,
+        SUM(CASE WHEN it.win THEN 1 ELSE 0 END)::bigint AS count_win
+      FROM ingest_match_players imp
+      INNER JOIN ingest_matchs im ON im.id = imp.match_id
+      INNER JOIN ingest_teams it ON it.id = imp.team_id
+      WHERE im.riot_match_id = ${trackedMatchId}
+        AND cardinality(imp.summoner_spells) >= 2
+        AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+        AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT')
+      GROUP BY
+        COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED'),
+        UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')),
+        imp.champion_id,
+        imp.summoner_spells[1],
+        imp.summoner_spells[2]
+    `
+    for (const r of pairRows) {
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_summoner_spell_pair_stats (
+          game_version, rank_tier, role_norm, champion_id, spell_d, spell_f, count_game, count_win, updated_at
+        )
+        VALUES (
+          ${gameVersion}, ${r.rank_tier}, ${r.role_norm}, ${r.champion_id}, ${r.spell_d}, ${r.spell_f},
+          ${Number(r.count_game ?? 0)}, ${Number(r.count_win ?? 0)}, NOW()
+        )
+        ON CONFLICT (game_version, rank_tier, role_norm, champion_id, spell_d, spell_f) DO UPDATE
+        SET count_game = agg_champion_summoner_spell_pair_stats.count_game + EXCLUDED.count_game,
+            count_win = agg_champion_summoner_spell_pair_stats.count_win + EXCLUDED.count_win,
+            updated_at = NOW()
+      `
+    }
+
+    const starterRows = await tx.$queryRaw<
+      Array<{ rank_tier: string; role_norm: string; champion_id: number; starter_key: string; count_game: bigint; count_win: bigint }>
+    >`
+      WITH starter_rows AS (
+        SELECT
+          COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') AS rank_tier,
+          UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) AS role_norm,
+          imp.champion_id,
+          it.win,
+          COALESCE(
+            (
+              SELECT '[' || string_agg((e ->> 'itemId')::text, ',' ORDER BY (e ->> 'order')::int, (e ->> 'timestampMs')::bigint) || ']'
+              FROM jsonb_array_elements(COALESCE(imp.items::jsonb, '[]'::jsonb)) AS e
+              WHERE COALESCE((e ->> 'starter')::boolean, false)
+                AND (e ->> 'itemId')::int NOT IN (
+                  3340, 3364, 3363, 2055,
+                  2003, 2009, 2010, 2031, 2032, 2033, 2060, 2138, 2139, 2140
+                )
+            ),
+            '[]'
+          ) AS starter_key
+        FROM ingest_match_players imp
+        INNER JOIN ingest_matchs im ON im.id = imp.match_id
+        INNER JOIN ingest_teams it ON it.id = imp.team_id
+        WHERE im.riot_match_id = ${trackedMatchId}
+          AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+          AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT')
+      )
+      SELECT
+        rank_tier, role_norm, champion_id, starter_key,
+        COUNT(*)::bigint AS count_game,
+        SUM(CASE WHEN win THEN 1 ELSE 0 END)::bigint AS count_win
+      FROM starter_rows
+      WHERE starter_key <> '[]'
+      GROUP BY rank_tier, role_norm, champion_id, starter_key
+    `
+    for (const r of starterRows) {
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_item_starter_set_stats (
+          game_version, rank_tier, role_norm, champion_id, starter_key, count_game, count_win, updated_at
+        )
+        VALUES (
+          ${gameVersion}, ${r.rank_tier}, ${r.role_norm}, ${r.champion_id}, ${r.starter_key},
+          ${Number(r.count_game ?? 0)}, ${Number(r.count_win ?? 0)}, NOW()
+        )
+        ON CONFLICT (game_version, rank_tier, role_norm, champion_id, starter_key) DO UPDATE
+        SET count_game = agg_champion_item_starter_set_stats.count_game + EXCLUDED.count_game,
+            count_win = agg_champion_item_starter_set_stats.count_win + EXCLUDED.count_win,
+            updated_at = NOW()
+      `
     }
 
     const matchRankTier =
       participants.map((p) => normalizeRankTier(p)).find((t) => t !== 'UNRANKED') ?? 'UNRANKED'
 
-    await tx.$executeRaw`
-      INSERT INTO agg_match_outcome_stats (game_version, rank_tier, count_match, updated_at)
-      VALUES (${gameVersion}, ${matchRankTier}, 1, NOW())
-      ON CONFLICT (game_version, rank_tier) DO UPDATE
-      SET count_match = agg_match_outcome_stats.count_match + EXCLUDED.count_match,
-          updated_at = NOW()
-    `
+    if (matchRankTier !== 'UNRANKED') {
+      await tx.$executeRaw`
+        INSERT INTO agg_match_outcome_stats (game_version, rank_tier, count_match, updated_at)
+        VALUES (${gameVersion}, ${matchRankTier}, 1, NOW())
+        ON CONFLICT (game_version, rank_tier) DO UPDATE
+        SET count_match = agg_match_outcome_stats.count_match + EXCLUDED.count_match,
+            updated_at = NOW()
+      `
+    }
 
     for (let idx = 0; idx < participants.length; idx++) {
       const p = participants[idx]
@@ -262,6 +617,7 @@ export async function processRawAggregateAndBurn(
       const role = resolvedRoles[idx] ?? roleFromPosition(p)
       if (!isAllowedRole(role)) continue
       const rankTier = normalizeRankTier(p)
+      if (rankTier === 'UNRANKED') continue
       const wins = p.win === true ? 1 : 0
       await tx.$executeRaw`
         INSERT INTO agg_champion_side_stats (
@@ -285,13 +641,14 @@ export async function processRawAggregateAndBurn(
     for (const team of infoAny.info?.teams ?? []) {
       const teamNum = toSafeInt(team.teamId)
       if (teamNum !== 100 && teamNum !== 200) continue
-      const id = teamCoreId(teamNum, matchRankTier, gameVersion)
+      if (matchRankTier === 'UNRANKED') continue
+      const idCandidate = teamCoreId(teamNum, matchRankTier, gameVersion)
       const objectives = team.objectives ?? {}
       const readKills = (k: string) => toSafeInt(objectives[k]?.kills)
       const readFirst = (k: string) => (objectives[k]?.first === true ? 1 : 0)
       const win = team.win === true ? 1 : 0
 
-      await tx.$executeRaw`
+      const teamRows = await tx.$queryRaw<Array<{ id: bigint }>>`
         INSERT INTO agg_team_core_stats (
           id, team, rank_tier, game_version, count_win, count_game,
           sum_baron_kills, count_baron_first, sum_dragon_kills, count_dragon_first,
@@ -300,13 +657,13 @@ export async function processRawAggregateAndBurn(
           count_first_blood, sum_elder_kills, updated_at
         )
         VALUES (
-          ${id}, ${teamNum}, ${matchRankTier}, ${gameVersion}, ${win}, 1,
+          ${idCandidate}, ${teamNum}, ${matchRankTier}, ${gameVersion}, ${win}, 1,
           ${readKills('baron')}, ${readFirst('baron')}, ${readKills('dragon')}, ${readFirst('dragon')},
           ${readKills('tower')}, ${readFirst('tower')}, ${readKills('horde')}, ${readFirst('horde')},
           ${readKills('riftHerald')}, ${readFirst('riftHerald')}, ${readKills('inhibitor')},
           ${readFirst('champion')}, ${readKills('elderDragon')}, NOW()
         )
-        ON CONFLICT (id) DO UPDATE
+        ON CONFLICT (team, rank_tier, game_version) DO UPDATE
         SET count_game = agg_team_core_stats.count_game + EXCLUDED.count_game,
             count_win = agg_team_core_stats.count_win + EXCLUDED.count_win,
             sum_baron_kills = agg_team_core_stats.sum_baron_kills + EXCLUDED.sum_baron_kills,
@@ -323,9 +680,11 @@ export async function processRawAggregateAndBurn(
             count_first_blood = agg_team_core_stats.count_first_blood + EXCLUDED.count_first_blood,
             sum_elder_kills = agg_team_core_stats.sum_elder_kills + EXCLUDED.sum_elder_kills,
             updated_at = NOW()
+        RETURNING id
       `
+      const sideStatId = teamRows[0]?.id
+      if (sideStatId == null) continue
 
-      const sideStatId = teamCoreId(teamNum, matchRankTier, gameVersion)
       const objectiveBuckets = [
         ['baron', toObjectiveBucket(readKills('baron'))],
         ['dragon', toObjectiveBucket(readKills('dragon'))],
@@ -363,7 +722,14 @@ export async function processRawAggregateAndBurn(
       for (const ban of team.bans ?? []) {
         const bannedChampionId = toSafeInt(ban.championId)
         if (bannedChampionId <= 0) continue
-        const bannerRoleNorm = teamRoleByChampion.get(`${teamNum}|${bannedChampionId}`) ?? 'UNKNOWN'
+        const byPickOrder = bannerRoleFromPickOrder(
+          (ban as { pickOrder?: number; pickTurn?: number }).pickOrder ??
+            (ban as { pickOrder?: number; pickTurn?: number }).pickTurn
+        )
+        const bannerRoleNorm =
+          byPickOrder !== 'UNKNOWN'
+            ? byPickOrder
+            : (teamRoleByChampion.get(`${teamNum}|${bannedChampionId}`) ?? 'UNKNOWN')
         await tx.$executeRaw`
           INSERT INTO agg_champion_bans_by_banner (
             team_num, banner_role_norm, banned_champion_id, game_version, rank_tier, ban_count, updated_at
@@ -383,5 +749,11 @@ export async function processRawAggregateAndBurn(
     `
 
     await tx.$executeRaw`DELETE FROM match_ingest_raw WHERE id = ${rawId}`
-  })
+      })
+      break
+    } catch (err) {
+      if (attempt >= 3 || !isRetryableTxError(err)) throw err
+      await new Promise((r) => setTimeout(r, attempt * 150))
+    }
+  }
 }

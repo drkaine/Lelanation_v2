@@ -1,15 +1,11 @@
 /**
- * StatsAggregationService (Phase 2)
- *
- * Single responsibility: run patch cleanup from config (close patches that have
- * reached maxMatches → archive MVs + remove from active_patches + delete raw match data).
- *
- * Incremental aggregation into champion_*_stats / team_core_stats has been removed;
- * stats are computed only via materialized views from raw data (core_stat_id).
+ * Patch cleanup service:
+ * close patches that reached maxMatches (archive + remove from active list + raw cleanup).
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { loadMatchFilters } from './RiotConfigService.js'
+import { closePatch } from './PatchLifecycleService.js'
 
 type LoggerType = ReturnType<typeof createRiotPollerLogger>
 
@@ -20,8 +16,6 @@ type LoggerType = ReturnType<typeof createRiotPollerLogger>
  */
 export async function runPatchCleanupFromConfig(logger?: LoggerType): Promise<void> {
   if (!isDatabaseConfigured()) return
-
-  const { closePatch } = await import('./MaterializedViewService.js')
 
   const filtersRes = await loadMatchFilters()
   if (filtersRes.isErr()) return

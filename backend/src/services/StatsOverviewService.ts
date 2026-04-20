@@ -1,16 +1,14 @@
 /**
  * Overview stats for the statistics page: total matches, last update, top winrate champions,
  * matches per division, distinct participant count (unique player_id in ingest_match_players).
- * Uses materialized views built from `ingest_*` plus aggregate helpers where applicable.
+ * Uses incremental aggregate tables (`agg_*`) plus legacy MVs for metrics not yet migrated.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import {
-  applyRankTierWhere,
   rankTierCacheKey,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
-import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
 
@@ -451,24 +449,30 @@ export async function getOverviewStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const coreWhere: Record<string, unknown> = {}
-    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) coreWhere.role = pRole
-
     const [coreRows, matchOutcomeRows, matchDivisionRows, matchVersionRows] = await Promise.all([
-      prisma.mvChampionCoreStat.findMany({
-        where: coreWhere,
-        select: {
-          championId: true,
-          countWin: true,
-          countGame: true,
-          countBan: true,
-          rankTier: true,
-          gameVersion: true,
-          region: true,
-        },
-      }),
+      prisma.$queryRawUnsafe<
+        Array<{
+          champion_id: number
+          count_win: bigint
+          count_game: bigint
+          count_ban: bigint
+          rank_tier: string
+          game_version: string
+          region: string
+        }>
+      >(`
+        SELECT
+          ac.champion_id,
+          ac.count_win,
+          ac.count_game,
+          ac.count_ban,
+          ac.rank_tier,
+          ac.game_version,
+          ac.region
+        FROM agg_champion_core_stats ac
+        WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ac.')}
+        ${pRole ? `AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''}
+      `),
       prisma.$queryRawUnsafe<Array<{ game_version: string; rank_tier: string; count_match: bigint }>>(`
         SELECT mo.game_version, mo.rank_tier, mo.count_match
         FROM agg_match_outcome_stats mo
@@ -493,20 +497,26 @@ export async function getOverviewStats(
 
     const totalMatches = matchOutcomeRows.reduce((acc, row) => acc + Number(row.count_match ?? 0), 0)
 
-    const banTotalsByChampion = bansPerChampionFromMvRows(coreRows)
+    const banTotalsByChampion = new Map<number, number>()
+    for (const row of coreRows) {
+      const cid = Number(row.champion_id)
+      const bans = Number(row.count_ban ?? 0)
+      banTotalsByChampion.set(cid, (banTotalsByChampion.get(cid) ?? 0) + bans)
+    }
 
     // Aggregate champion stats
     const byChampion = new Map<number, { wins: number; games: number; bans: number }>()
     let totalParticipants = 0
     for (const row of coreRows) {
-      let entry = byChampion.get(row.championId)
+      const championId = Number(row.champion_id)
+      let entry = byChampion.get(championId)
       if (!entry) {
         entry = { wins: 0, games: 0, bans: 0 }
-        byChampion.set(row.championId, entry)
+        byChampion.set(championId, entry)
       }
-      entry.wins += row.countWin
-      entry.games += row.countGame
-      totalParticipants += row.countGame
+      entry.wins += Number(row.count_win ?? 0)
+      entry.games += Number(row.count_game ?? 0)
+      totalParticipants += Number(row.count_game ?? 0)
     }
     for (const [cid, entry] of byChampion) {
       entry.bans = banTotalsByChampion.get(cid) ?? 0
@@ -617,21 +627,21 @@ async function loadSummonerSpellPairsFromMatches(
 ): Promise<SpellPairSqlRow[]> {
   const matchCond = buildRawMatchCond(version, useApexRanksOnly ? [...APEX_LADDER_TIERS] : rankTier).replace(
     /\bm\./g,
-    'mv.'
+    'ag.'
   )
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND mv.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
-  const smiteSql = includeSmite ? '' : ` AND mv.spell_d <> 11 AND mv.spell_f <> 11`
+  const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const sql = `
       SELECT
-        mv.spell_d::int AS spell_d,
-        mv.spell_f::int AS spell_f,
-        SUM(mv.count_game)::int AS games,
-        SUM(mv.count_win)::int AS wins
-      FROM mv_champion_summoner_spell_pair_stats mv
+        ag.spell_d::int AS spell_d,
+        ag.spell_f::int AS spell_f,
+        SUM(ag.count_game)::int AS games,
+        SUM(ag.count_win)::int AS wins
+      FROM agg_champion_summoner_spell_pair_stats ag
       WHERE ${matchCond}${roleSql}${smiteSql}
-      GROUP BY mv.spell_d, mv.spell_f
-      HAVING SUM(mv.count_game) >= 40
+      GROUP BY ag.spell_d, ag.spell_f
+      HAVING SUM(ag.count_game) >= 40
       ORDER BY games DESC
       LIMIT 150
     `
@@ -655,18 +665,18 @@ async function loadItemStarterSetsFromMatches(
   rankTier: string | string[] | null,
   role: string | null
 ): Promise<ItemStarterSetSqlRow[]> {
-  const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ag.')
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND mv.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
   const sql = `
       SELECT
-        mv.starter_key,
-        SUM(mv.count_game)::int AS games,
-        SUM(mv.count_win)::int AS wins
-      FROM mv_champion_item_starter_set_stats mv
+        ag.starter_key,
+        SUM(ag.count_game)::int AS games,
+        SUM(ag.count_win)::int AS wins
+      FROM agg_champion_item_starter_set_stats ag
       WHERE ${matchCond}${roleSql}
-      GROUP BY mv.starter_key
-      HAVING SUM(mv.count_game) >= 5
+      GROUP BY ag.starter_key
+      HAVING SUM(ag.count_game) >= 5
       ORDER BY games DESC
       LIMIT 50
     `
@@ -697,16 +707,14 @@ export async function getOverviewDetailStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const coreWhere: Record<string, unknown> = {}
-    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) coreWhere.role = pRole
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, countGame: true },
-    })
-    const totalParticipants = coreStats.reduce((s, r) => s + r.countGame, 0)
+    const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; count_game: bigint }>>(`
+      SELECT ac.id, ac.count_game
+      FROM agg_champion_core_stats ac
+      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
+      ${roleSql}
+    `)
+    const totalParticipants = coreStats.reduce((s, r) => s + Number(r.count_game ?? 0), 0)
     if (totalParticipants === 0) {
       overviewDetailCache.set(key, { data: EMPTY_OVERVIEW_DETAIL, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
       return EMPTY_OVERVIEW_DETAIL
@@ -714,39 +722,58 @@ export async function getOverviewDetailStats(
 
     const statIds = coreStats.map((s) => s.id)
 
+    const statIdsSql = statIds.map((s) => s.toString()).join(',')
     const [soloRunes, soloItems, spells, soloShards] = await Promise.all([
-      prisma.mvChampionRunesSoloStat.findMany({
-        where: { championStatId: { in: statIds } },
-        select: { perkId: true, countWin: true, countGame: true },
-      }),
-      prisma.mvChampionItemSoloStat.findMany({
-        where: { championStatId: { in: statIds } },
-        select: {
-          itemId: true,
-          countWin: true,
-          countGame: true,
-          countStarter: true,
-          countCore: true,
-          countFinal: true,
-        },
-      }),
-      prisma.mvChampionSummonerSpellAgg.findMany({
-        where: {
-          championStatId: { in: statIds },
-          ...(!includeSmite ? { spellId: { not: 11 } } : {}),
-        },
-        select: {
-          spellId: true,
-          countWin: true,
-          countGame: true,
-          countSlot0: true,
-          countSlot1: true,
-        },
-      }),
-      prisma.mvChampionShardSoloStat.findMany({
-        where: { championStatId: { in: statIds } },
-        select: { shardId: true, slot: true, countWin: true, countGame: true },
-      }),
+      prisma.$queryRawUnsafe<Array<{ perkId: number; countWin: bigint; countGame: bigint }>>(`
+        SELECT
+          perk_id AS "perkId",
+          count_win AS "countWin",
+          count_game AS "countGame"
+        FROM agg_champion_runes_solo_stats
+        WHERE champion_stat_id IN (${statIdsSql})
+      `),
+      prisma.$queryRawUnsafe<
+        Array<{
+          itemId: number
+          countWin: bigint
+          countGame: bigint
+          countStarter: bigint
+          countCore: bigint
+          countFinal: bigint
+        }>
+      >(`
+        SELECT
+          item_id AS "itemId",
+          count_win AS "countWin",
+          count_game AS "countGame",
+          count_starter AS "countStarter",
+          count_core AS "countCore",
+          count_final AS "countFinal"
+        FROM agg_champion_item_solo_stats
+        WHERE champion_stat_id IN (${statIdsSql})
+      `),
+      prisma.$queryRawUnsafe<
+        Array<{ spellId: number; countWin: bigint; countGame: bigint; countSlot0: bigint; countSlot1: bigint }>
+      >(`
+        SELECT
+          spell_id AS "spellId",
+          count_win AS "countWin",
+          count_game AS "countGame",
+          count_slot0 AS "countSlot0",
+          count_slot1 AS "countSlot1"
+        FROM agg_champion_summoner_spells
+        WHERE champion_stat_id IN (${statIdsSql})
+        ${includeSmite ? '' : 'AND spell_id <> 11'}
+      `),
+      prisma.$queryRawUnsafe<Array<{ shardId: number; slot: number; countWin: bigint; countGame: bigint }>>(`
+        SELECT
+          shard_id AS "shardId",
+          slot,
+          count_win AS "countWin",
+          count_game AS "countGame"
+        FROM agg_champion_shard_solo_stats
+        WHERE champion_stat_id IN (${statIdsSql})
+      `),
     ])
 
     // Per-rune aggregation
@@ -754,7 +781,7 @@ export async function getOverviewDetailStats(
     for (const r of soloRunes) {
       let e = runeMap.get(r.perkId)
       if (!e) { e = { wins: 0, games: 0 }; runeMap.set(r.perkId, e) }
-      e.wins += r.countWin; e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0); e.games += Number(r.countGame ?? 0)
     }
     const runes = Array.from(runeMap.entries())
       .map(([runeId, e]) => ({
@@ -774,8 +801,8 @@ export async function getOverviewDetailStats(
         e = { wins: 0, games: 0 }
         shardMap.set(k, e)
       }
-      e.wins += r.countWin
-      e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0)
+      e.games += Number(r.countGame ?? 0)
     }
     mergeLegacyStatShardAggregates(shardMap)
     const shards = Array.from(shardMap.entries())
@@ -847,8 +874,8 @@ export async function getOverviewDetailStats(
           b = { wins: 0, games: 0 }
           itemBootMap.set(r.itemId, b)
         }
-        b.wins += r.countWin
-        b.games += r.countGame
+        b.wins += Number(r.countWin ?? 0)
+        b.games += Number(r.countGame ?? 0)
         continue
       }
       let e = itemMap.get(r.itemId)
@@ -856,17 +883,29 @@ export async function getOverviewDetailStats(
         e = { wins: 0, games: 0 }
         itemMap.set(r.itemId, e)
       }
-      e.wins += r.countWin
-      e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0)
+      e.games += Number(r.countGame ?? 0)
       mergeItemSlice(
         itemStarterMap,
         r.itemId,
-        r.countWin,
-        r.countGame,
-        OVERVIEW_STARTER_SLICE_EXCLUDED_IDS.has(r.itemId) ? 0 : r.countStarter
+        Number(r.countWin ?? 0),
+        Number(r.countGame ?? 0),
+        OVERVIEW_STARTER_SLICE_EXCLUDED_IDS.has(r.itemId) ? 0 : Number(r.countStarter ?? 0)
       )
-      mergeItemSlice(itemCoreMap, r.itemId, r.countWin, r.countGame, r.countCore)
-      mergeItemSlice(itemFinalMap, r.itemId, r.countWin, r.countGame, r.countFinal)
+      mergeItemSlice(
+        itemCoreMap,
+        r.itemId,
+        Number(r.countWin ?? 0),
+        Number(r.countGame ?? 0),
+        Number(r.countCore ?? 0)
+      )
+      mergeItemSlice(
+        itemFinalMap,
+        r.itemId,
+        Number(r.countWin ?? 0),
+        Number(r.countGame ?? 0),
+        Number(r.countFinal ?? 0)
+      )
     }
     const items = Array.from(itemMap.entries())
       .map(([itemId, e]) => ({
@@ -898,30 +937,31 @@ export async function getOverviewDetailStats(
         e = { wins: 0, games: 0, slot0: 0, slot1: 0 }
         spellMap.set(r.spellId, e)
       }
-      e.wins += r.countWin
-      e.games += r.countGame
-      e.slot0 += r.countSlot0
-      e.slot1 += r.countSlot1
+      e.wins += Number(r.countWin ?? 0)
+      e.games += Number(r.countGame ?? 0)
+      e.slot0 += Number(r.countSlot0 ?? 0)
+      e.slot1 += Number(r.countSlot1 ?? 0)
     }
 
-    const apexCoreWhere: Record<string, unknown> = {}
-    if (pVersion) apexCoreWhere.gameVersion = { startsWith: pVersion }
-    apexCoreWhere.rankTier = { in: [...APEX_LADDER_TIERS] }
-    if (pRole) apexCoreWhere.role = pRole
-    const apexCoreStats = await prisma.mvChampionCoreStat.findMany({
-      where: apexCoreWhere,
-      select: { id: true },
-    })
+    const apexRoleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const apexCoreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint }>>(`
+      SELECT ac.id
+      FROM agg_champion_core_stats ac
+      WHERE ${buildRawMatchCond(pVersion, [...APEX_LADDER_TIERS]).replace(/\bm\./g, 'ac.')}
+      ${apexRoleSql}
+    `)
     const apexStatIds = apexCoreStats.map((s) => s.id)
     const apexSpellRows =
       apexStatIds.length > 0
-        ? await prisma.mvChampionSummonerSpellAgg.findMany({
-            where: {
-              championStatId: { in: apexStatIds },
-              ...(!includeSmite ? { spellId: { not: 11 } } : {}),
-            },
-            select: { spellId: true, countWin: true, countGame: true },
-          })
+        ? await prisma.$queryRawUnsafe<Array<{ spellId: number; countWin: bigint; countGame: bigint }>>(`
+            SELECT
+              spell_id AS "spellId",
+              count_win AS "countWin",
+              count_game AS "countGame"
+            FROM agg_champion_summoner_spells
+            WHERE champion_stat_id IN (${apexStatIds.map((id) => id.toString()).join(',')})
+            ${includeSmite ? '' : 'AND spell_id <> 11'}
+          `)
         : []
     const apexSpellMap = new Map<number, { wins: number; games: number }>()
     for (const r of apexSpellRows) {
@@ -930,8 +970,8 @@ export async function getOverviewDetailStats(
         e = { wins: 0, games: 0 }
         apexSpellMap.set(r.spellId, e)
       }
-      e.wins += r.countWin
-      e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0)
+      e.games += Number(r.countGame ?? 0)
     }
 
     let summonerSpells = Array.from(spellMap.entries())
@@ -1014,16 +1054,22 @@ export async function getOverviewDetailStats(
     }))
 
     // Item sets (combinations) - from champion_item_stats
-    const itemSetRows = await prisma.mvChampionItemStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: { itemList: true, countWin: true, countGame: true },
-      take: 2000,
-    })
+    const itemSetRows = await prisma.$queryRawUnsafe<
+      Array<{ itemList: string; countWin: bigint; countGame: bigint }>
+    >(`
+      SELECT
+        item_list AS "itemList",
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_item_stats
+      WHERE champion_stat_id IN (${statIdsSql})
+      LIMIT 2000
+    `)
     const itemSetMap = new Map<string, { wins: number; games: number }>()
     for (const r of itemSetRows) {
       let e = itemSetMap.get(r.itemList)
       if (!e) { e = { wins: 0, games: 0 }; itemSetMap.set(r.itemList, e) }
-      e.wins += r.countWin; e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0); e.games += Number(r.countGame ?? 0)
     }
     const itemSets = Array.from(itemSetMap.entries())
       .filter(([, e]) => e.games >= 5)
@@ -1071,11 +1117,18 @@ export async function getOverviewDetailStats(
       .filter((row) => row.items.length > 0)
 
     // Rune sets (combinations) - from champion_runes_stats
-    const runeSetRows = await prisma.mvChampionRunesStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: { runeList: true, shardList: true, countWin: true, countGame: true },
-      take: 2000,
-    })
+    const runeSetRows = await prisma.$queryRawUnsafe<
+      Array<{ runeList: string; shardList: string; countWin: bigint; countGame: bigint }>
+    >(`
+      SELECT
+        rune_list AS "runeList",
+        shard_list AS "shardList",
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_runes_stats
+      WHERE champion_stat_id IN (${statIdsSql})
+      LIMIT 2000
+    `)
     const runeSetAggKeySep = '\u001e'
     const parseShardListCsv = (csv: string | null | undefined): number[] => {
       if (csv == null || csv === '') return []
@@ -1093,8 +1146,8 @@ export async function getOverviewDetailStats(
         e = { wins: 0, games: 0, shardList: shard }
         runeSetMap.set(aggKey, e)
       }
-      e.wins += r.countWin
-      e.games += r.countGame
+      e.wins += Number(r.countWin ?? 0)
+      e.games += Number(r.countGame ?? 0)
     }
     const runeSets = Array.from(runeSetMap.entries())
       .filter(([, e]) => e.games >= 5)
@@ -1156,14 +1209,7 @@ export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; er
   overviewProgressionFullCache.clear()
   overviewSidesCache.clear()
   overviewSidesProgressionCache.clear()
-  try {
-    const { refreshAllMaterializedViews } = await import('./MaterializedViewService.js')
-    await refreshAllMaterializedViews()
-    return { ok: true }
-  } catch (err) {
-    const error = err instanceof Error ? err.message : String(err)
-    return { ok: false, error }
-  }
+  return { ok: true }
 }
 
 // ── getOverviewTeamsStats ────────────────────────────────────────────────────
@@ -1377,32 +1423,27 @@ export async function getOverviewDurationWinrateStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const coreWhere: Record<string, unknown> = {}
-    if (pVersion) coreWhere.gameVersion = { startsWith: pVersion }
-    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) coreWhere.role = pRole
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true },
-    })
-    const statIds = coreStats.map((s) => s.id)
-
-    if (statIds.length === 0) {
-      return { buckets: [] }
-    }
-
-    const bucketRows = await prisma.mvChampionBucket.findMany({
-      where: { championStatId: { in: statIds } },
-      select: { durationBucket: true, countWin: true, countGame: true },
-    })
+    const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const bucketRows = await prisma.$queryRawUnsafe<
+      Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
+    >(`
+      SELECT
+        cb.duration_bucket,
+        SUM(cb.count_win)::bigint AS count_win,
+        SUM(cb.count_game)::bigint AS count_game
+      FROM agg_champion_bucket cb
+      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
+      ${roleSql}
+      GROUP BY cb.duration_bucket
+    `)
 
     const bucketMap = new Map<number, { wins: number; games: number }>()
     for (const row of bucketRows) {
-      let e = bucketMap.get(row.durationBucket)
-      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(row.durationBucket, e) }
-      e.wins += row.countWin
-      e.games += row.countGame
+      let e = bucketMap.get(Number(row.duration_bucket))
+      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(Number(row.duration_bucket), e) }
+      e.wins += Number(row.count_win ?? 0)
+      e.games += Number(row.count_game ?? 0)
     }
 
     const buckets = Array.from(bucketMap.entries())
@@ -1432,28 +1473,26 @@ export async function getDurationWinrateByChampion(
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const coreWhere: Record<string, unknown> = { championId }
-    if (version) coreWhere.gameVersion = { startsWith: version }
-    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true },
-    })
-    const statIds = coreStats.map((s) => s.id)
-    if (statIds.length === 0) return { buckets: [] }
-
-    const bucketRows = await prisma.mvChampionBucket.findMany({
-      where: { championStatId: { in: statIds } },
-      select: { durationBucket: true, countWin: true, countGame: true },
-    })
+    const bucketRows = await prisma.$queryRawUnsafe<
+      Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
+    >(`
+      SELECT
+        cb.duration_bucket,
+        SUM(cb.count_win)::bigint AS count_win,
+        SUM(cb.count_game)::bigint AS count_game
+      FROM agg_champion_bucket cb
+      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      WHERE ac.champion_id = ${championId}
+        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
+      GROUP BY cb.duration_bucket
+    `)
 
     const bucketMap = new Map<number, { wins: number; games: number }>()
     for (const row of bucketRows) {
-      let e = bucketMap.get(row.durationBucket)
-      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(row.durationBucket, e) }
-      e.wins += row.countWin
-      e.games += row.countGame
+      let e = bucketMap.get(Number(row.duration_bucket))
+      if (!e) { e = { wins: 0, games: 0 }; bucketMap.set(Number(row.duration_bucket), e) }
+      e.wins += Number(row.count_win ?? 0)
+      e.games += Number(row.count_game ?? 0)
     }
 
     const buckets = Array.from(bucketMap.entries())
@@ -1501,46 +1540,38 @@ export async function getDurationWinrateByChampionByTier(
 ): Promise<ChampionDurationWinrateByTier | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const coreWhere: Record<string, unknown> = { championId }
-    if (version) coreWhere.gameVersion = { startsWith: version }
-    applyRankTierWhere(coreWhere, rankTier, { excludeUnrankedWhenEmpty: true })
     let roleNorm = role != null && String(role).trim() !== '' ? String(role).trim().toUpperCase() : null
     if (roleNorm === 'UTILITY') roleNorm = 'SUPPORT'
-    if (roleNorm) coreWhere.role = roleNorm
+    const roleSql = roleNorm ? ` AND ac.role = '${roleNorm.replace(/'/g, "''")}'` : ''
 
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, rankTier: true },
-    })
-    const idToTier = new Map<bigint, string>()
-    for (const row of coreStats) {
-      const base = String(row.rankTier ?? '')
-        .trim()
-        .toUpperCase()
-        .split('_')[0]!
-      if (!base || base === 'UNRANKED') continue
-      idToTier.set(row.id, base)
-    }
-    const statIds = [...idToTier.keys()]
-    if (statIds.length === 0) return { series: [] }
-
-    const bucketRows = await prisma.mvChampionBucket.findMany({
-      where: { championStatId: { in: statIds } },
-      select: { championStatId: true, durationBucket: true, countWin: true, countGame: true },
-    })
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ rank_tier: string; duration_bucket: number; count_win: bigint; count_game: bigint }>
+    >(`
+      SELECT
+        ac.rank_tier,
+        cb.duration_bucket,
+        SUM(cb.count_win)::bigint AS count_win,
+        SUM(cb.count_game)::bigint AS count_game
+      FROM agg_champion_bucket cb
+      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      WHERE ac.champion_id = ${championId}
+        AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
+        ${roleSql}
+      GROUP BY ac.rank_tier, cb.duration_bucket
+    `)
 
     const cellMap = new Map<string, { wins: number; games: number }>()
-    for (const row of bucketRows) {
-      const tier = idToTier.get(row.championStatId)
-      if (!tier) continue
-      const key = `${tier}\0${row.durationBucket}`
+    for (const row of rows) {
+      const base = String(row.rank_tier ?? '').trim().toUpperCase().split('_')[0] ?? ''
+      if (!base || base === 'UNRANKED') continue
+      const key = `${base}\0${Number(row.duration_bucket)}`
       let e = cellMap.get(key)
       if (!e) {
         e = { wins: 0, games: 0 }
         cellMap.set(key, e)
       }
-      e.wins += row.countWin
-      e.games += row.countGame
+      e.wins += Number(row.count_win ?? 0)
+      e.games += Number(row.count_game ?? 0)
     }
 
     const byTier = new Map<string, Map<number, { wins: number; games: number }>>()
@@ -1599,31 +1630,36 @@ export async function getOverviewProgressionStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    applyRankTierWhere(oldestWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) oldestWhere.role = pRole
-
-    const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    applyRankTierWhere(sinceWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) sinceWhere.role = pRole
+    const roleFilterSql = pRole
+      ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
+      : ''
+    const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
+    const oldestVersionEscaped = String(versionOldest).replace(/'/g, "''")
 
     const [oldestRows, sinceRows] = await Promise.all([
-      prisma.mvChampionCoreStat.findMany({
-        where: oldestWhere,
-        select: { championId: true, countWin: true, countGame: true },
-      }),
-      prisma.mvChampionCoreStat.findMany({
-        where: sinceWhere,
-        select: { championId: true, countWin: true, countGame: true },
-      }),
+      prisma.$queryRawUnsafe<Array<{ champion_id: number; count_win: bigint; count_game: bigint }>>(`
+        SELECT ac.champion_id, ac.count_win, ac.count_game
+        FROM agg_champion_core_stats ac
+        WHERE ${rawCond}
+          AND ac.game_version LIKE '${oldestVersionEscaped}%'
+          ${roleFilterSql}
+      `),
+      prisma.$queryRawUnsafe<Array<{ champion_id: number; count_win: bigint; count_game: bigint }>>(`
+        SELECT ac.champion_id, ac.count_win, ac.count_game
+        FROM agg_champion_core_stats ac
+        WHERE ${rawCond}
+          AND ac.game_version NOT LIKE '${oldestVersionEscaped}%'
+          ${roleFilterSql}
+      `),
     ])
 
-    const aggByChamp = (rows: Array<{ championId: number; countWin: number; countGame: number }>) => {
+    const aggByChamp = (rows: Array<{ champion_id: number; count_win: bigint; count_game: bigint }>) => {
       const m = new Map<number, { wins: number; games: number }>()
       for (const r of rows) {
-        let e = m.get(r.championId)
-        if (!e) { e = { wins: 0, games: 0 }; m.set(r.championId, e) }
-        e.wins += r.countWin; e.games += r.countGame
+        const championId = Number(r.champion_id)
+        let e = m.get(championId)
+        if (!e) { e = { wins: 0, games: 0 }; m.set(championId, e) }
+        e.wins += Number(r.count_win ?? 0); e.games += Number(r.count_game ?? 0)
       }
       return m
     }
@@ -1685,54 +1721,45 @@ export async function getOverviewProgressionFullStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const oldestWhere: Record<string, unknown> = { gameVersion: { startsWith: versionOldest } }
-    applyRankTierWhere(oldestWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) oldestWhere.role = pRole
-    const sinceWhere: Record<string, unknown> = { gameVersion: { not: { startsWith: versionOldest } } }
-    applyRankTierWhere(sinceWhere, rankTier, { excludeUnrankedWhenEmpty: true })
-    if (pRole) sinceWhere.role = pRole
+    const roleFilterSql = pRole
+      ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
+      : ''
+    const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
+    const oldestVersionEscaped = String(versionOldest).replace(/'/g, "''")
 
     const [oldestRows, sinceRows] = await Promise.all([
-      prisma.mvChampionCoreStat.findMany({
-        where: oldestWhere,
-        select: {
-          championId: true,
-          countWin: true,
-          countGame: true,
-          countBan: true,
-          rankTier: true,
-          gameVersion: true,
-          region: true,
-        },
-      }),
-      prisma.mvChampionCoreStat.findMany({
-        where: sinceWhere,
-        select: {
-          championId: true,
-          countWin: true,
-          countGame: true,
-          countBan: true,
-          rankTier: true,
-          gameVersion: true,
-          region: true,
-        },
-      }),
+      prisma.$queryRawUnsafe<
+        Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>
+      >(`
+        SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
+        FROM agg_champion_core_stats ac
+        WHERE ${rawCond}
+          AND ac.game_version LIKE '${oldestVersionEscaped}%'
+          ${roleFilterSql}
+      `),
+      prisma.$queryRawUnsafe<
+        Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>
+      >(`
+        SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
+        FROM agg_champion_core_stats ac
+        WHERE ${rawCond}
+          AND ac.game_version NOT LIKE '${oldestVersionEscaped}%'
+          ${roleFilterSql}
+      `),
     ])
 
-    const aggByChamp = (rows: typeof oldestRows) => {
-      const banTotals = bansPerChampionFromMvRows(rows)
+    const aggByChamp = (rows: Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>) => {
       const m = new Map<number, { wins: number; games: number; bans: number }>()
       for (const r of rows) {
-        let e = m.get(r.championId)
+        const championId = Number(r.champion_id)
+        let e = m.get(championId)
         if (!e) {
           e = { wins: 0, games: 0, bans: 0 }
-          m.set(r.championId, e)
+          m.set(championId, e)
         }
-        e.wins += r.countWin
-        e.games += r.countGame
-      }
-      for (const [cid, e] of m) {
-        e.bans = banTotals.get(cid) ?? 0
+        e.wins += Number(r.count_win ?? 0)
+        e.games += Number(r.count_game ?? 0)
+        e.bans += Number(r.count_ban ?? 0)
       }
       return m
     }
@@ -1812,7 +1839,10 @@ export interface InfosMetaCounts {
 export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    const totalMatches = await prisma.ingestMatch.count()
+    const matchRows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
+      `SELECT COALESCE(SUM(count_match), 0)::bigint AS c FROM agg_match_outcome_stats`
+    )
+    const totalMatches = Number(matchRows[0]?.c ?? 0)
     const totalPlayers = await prisma.player.count()
     const playersWithoutLastSeen = await prisma.player.count({ where: { lastSeen: null } })
     return {

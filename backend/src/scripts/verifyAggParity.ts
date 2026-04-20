@@ -45,6 +45,51 @@ const CHECKS: ScopedCheck[] = [
     legacySql: `SELECT COALESCE(SUM(tb.count_game), 0) AS v FROM mv_team_bucket tb INNER JOIN mv_team_core_stats tc ON tc.id = tb.team_stat_id WHERE tc.rank_tier <> 'UNRANKED'`,
     aggSql: `SELECT COALESCE(SUM(tb.count_game), 0) AS v FROM agg_team_bucket tb INNER JOIN agg_team_core_stats tc ON tc.id = tb.team_stat_id WHERE tc.rank_tier <> 'UNRANKED'`,
   },
+  {
+    name: 'mv_champion_bucket -> agg_champion_bucket',
+    legacySql: `SELECT COALESCE(SUM(cb.count_game_finished_at_bucket), 0) AS v FROM mv_champion_bucket cb INNER JOIN mv_champion_core_stats cc ON cc.id = cb.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(cb.count_game), 0) AS v FROM agg_champion_bucket cb INNER JOIN agg_champion_core_stats cc ON cc.id = cb.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_summoner_spells -> agg_champion_summoner_spells',
+    legacySql: `SELECT COALESCE(SUM(ss.count_game), 0) AS v FROM mv_champion_summoner_spells ss INNER JOIN mv_champion_core_stats cc ON cc.id = ss.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(ss.count_game), 0) AS v FROM agg_champion_summoner_spells ss INNER JOIN agg_champion_core_stats cc ON cc.id = ss.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_runes_stats -> agg_champion_runes_stats',
+    legacySql: `SELECT COALESCE(SUM(rs.count_game), 0) AS v FROM mv_champion_runes_stats rs INNER JOIN mv_champion_core_stats cc ON cc.id = rs.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(rs.count_game), 0) AS v FROM agg_champion_runes_stats rs INNER JOIN agg_champion_core_stats cc ON cc.id = rs.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_runes_solo_stats -> agg_champion_runes_solo_stats',
+    legacySql: `SELECT COALESCE(SUM(rs.count_game), 0) AS v FROM mv_champion_runes_solo_stats rs INNER JOIN mv_champion_core_stats cc ON cc.id = rs.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(rs.count_game), 0) AS v FROM agg_champion_runes_solo_stats rs INNER JOIN agg_champion_core_stats cc ON cc.id = rs.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_shard_solo_stats -> agg_champion_shard_solo_stats',
+    legacySql: `SELECT COALESCE(SUM(ss.count_game), 0) AS v FROM mv_champion_shard_solo_stats ss INNER JOIN mv_champion_core_stats cc ON cc.id = ss.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(ss.count_game), 0) AS v FROM agg_champion_shard_solo_stats ss INNER JOIN agg_champion_core_stats cc ON cc.id = ss.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_item_stats -> agg_champion_item_stats',
+    legacySql: `SELECT COALESCE(SUM(isx.count_game), 0) AS v FROM mv_champion_item_stats isx INNER JOIN mv_champion_core_stats cc ON cc.id = isx.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(isx.count_game), 0) AS v FROM agg_champion_item_stats isx INNER JOIN agg_champion_core_stats cc ON cc.id = isx.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_item_solo_stats -> agg_champion_item_solo_stats',
+    legacySql: `SELECT COALESCE(SUM(isx.count_game), 0) AS v FROM mv_champion_item_solo_stats isx INNER JOIN mv_champion_core_stats cc ON cc.id = isx.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(isx.count_game), 0) AS v FROM agg_champion_item_solo_stats isx INNER JOIN agg_champion_core_stats cc ON cc.id = isx.champion_stat_id WHERE cc.rank_tier <> 'UNRANKED' AND UPPER(cc.role) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_summoner_spell_pair_stats -> agg_champion_summoner_spell_pair_stats',
+    legacySql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM mv_champion_summoner_spell_pair_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM agg_champion_summoner_spell_pair_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
+  },
+  {
+    name: 'mv_champion_item_starter_set_stats -> agg_champion_item_starter_set_stats',
+    legacySql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM mv_champion_item_starter_set_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM agg_champion_item_starter_set_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
+  },
 ]
 
 async function scalar(sql: string): Promise<number> {

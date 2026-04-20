@@ -200,14 +200,12 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
   if (!isDatabaseConfigured()) return
 
   const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
-    WITH unified_matches AS (
-      SELECT riot_match_id, game_version FROM ingest_matchs
-    ),
     per_patch AS (
       SELECT
-        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
-        COUNT(*)::bigint AS cnt
-      FROM unified_matches
+        game_version AS patch,
+        COALESCE(SUM(count_match), 0)::bigint AS cnt
+      FROM agg_match_outcome_stats
+      WHERE rank_tier <> 'UNRANKED'
       GROUP BY 1
     )
     SELECT patch, cnt FROM per_patch

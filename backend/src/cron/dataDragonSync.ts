@@ -8,7 +8,7 @@ import { CronStatusService } from '../services/CronStatusService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
-import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/MaterializedViewService.js'
+import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/ActivePatchService.js'
 import { FileManager } from '../utils/fileManager.js'
 
 /**

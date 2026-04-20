@@ -51,10 +51,8 @@ async function shouldSkipMvRefreshDueToIngestBacklog(groupIndex: number): Promis
 
 export function setupMaterializedViewStaggeredRefresh(): void {
   if (!isDatabaseConfigured()) return
-  if (process.env.MV_STAGGERED_REFRESH_DISABLED === '1') {
-    console.log('[Cron] Staggered MV refresh disabled (MV_STAGGERED_REFRESH_DISABLED=1)')
-    return
-  }
+  console.log('[Cron] Staggered MV refresh hard-disabled during agg migration')
+  return
 
   const n = MV_REFRESH_GROUPS.length
   for (let i = 0; i < n; i++) {

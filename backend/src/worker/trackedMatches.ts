@@ -36,16 +36,20 @@ export async function releaseTrackedMatch(matchId: string): Promise<void> {
 
 export async function releaseTrackedErrorMatches(limit: number): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ match_id: string }>>`
-    WITH doomed AS (
+    WITH candidates AS (
       SELECT match_id
       FROM tracked_matches
       WHERE status = 'ERROR'
       ORDER BY created_at ASC
       LIMIT ${Math.max(1, limit)}
+      FOR UPDATE SKIP LOCKED
     )
-    DELETE FROM tracked_matches t
-    USING doomed d
-    WHERE t.match_id = d.match_id
+    UPDATE tracked_matches t
+    SET
+      status = 'PENDING',
+      created_at = NOW()
+    FROM candidates c
+    WHERE t.match_id = c.match_id
     RETURNING t.match_id
   `
   return rows.length

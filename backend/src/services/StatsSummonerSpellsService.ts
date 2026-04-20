@@ -4,7 +4,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 export interface SummonerSpellRow {
   spellId: number
@@ -36,15 +36,25 @@ async function getChampionStatIds(
   pVersion: string | null,
   rankTier: string | string[] | null
 ): Promise<{ statIds: bigint[]; totalGames: number }> {
-  const coreWhere: Record<string, unknown> = { championId }
-  if (pVersion) coreWhere.gameVersion = pVersion
-  applyRankTierWhere(coreWhere, rankTier)
+  const filters: string[] = [`champion_id = ${championId}`]
+  if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1) {
+    filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  } else {
+    filters.push(`rank_tier <> 'UNRANKED'`)
+  }
 
-  const coreStats = await prisma.mvChampionCoreStat.findMany({
-    where: coreWhere,
-    select: { id: true, countGame: true },
-  })
-  const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
+  const whereSql = filters.join(' AND ')
+  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+    SELECT
+      id,
+      count_game AS "countGame"
+    FROM agg_champion_core_stats
+    WHERE ${whereSql}
+  `)
+  const totalGames = coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0)
   const statIds = coreStats.map((s) => s.id)
   return { statIds, totalGames }
 }
@@ -61,16 +71,24 @@ export async function getSummonerSpellsByChampion(
     const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     if (statIds.length === 0) return { totalGames: 0, spells: [] }
 
-    const spellRows = await prisma.mvChampionSummonerSpellAgg.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        spellId: true,
-        countWin: true,
-        countGame: true,
-        countSlot0: true,
-        countSlot1: true,
-      },
-    })
+    const spellRows = await prisma.$queryRawUnsafe<
+      Array<{
+        spellId: number
+        countWin: number
+        countGame: number
+        countSlot0: number
+        countSlot1: number
+      }>
+    >(`
+      SELECT
+        spell_id AS "spellId",
+        count_win AS "countWin",
+        count_game AS "countGame",
+        count_slot0 AS "countSlot0",
+        count_slot1 AS "countSlot1"
+      FROM agg_champion_summoner_spells
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     const bySpell = new Map<
       number,
@@ -123,22 +141,31 @@ export async function getSummonerSpellsDuosByChampion(
     if (statIds.length === 0) return { totalGames: 0, duos: [] }
 
     // Duos from ingest_match_players.summoner_spells (ordered D/F)
-    const matchRankWhere: Record<string, unknown> = {}
-    if (pVersion) matchRankWhere.gameVersion = pVersion
-    applyRankTierWhere(matchRankWhere, rankTier)
+    const versionClause = pVersion
+      ? `AND m.game_version LIKE '${pVersion.replace(/'/g, "''")}%'`
+      : ''
+    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+    const rankClause =
+      ranks.length === 1
+        ? `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') = '${ranks[0]!.replace(/'/g, "''")}'`
+        : ranks.length > 1
+          ? `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
+          : `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'`
 
-    const matchPlayersRows = await prisma.ingestMatchPlayer.findMany({
-      where: {
-        championId,
-        match: matchRankWhere,
-      },
-      select: {
-        id: true,
-        team: { select: { win: true } },
-        summonerSpells: true,
-      },
-      take: 50000,
-    })
+    const matchPlayersRows = await prisma.$queryRawUnsafe<
+      Array<{ win: boolean; summonerSpells: number[] }>
+    >(`
+      SELECT
+        it.win AS win,
+        imp.summoner_spells AS "summonerSpells"
+      FROM ingest_match_players imp
+      INNER JOIN ingest_matchs m ON m.id = imp.match_id
+      INNER JOIN ingest_teams it ON it.id = imp.team_id
+      WHERE imp.champion_id = ${championId}
+        ${versionClause}
+        ${rankClause}
+      LIMIT 50000
+    `)
 
     const totalGamesRaw = matchPlayersRows.length
     if (totalGamesRaw === 0) return { totalGames: totalGames, duos: [] }
@@ -150,7 +177,7 @@ export async function getSummonerSpellsDuosByChampion(
       const id1 = spellIds[0]
       const id2 = spellIds[1]
       const key = `${id1}:${id2}`
-      const win = mp.team?.win ?? false
+      const win = mp.win ?? false
       let entry = duoMap.get(key)
       if (!entry) {
         entry = { id1, id2, games: 0, wins: 0 }

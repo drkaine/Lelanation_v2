@@ -108,15 +108,29 @@ type PollerDbWindowMetrics = {
   matchesRecovered: number
   playersPolled: number
   playersAdded: number
+  skippedVersion: number
+  deferredPatch: number
 }
 
 async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWindowMetrics> {
   const since = new Date(Date.now() - Math.max(1, windowMs))
-  const [trackedRows, playersPolled, playersAdded] = await Promise.all([
+  const [trackedRows, trackedSkippedRows, trackedDeferredRows, playersPolled, playersAdded] = await Promise.all([
     prisma.$queryRaw<Array<{ c: bigint }>>`
       SELECT COUNT(*)::bigint AS c
       FROM tracked_matches
       WHERE created_at >= ${since}
+    `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE created_at >= ${since}
+        AND status = 'SKIPPED_VERSION'
+    `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE created_at >= ${since}
+        AND status = 'DEFERRED_PATCH'
     `,
     prisma.player.count({ where: { lastSeen: { gte: since } } }),
     prisma.player.count({ where: { createdAt: { gte: since } } }),
@@ -125,6 +139,8 @@ async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWind
     matchesRecovered: Number(trackedRows[0]?.c ?? 0),
     playersPolled,
     playersAdded,
+    skippedVersion: Number(trackedSkippedRows[0]?.c ?? 0),
+    deferredPatch: Number(trackedDeferredRows[0]?.c ?? 0),
   }
 }
 
@@ -140,6 +156,8 @@ async function emitPollerSummariesIfDue(
       matchesRecovered: 0,
       playersPolled: 0,
       playersAdded: 0,
+      skippedVersion: 0,
+      deferredPatch: 0,
     }))
     const elapsedMs = Math.max(1, now - sw.summary30mWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.summary30mPlayersPolled
@@ -238,6 +256,8 @@ async function emitPollerSummariesIfDue(
       matchesRecovered: 0,
       playersPolled: 0,
       playersAdded: 0,
+      skippedVersion: 0,
+      deferredPatch: 0,
     }))
     const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.hourlyPlayersPolled
@@ -274,6 +294,7 @@ async function emitPollerSummariesIfDue(
       `[${tsLabel}] RESUME HORAIRE`,
       `- Joueurs polles (last_seen, 1h): ${db1h.playersPolled} | nouveaux joueurs (created_at, 1h): ${db1h.playersAdded}`,
       `- Matches recuperes (tracked_matches.created_at, 1h): ${db1h.matchesRecovered}`,
+      `- Matches tracked skip/defer (1h): skipped_version=${db1h.skippedVersion} deferred_patch=${db1h.deferredPatch}`,
       `- Joueurs polles (delta process): ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
       `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesDbDelta} nouveaux en DB | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
       `- API Requests: ${httpRequestsDelta}/${requestBudget} (Usage: ${requestUsagePct.toFixed(1)}%)`,
@@ -340,28 +361,35 @@ async function emitPollerSummariesIfDue(
         lastRiotRateLimitHeaders: lastRlHeadersH,
       },
     })
-    const matchLoss = matchIdsFromApiDelta - matchesDbDelta
+    const effectiveProcessable = Math.max(
+      0,
+      matchIdsFromApiDelta - existingMatchesSkippedDelta - db1h.skippedVersion - db1h.deferredPatch
+    )
+    const matchLoss = Math.max(0, effectiveProcessable - matchesDbDelta)
     const backlogLikely =
       matchIdsFromApiDelta > 500 && matchesApiDelta === 0 && matchesDbDelta === 0
     if (
       !backlogLikely &&
       matchLoss >= POLLER_MATCH_LOSS_ALERT_ABSOLUTE &&
-      matchIdsFromApiDelta > 0 &&
-      matchLoss / matchIdsFromApiDelta >= POLLER_MATCH_LOSS_ALERT_RATIO
+      effectiveProcessable > 0 &&
+      matchLoss / effectiveProcessable >= POLLER_MATCH_LOSS_ALERT_RATIO
     ) {
       await appendUnifiedLog({
         section: 'back',
         type: 'warning',
         script: 'poller_hourly',
-        message: `Alerte perte matchs: trouves=${matchIdsFromApiDelta} inseresDb=${matchesDbDelta} perte=${matchLoss}`,
+        message: `Alerte perte matchs: trouves=${matchIdsFromApiDelta} processables=${effectiveProcessable} inseresDb=${matchesDbDelta} perte=${matchLoss}`,
         json: {
           matchIdsFromApiDelta,
+          effectiveProcessable,
           matchesInsertedDbDelta: matchesDbDelta,
           existingMatchesSkippedDelta,
+          trackedSkippedVersion1h: db1h.skippedVersion,
+          trackedDeferredPatch1h: db1h.deferredPatch,
           matchesApiIngestCompleteDelta: matchesApiDelta,
           timeoutDelta,
           error429Delta,
-          lossRatio: matchLoss / matchIdsFromApiDelta,
+          lossRatio: effectiveProcessable > 0 ? matchLoss / effectiveProcessable : 0,
         },
       })
     }
@@ -385,7 +413,7 @@ import { Prisma } from '../generated/prisma/index.js'
 import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
-import { syncActivePatches } from '../services/MaterializedViewService.js'
+import { syncActivePatches } from '../services/ActivePatchService.js'
 
 function getPlayersPerLoop(): number {
   const raw = parseInt(process.env.POLLER_PLAYERS_PER_LOOP ?? '', 10)
@@ -588,6 +616,17 @@ function is400Decrypt(body: unknown): boolean {
     return msg.includes('decrypt') || msg.includes('Bad Request')
   }
   return false
+}
+
+function isTransientAggregateConflictError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return (
+    message.includes('23505') &&
+    (message.includes('idx_agg_champion_core_dims') ||
+      message.includes('idx_agg_team_core_dims') ||
+      message.includes('agg_champion_core_stats') ||
+      message.includes('agg_team_core_stats'))
+  )
 }
 
 function isLikelyRiotPuuid(value: string | null | undefined): boolean {
@@ -1421,6 +1460,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
           await markRawIngestError(rawId, 'invalid_raw_payload_shape', 5 * 60_000)
+        } else if (isTransientAggregateConflictError(err)) {
+          // Transient write race around aggregate rows: retry later, do not poison tracked row as ERROR.
+          await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
+          await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
         } else {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
           const delay = Math.min(30 * 60_000, Math.max(60_000, 60_000))
@@ -1520,9 +1563,14 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
       if (rawId != null) {
-        await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
-        const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
-        await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
+        if (isTransientAggregateConflictError(err)) {
+          await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
+          await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
+        } else {
+          await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
+          const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
+          await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
+        }
       } else {
         await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
         const errPath = p!.replace(/\.json$/i, '')
@@ -2292,6 +2340,7 @@ async function runStep4ForPlayer(
             if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
             if (strict.reason === 'version') {
               matchIngestPending.delete(work.matchId)
+              await setTrackedMatchStatus(work.matchId, 'SKIPPED_VERSION').catch(() => undefined)
               await logger.info('Match skipped (game version not in allowed range)', {
                 playerId: tracker.player.id.toString(),
                 matchId: work.matchId,
@@ -2300,6 +2349,7 @@ async function runStep4ForPlayer(
             }
             if (strict.reason === 'deferred_patch') {
               matchIngestPending.delete(work.matchId)
+              await setTrackedMatchStatus(work.matchId, 'DEFERRED_PATCH').catch(() => undefined)
               await logger.info('Match deferred (latest patch priority mode)', {
                 playerId: tracker.player.id.toString(),
                 matchId: work.matchId,

@@ -122,7 +122,8 @@ export async function runYouTubeSyncOnce(): Promise<
 
   // Copy YouTube data to frontend
   await log.step('Copying YouTube data to frontend')
-  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(true, true)
+  // YouTube JSON files are served from /public; no Nuxt rebuild required.
+  const copyResult = await staticAssets.copyYouTubeAssetsToFrontend(true, false)
   if (copyResult.isOk()) {
     const stats = copyResult.unwrap()
     await log.info('YouTube assets copied:', stats.copied, 'files,', stats.deleted, 'backend files deleted')

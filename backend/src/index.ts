@@ -15,13 +15,11 @@ import shareBuildsRoutes from './routes/shareBuilds.js'
 import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
-import { setupMaterializedViewStaggeredRefresh } from './cron/materializedViewRefresh.js'
 // import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 // import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
 import { startDefaultScript, requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
-import { ensureMaterializedViewsPopulated } from './services/MaterializedViewService.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -62,7 +60,6 @@ try {
   setupDataDragonSync()
   setupYouTubeSync()
   setupCommunityDragonSync()
-  setupMaterializedViewStaggeredRefresh()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron
@@ -94,10 +91,6 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  // Après migrate (WITH NO DATA), les VM sont illisibles (55000) jusqu’au premier REFRESH.
-  void ensureMaterializedViewsPopulated().catch((e) =>
-    console.warn('[Server] ensureMaterializedViewsPopulated:', e instanceof Error ? e.message : e)
-  )
   // Précharger le cache overview-detail (sans filtre) pour limiter les 504
   // setTimeout(() => {
   //   Promise.all([

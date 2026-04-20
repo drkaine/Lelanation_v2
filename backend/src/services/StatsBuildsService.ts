@@ -3,7 +3,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 export interface BuildRow {
   items: number[]
@@ -34,6 +34,37 @@ export interface BuildsByChampionOptions {
   limit?: number
 }
 
+async function getCoreStatIdsAndTotalGames(options: {
+  championId: number
+  patch?: string | null
+  rankTier?: string | string[] | null
+  role?: string | null
+  region?: string | null
+}): Promise<{ statIds: bigint[]; totalGames: number }> {
+  const { championId, patch, rankTier, role, region } = options
+  const filters: string[] = [`champion_id = ${championId}`]
+  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  if (role) filters.push(`role = '${role.replace(/'/g, "''")}'`)
+  if (region) filters.push(`region = '${region.replace(/'/g, "''")}'`)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1) {
+    filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  } else {
+    filters.push(`rank_tier <> 'UNRANKED'`)
+  }
+  const whereSql = filters.join(' AND ')
+  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+    SELECT id, count_game AS "countGame"
+    FROM agg_champion_core_stats
+    WHERE ${whereSql}
+  `)
+  return {
+    statIds: coreStats.map((s) => s.id),
+    totalGames: coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0),
+  }
+}
+
 export async function getBuildsByChampion(
   options: BuildsByChampionOptions
 ): Promise<{ totalGames: number; builds: BuildRow[]; soloItems?: ItemSoloRow[] } | null> {
@@ -44,31 +75,27 @@ export async function getBuildsByChampion(
     const pPatch = patch != null && patch !== '' ? patch : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const coreWhere: Record<string, unknown> = { championId }
-    applyRankTierWhere(coreWhere, rankTier)
-    if (pRole) coreWhere.role = pRole
-    if (pPatch) coreWhere.gameVersion = pPatch
-    if (pRegion) coreWhere.region = pRegion
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, countGame: true },
+    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+      championId,
+      patch: pPatch,
+      rankTier,
+      role: pRole,
+      region: pRegion,
     })
-    if (coreStats.length === 0) return { totalGames: 0, builds: [], soloItems: [] }
-
-    const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
-    const statIds = coreStats.map((s) => s.id)
+    if (statIds.length === 0) return { totalGames: 0, builds: [], soloItems: [] }
 
     // Item combinations
-    const itemStatRows = await prisma.mvChampionItemStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        itemList: true,
-        countWin: true,
-        countGame: true,
-        sumTimestampMs: true,
-      },
-    })
+    const itemStatRows = await prisma.$queryRawUnsafe<
+      Array<{ itemList: string; countWin: number; countGame: number; sumTimestampMs: number }>
+    >(`
+      SELECT
+        item_list AS "itemList",
+        count_win AS "countWin",
+        count_game AS "countGame",
+        sum_timestamp_ms AS "sumTimestampMs"
+      FROM agg_champion_item_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     // Aggregate by item_list
     const byList = new Map<string, { wins: number; games: number; sumMs: number }>()
@@ -106,17 +133,26 @@ export async function getBuildsByChampion(
     builds.splice(limit)
 
     // Solo items
-    const soloRows = await prisma.mvChampionItemSoloStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        itemId: true,
-        countStarter: true,
-        countCore: true,
-        countWin: true,
-        countGame: true,
-        sumTimestampMs: true,
-      },
-    })
+    const soloRows = await prisma.$queryRawUnsafe<
+      Array<{
+        itemId: number
+        countStarter: number
+        countCore: number
+        countWin: number
+        countGame: number
+        sumTimestampMs: number
+      }>
+    >(`
+      SELECT
+        item_id AS "itemId",
+        count_starter AS "countStarter",
+        count_core AS "countCore",
+        count_win AS "countWin",
+        count_game AS "countGame",
+        sum_timestamp_ms AS "sumTimestampMs"
+      FROM agg_champion_item_solo_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     const bySolo = new Map<
       number,

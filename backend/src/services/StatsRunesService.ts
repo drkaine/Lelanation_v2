@@ -4,7 +4,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 
 export interface RuneRow {
@@ -27,6 +27,37 @@ export interface RunesByChampionOptions {
   limit?: number
 }
 
+async function getCoreStatIdsAndTotalGames(options: {
+  championId: number
+  versionOrPatch?: string | null
+  rankTier?: string | string[] | null
+  role?: string | null
+  region?: string | null
+}): Promise<{ statIds: bigint[]; totalGames: number }> {
+  const { championId, versionOrPatch, rankTier, role, region } = options
+  const filters: string[] = [`champion_id = ${championId}`]
+  if (versionOrPatch) filters.push(`game_version LIKE '${String(versionOrPatch).replace(/'/g, "''")}%'`)
+  if (role) filters.push(`role = '${String(role).replace(/'/g, "''")}'`)
+  if (region) filters.push(`region = '${String(region).replace(/'/g, "''")}'`)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1) {
+    filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  } else {
+    filters.push(`rank_tier <> 'UNRANKED'`)
+  }
+  const whereSql = filters.join(' AND ')
+  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+    SELECT id, count_game AS "countGame"
+    FROM agg_champion_core_stats
+    WHERE ${whereSql}
+  `)
+  return {
+    statIds: coreStats.map((s) => s.id),
+    totalGames: coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0),
+  }
+}
+
 export async function getRunesByChampion(
   options: RunesByChampionOptions
 ): Promise<{ totalGames: number; runes: RuneRow[] } | null> {
@@ -37,30 +68,26 @@ export async function getRunesByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const coreWhere: Record<string, unknown> = { championId }
-    applyRankTierWhere(coreWhere, rankTier)
-    if (pPatch) coreWhere.gameVersion = pPatch
-    if (pRole) coreWhere.role = pRole
-    if (pRegion) coreWhere.region = pRegion
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, countGame: true },
+    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+      championId,
+      versionOrPatch: pPatch,
+      rankTier,
+      role: pRole,
+      region: pRegion,
     })
-    if (coreStats.length === 0) return { totalGames: 0, runes: [] }
+    if (statIds.length === 0) return { totalGames: 0, runes: [] }
 
-    const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
-    const statIds = coreStats.map((s) => s.id)
-
-    const runeStatRows = await prisma.mvChampionRunesStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        runeList: true,
-        shardList: true,
-        countWin: true,
-        countGame: true,
-      },
-    })
+    const runeStatRows = await prisma.$queryRawUnsafe<
+      Array<{ runeList: string; shardList: string; countWin: number; countGame: number }>
+    >(`
+      SELECT
+        rune_list AS "runeList",
+        shard_list AS "shardList",
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_runes_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     const aggKeySep = '\u001e'
     const parseShardListCsv = (csv: string | null | undefined): number[] => {
@@ -141,30 +168,26 @@ export async function getRuneStatsByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const coreWhere: Record<string, unknown> = { championId }
-    if (pVersion) coreWhere.gameVersion = pVersion
-    applyRankTierWhere(coreWhere, rankTier)
-    if (pRole) coreWhere.role = pRole
-    if (pRegion) coreWhere.region = pRegion
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, countGame: true },
+    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+      championId,
+      versionOrPatch: pVersion,
+      rankTier,
+      role: pRole,
+      region: pRegion,
     })
-    if (coreStats.length === 0) return { totalGames: 0, runes: [] }
+    if (statIds.length === 0) return { totalGames: 0, runes: [] }
 
-    const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
-    const statIds = coreStats.map((s) => s.id)
-
-    const soloRows = await prisma.mvChampionRunesSoloStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        perkId: true,
-        style: true,
-        countWin: true,
-        countGame: true,
-      },
-    })
+    const soloRows = await prisma.$queryRawUnsafe<
+      Array<{ perkId: number; style: string; countWin: number; countGame: number }>
+    >(`
+      SELECT
+        perk_id AS "perkId",
+        style,
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_runes_solo_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     // Aggregate by runeId
     const byRune = new Map<number, { wins: number; games: number }>()
@@ -223,30 +246,26 @@ export async function getShardStatsByChampion(options: {
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    const coreWhere: Record<string, unknown> = { championId }
-    if (pVersion) coreWhere.gameVersion = pVersion
-    applyRankTierWhere(coreWhere, rankTier)
-    if (pRole) coreWhere.role = pRole
-    if (pRegion) coreWhere.region = pRegion
-
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true, countGame: true },
+    const { statIds, totalGames } = await getCoreStatIdsAndTotalGames({
+      championId,
+      versionOrPatch: pVersion,
+      rankTier,
+      role: pRole,
+      region: pRegion,
     })
-    if (coreStats.length === 0) return { totalGames: 0, shards: [] }
+    if (statIds.length === 0) return { totalGames: 0, shards: [] }
 
-    const totalGames = coreStats.reduce((sum, r) => sum + r.countGame, 0)
-    const statIds = coreStats.map((s) => s.id)
-
-    const shardRows = await prisma.mvChampionShardSoloStat.findMany({
-      where: { championStatId: { in: statIds } },
-      select: {
-        shardId: true,
-        slot: true,
-        countWin: true,
-        countGame: true,
-      },
-    })
+    const shardRows = await prisma.$queryRawUnsafe<
+      Array<{ shardId: number; slot: number; countWin: number; countGame: number }>
+    >(`
+      SELECT
+        shard_id AS "shardId",
+        slot,
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_shard_solo_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     const byShardSlot = new Map<string, { shardId: number; slot: number; wins: number; games: number }>()
     for (const row of shardRows) {
