@@ -4,9 +4,8 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { refreshAllMaterializedViews } from './MaterializedViewService.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
@@ -65,25 +64,41 @@ export class RiotStatsAggregator {
       const cached = championsCache.get(cacheKey)
       if (cached && cached.expiresAt > now) return cached.data
 
-      const where: Record<string, unknown> = {}
-      applyRankTierWhere(where, rankTier, { excludeUnrankedWhenEmpty: true })
-      if (pRole) where.role = pRole
-      if (pVersion) where.gameVersion = { startsWith: pVersion }
-      if (pRegion) where.region = pRegion
+      const filters: string[] = []
+      const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+      if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0].replace(/'/g, "''")}'`)
+      else if (ranks.length > 1) {
+        filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+      } else {
+        filters.push(`rank_tier <> 'UNRANKED'`)
+      }
+      if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
+      if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+      if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
+      const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
-      const rows = await prisma.mvChampionCoreStat.findMany({
-        where,
-        select: {
-          championId: true,
-          role: true,
-          countWin: true,
-          countGame: true,
-          countBan: true,
-          rankTier: true,
-          gameVersion: true,
-          region: true,
-        },
-      })
+      const rows = await prisma.$queryRawUnsafe<Array<{
+        championId: number
+        role: string
+        countWin: number
+        countGame: number
+        countBan: number
+        rankTier: string
+        gameVersion: string
+        region: string
+      }>>(`
+        SELECT
+          champion_id AS "championId",
+          role,
+          count_win AS "countWin",
+          count_game AS "countGame",
+          count_ban AS "countBan",
+          rank_tier AS "rankTier",
+          game_version AS "gameVersion",
+          region
+        FROM agg_champion_core_stats
+        WHERE ${whereSql}
+      `)
 
       if (rows.length === 0) {
         return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
@@ -172,7 +187,7 @@ export class RiotStatsAggregator {
   }
 
   /**
-   * Refresh all materialized views from raw match rows, then return champion rollups from MVs.
+   * Return champion rollups from incremental aggregate tables.
    */
   async computeAndSave(): Promise<AggregatedStats> {
     if (!isDatabaseConfigured()) {
@@ -183,7 +198,6 @@ export class RiotStatsAggregator {
         generatedAt: new Date().toISOString(),
       }
     }
-    await refreshAllMaterializedViews()
     championsCache.clear()
     const result = await this.load()
     if (result) return result

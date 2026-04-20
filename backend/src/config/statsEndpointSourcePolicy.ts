@@ -14,7 +14,7 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
   {
     path: '/overview',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_core_stats', 'mv_match_outcome_stats', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_champion_core_stats', 'agg_match_outcome_stats', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/overview-detail',
@@ -39,52 +39,52 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
   {
     path: '/overview-abandons',
     policy: 'mv_only',
-    allowedSources: ['mv_match_outcome_stats'],
+    allowedSources: ['agg_match_outcome_stats'],
   },
   {
     path: '/overview-teams',
     policy: 'mv_only',
-    allowedSources: ['mv_team_core_stats', 'mv_team_bucket', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_team_core_stats', 'agg_team_bucket', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/overview-sides',
     policy: 'mv_only',
-    allowedSources: ['mv_team_core_stats', 'mv_team_bucket', 'mv_champion_side_stats', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_team_core_stats', 'agg_team_bucket', 'agg_champion_side_stats', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/overview-sides-progression',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_side_stats', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_champion_side_stats', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/overview-progression',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_core_stats'],
+    allowedSources: ['agg_champion_core_stats'],
   },
   {
     path: '/overview-progression-full',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_core_stats', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_champion_core_stats', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/champions',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_core_stats'],
+    allowedSources: ['agg_champion_core_stats'],
   },
   {
     path: '/champions/global-table',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_side_stats', 'mv_champion_bans_by_banner'],
+    allowedSources: ['agg_champion_side_stats', 'agg_champion_bans_by_banner'],
   },
   {
     path: '/champions/bans-table',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_bans_by_banner', 'mv_match_outcome_stats'],
+    allowedSources: ['agg_champion_bans_by_banner', 'agg_match_outcome_stats'],
   },
   {
     path: '/tier-list',
     policy: 'mv_only',
-    allowedSources: ['mv_champion_core_stats', 'mv_champion_vs_stats', 'active_patches'],
+    allowedSources: ['agg_champion_core_stats', 'agg_champion_vs_stats', 'active_patches'],
   },
   {
     path: '/champions/:championId/tier-trend-snapshots',

@@ -3,7 +3,7 @@
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
+import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
 export interface MatchupRow {
   opponentChampionId: number
@@ -31,31 +31,38 @@ export async function getMatchupsByChampion(
     const pRole = role != null && role !== '' ? role : null
     const pRegion = region != null && region !== '' ? region : null
 
-    // Get all champion_core_stat IDs from MV for this champion matching filters
-    const coreWhere: Record<string, unknown> = { championId }
-    applyRankTierWhere(coreWhere, rankTier)
-    if (pRole) coreWhere.role = pRole
-    if (pVersion) coreWhere.gameVersion = pVersion
-    if (pRegion) coreWhere.region = pRegion
+    const filters: string[] = [`champion_id = ${championId}`]
+    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+    if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0].replace(/'/g, "''")}'`)
+    else if (ranks.length > 1) {
+      filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+    }
+    if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
+    if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+    if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
+    const whereSql = filters.join(' AND ')
 
-    const coreStats = await prisma.mvChampionCoreStat.findMany({
-      where: coreWhere,
-      select: { id: true },
-    })
+    const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint }>>(`
+      SELECT id
+      FROM agg_champion_core_stats
+      WHERE ${whereSql}
+    `)
     if (coreStats.length === 0) return { matchups: [] }
 
     const statIds = coreStats.map((s) => s.id)
 
-    const vsRows = await prisma.mvChampionVsStat.findMany({
-      where: {
-        championStatId: { in: statIds },
-      },
-      select: {
-        opponentChampionId: true,
-        countWin: true,
-        countGame: true,
-      },
-    })
+    const vsRows = await prisma.$queryRawUnsafe<Array<{
+      opponentChampionId: number
+      countWin: number
+      countGame: number
+    }>>(`
+      SELECT
+        opponent_champion_id AS "opponentChampionId",
+        count_win AS "countWin",
+        count_game AS "countGame"
+      FROM agg_champion_vs_stats
+      WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
+    `)
 
     // Aggregate by opponent
     const byOpponent = new Map<number, { wins: number; games: number }>()

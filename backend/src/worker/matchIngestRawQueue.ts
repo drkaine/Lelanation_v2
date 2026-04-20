@@ -37,6 +37,7 @@ export async function tryInsertRawIngestPayload(
       'pending',
       NOW()
     )
+    ON CONFLICT (riot_match_id) DO NOTHING
   `
   return 'written'
 }
@@ -98,6 +99,13 @@ export async function markRawIngestDone(id: bigint): Promise<void> {
         processing_started_at = NULL,
         last_error = NULL,
         next_retry_at = NULL
+    WHERE id = ${id}
+  `
+}
+
+export async function deleteRawIngestRow(id: bigint): Promise<void> {
+  await prisma.$executeRaw`
+    DELETE FROM match_ingest_raw
     WHERE id = ${id}
   `
 }

@@ -19,7 +19,10 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
-    "script:league-xp": "tsx src/worker/runScript.ts league-xp"
+    "script:league-xp": "tsx src/worker/runScript.ts league-xp",
+    "script:backfill-agg": "tsx src/scripts/backfillAggFromIngest.ts",
+    "script:repair-missing-ranks": "tsx src/scripts/repairMissingRanks.ts",
+    "script:verify-agg-parity": "tsx src/scripts/verifyAggParity.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",

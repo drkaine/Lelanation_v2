@@ -45,15 +45,22 @@ import {
   isRawIngestQueueEnabled,
   tryInsertRawIngestPayload,
   claimRawIngestRows,
-  markRawIngestDone,
+  deleteRawIngestRow,
   markRawIngestError,
   countRawIngestByStatus,
   requeueRawIngestErrors,
   requeueRawIngestStaleProcessing,
   deleteDoneRawIngestRows,
 } from './matchIngestRawQueue.js'
+import {
+  tryReserveTrackedMatch,
+  setTrackedMatchStatus,
+  releaseTrackedMatch,
+  releaseTrackedErrorMatches,
+} from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
 import { resolveRiotMatchIdForIngest } from './matchIngestIds.js'
+import { processRawAggregateAndBurn } from './rawAggregateProcessor.js'
 import {
   upsertIngestMatchAndParticipants,
   extractIngestTimelineExtras,
@@ -97,6 +104,30 @@ type PollerSummaryWindows = {
   hourlyTimeoutCount: number
 }
 
+type PollerDbWindowMetrics = {
+  matchesRecovered: number
+  playersPolled: number
+  playersAdded: number
+}
+
+async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWindowMetrics> {
+  const since = new Date(Date.now() - Math.max(1, windowMs))
+  const [trackedRows, playersPolled, playersAdded] = await Promise.all([
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE created_at >= ${since}
+    `,
+    prisma.player.count({ where: { lastSeen: { gte: since } } }),
+    prisma.player.count({ where: { createdAt: { gte: since } } }),
+  ])
+  return {
+    matchesRecovered: Number(trackedRows[0]?.c ?? 0),
+    playersPolled,
+    playersAdded,
+  }
+}
+
 /** Emit 30m/hourly lines to unified log when windows elapse (runs on a timer so long MV refresh does not block summaries). */
 async function emitPollerSummariesIfDue(
   client: RiotHttpClient,
@@ -105,6 +136,11 @@ async function emitPollerSummariesIfDue(
 ): Promise<void> {
   const now = Date.now()
   if (now - sw.summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
+    const db1h = await loadPollerDbWindowMetrics(60 * 60 * 1000).catch(() => ({
+      matchesRecovered: 0,
+      playersPolled: 0,
+      playersAdded: 0,
+    }))
     const elapsedMs = Math.max(1, now - sw.summary30mWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.summary30mPlayersPolled
     const playersFetchedDelta = state.playersFetched - sw.summary30mPlayersFetched
@@ -131,7 +167,7 @@ async function emitPollerSummariesIfDue(
       section: 'back',
       type: 'info',
       script: 'poller_30m',
-      message: `Resume 30 min — polled:+${playersPolledDelta} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} newPlayers:+${playersFetchedDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h si régulier) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
+      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
@@ -156,6 +192,7 @@ async function emitPollerSummariesIfDue(
         },
         httpRequestsProjectedPerHour,
         requestsPerHour: httpRequestsProjectedPerHour,
+        dbWindow1h: db1h,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
         totals: {
@@ -197,6 +234,11 @@ async function emitPollerSummariesIfDue(
     sw.summary30mTimeoutCount = state.timeoutCount
   }
   if (now - sw.hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
+    const db1h = await loadPollerDbWindowMetrics(60 * 60 * 1000).catch(() => ({
+      matchesRecovered: 0,
+      playersPolled: 0,
+      playersAdded: 0,
+    }))
     const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.hourlyPlayersPolled
     const playersFetchedDelta = state.playersFetched - sw.hourlyPlayersFetched
@@ -230,7 +272,9 @@ async function emitPollerSummariesIfDue(
     const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
     const formattedMessage = [
       `[${tsLabel}] RESUME HORAIRE`,
-      `- Joueurs polles: ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
+      `- Joueurs polles (last_seen, 1h): ${db1h.playersPolled} | nouveaux joueurs (created_at, 1h): ${db1h.playersAdded}`,
+      `- Matches recuperes (tracked_matches.created_at, 1h): ${db1h.matchesRecovered}`,
+      `- Joueurs polles (delta process): ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
       `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesDbDelta} nouveaux en DB | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
       `- API Requests: ${httpRequestsDelta}/${requestBudget} (Usage: ${requestUsagePct.toFixed(1)}%)`,
       `- Max Token Peak: ${limiterStats.maxApp120CountObserved}/${appTarget120} (Safety Margin: ${peakOk ? 'OK' : 'HIGH'})`,
@@ -269,6 +313,7 @@ async function emitPollerSummariesIfDue(
         requestsPerHour: httpRequestsProjectedPerHour,
         requestBudget,
         requestUsagePct,
+        dbWindow1h: db1h,
         maxTokenPeak: limiterStats.maxApp120CountObserved,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
@@ -1249,35 +1294,7 @@ function noteMatchIngestProcessed(enqueuedAt: number | null | undefined): void {
 async function maybeLogMatchIngestMetrics(): Promise<void> {
   const now = Date.now()
   if (now - matchIngestMetricsLastLogAtMs < 30_000 || matchIngestMetricsProcessed <= 0) return
-  const elapsedMs = Math.max(1, now - matchIngestMetricsLastLogAtMs)
-  const processed = matchIngestMetricsProcessed
-  const avgLagMs = Math.round(matchIngestMetricsLagTotalMs / processed)
-  const ingestPerSecond = Number((processed / (elapsedMs / 1000)).toFixed(2))
-  const rawDepths = isRawIngestQueueEnabled() ? await syncRawIngestDepthEstimates() : null
-  const queueDepth = rawDepths ? rawDepths.pending : await syncMatchIngestQueueDepthEstimate()
-  const errorDepth = rawDepths ? rawDepths.error : 0
-  void appendUnifiedLog({
-    section: 'back',
-    type: 'info',
-    script: 'poller_ingest',
-    message: `Ingest queue metrics — rate:${ingestPerSecond}/s avgLag:${avgLagMs}ms depth:${queueDepth} errorDepth:${errorDepth} workersBusy:${matchIngestBgInFlight} fallbackWrites:${rawIngestFallbackWrites}`,
-    json: {
-      ingestPerSecond,
-      avgLagMs,
-      queueDepth,
-      errorDepth,
-      workersBusy: matchIngestBgInFlight,
-      workersMax: getMatchIngestParallelJobs(),
-      configuredFileOrRawWorkers: isRawIngestQueueEnabled()
-        ? getRawIngestWorkers()
-        : getMatchIngestFileWorkers(),
-      matchIngestDbConcurrency: getMatchIngestDbConcurrency(),
-      fallbackFileWrites: rawIngestFallbackWrites,
-      windowMs: elapsedMs,
-      processed,
-      parallelMatchFetchesMax: getParallelMatchIngestFetches(),
-    },
-  })
+  // Poller ingest queue metrics are intentionally disabled (too noisy for unified logs).
   matchIngestMetricsLastLogAtMs = now
   matchIngestMetricsProcessed = 0
   matchIngestMetricsLagTotalMs = 0
@@ -1394,6 +1411,25 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     const tracker = ctx.playerTrackers?.[trackerIdx]
     const canonicalRiotMatchId = canonicalIds[i]
 
+    if (rawId != null) {
+      try {
+        await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
+        clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
+        ctx.syncLiveCounters()
+        noteMatchIngestProcessed(payload.enqueuedAt)
+      } catch (err) {
+        if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
+          await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
+          await markRawIngestError(rawId, 'invalid_raw_payload_shape', 5 * 60_000)
+        } else {
+          await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
+          const delay = Math.min(30 * 60_000, Math.max(60_000, 60_000))
+          await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
+        }
+      }
+      continue
+    }
+
     const existingDbId = existingMatchIdByRiot.get(canonicalRiotMatchId)
     if (existingDbId != null) {
       if (timelineDto) {
@@ -1412,7 +1448,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
-      if (rawId != null) await markRawIngestDone(rawId)
+      await setTrackedMatchStatus(canonicalRiotMatchId, 'INGESTED').catch(() => undefined)
+      if (rawId != null) await deleteRawIngestRow(rawId)
       else await unlink(p!).catch(() => undefined)
       continue
     }
@@ -1444,7 +1481,8 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       clearMatchIngestCooldownKeys(matchId, canonical)
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
-      if (rawId != null) await markRawIngestDone(rawId)
+      await setTrackedMatchStatus(canonical, 'INGESTED').catch(() => undefined)
+      if (rawId != null) await deleteRawIngestRow(rawId)
       else await unlink(p!).catch(() => undefined)
     } catch (err) {
       const skipped = unwrapMatchIngestSkipped(err)
@@ -1454,12 +1492,14 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
           reason: skipped.reason,
         })
         noteMatchIngestProcessed(payload.enqueuedAt)
-        if (rawId != null) await markRawIngestDone(rawId)
+        await setTrackedMatchStatus(canonicalRiotMatchId, `SKIPPED_${skipped.reason}`).catch(() => undefined)
+        if (rawId != null) await deleteRawIngestRow(rawId)
         else await unlink(p!).catch(() => undefined)
         continue
       }
       if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
         noteMatchIngestProcessed(payload.enqueuedAt)
+        await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
         if (rawId != null) {
           await markRawIngestError(rawId, RIOT_INGEST_ABORTED_MESSAGE, 30_000)
         } else {
@@ -1480,9 +1520,11 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
       if (rawId != null) {
+        await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
         const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
         await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
       } else {
+        await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
         const errPath = p!.replace(/\.json$/i, '')
         await rename(p!, `${errPath}.err.${Date.now()}.json`).catch(() => undefined)
       }
@@ -1937,15 +1979,15 @@ async function runStep4ForPlayer(
 
     const matchIds = Array.isArray(res.data) ? res.data : []
     phase1TotalIds += matchIds.length
-    const existing = await prisma.ingestMatch.findMany({
-      where: { riotMatchId: { in: matchIds } },
-      select: { riotMatchId: true },
-    })
-    const existingSet = new Set(existing.map((m) => m.riotMatchId))
-    phase1InDb += existingSet.size
+    const reservedSet = new Set<string>()
+    for (const matchId of matchIds) {
+      const isNewTracked = await tryReserveTrackedMatch(matchId)
+      if (isNewTracked) reservedSet.add(matchId)
+      else phase1InDb++
+    }
     const nowMs = Date.now()
     const toFetch = matchIds.filter((id) => {
-      if (existingSet.has(id)) return false
+      if (!reservedSet.has(id)) return false
       if (!canAttemptTimelineFetchNow(id, nowMs)) { phase1InTimelineRetry++; return false }
       if (!canAttemptMatchIngestNow(id, nowMs)) { phase1InBackoff++; return false }
       if (matchIngestPending.has(id)) { phase1InPendingIngest++; return false }
@@ -2168,6 +2210,7 @@ async function runStep4ForPlayer(
             if (strict.reason === 'abort') { pipelineAbort = 'abort'; break }
             if (strict.reason === 'version') {
               matchIngestPending.delete(work.matchId)
+              await setTrackedMatchStatus(work.matchId, 'SKIPPED_VERSION').catch(() => undefined)
               await logger.info('Match skipped (game version not in allowed range)', {
                 playerId: tracker.player.id.toString(),
                 matchId: work.matchId,
@@ -2176,6 +2219,7 @@ async function runStep4ForPlayer(
             }
             if (strict.reason === 'deferred_patch') {
               matchIngestPending.delete(work.matchId)
+              await setTrackedMatchStatus(work.matchId, 'DEFERRED_PATCH').catch(() => undefined)
               await logger.info('Match deferred (latest patch priority mode)', {
                 playerId: tracker.player.id.toString(),
                 matchId: work.matchId,
@@ -2187,6 +2231,7 @@ async function runStep4ForPlayer(
             if (strict.reason === 'transient') {
               if (!strict.matchDto) {
                 matchIngestPending.delete(work.matchId)
+                await releaseTrackedMatch(work.matchId).catch(() => undefined)
                 await recordMatchIngestFailure(work.matchId, logger)
                 await logger.info('Match detail fetch failed (API), will retry later', {
                   playerId: tracker.player.id.toString(),
@@ -2290,6 +2335,7 @@ async function runStep4ForPlayer(
                   : await tryEnqueueMatchIngestPayload(payload)
                 matchIngestPending.delete(work.matchId)
                 if (r === 'written') {
+                  await setTrackedMatchStatus(work.matchId, 'QUEUED').catch(() => undefined)
                   if (useRawMatchIngestQueue) noteRawIngestQueueDepthDelta(1)
                   else noteMatchIngestQueueDepthDelta(1)
                   syncLiveCounters()
@@ -2322,6 +2368,7 @@ async function runStep4ForPlayer(
                   matchId: work.matchId,
                   error: e instanceof Error ? e.message : String(e),
                 })
+                await releaseTrackedMatch(work.matchId).catch(() => undefined)
               }
               continue
             }
@@ -2346,6 +2393,7 @@ async function runStep4ForPlayer(
               : await tryEnqueueMatchIngestPayload(payload)
             matchIngestPending.delete(work.matchId)
             if (r === 'written') {
+              await setTrackedMatchStatus(work.matchId, 'QUEUED').catch(() => undefined)
               if (useRawMatchIngestQueue) noteRawIngestQueueDepthDelta(1)
               else noteMatchIngestQueueDepthDelta(1)
               syncLiveCounters()
@@ -2378,6 +2426,7 @@ async function runStep4ForPlayer(
               matchId: work.matchId,
               error: e instanceof Error ? e.message : String(e),
             })
+            await releaseTrackedMatch(work.matchId).catch(() => undefined)
           }
         }
       }
@@ -2559,12 +2608,15 @@ async function refreshPriorityRanksOffCriticalIngestPath(
       while (queue.length > 0 && !state.shouldStop) {
         const next = queue.shift()
         if (!next) break
-        client.setPlatform(next.region.toLowerCase())
         await waitForRiotGlobalCooldownIfNeeded('league-v4-entries-by-puuid')
-        const entriesRes = await client.getLeagueEntriesByPuuid(next.puuid, {
-          infinite429Retry: true,
-          shouldAbort: () => state.shouldStop,
-        })
+        const entriesRes = await client.getLeagueEntriesByPuuidOnPlatform(
+          next.puuid,
+          next.region.toLowerCase(),
+          {
+            infinite429Retry: true,
+            shouldAbort: () => state.shouldStop,
+          }
+        )
         if (!entriesRes.ok) {
           if (entriesRes.message === RIOT_INGEST_ABORTED_MESSAGE) break
           continue
@@ -2642,6 +2694,30 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     participantsRoleFixed: 0,
   })
 
+  void appendUnifiedLog({
+    section: 'back',
+    type: 'info',
+    script: 'poller',
+    message:
+      'Runtime throttle config — vérification des limites effectives (env appliqué au process)',
+    json: {
+      playersPerLoop: getPlayersPerLoop(),
+      matchIdsLookupConcurrency: getMatchIdsLookupConcurrency(),
+      parallelMatchIngestFetches: getParallelMatchIngestFetches(),
+      riotAppTargetPer120s: getRiotAppTargetPer120s(),
+      matchRequestBudget: Number.parseInt(process.env.RIOT_MATCH_REQUEST_BUDGET ?? '', 10) || null,
+      matchCycleDelayMs: Number.parseInt(process.env.RIOT_MATCH_CYCLE_DELAY_MS ?? '', 10) || null,
+      matchFastCycleDelayMs:
+        Number.parseInt(process.env.RIOT_MATCH_FAST_CYCLE_DELAY_MS ?? '', 10) || null,
+      limiterMaxConcurrent: Number.parseInt(process.env.RIOT_LIMITER_MAX_CONCURRENT ?? '', 10) || null,
+      limiterReservoirMax: Number.parseInt(process.env.RIOT_RESERVOIR_MAX ?? '', 10) || null,
+      post429SerialModeMs: Number.parseInt(process.env.RIOT_POST_429_SERIAL_MODE_MS ?? '', 10) || 120000,
+      hardStopRemainingMax:
+        Number.parseInt(process.env.RIOT_APP_120S_HARD_STOP_REMAINING_MAX ?? '', 10) || 1,
+      hardStopMs: Number.parseInt(process.env.RIOT_APP_120S_HARD_STOP_MS ?? '', 10) || 40000,
+    },
+  })
+
   try {
     activeMatchIngestClient = client
     startMatchIngestBackgroundProcessor()
@@ -2678,6 +2754,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     const rawDoneCleanupIntervalMs = getRawIngestDoneCleanupIntervalMs()
     const rawDoneCleanupBatch = getRawIngestDoneCleanupBatch()
     let nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
+    let nextTrackedErrorRecoveryAtMs = Date.now()
     const initLimiterStats = client.getRateLimiterStats()
     const sw: PollerSummaryWindows = {
       summary30mWindowStartedAtMs: Date.now(),
@@ -2785,6 +2862,19 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
               batch: rawDoneCleanupBatch,
               cleanupIntervalMs: rawDoneCleanupIntervalMs,
             },
+          })
+        }
+      }
+      if (Date.now() >= nextTrackedErrorRecoveryAtMs) {
+        const recoveredTracked = await releaseTrackedErrorMatches(500).catch(() => 0)
+        nextTrackedErrorRecoveryAtMs = Date.now() + 60_000
+        if (recoveredTracked > 0) {
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller',
+            message: `Tracked matches recovery: ${recoveredTracked} status ERROR -> retried`,
+            json: { recoveredTracked, sourceStatus: 'ERROR' },
           })
         }
       }

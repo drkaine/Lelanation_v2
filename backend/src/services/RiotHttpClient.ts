@@ -172,6 +172,11 @@ type RiotCountPeak = {
   pairIndex: number
 }
 
+type RiotWindowAggregate = {
+  completedWindows: number
+  peakSum: number
+}
+
 /** Fired once per completed `fetch` (every HTTP round-trip), including 4xx/5xx and 429 before retry. */
 export type RiotHttpResponseObserver = (info: {
   bucket: string
@@ -197,6 +202,9 @@ export class RiotHttpClient {
   /** Peak captured for the previous completed window (when counter drops/resets). */
   private appCountLastCompletedPeaks = new Map<string, RiotCountPeak>()
   private methodCountLastCompletedPeaks = new Map<string, RiotCountPeak>()
+  /** Running average of completed-window peaks (by pair index + windowSec). */
+  private appCountWindowAverages = new Map<string, RiotWindowAggregate>()
+  private methodCountWindowAverages = new Map<string, RiotWindowAggregate>()
 
   constructor(
     private readonly rateLimiter: RiotRateLimiter,
@@ -221,7 +229,8 @@ export class RiotHttpClient {
   private updateCountPeaks(
     raw: string | undefined,
     target: Map<string, RiotCountPeak>,
-    completedTarget: Map<string, RiotCountPeak>
+    completedTarget: Map<string, RiotCountPeak>,
+    averagesTarget: Map<string, RiotWindowAggregate>
   ): void {
     if (!raw) return
     const pairs = parseRiotLimitPairs(raw)
@@ -236,10 +245,12 @@ export class RiotHttpClient {
       }
       // Riot counters are monotonic within a window and drop at reset.
       if (current < prev.last) {
-        const completedPrev = completedTarget.get(key)
-        const completedPeak = Math.max(completedPrev?.peak ?? 0, prev.peak)
+        const avg = averagesTarget.get(key) ?? { completedWindows: 0, peakSum: 0 }
+        avg.completedWindows += 1
+        avg.peakSum += prev.peak
+        averagesTarget.set(key, avg)
         completedTarget.set(key, {
-          peak: completedPeak,
+          peak: prev.peak,
           last: prev.last,
           windowSec: prev.windowSec,
           pairIndex: prev.pairIndex,
@@ -277,6 +288,30 @@ export class RiotHttpClient {
       out.push(`${best}:${windowSec}`)
     }
     return out.length > 0 ? out.join(',') : null
+  }
+
+  private formatCompletedWindowPeaks(completedTarget: Map<string, RiotCountPeak>): string | null {
+    const list = Array.from(completedTarget.values()).sort((a, b) => {
+      if (a.pairIndex !== b.pairIndex) return a.pairIndex - b.pairIndex
+      return a.windowSec - b.windowSec
+    })
+    if (list.length === 0) return null
+    return list.map((x) => `${x.peak}:${x.windowSec}`).join(',')
+  }
+
+  private avgReqPerHourFromCompleted120s(averagesTarget: Map<string, RiotWindowAggregate>): number | null {
+    let peakSum = 0
+    let windows = 0
+    for (const [key, agg] of averagesTarget.entries()) {
+      const [, windowSecStr] = key.split(':')
+      const windowSec = Number(windowSecStr)
+      if (windowSec !== 120) continue
+      peakSum += agg.peakSum
+      windows += agg.completedWindows
+    }
+    if (windows <= 0) return null
+    const avgPeakPer120s = peakSum / windows
+    return Math.round(avgPeakPer120s * (3600 / 120))
   }
 
   /** Register a callback invoked whenever the API returns 401 or 403 (key invalid/expired). */
@@ -397,12 +432,14 @@ export class RiotHttpClient {
       this.updateCountPeaks(
         riotHeaders['x-app-rate-limit-count'],
         this.appCountPeaks,
-        this.appCountLastCompletedPeaks
+        this.appCountLastCompletedPeaks,
+        this.appCountWindowAverages
       )
       this.updateCountPeaks(
         riotHeaders['x-method-rate-limit-count'],
         this.methodCountPeaks,
-        this.methodCountLastCompletedPeaks
+        this.methodCountLastCompletedPeaks,
+        this.methodCountWindowAverages
       )
     }
 
@@ -420,10 +457,19 @@ export class RiotHttpClient {
           this.methodCountPeaks,
           this.methodCountLastCompletedPeaks
         )
+        const appCountCompletedWindowPeaks = this.formatCompletedWindowPeaks(
+          this.appCountLastCompletedPeaks
+        )
+        const methodCountCompletedWindowPeaks = this.formatCompletedWindowPeaks(
+          this.methodCountLastCompletedPeaks
+        )
+        const appAvgReqPerHourFromCompleted120s = this.avgReqPerHourFromCompleted120s(
+          this.appCountWindowAverages
+        )
         const message =
           near120 != null
-            ? `Riot rate-limit 120s (bucket le plus proche de la limite) — ${near120.scope}: ${near120.count}/${near120.limit} utilisés, ${near120.remaining} restants (${pctUsed}% de la fenêtre) | peaks x-app-rate-limit-count=${appCountPeakHeader ?? 'n/a'} x-method-rate-limit-count=${methodCountPeakHeader ?? 'n/a'}`
-            : `Riot rate-limit headers (dernière réponse OK) — pas de paire 120s dans les en-têtes | peaks x-app-rate-limit-count=${appCountPeakHeader ?? 'n/a'} x-method-rate-limit-count=${methodCountPeakHeader ?? 'n/a'}`
+            ? `Riot rate-limit 120s (bucket le plus proche de la limite) — ${near120.scope}: ${near120.count}/${near120.limit} utilisés, ${near120.remaining} restants (${pctUsed}% de la fenêtre) | currentPeaks app=${appCountPeakHeader ?? 'n/a'} method=${methodCountPeakHeader ?? 'n/a'} | completedWindowPeaks app=${appCountCompletedWindowPeaks ?? 'n/a'} method=${methodCountCompletedWindowPeaks ?? 'n/a'} | avgReqPerHour(app120s)=${appAvgReqPerHourFromCompleted120s ?? 'n/a'}`
+            : `Riot rate-limit headers (dernière réponse OK) — pas de paire 120s dans les en-têtes | currentPeaks app=${appCountPeakHeader ?? 'n/a'} method=${methodCountPeakHeader ?? 'n/a'} | completedWindowPeaks app=${appCountCompletedWindowPeaks ?? 'n/a'} method=${methodCountCompletedWindowPeaks ?? 'n/a'} | avgReqPerHour(app120s)=${appAvgReqPerHourFromCompleted120s ?? 'n/a'}`
         void appendUnifiedLog({
           section: 'back',
           type: 'rate_limit',
@@ -437,6 +483,11 @@ export class RiotHttpClient {
               app: appCountPeakHeader,
               method: methodCountPeakHeader,
             },
+            rateLimitCountCompletedWindowPeaks: {
+              app: appCountCompletedWindowPeaks,
+              method: methodCountCompletedWindowPeaks,
+            },
+            appAvgReqPerHourFromCompleted120s,
             riotRateLimitHeaders: { ...this.lastRiotRateLimitHeaders },
           },
         })
@@ -538,6 +589,21 @@ export class RiotHttpClient {
   > {
     // League-v4 routes on platform host (euw1/eun1), not regional host (europe).
     const url = `${getPlatformBase(this.platform)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
+    return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url, reqOpts)
+  }
+
+  /**
+   * League v4: entries by PUUID on an explicit platform host (no mutable client platform switch).
+   */
+  async getLeagueEntriesByPuuidOnPlatform(
+    puuid: string,
+    platform: string,
+    reqOpts?: RiotRequestOptions
+  ): Promise<
+    { ok: true; data: RiotLeagueEntryDto[] } | { ok: false; status: number; message?: string; body?: unknown }
+  > {
+    const normalizedPlatform = PLATFORM_BY_REGION[platform] ?? platform
+    const url = `${getPlatformBase(normalizedPlatform)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
     return this.request<RiotLeagueEntryDto[]>('GET', 'league-v4-entries-by-puuid', url, reqOpts)
   }
 

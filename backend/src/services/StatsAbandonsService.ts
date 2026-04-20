@@ -1,5 +1,5 @@
 /**
- * Stats d'abandon : surrender (early / normal) depuis la vue matérialisée `mv_match_outcome_stats`.
+ * Stats d'abandon : surrender (early / normal) depuis les tables d'agrégats runtime.
  * Remake = match où au moins un participant n'a aucun item (déco / non connecté).
  * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */
@@ -85,10 +85,12 @@ export async function getOverviewAbandons(
     >(`
       SELECT
         COALESCE(SUM(mo.count_match), 0)::bigint AS total_matches,
-        COALESCE(SUM(mo.count_early_surrender), 0)::bigint AS early_surrender_count,
-        COALESCE(SUM(mo.count_surrender), 0)::bigint AS surrender_count,
-        COALESCE(SUM(mo.count_remake), 0)::bigint AS remake_count
-      FROM mv_match_outcome_stats mo
+        COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count,
+        COALESCE(SUM(tc.count_team_surrendered), 0)::bigint AS surrender_count,
+        0::bigint AS remake_count
+      FROM agg_match_outcome_stats mo
+      LEFT JOIN agg_team_core_stats tc
+        ON tc.game_version = mo.game_version AND tc.rank_tier = mo.rank_tier
       WHERE ${whereSql}
     `)
     const row = rows[0]

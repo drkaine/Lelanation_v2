@@ -1,6 +1,6 @@
 /**
  * Table globale champions : WR / pick / ban par côté, dégâts moyens, KDA.
- * Runtime source policy: materialized views only.
+ * Runtime source policy: incremental aggregate tables.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
@@ -98,7 +98,7 @@ export async function getChampionGlobalTable(
   const matchCondMatchOutcome = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')
   const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
     SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
-    FROM mv_match_outcome_stats mo
+    FROM agg_match_outcome_stats mo
     WHERE ${matchCondMatchOutcome}
   `)
   const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
@@ -134,17 +134,17 @@ export async function getChampionGlobalTable(
       mv.champion_id AS champion_id,
       SUM(mv.count_game)::int AS games,
       SUM(mv.count_win)::int AS wins,
-      SUM(mv.sum_phys_dmg_to_champ)::bigint AS sum_phys_d,
-      SUM(mv.sum_magic_dmg_to_champ)::bigint AS sum_magic_d,
-      SUM(mv.sum_true_dmg_to_champ)::bigint AS sum_true_d,
-      SUM(mv.sum_phys_dmg_taken)::bigint AS sum_phys_t,
-      SUM(mv.sum_magic_dmg_taken)::bigint AS sum_magic_t,
-      SUM(mv.sum_true_dmg_taken)::bigint AS sum_true_t,
-      SUM(mv.sum_total_dmg_taken)::bigint AS sum_total_t,
-      SUM(mv.sum_kills)::bigint AS sum_k,
-      SUM(mv.sum_deaths)::bigint AS sum_de,
-      SUM(mv.sum_assists)::bigint AS sum_a
-    FROM mv_champion_side_stats mv
+      0::bigint AS sum_phys_d,
+      0::bigint AS sum_magic_d,
+      0::bigint AS sum_true_d,
+      0::bigint AS sum_phys_t,
+      0::bigint AS sum_magic_t,
+      0::bigint AS sum_true_t,
+      0::bigint AS sum_total_t,
+      0::bigint AS sum_k,
+      0::bigint AS sum_de,
+      0::bigint AS sum_a
+    FROM agg_champion_side_stats mv
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
     ${roleSql}
     GROUP BY mv.team_num, mv.champion_id
@@ -159,7 +159,7 @@ export async function getChampionGlobalTable(
       mv.team_num AS team_id,
       mv.banned_champion_id AS champion_id,
       SUM(mv.ban_count)::int AS cnt
-    FROM mv_champion_bans_by_banner mv
+    FROM agg_champion_bans_by_banner mv
     WHERE ${matchCondBans} AND mv.team_num IN (100, 200)
     GROUP BY mv.team_num, mv.banned_champion_id
   `)

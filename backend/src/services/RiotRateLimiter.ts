@@ -43,7 +43,7 @@ const PENALTY_BUFFER_MS = 2_500
 
 function readTargetAppRequestsPer120s(): number {
   const raw = Number.parseInt(process.env.RIOT_APP_TARGET_PER_120S ?? '', 10)
-  if (!Number.isFinite(raw)) return 100
+  if (!Number.isFinite(raw)) return 95
   return Math.min(100, Math.max(1, raw))
 }
 
@@ -54,8 +54,8 @@ export function getRiotAppTargetPer120s(): number {
 
 function readReservoirMax(): number {
   const raw = Number.parseInt(process.env.RIOT_RESERVOIR_MAX ?? '', 10)
-  if (!Number.isFinite(raw)) return 12
-  return Math.min(32, Math.max(1, raw))
+  if (!Number.isFinite(raw)) return 95
+  return Math.min(200, Math.max(1, raw))
 }
 
 function readMaxConcurrent(): number {
@@ -146,7 +146,7 @@ export class RiotRateLimiter {
       reservoirIncreaseInterval: dripMs,
       reservoirIncreaseMaximum: readReservoirMax(),
       maxConcurrent: readMaxConcurrent(),
-      minTime: 50,
+      minTime: 110,
     })
   }
 

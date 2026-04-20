@@ -6,7 +6,6 @@
  */
 import { prisma } from '../db.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
-import { applyRankTierWhere } from '../utils/statsFilters.js'
 import { isDatabaseConfigured } from '../db.js'
 
 const MIN_GAMES = 1
@@ -323,31 +322,38 @@ async function fetchRoleRows(
 
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
 
-  // Build where filter for mv_champion_core_stats
-  const where: Record<string, unknown> = {}
+  const filters: string[] = []
   if (highEloOnly) {
-    where.rankTier = { in: HIGH_ELO_TIERS }
+    filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
-    applyRankTierWhere(where, rankFilter)
+    const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+    filters.push(`rank_tier = '${rf}'`)
   }
-  // Filter by patch prefix (game_version starts with "major.minor")
-  if (patch) {
-    where.gameVersion = { startsWith: patch }
-  }
+  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
-  const coreRows = await prisma.mvChampionCoreStat.findMany({
-    where,
-    select: {
-      championId: true,
-      role: true,
-      gameVersion: true,
-      region: true,
-      rankTier: true,
-      countWin: true,
-      countGame: true,
-      countBan: true,
-    },
-  })
+  const coreRows = await prisma.$queryRawUnsafe<Array<{
+    championId: number
+    role: string
+    gameVersion: string
+    region: string
+    rankTier: string
+    countWin: number
+    countGame: number
+    countBan: number
+  }>>(`
+    SELECT
+      champion_id AS "championId",
+      role,
+      game_version AS "gameVersion",
+      region,
+      rank_tier AS "rankTier",
+      count_win AS "countWin",
+      count_game AS "countGame",
+      count_ban AS "countBan"
+    FROM agg_champion_core_stats
+    WHERE ${whereSql}
+  `)
 
   if (coreRows.length === 0) return []
 
@@ -410,33 +416,41 @@ async function fetchMatchupRoleRows(
 ): Promise<MatchupRoleRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
-  const where: Record<string, unknown> = {}
+  const filters: string[] = []
   if (highEloOnly) {
-    where.rankTier = { in: HIGH_ELO_TIERS }
+    filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
-    applyRankTierWhere(where, rankFilter)
+    const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
+    filters.push(`rank_tier = '${rf}'`)
   }
-  if (patch) where.gameVersion = { startsWith: patch }
+  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
 
-  const coreRows = await prisma.mvChampionCoreStat.findMany({
-    where,
-    select: { id: true, championId: true, role: true },
-  })
+  const coreRows = await prisma.$queryRawUnsafe<Array<{ id: bigint; championId: number; role: string }>>(`
+    SELECT id, champion_id AS "championId", role
+    FROM agg_champion_core_stats
+    WHERE ${whereSql}
+  `)
   if (coreRows.length === 0) return []
   const coreById = new Map<string, { championId: number; role: string }>()
   for (const r of coreRows) {
     coreById.set(String(r.id), { championId: r.championId, role: r.role })
   }
 
-  const vsRows = await prisma.mvChampionVsStat.findMany({
-    where,
-    select: {
-      championStatId: true,
-      opponentChampionId: true,
-      countGame: true,
-      countWin: true,
-    },
-  })
+  const vsRows = await prisma.$queryRawUnsafe<Array<{
+    championStatId: bigint
+    opponentChampionId: number
+    countGame: number
+    countWin: number
+  }>>(`
+    SELECT
+      champion_stat_id AS "championStatId",
+      opponent_champion_id AS "opponentChampionId",
+      count_game AS "countGame",
+      count_win AS "countWin"
+    FROM agg_champion_vs_stats
+    WHERE ${whereSql}
+  `)
   const agg = new Map<string, MatchupRoleRow>()
   for (const row of vsRows) {
     const core = coreById.get(String(row.championStatId))
