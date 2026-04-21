@@ -80,6 +80,11 @@ type PollerSummaryWindows = {
   summary30mMatchesFetched: number
   summary30mMatchesApiIngestComplete: number
   summary30mPlayersRankUpdatedLeague: number
+  summary30mNewPlayersRankFetched: number
+  summary30mStalePlayersRankRefreshed: number
+  summary30mRankSkippedFreshSnapshot: number
+  summary30mApiNoRank: number
+  summary30mApiError: number
   summary30mRequestCount: number
   summary30mError429Count: number
   summary30mParticipantsFetched: number
@@ -94,6 +99,11 @@ type PollerSummaryWindows = {
   hourlyMatchesFetched: number
   hourlyMatchesApiIngestComplete: number
   hourlyPlayersRankUpdatedLeague: number
+  hourlyNewPlayersRankFetched: number
+  hourlyStalePlayersRankRefreshed: number
+  hourlyRankSkippedFreshSnapshot: number
+  hourlyApiNoRank: number
+  hourlyApiError: number
   hourlyRequestCount: number
   hourlyError429Count: number
   hourlyParticipantsFetched: number
@@ -167,6 +177,14 @@ async function emitPollerSummariesIfDue(
       state.matchesApiIngestComplete - sw.summary30mMatchesApiIngestComplete
     const playersRankDelta =
       state.playersRankUpdatedLeague - sw.summary30mPlayersRankUpdatedLeague
+    const newPlayersRankFetchedDelta =
+      state.newPlayersRankFetched - sw.summary30mNewPlayersRankFetched
+    const stalePlayersRankRefreshedDelta =
+      state.stalePlayersRankRefreshed - sw.summary30mStalePlayersRankRefreshed
+    const rankSkippedFreshSnapshotDelta =
+      state.rankSkippedFreshSnapshot - sw.summary30mRankSkippedFreshSnapshot
+    const apiNoRankDelta = state.apiNoRank - sw.summary30mApiNoRank
+    const apiErrorDelta = state.apiError - sw.summary30mApiError
     const httpRequestsDelta = state.requestCount - sw.summary30mRequestCount
     const error429Delta = state.error429Count - sw.summary30mError429Count
     const participantsDelta = state.participantsFetched - sw.summary30mParticipantsFetched
@@ -201,6 +219,11 @@ async function emitPollerSummariesIfDue(
           matchesInsertedDb: matchesDbDelta,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
+          newPlayersRankFetched: newPlayersRankFetchedDelta,
+          stalePlayersRankRefreshed: stalePlayersRankRefreshedDelta,
+          rankSkippedFreshSnapshot: rankSkippedFreshSnapshotDelta,
+          apiNoRank: apiNoRankDelta,
+          apiError: apiErrorDelta,
           participants: participantsDelta,
           httpRequests: httpRequestsDelta,
           requests: httpRequestsDelta,
@@ -219,6 +242,11 @@ async function emitPollerSummariesIfDue(
           matchesInsertedDb: state.matchesFetched,
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
+          newPlayersRankFetched: state.newPlayersRankFetched,
+          stalePlayersRankRefreshed: state.stalePlayersRankRefreshed,
+          rankSkippedFreshSnapshot: state.rankSkippedFreshSnapshot,
+          apiNoRank: state.apiNoRank,
+          apiError: state.apiError,
           participants: state.participantsFetched,
           matchIdsFromApi: state.matchIdsFromApi,
           existingMatchesSkipped: state.existingMatchesSkipped,
@@ -242,6 +270,11 @@ async function emitPollerSummariesIfDue(
     sw.summary30mMatchesFetched = state.matchesFetched
     sw.summary30mMatchesApiIngestComplete = state.matchesApiIngestComplete
     sw.summary30mPlayersRankUpdatedLeague = state.playersRankUpdatedLeague
+    sw.summary30mNewPlayersRankFetched = state.newPlayersRankFetched
+    sw.summary30mStalePlayersRankRefreshed = state.stalePlayersRankRefreshed
+    sw.summary30mRankSkippedFreshSnapshot = state.rankSkippedFreshSnapshot
+    sw.summary30mApiNoRank = state.apiNoRank
+    sw.summary30mApiError = state.apiError
     sw.summary30mRequestCount = state.requestCount
     sw.summary30mError429Count = state.error429Count
     sw.summary30mParticipantsFetched = state.participantsFetched
@@ -267,6 +300,14 @@ async function emitPollerSummariesIfDue(
       state.matchesApiIngestComplete - sw.hourlyMatchesApiIngestComplete
     const playersRankDelta =
       state.playersRankUpdatedLeague - sw.hourlyPlayersRankUpdatedLeague
+    const newPlayersRankFetchedDelta =
+      state.newPlayersRankFetched - sw.hourlyNewPlayersRankFetched
+    const stalePlayersRankRefreshedDelta =
+      state.stalePlayersRankRefreshed - sw.hourlyStalePlayersRankRefreshed
+    const rankSkippedFreshSnapshotDelta =
+      state.rankSkippedFreshSnapshot - sw.hourlyRankSkippedFreshSnapshot
+    const apiNoRankDelta = state.apiNoRank - sw.hourlyApiNoRank
+    const apiErrorDelta = state.apiError - sw.hourlyApiError
     const httpRequestsDelta = state.requestCount - sw.hourlyRequestCount
     const error429Delta = state.error429Count - sw.hourlyError429Count
     const participantsDelta = state.participantsFetched - sw.hourlyParticipantsFetched
@@ -300,6 +341,7 @@ async function emitPollerSummariesIfDue(
       `- API Requests: ${httpRequestsDelta}/${requestBudget} (Usage: ${requestUsagePct.toFixed(1)}%)`,
       `- Max Token Peak: ${limiterStats.maxApp120CountObserved}/${appTarget120} (Safety Margin: ${peakOk ? 'OK' : 'HIGH'})`,
       `- Participants indexes: ${playersFetchedDelta} nouveaux PUUIDs`,
+      `- Rank ingest: new=${newPlayersRankFetchedDelta} stale_refresh=${stalePlayersRankRefreshedDelta} skip_fresh=${rankSkippedFreshSnapshotDelta} api_no_rank=${apiNoRankDelta} api_error=${apiErrorDelta}`,
       `- Erreurs: ${error429Delta + timeoutDelta} (429: ${error429Delta}, Timeout: ${timeoutDelta})`,
     ].join('\n')
     await appendUnifiedLog({
@@ -323,6 +365,11 @@ async function emitPollerSummariesIfDue(
           matchesInsertedDb: matchesDbDelta,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
+          newPlayersRankFetched: newPlayersRankFetchedDelta,
+          stalePlayersRankRefreshed: stalePlayersRankRefreshedDelta,
+          rankSkippedFreshSnapshot: rankSkippedFreshSnapshotDelta,
+          apiNoRank: apiNoRankDelta,
+          apiError: apiErrorDelta,
           participants: participantsDelta,
           httpRequests: httpRequestsDelta,
           requests: httpRequestsDelta,
@@ -346,6 +393,11 @@ async function emitPollerSummariesIfDue(
           matchesInsertedDb: state.matchesFetched,
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
+          newPlayersRankFetched: state.newPlayersRankFetched,
+          stalePlayersRankRefreshed: state.stalePlayersRankRefreshed,
+          rankSkippedFreshSnapshot: state.rankSkippedFreshSnapshot,
+          apiNoRank: state.apiNoRank,
+          apiError: state.apiError,
           participants: state.participantsFetched,
           httpRequests: state.requestCount,
           requests: state.requestCount,
@@ -399,6 +451,11 @@ async function emitPollerSummariesIfDue(
     sw.hourlyMatchesFetched = state.matchesFetched
     sw.hourlyMatchesApiIngestComplete = state.matchesApiIngestComplete
     sw.hourlyPlayersRankUpdatedLeague = state.playersRankUpdatedLeague
+    sw.hourlyNewPlayersRankFetched = state.newPlayersRankFetched
+    sw.hourlyStalePlayersRankRefreshed = state.stalePlayersRankRefreshed
+    sw.hourlyRankSkippedFreshSnapshot = state.rankSkippedFreshSnapshot
+    sw.hourlyApiNoRank = state.apiNoRank
+    sw.hourlyApiError = state.apiError
     sw.hourlyRequestCount = state.requestCount
     sw.hourlyError429Count = state.error429Count
     sw.hourlyParticipantsFetched = state.participantsFetched
@@ -482,6 +539,11 @@ export interface RiotPollerStatus {
   participantsFetched: number
   /** Successful League-v4-by-puuid responses that fed rank data during ingest. */
   playersRankUpdatedLeague: number
+  newPlayersRankFetched: number
+  stalePlayersRankRefreshed: number
+  rankSkippedFreshSnapshot: number
+  apiNoRank: number
+  apiError: number
   /** Match IDs returned by Riot `by-puuid` API. */
   matchIdsFromApi: number
   /** Match IDs skipped because already in DB. */
@@ -508,6 +570,11 @@ const defaultStatus: RiotPollerStatus = {
   playersPolled: 0,
   participantsFetched: 0,
   playersRankUpdatedLeague: 0,
+  newPlayersRankFetched: 0,
+  stalePlayersRankRefreshed: 0,
+  rankSkippedFreshSnapshot: 0,
+  apiNoRank: 0,
+  apiError: 0,
   matchIdsFromApi: 0,
   existingMatchesSkipped: 0,
   timeoutCount: 0,
@@ -1091,6 +1158,11 @@ type MatchIngestStepContext = {
     playersPolled: number
     participantsFetched: number
     playersRankUpdatedLeague: number
+    newPlayersRankFetched: number
+    stalePlayersRankRefreshed: number
+    rankSkippedFreshSnapshot: number
+    apiNoRank: number
+    apiError: number
     matchIdsFromApi: number
     existingMatchesSkipped: number
     timeoutCount: number
@@ -1674,6 +1746,11 @@ async function runStep4ForPlayer(
     playersPolled: number
     participantsFetched: number
     playersRankUpdatedLeague: number
+    newPlayersRankFetched: number
+    stalePlayersRankRefreshed: number
+    rankSkippedFreshSnapshot: number
+    apiNoRank: number
+    apiError: number
     matchIdsFromApi: number
     existingMatchesSkipped: number
     timeoutCount: number
@@ -1695,6 +1772,11 @@ async function runStep4ForPlayer(
       playersPolled: counters.playersPolled,
       participantsFetched: counters.participantsFetched,
       playersRankUpdatedLeague: counters.playersRankUpdatedLeague,
+      newPlayersRankFetched: counters.newPlayersRankFetched,
+      stalePlayersRankRefreshed: counters.stalePlayersRankRefreshed,
+      rankSkippedFreshSnapshot: counters.rankSkippedFreshSnapshot,
+      apiNoRank: counters.apiNoRank,
+      apiError: counters.apiError,
       matchIdsFromApi: counters.matchIdsFromApi,
       existingMatchesSkipped: counters.existingMatchesSkipped,
       timeoutCount: counters.timeoutCount,
@@ -2741,6 +2823,11 @@ async function runStep4Counters() {
     playersPolled: state.playersPolled,
     participantsFetched: state.participantsFetched,
     playersRankUpdatedLeague: state.playersRankUpdatedLeague,
+    newPlayersRankFetched: state.newPlayersRankFetched,
+    stalePlayersRankRefreshed: state.stalePlayersRankRefreshed,
+    rankSkippedFreshSnapshot: state.rankSkippedFreshSnapshot,
+    apiNoRank: state.apiNoRank,
+    apiError: state.apiError,
     matchIdsFromApi: state.matchIdsFromApi,
     existingMatchesSkipped: state.existingMatchesSkipped,
     timeoutCount: state.timeoutCount,
@@ -2766,6 +2853,11 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     playersPolled: 0,
     participantsFetched: 0,
     playersRankUpdatedLeague: 0,
+    newPlayersRankFetched: 0,
+    stalePlayersRankRefreshed: 0,
+    rankSkippedFreshSnapshot: 0,
+    apiNoRank: 0,
+    apiError: 0,
     matchIdsFromApi: 0,
     existingMatchesSkipped: 0,
     timeoutCount: 0,
@@ -2843,6 +2935,11 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       summary30mMatchesFetched: state.matchesFetched,
       summary30mMatchesApiIngestComplete: state.matchesApiIngestComplete,
       summary30mPlayersRankUpdatedLeague: state.playersRankUpdatedLeague,
+      summary30mNewPlayersRankFetched: state.newPlayersRankFetched,
+      summary30mStalePlayersRankRefreshed: state.stalePlayersRankRefreshed,
+      summary30mRankSkippedFreshSnapshot: state.rankSkippedFreshSnapshot,
+      summary30mApiNoRank: state.apiNoRank,
+      summary30mApiError: state.apiError,
       summary30mRequestCount: state.requestCount,
       summary30mError429Count: state.error429Count,
       summary30mParticipantsFetched: state.participantsFetched,
@@ -2857,6 +2954,11 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       hourlyMatchesFetched: state.matchesFetched,
       hourlyMatchesApiIngestComplete: state.matchesApiIngestComplete,
       hourlyPlayersRankUpdatedLeague: state.playersRankUpdatedLeague,
+      hourlyNewPlayersRankFetched: state.newPlayersRankFetched,
+      hourlyStalePlayersRankRefreshed: state.stalePlayersRankRefreshed,
+      hourlyRankSkippedFreshSnapshot: state.rankSkippedFreshSnapshot,
+      hourlyApiNoRank: state.apiNoRank,
+      hourlyApiError: state.apiError,
       hourlyRequestCount: state.requestCount,
       hourlyError429Count: state.error429Count,
       hourlyParticipantsFetched: state.participantsFetched,

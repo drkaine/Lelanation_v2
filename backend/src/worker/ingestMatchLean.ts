@@ -266,6 +266,11 @@ export async function upsertIngestMatchAndParticipants(
     playersFetched: number
     matchesApiIngestComplete: number
     playersRankUpdatedLeague: number
+    newPlayersRankFetched: number
+    stalePlayersRankRefreshed: number
+    rankSkippedFreshSnapshot: number
+    apiNoRank: number
+    apiError: number
   },
   logger?: ReturnType<typeof createRiotPollerLogger>,
   matchIngestOptions?: MatchIngestOptions
@@ -358,14 +363,14 @@ export async function upsertIngestMatchAndParticipants(
   async function fetchAccountRankForParticipant(
     puuid: string,
     options?: { bypassGlobalCache?: boolean }
-  ): Promise<void> {
+  ): Promise<'cached' | 'api_error' | 'api_no_rank' | 'api_rank'> {
     const bypassGlobalCache = options?.bypassGlobalCache === true
     if (!forceLeagueRankApiForEachParticipant && !bypassGlobalCache) {
-      if (accountRankCache.has(puuid)) return
+      if (accountRankCache.has(puuid)) return 'cached'
       const cached = getCachedRank(puuid)
       if (cached) {
         accountRankCache.set(puuid, cached)
-        return
+        return 'cached'
       }
     }
     const entriesRes = await client.getLeagueEntriesByPuuid(puuid, {
@@ -379,14 +384,16 @@ export async function upsertIngestMatchAndParticipants(
       const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
       accountRankCache.set(puuid, fallback)
       setCachedRank(puuid, fallback)
-      return
+      counters.apiError++
+      return 'api_error'
     }
     counters.playersRankUpdatedLeague++
     if (!Array.isArray(entriesRes.data)) {
       const fallback = { rankTier: undefined, rankDivision: null, rankLp: null }
       accountRankCache.set(puuid, fallback)
       setCachedRank(puuid, fallback)
-      return
+      counters.apiNoRank++
+      return 'api_no_rank'
     }
     const entries = entriesRes.data as unknown as Array<Record<string, unknown>>
     const solo =
@@ -399,14 +406,26 @@ export async function upsertIngestMatchAndParticipants(
     const data = { rankTier: rankTier ?? undefined, rankDivision, rankLp }
     accountRankCache.set(puuid, data)
     setCachedRank(puuid, data)
+    if (rankTier == null) {
+      counters.apiNoRank++
+      return 'api_no_rank'
+    }
+    return 'api_rank'
   }
 
   const shouldRefreshByPuuid = new Map<string, boolean>()
+  const newPlayerPuuids = new Set<string>()
   for (const p of participantDtos) {
     const pid = p.puuid
     if (!pid || shouldRefreshByPuuid.has(pid)) continue
     const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
+    if (!playerRow) newPlayerPuuids.add(pid)
     shouldRefreshByPuuid.set(pid, isRankUpdateRequired(playerRow))
+  }
+  if (!forceLeagueRankApiForEachParticipant) {
+    for (const stale of shouldRefreshByPuuid.values()) {
+      if (!stale) counters.rankSkippedFreshSnapshot++
+    }
   }
   const staleRankPuuids = new Set(
     Array.from(shouldRefreshByPuuid.entries())
@@ -429,10 +448,19 @@ export async function upsertIngestMatchAndParticipants(
         fetchAccountRankForParticipant(pid, { bypassGlobalCache: staleRankPuuids.has(pid) })
       )
     )
-    for (const res of leagueFetchResults) {
-      if (res.status === 'fulfilled') continue
+    for (let idx = 0; idx < leagueFetchResults.length; idx++) {
+      const res = leagueFetchResults[idx]
+      const pid = leagueFetchPuuids[idx]
+      if (res.status === 'fulfilled') {
+        if (res.value === 'api_rank') {
+          if (pid && newPlayerPuuids.has(pid)) counters.newPlayersRankFetched++
+          else counters.stalePlayersRankRefreshed++
+        }
+        continue
+      }
       const reason = res.reason instanceof Error ? res.reason.message : String(res.reason)
       if (reason === RIOT_INGEST_ABORTED_MESSAGE) throw new Error(RIOT_INGEST_ABORTED_MESSAGE)
+      counters.apiError++
       await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
     }
   }
