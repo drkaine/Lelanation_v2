@@ -24,6 +24,7 @@
     "script:repair-missing-ranks": "tsx src/scripts/repairMissingRanks.ts",
     "script:repair-players-metadata": "tsx src/scripts/repairPlayersMetadata.ts",
     "script:recompute-ingest-ranks": "tsx src/scripts/recomputeIngestRanks.ts",
+    "script:global-rank-recovery": "tsx src/scripts/runGlobalRankRecovery.ts",
     "script:verify-agg-parity": "tsx src/scripts/verifyAggParity.ts"
   },
   "devDependencies": {

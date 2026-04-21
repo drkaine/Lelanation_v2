@@ -1227,6 +1227,13 @@ function getRawIngestDoneCleanupBatch(): number {
   return Math.min(200_000, raw)
 }
 
+/** Min age of `match_ingest_raw.normalized_at` before a `done` row may be purged (default 12 h). */
+function getRawIngestDoneRetentionMs(): number {
+  const raw = parseInt(process.env.RAW_INGEST_DONE_RETENTION_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 0) return 12 * 60 * 60 * 1000
+  return Math.min(30 * 24 * 60 * 60 * 1000, raw)
+}
+
 function isMatchIngestLeagueLookupEnabled(): boolean {
   const raw = (process.env.MATCH_INGEST_LEAGUE_LOOKUPS ?? '').trim().toLowerCase()
   if (!raw) return true
@@ -1421,10 +1428,11 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   const existingMatchIdByRiot = new Map(existingRows.map((r) => [r.riotMatchId, r.id]))
 
   const puuidsToPreload: string[] = []
+  const batchHasRawIngest = parsed.some((row) => row.rawId != null)
   for (let i = 0; i < parsed.length; i++) {
-    const { payload } = parsed[i]
+    const { payload, rawId } = parsed[i]
     const cid = canonicalIds[i]
-    if (existingMatchIdByRiot.has(cid)) continue
+    if (existingMatchIdByRiot.has(cid) && rawId == null) continue
     const dto = payload.matchDto as RiotMatchDto
     const part = dto.info?.participants as RiotParticipantDto[] | undefined
     for (const p of part ?? []) {
@@ -1439,6 +1447,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     shouldAbort: () => state.shouldStop,
     allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
     forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
+    refreshExistingIngestParticipantRanks: batchHasRawIngest,
   }
 
   for (let i = 0; i < parsed.length; i++) {
@@ -1452,11 +1461,32 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
 
     if (rawId != null) {
       try {
+        await upsertIngestMatchAndParticipants(
+          client,
+          payload.region,
+          matchId,
+          matchDto,
+          payload.puuidKeyVersion ?? null,
+          ctx.counters,
+          ctx.logger,
+          rankIngestOpts
+        )
         await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)
       } catch (err) {
+        const skipped = unwrapMatchIngestSkipped(err)
+        if (skipped) {
+          await ctx.logger.info('Match ingest skipped (raw queue)', {
+            matchId,
+            reason: skipped.reason,
+          })
+          noteMatchIngestProcessed(payload.enqueuedAt)
+          await setTrackedMatchStatus(canonicalRiotMatchId, `SKIPPED_${skipped.reason}`).catch(() => undefined)
+          await deleteRawIngestRow(rawId)
+          continue
+        }
         if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
           await markRawIngestError(rawId, 'invalid_raw_payload_shape', 5 * 60_000)
@@ -2900,7 +2930,10 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           })
         }
         if (Date.now() >= nextRawDoneCleanupAtMs) {
-          const deleted = await deleteDoneRawIngestRows(rawDoneCleanupBatch).catch(() => 0)
+          const deleted = await deleteDoneRawIngestRows(
+            rawDoneCleanupBatch,
+            getRawIngestDoneRetentionMs()
+          ).catch(() => 0)
           nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
           void appendUnifiedLog({
             section: 'back',
@@ -2911,6 +2944,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
               deleted,
               batch: rawDoneCleanupBatch,
               cleanupIntervalMs: rawDoneCleanupIntervalMs,
+              doneRetentionMs: getRawIngestDoneRetentionMs(),
             },
           })
         }

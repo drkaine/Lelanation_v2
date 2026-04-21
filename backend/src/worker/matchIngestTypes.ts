@@ -18,4 +18,9 @@ export type MatchIngestOptions = {
   allowLeagueRankApiFetch?: boolean
   /** Force one league-v4 API call per participant for every ingested match (bypass rank caches). */
   forceLeagueRankApiForEachParticipant?: boolean
+  /**
+   * When the match row already exists, still push resolved ladder ranks into ingest_match_players /
+   * ingest_match (e.g. raw aggregate path after league-v4 refresh).
+   */
+  refreshExistingIngestParticipantRanks?: boolean
 }

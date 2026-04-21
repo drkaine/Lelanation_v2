@@ -61,6 +61,38 @@ function normalizeGameVersion(raw: unknown): string {
   return `${major}.${minor}`
 }
 
+async function loadIngestRankTiersByPuuid(riotMatchId: string): Promise<Map<string, string>> {
+  const rows = await prisma.$queryRaw<Array<{ puuid: string; rank_tier: string }>>`
+    SELECT pl.puuid::text AS puuid,
+           UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED'))) AS rank_tier
+    FROM ingest_match_players imp
+    INNER JOIN players pl ON pl.id = imp.player_id
+    INNER JOIN ingest_matchs im ON im.id = imp.match_id
+    WHERE im.riot_match_id = ${riotMatchId}
+  `
+  const m = new Map<string, string>()
+  for (const r of rows) {
+    const pu = String(r.puuid ?? '').trim().toLowerCase()
+    const tier = String(r.rank_tier ?? 'UNRANKED').trim().toUpperCase()
+    if (pu) m.set(pu, tier)
+  }
+  return m
+}
+
+function mergeParticipantTiersFromDb(
+  parts: RawParticipant[],
+  dbRankByPuuid: Map<string, string>
+): RawParticipant[] {
+  return parts.map((p) => {
+    const pid = String(p.puuid ?? '').trim().toLowerCase()
+    if (!pid) return p
+    const dbTier = dbRankByPuuid.get(pid)
+    if (!dbTier || dbTier === 'UNRANKED') return p
+    if (normalizeRankTier(p) !== 'UNRANKED') return p
+    return { ...p, tier: dbTier }
+  })
+}
+
 function roleFromPosition(p: RawParticipant): string {
   const pos = String(p.teamPosition ?? p.individualPosition ?? '').trim().toUpperCase()
   if (!pos) return 'FILL'
@@ -215,14 +247,17 @@ export async function processRawAggregateAndBurn(
     }
   }
 
+  const dbRankByPuuid = await loadIngestRankTiersByPuuid(trackedMatchId)
+  const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
+
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await prisma.$transaction(async (tx) => {
-    const resolvedRoles = resolveParticipantRoles(participants)
+    const resolvedRoles = resolveParticipantRoles(participantsForAgg)
     const participantByTeamRole = new Map<string, RawParticipant[]>()
     const teamRoleByChampion = new Map<string, string>()
-    for (let idx = 0; idx < participants.length; idx++) {
-      const p = participants[idx]
+    for (let idx = 0; idx < participantsForAgg.length; idx++) {
+      const p = participantsForAgg[idx]
       const teamId = toSafeInt(p.teamId)
       const role = resolvedRoles[idx] ?? roleFromPosition(p)
       const key = `${teamId}|${role}`
@@ -235,8 +270,8 @@ export async function processRawAggregateAndBurn(
       }
     }
 
-    for (let idx = 0; idx < participants.length; idx++) {
-      const p = participants[idx]
+    for (let idx = 0; idx < participantsForAgg.length; idx++) {
+      const p = participantsForAgg[idx]
       const championId = toSafeInt(p.championId)
       if (championId <= 0) continue
 
@@ -597,7 +632,7 @@ export async function processRawAggregateAndBurn(
     }
 
     const matchRankTier =
-      participants.map((p) => normalizeRankTier(p)).find((t) => t !== 'UNRANKED') ?? 'UNRANKED'
+      participantsForAgg.map((p) => normalizeRankTier(p)).find((t) => t !== 'UNRANKED') ?? 'UNRANKED'
 
     if (matchRankTier !== 'UNRANKED') {
       await tx.$executeRaw`
@@ -609,8 +644,8 @@ export async function processRawAggregateAndBurn(
       `
     }
 
-    for (let idx = 0; idx < participants.length; idx++) {
-      const p = participants[idx]
+    for (let idx = 0; idx < participantsForAgg.length; idx++) {
+      const p = participantsForAgg[idx]
       const championId = toSafeInt(p.championId)
       const teamNum = toSafeInt(p.teamId)
       if (championId <= 0 || (teamNum !== 100 && teamNum !== 200)) continue
@@ -748,7 +783,15 @@ export async function processRawAggregateAndBurn(
       WHERE match_id = ${trackedMatchId}
     `
 
-    await tx.$executeRaw`DELETE FROM match_ingest_raw WHERE id = ${rawId}`
+    await tx.$executeRaw`
+      UPDATE match_ingest_raw
+      SET status = 'done',
+          normalized_at = NOW(),
+          processing_started_at = NULL,
+          last_error = NULL,
+          next_retry_at = NULL
+      WHERE id = ${rawId}
+    `
       })
       break
     } catch (err) {

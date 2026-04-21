@@ -171,14 +171,25 @@ export async function requeueRawIngestStaleProcessing(maxAgeMs: number, limit: n
   return Number(moved ?? 0)
 }
 
-export async function deleteDoneRawIngestRows(batchSize: number): Promise<number> {
+/**
+ * Purge `match_ingest_raw` rows in `done` status once `normalized_at` is older than `minRetentionMs`.
+ * Pass `0` to delete eligible `done` rows regardless of age (still requires `normalized_at` set).
+ */
+export async function deleteDoneRawIngestRows(batchSize: number, minRetentionMs: number): Promise<number> {
   const capped = Math.max(1, Math.min(200_000, batchSize))
+  const retentionMs =
+    Number.isFinite(minRetentionMs) && minRetentionMs >= 0
+      ? Math.min(30 * 24 * 60 * 60 * 1000, minRetentionMs)
+      : 0
+  const retentionSec = Math.max(0, Math.ceil(retentionMs / 1000))
   const deleted = await prisma.$executeRaw`
     WITH candidates AS (
       SELECT id
       FROM match_ingest_raw
       WHERE status = 'done'
-      ORDER BY normalized_at NULLS LAST, id
+        AND normalized_at IS NOT NULL
+        AND normalized_at <= NOW() - (${retentionSec} * INTERVAL '1 second')
+      ORDER BY normalized_at, id
       LIMIT ${capped}
     )
     DELETE FROM match_ingest_raw q

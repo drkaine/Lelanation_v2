@@ -88,11 +88,6 @@ function participantRankFromDto(p: RiotParticipantDto): {
   return { tier, division, lp }
 }
 
-function needsLeagueRankApiFromDto(p: RiotParticipantDto): boolean {
-  const { tier, division, lp } = participantRankFromDto(p)
-  return division == null || lp == null || tier === 'UNRANKED'
-}
-
 type ResolvedParticipantRank = { tier: string; division: string | null; lp: number | null }
 
 function mergeDtoWithAccountCache(
@@ -134,14 +129,12 @@ function fillParticipantRankFromPeers(idx: number, ranks: ResolvedParticipantRan
   return { tier: avg.tier, division: avg.division || null, lp: null }
 }
 
-function isRankUpdateRequired(
-  player: { rankSnapshotGameDate: Date | null } | null,
-  matchGameDate: Date | null
-): boolean {
+const RANK_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+function isRankUpdateRequired(player: { rankSnapshotGameDate: Date | null } | null): boolean {
   if (!player) return true
   if (!player.rankSnapshotGameDate) return true
-  if (!matchGameDate) return false
-  return player.rankSnapshotGameDate.getTime() < matchGameDate.getTime()
+  return Date.now() - player.rankSnapshotGameDate.getTime() >= RANK_REFRESH_INTERVAL_MS
 }
 
 function buildRunePayload(runes: unknown): { runes: number[] } {
@@ -362,8 +355,12 @@ export async function upsertIngestMatchAndParticipants(
     return null
   }
 
-  async function fetchAccountRankForParticipant(puuid: string): Promise<void> {
-    if (!forceLeagueRankApiForEachParticipant) {
+  async function fetchAccountRankForParticipant(
+    puuid: string,
+    options?: { bypassGlobalCache?: boolean }
+  ): Promise<void> {
+    const bypassGlobalCache = options?.bypassGlobalCache === true
+    if (!forceLeagueRankApiForEachParticipant && !bypassGlobalCache) {
       if (accountRankCache.has(puuid)) return
       const cached = getCachedRank(puuid)
       if (cached) {
@@ -404,10 +401,18 @@ export async function upsertIngestMatchAndParticipants(
     setCachedRank(puuid, data)
   }
 
-  const participantDtoByPuuid = new Map<string, RiotParticipantDto>()
+  const shouldRefreshByPuuid = new Map<string, boolean>()
   for (const p of participantDtos) {
-    if (p.puuid && !participantDtoByPuuid.has(p.puuid)) participantDtoByPuuid.set(p.puuid, p)
+    const pid = p.puuid
+    if (!pid || shouldRefreshByPuuid.has(pid)) continue
+    const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
+    shouldRefreshByPuuid.set(pid, isRankUpdateRequired(playerRow))
   }
+  const staleRankPuuids = new Set(
+    Array.from(shouldRefreshByPuuid.entries())
+      .filter(([, stale]) => stale)
+      .map(([pid]) => pid)
+  )
   const leagueFetchPuuids = forceLeagueRankApiForEachParticipant
     ? Array.from(new Set(participantDtos.map((p) => p.puuid).filter((pid): pid is string => Boolean(pid))))
     : Array.from(
@@ -415,17 +420,14 @@ export async function upsertIngestMatchAndParticipants(
           participantDtos
             .map((p) => p.puuid)
             .filter((pid): pid is string => Boolean(pid))
-            .filter((pid) => {
-              const dtoP = participantDtoByPuuid.get(pid)
-              if (!dtoP || !needsLeagueRankApiFromDto(dtoP)) return false
-              const playerRow = playerRankSnapshotByPuuid.get(pid) ?? null
-              return isRankUpdateRequired(playerRow, gameDate)
-            })
+            .filter((pid) => staleRankPuuids.has(pid))
         )
       )
   if (allowLeagueRankApiFetch) {
     const leagueFetchResults = await Promise.allSettled(
-      leagueFetchPuuids.map((pid) => fetchAccountRankForParticipant(pid))
+      leagueFetchPuuids.map((pid) =>
+        fetchAccountRankForParticipant(pid, { bypassGlobalCache: staleRankPuuids.has(pid) })
+      )
     )
     for (const res of leagueFetchResults) {
       if (res.status === 'fulfilled') continue
@@ -458,7 +460,88 @@ export async function upsertIngestMatchAndParticipants(
       const { k1, k2 } = ingestAdvisoryLockKeys(riotMatchId)
       await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${k1}::int, ${k2}::int)`)
       const existing = await tx.ingestMatch.findUnique({ where: { riotMatchId }, select: { id: true } })
-      if (existing) return existing.id
+      if (existing) {
+        if (matchIngestOptions?.refreshExistingIngestParticipantRanks === true) {
+          const matchRows = await tx.ingestMatchPlayer.findMany({
+            where: { matchId: existing.id },
+            select: {
+              id: true,
+              playerId: true,
+              player: { select: { puuid: true, rankTier: true } },
+            },
+          })
+          const impByPuuid = new Map(matchRows.map((r) => [r.player.puuid, r]))
+          const matchRankScores: number[] = []
+          const teamRankScoresByRiotTeam = new Map<number, number[]>()
+
+          for (let pIdx = 0; pIdx < participantDtos.length; pIdx++) {
+            const p = participantDtos[pIdx]
+            const puuid = p.puuid
+            if (!puuid) continue
+            enqueuePriorityPuuid(puuid)
+            const rr = resolvedRanks[pIdx]
+            const impRow = impByPuuid.get(puuid)
+            const riotTeamId = p.teamId ?? 100
+            if (impRow) {
+              await tx.ingestMatchPlayer.update({
+                where: { id: impRow.id },
+                data: {
+                  rankTier: rr.tier,
+                  rankDivision: rr.division,
+                },
+              })
+              const prevRankTier = impRow.player.rankTier
+              if (gameDate && isNewestStoredMatchForPuuid(puuid)) {
+                await tx.player.update({
+                  where: { id: impRow.playerId },
+                  data: {
+                    rankTier: rr.tier === 'UNRANKED' ? null : rr.tier,
+                    rankDivision: rr.division,
+                    rankLp: rr.lp,
+                    rankSnapshotGameDate: gameDate,
+                  },
+                })
+              } else if (prevRankTier == null && rr.tier !== 'UNRANKED') {
+                await tx.player.update({
+                  where: { id: impRow.playerId },
+                  data: {
+                    rankTier: rr.tier,
+                    rankDivision: rr.division,
+                    rankLp: rr.lp,
+                    rankSnapshotGameDate: new Date(),
+                  },
+                })
+              }
+            }
+            if (rr.tier && rr.tier !== 'UNRANKED') {
+              const score = rankToScore(rr.tier, rr.division ?? '', rr.lp ?? null)
+              matchRankScores.push(score)
+              const list = teamRankScoresByRiotTeam.get(riotTeamId) ?? []
+              list.push(score)
+              teamRankScoresByRiotTeam.set(riotTeamId, list)
+            }
+          }
+
+          const teams = await tx.ingestTeam.findMany({
+            where: { matchId: existing.id },
+            select: { id: true, team: true },
+          })
+          for (const t of teams) {
+            const scores = teamRankScoresByRiotTeam.get(t.team) ?? []
+            const avg = averageRankFromScores(scores)
+            await tx.ingestTeam.update({
+              where: { id: t.id },
+              data: { rankTier: avg.tier },
+            })
+          }
+          const avgMatch = averageRankFromScores(matchRankScores)
+          await tx.ingestMatch.update({
+            where: { id: existing.id },
+            data: { rankTier: avgMatch.tier, rankDivision: avgMatch.division },
+          })
+        }
+        return existing.id
+      }
 
       const gameVersion = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(info))
       if (!isAllowedGameVersion(gameVersion)) {

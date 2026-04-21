@@ -41,23 +41,28 @@ async function main(): Promise<void> {
   let totalMatchesUpdated = 0
   let totalTeamsUpdated = 0
 
+  let lastSeenId = 0n
   while (true) {
     const candidates = await prisma.$queryRawUnsafe<MatchCandidate[]>(`
       SELECT im.id
       FROM ingest_matchs im
-      WHERE COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
+      WHERE im.id > ${lastSeenId.toString()}
+        AND (
+          COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
          OR EXISTS (
-           SELECT 1
-           FROM ingest_teams it
-           WHERE it.match_id = im.id
-             AND COALESCE(NULLIF(TRIM(it.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
-         )
+            SELECT 1
+            FROM ingest_teams it
+            WHERE it.match_id = im.id
+              AND COALESCE(NULLIF(TRIM(it.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
+          )
+        )
       ORDER BY im.id
       LIMIT ${batchSize}
     `)
     if (candidates.length === 0) break
 
     const matchIds = candidates.map((r) => r.id)
+    lastSeenId = matchIds[matchIds.length - 1] ?? lastSeenId
     const idListSql = matchIds.map((id) => id.toString()).join(',')
     const rows = await prisma.$queryRawUnsafe<ParticipantRankRow[]>(`
       SELECT
