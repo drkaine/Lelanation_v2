@@ -18,6 +18,7 @@
     :builds-filtered-by-visibility="buildsFilteredByVisibility"
     :build-to-delete="buildToDelete"
     :share-modal-open="shareModalOpen"
+    :share-modal-mode="shareModalMode"
     :share-code="shareCode"
     :import-code="importCode"
     :share-copied="shareCopied"
@@ -34,6 +35,7 @@
     @copy-share-code="copyShareCode"
     @update:import-code="importCode = $event"
     @import-by-code="importBuildsByCode"
+    @open-import-modal="openImportCodeModal"
   />
 </template>
 
@@ -86,6 +88,7 @@ const {
   favoriteBuilds,
   buildToDelete,
   shareModalOpen,
+  shareModalMode,
   shareCode,
   shareLoading,
   shareError,
@@ -93,6 +96,7 @@ const {
   importCode,
   importLoading,
   shareBuilds,
+  openImportCodeModal,
   importBuildsByCode,
   copyShareCode,
   closeShareModal,

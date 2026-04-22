@@ -154,6 +154,89 @@ async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWind
   }
 }
 
+const POLLER_HTTP_BUCKET_MS = 120_000
+const POLLER_HTTP_BUCKET_HISTORY_MAX = 120
+
+let pollerHttpBucketPeriodStartMs = Date.now()
+let pollerHttpBucketBaselineRequestCount = 0
+const pollerHttpBucketHistory: Array<{ periodEndMs: number; requests: number }> = []
+
+function resetPollerHttpBucketTracking(periodStartMs: number): void {
+  pollerHttpBucketPeriodStartMs = periodStartMs
+  pollerHttpBucketBaselineRequestCount = state.requestCount
+  pollerHttpBucketHistory.length = 0
+}
+
+function advancePollerHttpBuckets(nowMs: number): void {
+  while (nowMs - pollerHttpBucketPeriodStartMs >= POLLER_HTTP_BUCKET_MS) {
+    const periodEnd = pollerHttpBucketPeriodStartMs + POLLER_HTTP_BUCKET_MS
+    const requests = Math.max(0, state.requestCount - pollerHttpBucketBaselineRequestCount)
+    pollerHttpBucketHistory.push({ periodEndMs: periodEnd, requests })
+    while (pollerHttpBucketHistory.length > POLLER_HTTP_BUCKET_HISTORY_MAX) {
+      pollerHttpBucketHistory.shift()
+    }
+    pollerHttpBucketBaselineRequestCount = state.requestCount
+    pollerHttpBucketPeriodStartMs = periodEnd
+  }
+}
+
+type PollerHttpWindowStats = {
+  httpAvgPerMinuteOverall: number
+  httpAvgPer2MinUniform: number
+  httpTwoMinBucketsComplete: number
+  httpTwoMinBucketAvg: number | null
+  httpTwoMinBucketPeak: number
+  httpTwoMinBucketPeakCount: number
+  httpTwoMinBucketSum: number
+  /** httpRequestsDelta − somme des tranches 2 min complètes (reste = bords de fenêtre + tranche en cours). */
+  httpDeltaVsBucketSum: number
+}
+
+function buildPollerHttpWindowStats(
+  windowStartMs: number,
+  windowEndMs: number,
+  httpRequestsDelta: number,
+  elapsedMs: number,
+): PollerHttpWindowStats {
+  advancePollerHttpBuckets(windowEndMs)
+  const elapsedMin = elapsedMs / 60_000
+  const httpAvgPerMinuteOverall =
+    elapsedMin > 0 ? Math.round((httpRequestsDelta / elapsedMin) * 10) / 10 : 0
+  const twoMinSlots = elapsedMs / 120_000
+  const httpAvgPer2MinUniform =
+    twoMinSlots > 0 ? Math.round((httpRequestsDelta / twoMinSlots) * 10) / 10 : 0
+
+  const inWindow = pollerHttpBucketHistory.filter(
+    (b) => b.periodEndMs > windowStartMs && b.periodEndMs <= windowEndMs,
+  )
+  if (inWindow.length === 0) {
+    return {
+      httpAvgPerMinuteOverall,
+      httpAvgPer2MinUniform,
+      httpTwoMinBucketsComplete: 0,
+      httpTwoMinBucketAvg: null,
+      httpTwoMinBucketPeak: 0,
+      httpTwoMinBucketPeakCount: 0,
+      httpTwoMinBucketSum: 0,
+      httpDeltaVsBucketSum: httpRequestsDelta,
+    }
+  }
+  const counts = inWindow.map((b) => b.requests)
+  const sum = counts.reduce((a, c) => a + c, 0)
+  const peak = Math.max(...counts)
+  const peakCount = counts.filter((c) => c === peak).length
+  return {
+    httpAvgPerMinuteOverall,
+    httpAvgPer2MinUniform,
+    httpTwoMinBucketsComplete: counts.length,
+    httpTwoMinBucketAvg: Math.round((sum / counts.length) * 10) / 10,
+    httpTwoMinBucketPeak: peak,
+    httpTwoMinBucketPeakCount: peakCount,
+    httpTwoMinBucketSum: sum,
+    httpDeltaVsBucketSum: httpRequestsDelta - sum,
+  }
+}
+
 /** Emit 30m/hourly lines to unified log when windows elapse (runs on a timer so long MV refresh does not block summaries). */
 async function emitPollerSummariesIfDue(
   client: RiotHttpClient,
@@ -198,12 +281,17 @@ async function emitPollerSummariesIfDue(
     const http429PauseDelta = limiterStats.http429PauseCount - sw.summary30mHttp429PauseCount
     const windowHours = elapsedMs / (60 * 60 * 1000)
     const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
-    const lastRlHeaders30m = client.getLastRiotRateLimitHeaders()
+    const httpWin30 = buildPollerHttpWindowStats(
+      sw.summary30mWindowStartedAtMs,
+      now,
+      httpRequestsDelta,
+      elapsedMs,
+    )
     await appendUnifiedLog({
       section: 'back',
       type: 'info',
       script: 'poller_30m',
-      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} (~${httpRequestsProjectedPerHour}/h) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
+      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} moy:${httpWin30.httpAvgPerMinuteOverall}/min moy2min(uniforme):${httpWin30.httpAvgPer2MinUniform} moy2min(réel,${httpWin30.httpTwoMinBucketsComplete} tranches):${httpWin30.httpTwoMinBucketAvg ?? 'n/a'} pic2min:${httpWin30.httpTwoMinBucketPeak} (${httpWin30.httpTwoMinBucketPeakCount}×) (~${httpRequestsProjectedPerHour}/h proj) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
@@ -233,6 +321,7 @@ async function emitPollerSummariesIfDue(
         },
         httpRequestsProjectedPerHour,
         requestsPerHour: httpRequestsProjectedPerHour,
+        httpWindowStats: httpWin30,
         dbWindow1h: db1h,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
@@ -257,11 +346,6 @@ async function emitPollerSummariesIfDue(
           error400: state.error400Count,
           timeout: state.timeoutCount,
         },
-        riotRateLimitBuckets: {
-          app: limiterStats.appBuckets,
-          method: limiterStats.methodBuckets,
-        },
-        lastRiotRateLimitHeaders: lastRlHeaders30m,
       },
     })
     sw.summary30mWindowStartedAtMs = now
@@ -330,7 +414,12 @@ async function emitPollerSummariesIfDue(
     const requestUsagePct = requestBudget > 0 ? (httpRequestsDelta / requestBudget) * 100 : 0
     const peakOk = limiterStats.maxApp120CountObserved <= appTarget120
     const tsLabel = formatSummaryTimestamp(new Date(now))
-    const lastRlHeadersH = client.getLastRiotRateLimitHeaders()
+    const httpWinH = buildPollerHttpWindowStats(
+      sw.hourlyWindowStartedAtMs,
+      now,
+      httpRequestsDelta,
+      elapsedMs,
+    )
     const formattedMessage = [
       `[${tsLabel}] RESUME HORAIRE`,
       `- Joueurs polles (last_seen, 1h): ${db1h.playersPolled} | nouveaux joueurs (created_at, 1h): ${db1h.playersAdded}`,
@@ -338,7 +427,7 @@ async function emitPollerSummariesIfDue(
       `- Matches tracked skip/defer (1h): skipped_version=${db1h.skippedVersion} deferred_patch=${db1h.deferredPatch}`,
       `- Joueurs polles (delta process): ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
       `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesDbDelta} nouveaux en DB | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
-      `- API Requests: ${httpRequestsDelta}/${requestBudget} (Usage: ${requestUsagePct.toFixed(1)}%)`,
+      `- API HTTP (fenêtre): +${httpRequestsDelta} | moy ${httpWinH.httpAvgPerMinuteOverall}/min | moy/2min uniforme ${httpWinH.httpAvgPer2MinUniform} | moy/2min réel (${httpWinH.httpTwoMinBucketsComplete} tranches) ${httpWinH.httpTwoMinBucketAvg ?? 'n/a'} | pic/2min ${httpWinH.httpTwoMinBucketPeak} (${httpWinH.httpTwoMinBucketPeakCount}×) | budget ${httpRequestsDelta}/${requestBudget} (usage ${requestUsagePct.toFixed(1)}%)`,
       `- Max Token Peak: ${limiterStats.maxApp120CountObserved}/${appTarget120} (Safety Margin: ${peakOk ? 'OK' : 'HIGH'})`,
       `- Participants indexes: ${playersFetchedDelta} nouveaux PUUIDs`,
       `- Rank ingest: new=${newPlayersRankFetchedDelta} stale_refresh=${stalePlayersRankRefreshedDelta} skip_fresh=${rankSkippedFreshSnapshotDelta} api_no_rank=${apiNoRankDelta} api_error=${apiErrorDelta}`,
@@ -381,6 +470,7 @@ async function emitPollerSummariesIfDue(
         requestsPerHour: httpRequestsProjectedPerHour,
         requestBudget,
         requestUsagePct,
+        httpWindowStats: httpWinH,
         dbWindow1h: db1h,
         maxTokenPeak: limiterStats.maxApp120CountObserved,
         rateLimitRefreshPauses: nearLimitPauseDelta,
@@ -406,11 +496,6 @@ async function emitPollerSummariesIfDue(
           error400: state.error400Count,
           timeout: state.timeoutCount,
         },
-        riotRateLimitBuckets: {
-          app: limiterStats.appBuckets,
-          method: limiterStats.methodBuckets,
-        },
-        lastRiotRateLimitHeaders: lastRlHeadersH,
       },
     })
     const effectiveProcessable = Math.max(
@@ -2928,8 +3013,9 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
     let nextTrackedErrorRecoveryAtMs = Date.now()
     const initLimiterStats = client.getRateLimiterStats()
+    const summaryAnchorMs = Date.now()
     const sw: PollerSummaryWindows = {
-      summary30mWindowStartedAtMs: Date.now(),
+      summary30mWindowStartedAtMs: summaryAnchorMs,
       summary30mPlayersPolled: state.playersPolled,
       summary30mPlayersFetched: state.playersFetched,
       summary30mMatchesFetched: state.matchesFetched,
@@ -2948,7 +3034,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       summary30mMatchIdsFromApi: state.matchIdsFromApi,
       summary30mExistingMatchesSkipped: state.existingMatchesSkipped,
       summary30mTimeoutCount: state.timeoutCount,
-      hourlyWindowStartedAtMs: Date.now(),
+      hourlyWindowStartedAtMs: summaryAnchorMs,
       hourlyPlayersPolled: state.playersPolled,
       hourlyPlayersFetched: state.playersFetched,
       hourlyMatchesFetched: state.matchesFetched,
@@ -2968,6 +3054,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       hourlyExistingMatchesSkipped: state.existingMatchesSkipped,
       hourlyTimeoutCount: state.timeoutCount,
     }
+    resetPollerHttpBucketTracking(summaryAnchorMs)
 
     let summaryEmitChain: Promise<void> = Promise.resolve()
     const scheduleSummaryEmit = (): void => {

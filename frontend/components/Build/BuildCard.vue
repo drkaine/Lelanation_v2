@@ -3655,7 +3655,7 @@ defineExpose({
   display: flex;
   justify-content: flex-start;
   width: max-content;
-  max-width: 112px;
+  max-width: 128px;
 }
 
 .build-tags-container {
@@ -3667,16 +3667,20 @@ defineExpose({
 }
 
 .build-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
+  box-sizing: border-box;
   border-radius: 9999px;
   border: 1px solid rgba(148, 163, 184, 0.55);
   background: rgba(15, 23, 42, 0.25);
   color: rgba(203, 213, 225, 0.82);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
-  line-height: 1;
-  padding: 3px 6px;
-  min-height: 18px;
+  line-height: 1.1;
+  padding: 2px 6px;
+  min-height: 0;
   cursor: pointer;
   transition: all 0.2s ease;
   margin-top: 5px;

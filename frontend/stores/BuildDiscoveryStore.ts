@@ -47,6 +47,17 @@ function writePaginationToStorage(pageSize: PageSizeOption, currentPage: number)
   }
 }
 
+/** Pour le tri « récent » : dernière édition d’abord, sinon date de création. */
+function buildRecencyTimestamp(build: Build): number {
+  for (const iso of [build.updatedAt, build.createdAt]) {
+    if (iso && typeof iso === 'string') {
+      const t = new Date(iso).getTime()
+      if (Number.isFinite(t)) return t
+    }
+  }
+  return 0
+}
+
 interface BuildDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
@@ -126,10 +137,10 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       switch (this.sortBy) {
         case 'recent':
-          sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          sorted.sort((a, b) => buildRecencyTimestamp(b) - buildRecencyTimestamp(a))
           break
         case 'popular': {
-          // Sort by vote count (descending), then by creation date
+          // Sort by vote count (descending), then by recency (updated / created)
           const voteStore = useVoteStore()
           sorted.sort((a, b) => {
             const votesA = voteStore.getVoteCount(a.id)
@@ -137,8 +148,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
             if (votesA !== votesB) {
               return votesB - votesA
             }
-            // If same votes, sort by most recent
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            return buildRecencyTimestamp(b) - buildRecencyTimestamp(a)
           })
           break
         }
@@ -301,11 +311,8 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
 
       switch (this.sortBy) {
         case 'recent':
-          return sorted.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          )
+          return sorted.sort((a, b) => buildRecencyTimestamp(b) - buildRecencyTimestamp(a))
         case 'popular': {
-          // Sort by vote count (descending), then by creation date
           const voteStore = useVoteStore()
           return sorted.sort((a, b) => {
             const votesA = voteStore.getVoteCount(a.id)
@@ -313,8 +320,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
             if (votesA !== votesB) {
               return votesB - votesA
             }
-            // If same votes, sort by most recent
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            return buildRecencyTimestamp(b) - buildRecencyTimestamp(a)
           })
         }
         case 'name':

@@ -30,16 +30,6 @@
 
       <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
         <button
-          type="button"
-          :class="roleChipClass(selectedTag === null)"
-          :title="t('buildDiscovery.allTags')"
-          :aria-label="t('buildDiscovery.allTags')"
-          :aria-pressed="selectedTag === null"
-          @click="setTag(null)"
-        >
-          <img src="/icons/roles/all-role.png" alt="" class="h-5 w-5" role="presentation" />
-        </button>
-        <button
           v-for="opt in tagFilterOptions"
           :key="opt.value"
           type="button"
@@ -236,7 +226,7 @@ const roleChipClass = (active: boolean) =>
 
 const tagChipClass = (active: boolean, value: Exclude<FilterBuildTag, null>) =>
   [
-    'tag-filter-chip inline-flex h-7 min-w-[1.75rem] max-w-[3.25rem] shrink-0 items-center justify-center rounded-full border border-transparent px-1.5 py-0 text-[9px] font-bold leading-none transition-all',
+    'tag-filter-chip inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-transparent p-0 text-[11px] font-bold leading-none tracking-tight transition-all',
     active
       ? ['tag-filter-chip--on', value === 'troll' ? 'tag-filter-chip--troll' : '']
           .filter(Boolean)
@@ -319,10 +309,13 @@ watch(locale, () => {
 }
 
 .tag-filter-chip-label {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 3rem;
+  max-width: 100%;
+  padding: 0 0.125rem;
+  text-align: center;
 }
 
 .filter-select {

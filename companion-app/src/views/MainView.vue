@@ -1032,6 +1032,7 @@ watch(
       :builds-filtered-by-visibility="myBuildsForTab"
       :build-to-delete="null"
       :share-modal-open="false"
+      share-modal-mode="share"
       :share-code="null"
       :import-code="''"
       :share-copied="false"

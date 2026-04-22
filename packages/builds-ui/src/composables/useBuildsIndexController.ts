@@ -69,6 +69,8 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
 
   const buildToDelete = ref<string | null>(null)
   const shareModalOpen = ref(false)
+  /** `import` = saisie du code uniquement ; `share` = génération du code + import. */
+  const shareModalMode = ref<'share' | 'import'>('share')
   const shareCode = ref<string | null>(null)
   const importCode = ref('')
   const shareLoading = ref(false)
@@ -154,6 +156,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
   )
 
   const shareBuilds = async () => {
+    shareModalMode.value = 'share'
     shareModalOpen.value = true
     const localBuilds = buildStore.getSavedBuilds()
     const byId = new Map<string, Build>()
@@ -252,6 +255,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
       importCode.value = ''
       shareModalOpen.value = false
       shareCode.value = null
+      shareModalMode.value = 'share'
     } catch {
       shareError.value = t('buildsPage.shareError')
       setTimeout(() => {
@@ -262,10 +266,19 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     }
   }
 
+  const openImportCodeModal = () => {
+    shareModalMode.value = 'import'
+    shareModalOpen.value = true
+    shareCode.value = null
+    shareCopied.value = false
+    shareError.value = null
+  }
+
   const closeShareModal = () => {
     shareModalOpen.value = false
     shareCode.value = null
     shareCopied.value = false
+    shareModalMode.value = 'share'
   }
 
   const confirmDelete = (buildId: string) => {
@@ -313,6 +326,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     favoriteBuilds,
     buildToDelete,
     shareModalOpen,
+    shareModalMode,
     shareCode,
     importCode,
     shareLoading,
@@ -320,6 +334,7 @@ export function useBuildsIndexController(options: UseBuildsIndexControllerOption
     shareError,
     shareCopied,
     shareBuilds,
+    openImportCodeModal,
     importBuildsByCode,
     copyShareCode,
     closeShareModal,

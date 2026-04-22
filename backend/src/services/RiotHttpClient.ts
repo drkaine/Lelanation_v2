@@ -165,6 +165,11 @@ export async function resolveRiotApiKey(): Promise<
 
 const RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS = 120_000
 
+/** Set to `1` to emit `[rate_limit]` lines to lelanation-unified.log (verbose). Default: off. */
+function isRiotRateLimitUnifiedLogEnabled(): boolean {
+  return process.env.RIOT_RATE_LIMIT_UNIFIED_LOG === '1'
+}
+
 type RiotCountPeak = {
   peak: number
   last: number
@@ -444,7 +449,10 @@ export class RiotHttpClient {
     }
 
     const now = Date.now()
-    if (now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS) {
+    if (
+      isRiotRateLimitUnifiedLogEnabled() &&
+      now - this.lastRiotRateLimitSnapshotLogMs >= RIOT_RL_SNAPSHOT_LOG_INTERVAL_MS
+    ) {
       this.lastRiotRateLimitSnapshotLogMs = now
       if (Object.keys(this.lastRiotRateLimitHeaders).length > 0) {
         const near120 = pickNearestLimit120sBucket(this.lastRiotRateLimitHeaders)

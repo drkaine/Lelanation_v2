@@ -1,7 +1,7 @@
 <template>
   <div class="builds-page min-h-screen px-[10px] pb-4 text-text">
     <div class="mx-auto max-w-8xl px-0">
-      <div class="flex justify-center">
+      <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <div class="streamer-tabs">
           <button
             type="button"
@@ -35,6 +35,31 @@
           >
             {{ t('buildsPage.createBuild') }}
           </component>
+        </div>
+        <div v-if="allowShare" class="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            class="inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
+            :disabled="shareLoading"
+            @click="emit('share-builds')"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
+              <path d="M13 5v5h5" />
+              <path d="m8 14 3 3 5-5" />
+            </svg>
+            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
+          </button>
         </div>
       </div>
 
@@ -119,28 +144,6 @@
               {{ opt.label }}
             </button>
           </div>
-          <button
-            v-if="allowShare"
-            class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
-            :disabled="shareLoading"
-            @click="emit('share-builds')"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-              <path d="M13 5v5h5" />
-              <path d="m8 14 3 3 5-5" />
-            </svg>
-            {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
-          </button>
         </div>
 
         <component
@@ -157,28 +160,6 @@
           <div class="flex flex-wrap items-center gap-2">
             <component :is="buildSearchComponent" />
             <component :is="buildFiltersComponent" />
-            <button
-              v-if="allowShare"
-              class="ml-auto inline-flex h-[38px] items-center gap-2 rounded-lg border border-primary/80 bg-background/25 px-3 text-sm text-text transition-colors hover:bg-primary/20"
-              :disabled="shareLoading"
-              @click="emit('share-builds')"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M3 7a2 2 0 0 1 2-2h8l5 5v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
-                <path d="M13 5v5h5" />
-                <path d="m8 14 3 3 5-5" />
-              </svg>
-              {{ shareLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareToApp') }}
-            </button>
           </div>
         </div>
         <component
@@ -237,40 +218,52 @@
         style="background-color: var(--color-surface); opacity: 1"
         @click.stop
       >
-        <h3 class="mb-2 text-lg font-bold text-text">{{ t('buildsPage.shareCodeTitle') }}</h3>
+        <h3 class="mb-2 text-lg font-bold text-text">
+          {{
+            shareModalMode === 'import'
+              ? t('buildsPage.importCodeTitle')
+              : t('buildsPage.shareCodeTitle')
+          }}
+        </h3>
         <p class="mb-4 text-sm text-text-secondary">
-          {{ t('buildsPage.shareCodeDescription') }}
+          {{
+            shareModalMode === 'import'
+              ? t('buildsPage.importCodeBlurb')
+              : t('buildsPage.shareCodeDescription')
+          }}
         </p>
-        <div
-          v-if="shareCode"
-          class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-xl font-bold tracking-[0.25em] text-accent"
-        >
-          {{ shareCode }}
-          <button
-            type="button"
-            class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-text-secondary transition-colors hover:text-accent"
-            :aria-label="t('buildsPage.shareCodeCopy')"
-            :title="t('buildsPage.shareCodeCopy')"
-            @click="emit('copy-share-code')"
+        <template v-if="shareModalMode === 'share'">
+          <div
+            v-if="shareCode"
+            class="mx-auto mb-4 flex w-fit items-center gap-3 rounded-lg border-2 border-accent bg-background px-6 py-3 font-mono text-xl font-bold tracking-[0.25em] text-accent"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            {{ shareCode }}
+            <button
+              type="button"
+              class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded p-1 text-text-secondary transition-colors hover:text-accent"
+              :aria-label="t('buildsPage.shareCodeCopy')"
+              :title="t('buildsPage.shareCodeCopy')"
+              @click="emit('copy-share-code')"
             >
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-          </button>
-        </div>
-        <p v-else class="mb-4 text-sm text-text-secondary">
-          {{ t('buildsPage.shareNoBuilds') }}
-        </p>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+          </div>
+          <p v-else class="mb-4 text-sm text-text-secondary">
+            {{ t('buildsPage.shareNoBuilds') }}
+          </p>
+        </template>
         <div class="mb-3">
           <input
             :value="importCode"
@@ -289,10 +282,12 @@
         >
           {{ importLoading ? t('buildsPage.shareLoading') : t('buildsPage.shareCodeImportAction') }}
         </button>
-        <p v-if="shareCopied" class="mb-2 text-sm text-green-400">
+        <p v-if="shareCopied && shareModalMode === 'share'" class="mb-2 text-sm text-green-400">
           {{ t('buildsPage.shareCodeCopied') }}
         </p>
-        <p class="mb-4 text-xs text-text-secondary">{{ t('buildsPage.shareCodeExpiry') }}</p>
+        <p v-if="shareModalMode === 'share'" class="mb-4 text-xs text-text-secondary">
+          {{ t('buildsPage.shareCodeExpiry') }}
+        </p>
         <button
           class="rounded-lg border border-accent/70 bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-accent/10"
           @click="emit('close-share-code')"
@@ -336,6 +331,7 @@ defineProps<{
   buildsFilteredByVisibility: Build[]
   buildToDelete: string | null
   shareModalOpen: boolean
+  shareModalMode: 'share' | 'import'
   shareCode: string | null
   importCode: string
   shareCopied: boolean
@@ -346,6 +342,7 @@ const emit = defineEmits<{
   'update:activeTab': [value: string]
   'update:myBuildsVisibilityFilter': [value: VisibilityFilterValue]
   'share-builds': []
+  'open-import-modal': []
   'clear-comparison': []
   'confirm-delete': [buildId: string]
   'toggle-visibility': [buildId: string]
