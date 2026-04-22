@@ -1260,7 +1260,22 @@
         "participantsWithoutRank": "Participants sans rang",
         "totalPlayers": "Joueurs (total)",
         "totalMatches": "Matchs (total)",
-        "lastNewPlayerAt": "Dernier joueur trouvé"
+        "lastNewPlayerAt": "Dernier joueur trouvé",
+        "totalTrackedMatches": "Matchs suivis (tracked_matches)",
+        "trackedMatches1h": "Tracked créés (1 h)",
+        "lastPlayerLastSeen": "Dernière activité (max last_seen)",
+        "playersCreated1h": "Joueurs créés (1 h)",
+        "playersLastSeen1h": "Joueurs vus (last_seen, 1 h)",
+        "resumeTitle": "Dernier résumé poller (log)",
+        "resumeWindow": "Fenêtre",
+        "resumeHttp": "HTTP (delta fenêtre)",
+        "resume429": "429",
+        "resumeMatchIds": "IDs matchs API",
+        "resumeMatchesDb": "Matchs insérés DB",
+        "resumeMatchesApi": "Paires API ingest OK",
+        "resumeParticipants": "Participants",
+        "resumePlayersPolled": "Joueurs pollés (delta)",
+        "resumeNewPlayers": "Nouveaux joueurs (delta)"
       }
     },
     "appDownload": {

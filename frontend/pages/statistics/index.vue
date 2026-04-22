@@ -373,9 +373,9 @@
           </div>
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-          <!-- <div v-show="activeTab === 'trends'" class="space-y-6">
+          <div v-show="activeTab === 'trends'" class="space-y-6">
             <StatisticsTrendsTab />
-          </div> -->
+          </div>
 
           <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
           <div v-show="activeTab === 'team'" class="space-y-6">
@@ -550,6 +550,47 @@ function queryFirst(value: string | string[] | null | undefined): string {
   return value ?? ''
 }
 
+type StatisticsTabSection =
+  | 'infos-overview'
+  | 'tierlist-champion'
+  | 'items'
+  | 'runes-summoner'
+  | 'objectives'
+  | 'team-bans'
+  | 'balance-progression'
+  | 'synergy-botlane'
+
+const STATISTICS_SECTION_TABS: Record<StatisticsTabSection, StatisticsMainTab[]> = {
+  'infos-overview': ['infos', 'overview'],
+  'tierlist-champion': ['tierlist', 'championTable'],
+  items: ['items'],
+  'runes-summoner': ['runes', 'spells'],
+  objectives: ['objectives'],
+  'team-bans': ['team', 'bans'],
+  'balance-progression': ['balance', 'trends'],
+  'synergy-botlane': ['championTable'],
+}
+
+function isStatisticsTabSection(value: string): value is StatisticsTabSection {
+  return value in STATISTICS_SECTION_TABS
+}
+
+function sectionFromQuery(): StatisticsTabSection | null {
+  const raw = queryFirst(route.query.section as string | string[] | null | undefined)
+  if (raw && isStatisticsTabSection(raw)) return raw
+  return null
+}
+
+function normalizeTabForSection(
+  section: StatisticsTabSection | null,
+  tab: StatisticsMainTab
+): StatisticsMainTab {
+  if (!section) return tab
+  const allowedTabs = STATISTICS_SECTION_TABS[section]
+  if (allowedTabs.includes(tab)) return tab
+  return allowedTabs[0] ?? tab
+}
+
 function normalizeLegacyTab(tab: string): StatisticsMainTab {
   if (tab === 'champions') return 'infos'
   if (tab === 'progressions') return 'trends'
@@ -607,7 +648,7 @@ const activeTab = ref<
   | 'abandons'
   | 'bans'
 >(initialActiveTabFromRoute())
-const tabs = computed(() => [
+const allTabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
   {
@@ -623,11 +664,19 @@ const tabs = computed(() => [
     widgetId: 'championTable',
   },
   { id: 'balance' as const, label: t('statisticsPage.tabBalance'), widgetId: 'balance' },
+  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
   { id: 'infos' as const, label: t('statisticsPage.tabInfos'), widgetId: 'infos' },
 ])
+const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQuery())
+const tabs = computed(() => {
+  const section = activeSection.value
+  if (!section) return allTabs.value
+  const visibleTabIds = new Set(STATISTICS_SECTION_TABS[section])
+  return allTabs.value.filter(tab => visibleTabIds.has(tab.id))
+})
 
 function cardIsFavorite(cardId: string): boolean {
   return statisticsCustomStore.isFavorite(cardId)
@@ -802,6 +851,9 @@ type TierListSortColumn =
   | 'delta'
 
 const tierListViewModel = ref<'table' | 'chart'>('table')
+function setTierListViewModel(value: 'table' | 'chart') {
+  tierListViewModel.value = value
+}
 const tierListSortColumn = ref<TierListSortColumn | null>('rank')
 const tierListSortDir = ref<'asc' | 'desc'>('desc')
 const tierListPage = ref(1)
@@ -1362,8 +1414,9 @@ function applyStatisticsStateFromQuery(): void {
     .filter(Boolean)
 
   isApplyingQueryState.value = true
-  if (tabRaw) activeTab.value = normalizeLegacyTab(tabRaw)
-  else activeTab.value = 'overview'
+  const section = sectionFromQuery()
+  const tabCandidate = tabRaw ? normalizeLegacyTab(tabRaw) : 'overview'
+  activeTab.value = normalizeTabForSection(section, tabCandidate)
   statsVersionFilter.value = versionRaw
   statsRoleFilter.value = roleRaw
   statsDivisionFilter.value = divisionsRaw
@@ -2464,6 +2517,9 @@ const overviewTeamsPending = ref(false)
 const bansExpandByWin = ref(false)
 const bansExpandByLoss = ref(false)
 const objectivesPanelTab = ref<'objectives' | 'drakeTypes' | 'drakeSouls'>('objectives')
+function setObjectivesPanelTab(value: 'objectives' | 'drakeTypes' | 'drakeSouls') {
+  objectivesPanelTab.value = value
+}
 function teamPercent(value: number, matchCount: number): string {
   if (!matchCount) return '—'
   return Number((value / matchCount) * 100).toFixed(2) + '%'
@@ -4245,6 +4301,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   retryOverviewDetail,
   scaleMatchupScore,
   setChampionGlobalSort,
+  setObjectivesPanelTab,
+  setTierListViewModel,
   showBansRoleColumns,
   sidesBlueBanRows,
   sidesBlueBestWinrateRows,

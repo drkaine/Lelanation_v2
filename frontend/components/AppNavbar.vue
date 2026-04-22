@@ -94,9 +94,8 @@
         >
           {{ t('nav.map') }}
         </NuxtLink>
-        <div class="mobile-builds-menu">
+        <div v-if="isAdminLoggedIn" class="mobile-builds-menu">
           <button
-            v-if="isAdminLoggedIn"
             type="button"
             class="version mobile-builds-trigger"
             :class="{ 'is-active': isStatisticsSectionActive }"
@@ -109,29 +108,14 @@
           </button>
           <div v-if="isMobileStatisticsMenuOpen" class="mobile-builds-dropdown">
             <NuxtLink
-              :to="statisticsClassicLink"
+              v-for="item in statisticsNavItems"
+              :key="`mobile-${item.id}`"
+              :to="item.to"
               class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsClassicActive }"
+              :class="{ 'is-active': item.isActive }"
               @click="handleBuildsNavigation"
             >
-              {{ t('statisticsPage.modeClassic') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasCustomStatistics"
-              :to="statisticsCustomLink"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsCustomActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('statisticsPage.modeCustom') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="statisticsRecapLink"
-              class="version builds-submenu-link"
-              :class="{ 'is-active': isStatisticsRecapActive }"
-              @click="handleBuildsNavigation"
-            >
-              {{ t('statisticsPage.recapNav') }}
+              {{ item.label }}
             </NuxtLink>
           </div>
         </div>
@@ -229,44 +213,30 @@
           {{ t('nav.map') }}
         </NuxtLink>
         <div
+          v-if="isAdminLoggedIn"
           class="builds-menu"
           @mouseenter="isStatisticsMenuOpen = true"
           @mouseleave="isStatisticsMenuOpen = false"
         >
-          <NuxtLink
-            v-if="isAdminLoggedIn"
-            :to="statisticsClassicLink"
+          <button
+            type="button"
             class="version builds-menu-trigger"
             :class="{ 'is-active': isStatisticsSectionActive }"
+            @click.prevent
           >
             <span>{{ t('nav.statistics') }}</span>
             <span class="builds-menu-chevron" :class="{ 'is-open': isStatisticsMenuOpen }">▾</span>
-          </NuxtLink>
+          </button>
           <div v-show="isStatisticsMenuOpen" class="builds-menu-dropdown">
             <NuxtLink
-              :to="statisticsClassicLink"
+              v-for="item in statisticsNavItems"
+              :key="`desktop-${item.id}`"
+              :to="item.to"
               class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsClassicActive }"
+              :class="{ 'is-active': item.isActive }"
               @click="closeStatisticsMenu"
             >
-              {{ t('statisticsPage.modeClassic') }}
-            </NuxtLink>
-            <NuxtLink
-              v-if="hasCustomStatistics"
-              :to="statisticsCustomLink"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsCustomActive }"
-              @click="closeStatisticsMenu"
-            >
-              {{ t('statisticsPage.modeCustom') }}
-            </NuxtLink>
-            <NuxtLink
-              :to="statisticsRecapLink"
-              class="builds-submenu-link"
-              :class="{ 'is-active': isStatisticsRecapActive }"
-              @click="closeStatisticsMenu"
-            >
-              {{ t('statisticsPage.recapNav') }}
+              {{ item.label }}
             </NuxtLink>
           </div>
         </div>
@@ -308,7 +278,6 @@ import { getFallbackGameVersion } from '~/config/version'
 import { useVersionStore } from '~/stores/VersionStore'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { useFavoritesStore } from '~/stores/FavoritesStore'
-import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 
 const isMenuOpen = ref(false)
 const isBuildsMenuOpen = ref(false)
@@ -340,20 +309,133 @@ const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
-const statisticsCustomStore = useStatisticsCustomStore()
-const statisticsClassicLink = computed(() => localePath('/statistics'))
+const statisticsInfosLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'infos-overview', tab: 'infos' },
+}))
+const statisticsTierListLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'tierlist-champion', tab: 'tierlist' },
+}))
+const statisticsItemsLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'items', tab: 'items' },
+}))
+const statisticsRunesLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'runes-summoner', tab: 'runes' },
+}))
+const statisticsObjectivesLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'objectives', tab: 'objectives' },
+}))
+const statisticsTeamLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'team-bans', tab: 'team' },
+}))
+const statisticsBalanceLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'balance-progression', tab: 'balance' },
+}))
+const statisticsSynergyLink = computed(() => ({
+  path: localePath('/statistics'),
+  query: { section: 'synergy-botlane', tab: 'championTable' },
+}))
 const statisticsCustomLink = computed(() => localePath('/statistics/custom'))
-const statisticsRecapLink = computed(() => localePath('/statistics/recap'))
 const isStatisticsSectionActive = computed(() => route.path.startsWith('/statistics'))
-const isStatisticsRecapActive = computed(() => route.path.includes('/statistics/recap'))
-const isStatisticsClassicActive = computed(
-  () =>
-    route.path.startsWith('/statistics') &&
-    !route.path.startsWith('/statistics/custom') &&
-    !route.path.includes('/statistics/recap')
-)
-const isStatisticsCustomActive = computed(() => route.path.startsWith('/statistics/custom'))
-const hasCustomStatistics = computed(() => statisticsCustomStore.hasCustomStatistics)
+const currentStatisticsSection = computed(() => {
+  if (!route.path.startsWith('/statistics') || route.path.startsWith('/statistics/custom'))
+    return null
+  return typeof route.query.section === 'string' ? route.query.section : null
+})
+const currentStatisticsTab = computed(() => {
+  if (!route.path.startsWith('/statistics') || route.path.startsWith('/statistics/custom'))
+    return null
+  if (route.path.startsWith('/statistics/recap')) return 'recap'
+  return typeof route.query.tab === 'string' ? route.query.tab : 'overview'
+})
+const statisticsNavItems = computed(() => [
+  {
+    id: 'infos-overview',
+    to: statisticsInfosLink.value,
+    label: `${t('statisticsPage.tabInfos')} / ${t('statisticsPage.tabOverview')}`,
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'infos-overview'
+        : currentStatisticsTab.value === 'infos' || currentStatisticsTab.value === 'overview',
+  },
+  {
+    id: 'tierlist-champion',
+    to: statisticsTierListLink.value,
+    label: `${t('statisticsPage.tabTierList')} / ${t('statisticsPage.tabChampionTable')}`,
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'tierlist-champion'
+        : currentStatisticsTab.value === 'tierlist' ||
+          currentStatisticsTab.value === 'championTable',
+  },
+  {
+    id: 'items',
+    to: statisticsItemsLink.value,
+    label: t('statisticsPage.tabItems'),
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'items'
+        : currentStatisticsTab.value === 'items',
+  },
+  {
+    id: 'runes-summoner',
+    to: statisticsRunesLink.value,
+    label: `${t('statisticsPage.tabRunes')} / ${t('statisticsPage.tabSummonerSpells')}`,
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'runes-summoner'
+        : currentStatisticsTab.value === 'runes' || currentStatisticsTab.value === 'spells',
+  },
+  {
+    id: 'objectives',
+    to: statisticsObjectivesLink.value,
+    label: t('statisticsPage.tabObjectives'),
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'objectives'
+        : currentStatisticsTab.value === 'objectives',
+  },
+  {
+    id: 'team-bans',
+    to: statisticsTeamLink.value,
+    label: `${t('statisticsPage.tabTeam')} / ${t('statisticsPage.tabBans')}`,
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'team-bans'
+        : currentStatisticsTab.value === 'team' || currentStatisticsTab.value === 'bans',
+  },
+  {
+    id: 'balance-progression',
+    to: statisticsBalanceLink.value,
+    label: `${t('statisticsPage.tabBalance')} / ${t('statisticsPage.tabTrends')}`,
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'balance-progression'
+        : currentStatisticsTab.value === 'balance' || currentStatisticsTab.value === 'trends',
+  },
+  {
+    id: 'synergy-botlane',
+    to: statisticsSynergyLink.value,
+    label: 'Synergie / VS botlane',
+    isActive:
+      currentStatisticsSection.value != null
+        ? currentStatisticsSection.value === 'synergy-botlane'
+        : currentStatisticsTab.value === 'championTable',
+  },
+  {
+    id: 'customize',
+    to: statisticsCustomLink.value,
+    label: t('statisticsPage.modeCustom'),
+    isActive:
+      route.path.startsWith('/statistics/custom') || route.path.startsWith('/statistics/recap'),
+  },
+])
 
 // Map i18n locale to Riot Games locale code
 const getRiotLocale = (locale: string): string => {
@@ -388,7 +470,6 @@ onMounted(() => {
     versionStore.loadCurrentVersion().catch(() => undefined)
   }
   favoritesStore.init()
-  statisticsCustomStore.init()
 })
 
 const toggleMenu = () => {

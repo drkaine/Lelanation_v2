@@ -6,6 +6,7 @@ async function main(): Promise<void> {
 
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
+      agg_objective_outcome_stats,
       agg_champion_item_starter_set_stats,
       agg_champion_summoner_spell_pair_stats,
       agg_champion_item_solo_stats,
@@ -1205,7 +1206,55 @@ async function main(): Promise<void> {
       updated_at = NOW()
   `)
 
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO agg_objective_outcome_stats (
+      game_version,
+      rank_tier,
+      objective_key,
+      objective_bucket,
+      count_win,
+      count_loss,
+      count_game,
+      winrate_win_side,
+      winrate_other_side,
+      updated_at
+    )
+    SELECT
+      atc.game_version,
+      atc.rank_tier,
+      tb.objective_key,
+      tb.objective_bucket,
+      SUM(tb.count_win)::int AS count_win,
+      SUM(tb.count_game - tb.count_win)::int AS count_loss,
+      SUM(tb.count_game)::int AS count_game,
+      CASE
+        WHEN SUM(tb.count_game) > 0
+          THEN ROUND((SUM(tb.count_win)::numeric / SUM(tb.count_game)::numeric) * 100.0, 2)
+        ELSE 0
+      END AS winrate_win_side,
+      CASE
+        WHEN SUM(tb.count_game) > 0
+          THEN ROUND((((SUM(tb.count_game) - SUM(tb.count_win))::numeric / SUM(tb.count_game)::numeric) * 100.0), 2)
+        ELSE 0
+      END AS winrate_other_side,
+      NOW()
+    FROM agg_team_bucket tb
+    INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
+    WHERE atc.rank_tier <> 'UNRANKED'
+    GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
+    ON CONFLICT (game_version, rank_tier, objective_key, objective_bucket) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_loss = EXCLUDED.count_loss,
+      count_game = EXCLUDED.count_game,
+      winrate_win_side = EXCLUDED.winrate_win_side,
+      winrate_other_side = EXCLUDED.winrate_other_side,
+      updated_at = NOW()
+  `)
+
   const counts = await prisma.$queryRawUnsafe<Array<{ k: string; c: bigint }>>(`
+    SELECT 'agg_objective_outcome_stats'::text AS k, COUNT(*)::bigint AS c FROM agg_objective_outcome_stats
+    UNION ALL
     SELECT 'agg_champion_core_stats'::text AS k, COUNT(*)::bigint AS c FROM agg_champion_core_stats
     UNION ALL SELECT 'agg_champion_summoner_spell_pair_stats', COUNT(*)::bigint FROM agg_champion_summoner_spell_pair_stats
     UNION ALL SELECT 'agg_champion_item_starter_set_stats', COUNT(*)::bigint FROM agg_champion_item_starter_set_stats

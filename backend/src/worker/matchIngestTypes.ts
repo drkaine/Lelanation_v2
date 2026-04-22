@@ -2,6 +2,11 @@
 export type MatchIngestDbPreload = {
   maxGameByPuuid: Map<string, Date>
   playerRankSnapshotByPuuid: Map<string, { rankSnapshotGameDate: Date | null }>
+  /** Dernier rang ladder en DB (`players`) quand league-v4 est ignoré (snapshot récent). */
+  playerDbLadderByPuuid: Map<
+    string,
+    { rankTier: string | null; rankDivision: string | null; rankLp: number | null }
+  >
 }
 
 export type MatchIngestRankCache = Map<

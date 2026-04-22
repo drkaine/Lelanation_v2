@@ -74,7 +74,7 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
               ? 'bg-accent text-background'
               : 'bg-black/20 text-text/80 hover:bg-white/10'
           "
-          @click="p.objectivesPanelTab = 'objectives'"
+          @click="p.setObjectivesPanelTab('objectives')"
         >
           {{ p.t('statisticsPage.objectivesTabMain') }}
         </button>
@@ -86,7 +86,7 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
               ? 'bg-accent text-background'
               : 'bg-black/20 text-text/80 hover:bg-white/10'
           "
-          @click="p.objectivesPanelTab = 'drakeTypes'"
+          @click="p.setObjectivesPanelTab('drakeTypes')"
         >
           {{ p.t('statisticsPage.objectivesTabDrakeTypes') }}
         </button>
@@ -98,7 +98,7 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
               ? 'bg-accent text-background'
               : 'bg-black/20 text-text/80 hover:bg-white/10'
           "
-          @click="p.objectivesPanelTab = 'drakeSouls'"
+          @click="p.setObjectivesPanelTab('drakeSouls')"
         >
           {{ p.t('statisticsPage.objectivesTabSouls') }}
         </button>

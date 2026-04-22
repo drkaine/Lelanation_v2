@@ -6,11 +6,23 @@
           <NuxtLink :to="localePath('/statistics')" class="mode-btn">
             {{ t('statisticsPage.modeClassic') }}
           </NuxtLink>
-          <NuxtLink :to="localePath('/statistics/custom')" class="mode-btn mode-btn-active">
+          <NuxtLink
+            :to="localePath('/statistics/custom')"
+            class="mode-btn"
+            :class="{ 'mode-btn-active': customTab === 'custom' }"
+          >
             {{ t('statisticsPage.modeCustom') }}
+          </NuxtLink>
+          <NuxtLink
+            :to="{ path: localePath('/statistics/custom'), query: { tab: 'recap' } }"
+            class="mode-btn"
+            :class="{ 'mode-btn-active': customTab === 'recap' }"
+          >
+            {{ t('statisticsPage.recapNav') }}
           </NuxtLink>
         </div>
         <button
+          v-if="customTab === 'custom'"
           type="button"
           class="inline-flex items-center gap-1.5 rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
           :title="t('statisticsPage.customModeBuildTooltip')"
@@ -39,13 +51,26 @@
       </div>
 
       <div
-        v-if="!widgets.length"
+        v-if="customTab === 'recap'"
+        class="rounded-lg border border-primary/30 bg-surface/30 p-6 text-text/80"
+      >
+        <p class="mb-3">{{ t('statisticsPage.recapDescription') }}</p>
+        <NuxtLink
+          :to="localePath('/statistics/recap')"
+          class="inline-flex rounded border border-primary/40 bg-surface px-3 py-2 text-sm hover:bg-primary/15"
+        >
+          {{ t('statisticsPage.recapTitle') }}
+        </NuxtLink>
+      </div>
+
+      <div
+        v-else-if="!widgets.length"
         class="rounded-lg border border-primary/30 bg-surface/30 p-6 text-text/80"
       >
         {{ t('statisticsPage.customEmpty') }}
       </div>
 
-      <div class="grid gap-3 md:grid-cols-2">
+      <div v-if="customTab === 'custom'" class="grid gap-3 md:grid-cols-2">
         <article
           v-for="(widget, idx) in widgets"
           :key="widget.id"
@@ -85,11 +110,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useStatisticsCustomStore } from '~/stores/StatisticsCustomStore'
 
 const { t } = useI18n()
 const localePath = useLocalePath()
+const route = useRoute()
 const store = useStatisticsCustomStore()
+const customTab = computed(() => (route.query.tab === 'recap' ? 'recap' : 'custom'))
 
 const widgets = computed(() => store.layout.filter(w => store.favoriteWidgetIds.includes(w.id)))
 

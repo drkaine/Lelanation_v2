@@ -1254,7 +1254,22 @@
         "participantsWithoutRank": "Participants without rank",
         "totalPlayers": "Players (total)",
         "totalMatches": "Matches (total)",
-        "lastNewPlayerAt": "Last new player found"
+        "lastNewPlayerAt": "Last new player found",
+        "totalTrackedMatches": "Tracked matches (tracked_matches)",
+        "trackedMatches1h": "Tracked created (1 h)",
+        "lastPlayerLastSeen": "Latest activity (max last_seen)",
+        "playersCreated1h": "Players created (1 h)",
+        "playersLastSeen1h": "Players seen (last_seen, 1 h)",
+        "resumeTitle": "Latest poller summary (log)",
+        "resumeWindow": "Window",
+        "resumeHttp": "HTTP (window delta)",
+        "resume429": "429",
+        "resumeMatchIds": "Match IDs from API",
+        "resumeMatchesDb": "Matches inserted DB",
+        "resumeMatchesApi": "API ingest pairs OK",
+        "resumeParticipants": "Participants",
+        "resumePlayersPolled": "Players polled (delta)",
+        "resumeNewPlayers": "New players (delta)"
       }
     },
     "appDownload": {

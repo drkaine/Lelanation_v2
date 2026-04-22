@@ -35,6 +35,7 @@ import {
   getOverviewProgressionFullStats,
   getInfosPatchDivisionMatrix,
   getInfosMetaCounts,
+  getObjectiveOutcomeAggByPatchDivision,
 } from '../services/StatsOverviewService.js'
 import { getOverviewAbandons } from '../services/StatsAbandonsService.js'
 import {
@@ -375,6 +376,19 @@ router.get('/overview-progression-full', async (req: Request, res: Response) => 
   if (!data) {
     return res.status(200).json({ oldestVersion: null, champions: [] })
   }
+  return res.json(data)
+})
+
+/** GET /api/stats/overview-objectives-agg - Agrégat patch/division/objectif/compte avec wins/losses/winrates. */
+router.get('/overview-objectives-agg', async (req: Request, res: Response) => {
+  const version = queryStringArray(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const objectiveKey = queryString(req.query.objectiveKey)
+  const data = await getObjectiveOutcomeAggByPatchDivision(
+    version.length ? version : null,
+    rankTier,
+    objectiveKey
+  )
   return res.json(data)
 })
 

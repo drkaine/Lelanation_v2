@@ -19,7 +19,7 @@ const p = inject('statisticsPageCtx') as any
               ? 'bg-accent text-background'
               : 'bg-surface/50 text-text/80 hover:bg-primary/20',
           ]"
-          @click="p.tierListViewModel = 'table'"
+          @click="p.setTierListViewModel('table')"
         >
           {{ p.t('statisticsPage.tierListViewTable') }}
         </button>
@@ -31,7 +31,7 @@ const p = inject('statisticsPageCtx') as any
               ? 'bg-accent text-background'
               : 'bg-surface/50 text-text/80 hover:bg-primary/20',
           ]"
-          @click="p.tierListViewModel = 'chart'"
+          @click="p.setTierListViewModel('chart')"
         >
           {{ p.t('statisticsPage.tierListViewChart') }}
         </button>

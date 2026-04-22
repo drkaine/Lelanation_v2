@@ -25,6 +25,8 @@ import {
   deleteUnifiedLogsInRange,
   appendUnifiedLog,
   getUnifiedLogPathResolved,
+  findLatestPollerSummaryEntries,
+  type ParsedUnifiedLogEntry,
 } from '../logging/unifiedAppLog.js'
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
@@ -251,37 +253,114 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
     .catch((e) => console.error('[admin] refresh-precomputed-stats error:', e))
 })
 
+export type AdminDataCollectStats = {
+  totalPlayers: number
+  playersWrongKeyVersion: number
+  lastNewPlayerAt: string | null
+  lastPlayerLastSeenAt: string | null
+  totalTrackedMatches: number
+  trackedMatchesCreatedLast1h: number
+  playersCreatedLast1h: number
+  playersLastSeenLast1h: number
+  pollerResume: {
+    script: string
+    atIso: string
+    message: string
+    windowStartIso: string | null
+    windowEndIso: string | null
+    delta: Record<string, unknown>
+    httpWindowStats: unknown
+    dbWindow1h: unknown
+    requestsPerHour: unknown
+    httpRequestsProjectedPerHour: unknown
+  } | null
+}
 
-/** GET /api/admin/data-stats - stats for Data tab (collecte: players, matches, participants, migration, etc.). */
-router.get('/data-stats', async (_req, res) => {
-  let dataStats: {
-    totalPlayers: number
-    playersWrongKeyVersion: number
-    lastNewPlayerAt: string | null
-    totalMatches: number
-  } = {
+function pickNewerPollerLogEntry(
+  a: ParsedUnifiedLogEntry | null,
+  b: ParsedUnifiedLogEntry | null,
+): ParsedUnifiedLogEntry | null {
+  if (!a) return b
+  if (!b) return a
+  return a.atIso >= b.atIso ? a : b
+}
+
+function pollerResumeFromUnifiedEntry(
+  e: ParsedUnifiedLogEntry,
+): NonNullable<AdminDataCollectStats['pollerResume']> {
+  const j = e.json ?? {}
+  const delta = (j['delta'] as Record<string, unknown>) ?? {}
+  return {
+    script: e.script,
+    atIso: e.atIso,
+    message: e.message,
+    windowStartIso: typeof j['windowStartIso'] === 'string' ? j['windowStartIso'] : null,
+    windowEndIso: typeof j['windowEndIso'] === 'string' ? j['windowEndIso'] : null,
+    delta,
+    httpWindowStats: j['httpWindowStats'] ?? null,
+    dbWindow1h: j['dbWindow1h'] ?? null,
+    requestsPerHour: j['requestsPerHour'] ?? null,
+    httpRequestsProjectedPerHour: j['httpRequestsProjectedPerHour'] ?? null,
+  }
+}
+
+async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
+  const empty: AdminDataCollectStats = {
     totalPlayers: 0,
     playersWrongKeyVersion: 0,
     lastNewPlayerAt: null,
-    totalMatches: 0,
+    lastPlayerLastSeenAt: null,
+    totalTrackedMatches: 0,
+    trackedMatchesCreatedLast1h: 0,
+    playersCreatedLast1h: 0,
+    playersLastSeenLast1h: 0,
+    pollerResume: null,
   }
+  const since1h = new Date(Date.now() - 60 * 60 * 1000)
   try {
-    const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
+    const [
+      lastPlayer,
+      maxLastSeenAgg,
+      totalPlayers,
+      trackedTotal,
+      tracked1h,
+      playersWrongKeyVersion,
+      playersCreated1h,
+      playersLastSeen1h,
+      logSummaries,
+    ] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.player.aggregate({ _max: { lastSeen: true } }),
       prisma.player.count(),
-      prisma.ingestMatch.count(),
+      prisma.$queryRaw<Array<{ c: bigint }>>`SELECT COUNT(*)::bigint AS c FROM tracked_matches`,
+      prisma.$queryRaw<Array<{ c: bigint }>>`
+        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE created_at >= ${since1h}
+      `,
       prisma.player.count({ where: { puuidKeyVersion: null } }),
+      prisma.player.count({ where: { createdAt: { gte: since1h } } }),
+      prisma.player.count({ where: { lastSeen: { gte: since1h } } }),
+      findLatestPollerSummaryEntries(),
     ])
-    dataStats = {
+    const latest = pickNewerPollerLogEntry(logSummaries.last30m, logSummaries.lastHourly)
+    return {
       totalPlayers,
       playersWrongKeyVersion,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      totalMatches,
+      lastPlayerLastSeenAt: maxLastSeenAgg._max.lastSeen?.toISOString() ?? null,
+      totalTrackedMatches: Number(trackedTotal[0]?.c ?? 0),
+      trackedMatchesCreatedLast1h: Number(tracked1h[0]?.c ?? 0),
+      playersCreatedLast1h: playersCreated1h,
+      playersLastSeenLast1h: playersLastSeen1h,
+      pollerResume: latest ? pollerResumeFromUnifiedEntry(latest) : null,
     }
   } catch {
-    // ignore
+    return empty
   }
-  return res.json(dataStats)
+}
+
+/** GET /api/admin/data-stats — collecte : DB (`tracked_matches`, `players`) + dernier résumé poller (log unifié). */
+router.get('/data-stats', async (_req, res) => {
+  return res.json(await getAdminDataCollectStats())
 })
 
 router.get('/active-patches', async (_req, res) => {
@@ -450,33 +529,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
     }
   })
 
-  let dataStats: {
-    totalPlayers: number
-    playersWrongKeyVersion: number
-    lastNewPlayerAt: string | null
-    totalMatches: number
-  } = {
-    totalPlayers: 0,
-    playersWrongKeyVersion: 0,
-    lastNewPlayerAt: null,
-    totalMatches: 0,
-  }
-  try {
-    const [lastPlayer, totalPlayers, totalMatches, playersWrongKeyVersion] = await Promise.all([
-      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.player.count(),
-      prisma.ingestMatch.count(),
-      prisma.player.count({ where: { puuidKeyVersion: null } }),
-    ])
-    dataStats = {
-      totalPlayers,
-      playersWrongKeyVersion,
-      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      totalMatches,
-    }
-  } catch {
-    // ignore
-  }
+  const dataStats = await getAdminDataCollectStats()
 
   const orchestratorStatus = getOrchestratorStatus()
   const lastFinished = getLastFinishedInfo()

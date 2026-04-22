@@ -105,31 +105,156 @@
         <!-- Section 1: Stats collecte -->
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.data.stats.title') }}</h2>
+          <p class="mb-3 text-xs text-text/70">
+            Totaux et fenêtre 1 h : <code class="text-[11px]">players</code> (created_at, last_seen)
+            et <code class="text-[11px]">tracked_matches</code>. Débit / deltas : dernier
+            <code class="text-[11px]">poller_30m</code> ou
+            <code class="text-[11px]">poller_hourly</code> dans le log unifié.
+          </p>
           <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
-          <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">
-                {{ dataStats?.totalPlayers ?? '—' }}
+          <template v-else>
+            <p class="mb-2 text-xs font-medium uppercase tracking-wide text-text/60">Base (DB)</p>
+            <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.totalPlayers ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">{{ t('admin.data.stats.totalPlayers') }}</div>
               </div>
-              <div class="text-xs text-text/70">Nombre de players</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">
-                {{ dataStats?.playersWrongKeyVersion ?? '—' }}
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.playersWrongKeyVersion ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">Players clé/version différente de la config</div>
               </div>
-              <div class="text-xs text-text/70">Players clé/version différente de la config</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-xl font-bold text-text">{{ dataStats?.totalMatches ?? '—' }}</div>
-              <div class="text-xs text-text/70">Nombre de matchs total</div>
-            </div>
-            <div class="rounded border border-primary/20 bg-background/30 p-3">
-              <div class="text-base font-semibold text-text">
-                {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.totalTrackedMatches ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">
+                  {{ t('admin.data.stats.totalTrackedMatches') }}
+                </div>
               </div>
-              <div class="text-xs text-text/70">Temps depuis ajout dernier joueur</div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.trackedMatchesCreatedLast1h ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">{{ t('admin.data.stats.trackedMatches1h') }}</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.playersCreatedLast1h ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">{{ t('admin.data.stats.playersCreated1h') }}</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.playersLastSeenLast1h ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">
+                  {{ t('admin.data.stats.playersLastSeen1h') }}
+                </div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-base font-semibold text-text">
+                  {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
+                </div>
+                <div class="text-xs text-text/70">{{ t('admin.data.stats.lastNewPlayerAt') }}</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-base font-semibold text-text">
+                  {{
+                    dataStats?.lastPlayerLastSeenAt
+                      ? formatRiotDate(dataStats.lastPlayerLastSeenAt)
+                      : '—'
+                  }}
+                </div>
+                <div class="text-xs text-text/70">
+                  {{ t('admin.data.stats.lastPlayerLastSeen') }}
+                </div>
+              </div>
             </div>
-          </div>
+            <template v-if="dataStats?.pollerResume">
+              <p class="mb-2 text-xs font-medium uppercase tracking-wide text-text/60">
+                {{ t('admin.data.stats.resumeTitle') }} — {{ dataStats.pollerResume.script }}
+              </p>
+              <p class="mb-2 font-mono text-[11px] text-text/60">
+                {{ t('admin.data.stats.resumeWindow') }}:
+                {{ dataStats.pollerResume.windowStartIso ?? '—' }} →
+                {{ dataStats.pollerResume.windowEndIso ?? '—' }}
+                <span class="text-text/50">({{ dataStats.pollerResume.atIso }})</span>
+              </p>
+              <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.httpRequests) }}
+                  </div>
+                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resumeHttp') }}</div>
+                  <div
+                    v-if="formatPollerHttpWindowSummary(dataStats.pollerResume.httpWindowStats)"
+                    class="mt-1 text-[11px] leading-snug text-text/65"
+                  >
+                    {{ formatPollerHttpWindowSummary(dataStats.pollerResume.httpWindowStats) }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.error429) }}
+                  </div>
+                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resume429') }}</div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.matchIdsFromApi) }}
+                  </div>
+                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resumeMatchIds') }}</div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.matchesInsertedDb) }}
+                  </div>
+                  <div class="text-xs text-text/70">
+                    {{ t('admin.data.stats.resumeMatchesDb') }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.matchesApiIngestComplete) }}
+                  </div>
+                  <div class="text-xs text-text/70">
+                    {{ t('admin.data.stats.resumeMatchesApi') }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.participants) }}
+                  </div>
+                  <div class="text-xs text-text/70">
+                    {{ t('admin.data.stats.resumeParticipants') }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.playersPolled) }}
+                  </div>
+                  <div class="text-xs text-text/70">
+                    {{ t('admin.data.stats.resumePlayersPolled') }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ adminStatNum(dataStats.pollerResume.delta?.newPlayers) }}
+                  </div>
+                  <div class="text-xs text-text/70">
+                    {{ t('admin.data.stats.resumeNewPlayers') }}
+                  </div>
+                </div>
+              </div>
+            </template>
+            <p v-else class="text-sm text-text/60">
+              Aucun résumé poller récent dans le log unifié.
+            </p>
+          </template>
         </div>
 
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
@@ -2117,13 +2242,55 @@ const riotApiStats = ref<{
 // Data tab: collapsible sections
 const dataSectionCrons = ref(true)
 const dataSectionPoller = ref(true)
-const dataStats = ref<{
+type AdminDataCollectPollerResume = {
+  script: string
+  atIso: string
+  message: string
+  windowStartIso: string | null
+  windowEndIso: string | null
+  delta: Record<string, unknown>
+  httpWindowStats: unknown
+  dbWindow1h: unknown
+  requestsPerHour: unknown
+  httpRequestsProjectedPerHour: unknown
+}
+type AdminDataCollectStatsClient = {
   totalPlayers: number
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
-  totalMatches: number
-} | null>(null)
+  lastPlayerLastSeenAt: string | null
+  totalTrackedMatches: number
+  trackedMatchesCreatedLast1h: number
+  playersCreatedLast1h: number
+  playersLastSeenLast1h: number
+  pollerResume: AdminDataCollectPollerResume | null
+}
+const dataStats = ref<AdminDataCollectStatsClient | null>(null)
 const dataStatsLoading = ref(false)
+
+function adminStatNum(v: unknown): string {
+  if (typeof v === 'number' && Number.isFinite(v)) return String(Math.trunc(v))
+  if (typeof v === 'string' && v.trim()) {
+    const n = Number(v)
+    return Number.isFinite(n) ? String(Math.trunc(n)) : '—'
+  }
+  return '—'
+}
+
+function formatPollerHttpWindowSummary(h: unknown): string {
+  if (!h || typeof h !== 'object') return ''
+  const o = h as Record<string, unknown>
+  const bits: string[] = []
+  if (typeof o.httpAvgPerMinuteOverall === 'number')
+    bits.push(`moy ${o.httpAvgPerMinuteOverall}/min`)
+  if (typeof o.httpAvgPer2MinUniform === 'number') bits.push(`moy/2min∼${o.httpAvgPer2MinUniform}`)
+  if (typeof o.httpTwoMinBucketAvg === 'number') bits.push(`moy/2min réel ${o.httpTwoMinBucketAvg}`)
+  if (typeof o.httpTwoMinBucketPeak === 'number') {
+    const c = o.httpTwoMinBucketPeakCount
+    bits.push(`pic/2min ${o.httpTwoMinBucketPeak}${typeof c === 'number' ? ` (${c}×)` : ''}`)
+  }
+  return bits.join(' · ')
+}
 const activePatches = ref<
   Array<{
     gameVersion: string
@@ -2716,18 +2883,8 @@ const riotScriptFields = ref<Record<string, Record<string, string>>>({})
 const riotScriptBusy = ref<Record<string, boolean>>({})
 const riotScriptStopBusy = ref<Record<string, boolean>>({})
 const riotScriptsStatus = ref<Record<string, any>>({})
-const riotDataStats = ref<{
-  matchesWithoutRank?: number
-  lastNewPlayerAt?: string | null
-  playersNotMigrated?: number
-  playersErreur?: number
-  playersPerdu?: number
-  participantsWithoutRole?: number
-  participantsWithoutRank?: number
-  totalPlayers?: number
-  totalMatches?: number
-  playersMissingSummonerName?: number
-} | null>(null)
+/** Miroir de `dataStats` depuis `/api/admin/riot-scripts-status` (même charge utile que `/api/admin/data-stats`). */
+const riotDataStats = ref<AdminDataCollectStatsClient | null>(null)
 const riotScriptLogsOpen = ref(false)
 const riotScriptLogsLoading = ref(false)
 const riotScriptLogsTitle = ref('')

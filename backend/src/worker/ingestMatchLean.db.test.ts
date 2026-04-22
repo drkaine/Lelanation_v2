@@ -28,6 +28,11 @@ const fullCounters = () => ({
   playersFetched: 0,
   matchesApiIngestComplete: 0,
   playersRankUpdatedLeague: 0,
+  newPlayersRankFetched: 0,
+  stalePlayersRankRefreshed: 0,
+  rankSkippedFreshSnapshot: 0,
+  apiNoRank: 0,
+  apiError: 0,
 })
 
 test('lean ingest creates ingest_* rows for new riot id', { skip: skipDbReason }, async (t) => {
@@ -244,3 +249,103 @@ test('extractIngestTimelineExtras updates items on ingest_match_players', { skip
     await prisma.player.deleteMany({ where: { puuid: { in: puuids } } })
   }
 })
+
+test(
+  'lean ingest uses DB ladder when league-v4 skipped (fresh rank snapshot)',
+  { skip: skipDbReason },
+  async (t) => {
+    try {
+      await prisma.$queryRaw`SELECT 1 FROM ingest_matchs LIMIT 1`
+    } catch {
+      t.skip('Migration 20260416143000_ingest_lean_tables not applied (prisma migrate deploy)')
+      return
+    }
+    const base = Date.now()
+    const puuidA = `TEST_LEAN_DB_LADDER_A_${base}`
+    const puuidB = `TEST_LEAN_DB_LADDER_B_${base}`
+    const puuids = [puuidA, puuidB]
+    let leagueCalls = 0
+    const soloEntry = {
+      queueType: 'RANKED_SOLO_5x5',
+      tier: 'GOLD',
+      rank: 'II',
+      leaguePoints: 22,
+    }
+    const riotClient = {
+      async getLeagueEntriesByPuuid() {
+        leagueCalls++
+        return { ok: true as const, status: 200, data: [soloEntry] }
+      },
+    } as unknown as RiotHttpClient
+
+    const mkDto = (matchId: string, gameCreation: number): RiotMatchDto => ({
+      metadata: { matchId },
+      info: {
+        gameId: 9_900_000 + Math.floor(Math.random() * 1000),
+        gameDuration: 900,
+        gameCreation,
+        gameVersion: '16.1.1',
+        queueId: 420,
+        endOfGameResult: 'GameComplete',
+        participants: puuids.map((puuid, idx) => ({
+          puuid,
+          championId: 10 + idx,
+          teamId: idx === 0 ? 100 : 200,
+          win: idx === 0,
+          kills: 1,
+          deaths: 0,
+          assists: 0,
+        })),
+      },
+    })
+
+    const matchId1 = `EUW1_LEAN_DB_LADDER_1_${base}`
+    const matchId2 = `EUW1_LEAN_DB_LADDER_2_${base}`
+    const tFirst = base - 3 * 60 * 60 * 1000
+    const tSecond = tFirst + 60 * 60 * 1000
+
+    const c1 = fullCounters()
+    const c2 = fullCounters()
+    try {
+      await upsertIngestMatchAndParticipants(
+        riotClient,
+        'euw1',
+        matchId1,
+        mkDto(matchId1, tFirst),
+        'perso',
+        c1,
+        undefined,
+        { shouldAbort: () => false }
+      )
+      assert.equal(leagueCalls, 2)
+
+      await upsertIngestMatchAndParticipants(
+        riotClient,
+        'euw1',
+        matchId2,
+        mkDto(matchId2, tSecond),
+        'perso',
+        c2,
+        undefined,
+        { shouldAbort: () => false }
+      )
+      assert.equal(leagueCalls, 2, 'league-v4 must not run again while snapshot < 4h')
+
+      const ingest2 = await prisma.ingestMatch.findUnique({
+        where: { riotMatchId: matchId2 },
+        include: { matchPlayers: true },
+      })
+      assert.ok(ingest2)
+      for (const mp of ingest2!.matchPlayers) {
+        assert.equal(mp.rankTier, 'GOLD')
+      }
+      assert.equal(ingest2!.rankTier, 'GOLD')
+    } finally {
+      for (const mid of [matchId1, matchId2]) {
+        const row = await prisma.ingestMatch.findUnique({ where: { riotMatchId: mid } })
+        if (row) await prisma.ingestMatch.delete({ where: { id: row.id } })
+      }
+      await prisma.player.deleteMany({ where: { puuid: { in: puuids } } })
+    }
+  }
+)

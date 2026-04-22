@@ -230,8 +230,12 @@ export function buildLeanParticipantStats(
 export async function preloadIngestLeanMatchDbData(puuids: string[]): Promise<MatchIngestDbPreload> {
   const maxGameByPuuid = new Map<string, Date>()
   const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
+  const playerDbLadderByPuuid = new Map<
+    string,
+    { rankTier: string | null; rankDivision: string | null; rankLp: number | null }
+  >()
   const unique = [...new Set(puuids.filter(Boolean))]
-  if (unique.length === 0) return { maxGameByPuuid, playerRankSnapshotByPuuid }
+  if (unique.length === 0) return { maxGameByPuuid, playerRankSnapshotByPuuid, playerDbLadderByPuuid }
 
   const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
     SELECT pl.puuid, MAX(im.game_date) AS max_game
@@ -246,12 +250,23 @@ export async function preloadIngestLeanMatchDbData(puuids: string[]): Promise<Ma
   }
   const playerRows = await prisma.player.findMany({
     where: { puuid: { in: unique } },
-    select: { puuid: true, rankSnapshotGameDate: true },
+    select: {
+      puuid: true,
+      rankSnapshotGameDate: true,
+      rankTier: true,
+      rankDivision: true,
+      rankLp: true,
+    },
   })
   for (const row of playerRows) {
     playerRankSnapshotByPuuid.set(row.puuid, { rankSnapshotGameDate: row.rankSnapshotGameDate })
+    playerDbLadderByPuuid.set(row.puuid, {
+      rankTier: row.rankTier,
+      rankDivision: row.rankDivision,
+      rankLp: row.rankLp,
+    })
   }
-  return { maxGameByPuuid, playerRankSnapshotByPuuid }
+  return { maxGameByPuuid, playerRankSnapshotByPuuid, playerDbLadderByPuuid }
 }
 
 export async function upsertIngestMatchAndParticipants(
@@ -298,6 +313,10 @@ export async function upsertIngestMatchAndParticipants(
 
   const maxGameByPuuid = new Map<string, Date>()
   const playerRankSnapshotByPuuid = new Map<string, { rankSnapshotGameDate: Date | null }>()
+  const playerDbLadderByPuuid = new Map<
+    string,
+    { rankTier: string | null; rankDivision: string | null; rankLp: number | null }
+  >()
   if (puuids.length > 0) {
     const preload = matchIngestOptions?.ingestPreload
     if (preload) {
@@ -307,6 +326,9 @@ export async function upsertIngestMatchAndParticipants(
         if (preload.playerRankSnapshotByPuuid.has(p)) {
           playerRankSnapshotByPuuid.set(p, preload.playerRankSnapshotByPuuid.get(p)!)
         }
+        if (preload.playerDbLadderByPuuid.has(p)) {
+          playerDbLadderByPuuid.set(p, preload.playerDbLadderByPuuid.get(p)!)
+        }
       }
     } else {
       const leanPreload = await preloadIngestLeanMatchDbData(puuids)
@@ -315,6 +337,9 @@ export async function upsertIngestMatchAndParticipants(
         if (g) maxGameByPuuid.set(p, g)
         if (leanPreload.playerRankSnapshotByPuuid.has(p)) {
           playerRankSnapshotByPuuid.set(p, leanPreload.playerRankSnapshotByPuuid.get(p)!)
+        }
+        if (leanPreload.playerDbLadderByPuuid.has(p)) {
+          playerDbLadderByPuuid.set(p, leanPreload.playerDbLadderByPuuid.get(p)!)
         }
       }
     }
@@ -463,6 +488,20 @@ export async function upsertIngestMatchAndParticipants(
       counters.apiError++
       await logger?.info?.('League rank lookup ignored (allSettled)', { reason })
     }
+  }
+
+  /** PUUID qui ont reçu un résultat league-v4 dans cet ingest (on ne les écrase pas avec la DB). */
+  const leagueFetchedSet = new Set(allowLeagueRankApiFetch ? leagueFetchPuuids : [])
+  for (const pid of puuids) {
+    if (!pid || leagueFetchedSet.has(pid)) continue
+    const dbRank = playerDbLadderByPuuid.get(pid)
+    const t = dbRank?.rankTier?.trim().toUpperCase()
+    if (!t || t === 'UNRANKED') continue
+    accountRankCache.set(pid, {
+      rankTier: t,
+      rankDivision: dbRank!.rankDivision,
+      rankLp: dbRank!.rankLp,
+    })
   }
 
   const resolvedRanks: ResolvedParticipantRank[] = participantDtos.map((p) => {

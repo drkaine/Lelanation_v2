@@ -603,3 +603,21 @@ model MvTeamBucket {
   @@id([teamStatId, objectiveKey, objectiveBucket])
   @@map("mv_team_bucket")
 }
+
+model AggObjectiveOutcomeStat {
+  id              BigInt   @id @default(autoincrement())
+  gameVersion     String   @map("game_version")
+  rankTier        String   @map("rank_tier")
+  objectiveKey    String   @map("objective_key")
+  objectiveBucket Int      @map("objective_bucket")
+  countWin        Int      @default(0) @map("count_win")
+  countLoss       Int      @default(0) @map("count_loss")
+  countGame       Int      @default(0) @map("count_game")
+  winrateWinSide  Decimal  @default(0) @map("winrate_win_side") @db.Decimal(6, 2)
+  winrateOtherSide Decimal @default(0) @map("winrate_other_side") @db.Decimal(6, 2)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([gameVersion, rankTier, objectiveKey, objectiveBucket])
+  @@index([gameVersion, rankTier, objectiveKey, objectiveBucket], map: "idx_agg_objective_outcome_patch_div")
+  @@map("agg_objective_outcome_stats")
+}
