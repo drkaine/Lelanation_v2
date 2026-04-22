@@ -293,6 +293,7 @@ router.get('/active-patches', async (_req, res) => {
         gamesNumber: true,
         gameNumberMax: true,
         isCurrent: true,
+        archivedAt: true,
       },
     })
     return res.json({ patches })
@@ -327,7 +328,7 @@ router.post('/patch-close', async (req, res) => {
         error: 'Unknown patch or invalid date window (check data/game/versions.json)',
       })
     }
-    await closePatch(window.patchLabel)
+    const closeSummary = await closePatch(window.patchLabel)
     const { archivedRowCount } = await archiveChampionTierDailySnapshotsInDateRange(
       window.startInclusive,
       window.endExclusive,
@@ -340,6 +341,7 @@ router.post('/patch-close', async (req, res) => {
       endExclusive: window.endExclusive,
       snapshotRowsArchived: archivedRowCount,
       isLatestInRecap: window.isLatestInRecap,
+      closeSummary,
     })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })

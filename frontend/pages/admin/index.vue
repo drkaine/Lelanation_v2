@@ -141,7 +141,9 @@
             >
               <option value="" disabled>Sélectionner un patch</option>
               <option v-for="p in activePatches" :key="p.gameVersion" :value="p.gameVersion">
-                {{ p.gameVersion }} ({{ p.gamesNumber }} / {{ p.gameNumberMax }})
+                {{ p.gameVersion }} ({{ p.gamesNumber }} / {{ p.gameNumberMax }}){{
+                  p.archivedAt ? ' — archivé' : ''
+                }}
               </option>
             </select>
             <input
@@ -2123,7 +2125,13 @@ const dataStats = ref<{
 } | null>(null)
 const dataStatsLoading = ref(false)
 const activePatches = ref<
-  Array<{ gameVersion: string; gamesNumber: number; gameNumberMax: number; isCurrent: boolean }>
+  Array<{
+    gameVersion: string
+    gamesNumber: number
+    gameNumberMax: number
+    isCurrent: boolean
+    archivedAt?: string | null
+  }>
 >([])
 const selectedActivePatch = ref('')
 const activePatchMaxInput = ref<number>(1000000)
@@ -2520,7 +2528,16 @@ async function runPatchClose() {
     }
     const data = await res.json()
     if (res.ok) {
-      patchCloseMessage.value = `Patch ${data.patch} fermé. Snapshots archivés : ${data.snapshotRowsArchived ?? 0} ligne(s).`
+      const cs = data.closeSummary as
+        | {
+            gamesNumber?: number
+            rankedMatchCount?: number
+            rowsInserted?: Record<string, number>
+          }
+        | undefined
+      const ranked = cs?.rankedMatchCount ?? cs?.gamesNumber
+      const coreRows = cs?.rowsInserted?.agg_champion_core_stats
+      patchCloseMessage.value = `Patch ${data.patch} fermé. Matchs classés (somme outcome) : ${ranked ?? '—'}. Lignes core archivées : ${coreRows ?? '—'}. Snapshots : ${data.snapshotRowsArchived ?? 0} ligne(s).`
       await loadActivePatches()
       await loadPatchCloseOptions()
     } else {

@@ -1,11 +1,8 @@
 import { prisma } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 
-const partitionListCache = new Map<string, { at: number; names: string[] }>()
-const PARTITION_TTL_MS = 60_000
-
 export function invalidateAggArchivePartitionCache(): void {
-  partitionListCache.clear()
+  /* no-op: legacy per-patch archive tables removed; unified archive does not need a partition list cache */
 }
 
 export function normalizePatchMajorMinor(version: string): string {
@@ -22,7 +19,63 @@ function isSafeIdentSegment(s: string): boolean {
   return /^[a-z][a-z0-9_]*$/.test(s)
 }
 
-/** Physical relation for one patch: live agg table or frozen archive_agg_*_{major_minor}. */
+/** Satellites keyed by champion_stat_id (no game_version on row). */
+const CHAMPION_SATELLITE_TABLES = new Set([
+  'agg_champion_bucket',
+  'agg_champion_summoner_spells',
+  'agg_champion_runes_stats',
+  'agg_champion_runes_solo_stats',
+  'agg_champion_shard_solo_stats',
+  'agg_champion_item_stats',
+  'agg_champion_item_solo_stats',
+])
+
+function unifiedArchiveTableName(aggTableName: string): string {
+  return `archive_${aggTableName}`
+}
+
+function patchVersionSqlPredicate(alias: string, p: string): string {
+  return `(${alias}.game_version = '${p}' OR ${alias}.game_version LIKE '${p}.%')`
+}
+
+/**
+ * Single-patch archive fragment: unified table `archive_<aggTableName>` filtered to one patch.
+ */
+function sqlArchivedSinglePatchFragment(aggTableName: string, p: string): string {
+  const archive = unifiedArchiveTableName(aggTableName)
+  if (CHAMPION_SATELLITE_TABLES.has(aggTableName)) {
+    return `(SELECT s.* FROM ${archive} s INNER JOIN archive_agg_champion_core_stats cj ON cj.id = s.champion_stat_id WHERE ${patchVersionSqlPredicate('cj', p)})`
+  }
+  if (aggTableName === 'agg_team_bucket') {
+    return `(SELECT tb.* FROM ${archive} tb INNER JOIN archive_agg_team_core_stats tj ON tj.id = tb.team_stat_id WHERE ${patchVersionSqlPredicate('tj', p)})`
+  }
+  return `(SELECT * FROM ${archive} WHERE game_version = '${p}' OR game_version LIKE '${p}.%')`
+}
+
+async function unifiedArchiveRelationExists(archiveName: string): Promise<boolean> {
+  if (!/^[a-z0-9_]+$/.test(archiveName)) return false
+  const rows = await prisma.$queryRawUnsafe<Array<{ x: boolean }>>(
+    `SELECT to_regclass('public.${archiveName}') IS NOT NULL AS x`,
+  )
+  return Boolean(rows[0]?.x)
+}
+
+async function patchHasRowsInUnifiedArchive(patchKey: string): Promise<boolean> {
+  const p = normalizePatchMajorMinor(patchKey)
+  if (!/^\d+\.\d+$/.test(p)) return false
+  const like = `${p}.%`
+  const rows = await prisma.$queryRaw<[{ ok: boolean }]>`
+    SELECT EXISTS (
+      SELECT 1 FROM archive_agg_champion_core_stats a
+      WHERE a.game_version = ${p} OR a.game_version LIKE ${like}
+    ) AS ok
+  `
+  return Boolean(rows[0]?.ok)
+}
+
+/**
+ * FROM fragment for one patch: live agg or filtered rows from unified archive table.
+ */
 export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: string): Promise<string | null> {
   if (!isSafeIdentSegment(aggTableName)) return null
   const p = normalizePatchMajorMinor(patchKey)
@@ -32,25 +85,16 @@ export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: st
     where: { gameVersion: p },
     select: { archivedAt: true },
   })
-  const suffix = p.replace(/\./g, '_')
-  const archiveName = `archive_${aggTableName}_${suffix}`
-  if (!isSafeIdentSegment(archiveName)) return null
 
-  if (row?.archivedAt != null) return archiveName
+  const inArchive =
+    row?.archivedAt != null || (row == null && (await patchHasRowsInUnifiedArchive(p)))
 
-  if (!row) {
-    const exists = await archiveRelationExists(archiveName)
-    if (exists) return archiveName
-  }
-  return aggTableName
-}
+  if (!inArchive) return aggTableName
 
-async function archiveRelationExists(rel: string): Promise<boolean> {
-  if (!/^[a-z0-9_]+$/.test(rel)) return false
-  const rows = await prisma.$queryRawUnsafe<Array<{ x: boolean }>>(
-    `SELECT to_regclass('public.${rel}') IS NOT NULL AS x`
-  )
-  return Boolean(rows[0]?.x)
+  const archiveName = unifiedArchiveTableName(aggTableName)
+  if (!(await unifiedArchiveRelationExists(archiveName))) return aggTableName
+
+  return sqlArchivedSinglePatchFragment(aggTableName, p)
 }
 
 function normalizeSingleVersionKey(version: string | string[] | null | undefined): string | null {
@@ -83,30 +127,21 @@ export async function sqlAggUnionAllLiveAndArchives(aggTableName: string, asAlia
   if (!isSafeIdentSegment(aggTableName) || !/^[a-z][a-z0-9_]*$/.test(asAlias)) {
     return `${aggTableName} ${asAlias}`
   }
-  const archives = await listArchivePartitionTables(aggTableName)
-  if (archives.length === 0) return `${aggTableName} ${asAlias}`
-  const parts = [`SELECT * FROM ${aggTableName}`, ...archives.map((t) => `SELECT * FROM ${t}`)]
-  return `(${parts.join(' UNION ALL ')}) AS ${asAlias}`
-}
-
-async function listArchivePartitionTables(aggTableName: string): Promise<string[]> {
-  const now = Date.now()
-  const cached = partitionListCache.get(aggTableName)
-  if (cached && now - cached.at < PARTITION_TTL_MS) return cached.names
-
-  const prefix = `archive_${aggTableName}_`
-  const rows = await prisma.$queryRaw<Array<{ relname: string }>>`
-    SELECT c.relname::text AS relname
-    FROM pg_class c
-    INNER JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public'
-      AND c.relkind = 'r'
-      AND c.relname LIKE ${prefix + '%'}
-    ORDER BY c.relname
-  `
-  const safePrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const re = new RegExp(`^${safePrefix}\\d+_\\d+$`)
-  const names = rows.map((r) => r.relname).filter((n) => re.test(n) && /^[a-z0-9_]+$/.test(n))
-  partitionListCache.set(aggTableName, { at: now, names })
-  return names
+  const archive = unifiedArchiveTableName(aggTableName)
+  if (!(await unifiedArchiveRelationExists(archive))) {
+    return `${aggTableName} ${asAlias}`
+  }
+  if (CHAMPION_SATELLITE_TABLES.has(aggTableName)) {
+    return `(SELECT * FROM ${aggTableName}
+      UNION ALL
+      SELECT s.* FROM ${archive} s
+      INNER JOIN archive_agg_champion_core_stats c ON c.id = s.champion_stat_id) AS ${asAlias}`
+  }
+  if (aggTableName === 'agg_team_bucket') {
+    return `(SELECT * FROM ${aggTableName}
+      UNION ALL
+      SELECT tb.* FROM ${archive} tb
+      INNER JOIN archive_agg_team_core_stats t ON t.id = tb.team_stat_id) AS ${asAlias}`
+  }
+  return `(SELECT * FROM ${aggTableName} UNION ALL SELECT * FROM ${archive}) AS ${asAlias}`
 }
