@@ -151,7 +151,7 @@ const authorName = computed(() => {
   visibility: hidden !important;
 }
 
-.screenshot-root :deep(.variants-count-indicator),
+.screenshot-root :deep(.variants-count-indicator:not(.variants-count-indicator--layout-spacer)),
 .screenshot-root :deep(.skill-slot-dropdown) {
   display: none !important;
 }

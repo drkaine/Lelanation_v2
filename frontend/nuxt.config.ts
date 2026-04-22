@@ -142,6 +142,7 @@ export default defineNuxtConfig({
           '/builds/create',
           '/videos',
           '/statistics',
+          '/statistics/recap',
           '/privacy',
           '/legal',
           '/lelanation-app',

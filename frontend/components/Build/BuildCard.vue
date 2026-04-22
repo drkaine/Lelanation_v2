@@ -213,6 +213,10 @@
           <span>{{ t('buildCard.copySummoners') }}</span>
         </label>
         <label class="variants-copy-option">
+          <input v-model="copySelection.tags" type="checkbox" />
+          <span>{{ t('buildCard.copyTags') }}</span>
+        </label>
+        <label class="variants-copy-option">
           <input v-model="copySelection.firstThreeUps" type="checkbox" />
           <span>{{ t('buildCard.copyFirstThreeUps') }}</span>
         </label>
@@ -241,34 +245,82 @@
         <!-- Version (top right) -->
         <div class="build-version">{{ version }}</div>
 
-        <button
-          v-if="
-            !forScreenshot &&
-            ((readonly && buildSubBuilds.length > 0) || (!readonly && hasChampion))
-          "
-          ref="variantsTriggerRef"
-          class="variants-count-indicator"
-          type="button"
-          @click.stop="toggleVariantsPopover"
-        >
-          <div
-            class="variants-poker-icon"
-            :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+        <div v-if="showFrontVariantsTagsStack" class="variants-tags-stack">
+          <button
+            v-if="showVariantTriggerButton"
+            ref="variantsTriggerRef"
+            class="variants-count-indicator"
+            type="button"
+            @click.stop="toggleVariantsPopover"
           >
-            <span
-              v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
-              :key="`variant-card-${n}`"
-              class="variants-poker-card"
-              :style="{
-                transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
-                zIndex: n,
-              }"
-            />
-            <span class="variants-poker-badge">
-              {{ totalVariantCount }}
-            </span>
+            <div
+              class="variants-poker-icon"
+              :title="`${totalVariantCount} variante${totalVariantCount > 1 ? 's' : ''}`"
+            >
+              <span
+                v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+                :key="`variant-card-${n}`"
+                class="variants-poker-card"
+                :style="{
+                  transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                  zIndex: n,
+                }"
+              />
+              <span class="variants-poker-badge">
+                {{ totalVariantCount }}
+              </span>
+            </div>
+          </button>
+          <!-- Même boîte que le bouton variantes (dimensions identiques au builder / liste / capture). -->
+          <div
+            v-else-if="showVariantsTagColumnSpacer"
+            class="variants-count-indicator variants-count-indicator--layout-spacer"
+            aria-hidden="true"
+          >
+            <div class="variants-poker-icon">
+              <span
+                v-for="n in Math.max(1, Math.min(totalVariantCount, 4))"
+                :key="`phantom-variant-card-${n}`"
+                class="variants-poker-card"
+                :style="{
+                  transform: `translateX(${(n - 1) * 4}px) rotate(${(n - 1) * 4}deg)`,
+                  zIndex: n,
+                }"
+              />
+              <span class="variants-poker-badge">
+                {{ totalVariantCount }}
+              </span>
+            </div>
           </div>
-        </button>
+
+          <div v-if="!readonly || selectedBuildTags.length > 0" class="build-tags-section">
+            <div class="build-tags-container">
+              <button
+                v-for="tag in visibleBuildTags"
+                :key="tag.id"
+                type="button"
+                class="build-tag-chip"
+                :class="[
+                  selectedBuildTags.includes(tag.id)
+                    ? 'build-tag-chip--selected'
+                    : 'build-tag-chip--unselected',
+                  selectedBuildTags.includes(tag.id) && tag.id === 'troll'
+                    ? 'build-tag-chip--troll-selected'
+                    : '',
+                ]"
+                :style="
+                  selectedBuildTags.includes(tag.id)
+                    ? { '--tag-g1': tag.gradient[0], '--tag-g2': tag.gradient[1] }
+                    : undefined
+                "
+                :disabled="readonly"
+                @click="!readonly && toggleBuildTag(tag.id)"
+              >
+                {{ tag.label }}
+              </button>
+            </div>
+          </div>
+        </div>
 
         <!-- Roles Section - Entre la version et le séparateur -->
         <div
@@ -1397,6 +1449,7 @@ const props = withDefaults(defineProps<Props>(), {
   forScreenshot: false,
   championSplashOverride: null,
 })
+type BuildTag = NonNullable<Build['tags']>[number]
 
 const emit = defineEmits<{
   /** Émis quand la variante affichée change. null = build principal. */
@@ -1458,6 +1511,7 @@ const copySelection = ref({
   runes: true,
   shards: true,
   summonerSpells: true,
+  tags: true,
   firstThreeUps: false,
   skillUpOrder: false,
 })
@@ -1494,6 +1548,7 @@ const copyAllSelected = computed(
     copySelection.value.runes &&
     copySelection.value.shards &&
     copySelection.value.summonerSpells &&
+    copySelection.value.tags &&
     copySelection.value.firstThreeUps &&
     copySelection.value.skillUpOrder
 )
@@ -1503,6 +1558,7 @@ const hasCopySelection = computed(
     copySelection.value.runes ||
     copySelection.value.shards ||
     copySelection.value.summonerSpells ||
+    copySelection.value.tags ||
     copySelection.value.firstThreeUps ||
     copySelection.value.skillUpOrder
 )
@@ -1613,6 +1669,7 @@ function toggleCopyAll(event: Event) {
     runes: checked,
     shards: checked,
     summonerSpells: checked,
+    tags: checked,
     firstThreeUps: checked,
     skillUpOrder: checked,
   }
@@ -1627,6 +1684,7 @@ function applyCopySelection() {
     runes: copySelection.value.runes,
     shards: copySelection.value.shards,
     summonerSpells: copySelection.value.summonerSpells,
+    tags: copySelection.value.tags,
     firstThreeUps: copySelection.value.firstThreeUps,
     skillUpOrder: copySelection.value.skillUpOrder,
   }
@@ -1874,6 +1932,7 @@ const displayBuild = computed<Build | null>(() => {
         summonerSpells: sub.summonerSpells,
         skillOrder: sub.skillOrder,
         roles: sub.roles,
+        tags: sub.tags !== undefined ? sub.tags : (baseBuild.tags ?? []),
         description: sub.description ?? baseBuild.description,
         gameVersion: sub.gameVersion || baseBuild.gameVersion,
       } as Build
@@ -2115,6 +2174,41 @@ const versionForImages = defaultVersion
 // Rôles
 const allRoles: Role[] = ['top', 'jungle', 'mid', 'adc', 'support']
 const selectedRoles = computed(() => displayBuild.value?.roles || [])
+/** Paires alignées sur `public/data/regions.json` (shurima, freljord, void, ionia). */
+const orderedBuildTags: Array<{ id: BuildTag; label: string; gradient: [string, string] }> = [
+  { id: 'pro', label: 'Pro', gradient: ['#bd9700', '#704b00'] },
+  { id: 'otp', label: 'OTP', gradient: ['#00b4dd', '#003366'] },
+  { id: 'exotique', label: 'Exotique', gradient: ['#6e008a', '#420042'] },
+  { id: 'troll', label: 'Troll', gradient: ['#e4b5e4', '#36bfb1'] },
+]
+const selectedBuildTags = computed(() => displayBuild.value?.tags ?? [])
+const visibleBuildTags = computed(() =>
+  props.readonly
+    ? orderedBuildTags.filter(tag => selectedBuildTags.value.includes(tag.id))
+    : orderedBuildTags
+)
+
+/** Colonne gauche : bouton variantes + tags (tags toujours sous le bouton quand les deux sont visibles). */
+/** Bouton poker variantes (masqué en capture / sans contexte). */
+const showVariantTriggerButton = computed(
+  () =>
+    !props.forScreenshot &&
+    ((props.readonly && buildSubBuilds.value.length > 0) || (!props.readonly && hasChampion.value))
+)
+
+const showFrontVariantsTagsStack = computed(() => {
+  const variantShown = showVariantTriggerButton.value
+  const tagsShown = !props.readonly || selectedBuildTags.value.length > 0
+  return variantShown || tagsShown
+})
+
+/** Même décalage vertical des tags que lorsque le bouton variantes est présent. */
+const showVariantsTagColumnSpacer = computed(
+  () =>
+    showFrontVariantsTagsStack.value &&
+    !showVariantTriggerButton.value &&
+    (!props.readonly || selectedBuildTags.value.length > 0)
+)
 
 const getRoleName = (role: Role): string => {
   const names: Record<Role, string> = {
@@ -2137,6 +2231,21 @@ const toggleRole = (role: Role) => {
     // Ajouter le rôle
     buildStore.setRoles([...currentRoles, role])
   }
+}
+
+const toggleBuildTag = (tag: BuildTag) => {
+  if (props.readonly || props.build) return
+  const currentTags = selectedBuildTags.value
+  if (currentTags.includes(tag)) {
+    buildStore.setTags(currentTags.filter(t => t !== tag))
+    return
+  }
+  if (tag === 'troll') {
+    buildStore.setTags(['troll'])
+    return
+  }
+  const withoutTroll = currentTags.filter(t => t !== 'troll')
+  buildStore.setTags([...withoutTroll, tag])
 }
 
 // Get selected runes, spells, and shards
@@ -3520,10 +3629,80 @@ defineExpose({
   object-fit: contain;
 }
 
-.variants-count-indicator {
+.variants-tags-stack {
   position: absolute;
   top: 8px;
   left: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.variants-tags-stack > .variants-count-indicator {
+  position: static;
+}
+
+/* Espace réservé : même classes que le bouton sauf visibilité (liste sans bouton, capture, etc.). */
+.variants-count-indicator--layout-spacer {
+  visibility: hidden;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.build-tags-section {
+  display: flex;
+  justify-content: flex-start;
+  width: max-content;
+  max-width: 112px;
+}
+
+.build-tags-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+  width: 100%;
+}
+
+.build-tag-chip {
+  width: 100%;
+  border-radius: 9999px;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background: rgba(15, 23, 42, 0.25);
+  color: rgba(203, 213, 225, 0.82);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  min-height: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 5px;
+}
+
+.build-tag-chip:disabled {
+  cursor: default;
+}
+
+.build-tag-chip--selected {
+  color: rgba(255, 255, 255, 0.95);
+  border-color: rgb(255 255 255 / 0.38);
+  background: linear-gradient(130deg, var(--tag-g1) 0%, var(--tag-g2) 100%);
+  filter: grayscale(0%);
+}
+
+.build-tag-chip--selected.build-tag-chip--troll-selected {
+  color: rgba(12, 12, 14, 0.94);
+  border-color: rgb(12 12 14 / 0.35);
+}
+
+.build-tag-chip--unselected {
+  filter: grayscale(100%);
+}
+
+.variants-count-indicator {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -3535,7 +3714,6 @@ defineExpose({
   font-size: 9px;
   line-height: 1;
   white-space: nowrap;
-  z-index: 10;
 }
 
 .variants-poker-icon {

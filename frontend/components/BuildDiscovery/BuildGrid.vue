@@ -589,6 +589,15 @@ const filteredCustomBuilds = computed(() => {
     results = results.filter(build => build.roles?.includes(discoveryStore.selectedRole!))
   }
 
+  // Filter by build tag
+  if (discoveryStore.selectedTag) {
+    const tag = discoveryStore.selectedTag
+    results = results.filter(build => {
+      if (build.tags?.includes(tag)) return true
+      return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
+    })
+  }
+
   // Filter by version
   if (discoveryStore.selectedVersion) {
     results = results.filter(build => build.gameVersion === discoveryStore.selectedVersion)

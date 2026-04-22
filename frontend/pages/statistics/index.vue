@@ -451,6 +451,7 @@ import {
 } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
+import { RANK_TIERS } from '~/utils/rankTiers'
 import { getRankedEmblemUrl } from '~/utils/rankedEmblem'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useItemsStore } from '~/stores/ItemsStore'
@@ -3247,18 +3248,7 @@ const drakeSoulGlobal = computed(() => {
     byLoss: rows.reduce((s, r) => s + r.byLoss, 0),
   }
 })
-const rankTiers = [
-  'IRON',
-  'BRONZE',
-  'SILVER',
-  'GOLD',
-  'PLATINUM',
-  'EMERALD',
-  'DIAMOND',
-  'MASTER',
-  'GRANDMASTER',
-  'CHALLENGER',
-]
+const rankTiers = [...RANK_TIERS]
 const roles = [
   { value: 'TOP', label: 'Top', icon: '/icons/roles/top.png' },
   { value: 'JUNGLE', label: 'Jungle', icon: '/icons/roles/jungle.png' },

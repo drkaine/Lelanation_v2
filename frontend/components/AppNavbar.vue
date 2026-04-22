@@ -125,6 +125,14 @@
             >
               {{ t('statisticsPage.modeCustom') }}
             </NuxtLink>
+            <NuxtLink
+              :to="statisticsRecapLink"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isStatisticsRecapActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('statisticsPage.recapNav') }}
+            </NuxtLink>
           </div>
         </div>
         <a
@@ -252,6 +260,14 @@
             >
               {{ t('statisticsPage.modeCustom') }}
             </NuxtLink>
+            <NuxtLink
+              :to="statisticsRecapLink"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isStatisticsRecapActive }"
+              @click="closeStatisticsMenu"
+            >
+              {{ t('statisticsPage.recapNav') }}
+            </NuxtLink>
           </div>
         </div>
         <NuxtLink
@@ -327,9 +343,14 @@ const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
 const statisticsCustomStore = useStatisticsCustomStore()
 const statisticsClassicLink = computed(() => localePath('/statistics'))
 const statisticsCustomLink = computed(() => localePath('/statistics/custom'))
+const statisticsRecapLink = computed(() => localePath('/statistics/recap'))
 const isStatisticsSectionActive = computed(() => route.path.startsWith('/statistics'))
+const isStatisticsRecapActive = computed(() => route.path.includes('/statistics/recap'))
 const isStatisticsClassicActive = computed(
-  () => route.path.startsWith('/statistics') && !route.path.startsWith('/statistics/custom')
+  () =>
+    route.path.startsWith('/statistics') &&
+    !route.path.startsWith('/statistics/custom') &&
+    !route.path.includes('/statistics/recap')
 )
 const isStatisticsCustomActive = computed(() => route.path.startsWith('/statistics/custom'))
 const hasCustomStatistics = computed(() => statisticsCustomStore.hasCustomStatistics)

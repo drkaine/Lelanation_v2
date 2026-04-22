@@ -1,72 +1,102 @@
 <template>
-  <div class="build-filters flex flex-1 flex-wrap items-center gap-2">
-    <div class="role-filter-row flex items-center gap-0 overflow-x-auto whitespace-nowrap">
-      <button
-        type="button"
-        :class="roleChipClass(selectedRole === null)"
-        :title="t('statisticsPage.allRoles')"
-        :aria-label="t('statisticsPage.allRoles')"
-        :aria-pressed="selectedRole === null"
-        @click="setRole(null)"
-      >
-        <img src="/icons/roles/all-role.png" alt="" class="h-5 w-5" role="presentation" />
-      </button>
-      <button
-        v-for="role in roleOptions"
-        :key="role.value"
-        type="button"
-        :class="roleChipClass(selectedRole === role.value)"
-        :title="role.label"
-        :aria-label="role.label"
-        :aria-pressed="selectedRole === role.value"
-        @click="toggleRole(role.value)"
-      >
-        <img :src="role.icon" alt="" class="h-5 w-5" role="presentation" />
-      </button>
-    </div>
+  <div class="build-filters flex min-w-0 flex-1 items-center gap-2">
+    <div class="filters-one-line flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+      <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
+        <button
+          type="button"
+          :class="roleChipClass(selectedRole === null)"
+          :title="t('statisticsPage.allRoles')"
+          :aria-label="t('statisticsPage.allRoles')"
+          :aria-pressed="selectedRole === null"
+          @click="setRole(null)"
+        >
+          <img src="/icons/roles/all-role.png" alt="" class="h-5 w-5" role="presentation" />
+        </button>
+        <button
+          v-for="role in roleOptions"
+          :key="role.value"
+          type="button"
+          :class="roleChipClass(selectedRole === role.value)"
+          :title="role.label"
+          :aria-label="role.label"
+          :aria-pressed="selectedRole === role.value"
+          @click="toggleRole(role.value)"
+        >
+          <img :src="role.icon" alt="" class="h-5 w-5" role="presentation" />
+        </button>
+      </div>
 
-    <select
-      id="build-discovery-version"
-      v-model="selectedVersion"
-      class="filter-select"
-      :aria-label="t('buildDiscovery.version')"
-      @change="handleVersionChange"
-    >
-      <option value="">{{ t('buildDiscovery.allVersions') }}</option>
-      <option v-for="version in availableVersions" :key="version" :value="version">
-        {{ version }}
-      </option>
-    </select>
+      <span class="filters-sep shrink-0" aria-hidden="true" />
 
-    <select
-      id="build-discovery-sort"
-      v-model="sortBy"
-      class="filter-select"
-      :aria-label="t('buildDiscovery.sort')"
-      @change="handleSortChange"
-    >
-      <option value="recent">{{ t('buildDiscovery.mostRecent') }}</option>
-      <option value="popular">{{ t('buildDiscovery.mostPopular') }}</option>
-      <option value="name">{{ t('buildDiscovery.nameAZ') }}</option>
-    </select>
+      <div class="role-filter-row flex shrink-0 items-center gap-0 whitespace-nowrap">
+        <button
+          type="button"
+          :class="roleChipClass(selectedTag === null)"
+          :title="t('buildDiscovery.allTags')"
+          :aria-label="t('buildDiscovery.allTags')"
+          :aria-pressed="selectedTag === null"
+          @click="setTag(null)"
+        >
+          <img src="/icons/roles/all-role.png" alt="" class="h-5 w-5" role="presentation" />
+        </button>
+        <button
+          v-for="opt in tagFilterOptions"
+          :key="opt.value"
+          type="button"
+          :class="tagChipClass(selectedTag === opt.value, opt.value)"
+          :style="tagChipStyle(selectedTag === opt.value, opt.value)"
+          :title="t(opt.labelKey)"
+          :aria-label="t(opt.labelKey)"
+          :aria-pressed="selectedTag === opt.value"
+          @click="toggleTag(opt.value)"
+        >
+          <span class="tag-filter-chip-label">{{ opt.short }}</span>
+        </button>
+      </div>
 
-    <div class="filter-inline-label">
-      <span class="filter-inline-label-text">{{ t('buildDiscovery.show') }}</span>
       <select
-        id="build-discovery-per-page"
-        v-model="pageSize"
-        class="filter-select"
-        :aria-label="t('buildDiscovery.buildsPerPage')"
+        id="build-discovery-version"
+        v-model="selectedVersion"
+        class="filter-select shrink-0"
+        :aria-label="t('buildDiscovery.version')"
+        @change="handleVersionChange"
       >
-        <option :value="20">20</option>
-        <option :value="30">30</option>
-        <option :value="40">40</option>
-        <option :value="50">50</option>
-        <option value="all">{{ t('buildDiscovery.all') }}</option>
+        <option value="">{{ t('buildDiscovery.allVersions') }}</option>
+        <option v-for="version in availableVersions" :key="version" :value="version">
+          {{ version }}
+        </option>
       </select>
+
+      <select
+        id="build-discovery-sort"
+        v-model="sortBy"
+        class="filter-select shrink-0"
+        :aria-label="t('buildDiscovery.sort')"
+        @change="handleSortChange"
+      >
+        <option value="recent">{{ t('buildDiscovery.mostRecent') }}</option>
+        <option value="popular">{{ t('buildDiscovery.mostPopular') }}</option>
+        <option value="name">{{ t('buildDiscovery.nameAZ') }}</option>
+      </select>
+
+      <div class="filter-inline-label shrink-0">
+        <span class="filter-inline-label-text">{{ t('buildDiscovery.show') }}</span>
+        <select
+          id="build-discovery-per-page"
+          v-model="pageSize"
+          class="filter-select"
+          :aria-label="t('buildDiscovery.buildsPerPage')"
+        >
+          <option :value="20">20</option>
+          <option :value="30">30</option>
+          <option :value="40">40</option>
+          <option :value="50">50</option>
+          <option value="all">{{ t('buildDiscovery.all') }}</option>
+        </select>
+      </div>
     </div>
 
-    <button v-if="hasActiveFilters" class="filter-clear" @click="clearFilters">
+    <button v-if="hasActiveFilters" class="filter-clear shrink-0" @click="clearFilters">
       {{ t('buildDiscovery.clearFilters') }}
     </button>
   </div>
@@ -78,7 +108,12 @@ import { useI18n } from 'vue-i18n'
 import { useBuildDiscoveryStore } from '~/stores/BuildDiscoveryStore'
 import { useChampionsStore } from '~/stores/ChampionsStore'
 import { useVersionStore } from '~/stores/VersionStore'
-import type { FilterRole, SortOption, PageSizeOption } from '~/stores/BuildDiscoveryStore'
+import type {
+  FilterRole,
+  FilterBuildTag,
+  SortOption,
+  PageSizeOption,
+} from '~/stores/BuildDiscoveryStore'
 
 const { locale, t } = useI18n()
 const discoveryStore = useBuildDiscoveryStore()
@@ -91,6 +126,7 @@ const riotLocale = computed(() => getRiotLanguage(locale.value))
 const selectedVersion = ref(discoveryStore.selectedVersion ?? '')
 const selectedChampion = ref<string | null>(discoveryStore.selectedChampion)
 const selectedRole = ref<FilterRole>(discoveryStore.selectedRole)
+const selectedTag = ref<FilterBuildTag>(discoveryStore.selectedTag)
 const sortBy = ref<SortOption>(discoveryStore.sortBy)
 const pageSize = computed({
   get: () => discoveryStore.pageSize,
@@ -142,6 +178,29 @@ const roleOptions: Array<{ value: Exclude<FilterRole, null>; label: string; icon
   { value: 'support', label: 'Support', icon: '/icons/roles/support.png' },
 ]
 
+const tagFilterOptions: Array<{
+  value: Exclude<FilterBuildTag, null>
+  short: string
+  labelKey:
+    | 'buildDiscovery.tagPro'
+    | 'buildDiscovery.tagOtp'
+    | 'buildDiscovery.tagExotique'
+    | 'buildDiscovery.tagTroll'
+}> = [
+  { value: 'pro', short: 'Pro', labelKey: 'buildDiscovery.tagPro' },
+  { value: 'otp', short: 'OTP', labelKey: 'buildDiscovery.tagOtp' },
+  { value: 'exotique', short: 'Exo', labelKey: 'buildDiscovery.tagExotique' },
+  { value: 'troll', short: 'Troll', labelKey: 'buildDiscovery.tagTroll' },
+]
+
+/** Aligné sur `public/data/regions.json` (shurima, freljord, void, ionia). */
+const tagFilterGradients: Record<Exclude<FilterBuildTag, null>, [string, string]> = {
+  pro: ['#bd9700', '#704b00'],
+  otp: ['#00b4dd', '#003366'],
+  exotique: ['#6e008a', '#420042'],
+  troll: ['#e4b5e4', '#36bfb1'],
+}
+
 const setRole = (role: FilterRole) => {
   selectedRole.value = role
   discoveryStore.setSelectedRole(role)
@@ -156,11 +215,40 @@ const toggleRole = (role: FilterRole) => {
   }
 }
 
+const setTag = (tag: FilterBuildTag) => {
+  selectedTag.value = tag
+  discoveryStore.setSelectedTag(tag)
+}
+
+const toggleTag = (tag: Exclude<FilterBuildTag, null>) => {
+  if (selectedTag.value === tag) {
+    setTag(null)
+  } else {
+    setTag(tag)
+  }
+}
+
 const roleChipClass = (active: boolean) =>
   [
     'inline-flex h-7 w-7 items-center justify-center rounded-full p-0 transition-all',
     active ? 'bg-accent/15' : 'opacity-60 grayscale hover:opacity-100 hover:grayscale-0',
   ].join(' ')
+
+const tagChipClass = (active: boolean, value: Exclude<FilterBuildTag, null>) =>
+  [
+    'tag-filter-chip inline-flex h-7 min-w-[1.75rem] max-w-[3.25rem] shrink-0 items-center justify-center rounded-full border border-transparent px-1.5 py-0 text-[9px] font-bold leading-none transition-all',
+    active
+      ? ['tag-filter-chip--on', value === 'troll' ? 'tag-filter-chip--troll' : '']
+          .filter(Boolean)
+          .join(' ')
+      : 'opacity-60 grayscale hover:opacity-100 hover:grayscale-0',
+  ].join(' ')
+
+function tagChipStyle(active: boolean, value: Exclude<FilterBuildTag, null>) {
+  if (!active) return undefined
+  const [g1, g2] = tagFilterGradients[value]
+  return { '--tag-g1': g1, '--tag-g2': g2 } as Record<string, string>
+}
 
 const handleVersionChange = () => {
   discoveryStore.setSelectedVersion(selectedVersion.value || null)
@@ -176,6 +264,7 @@ const clearFilters = () => {
   selectedChampion.value = null
   championSearchQuery.value = ''
   selectedRole.value = null
+  selectedTag.value = null
   sortBy.value = 'recent'
 }
 
@@ -199,11 +288,41 @@ watch(locale, () => {
 .role-filter-row {
   margin: 0;
   padding: 0;
+}
+
+.filters-one-line {
   scrollbar-width: none;
 }
 
-.role-filter-row::-webkit-scrollbar {
+.filters-one-line::-webkit-scrollbar {
   display: none;
+}
+
+.filters-sep {
+  display: inline-block;
+  width: 1px;
+  height: 1.25rem;
+  background: rgb(var(--rgb-primary) / 0.35);
+}
+
+.tag-filter-chip--on {
+  border-color: rgb(255 255 255 / 0.38) !important;
+  background: linear-gradient(130deg, var(--tag-g1) 0%, var(--tag-g2) 100%) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.tag-filter-chip--on.tag-filter-chip--troll {
+  border-color: rgb(12 12 14 / 0.35) !important;
+  color: rgba(12, 12, 14, 0.94) !important;
+}
+
+.tag-filter-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 3rem;
 }
 
 .filter-select {

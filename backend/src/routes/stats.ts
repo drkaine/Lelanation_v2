@@ -43,6 +43,11 @@ import {
 } from '../services/StatsSummonerSpellsService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { getBalanceFramework } from '../services/StatsBalanceService.js'
+import {
+  batchWatchlistDeltas,
+  getGlobalWinrateMovers,
+  getWatchlistDelta,
+} from '../services/StatsWatchlistService.js'
 import { isDatabaseConfigured } from '../db.js'
 
 const router = Router()
@@ -1076,6 +1081,108 @@ router.get('/trends/deltas', async (req: Request, res: Response) => {
     banrateDeltaPct: STATS_TREND_BAN_DELTA_PCT,
     gamesDeltaPct: STATS_TREND_GAMES_DELTA_PCT,
   }, metricsByTier })
+})
+
+/** GET /api/stats/watchlist/delta — delta win/pick/ban between latest snapshot day and N days before (aggregated tiers unless rankTier set). */
+router.get('/watchlist/delta', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const championIdRaw = req.query.championId
+  const championId =
+    championIdRaw != null && String(championIdRaw) !== ''
+      ? Number.parseInt(String(championIdRaw), 10)
+      : null
+  const role = queryString(req.query.role)
+  const rankTier = queryString(req.query.rankTier)
+  const days = req.query.days != null ? Number.parseInt(String(req.query.days), 10) : 7
+  if (championId != null && (!Number.isFinite(championId) || championId <= 0)) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const data = await getWatchlistDelta({
+    championId: championId != null && Number.isFinite(championId) && championId > 0 ? championId : null,
+    role,
+    rankTier,
+    days: Number.isFinite(days) ? days : 7,
+  })
+  return res.json(data)
+})
+
+/** POST /api/stats/watchlist/deltas/batch — body `{ queries: [{ id, days, global?, rankTier?, championId?, role? }] }` max 24. If `global: true`, pool-wide delta (optional rankTier); else championId or role required. */
+router.post('/watchlist/deltas/batch', async (req: Request, res: Response) => {
+  res.set('Cache-Control', 'no-store')
+  const body = req.body as { queries?: unknown }
+  const raw = body?.queries
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return res.status(400).json({ error: 'queries array required' })
+  }
+  if (raw.length > 24) {
+    return res.status(400).json({ error: 'Too many queries (max 24)' })
+  }
+  const queries: Array<{
+    id: string
+    championId?: number | null
+    role?: string | null
+    rankTier?: string | null
+    days: number
+    global?: boolean
+  }> = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const id = typeof o.id === 'string' ? o.id : null
+    if (!id) return res.status(400).json({ error: 'Each query must have string id' })
+    const isGlobal = o.global === true || o.global === 'true' || o.global === 1 || o.global === '1'
+    const cid =
+      o.championId != null && o.championId !== ''
+        ? Number.parseInt(String(o.championId), 10)
+        : null
+    if (cid != null && (!Number.isFinite(cid) || cid <= 0)) {
+      return res.status(400).json({ error: `Invalid championId for query ${id}` })
+    }
+    const d = o.days != null ? Number.parseInt(String(o.days), 10) : 7
+    if (!Number.isFinite(d) || d < 1 || d > 30) {
+      return res.status(400).json({ error: `Invalid days for query ${id}` })
+    }
+    const role = typeof o.role === 'string' ? o.role : null
+    const rankTier = typeof o.rankTier === 'string' ? o.rankTier : null
+    const hasChampion = cid != null && Number.isFinite(cid) && cid > 0
+    const hasRole = role != null && role.trim() !== ''
+    if (!isGlobal && !hasChampion && !hasRole) {
+      return res.status(400).json({
+        error: `Query ${id}: championId or role is required unless global is true`,
+      })
+    }
+    queries.push({
+      id,
+      championId: cid,
+      role,
+      rankTier,
+      days: d,
+      ...(isGlobal ? { global: true as const } : {}),
+    })
+  }
+  if (queries.length === 0) {
+    return res.status(400).json({ error: 'No valid queries' })
+  }
+  const results = await batchWatchlistDeltas(queries)
+  return res.json({ results })
+})
+
+/** GET /api/stats/watchlist/global-movers — top |ΔWR| champions (aggregated). Query: days, limit, minGamesLatest, minGamesPast */
+router.get('/watchlist/global-movers', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const days = req.query.days != null ? Number.parseInt(String(req.query.days), 10) : 7
+  const limit = req.query.limit != null ? Number.parseInt(String(req.query.limit), 10) : 5
+  const minGamesLatest =
+    req.query.minGamesLatest != null ? Number.parseInt(String(req.query.minGamesLatest), 10) : 80
+  const minGamesPast =
+    req.query.minGamesPast != null ? Number.parseInt(String(req.query.minGamesPast), 10) : 80
+  const data = await getGlobalWinrateMovers({
+    days: Number.isFinite(days) ? days : 7,
+    limit: Number.isFinite(limit) ? limit : 5,
+    minGamesLatest: Number.isFinite(minGamesLatest) ? minGamesLatest : 80,
+    minGamesPast: Number.isFinite(minGamesPast) ? minGamesPast : 80,
+  })
+  return res.json(data)
 })
 
 /** New API: /api/stats/runes/table */

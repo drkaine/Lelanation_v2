@@ -17,7 +17,7 @@
         <span>{{ t('mapPlanner.map') }}</span>
         <select :value="store.currentBoard.mapId" @change="onMapChange">
           <option v-for="mapAsset in MAP_PLANNER_MAPS" :key="mapAsset.id" :value="mapAsset.id">
-            {{ mapAsset.name }}
+            {{ mapDisplayName(mapAsset) }}
           </option>
         </select>
       </label>
@@ -51,12 +51,12 @@
           type="button"
           class="icon-button"
           :class="{ active: selectedIconKey === icon.key }"
-          :title="icon.label"
+          :title="iconDisplayLabel(icon)"
           @click="selectIcon(icon.key)"
         >
           <img
             :src="resolveAsset(icon.localPath, icon.fallbackUrl)"
-            :alt="icon.label"
+            :alt="iconDisplayLabel(icon)"
             @error="markAssetFallback(icon.localPath)"
           />
         </button>
@@ -94,7 +94,7 @@
         <img
           class="map-background"
           :src="resolveAsset(currentMap.localPath, currentMap.fallbackUrl)"
-          alt="Map"
+          :alt="t('mapPlanner.mapImageAlt')"
           @error="markAssetFallback(currentMap.localPath)"
         />
         <canvas ref="canvasRef" class="drawing-canvas" width="1024" height="1024" />
@@ -103,7 +103,7 @@
           :key="iconInstance.id"
           class="placed-icon"
           :src="getIconAsset(iconInstance.iconKey).url"
-          :alt="iconInstance.iconKey"
+          :alt="iconLabelForKey(iconInstance.iconKey)"
           :style="{
             left: `${iconInstance.x * 100}%`,
             top: `${iconInstance.y * 100}%`,
@@ -144,8 +144,20 @@
           {{ t('mapPlanner.visible') }}
         </label>
         <div class="layer-actions">
-          <button type="button" @click="store.duplicateLayer(layer.id)">⧉</button>
-          <button type="button" @click="store.removeLayer(layer.id)">✕</button>
+          <button
+            type="button"
+            :aria-label="t('mapPlanner.duplicateLayer')"
+            @click="store.duplicateLayer(layer.id)"
+          >
+            ⧉
+          </button>
+          <button
+            type="button"
+            :aria-label="t('mapPlanner.removeLayer')"
+            @click="store.removeLayer(layer.id)"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
@@ -173,7 +185,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { MapPlannerIconInstance, MapPlannerStroke } from '~/stores/MapPlannerStore'
 import { useMapPlannerStore } from '~/stores/MapPlannerStore'
-import { MAP_PLANNER_ICONS, MAP_PLANNER_MAPS } from '~/utils/mapPlannerAssets'
+import {
+  MAP_PLANNER_ICONS,
+  MAP_PLANNER_MAPS,
+  type MapPlannerIconAsset,
+  type MapPlannerAsset,
+} from '~/utils/mapPlannerAssets'
 
 type ToolMode = 'brush' | 'eraser' | 'icon'
 
@@ -186,7 +203,7 @@ interface VisibleIconInstance extends MapPlannerIconInstance {
   layerId: string
 }
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const route = useRoute()
 const store = useMapPlannerStore()
 
@@ -217,7 +234,24 @@ const visibleIcons = computed(() => {
 
 useHead({
   title: () => t('mapPlanner.metaTitle'),
+  meta: [{ name: 'description', content: () => t('mapPlanner.metaDescription') }],
 })
+
+function mapDisplayName(mapAsset: MapPlannerAsset): string {
+  const key = `mapPlanner.maps.${mapAsset.id}`
+  return te(key) ? t(key) : mapAsset.name
+}
+
+function iconDisplayLabel(icon: MapPlannerIconAsset): string {
+  const key = `mapPlanner.icons.${icon.key}`
+  return te(key) ? t(key) : icon.label
+}
+
+function iconLabelForKey(iconKey: string): string {
+  const icon = MAP_PLANNER_ICONS.find(item => item.key === iconKey)
+  if (!icon) return iconKey
+  return iconDisplayLabel(icon)
+}
 
 function markAssetFallback(localPath: string): void {
   failedAssets.value.add(localPath)

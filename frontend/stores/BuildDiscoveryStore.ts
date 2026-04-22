@@ -8,6 +8,8 @@ import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
+/** Filtre découverte : un tag build (Pro / OTP / …), même logique que `Build.tags`. */
+export type FilterBuildTag = 'pro' | 'otp' | 'exotique' | 'troll' | null
 export type PageSizeOption = 20 | 30 | 40 | 50 | 'all'
 
 const PAGINATION_STORAGE_KEY = 'lelanation_builds_pagination'
@@ -49,6 +51,7 @@ interface BuildDiscoveryState {
   searchQuery: string
   selectedChampion: string | null
   selectedRole: FilterRole
+  selectedTag: FilterBuildTag
   selectedVersion: string | null
   sortBy: SortOption
   pageSize: PageSizeOption
@@ -63,6 +66,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
     searchQuery: '',
     selectedChampion: null,
     selectedRole: null,
+    selectedTag: null,
     selectedVersion: null,
     sortBy: 'recent',
     pageSize: 20,
@@ -100,6 +104,15 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         results = results.filter(build => {
           // Vérifier si le build a le rôle sélectionné dans son champ roles
           return build.roles && build.roles.includes(this.selectedRole!)
+        })
+      }
+
+      // Filter by build tag (Pro, OTP, …)
+      if (this.selectedTag) {
+        const tag = this.selectedTag
+        results = results.filter(build => {
+          if (build.tags?.includes(tag)) return true
+          return (build.subBuilds ?? []).some(sub => sub.tags?.includes(tag))
         })
       }
 
@@ -162,6 +175,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
         this.searchQuery !== '' ||
         this.selectedChampion !== null ||
         this.selectedRole !== null ||
+        this.selectedTag !== null ||
         this.selectedVersion !== null
       )
     },
@@ -219,6 +233,11 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.applyFilters()
     },
 
+    setSelectedTag(tag: FilterBuildTag) {
+      this.selectedTag = tag
+      this.applyFilters()
+    },
+
     setSelectedVersion(version: string | null) {
       this.selectedVersion = version
       this.applyFilters()
@@ -233,6 +252,7 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
       this.searchQuery = ''
       this.selectedChampion = null
       this.selectedRole = null
+      this.selectedTag = null
       this.selectedVersion = null
       this.applyFilters()
     },

@@ -41,6 +41,7 @@ type BuildLikeForValidation = Pick<
   Build,
   'champion' | 'roles' | 'items' | 'runes' | 'summonerSpells' | 'skillOrder'
 >
+type BuildTag = NonNullable<Build['tags']>[number]
 
 function isBuildPayloadValid(build: BuildLikeForValidation | null | undefined): boolean {
   if (!build) return false
@@ -108,6 +109,7 @@ export const useBuildStore = defineStore('build', {
         summonerSpells: sub.summonerSpells,
         skillOrder: sub.skillOrder,
         roles: sub.roles,
+        tags: sub.tags !== undefined ? sub.tags : (this.currentBuild.tags ?? []),
         description: sub.description ?? this.currentBuild.description,
         gameVersion: sub.gameVersion || this.currentBuild.gameVersion,
       } as Build
@@ -317,6 +319,7 @@ export const useBuildStore = defineStore('build', {
           skillUpOrder: [null as any, null as any, null as any],
         },
         roles: [],
+        tags: [],
         upvote: 0,
         downvote: 0,
         gameVersion: '',
@@ -453,6 +456,7 @@ export const useBuildStore = defineStore('build', {
         summonerSpells: [null, null],
         skillOrder: null,
         roles: [...(b.roles ?? [])],
+        tags: [...(b.tags ?? [])],
         gameVersion: b.gameVersion || '',
       }
       if (!b.subBuilds) b.subBuilds = []
@@ -705,10 +709,11 @@ export const useBuildStore = defineStore('build', {
       summonerSpells: [SummonerSpell | null, SummonerSpell | null]
       skillOrder: SkillOrder | null
       description: string
+      tags: BuildTag[]
     } | null {
       if (!this.currentBuild) return null
+      const b = this.currentBuild
       if (source === 'main') {
-        const b = this.currentBuild
         return {
           items: b.items ?? [],
           runes: b.runes ?? null,
@@ -716,9 +721,10 @@ export const useBuildStore = defineStore('build', {
           summonerSpells: b.summonerSpells ?? [null, null],
           skillOrder: b.skillOrder ?? null,
           description: b.description ?? '',
+          tags: [...(b.tags ?? [])],
         }
       }
-      const subs = this.currentBuild.subBuilds as SubBuild[] | undefined
+      const subs = b.subBuilds as SubBuild[] | undefined
       const sub = subs?.[source]
       if (!sub) return null
       return {
@@ -728,6 +734,7 @@ export const useBuildStore = defineStore('build', {
         summonerSpells: sub.summonerSpells ?? [null, null],
         skillOrder: sub.skillOrder ?? null,
         description: sub.description ?? '',
+        tags: sub.tags !== undefined ? [...sub.tags] : [...(b.tags ?? [])],
       }
     },
 
@@ -747,6 +754,7 @@ export const useBuildStore = defineStore('build', {
         firstThreeUps?: boolean
         skillUpOrder?: boolean
         description?: boolean
+        tags?: boolean
       }
     ) {
       const data = this.getSourceBuildData(source)
@@ -762,6 +770,7 @@ export const useBuildStore = defineStore('build', {
       if (fields.summonerSpells)
         destBuild.summonerSpells = [data.summonerSpells[0], data.summonerSpells[1]]
       if (fields.description) destBuild.description = data.description
+      if (fields.tags) destBuild.tags = [...data.tags]
 
       if (fields.skillOrder && data.skillOrder) {
         destBuild.skillOrder = data.skillOrder
@@ -803,6 +812,25 @@ export const useBuildStore = defineStore('build', {
         }))
       }
       this.currentBuild.updatedAt = new Date().toISOString()
+    },
+
+    /** Tags du build principal ou de la variante actuellement affichée. */
+    setTags(tags: BuildTag[]) {
+      if (!this.currentBuild) {
+        this.createNewBuild()
+      }
+      if (!this.currentBuild) return
+      const b = this.currentBuild
+      const next = [...tags]
+      if (this.displayedVariant === 'main') {
+        b.tags = next
+      } else if (typeof this.displayedVariant === 'number') {
+        const sub = b.subBuilds?.[this.displayedVariant]
+        if (sub) {
+          sub.tags = next
+        }
+      }
+      b.updatedAt = new Date().toISOString()
     },
 
     setName(name: string) {

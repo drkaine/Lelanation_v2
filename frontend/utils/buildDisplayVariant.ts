@@ -14,6 +14,7 @@ export function resolveDisplayedBuild(base: Build, subIndex: number | null): Bui
     summonerSpells: sub.summonerSpells,
     skillOrder: sub.skillOrder,
     roles: sub.roles,
+    tags: sub.tags !== undefined ? sub.tags : (base.tags ?? []),
     description: sub.description ?? base.description,
     gameVersion: sub.gameVersion || base.gameVersion,
   } as Build

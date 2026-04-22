@@ -4,19 +4,16 @@ import { writeSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { prisma } from '../db.js'
 import { Prisma } from '../generated/prisma/index.js'
-import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
+import { getRiotAppTargetPer120s, RiotRateLimiter } from '../services/RiotRateLimiter.js'
 import { RiotHttpClient, resolveRiotApiKey, type RiotLeagueEntryDto } from '../services/RiotHttpClient.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
+import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
 const execFileAsync = promisify(execFile)
 
 /** Line-buffered stdout for PM2 / non-TTY (avoids long silent periods). */
 function logLine(message: string): void {
   writeSync(1, Buffer.from(`${message}\n`, 'utf8'))
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)))
 }
 
 function normalizeRankTier(raw: unknown): string | null {
@@ -50,16 +47,61 @@ function isLikelyRiotPuuid(value: string | null | undefined): boolean {
   return v.length >= 30
 }
 
+/**
+ * Copy ladder rank from `players` into participant rows still UNRANKED when the player already has a
+ * real tier (not NULL / empty / literal UNRANKED). No requirement that `ingest_matchs.rank_tier` still
+ * be UNRANKED — match-level recomputation can have run while participant rows stayed stale.
+ *
+ * Note: `players.rank_tier IS NOT NULL` alone is a weak diagnostic: the value 'UNRANKED' is non-NULL.
+ * Prefer counting with `upper(trim(rank_tier)) <> 'UNRANKED'` to see exploitable ranks only.
+ */
+async function backfillIngestFromPlayerRanks(targetGameVersion: string): Promise<void> {
+  const t0 = Date.now()
+  const gameFilter = targetGameVersion
+    ? Prisma.sql`AND im.game_version = ${targetGameVersion}`
+    : Prisma.sql``
+
+  const playerHasExploitableRankSql = Prisma.sql`
+      AND p.rank_tier IS NOT NULL
+      AND NULLIF(TRIM(p.rank_tier), '') IS NOT NULL
+      AND UPPER(TRIM(p.rank_tier)) <> 'UNRANKED'`
+
+  const countRows = await prisma.$queryRaw<[{ c: bigint }]>`
+    SELECT COUNT(*)::bigint AS c
+    FROM ingest_match_players imp
+    INNER JOIN players p ON p.id = imp.player_id
+    INNER JOIN ingest_matchs im ON im.id = imp.match_id
+    WHERE COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
+      ${playerHasExploitableRankSql}
+      ${gameFilter}
+  `
+  const pending = Number(countRows[0]?.c ?? 0n)
+  if (pending === 0) {
+    logLine(`[rank-repair] backfill_from_players: none pending (${Date.now() - t0}ms)`)
+    return
+  }
+
+  const updated = await prisma.$executeRaw`
+    UPDATE ingest_match_players imp
+    SET rank_tier = p.rank_tier, rank_division = p.rank_division
+    FROM players p, ingest_matchs im
+    WHERE imp.player_id = p.id
+      AND imp.match_id = im.id
+      AND COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED') = 'UNRANKED'
+      ${playerHasExploitableRankSql}
+      ${gameFilter}
+  `
+  logLine(
+    `[rank-repair] backfill_from_players: pending=${pending} rows_updated=${updated} ms=${Date.now() - t0}`
+  )
+}
+
 async function main(): Promise<void> {
   const resolved = await resolveRiotApiKey()
   if (!resolved.ok) throw new Error(resolved.error)
 
   const rateLimiter = new RiotRateLimiter()
-  const logger = {
-    info: async () => undefined,
-    error: async () => undefined,
-    step: async () => undefined,
-  } as any
+  const logger = createRiotPollerLogger('rank_repair')
   const client = new RiotHttpClient(rateLimiter, logger, 'rank_repair')
   client.setKey(resolved.key, resolved.source, resolved.clefType)
 
@@ -68,11 +110,14 @@ async function main(): Promise<void> {
     Math.min(100000, parseInt(process.env.RANK_REPAIR_BATCHES_PER_RUN ?? '2000', 10) || 2000)
   )
   const targetGameVersion = (process.env.RANK_REPAIR_GAME_VERSION ?? '').trim()
+  const appTarget120 = getRiotAppTargetPer120s()
   const maxRequestsPer120s = Math.max(
     1,
-    Math.min(95, parseInt(process.env.RANK_REPAIR_MAX_REQ_120S ?? '95', 10) || 95)
+    Math.min(
+      100,
+      parseInt(process.env.RANK_REPAIR_MAX_REQ_120S ?? '', 10) || appTarget120
+    )
   )
-  const windowMs = 120_000
   const maxTouchedMatchesPerWindow = Math.max(
     100,
     Math.min(10000, parseInt(process.env.RANK_REPAIR_MATCH_RECALC_CAP ?? '2000', 10) || 2000)
@@ -90,8 +135,18 @@ async function main(): Promise<void> {
   let lastIngestMatchPlayerId = 0n
   const startedAtMs = Date.now()
   logLine(
-    `[rank-repair] start targetGameVersion=${targetGameVersion || 'ALL'} maxReq120s=${maxRequestsPer120s} maxBatches=${maxBatchesPerRun} matchRecalcCap=${maxTouchedMatchesPerWindow}`
+    `[rank-repair] start targetGameVersion=${targetGameVersion || 'ALL'} riotAppTarget120s=${appTarget120} batchLimit=${maxRequestsPer120s} maxBatches=${maxBatchesPerRun} matchRecalcCap=${maxTouchedMatchesPerWindow}`
   )
+
+  const skipPlayerIngestBackfill = ['1', 'true', 'yes', 'on'].includes(
+    (process.env.RANK_REPAIR_SKIP_INGEST_BACKFILL_FROM_PLAYERS ?? '').trim().toLowerCase()
+  )
+  if (!skipPlayerIngestBackfill) {
+    await backfillIngestFromPlayerRanks(targetGameVersion)
+  } else {
+    logLine('[rank-repair] backfill_from_players: skipped (RANK_REPAIR_SKIP_INGEST_BACKFILL_FROM_PLAYERS)')
+  }
+
   for (let batch = 0; batch < maxBatchesPerRun; batch++) {
     const sqlFetchStart = Date.now()
     logLine(
@@ -298,7 +353,6 @@ async function main(): Promise<void> {
     }
 
     const elapsed = Date.now() - windowStart
-    const waitMs = Math.max(0, windowMs - elapsed)
     const windowApiSuccessDelta = totalApiSuccess - windowApiSuccessBefore
     const windowApiNoRankDelta = totalApiNoRank - windowApiNoRankBefore
     const windowApiErrorsDelta = totalApiErrors - windowApiErrorsBefore
@@ -307,9 +361,8 @@ async function main(): Promise<void> {
     const windowTeamsRecomputedDelta = teamsRecomputed - windowTeamsRecomputedBefore
     const totalElapsedMs = Date.now() - startedAtMs
     logLine(
-      `[rank-repair] window=${totalWindows} batch=${batchesProcessed}/${maxBatchesPerRun} candidates=${candidates.length} eligible=${eligibleCandidates.length} localPrefill=${prefilledFromPlayerRank} apiCandidates=${apiCandidates.length} apiSuccess=${windowApiSuccessDelta} apiNoRank=${windowApiNoRankDelta} apiError=${windowApiErrorsDelta} participantsUpdated=${windowParticipantsUpdatedDelta} touchedMatches=${touchedMatchIds.length} matchesRecomputed=${windowMatchesRecomputedDelta} teamsRecomputed=${windowTeamsRecomputedDelta} elapsedMs=${elapsed} waitMs=${waitMs} totalElapsedSec=${Math.round(totalElapsedMs / 1000)}`
+      `[rank-repair] window=${totalWindows} batch=${batchesProcessed}/${maxBatchesPerRun} candidates=${candidates.length} eligible=${eligibleCandidates.length} localPrefill=${prefilledFromPlayerRank} apiCandidates=${apiCandidates.length} apiSuccess=${windowApiSuccessDelta} apiNoRank=${windowApiNoRankDelta} apiError=${windowApiErrorsDelta} participantsUpdated=${windowParticipantsUpdatedDelta} touchedMatches=${touchedMatchIds.length} matchesRecomputed=${windowMatchesRecomputedDelta} teamsRecomputed=${windowTeamsRecomputedDelta} elapsedMs=${elapsed} totalElapsedSec=${Math.round(totalElapsedMs / 1000)}`
     )
-    if (waitMs > 0) await sleep(waitMs)
   }
 
   logLine(`[rank-repair] targetGameVersion: ${targetGameVersion || 'ALL'}`)

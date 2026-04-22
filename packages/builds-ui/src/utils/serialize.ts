@@ -32,6 +32,7 @@ function serializeSubBuild(sub: SubBuild): StoredSubBuild {
       ? { firstThreeUps: sub.skillOrder.firstThreeUps, skillUpOrder: sub.skillOrder.skillUpOrder }
       : null,
     roles: sub.roles ?? [],
+    tags: sub.tags ?? [],
     gameVersion: sub.gameVersion,
   }
 }
@@ -57,6 +58,7 @@ export function serializeBuild(build: Build): StoredBuild {
       ? { firstThreeUps: build.skillOrder.firstThreeUps, skillUpOrder: build.skillOrder.skillUpOrder }
       : null,
     roles: build.roles ?? [],
+    tags: build.tags ?? [],
     upvote: build.upvote ?? 0,
     downvote: build.downvote ?? 0,
     gameVersion: build.gameVersion,
@@ -149,6 +151,7 @@ function hydrateSubBuild(stored: StoredSubBuild, catalogs: HydrationCatalogs): S
     summonerSpells: resolveSpells(stored.summonerSpells, catalogs),
     skillOrder: normalizeSkillOrder(stored.skillOrder),
     roles: stored.roles ?? [],
+    tags: stored.tags ?? [],
     gameVersion: stored.gameVersion,
   }
 }
@@ -163,7 +166,7 @@ export function hydrateBuild(stored: StoredBuild, catalogs: HydrationCatalogs): 
     id: stored.id, name: stored.name, author: stored.author, description: stored.description,
     visibility: stored.visibility, champion, items, runes: stored.runes, shards: stored.shards,
     summonerSpells, skillOrder: normalizeSkillOrder(stored.skillOrder),
-    roles: stored.roles, upvote: stored.upvote, downvote: stored.downvote,
+    roles: stored.roles, tags: stored.tags ?? [], upvote: stored.upvote, downvote: stored.downvote,
     gameVersion: stored.gameVersion, createdAt: stored.createdAt, updatedAt: stored.updatedAt,
     subBuilds: stored.subBuilds ? stored.subBuilds.map(s => hydrateSubBuild(s, catalogs)) : undefined,
     descriptionMode: stored.descriptionMode,

@@ -270,6 +270,7 @@ export interface SkillOrder {
 }
 
 export type Role = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
+export type BuildTag = 'pro' | 'otp' | 'exotique' | 'troll'
 
 /** A build variant (sub-build). Same content as Build but champion is always inherited from the parent build. */
 export interface SubBuild {
@@ -282,6 +283,7 @@ export interface SubBuild {
   summonerSpells: [SummonerSpell | null, SummonerSpell | null]
   skillOrder: SkillOrder | null
   roles: Role[]
+  tags?: BuildTag[]
   gameVersion: string
 }
 
@@ -296,6 +298,7 @@ export interface StoredSubBuild {
   summonerSpells: [SummonerSpellRef | null, SummonerSpellRef | null]
   skillOrder: SkillOrder | null
   roles: Role[]
+  tags?: BuildTag[]
   gameVersion: string
 }
 
@@ -312,6 +315,7 @@ export interface Build {
   summonerSpells: [SummonerSpell | null, SummonerSpell | null]
   skillOrder: SkillOrder | null
   roles: Role[]
+  tags?: BuildTag[]
   upvote: number
   downvote: number
   gameVersion: string
@@ -351,6 +355,7 @@ export interface StoredBuild {
   summonerSpells: [SummonerSpellRef | null, SummonerSpellRef | null]
   skillOrder: SkillOrder | null
   roles: Role[]
+  tags?: BuildTag[]
   upvote: number
   downvote: number
   gameVersion: string

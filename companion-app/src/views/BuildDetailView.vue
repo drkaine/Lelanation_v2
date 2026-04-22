@@ -42,6 +42,7 @@ const detailDisplayedBuild = computed<Build>(() => {
     summonerSpells: sub.summonerSpells,
     skillOrder: sub.skillOrder,
     roles: sub.roles,
+    tags: sub.tags !== undefined ? sub.tags : (props.build.tags ?? []),
     description: sub.description ?? props.build.description,
     gameVersion: sub.gameVersion || props.build.gameVersion,
   } as Build;

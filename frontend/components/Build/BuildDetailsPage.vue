@@ -401,6 +401,7 @@ const detailDisplayedBuild = computed<Build | null>(() => {
     summonerSpells: sub.summonerSpells,
     skillOrder: sub.skillOrder,
     roles: sub.roles,
+    tags: sub.tags !== undefined ? sub.tags : (build.value.tags ?? []),
     description: sub.description ?? build.value.description,
     gameVersion: sub.gameVersion || build.value.gameVersion,
   } as Build
@@ -494,6 +495,7 @@ const variantEntries = computed<VariantEntry[]>(() => {
       summonerSpells: sub.summonerSpells,
       skillOrder: sub.skillOrder,
       roles: sub.roles,
+      tags: sub.tags !== undefined ? sub.tags : (b.tags ?? []),
       description: sub.description ?? b.description,
       gameVersion: sub.gameVersion || b.gameVersion,
     } as Build

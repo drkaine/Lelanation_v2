@@ -81,6 +81,7 @@ function displayedBuildFor(b: Build): Build {
     summonerSpells: sub.summonerSpells,
     skillOrder: sub.skillOrder,
     roles: sub.roles,
+    tags: sub.tags !== undefined ? sub.tags : (b.tags ?? []),
     description: sub.description ?? b.description,
     gameVersion: sub.gameVersion || b.gameVersion,
   } as Build;

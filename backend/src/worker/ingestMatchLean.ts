@@ -278,7 +278,7 @@ export async function upsertIngestMatchAndParticipants(
   const normalizedPuuidKeyVersion =
     typeof puuidKeyVersion === 'string' && puuidKeyVersion.trim() !== ''
       ? puuidKeyVersion.trim()
-      : 'unknown'
+      : 'perso'
   const riotMatchId = resolveRiotMatchIdForIngest(queueRiotMatchId, dto)
   if (!riotMatchId) throw new MatchIngestSkippedError('no_riot_match_id')
   const info = dto.info
