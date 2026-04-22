@@ -4,6 +4,7 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export interface MatchupRow {
   opponentChampionId: number
@@ -38,13 +39,16 @@ export async function getMatchupsByChampion(
       filters.push(`rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
     }
     if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
-    if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+    if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
     if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
     const whereSql = filters.join(' AND ')
 
+    const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
+    const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', pVersion, 'vs')
+
     const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint }>>(`
       SELECT id
-      FROM agg_champion_core_stats
+      FROM ${coreFrom}
       WHERE ${whereSql}
     `)
     if (coreStats.length === 0) return { matchups: [] }
@@ -60,7 +64,7 @@ export async function getMatchupsByChampion(
         opponent_champion_id AS "opponentChampionId",
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_vs_stats
+      FROM ${vsFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 

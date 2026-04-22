@@ -206,8 +206,7 @@ async function getActiveSnapshotDates(): Promise<Date[]> {
   return dates.map((r) => new Date(`${r.d.toISOString().slice(0, 10)}T00:00:00.000Z`))
 }
 
-async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<number> {
-  // Archive daily snapshots whose date belongs to a completed patch.
+async function ensureChampionTierSnapshotArchiveTable(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS champion_tier_daily_snapshots_archive
     (LIKE champion_tier_daily_snapshots INCLUDING ALL)
@@ -220,6 +219,49 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<num
     CREATE UNIQUE INDEX IF NOT EXISTS champion_tier_daily_snapshots_archive_date_of_game_rank_tier_role_champion_id_key
     ON champion_tier_daily_snapshots_archive (date_of_game, rank_tier, role, champion_id)
   `)
+}
+
+/**
+ * Move hot snapshot rows in [startInclusive, endExclusive) to champion_tier_daily_snapshots_archive.
+ * Dates are UTC calendar days (YYYY-MM-DD), same semantics as date_of_game on snapshots.
+ */
+export async function archiveChampionTierDailySnapshotsInDateRange(
+  startInclusive: string,
+  endExclusive: string,
+): Promise<{ archivedRowCount: number }> {
+  if (!isDatabaseConfigured()) return { archivedRowCount: 0 }
+  const ymd = /^\d{4}-\d{2}-\d{2}$/
+  if (!ymd.test(startInclusive) || !ymd.test(endExclusive)) {
+    throw new Error('Invalid date range (expected YYYY-MM-DD)')
+  }
+  if (endExclusive <= startInclusive) {
+    throw new Error('endExclusive must be after startInclusive')
+  }
+  await ensureChampionTierSnapshotArchiveTable()
+  const countRows = await prisma.$queryRaw<[{ c: bigint }]>`
+    SELECT COUNT(*)::bigint AS c FROM champion_tier_daily_snapshots
+    WHERE date_of_game >= ${startInclusive}::date AND date_of_game < ${endExclusive}::date
+  `
+  const n = Number(countRows[0]?.c ?? 0)
+  if (n === 0) return { archivedRowCount: 0 }
+  await prisma.$transaction([
+    prisma.$executeRaw`
+      INSERT INTO champion_tier_daily_snapshots_archive
+      SELECT * FROM champion_tier_daily_snapshots
+      WHERE date_of_game >= ${startInclusive}::date AND date_of_game < ${endExclusive}::date
+      ON CONFLICT DO NOTHING
+    `,
+    prisma.$executeRaw`
+      DELETE FROM champion_tier_daily_snapshots
+      WHERE date_of_game >= ${startInclusive}::date AND date_of_game < ${endExclusive}::date
+    `,
+  ])
+  return { archivedRowCount: n }
+}
+
+async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<number> {
+  // Archive daily snapshots whose date belongs to a completed patch.
+  await ensureChampionTierSnapshotArchiveTable()
   const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT c.date_of_game::date AS d
     FROM champion_tier_daily_snapshots c

@@ -156,6 +156,8 @@ model ActivePatch {
   isCurrent   Boolean  @default(true) @map("is_current")
   gamesNumber Int      @default(0) @map("games_number")
   gameNumberMax Int    @default(1000000) @map("game_number_max")
+  /// Set when close_patch() moved agg rows to archive_agg_* ; frozen games_number for UI.
+  archivedAt  DateTime? @map("archived_at")
 
   @@id([gameVersion])
   @@map("active_patches")

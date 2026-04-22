@@ -1,4 +1,5 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
+import { invalidateAggArchivePartitionCache } from './statsAggArchive.js'
 
 /**
  * Close a patch using DB-side lifecycle function.
@@ -9,4 +10,5 @@ export async function closePatch(patch: string): Promise<void> {
   const value = (patch ?? '').trim()
   if (!value) return
   await prisma.$executeRaw`SELECT close_patch(${value})`
+  invalidateAggArchivePartitionCache()
 }

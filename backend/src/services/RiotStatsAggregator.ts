@@ -6,6 +6,7 @@ import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
 const championsCache = new Map<
@@ -73,9 +74,11 @@ export class RiotStatsAggregator {
         filters.push(`rank_tier <> 'UNRANKED'`)
       }
       if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
-      if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+      if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
       if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
       const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
+
+      const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
 
       const rows = await prisma.$queryRawUnsafe<Array<{
         championId: number
@@ -96,7 +99,7 @@ export class RiotStatsAggregator {
           rank_tier AS "rankTier",
           game_version AS "gameVersion",
           region
-        FROM agg_champion_core_stats
+        FROM ${coreFrom}
         WHERE ${whereSql}
       `)
 

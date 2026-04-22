@@ -5,6 +5,7 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { buildRawMatchCond } from './ChampionGlobalTableService.js'
+import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 export type ChampionBansTableRow = {
   championId: number
@@ -54,6 +55,9 @@ export async function getChampionBansTable(
   const otpMode = otpModeFromQuery(otp)
   const otpThreshold = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
   const matchCond = buildRawMatchCond(version, rankTier)
+  const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
+  const mvFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
+  const csFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'cs')
   const roleFilter = normalizeRoleFilter(role)
   /**
    * Filtre rôle "joué" pour l'onglet Bans:
@@ -65,7 +69,7 @@ export async function getChampionBansTable(
     roleFilter != null
       ? `AND EXISTS (
           SELECT 1
-          FROM agg_champion_side_stats cs
+          FROM ${csFrom}
           WHERE cs.champion_id = mv.banned_champion_id
             AND ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')}
             AND cs.role_norm = '${roleFilter.replace(/'/g, "''")}'
@@ -75,7 +79,7 @@ export async function getChampionBansTable(
 
   const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(
     `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
-     FROM agg_match_outcome_stats mo
+     FROM ${moFrom}
      WHERE ${matchCond.replace(/\bm\./g, 'mo.')}`
   )
   const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
@@ -97,7 +101,7 @@ export async function getChampionBansTable(
       SUM(mv.ban_count) FILTER (WHERE mv.banner_role_norm = 'MIDDLE')::int AS bans_middle,
       SUM(mv.ban_count) FILTER (WHERE mv.banner_role_norm = 'BOTTOM')::int AS bans_bottom,
       SUM(mv.ban_count) FILTER (WHERE mv.banner_role_norm = 'SUPPORT')::int AS bans_support
-    FROM agg_champion_bans_by_banner mv
+    FROM ${mvFrom}
     WHERE ${mvWhere}
     ${rolePlayedCond}
     GROUP BY mv.banned_champion_id
@@ -137,7 +141,7 @@ export async function getChampionBansTable(
       SELECT
         cs.champion_id::int AS champion_id,
         SUM(cs.count_game)::bigint AS games
-      FROM agg_champion_side_stats cs
+      FROM ${csFrom}
       WHERE ${sideWhere}
       ${roleSql}
       GROUP BY cs.champion_id

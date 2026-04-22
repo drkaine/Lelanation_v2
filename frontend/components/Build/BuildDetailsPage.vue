@@ -348,8 +348,7 @@ import OutdatedBuildBanner from '~/components/Build/OutdatedBuildBanner.vue'
 import StatsTable from '~/components/Build/StatsTable.vue'
 import { apiUrl } from '~/utils/apiUrl'
 import {
-  buildCardShareImageUrl,
-  fetchBuildCardSharePng,
+  fetchBuildCardSharePngResilient,
   copyPngBlobToClipboard,
 } from '~/utils/buildCardShareImage'
 import { linkifyDescription } from '~/utils/linkifyDescription'
@@ -640,20 +639,24 @@ const copyBuildLink = async () => {
   }
 }
 
-function detailShareImagePath(meta: boolean): string {
-  if (!build.value) return ''
+function detailShareImageOptions(meta: boolean) {
   const sub = detailDisplayedSubIndex.value
-  return buildCardShareImageUrl(build.value.id, locale.value, {
+  return {
     sub: typeof sub === 'number' ? sub : null,
     meta,
     splash: championSplashEnabled.value,
-  })
+  }
 }
 
 const downloadBuildImage = async () => {
   if (!build.value) return
   try {
-    const blob = await fetchBuildCardSharePng(detailShareImagePath(false))
+    const b = build.value
+    const blob = await fetchBuildCardSharePngResilient(
+      b,
+      locale.value,
+      detailShareImageOptions(false)
+    )
     if (!blob) return
 
     const url = URL.createObjectURL(blob)
@@ -674,7 +677,12 @@ const downloadBuildImage = async () => {
 const copyBuildImage = async () => {
   if (!build.value) return
   try {
-    const blob = await fetchBuildCardSharePng(detailShareImagePath(false))
+    const b = build.value
+    const blob = await fetchBuildCardSharePngResilient(
+      b,
+      locale.value,
+      detailShareImageOptions(false)
+    )
     if (!blob) {
       console.warn('[BuildDetailsPage] fetch build card png returned null', build.value.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
@@ -698,7 +706,12 @@ const copyBuildImage = async () => {
 const copyBuildImageWithAuthorAndDescription = async () => {
   if (!build.value) return
   try {
-    const blob = await fetchBuildCardSharePng(detailShareImagePath(true))
+    const b = build.value
+    const blob = await fetchBuildCardSharePngResilient(
+      b,
+      locale.value,
+      detailShareImageOptions(true)
+    )
     if (!blob) {
       console.warn('[BuildDetailsPage] fetch build card png (meta) returned null', build.value.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')

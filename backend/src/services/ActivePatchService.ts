@@ -34,7 +34,7 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
   }
 
   const existing = await prisma.activePatch.findMany({
-    select: { gameVersion: true, gameNumberMax: true },
+    select: { gameVersion: true, gameNumberMax: true, archivedAt: true },
   })
 
   const patches = new Set<string>()
@@ -42,8 +42,10 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
   for (const p of countByPatch.keys()) patches.add(p)
 
   for (const patch of patches) {
-    const count = countByPatch.get(patch) ?? 0
     const row = existing.find((e) => e.gameVersion === patch)
+    if (row?.archivedAt != null) continue
+
+    const count = countByPatch.get(patch) ?? 0
     const max = row?.gameNumberMax ?? 0
     await prisma.activePatch.upsert({
       where: { gameVersion: patch },
@@ -66,7 +68,10 @@ async function syncActivePatchesImpl(): Promise<number> {
     SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
     FROM (
       SELECT game_version FROM ingest_matchs
+      UNION
+      SELECT game_version FROM agg_match_outcome_stats
     ) v
+    WHERE COALESCE(TRIM(v.game_version), '') <> ''
   `
   let added = 0
   for (const { patch } of rows) {

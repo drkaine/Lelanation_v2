@@ -34,11 +34,16 @@ async function fetchBuildForCacheRevision(
   buildId: string
 ): Promise<{ cacheRev: string; subBuildsLen: number } | null> {
   const apiRoots = resolveApiRoots(event)
+  let sawUpstreamFailure = false
   for (const apiRoot of apiRoots) {
     const prefix = apiRoot.endsWith('/api') ? '' : '/api'
     const url = `${apiRoot}${prefix}/builds/${encodeURIComponent(buildId)}`
     try {
       const res = await fetch(url)
+      if (res.status >= 500) {
+        sawUpstreamFailure = true
+        continue
+      }
       if (!res.ok) continue
       const json = (await res.json()) as {
         updatedAt?: string
@@ -50,8 +55,14 @@ async function fetchBuildForCacheRevision(
       const subBuildsLen = Array.isArray(json.subBuilds) ? json.subBuilds.length : 0
       return { cacheRev: rev, subBuildsLen }
     } catch {
-      // Try next candidate root.
+      sawUpstreamFailure = true
     }
+  }
+  if (sawUpstreamFailure) {
+    throw createError({
+      statusCode: 503,
+      statusMessage: 'Build API unavailable',
+    })
   }
   return null
 }

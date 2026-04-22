@@ -11,6 +11,12 @@ import {
 } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 import { isBootsItem, loadItemMeta } from '../worker/itemBuildSelection.js'
+import {
+  invalidateAggArchivePartitionCache,
+  matchVersionedAggFrom,
+  normalizePatchMajorMinor,
+  sqlAggUnionAllLiveAndArchives,
+} from './statsAggArchive.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -400,6 +406,7 @@ async function loadSurrenderBySideCounts(
   redMatchTotal: number
 ): Promise<OverviewSurrenderBySide> {
   const cond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const mvFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
   const rows = await prisma.$queryRawUnsafe<
     Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
   >(`
@@ -407,7 +414,7 @@ async function loadSurrenderBySideCounts(
         mv.team AS team_num,
         COALESCE(SUM(mv.count_team_early_surrendered), 0)::bigint AS early_cnt,
         COALESCE(SUM(mv.count_team_surrendered), 0)::bigint AS surrender_cnt
-      FROM agg_team_core_stats mv
+      FROM ${mvFrom}
       WHERE ${cond}
       GROUP BY mv.team
   `)
@@ -449,6 +456,8 @@ export async function getOverviewStats(
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
+    const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
+    const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
     const [coreRows, matchOutcomeRows, matchDivisionRows, matchVersionRows] = await Promise.all([
       prisma.$queryRawUnsafe<
         Array<{
@@ -469,25 +478,25 @@ export async function getOverviewStats(
           ac.rank_tier,
           ac.game_version,
           ac.region
-        FROM agg_champion_core_stats ac
+        FROM ${coreFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ac.')}
         ${pRole ? `AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''}
       `),
       prisma.$queryRawUnsafe<Array<{ game_version: string; rank_tier: string; count_match: bigint }>>(`
         SELECT mo.game_version, mo.rank_tier, mo.count_match
-        FROM agg_match_outcome_stats mo
+        FROM ${moFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')}
       `),
       prisma.$queryRawUnsafe<Array<{ rank_tier: string; match_count: bigint }>>(`
         SELECT mo.rank_tier, COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
-        FROM agg_match_outcome_stats mo
+        FROM ${moFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')}
         GROUP BY mo.rank_tier
         ORDER BY match_count DESC
       `),
       prisma.$queryRawUnsafe<Array<{ game_version: string; match_count: bigint }>>(`
         SELECT mo.game_version, COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
-        FROM agg_match_outcome_stats mo
+        FROM ${moFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')}
         GROUP BY mo.game_version
         ORDER BY match_count DESC
@@ -632,13 +641,14 @@ async function loadSummonerSpellPairsFromMatches(
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
+  const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `
       SELECT
         ag.spell_d::int AS spell_d,
         ag.spell_f::int AS spell_f,
         SUM(ag.count_game)::int AS games,
         SUM(ag.count_win)::int AS wins
-      FROM agg_champion_summoner_spell_pair_stats ag
+      FROM ${agFrom}
       WHERE ${matchCond}${roleSql}${smiteSql}
       GROUP BY ag.spell_d, ag.spell_f
       HAVING SUM(ag.count_game) >= 40
@@ -668,12 +678,13 @@ async function loadItemStarterSetsFromMatches(
   const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ag.')
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
   const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const agFrom = await matchVersionedAggFrom('agg_champion_item_starter_set_stats', version, 'ag')
   const sql = `
       SELECT
         ag.starter_key,
         SUM(ag.count_game)::int AS games,
         SUM(ag.count_win)::int AS wins
-      FROM agg_champion_item_starter_set_stats ag
+      FROM ${agFrom}
       WHERE ${matchCond}${roleSql}
       GROUP BY ag.starter_key
       HAVING SUM(ag.count_game) >= 5
@@ -708,9 +719,16 @@ export async function getOverviewDetailStats(
 
   try {
     const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
+    const rsFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
+    const isoFrom = await matchVersionedAggFrom('agg_champion_item_solo_stats', pVersion, 'iso')
+    const ssFrom = await matchVersionedAggFrom('agg_champion_summoner_spells', pVersion, 'ss')
+    const shFrom = await matchVersionedAggFrom('agg_champion_shard_solo_stats', pVersion, 'sh')
+    const istFrom = await matchVersionedAggFrom('agg_champion_item_stats', pVersion, 'ist')
+    const crsFrom = await matchVersionedAggFrom('agg_champion_runes_stats', pVersion, 'crs')
     const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; count_game: bigint }>>(`
       SELECT ac.id, ac.count_game
-      FROM agg_champion_core_stats ac
+      FROM ${coreFrom}
       WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
       ${roleSql}
     `)
@@ -729,7 +747,7 @@ export async function getOverviewDetailStats(
           perk_id AS "perkId",
           count_win AS "countWin",
           count_game AS "countGame"
-        FROM agg_champion_runes_solo_stats
+        FROM ${rsFrom}
         WHERE champion_stat_id IN (${statIdsSql})
       `),
       prisma.$queryRawUnsafe<
@@ -749,7 +767,7 @@ export async function getOverviewDetailStats(
           count_starter AS "countStarter",
           count_core AS "countCore",
           count_final AS "countFinal"
-        FROM agg_champion_item_solo_stats
+        FROM ${isoFrom}
         WHERE champion_stat_id IN (${statIdsSql})
       `),
       prisma.$queryRawUnsafe<
@@ -761,7 +779,7 @@ export async function getOverviewDetailStats(
           count_game AS "countGame",
           count_slot0 AS "countSlot0",
           count_slot1 AS "countSlot1"
-        FROM agg_champion_summoner_spells
+        FROM ${ssFrom}
         WHERE champion_stat_id IN (${statIdsSql})
         ${includeSmite ? '' : 'AND spell_id <> 11'}
       `),
@@ -771,7 +789,7 @@ export async function getOverviewDetailStats(
           slot,
           count_win AS "countWin",
           count_game AS "countGame"
-        FROM agg_champion_shard_solo_stats
+        FROM ${shFrom}
         WHERE champion_stat_id IN (${statIdsSql})
       `),
     ])
@@ -946,7 +964,7 @@ export async function getOverviewDetailStats(
     const apexRoleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
     const apexCoreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint }>>(`
       SELECT ac.id
-      FROM agg_champion_core_stats ac
+      FROM ${coreFrom}
       WHERE ${buildRawMatchCond(pVersion, [...APEX_LADDER_TIERS]).replace(/\bm\./g, 'ac.')}
       ${apexRoleSql}
     `)
@@ -958,7 +976,7 @@ export async function getOverviewDetailStats(
               spell_id AS "spellId",
               count_win AS "countWin",
               count_game AS "countGame"
-            FROM agg_champion_summoner_spells
+            FROM ${ssFrom}
             WHERE champion_stat_id IN (${apexStatIds.map((id) => id.toString()).join(',')})
             ${includeSmite ? '' : 'AND spell_id <> 11'}
           `)
@@ -1061,7 +1079,7 @@ export async function getOverviewDetailStats(
         item_list AS "itemList",
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_item_stats
+      FROM ${istFrom}
       WHERE champion_stat_id IN (${statIdsSql})
       LIMIT 2000
     `)
@@ -1125,7 +1143,7 @@ export async function getOverviewDetailStats(
         shard_list AS "shardList",
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_runes_stats
+      FROM ${crsFrom}
       WHERE champion_stat_id IN (${statIdsSql})
       LIMIT 2000
     `)
@@ -1209,6 +1227,7 @@ export async function refreshStatsMaterializedViews(): Promise<{ ok: boolean; er
   overviewProgressionFullCache.clear()
   overviewSidesCache.clear()
   overviewSidesProgressionCache.clear()
+  invalidateAggArchivePartitionCache()
   return { ok: true }
 }
 
@@ -1230,9 +1249,11 @@ export async function getOverviewTeamsStats(
 
   try {
     const condTeam = buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'mv.')
+    const moFromTeams = await matchVersionedAggFrom('agg_match_outcome_stats', pVersion, 'mo')
+    const mvFromTeams = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'mv')
     const outcomeRows = await prisma.$queryRawUnsafe<Array<{ count_match: bigint }>>(`
       SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS count_match
-      FROM agg_match_outcome_stats mo
+      FROM ${moFromTeams}
       WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'mo.')}
     `)
     const matchCount = Number(outcomeRows[0]?.count_match ?? 0)
@@ -1298,7 +1319,7 @@ export async function getOverviewTeamsStats(
         SUM(mv.count_fire_drake_soul)::bigint AS count_fire_drake_soul,
         SUM(mv.count_hextec_drake_soul)::bigint AS count_hextec_drake_soul,
         SUM(mv.count_chem_drake_soul)::bigint AS count_chem_drake_soul
-      FROM agg_team_core_stats mv
+      FROM ${mvFromTeams}
       WHERE ${condTeam}
       GROUP BY mv.team
     `)
@@ -1326,11 +1347,12 @@ export async function getOverviewTeamsStats(
       horde: { first: toN(team200?.count_horde_first), kills: toN(team200?.sum_horde_kills) },
     }
 
+    const banFromTeams = await matchVersionedAggFrom('agg_champion_bans_by_banner', pVersion, 'mv')
     const banRows = await prisma.$queryRawUnsafe<
       Array<{ champion_id: number; total_bans: bigint }>
     >(`
       SELECT mv.banned_champion_id AS champion_id, SUM(mv.ban_count)::bigint AS total_bans
-      FROM agg_champion_bans_by_banner mv
+      FROM ${banFromTeams}
       WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'mv.')}
       ${pRole ? `AND mv.banner_role_norm = '${String(pRole).toUpperCase().replace(/'/g, "''")}'` : ''}
       GROUP BY mv.banned_champion_id
@@ -1424,6 +1446,8 @@ export async function getOverviewDurationWinrateStats(
 
   try {
     const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const acFromDur = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
+    const cbFromDur = await matchVersionedAggFrom('agg_champion_bucket', pVersion, 'cb')
     const bucketRows = await prisma.$queryRawUnsafe<
       Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
     >(`
@@ -1431,8 +1455,8 @@ export async function getOverviewDurationWinrateStats(
         cb.duration_bucket,
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
-      FROM agg_champion_bucket cb
-      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      FROM ${cbFromDur}
+      INNER JOIN ${acFromDur} ON ac.id = cb.champion_stat_id
       WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
       ${roleSql}
       GROUP BY cb.duration_bucket
@@ -1473,6 +1497,8 @@ export async function getDurationWinrateByChampion(
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   try {
+    const acFromCh = await matchVersionedAggFrom('agg_champion_core_stats', version ?? null, 'ac')
+    const cbFromCh = await matchVersionedAggFrom('agg_champion_bucket', version ?? null, 'cb')
     const bucketRows = await prisma.$queryRawUnsafe<
       Array<{ duration_bucket: number; count_win: bigint; count_game: bigint }>
     >(`
@@ -1480,8 +1506,8 @@ export async function getDurationWinrateByChampion(
         cb.duration_bucket,
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
-      FROM agg_champion_bucket cb
-      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      FROM ${cbFromCh}
+      INNER JOIN ${acFromCh} ON ac.id = cb.champion_stat_id
       WHERE ac.champion_id = ${championId}
         AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
       GROUP BY cb.duration_bucket
@@ -1544,6 +1570,8 @@ export async function getDurationWinrateByChampionByTier(
     if (roleNorm === 'UTILITY') roleNorm = 'SUPPORT'
     const roleSql = roleNorm ? ` AND ac.role = '${roleNorm.replace(/'/g, "''")}'` : ''
 
+    const acFromTier = await matchVersionedAggFrom('agg_champion_core_stats', version ?? null, 'ac')
+    const cbFromTier = await matchVersionedAggFrom('agg_champion_bucket', version ?? null, 'cb')
     const rows = await prisma.$queryRawUnsafe<
       Array<{ rank_tier: string; duration_bucket: number; count_win: bigint; count_game: bigint }>
     >(`
@@ -1552,8 +1580,8 @@ export async function getDurationWinrateByChampionByTier(
         cb.duration_bucket,
         SUM(cb.count_win)::bigint AS count_win,
         SUM(cb.count_game)::bigint AS count_game
-      FROM agg_champion_bucket cb
-      INNER JOIN agg_champion_core_stats ac ON ac.id = cb.champion_stat_id
+      FROM ${cbFromTier}
+      INNER JOIN ${acFromTier} ON ac.id = cb.champion_stat_id
       WHERE ac.champion_id = ${championId}
         AND ${buildRawMatchCond(version ?? null, rankTier).replace(/\bm\./g, 'ac.')}
         ${roleSql}
@@ -1634,21 +1662,24 @@ export async function getOverviewProgressionStats(
       ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
-    const oldestVersionEscaped = String(versionOldest).replace(/'/g, "''")
+    const oldestPrefix = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
+
+    const oldestFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
+    const sinceFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
 
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.$queryRawUnsafe<Array<{ champion_id: number; count_win: bigint; count_game: bigint }>>(`
         SELECT ac.champion_id, ac.count_win, ac.count_game
-        FROM agg_champion_core_stats ac
+        FROM ${oldestFrom}
         WHERE ${rawCond}
-          AND ac.game_version LIKE '${oldestVersionEscaped}%'
+          AND ac.game_version LIKE '${oldestPrefix}%'
           ${roleFilterSql}
       `),
       prisma.$queryRawUnsafe<Array<{ champion_id: number; count_win: bigint; count_game: bigint }>>(`
         SELECT ac.champion_id, ac.count_win, ac.count_game
-        FROM agg_champion_core_stats ac
+        FROM ${sinceFrom}
         WHERE ${rawCond}
-          AND ac.game_version NOT LIKE '${oldestVersionEscaped}%'
+          AND ac.game_version NOT LIKE '${oldestPrefix}%'
           ${roleFilterSql}
       `),
     ])
@@ -1725,25 +1756,28 @@ export async function getOverviewProgressionFullStats(
       ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
-    const oldestVersionEscaped = String(versionOldest).replace(/'/g, "''")
+    const oldestPrefixFull = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
+
+    const oldestFromFull = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
+    const sinceFromFull = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
 
     const [oldestRows, sinceRows] = await Promise.all([
       prisma.$queryRawUnsafe<
         Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>
       >(`
         SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
-        FROM agg_champion_core_stats ac
+        FROM ${oldestFromFull}
         WHERE ${rawCond}
-          AND ac.game_version LIKE '${oldestVersionEscaped}%'
+          AND ac.game_version LIKE '${oldestPrefixFull}%'
           ${roleFilterSql}
       `),
       prisma.$queryRawUnsafe<
         Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>
       >(`
         SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
-        FROM agg_champion_core_stats ac
+        FROM ${sinceFromFull}
         WHERE ${rawCond}
-          AND ac.game_version NOT LIKE '${oldestVersionEscaped}%'
+          AND ac.game_version NOT LIKE '${oldestPrefixFull}%'
           ${roleFilterSql}
       `),
     ])
@@ -1811,9 +1845,10 @@ export async function getOverviewMeta(
 ): Promise<{ lastUpdate: string | null; playerCount: number } | null> {
   if (!isDatabaseConfigured()) return null
   try {
+    const moFromMeta = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
     const rows = await prisma.$queryRawUnsafe<Array<{ players: bigint }>>(`
       SELECT COALESCE(SUM(mo.count_match), 0)::bigint * 10 AS players
-      FROM agg_match_outcome_stats mo
+      FROM ${moFromMeta}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')}
     `)
     const playerCount = Number(rows[0]?.players ?? 0)
@@ -1839,8 +1874,9 @@ export interface InfosMetaCounts {
 export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
   if (!isDatabaseConfigured()) return null
   try {
+    const moUnion = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
     const matchRows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
-      `SELECT COALESCE(SUM(count_match), 0)::bigint AS c FROM agg_match_outcome_stats`
+      `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS c FROM ${moUnion}`
     )
     const totalMatches = Number(matchRows[0]?.c ?? 0)
     const totalPlayers = await prisma.player.count()
@@ -1860,12 +1896,13 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
   if (!isDatabaseConfigured()) return null
   type RawRow = { version: string; rank_tier: string; match_count: bigint }
   try {
+    const moUnionPatch = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
     const raw = await prisma.$queryRawUnsafe<RawRow[]>(`
       SELECT
         mo.game_version::text AS version,
         mo.rank_tier::text AS rank_tier,
         COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
-      FROM agg_match_outcome_stats mo
+      FROM ${moUnionPatch}
       WHERE mo.rank_tier <> 'UNRANKED'
       GROUP BY mo.game_version, mo.rank_tier
     `)
@@ -1903,7 +1940,8 @@ function buildRawMatchCond(
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (versions.length === 1) parts.push(`m.game_version LIKE '${versions[0].replace(/'/g, "''")}%'`)
+  if (versions.length === 1)
+    parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]).replace(/'/g, "''")}%'`)
   else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`)
   if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map(r => `'${r}'`).join(',')})`)
@@ -1932,6 +1970,8 @@ async function loadObjectiveDistributionBySides(
   const whereSql = conditions.join(' AND ')
   const safeKey = objectiveKey.replace(/'/g, "''")
   try {
+    const tbFrom = await matchVersionedAggFrom('agg_team_bucket', pVersion, 'tb')
+    const bFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'b')
     const rows = await prisma.$queryRawUnsafe<
       Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
     >(`
@@ -1940,8 +1980,8 @@ async function loadObjectiveDistributionBySides(
             tb.objective_bucket,
             SUM(tb.count_win)::int AS count_win,
             SUM(tb.count_game)::int AS count_game
-          FROM agg_team_bucket tb
-          JOIN agg_team_core_stats b ON b.id = tb.team_stat_id
+          FROM ${tbFrom}
+          JOIN ${bFrom} ON b.id = tb.team_stat_id
           WHERE tb.objective_key = '${safeKey}'
             AND ${whereSql}
           GROUP BY b.team, tb.objective_bucket
@@ -1981,9 +2021,10 @@ export async function getOverviewSidesStats(
   const pVersion = toQueryStringArrayParam(version).length === 1 ? toQueryStringArrayParam(version)[0] : null
   try {
     const condTeam = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+    const mvSidesA = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
     const sideRows = await prisma.$queryRawUnsafe<Array<{ team_id: number; matches: bigint; wins: bigint }>>(`
       SELECT mv.team AS team_id, SUM(mv.count_game)::bigint AS matches, SUM(mv.count_win)::bigint AS wins
-      FROM agg_team_core_stats mv
+      FROM ${mvSidesA}
       WHERE ${condTeam}
       GROUP BY mv.team
     `)
@@ -1998,6 +2039,7 @@ export async function getOverviewSidesStats(
     const redSide = toSide(redRow)
     const matchCount = Math.round((blueSide.matches + redSide.matches) / 2)
 
+    const sideChampFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'mv')
     const champRows = await prisma.$queryRawUnsafe<
       Array<{ team_id: number; champion_id: number; games: bigint; wins: bigint }>
     >(`
@@ -2006,7 +2048,7 @@ export async function getOverviewSidesStats(
         mv.champion_id,
         SUM(mv.count_game)::bigint AS games,
         SUM(mv.count_win)::bigint AS wins
-      FROM agg_champion_side_stats mv
+      FROM ${sideChampFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
       GROUP BY mv.team_num, mv.champion_id
       HAVING SUM(mv.count_game) >= 5
@@ -2027,12 +2069,13 @@ export async function getOverviewSidesStats(
       red: [...champRedAll].sort((a, b) => b.games - a.games).slice(0, 120),
     }
 
+    const banSidesFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
     const banRows = await prisma.$queryRawUnsafe<Array<{ team_id: number; champion_id: number; cnt: bigint }>>(`
       SELECT
         mv.team_num AS team_id,
         mv.banned_champion_id AS champion_id,
         SUM(mv.ban_count)::bigint AS cnt
-      FROM agg_champion_bans_by_banner mv
+      FROM ${banSidesFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
       GROUP BY mv.team_num, mv.banned_champion_id
     `)
@@ -2049,6 +2092,7 @@ export async function getOverviewSidesStats(
     const bansBySide = { blue: bansBlue, red: bansRed }
 
     const surrenderBySide = await loadSurrenderBySideCounts(version, rankTier, blueSide.matches, redSide.matches)
+    const mvSidesB = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
     const teamAggRows = await prisma.$queryRawUnsafe<
       Array<{
         team: number
@@ -2106,7 +2150,7 @@ export async function getOverviewSidesStats(
         SUM(mv.count_fire_drake_soul)::bigint AS count_fire_drake_soul,
         SUM(mv.count_hextec_drake_soul)::bigint AS count_hextec_drake_soul,
         SUM(mv.count_chem_drake_soul)::bigint AS count_chem_drake_soul
-      FROM agg_team_core_stats mv
+      FROM ${mvSidesB}
       WHERE ${condTeam}
       GROUP BY mv.team
     `)
@@ -2226,14 +2270,15 @@ async function sideChampionMap(
   rawMatchCond: string,
   teamId: 100 | 200,
   versionClauseSql: string,
-  roleSql: string
+  roleSql: string,
+  fromMv: string
 ): Promise<Map<number, { games: number; wins: number }>> {
   const sql = `
     SELECT
       mv.champion_id,
       SUM(mv.count_game)::int AS games,
       SUM(mv.count_win)::int AS wins
-    FROM agg_champion_side_stats mv
+    FROM ${fromMv}
     WHERE ${rawMatchCond} AND mv.team_num = ${teamId} AND ${versionClauseSql}${roleSql}
     GROUP BY mv.champion_id
   `
@@ -2248,13 +2293,14 @@ async function sideChampionMap(
 async function sideBanMap(
   rawMatchCond: string,
   teamId: 100 | 200,
-  versionClauseSql: string
+  versionClauseSql: string,
+  fromMv: string
 ): Promise<Map<number, number>> {
   const sql = `
     SELECT
       mv.banned_champion_id AS champion_id,
       SUM(mv.ban_count)::int AS bans
-    FROM agg_champion_bans_by_banner mv
+    FROM ${fromMv}
     WHERE ${rawMatchCond} AND mv.team_num = ${teamId} AND ${versionClauseSql}
     GROUP BY mv.banned_champion_id
   `
@@ -2302,12 +2348,17 @@ export async function getOverviewSidesProgressionFullStats(
         : `mv.game_version NOT LIKE '${vo}%'`
     const rSql = roleSqlClause(pRole)
 
+    const oldestSideFrom = await matchVersionedAggFrom('agg_champion_side_stats', voRaw, 'mv')
+    const sinceSideFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_side_stats', 'mv')
+    const oldestBanFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', voRaw, 'mv')
+    const sinceBanFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_bans_by_banner', 'mv')
+
     const buildSide = async (teamId: 100 | 200): Promise<OverviewProgressionFullStats['champions']> => {
       const [oldestMap, sinceMap, banOldest, banSince] = await Promise.all([
-        sideChampionMap(rawMatchCond, teamId, oldestClause, rSql),
-        sideChampionMap(rawMatchCond, teamId, sinceClause, rSql),
-        sideBanMap(rawMatchCond, teamId, oldestClause),
-        sideBanMap(rawMatchCond, teamId, sinceClause),
+        sideChampionMap(rawMatchCond, teamId, oldestClause, rSql, oldestSideFrom),
+        sideChampionMap(rawMatchCond, teamId, sinceClause, rSql, sinceSideFrom),
+        sideBanMap(rawMatchCond, teamId, oldestClause, oldestBanFrom),
+        sideBanMap(rawMatchCond, teamId, sinceClause, sinceBanFrom),
       ])
       let oldestTotalGames = 0
       for (const e of oldestMap.values()) oldestTotalGames += e.games

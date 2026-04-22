@@ -784,12 +784,19 @@ export async function processRawAggregateAndBurn(
     `
 
     await tx.$executeRaw`
-      UPDATE match_ingest_raw
-      SET status = 'done',
-          normalized_at = NOW(),
-          processing_started_at = NULL,
-          last_error = NULL,
-          next_retry_at = NULL
+      INSERT INTO active_patches (game_version, activated_at, is_current, games_number, game_number_max)
+      VALUES (${gameVersion}, NOW(), true, 0, 1000000)
+      ON CONFLICT (game_version) DO NOTHING
+    `
+
+    // Ingest lean is only a staging area for this pipeline; counts/UI patches come from agg + sync.
+    await tx.$executeRaw`
+      DELETE FROM ingest_matchs
+      WHERE riot_match_id = ${trackedMatchId}
+    `
+
+    await tx.$executeRaw`
+      DELETE FROM match_ingest_raw
       WHERE id = ${rawId}
     `
       })

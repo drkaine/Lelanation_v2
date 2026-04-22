@@ -17,6 +17,8 @@ import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { prisma } from '../db.js'
+import { closePatch } from '../services/PatchLifecycleService.js'
+import { archiveChampionTierDailySnapshotsInDateRange } from '../services/ChampionTierDailySnapshotService.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
   readUnifiedLogEntries,
@@ -294,6 +296,51 @@ router.get('/active-patches', async (_req, res) => {
       },
     })
     return res.json({ patches })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.get('/patch-close-options', async (_req, res) => {
+  try {
+    const options = await versionService.listPatchCloseOptions()
+    return res.json({ options })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
+router.post('/patch-close', async (req, res) => {
+  const patchLabelRaw =
+    typeof req.body?.patchLabel === 'string'
+      ? req.body.patchLabel.trim()
+      : typeof req.body?.patch === 'string'
+        ? req.body.patch.trim()
+        : ''
+  if (!patchLabelRaw) {
+    return res.status(400).json({ error: 'patchLabel is required' })
+  }
+  try {
+    const window = await versionService.resolveSnapshotWindowForPatch(patchLabelRaw)
+    if (!window) {
+      return res.status(400).json({
+        error: 'Unknown patch or invalid date window (check data/game/versions.json)',
+      })
+    }
+    await closePatch(window.patchLabel)
+    const { archivedRowCount } = await archiveChampionTierDailySnapshotsInDateRange(
+      window.startInclusive,
+      window.endExclusive,
+    )
+    return res.json({
+      ok: true,
+      patch: window.patchLabel,
+      version: window.version,
+      startInclusive: window.startInclusive,
+      endExclusive: window.endExclusive,
+      snapshotRowsArchived: archivedRowCount,
+      isLatestInRecap: window.isLatestInRecap,
+    })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }

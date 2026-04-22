@@ -23,6 +23,15 @@ interface VersionsRecapJson {
   versions: VersionsRecapEntry[]
 }
 
+/** Major.minor key used in active_patches / close_patch (e.g. 16.4.1 → 16.4). */
+export function normalizeGamePatchKey(versionOrPatch: string): string {
+  const p = (versionOrPatch ?? '').trim()
+  if (!p) return ''
+  const parts = p.split('.').filter((s) => s.length > 0)
+  if (parts.length >= 2) return `${parts[0]}.${parts[1]}`
+  return p
+}
+
 export class VersionService {
   private readonly versionFile: string
   private readonly versionsFile: string
@@ -187,5 +196,91 @@ export class VersionService {
     }
 
     return Result.ok<boolean, AppError>(buildVersion !== currentVersion.currentVersion)
+  }
+
+  async readVersionsRecap(): Promise<VersionsRecapJson | null> {
+    const readResult = await FileManager.readJson<VersionsRecapJson>(this.versionsFile)
+    if (readResult.isErr()) return null
+    return readResult.unwrap()
+  }
+
+  private tomorrowUtcYyyyMmDd(): string {
+    const t = new Date()
+    t.setUTCDate(t.getUTCDate() + 1)
+    return t.toISOString().slice(0, 10)
+  }
+
+  /**
+   * Entries in versions.json are newest-first. For index i, patch window is
+   * [versions[i].releaseDate, versions[i-1].releaseDate) when a newer patch exists;
+   * otherwise end is tomorrow UTC (exclusive) so the current recap head stays consistent.
+   */
+  async listPatchCloseOptions(): Promise<
+    Array<{
+      patchLabel: string
+      version: string
+      releaseDate: string
+      endExclusive: string
+      isLatestInRecap: boolean
+    }>
+  > {
+    const recap = await this.readVersionsRecap()
+    const versions = recap?.versions ?? []
+    const out: Array<{
+      patchLabel: string
+      version: string
+      releaseDate: string
+      endExclusive: string
+      isLatestInRecap: boolean
+    }> = []
+    for (let i = 0; i < versions.length; i++) {
+      const v = versions[i]!
+      const rd = this.normalizeReleaseDate(v.releaseDate)
+      if (!rd) continue
+      const endExclusive =
+        i > 0 ? this.normalizeReleaseDate(versions[i - 1]!.releaseDate) : this.tomorrowUtcYyyyMmDd()
+      if (!endExclusive || endExclusive <= rd) continue
+      out.push({
+        patchLabel: normalizeGamePatchKey(v.patchLabel),
+        version: v.version,
+        releaseDate: rd,
+        endExclusive,
+        isLatestInRecap: i === 0,
+      })
+    }
+    return out
+  }
+
+  async resolveSnapshotWindowForPatch(patchLabelInput: string): Promise<{
+    startInclusive: string
+    endExclusive: string
+    patchLabel: string
+    version: string
+    isLatestInRecap: boolean
+  } | null> {
+    const want = normalizeGamePatchKey(patchLabelInput)
+    if (!want) return null
+    const recap = await this.readVersionsRecap()
+    const versions = recap?.versions ?? []
+    const idx = versions.findIndex(
+      (e) =>
+        normalizeGamePatchKey(e.patchLabel) === want || normalizeGamePatchKey(e.version) === want,
+    )
+    if (idx < 0) return null
+    const v = versions[idx]!
+    const startInclusive = this.normalizeReleaseDate(v.releaseDate)
+    if (!startInclusive) return null
+    const endExclusive =
+      idx > 0
+        ? this.normalizeReleaseDate(versions[idx - 1]!.releaseDate)
+        : this.tomorrowUtcYyyyMmDd()
+    if (!endExclusive || endExclusive <= startInclusive) return null
+    return {
+      startInclusive,
+      endExclusive,
+      patchLabel: normalizeGamePatchKey(v.patchLabel),
+      version: v.version,
+      isLatestInRecap: idx === 0,
+    }
   }
 }

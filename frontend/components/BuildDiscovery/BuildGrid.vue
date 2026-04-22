@@ -316,14 +316,14 @@
               <button
                 class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
                 :class="!isPrivateBuild(build) ? 'border-t border-primary' : 'rounded-t-lg'"
-                @click="downloadBuildImage(build.id)"
+                @click="downloadBuildImage(build)"
               >
                 <span class="text-base">⬇️</span>
                 <span>{{ t('buildDiscovery.downloadImage') }}</span>
               </button>
               <button
                 class="flex w-full items-center gap-2 border-t border-primary px-4 py-2 text-left text-sm text-text transition-colors hover:bg-primary/20"
-                @click="copyBuildImage(build.id)"
+                @click="copyBuildImage(build)"
               >
                 <span class="text-base">📋</span>
                 <span>{{ t('buildDiscovery.copyImage') }}</span>
@@ -461,8 +461,7 @@ import { useLayoutScaled } from '~/composables/useLayoutScaled'
 import { useAdminAuth } from '~/composables/useAdminAuth'
 import { apiUrl } from '~/utils/apiUrl'
 import {
-  buildCardShareImageUrl,
-  fetchBuildCardSharePng,
+  fetchBuildCardSharePngResilient,
   copyPngBlobToClipboard,
 } from '~/utils/buildCardShareImage'
 import { useChampionSplashPreference } from '~/composables/useChampionSplashPreference'
@@ -823,40 +822,48 @@ const copyBuildLink = async (buildId: string) => {
   }
 }
 
-function shareImagePath(buildId: string, meta: boolean): string {
+function shareImageOptionsForBuild(buildId: string, meta: boolean) {
   const sub = displayedSubMap.value[buildId]
-  return buildCardShareImageUrl(buildId, locale.value, {
+  return {
     sub: typeof sub === 'number' ? sub : null,
     meta,
     splash: championSplashEnabled.value,
-  })
+  }
 }
 
-const downloadBuildImage = async (buildId: string) => {
+const downloadBuildImage = async (build: Build) => {
   try {
-    const blob = await fetchBuildCardSharePng(shareImagePath(buildId, false))
+    const blob = await fetchBuildCardSharePngResilient(
+      build,
+      locale.value,
+      shareImageOptionsForBuild(build.id, false)
+    )
     if (!blob) return
 
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `build-${buildId}.png`
+    link.download = `build-${build.id}.png`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    trackBuildShare(buildId, 'image').catch(() => {})
+    trackBuildShare(build.id, 'image').catch(() => {})
     openShareDropdown.value = null
   } catch {
     // Failed to download image
   }
 }
 
-const copyBuildImage = async (buildId: string) => {
+const copyBuildImage = async (build: Build) => {
   try {
-    const blob = await fetchBuildCardSharePng(shareImagePath(buildId, false))
+    const blob = await fetchBuildCardSharePngResilient(
+      build,
+      locale.value,
+      shareImageOptionsForBuild(build.id, false)
+    )
     if (!blob) {
-      console.warn('[BuildGrid] fetch build card png returned null', buildId)
+      console.warn('[BuildGrid] fetch build card png returned null', build.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')
       return
     }
@@ -867,7 +874,7 @@ const copyBuildImage = async (buildId: string) => {
       return
     }
 
-    trackBuildShare(buildId, 'image').catch(() => {})
+    trackBuildShare(build.id, 'image').catch(() => {})
     openShareDropdown.value = null
     showShareToast(t('buildDiscovery.imageCopied'), 'success')
   } catch {
@@ -877,7 +884,11 @@ const copyBuildImage = async (buildId: string) => {
 
 async function copyBuildImageWithAuthorAndDescription(build: Build) {
   try {
-    const blob = await fetchBuildCardSharePng(shareImagePath(build.id, true))
+    const blob = await fetchBuildCardSharePngResilient(
+      build,
+      locale.value,
+      shareImageOptionsForBuild(build.id, true)
+    )
     if (!blob) {
       console.warn('[BuildGrid] fetch build card png (meta) returned null', build.id)
       showShareToast(t('buildDiscovery.imageCopyError'), 'error')

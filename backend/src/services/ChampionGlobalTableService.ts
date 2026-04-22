@@ -4,6 +4,7 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export function buildRawMatchCond(
   version?: string | string[] | null,
@@ -12,7 +13,8 @@ export function buildRawMatchCond(
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-  if (versions.length === 1) parts.push(`m.game_version LIKE '${versions[0].replace(/'/g, "''")}%'`)
+  if (versions.length === 1)
+    parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`)
   else if (versions.length > 1)
     parts.push(`m.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
   if (ranks.length === 1) parts.push(`m.rank_tier = '${ranks[0]}'`)
@@ -96,9 +98,10 @@ export async function getChampionGlobalTable(
           : roleFilterRaw
 
   const matchCondMatchOutcome = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')
+  const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
   const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
     SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
-    FROM agg_match_outcome_stats mo
+    FROM ${moFrom}
     WHERE ${matchCondMatchOutcome}
   `)
   const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
@@ -126,6 +129,7 @@ export async function getChampionGlobalTable(
   }
 
   const matchCondSide = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const sideFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'mv')
   const roleSql =
     roleFilter !== '' ? ` AND mv.role_norm = '${roleFilter.replace(/'/g, "''")}'` : ''
   const aggSql = `
@@ -144,7 +148,7 @@ export async function getChampionGlobalTable(
       0::bigint AS sum_k,
       0::bigint AS sum_de,
       0::bigint AS sum_a
-    FROM agg_champion_side_stats mv
+    FROM ${sideFrom}
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
     ${roleSql}
     GROUP BY mv.team_num, mv.champion_id
@@ -152,6 +156,7 @@ export async function getChampionGlobalTable(
   const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)
 
   const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
   const banRows = await prisma.$queryRawUnsafe<
     Array<{ team_id: number; champion_id: number; cnt: number }>
   >(`
@@ -159,7 +164,7 @@ export async function getChampionGlobalTable(
       mv.team_num AS team_id,
       mv.banned_champion_id AS champion_id,
       SUM(mv.ban_count)::int AS cnt
-    FROM agg_champion_bans_by_banner mv
+    FROM ${bansFrom}
     WHERE ${matchCondBans} AND mv.team_num IN (100, 200)
     GROUP BY mv.team_num, mv.banned_champion_id
   `)

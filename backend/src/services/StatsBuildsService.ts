@@ -4,6 +4,7 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export interface BuildRow {
   items: number[]
@@ -43,7 +44,7 @@ async function getCoreStatIdsAndTotalGames(options: {
 }): Promise<{ statIds: bigint[]; totalGames: number }> {
   const { championId, patch, rankTier, role, region } = options
   const filters: string[] = [`champion_id = ${championId}`]
-  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
   if (role) filters.push(`role = '${role.replace(/'/g, "''")}'`)
   if (region) filters.push(`region = '${region.replace(/'/g, "''")}'`)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
@@ -54,9 +55,10 @@ async function getCoreStatIdsAndTotalGames(options: {
     filters.push(`rank_tier <> 'UNRANKED'`)
   }
   const whereSql = filters.join(' AND ')
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch ?? null, 'cc')
   const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT id, count_game AS "countGame"
-    FROM agg_champion_core_stats
+    FROM ${coreFrom}
     WHERE ${whereSql}
   `)
   return {
@@ -84,6 +86,8 @@ export async function getBuildsByChampion(
     })
     if (statIds.length === 0) return { totalGames: 0, builds: [], soloItems: [] }
 
+    const itemsFrom = await matchVersionedAggFrom('agg_champion_item_stats', pPatch, 'it')
+
     // Item combinations
     const itemStatRows = await prisma.$queryRawUnsafe<
       Array<{ itemList: string; countWin: number; countGame: number; sumTimestampMs: number }>
@@ -93,7 +97,7 @@ export async function getBuildsByChampion(
         count_win AS "countWin",
         count_game AS "countGame",
         sum_timestamp_ms AS "sumTimestampMs"
-      FROM agg_champion_item_stats
+      FROM ${itemsFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 
@@ -132,6 +136,8 @@ export async function getBuildsByChampion(
     builds.sort((a, b) => b.games - a.games)
     builds.splice(limit)
 
+    const soloFrom = await matchVersionedAggFrom('agg_champion_item_solo_stats', pPatch, 'iso')
+
     // Solo items
     const soloRows = await prisma.$queryRawUnsafe<
       Array<{
@@ -150,7 +156,7 @@ export async function getBuildsByChampion(
         count_win AS "countWin",
         count_game AS "countGame",
         sum_timestamp_ms AS "sumTimestampMs"
-      FROM agg_champion_item_solo_stats
+      FROM ${soloFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 

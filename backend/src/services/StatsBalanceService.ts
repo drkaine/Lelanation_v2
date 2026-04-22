@@ -1,6 +1,6 @@
-import { Prisma } from '../generated/prisma/index.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
 type BalanceStatus = 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
 const BALANCE_ALLOWED_ROLES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'])
@@ -103,10 +103,10 @@ function findPreviousPatch(current: string, available: string[]): string | null 
 }
 
 async function listAvailablePatches(): Promise<string[]> {
-  const rows = await prisma.$queryRaw<Array<{ game_version: string }>>`
-    SELECT DISTINCT game_version
-    FROM agg_champion_core_stats
-  `
+  const union = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 't')
+  const rows = await prisma.$queryRawUnsafe<Array<{ game_version: string }>>(
+    `SELECT DISTINCT game_version FROM ${union}`
+  )
   return [
     ...new Set(
       rows
@@ -205,17 +205,17 @@ async function buildPatchSnapshot(
   })
   const tiers = [...allTiers]
 
-  const tiersSql = Prisma.join(tiers.map((t) => Prisma.sql`${t}`))
-  const roleFilter = role ? Prisma.sql`AND role = ${role}` : Prisma.sql``
-  const coreRows = await prisma.$queryRaw<CoreRow[]>(
-    Prisma.sql`
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'cc')
+  const tiersSql = tiers.map((t) => `'${String(t).replace(/'/g, "''")}'`).join(', ')
+  const roleSql = role ? `AND role = '${String(role).replace(/'/g, "''")}'` : ''
+  const patchLike = `${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%`
+  const coreRows = await prisma.$queryRawUnsafe<CoreRow[]>(`
       SELECT champion_id, rank_tier, role, count_game, count_win, count_ban
-      FROM agg_champion_core_stats
-      WHERE game_version LIKE ${`${patch}%`}
+      FROM ${coreFrom}
+      WHERE game_version LIKE '${patchLike}'
         AND rank_tier IN (${tiersSql})
-        ${roleFilter}
-    `
-  )
+        ${roleSql}
+    `)
 
   const byLevel: Record<BalanceLevelKey, Map<string, ChampionAgg>> = {
     average: new Map(),

@@ -6,6 +6,7 @@ import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export interface RuneRow {
   runes: unknown
@@ -36,7 +37,8 @@ async function getCoreStatIdsAndTotalGames(options: {
 }): Promise<{ statIds: bigint[]; totalGames: number }> {
   const { championId, versionOrPatch, rankTier, role, region } = options
   const filters: string[] = [`champion_id = ${championId}`]
-  if (versionOrPatch) filters.push(`game_version LIKE '${String(versionOrPatch).replace(/'/g, "''")}%'`)
+  if (versionOrPatch)
+    filters.push(`game_version LIKE '${normalizePatchMajorMinor(String(versionOrPatch)).replace(/'/g, "''")}%'`)
   if (role) filters.push(`role = '${String(role).replace(/'/g, "''")}'`)
   if (region) filters.push(`region = '${String(region).replace(/'/g, "''")}'`)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
@@ -47,9 +49,10 @@ async function getCoreStatIdsAndTotalGames(options: {
     filters.push(`rank_tier <> 'UNRANKED'`)
   }
   const whereSql = filters.join(' AND ')
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOrPatch ?? null, 'cc')
   const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT id, count_game AS "countGame"
-    FROM agg_champion_core_stats
+    FROM ${coreFrom}
     WHERE ${whereSql}
   `)
   return {
@@ -77,6 +80,8 @@ export async function getRunesByChampion(
     })
     if (statIds.length === 0) return { totalGames: 0, runes: [] }
 
+    const runesFrom = await matchVersionedAggFrom('agg_champion_runes_stats', pPatch, 'rs')
+
     const runeStatRows = await prisma.$queryRawUnsafe<
       Array<{ runeList: string; shardList: string; countWin: number; countGame: number }>
     >(`
@@ -85,7 +90,7 @@ export async function getRunesByChampion(
         shard_list AS "shardList",
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_runes_stats
+      FROM ${runesFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 
@@ -177,6 +182,8 @@ export async function getRuneStatsByChampion(
     })
     if (statIds.length === 0) return { totalGames: 0, runes: [] }
 
+    const soloFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
+
     const soloRows = await prisma.$queryRawUnsafe<
       Array<{ perkId: number; style: string; countWin: number; countGame: number }>
     >(`
@@ -185,7 +192,7 @@ export async function getRuneStatsByChampion(
         style,
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_runes_solo_stats
+      FROM ${soloFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 
@@ -255,6 +262,8 @@ export async function getShardStatsByChampion(options: {
     })
     if (statIds.length === 0) return { totalGames: 0, shards: [] }
 
+    const shardFrom = await matchVersionedAggFrom('agg_champion_shard_solo_stats', pVersion, 'sh')
+
     const shardRows = await prisma.$queryRawUnsafe<
       Array<{ shardId: number; slot: number; countWin: number; countGame: number }>
     >(`
@@ -263,7 +272,7 @@ export async function getShardStatsByChampion(options: {
         slot,
         count_win AS "countWin",
         count_game AS "countGame"
-      FROM agg_champion_shard_solo_stats
+      FROM ${shardFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 

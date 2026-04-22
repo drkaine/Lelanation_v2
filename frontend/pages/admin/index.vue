@@ -173,6 +173,56 @@
         </div>
 
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+          <h2 class="mb-3 text-lg font-semibold text-text">Clôture de patch</h2>
+          <p class="mb-3 text-xs text-text/70">
+            Exécute <code class="rounded bg-background/80 px-1 text-[11px]">close_patch</code> puis
+            archive les
+            <code class="rounded bg-background/80 px-1 text-[11px]"
+              >champion_tier_daily_snapshots</code
+            >
+            dont <code class="rounded bg-background/80 px-1 text-[11px]">date_of_game</code> est
+            dans
+            <code class="rounded bg-background/80 px-1 text-[11px]"
+              >[releaseDate, releaseDate du patch suivant)</code
+            >
+            selon
+            <code class="rounded bg-background/80 px-1 text-[11px]">data/game/versions.json</code>
+            (ordre du fichier : plus récent en premier ; le patch le plus récent du fichier utilise
+            demain UTC comme fin exclusive).
+          </p>
+          <div class="grid gap-2 sm:grid-cols-3">
+            <select
+              v-model="selectedPatchClose"
+              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
+            >
+              <option value="" disabled>Choisir un patch</option>
+              <option v-for="o in patchCloseOptions" :key="o.patchLabel" :value="o.patchLabel">
+                {{ o.patchLabel }} — {{ o.releaseDate }} → {{ o.endExclusive
+                }}{{ o.isLatestInRecap ? ' (tête du recap)' : '' }}
+              </option>
+            </select>
+            <button
+              type="button"
+              class="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50 sm:col-span-2"
+              :disabled="patchCloseBusy || !selectedPatchClose"
+              @click="runPatchClose"
+            >
+              {{ patchCloseBusy ? '…' : 'Fermer le patch (agg + snapshots)' }}
+            </button>
+          </div>
+          <p
+            v-if="patchCloseMessage"
+            :class="
+              patchCloseError
+                ? 'mt-2 text-sm text-error'
+                : 'mt-2 text-sm text-green-600 dark:text-green-400'
+            "
+          >
+            {{ patchCloseMessage }}
+          </p>
+        </div>
+
+        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-3 text-lg font-semibold text-text">Balance Framework Rules</h2>
           <p class="mb-3 text-xs text-text/70">
             Modifie les seuils utilisés par l'onglet statistiques Balance (Average / Skilled /
@@ -2080,6 +2130,18 @@ const activePatchMaxInput = ref<number>(1000000)
 const activePatchSaveBusy = ref(false)
 const activePatchMessage = ref('')
 const activePatchError = ref(false)
+type PatchCloseOption = {
+  patchLabel: string
+  version: string
+  releaseDate: string
+  endExclusive: string
+  isLatestInRecap: boolean
+}
+const patchCloseOptions = ref<PatchCloseOption[]>([])
+const selectedPatchClose = ref('')
+const patchCloseBusy = ref(false)
+const patchCloseMessage = ref('')
+const patchCloseError = ref(false)
 const balanceRulesLoading = ref(false)
 const balanceRulesSaving = ref(false)
 const balanceRulesMessage = ref('')
@@ -2415,6 +2477,61 @@ async function loadActivePatches() {
     }
   } catch {
     activePatches.value = []
+  }
+}
+
+async function loadPatchCloseOptions() {
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/patch-close-options'))
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    patchCloseOptions.value = Array.isArray(data?.options) ? data.options : []
+  } catch {
+    patchCloseOptions.value = []
+  }
+}
+
+async function runPatchClose() {
+  if (!selectedPatchClose.value) return
+  if (
+    !confirm(
+      `Fermer le patch ${selectedPatchClose.value} ? Les agrégats seront archivés (close_patch) et les snapshots quotidiens de la fenêtre versions.json seront déplacés vers l’archive.`
+    )
+  ) {
+    return
+  }
+  patchCloseMessage.value = ''
+  patchCloseError.value = false
+  patchCloseBusy.value = true
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/patch-close'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patchLabel: selectedPatchClose.value }),
+    })
+    if (res.status === 401) {
+      clearAuth()
+      await navigateTo(localePath('/admin/login'))
+      return
+    }
+    const data = await res.json()
+    if (res.ok) {
+      patchCloseMessage.value = `Patch ${data.patch} fermé. Snapshots archivés : ${data.snapshotRowsArchived ?? 0} ligne(s).`
+      await loadActivePatches()
+      await loadPatchCloseOptions()
+    } else {
+      patchCloseError.value = true
+      patchCloseMessage.value = data?.error ?? 'Erreur'
+    }
+  } catch {
+    patchCloseError.value = true
+    patchCloseMessage.value = 'Erreur réseau'
+  } finally {
+    patchCloseBusy.value = false
   }
 }
 
@@ -3833,6 +3950,7 @@ onMounted(async () => {
     loadRiotApiStats(),
     loadDataStats(),
     loadActivePatches(),
+    loadPatchCloseOptions(),
     loadBalanceRules(),
     loadSeedPlayers(),
   ])
@@ -3865,6 +3983,7 @@ watch(activeTab, (tab, prevTab) => {
     loadRiotApiStats()
     loadDataStats()
     loadActivePatches()
+    loadPatchCloseOptions()
     loadBalanceRules()
     if (dataSectionPoller.value) loadPollerMetrics().catch(() => {})
     // Seed players UI removed

@@ -5,6 +5,7 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export interface SummonerSpellRow {
   spellId: number
@@ -37,7 +38,7 @@ async function getChampionStatIds(
   rankTier: string | string[] | null
 ): Promise<{ statIds: bigint[]; totalGames: number }> {
   const filters: string[] = [`champion_id = ${championId}`]
-  if (pVersion) filters.push(`game_version LIKE '${pVersion.replace(/'/g, "''")}%'`)
+  if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
   else if (ranks.length > 1) {
@@ -47,11 +48,12 @@ async function getChampionStatIds(
   }
 
   const whereSql = filters.join(' AND ')
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'cc')
   const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT
       id,
       count_game AS "countGame"
-    FROM agg_champion_core_stats
+    FROM ${coreFrom}
     WHERE ${whereSql}
   `)
   const totalGames = coreStats.reduce((sum, r) => sum + Number(r.countGame ?? 0), 0)
@@ -71,6 +73,8 @@ export async function getSummonerSpellsByChampion(
     const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     if (statIds.length === 0) return { totalGames: 0, spells: [] }
 
+    const spellsFrom = await matchVersionedAggFrom('agg_champion_summoner_spells', pVersion, 'ss')
+
     const spellRows = await prisma.$queryRawUnsafe<
       Array<{
         spellId: number
@@ -86,7 +90,7 @@ export async function getSummonerSpellsByChampion(
         count_game AS "countGame",
         count_slot0 AS "countSlot0",
         count_slot1 AS "countSlot1"
-      FROM agg_champion_summoner_spells
+      FROM ${spellsFrom}
       WHERE champion_stat_id IN (${statIds.map((id) => id.toString()).join(',')})
     `)
 

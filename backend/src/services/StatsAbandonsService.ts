@@ -6,6 +6,7 @@
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
 import { rankTierCacheKey, toQueryStringArrayParam } from '../utils/statsFilters.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 const ABANDONS_CACHE_TTL_MS = 5 * 60 * 1000
 const abandonsCache = new Map<string, { data: OverviewAbandonsResult; expiresAt: number }>()
@@ -67,13 +68,19 @@ export async function getOverviewAbandons(
     const versions = toQueryStringArrayParam(version)
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
     const cond: string[] = ['1=1']
-    if (versions.length === 1) cond.push(`mo.game_version LIKE '${versions[0].replace(/'/g, "''")}%'`)
+    if (versions.length === 1)
+      cond.push(
+        `mo.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
+      )
     else if (versions.length > 1)
       cond.push(`mo.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
     if (ranks.length === 1) cond.push(`mo.rank_tier = '${ranks[0]}'`)
     else if (ranks.length > 1) cond.push(`mo.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
     else cond.push(`mo.rank_tier <> 'UNRANKED'`)
     const whereSql = cond.join(' AND ')
+
+    const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', pVersion, 'mo')
+    const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'tc')
 
     const rows = await prisma.$queryRawUnsafe<
       Array<{
@@ -88,8 +95,8 @@ export async function getOverviewAbandons(
         COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count,
         COALESCE(SUM(tc.count_team_surrendered), 0)::bigint AS surrender_count,
         0::bigint AS remake_count
-      FROM agg_match_outcome_stats mo
-      LEFT JOIN agg_team_core_stats tc
+      FROM ${moFrom}
+      LEFT JOIN ${tcFrom}
         ON tc.game_version = mo.game_version AND tc.rank_tier = mo.rank_tier
       WHERE ${whereSql}
     `)

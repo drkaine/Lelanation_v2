@@ -7,6 +7,7 @@
 import { prisma } from '../db.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { isDatabaseConfigured } from '../db.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
@@ -329,8 +330,10 @@ async function fetchRoleRows(
     const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
     filters.push(`rank_tier = '${rf}'`)
   }
-  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
+
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
 
   const coreRows = await prisma.$queryRawUnsafe<Array<{
     championId: number
@@ -351,7 +354,7 @@ async function fetchRoleRows(
       count_win AS "countWin",
       count_game AS "countGame",
       count_ban AS "countBan"
-    FROM agg_champion_core_stats
+    FROM ${coreFrom}
     WHERE ${whereSql}
   `)
 
@@ -423,12 +426,15 @@ async function fetchMatchupRoleRows(
     const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
     filters.push(`rank_tier = '${rf}'`)
   }
-  if (patch) filters.push(`game_version LIKE '${patch.replace(/'/g, "''")}%'`)
+  if (patch) filters.push(`game_version LIKE '${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%'`)
   const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
+
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
+  const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', patch, 'vs')
 
   const coreRows = await prisma.$queryRawUnsafe<Array<{ id: bigint; championId: number; role: string }>>(`
     SELECT id, champion_id AS "championId", role
-    FROM agg_champion_core_stats
+    FROM ${coreFrom}
     WHERE ${whereSql}
   `)
   if (coreRows.length === 0) return []
@@ -448,7 +454,7 @@ async function fetchMatchupRoleRows(
       opponent_champion_id AS "opponentChampionId",
       count_game AS "countGame",
       count_win AS "countWin"
-    FROM agg_champion_vs_stats
+    FROM ${vsFrom}
     WHERE ${whereSql}
   `)
   const agg = new Map<string, MatchupRoleRow>()
