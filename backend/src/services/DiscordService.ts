@@ -1,6 +1,6 @@
-import axios, { AxiosInstance } from 'axios'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
+import { postJson } from '../utils/httpFetch.js'
 
 interface DiscordWebhookPayload {
   content?: string
@@ -21,7 +21,6 @@ interface DiscordWebhookPayload {
 }
 
 export class DiscordService {
-  private readonly api: AxiosInstance
   private readonly webhookUrl: string | null
   /** Webhook URL for contact form notifications (DISCORD_CONTACT_WEBHOOK_URL) */
   private readonly contactWebhookUrl: string | null
@@ -30,9 +29,6 @@ export class DiscordService {
     this.webhookUrl = webhookUrl ?? process.env.DISCORD_WEBHOOK_URL ?? null
     this.contactWebhookUrl =
       contactWebhookUrl ?? process.env.DISCORD_CONTACT_WEBHOOK_URL ?? null
-    this.api = axios.create({
-      timeout: 10000
-    })
   }
 
   /**
@@ -95,7 +91,7 @@ export class DiscordService {
         embeds: embed
       }
 
-      await this.api.post(this.webhookUrl, payload)
+      await postJson(this.webhookUrl, payload, { timeoutMs: 10_000 })
 
       return Result.ok(undefined)
     } catch (error) {
@@ -153,7 +149,7 @@ export class DiscordService {
         embeds: embed
       }
 
-      await this.api.post(this.webhookUrl, payload)
+      await postJson(this.webhookUrl, payload, { timeoutMs: 10_000 })
 
       return Result.ok(undefined)
     } catch (error) {
@@ -202,7 +198,7 @@ export class DiscordService {
         }
       ]
 
-      await this.api.post(this.contactWebhookUrl, { embeds: embed })
+      await postJson(this.contactWebhookUrl, { embeds: embed }, { timeoutMs: 10_000 })
       return Result.ok(undefined)
     } catch (error) {
       console.error('[DiscordService] Failed to send contact notification:', error)

@@ -4,6 +4,7 @@ import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 
 type MatchCandidate = { id: bigint }
 type ParticipantRankRow = {
+  id: bigint
   match_id: bigint
   team_id: bigint
   rank_tier: string | null
@@ -13,6 +14,17 @@ type ParticipantRankRow = {
 function isUsableTier(tier: string | null | undefined): boolean {
   const v = String(tier ?? '').trim().toUpperCase()
   return v !== '' && v !== 'UNRANKED'
+}
+
+function normalizedDivision(value: string | null | undefined): string | null {
+  if (!value) return null
+  const v = value.trim().toUpperCase()
+  return v === '' ? null : v
+}
+
+function avg(values: number[]): number | null {
+  if (values.length === 0) return null
+  return values.reduce((a, b) => a + b, 0) / values.length
 }
 
 async function countUnranked(): Promise<{ matches: number; teams: number }> {
@@ -66,6 +78,7 @@ async function main(): Promise<void> {
     const idListSql = matchIds.map((id) => id.toString()).join(',')
     const rows = await prisma.$queryRawUnsafe<ParticipantRankRow[]>(`
       SELECT
+        imp.id,
         imp.match_id,
         imp.team_id,
         imp.rank_tier,
@@ -85,6 +98,37 @@ async function main(): Promise<void> {
     for (const matchId of matchIds) {
       const participants = byMatch.get(matchId.toString()) ?? []
       if (participants.length === 0) continue
+
+      const knownScoresByTeam = new Map<string, number[]>()
+      const knownMatchScores: number[] = []
+      for (const p of participants) {
+        if (!isUsableTier(p.rank_tier)) continue
+        const tier = String(p.rank_tier).trim().toUpperCase()
+        const division = normalizedDivision(p.rank_division)
+        const score = rankToScore(tier, division, null)
+        knownMatchScores.push(score)
+        const key = p.team_id.toString()
+        const arr = knownScoresByTeam.get(key) ?? []
+        arr.push(score)
+        knownScoresByTeam.set(key, arr)
+      }
+
+      const matchAvgScore = avg(knownMatchScores)
+      let inferredParticipantsUpdated = 0
+      for (const p of participants) {
+        if (isUsableTier(p.rank_tier)) continue
+        const teamAvgScore = avg(knownScoresByTeam.get(p.team_id.toString()) ?? [])
+        const sourceScore = teamAvgScore ?? matchAvgScore
+        if (sourceScore == null) continue
+        const inferred = scoreToRank(sourceScore)
+        await prisma.ingestMatchPlayer.update({
+          where: { id: p.id },
+          data: { rankTier: inferred.tier, rankDivision: inferred.division },
+        })
+        p.rank_tier = inferred.tier
+        p.rank_division = inferred.division
+        inferredParticipantsUpdated++
+      }
 
       const matchScores: number[] = []
       const teamScores = new Map<string, number[]>()
@@ -119,6 +163,12 @@ async function main(): Promise<void> {
           data: { rankTier: rank.tier },
         })
         totalTeamsUpdated++
+      }
+
+      if (inferredParticipantsUpdated > 0) {
+        console.log(
+          `[recompute-ingest-ranks] inferred participants matchId=${matchId.toString()} count=${inferredParticipantsUpdated}`
+        )
       }
     }
 

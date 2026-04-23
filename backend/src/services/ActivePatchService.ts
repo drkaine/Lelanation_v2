@@ -15,15 +15,37 @@ function enqueueActivePatchUpdate<T>(fn: () => Promise<T>): Promise<T> {
 async function applyActivePatchGameCountsFromDb(): Promise<void> {
   if (!isDatabaseConfigured()) return
   const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
-    WITH per_patch AS (
+    WITH ingest_per_patch AS (
       SELECT
-        game_version AS patch,
+        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
+        COUNT(*)::bigint AS cnt
+      FROM ingest_matchs
+      WHERE COALESCE(NULLIF(TRIM(game_version), ''), '') <> ''
+        AND COALESCE(NULLIF(TRIM(rank_tier), ''), 'UNRANKED') <> 'UNRANKED'
+      GROUP BY 1
+    ),
+    agg_per_patch AS (
+      SELECT
+        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
         COALESCE(SUM(count_match), 0)::bigint AS cnt
       FROM agg_match_outcome_stats
       WHERE rank_tier <> 'UNRANKED'
+        AND COALESCE(NULLIF(TRIM(game_version), ''), '') <> ''
       GROUP BY 1
+    ),
+    merged AS (
+      SELECT
+        COALESCE(i.patch, a.patch) AS patch,
+        CASE
+          WHEN COALESCE(i.cnt, 0) > 0 THEN i.cnt
+          ELSE COALESCE(a.cnt, 0)
+        END AS cnt
+      FROM ingest_per_patch i
+      FULL JOIN agg_per_patch a ON a.patch = i.patch
     )
-    SELECT patch, cnt FROM per_patch
+    SELECT patch, cnt
+    FROM merged
+    WHERE COALESCE(NULLIF(TRIM(patch), ''), '') <> ''
   `
 
   const countByPatch = new Map<string, number>()

@@ -47,6 +47,7 @@ import {
   type PollerLogSource,
 } from '../services/PollerMetricsFromLog.js'
 import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
+import { riotGateway } from '../services/RiotGateway.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
@@ -680,20 +681,12 @@ router.post('/riot-apikey/test', async (_req, res) => {
     })
   }
   try {
-    const r = await fetch('https://euw1.api.riotgames.com/lol/status/v4/platform-data', {
-      headers: { 'X-Riot-Token': resolved.key, Accept: 'application/json' },
-    })
-    if (r.ok) {
+    const r = await riotGateway.call('GET', `${riotGateway.getPlatformBase('euw1')}/lol/status/v4/platform-data`)
+    if (r.status >= 200 && r.status < 300) {
       return res.json({ valid: true })
     }
-    const text = await r.text()
-    let msg = `HTTP ${r.status}`
-    try {
-      const data = JSON.parse(text) as { status?: { message?: string } }
-      if (data?.status?.message) msg = data.status.message
-    } catch {
-      // use msg
-    }
+    const data = r.data as { status?: { message?: string } }
+    const msg = data?.status?.message ?? `HTTP ${r.status}`
     return res.json({
       valid: false,
       error: msg,
@@ -701,9 +694,13 @@ router.post('/riot-apikey/test', async (_req, res) => {
       keyLength: resolved.key.length,
     })
   } catch (err) {
+    const gatewayErr = err as { status?: number; body?: { status?: { message?: string } } }
+    const errorMessage =
+      gatewayErr?.body?.status?.message ??
+      (gatewayErr?.status ? `HTTP ${gatewayErr.status}` : err instanceof Error ? err.message : String(err))
     return res.json({
       valid: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: errorMessage,
       keySource: resolved.source,
       keyLength: resolved.key.length,
     })

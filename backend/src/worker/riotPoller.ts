@@ -26,7 +26,6 @@ import {
 import { DiscordService } from '../services/DiscordService.js'
 import {
   RiotHttpClient,
-  resolveRiotApiKey,
   RIOT_INGEST_ABORTED_MESSAGE,
   type RiotLeagueEntryDto,
   type RiotMatchDto,
@@ -57,6 +56,7 @@ import {
   setTrackedMatchStatus,
   releaseTrackedMatch,
   releaseTrackedErrorMatches,
+  releaseStalePendingTrackedMatches,
 } from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
 import { resolveRiotMatchIdForIngest } from './matchIngestIds.js'
@@ -140,7 +140,7 @@ async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWind
       SELECT COUNT(*)::bigint AS c
       FROM tracked_matches
       WHERE created_at >= ${since}
-        AND status = 'DEFERRED_PATCH'
+        AND status LIKE 'DEFERRED_%'
     `,
     prisma.player.count({ where: { lastSeen: { gte: since } } }),
     prisma.player.count({ where: { createdAt: { gte: since } } }),
@@ -595,7 +595,7 @@ function formatSummaryTimestamp(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 /** Dernière sync `active_patches` depuis `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
-let lastSyncActivePatchesAt = Date.now()
+let lastSyncActivePatchesAt = 0
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
@@ -1358,6 +1358,24 @@ function getRawIngestErrorRequeueBatch(): number {
   const raw = parseInt(process.env.RAW_INGEST_ERROR_REQUEUE_BATCH ?? '', 10)
   if (!Number.isFinite(raw) || raw < 1) return 100
   return Math.min(10_000, raw)
+}
+
+function getTrackedPendingCleanupMaxAgeMs(): number {
+  const raw = parseInt(process.env.TRACKED_PENDING_CLEANUP_MAX_AGE_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 30 * 60_000
+  return Math.min(7 * 24 * 60 * 60 * 1000, raw)
+}
+
+function getTrackedPendingCleanupBatch(): number {
+  const raw = parseInt(process.env.TRACKED_PENDING_CLEANUP_BATCH ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1) return 500
+  return Math.min(20_000, raw)
+}
+
+function getTrackedPendingCleanupIntervalMs(): number {
+  const raw = parseInt(process.env.TRACKED_PENDING_CLEANUP_INTERVAL_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 60_000
+  return Math.min(24 * 60 * 60 * 1000, raw)
 }
 
 function getRawIngestStaleProcessingMaxAgeMs(): number {
@@ -2231,13 +2249,38 @@ async function runStep4ForPlayer(
       else phase1InDb++
     }
     const nowMs = Date.now()
-    const toFetch = matchIds.filter((id) => {
-      if (!reservedSet.has(id)) return false
-      if (!canAttemptTimelineFetchNow(id, nowMs)) { phase1InTimelineRetry++; return false }
-      if (!canAttemptMatchIngestNow(id, nowMs)) { phase1InBackoff++; return false }
-      if (matchIngestPending.has(id)) { phase1InPendingIngest++; return false }
-      return true
-    })
+    const toFetch: string[] = []
+    const deferredTimelineRetry: string[] = []
+    const deferredBackoff: string[] = []
+    const deferredPendingIngest: string[] = []
+    for (const id of matchIds) {
+      if (!reservedSet.has(id)) continue
+      if (!canAttemptTimelineFetchNow(id, nowMs)) {
+        phase1InTimelineRetry++
+        deferredTimelineRetry.push(id)
+        continue
+      }
+      if (!canAttemptMatchIngestNow(id, nowMs)) {
+        phase1InBackoff++
+        deferredBackoff.push(id)
+        continue
+      }
+      if (matchIngestPending.has(id)) {
+        phase1InPendingIngest++
+        deferredPendingIngest.push(id)
+        continue
+      }
+      toFetch.push(id)
+    }
+    await Promise.allSettled(
+      deferredTimelineRetry.map((id) => setTrackedMatchStatus(id, 'DEFERRED_TIMELINE_RETRY'))
+    )
+    await Promise.allSettled(
+      deferredBackoff.map((id) => setTrackedMatchStatus(id, 'DEFERRED_INGEST_BACKOFF'))
+    )
+    await Promise.allSettled(
+      deferredPendingIngest.map((id) => setTrackedMatchStatus(id, 'DEFERRED_INGEST_PENDING'))
+    )
     phase1ToFetch += toFetch.length
 
     const trackerIdx = playerTrackers.length
@@ -2775,14 +2818,13 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
   const filters = filtersRes.unwrap()
   await loadCurrentGameVersion()
 
-  const resolved = await resolveRiotApiKey()
-  if (!resolved.ok) {
-    await logger.error('No API key configured', resolved.error)
-    setState({ lastError: resolved.error })
+  const activeKeyInfo = client.getActiveKeyInfo()
+  if (!activeKeyInfo) {
+    await logger.error('No API key configured', 'No RIOT_API_KEY in env')
+    setState({ lastError: 'No RIOT_API_KEY in env' })
     return { ok: false }
   }
-  client.setKey(resolved.key, resolved.source, resolved.clefType)
-  await logger.step('API key loaded', { source: resolved.source, keyLen: resolved.key.length })
+  await logger.step('API key loaded', { source: activeKeyInfo.source })
 
   client.setOnHttpResponse(({ httpStatus, retryAfterSec }) => {
     if (httpStatus === 429) {
@@ -2801,7 +2843,7 @@ export async function initRiotPoller(): Promise<RiotPollerInit | { ok: false }> 
     void logger.error(msg, {})
   })
 
-  const clefType = client.getActiveKeyInfo()?.clefType ?? null
+  const clefType = activeKeyInfo.clefType ?? null
   return { ok: true, client, rateLimiter, logger, filters, clefType }
 }
 
@@ -3012,6 +3054,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     const rawDoneCleanupBatch = getRawIngestDoneCleanupBatch()
     let nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
     let nextTrackedErrorRecoveryAtMs = Date.now()
+    let nextTrackedPendingCleanupAtMs = Date.now()
     const initLimiterStats = client.getRateLimiterStats()
     const summaryAnchorMs = Date.now()
     const sw: PollerSummaryWindows = {
@@ -3148,6 +3191,28 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
             script: 'poller',
             message: `Tracked matches recovery: ${recoveredTracked} status ERROR -> retried`,
             json: { recoveredTracked, sourceStatus: 'ERROR' },
+          })
+        }
+      }
+      if (Date.now() >= nextTrackedPendingCleanupAtMs) {
+        const olderThan = new Date(Date.now() - getTrackedPendingCleanupMaxAgeMs())
+        const cleanedPending = await releaseStalePendingTrackedMatches(
+          getTrackedPendingCleanupBatch(),
+          olderThan
+        ).catch(() => 0)
+        nextTrackedPendingCleanupAtMs = Date.now() + getTrackedPendingCleanupIntervalMs()
+        if (cleanedPending > 0) {
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'warning',
+            script: 'poller',
+            message: `Tracked matches cleanup: ${cleanedPending} stale PENDING released`,
+            json: {
+              cleanedPending,
+              sourceStatus: 'PENDING',
+              maxAgeMs: getTrackedPendingCleanupMaxAgeMs(),
+              batch: getTrackedPendingCleanupBatch(),
+            },
           })
         }
       }

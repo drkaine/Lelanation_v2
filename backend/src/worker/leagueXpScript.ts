@@ -12,7 +12,7 @@ import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
-import { RiotHttpClient, resolveRiotApiKey } from '../services/RiotHttpClient.js'
+import { RiotHttpClient } from '../services/RiotHttpClient.js'
 
 export interface LeagueXpOptions {
   /** Riot queue type, e.g. 'RANKED_SOLO_5x5' or 'RANKED_FLEX_SR'. Default: 'RANKED_SOLO_5x5'. */
@@ -111,11 +111,10 @@ export async function runLeagueXpScript(
     const rateLimiter = new RiotRateLimiter()
     const client = new RiotHttpClient(rateLimiter, logger, 'league_xp')
 
-    const resolved = await resolveRiotApiKey()
-    if (!resolved.ok) {
-      throw new Error(`No Riot API key configured: ${resolved.error}`)
+    const activeKeyInfo = client.getActiveKeyInfo()
+    if (!activeKeyInfo) {
+      throw new Error('No Riot API key configured: No RIOT_API_KEY in env')
     }
-    client.setKey(resolved.key, resolved.source, resolved.clefType)
     client.setPlatform(region)
 
     await appendUnifiedLog({
@@ -176,7 +175,7 @@ export async function runLeagueXpScript(
         const toCreate = newEntries.map((e) => ({
           puuid: e.puuid!,
           region,
-          puuidKeyVersion: resolved.clefType,
+          puuidKeyVersion: activeKeyInfo.clefType,
           gameName: null as string | null,
           tagName: null as string | null,
           lastSeen: null as Date | null,

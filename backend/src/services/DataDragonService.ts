@@ -1,10 +1,10 @@
-import axios, { AxiosInstance } from 'axios'
 import { join } from 'path'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { ImageService } from './ImageService.js'
 import { CommunityDragonOrnnService } from './CommunityDragonOrnnService.js'
+import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 
 interface ChampionData {
   [key: string]: {
@@ -45,7 +45,6 @@ type ChampionFullPassive = Record<string, unknown>
 type ChampionFullChampion = Record<string, unknown>
 
 export class DataDragonService {
-  private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
   private readonly dataDir: string
   private readonly imageService: ImageService
@@ -56,12 +55,13 @@ export class DataDragonService {
   ) {
     this.dataDir = dataDir
     this.imageService = new ImageService(imagesDir)
-    this.api = axios.create({
-      baseURL: this.baseUrl,
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Lelanation/1.0'
-      }
+  }
+
+  private async ddragonGet<T>(pathOrUrl: string): Promise<T> {
+    const url = /^https?:\/\//.test(pathOrUrl) ? pathOrUrl : `${this.baseUrl}${pathOrUrl}`
+    return fetchJson<T>(url, {
+      timeoutMs: 30_000,
+      headers: { 'User-Agent': 'Lelanation/1.0' },
     })
   }
 
@@ -330,18 +330,18 @@ export class DataDragonService {
   async getLatestVersion(): Promise<Result<string, AppError>> {
     try {
       // Data Dragon returns a JSON array of version strings (e.g. ["15.1.1", ...])
-      const response = await this.api.get<string[]>(
+      const versions = await this.ddragonGet<string[]>(
         'https://ddragon.leagueoflegends.com/api/versions.json'
       )
 
-      if (!response.data || response.data.length === 0) {
+      if (!versions || versions.length === 0) {
         return Result.err(
           new ExternalApiError('No versions found in Data Dragon API')
         )
       }
 
       // Latest version is first in the array
-      const latestVersion = response.data[0]
+      const latestVersion = versions[0]
       if (!latestVersion || typeof latestVersion !== 'string') {
         return Result.err(
           new ExternalApiError('Invalid versions payload from Data Dragon API')
@@ -349,11 +349,11 @@ export class DataDragonService {
       }
       return Result.ok(latestVersion)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (error instanceof HttpRequestError) {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch version: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -373,19 +373,19 @@ export class DataDragonService {
   ): Promise<Result<ChampionData, AppError>> {
     try {
       const url = `/${version}/data/${language}/champion.json`
-      const response = await this.api.get<{ data: ChampionData }>(url)
+      const response = await this.ddragonGet<{ data: ChampionData }>(url)
 
-      if (!response.data || !response.data.data) {
+      if (!response || !response.data) {
         return Result.err(
           new ExternalApiError('Invalid champions data from Data Dragon API')
         )
       }
 
-      return Result.ok(response.data.data)
+      return Result.ok(response.data)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (error instanceof HttpRequestError) {
         // Handle rate limiting (429)
-        if (error.response?.status === 429) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded. Please retry later.',
@@ -397,7 +397,7 @@ export class DataDragonService {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch champions: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -419,9 +419,9 @@ export class DataDragonService {
   ): Promise<Result<ItemData, AppError>> {
     try {
       const url = `/${version}/data/${language}/item.json`
-      const response = await this.api.get<{ data: ItemData }>(url)
+      const response = await this.ddragonGet<{ data: ItemData }>(url)
 
-      if (!response.data || !response.data.data) {
+      if (!response || !response.data) {
         return Result.err(
           new ExternalApiError('Invalid items data from Data Dragon API')
         )
@@ -459,7 +459,7 @@ export class DataDragonService {
       ]
 
       // Filter items
-      const allItems = response.data.data
+      const allItems = response.data
       const filteredItems: ItemData = {}
       const seenNames = new Set<string>()
 
@@ -488,8 +488,8 @@ export class DataDragonService {
 
       return Result.ok(this.cleanItemsData(filteredItems))
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded. Please retry later.',
@@ -501,7 +501,7 @@ export class DataDragonService {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch items: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -521,18 +521,18 @@ export class DataDragonService {
   ): Promise<Result<RuneData[], AppError>> {
     try {
       const url = `/${version}/data/${language}/runesReforged.json`
-      const response = await this.api.get<RuneData[]>(url)
+      const response = await this.ddragonGet<RuneData[]>(url)
 
-      if (!response.data || !Array.isArray(response.data)) {
+      if (!response || !Array.isArray(response)) {
         return Result.err(
           new ExternalApiError('Invalid runes data from Data Dragon API')
         )
       }
 
-      return Result.ok(this.cleanRunesData(response.data))
+      return Result.ok(this.cleanRunesData(response))
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded. Please retry later.',
@@ -544,7 +544,7 @@ export class DataDragonService {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch runes: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -565,16 +565,16 @@ export class DataDragonService {
   ): Promise<Result<SummonerSpellData, AppError>> {
     try {
       const url = `/${version}/data/${language}/summoner.json`
-      const response = await this.api.get<{ data: SummonerSpellData }>(url)
+      const response = await this.ddragonGet<{ data: SummonerSpellData }>(url)
 
-      if (!response.data || !response.data.data) {
+      if (!response || !response.data) {
         return Result.err(
           new ExternalApiError('Invalid summoner spells data from Data Dragon API')
         )
       }
 
       // Filter spells to only include those available in CLASSIC mode
-      const allSpells = response.data.data
+      const allSpells = response.data
       const filteredSpells: SummonerSpellData = {}
 
       for (const [spellId, spell] of Object.entries(allSpells)) {
@@ -586,8 +586,8 @@ export class DataDragonService {
 
       return Result.ok(this.cleanSummonerSpellsData(filteredSpells))
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded. Please retry later.',
@@ -599,7 +599,7 @@ export class DataDragonService {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch summoner spells: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -891,18 +891,18 @@ export class DataDragonService {
   ): Promise<Result<Record<string, any>, AppError>> {
     try {
       const url = `/${version}/data/${language}/championFull.json`
-      const response = await this.api.get<{ data: Record<string, any> }>(url)
+      const response = await this.ddragonGet<{ data: Record<string, any> }>(url)
 
-      if (!response.data || !response.data.data) {
+      if (!response || !response.data) {
         return Result.err(
           new ExternalApiError('Invalid champions full data from Data Dragon API')
         )
       }
 
-      return Result.ok(this.cleanChampionFullData(response.data.data))
+      return Result.ok(this.cleanChampionFullData(response.data))
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded. Please retry later.',
@@ -914,7 +914,7 @@ export class DataDragonService {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch champions full: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )

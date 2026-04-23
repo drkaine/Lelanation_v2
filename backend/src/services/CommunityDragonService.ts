@@ -1,4 +1,3 @@
-import axios, { AxiosInstance } from 'axios'
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import sharp from 'sharp'
@@ -6,6 +5,7 @@ import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
 import { VersionService } from './VersionService.js'
+import { fetchBuffer, fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 
 interface ChampionFullData {
   data: Record<string, { key: string; [k: string]: unknown }>
@@ -119,7 +119,6 @@ function getCommunityDragonLocale(): string {
  * Uses configurable locale (default fr_fr); default = en_US on CD.
  */
 export class CommunityDragonService {
-  private readonly api: AxiosInstance
   private readonly dataDir: string
   private readonly versionService: VersionService
   /** Locale used for sync (e.g. fr_fr, default). */
@@ -132,13 +131,19 @@ export class CommunityDragonService {
     this.dataDir = dataDir
     this.locale = locale
     this.versionService = new VersionService()
-    const baseUrl = `${CD_BASE}/${this.locale}/v1/champions`
-    this.api = axios.create({
-      baseURL: baseUrl,
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Lelanation/1.0',
-      },
+  }
+
+  private async fetchCommunityJson<T>(relativePath: string): Promise<T> {
+    return fetchJson<T>(`${CD_BASE}/${this.locale}/v1/champions${relativePath}`, {
+      timeoutMs: 30_000,
+      headers: { 'User-Agent': 'Lelanation/1.0' },
+    })
+  }
+
+  private async fetchBinary(baseUrl: string, relativePath: string): Promise<Buffer> {
+    return fetchBuffer(`${baseUrl}${relativePath}`, {
+      timeoutMs: 30_000,
+      headers: { 'User-Agent': 'Lelanation/1.0' },
     })
   }
 
@@ -217,18 +222,18 @@ export class CommunityDragonService {
    */
   private async fetchChampionData(key: string): Promise<Result<unknown, AppError>> {
     try {
-      const response = await this.api.get<unknown>(`/${key}.json`)
-      if (!response.data) {
-        return Result.err(new ExternalApiError(`No data returned for ${key}`, response.status))
+      const data = await this.fetchCommunityJson<unknown>(`/${key}.json`)
+      if (!data) {
+        return Result.err(new ExternalApiError(`No data returned for ${key}`))
       }
-      return Result.ok(response.data)
+      return Result.ok(data)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 404) {
           return Result.err(new ExternalApiError(`Champion not found: ${key}`, 404, error))
         }
         return Result.err(
-          new ExternalApiError(`Failed to fetch ${key}: ${error.message}`, error.response?.status, error)
+          new ExternalApiError(`Failed to fetch ${key}: ${error.message}`, error.statusCode, error)
         )
       }
       return Result.err(new ExternalApiError(`Failed to fetch ${key}`, undefined, error))
@@ -429,24 +434,16 @@ export class CommunityDragonService {
     let failed = 0
     const errors: Array<{ file: string; error: string }> = []
 
-    const axiosEmblem = axios.create({
-      baseURL: CD_RANKED_EMBLEM_BASE,
-      timeout: 30000,
-      responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Lelanation/1.0' },
-    })
-
     for (const file of RANKED_EMBLEM_FILES) {
       try {
-        const response = await axiosEmblem.get<ArrayBuffer | Buffer>(`/${file}`)
-        const data = response.data
-        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+        const data = await this.fetchBinary(CD_RANKED_EMBLEM_BASE, `/${file}`)
+        if (data == null || data.byteLength === 0) {
           failed++
           errors.push({ file, error: 'No data returned' })
           continue
         }
         const targetPath = join(emblemDir, file)
-        const buffer = Buffer.from(data as ArrayBuffer)
+        const buffer = Buffer.from(data)
         const trimmed = await sharp(buffer)
           .trim({ threshold: 0 })
           .png()
@@ -484,30 +481,16 @@ export class CommunityDragonService {
     let failed = 0
     const errors: Array<{ file: string; error: string }> = []
 
-    const axiosObjective = axios.create({
-      baseURL: CD_SCOREBOARD_BASE,
-      timeout: 30000,
-      responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Lelanation/1.0' },
-    })
-    const axiosMinimapIcons = axios.create({
-      baseURL: CD_MINIMAP_ICONS_BASE,
-      timeout: 30000,
-      responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Lelanation/1.0' },
-    })
-
     for (const file of SCOREBOARD_OBJECTIVE_FILES) {
       try {
-        const response = await axiosObjective.get<ArrayBuffer | Buffer>(`/${file}`)
-        const data = response.data
-        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+        const data = await this.fetchBinary(CD_SCOREBOARD_BASE, `/${file}`)
+        if (data == null || data.byteLength === 0) {
           failed++
           errors.push({ file, error: 'No data returned' })
           continue
         }
         const targetPath = join(objectiveDir, file)
-        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        await fs.writeFile(targetPath, Buffer.from(data))
         synced++
       } catch (error) {
         failed++
@@ -519,15 +502,14 @@ export class CommunityDragonService {
 
     for (const icon of MINIMAP_OBJECTIVE_ICONS) {
       try {
-        const response = await axiosMinimapIcons.get<ArrayBuffer | Buffer>(`/${icon.source}`)
-        const data = response.data
-        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+        const data = await this.fetchBinary(CD_MINIMAP_ICONS_BASE, `/${icon.source}`)
+        if (data == null || data.byteLength === 0) {
           failed++
           errors.push({ file: icon.source, error: 'No data returned' })
           continue
         }
         const targetPath = join(objectiveDir, icon.target)
-        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        await fs.writeFile(targetPath, Buffer.from(data))
         synced++
       } catch (error) {
         failed++
@@ -560,24 +542,16 @@ export class CommunityDragonService {
     let failed = 0
     const errors: Array<{ file: string; error: string }> = []
 
-    const axiosMapPlanner = axios.create({
-      baseURL: CD_MATCH_HISTORY_BASE,
-      timeout: 30000,
-      responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Lelanation/1.0' },
-    })
-
     for (const asset of MAP_PLANNER_FILES) {
       try {
-        const response = await axiosMapPlanner.get<ArrayBuffer | Buffer>(`/${asset.source}`)
-        const data = response.data
-        if (data == null || (data as ArrayBuffer).byteLength === 0) {
+        const data = await this.fetchBinary(CD_MATCH_HISTORY_BASE, `/${asset.source}`)
+        if (data == null || data.byteLength === 0) {
           failed++
           errors.push({ file: asset.source, error: 'No data returned' })
           continue
         }
         const targetPath = join(mapPlannerDir, asset.target)
-        await fs.writeFile(targetPath, Buffer.from(data as ArrayBuffer))
+        await fs.writeFile(targetPath, Buffer.from(data))
         synced++
       } catch (error) {
         failed++

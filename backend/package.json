@@ -41,7 +41,6 @@
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^6.19.3",
     "@prisma/client-runtime-utils": "^7.4.0",
-    "axios": "^1.13.2",
     "bottleneck": "^2.19.5",
     "compression": "^1.8.1",
     "cors": "^2.8.5",

@@ -5,15 +5,10 @@ export async function tryReserveTrackedMatch(matchId: string): Promise<boolean> 
     INSERT INTO tracked_matches (match_id)
     VALUES (${matchId})
     ON CONFLICT (match_id) DO UPDATE
-      SET status = CASE
-        WHEN tracked_matches.status = 'ERROR' THEN 'PENDING'
-        ELSE tracked_matches.status
-      END,
-      created_at = CASE
-        WHEN tracked_matches.status = 'ERROR' THEN NOW()
-        ELSE tracked_matches.created_at
-      END
+      SET status = 'PENDING',
+          created_at = NOW()
     WHERE tracked_matches.status = 'ERROR'
+       OR tracked_matches.status LIKE 'DEFERRED_%'
     RETURNING match_id;
   `
   return rows.length > 0
@@ -49,6 +44,28 @@ export async function releaseTrackedErrorMatches(limit: number): Promise<number>
       status = 'PENDING',
       created_at = NOW()
     FROM candidates c
+    WHERE t.match_id = c.match_id
+    RETURNING t.match_id
+  `
+  return rows.length
+}
+
+export async function releaseStalePendingTrackedMatches(
+  limit: number,
+  olderThan: Date
+): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ match_id: string }>>`
+    WITH candidates AS (
+      SELECT match_id
+      FROM tracked_matches
+      WHERE status = 'PENDING'
+        AND created_at < ${olderThan}
+      ORDER BY created_at ASC
+      LIMIT ${Math.max(1, limit)}
+      FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM tracked_matches t
+    USING candidates c
     WHERE t.match_id = c.match_id
     RETURNING t.match_id
   `

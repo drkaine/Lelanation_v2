@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 import { prisma } from '../db.js'
 import { Prisma } from '../generated/prisma/index.js'
 import { getRiotAppTargetPer120s, RiotRateLimiter } from '../services/RiotRateLimiter.js'
-import { RiotHttpClient, resolveRiotApiKey, type RiotLeagueEntryDto } from '../services/RiotHttpClient.js'
+import { RiotHttpClient, type RiotLeagueEntryDto } from '../services/RiotHttpClient.js'
 import { rankToScore, scoreToRank } from '../utils/rankScore.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 
@@ -38,6 +38,11 @@ function normalizeRankLp(raw: unknown): number | null {
     return Number.isFinite(n) ? Math.trunc(n) : null
   }
   return null
+}
+
+function avg(values: number[]): number | null {
+  if (values.length === 0) return null
+  return values.reduce((a, b) => a + b, 0) / values.length
 }
 
 function isLikelyRiotPuuid(value: string | null | undefined): boolean {
@@ -97,13 +102,11 @@ async function backfillIngestFromPlayerRanks(targetGameVersion: string): Promise
 }
 
 async function main(): Promise<void> {
-  const resolved = await resolveRiotApiKey()
-  if (!resolved.ok) throw new Error(resolved.error)
-
   const rateLimiter = new RiotRateLimiter()
   const logger = createRiotPollerLogger('rank_repair')
   const client = new RiotHttpClient(rateLimiter, logger, 'rank_repair')
-  client.setKey(resolved.key, resolved.source, resolved.clefType)
+  const activeKeyInfo = client.getActiveKeyInfo()
+  if (!activeKeyInfo) throw new Error('No RIOT_API_KEY in env')
 
   const maxBatchesPerRun = Math.max(
     1,
@@ -306,7 +309,7 @@ async function main(): Promise<void> {
     if (touchedMatchIds.length > 0) {
       const rows = await prisma.ingestMatchPlayer.findMany({
         where: { matchId: { in: touchedMatchIds } },
-        select: { matchId: true, rankTier: true, rankDivision: true, teamId: true },
+        select: { id: true, matchId: true, rankTier: true, rankDivision: true, teamId: true },
       })
       const byMatch = new Map<string, typeof rows>()
       for (const row of rows) {
@@ -318,11 +321,45 @@ async function main(): Promise<void> {
       for (const matchId of touchedMatchIds) {
         const participants = byMatch.get(matchId.toString()) ?? []
         if (participants.length < 10) continue
+
+        const knownTeamScores = new Map<string, number[]>()
+        const knownMatchScores: number[] = []
+        for (const part of participants) {
+          const tier =
+            part.rankTier && part.rankTier.trim() !== '' ? part.rankTier.trim().toUpperCase() : 'UNRANKED'
+          if (tier === 'UNRANKED') continue
+          const score = rankToScore(tier, part.rankDivision ?? null, null)
+          knownMatchScores.push(score)
+          const tk = part.teamId.toString()
+          const arr = knownTeamScores.get(tk) ?? []
+          arr.push(score)
+          knownTeamScores.set(tk, arr)
+        }
+
+        const matchAvgScore = avg(knownMatchScores)
+        for (const part of participants) {
+          const tier =
+            part.rankTier && part.rankTier.trim() !== '' ? part.rankTier.trim().toUpperCase() : 'UNRANKED'
+          if (tier !== 'UNRANKED') continue
+          const teamAvgScore = avg(knownTeamScores.get(part.teamId.toString()) ?? [])
+          const source = teamAvgScore ?? matchAvgScore
+          if (source == null) continue
+          const inferred = scoreToRank(source)
+          await prisma.ingestMatchPlayer.update({
+            where: { id: part.id },
+            data: { rankTier: inferred.tier, rankDivision: inferred.division },
+          })
+          part.rankTier = inferred.tier
+          part.rankDivision = inferred.division
+          participantsUpdated++
+        }
+
         const scores: number[] = []
         const teamScores = new Map<string, number[]>()
         for (const part of participants) {
           const normalizedTier =
             part.rankTier && part.rankTier.trim() !== '' ? part.rankTier.trim().toUpperCase() : 'UNRANKED'
+          if (normalizedTier === 'UNRANKED') continue
           const score = rankToScore(normalizedTier, part.rankDivision ?? null, null)
           scores.push(score)
           const tk = part.teamId.toString()

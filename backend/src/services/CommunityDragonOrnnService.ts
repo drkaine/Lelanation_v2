@@ -7,11 +7,11 @@
  * Icons: https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/items/icons2d/{filename}.png
  */
 
-import axios, { AxiosInstance } from 'axios'
 import { join } from 'path'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
+import { fetchBuffer, fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 
 const CD_BASE = 'https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global'
 const CD_ICONS_BASE = `${CD_BASE}/default/assets/items/icons2d`
@@ -74,15 +74,10 @@ function iconPathToFilename(iconPath: string | undefined): string | null {
 }
 
 export class CommunityDragonOrnnService {
-  private readonly api: AxiosInstance
   private readonly imagesDir: string
 
   constructor(imagesDir: string = join(process.cwd(), 'data', 'images')) {
     this.imagesDir = imagesDir
-    this.api = axios.create({
-      timeout: 30000,
-      headers: { 'User-Agent': 'Lelanation/1.0' },
-    })
   }
 
   /**
@@ -93,21 +88,23 @@ export class CommunityDragonOrnnService {
   ): Promise<Result<CommunityDragonItem[], AppError>> {
     try {
       const url = `${CD_BASE}/${locale}/v1/items.json`
-      const response = await this.api.get<CommunityDragonItem[]>(url)
-
-      if (!response.data || !Array.isArray(response.data)) {
+      const data = await fetchJson<CommunityDragonItem[]>(url, {
+        timeoutMs: 30_000,
+        headers: { 'User-Agent': 'Lelanation/1.0' },
+      })
+      if (!data || !Array.isArray(data)) {
         return Result.err(
           new ExternalApiError('Invalid items data from Community Dragon')
         )
       }
 
-      return Result.ok(response.data)
+      return Result.ok(data)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (error instanceof HttpRequestError) {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch Community Dragon items: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -194,8 +191,11 @@ export class CommunityDragonOrnnService {
         return Result.err(dirResult.unwrapErr())
       }
 
-      const response = await this.api.get(url, { responseType: 'arraybuffer' })
-      if (!response.data || response.data.length === 0) {
+      const data = await fetchBuffer(url, {
+        timeoutMs: 30_000,
+        headers: { 'User-Agent': 'Lelanation/1.0' },
+      })
+      if (!data || data.length === 0) {
         return Result.err(
           new ExternalApiError(`Empty response when downloading: ${url}`)
         )
@@ -203,12 +203,12 @@ export class CommunityDragonOrnnService {
 
       const localPath = join(itemDir, filename)
       const { promises: fs } = await import('fs')
-      await fs.writeFile(localPath, response.data)
+      await fs.writeFile(localPath, data)
 
       return Result.ok(undefined)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 404) {
           return Result.err(
             new ExternalApiError(`Ornn icon not found: ${url}`, 404, error)
           )
@@ -216,7 +216,7 @@ export class CommunityDragonOrnnService {
         return Result.err(
           new ExternalApiError(
             `Failed to download Ornn icon: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )

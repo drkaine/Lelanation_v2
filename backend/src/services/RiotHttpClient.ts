@@ -4,6 +4,7 @@
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { RiotRateLimiter, RIOT_429_MIN_PENALTY_MS } from './RiotRateLimiter.js'
 import type { RiotPollerLogger } from '../utils/riotPollerLogger.js'
+import { riotGateway, type RiotGatewayError } from './RiotGateway.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
 const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
@@ -41,11 +42,40 @@ const RIOT_RATE_LIMIT_HEADER_KEYS = [
   'retry-after',
 ] as const
 
-function pickRiotRateLimitHeaders(h: Headers): Record<string, string> {
+type HeaderReader = {
+  get(name: string): string | null | undefined
+}
+
+function readHeader(
+  headers: HeaderReader | Record<string, string | undefined>,
+  name: string
+): string | null {
+  if (typeof (headers as HeaderReader).get === 'function') {
+    return (headers as HeaderReader).get(name) ?? null
+  }
+  const direct = (headers as Record<string, string | undefined>)[name]
+  if (direct != null) return direct
+  return (headers as Record<string, string | undefined>)[name.toLowerCase()] ?? null
+}
+
+function pickRiotRateLimitHeaders(
+  h: HeaderReader | Record<string, string | undefined>
+): Record<string, string> {
   const out: Record<string, string> = {}
   for (const key of RIOT_RATE_LIMIT_HEADER_KEYS) {
-    const v = h.get(key)
+    const v = readHeader(h, key)
     if (v) out[key] = v
+  }
+  return out
+}
+
+function normalizeHeaders(
+  headers: Record<string, string | undefined> | undefined
+): Record<string, string> {
+  if (!headers) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(headers)) {
+    if (typeof v === 'string' && v.length > 0) out[k.toLowerCase()] = v
   }
   return out
 }
@@ -190,9 +220,6 @@ export type RiotHttpResponseObserver = (info: {
 }) => void
 
 export class RiotHttpClient {
-  private key: string = ''
-  private keySource: RiotKeySource = 'env'
-  private clefType: string | null = null
   private platform: string = 'euw1'
   private onInvalidKey?: () => void
   /** Optional: poller uses this to count every Riot HTTP response (accurate request totals). */
@@ -326,17 +353,19 @@ export class RiotHttpClient {
 
   setPlatform(platform: string): void {
     this.platform = PLATFORM_BY_REGION[platform] ?? platform
+    riotGateway.setPlatform(this.platform)
   }
 
   setKey(key: string, source: RiotKeySource, clefType: string | null): void {
-    this.key = key
-    this.keySource = source
-    this.clefType = clefType
+    void key
+    void source
+    void clefType
   }
 
   getActiveKeyInfo(): ActiveKeyInfo | null {
-    if (!this.key) return null
-    return { key: this.key, source: this.keySource, clefType: this.clefType }
+    const envKey = process.env[RIOT_API_KEY_ENV]?.trim()
+    if (!envKey) return null
+    return { key: envKey, source: 'env', clefType: resolvePuuidKeyVersionFromEnv() }
   }
 
   private async request<T>(
@@ -351,40 +380,32 @@ export class RiotHttpClient {
       return { ok: false, status: 0, message: RIOT_INGEST_ABORTED_MESSAGE }
     }
 
-    const reqHeaders: Record<string, string> = {
-      'X-Riot-Token': this.key,
-      'Accept': 'application/json',
-    }
-
-    let res: Response
-    let text: string
-    try {
-      const result = await this.rateLimiter.schedule(async () => {
-        const r = await fetch(url, { method, headers: reqHeaders })
-        const t = await r.text()
-        return { r, t }
-      })
-      res = result.r
-      text = result.t
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      void this._log.error('Riot API request failed', msg, url)
-      return { ok: false, status: 0, message: msg }
-    }
-
-    const retryAfterRaw = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
-    const retryAfterSec = Number.isFinite(retryAfterRaw) ? retryAfterRaw : undefined
-    this.onHttpResponse?.({ bucket, httpStatus: res.status, retryAfterSec })
-
+    let status = 0
     let data: unknown
+    let headers: Record<string, string> = {}
     try {
-      data = text ? JSON.parse(text) : null
-    } catch {
-      data = text
+      const res = await riotGateway.call<T>(method, url)
+      status = res.status
+      data = res.data
+      headers = normalizeHeaders(res.headers as Record<string, string | undefined>)
+    } catch (err) {
+      const gwError = err as Partial<RiotGatewayError>
+      status = typeof gwError.status === 'number' ? gwError.status : 0
+      headers = normalizeHeaders(gwError.headers)
+      data = gwError.body
+      if (status === 0) {
+        const msg = err instanceof Error ? err.message : String(err)
+        void this._log.error('Riot API request failed', msg, url)
+        return { ok: false, status: 0, message: msg }
+      }
     }
 
-    if (res.status === 429) {
-      const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+    const retryAfterRaw = Number.parseInt(headers['retry-after'] ?? '', 10)
+    const retryAfterSec = Number.isFinite(retryAfterRaw) ? retryAfterRaw : undefined
+    this.onHttpResponse?.({ bucket, httpStatus: status, retryAfterSec })
+
+    if (status === 429) {
+      const riotHeaders = pickRiotRateLimitHeaders(headers)
       const effectiveRetryAfterSec =
         retryAfterSec != null && Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec : 1
       const effectiveRetryMs =
@@ -397,7 +418,7 @@ export class RiotHttpClient {
         script: this.apiLogScript,
         message: 'Riot API HTTP 429',
         json: {
-          httpStatus: res.status,
+          httpStatus: status,
           origin: 'riot_http_response',
           bucket,
           url,
@@ -418,20 +439,24 @@ export class RiotHttpClient {
       return { ok: false, status: 429, message: 'Rate limit exceeded (max retries)', body: data }
     }
 
-    if (res.status === 401) {
+    if (status === 401) {
       this.onInvalidKey?.()
-      return { ok: false, status: res.status, message: 'Invalid or expired API key', body: data }
+      return { ok: false, status, message: 'Invalid or expired API key', body: data }
     }
-    if (res.status >= 400) {
+    if (status >= 400) {
       const msg = typeof (data as { status?: { message?: string } })?.status?.message === 'string'
         ? (data as { status: { message: string } }).status.message
         : undefined
-      return { ok: false, status: res.status, message: msg, body: data }
+      return { ok: false, status, message: msg, body: data }
     }
 
-    this.rateLimiter.syncFromResponseHeaders(res.headers)
+    this.rateLimiter.syncFromResponseHeaders({
+      get(name: string): string | null {
+        return headers[name.toLowerCase()] ?? null
+      },
+    })
 
-    const riotHeaders = pickRiotRateLimitHeaders(res.headers)
+    const riotHeaders = pickRiotRateLimitHeaders(headers)
     if (Object.keys(riotHeaders).length > 0) {
       this.lastRiotRateLimitHeaders = riotHeaders
       this.updateCountPeaks(
@@ -484,7 +509,7 @@ export class RiotHttpClient {
           script: this.apiLogScript,
           message,
           json: {
-            httpStatus: res.status,
+            httpStatus: status,
             bucket,
             nearLimit120s: near120,
             rateLimitCountPeaks: {
@@ -502,7 +527,7 @@ export class RiotHttpClient {
       }
     }
 
-    return { ok: true, data: data as T, status: res.status }
+    return { ok: true, data: data as T, status }
   }
 
   async getPlatformData(): Promise<

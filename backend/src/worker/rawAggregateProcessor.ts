@@ -38,6 +38,31 @@ type RawTeam = {
   objectives?: Record<string, { first?: boolean; kills?: number }>
 }
 
+type TimelineEvent = {
+  type?: string
+  killerTeamId?: number
+  teamId?: number
+  monsterType?: string
+  monsterSubType?: string
+  name?: string
+}
+
+type TeamDrakeObjectiveStats = {
+  earthDrake: number
+  waterDrake: number
+  windDrake: number
+  fireDrake: number
+  hextecDrake: number
+  chemDrake: number
+  earthSoul: number
+  waterSoul: number
+  windSoul: number
+  fireSoul: number
+  hextecSoul: number
+  chemSoul: number
+  elderKills: number
+}
+
 function toSafeInt(v: unknown): number {
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
   if (typeof v === 'string') {
@@ -218,6 +243,99 @@ function isRetryableTxError(err: unknown): boolean {
   return message.includes('40P01') || message.toLowerCase().includes('deadlock detected')
 }
 
+function initTeamDrakeStats(): TeamDrakeObjectiveStats {
+  return {
+    earthDrake: 0,
+    waterDrake: 0,
+    windDrake: 0,
+    fireDrake: 0,
+    hextecDrake: 0,
+    chemDrake: 0,
+    earthSoul: 0,
+    waterSoul: 0,
+    windSoul: 0,
+    fireSoul: 0,
+    hextecSoul: 0,
+    chemSoul: 0,
+    elderKills: 0,
+  }
+}
+
+function normalizeDragonElement(raw: unknown): 'earth' | 'water' | 'wind' | 'fire' | 'hextec' | 'chem' | null {
+  const v = String(raw ?? '').trim().toUpperCase()
+  if (!v) return null
+  if (v.includes('MOUNTAIN') || v.includes('EARTH')) return 'earth'
+  if (v.includes('OCEAN') || v.includes('WATER')) return 'water'
+  if (v.includes('CLOUD') || v.includes('WIND') || v.includes('AIR')) return 'wind'
+  if (v.includes('INFERNAL') || v.includes('FIRE')) return 'fire'
+  if (v.includes('HEXTECH') || v.includes('HEXTEC')) return 'hextec'
+  if (v.includes('CHEMTECH') || v.includes('CHEM')) return 'chem'
+  return null
+}
+
+function addDrakeKill(stats: TeamDrakeObjectiveStats, element: NonNullable<ReturnType<typeof normalizeDragonElement>>): void {
+  if (element === 'earth') stats.earthDrake++
+  else if (element === 'water') stats.waterDrake++
+  else if (element === 'wind') stats.windDrake++
+  else if (element === 'fire') stats.fireDrake++
+  else if (element === 'hextec') stats.hextecDrake++
+  else if (element === 'chem') stats.chemDrake++
+}
+
+function markSoul(stats: TeamDrakeObjectiveStats, element: NonNullable<ReturnType<typeof normalizeDragonElement>>): void {
+  if (element === 'earth') stats.earthSoul = 1
+  else if (element === 'water') stats.waterSoul = 1
+  else if (element === 'wind') stats.windSoul = 1
+  else if (element === 'fire') stats.fireSoul = 1
+  else if (element === 'hextec') stats.hextecSoul = 1
+  else if (element === 'chem') stats.chemSoul = 1
+}
+
+function extractTeamDrakeStatsByTeam(payload: MatchIngestQueuePayloadV1): Map<number, TeamDrakeObjectiveStats> {
+  const out = new Map<number, TeamDrakeObjectiveStats>()
+  const timeline = payload.timelineDto as { info?: { frames?: Array<{ events?: TimelineEvent[] }> } } | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return out
+
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      const evType = String(ev?.type ?? '').trim().toUpperCase()
+      if (!evType) continue
+
+      if (evType === 'ELITE_MONSTER_KILL') {
+        const killerTeamId = toSafeInt(ev?.killerTeamId)
+        if (killerTeamId !== 100 && killerTeamId !== 200) continue
+        const teamStats = out.get(killerTeamId) ?? initTeamDrakeStats()
+        const monsterType = String(ev?.monsterType ?? '').trim().toUpperCase()
+        if (monsterType === 'DRAGON') {
+          const subtype = String(ev?.monsterSubType ?? '').trim().toUpperCase()
+          if (subtype.includes('ELDER')) {
+            teamStats.elderKills++
+          } else {
+            const element = normalizeDragonElement(subtype)
+            if (element) addDrakeKill(teamStats, element)
+          }
+        } else if (monsterType.includes('ELDER')) {
+          teamStats.elderKills++
+        }
+        out.set(killerTeamId, teamStats)
+        continue
+      }
+
+      if (evType === 'DRAGON_SOUL_GIVEN') {
+        const soulTeamId = toSafeInt(ev?.teamId)
+        if (soulTeamId !== 100 && soulTeamId !== 200) continue
+        const teamStats = out.get(soulTeamId) ?? initTeamDrakeStats()
+        const element = normalizeDragonElement(ev?.name)
+        if (element) markSoul(teamStats, element)
+        out.set(soulTeamId, teamStats)
+      }
+    }
+  }
+
+  return out
+}
+
 export async function processRawAggregateAndBurn(
   rawId: bigint,
   payload: MatchIngestQueuePayloadV1,
@@ -249,6 +367,7 @@ export async function processRawAggregateAndBurn(
 
   const dbRankByPuuid = await loadIngestRankTiersByPuuid(trackedMatchId)
   const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
+  const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -682,6 +801,8 @@ export async function processRawAggregateAndBurn(
       const readKills = (k: string) => toSafeInt(objectives[k]?.kills)
       const readFirst = (k: string) => (objectives[k]?.first === true ? 1 : 0)
       const win = team.win === true ? 1 : 0
+      const drakeStats = drakeStatsByTeam.get(teamNum) ?? initTeamDrakeStats()
+      const elderKillsResolved = Math.max(readKills('elderDragon'), drakeStats.elderKills)
 
       const teamRows = await tx.$queryRaw<Array<{ id: bigint }>>`
         INSERT INTO agg_team_core_stats (
@@ -689,14 +810,24 @@ export async function processRawAggregateAndBurn(
           sum_baron_kills, count_baron_first, sum_dragon_kills, count_dragon_first,
           sum_tower_kills, count_tower_first, sum_horde_kills, count_horde_first,
           sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills,
-          count_first_blood, sum_elder_kills, updated_at
+          count_first_blood, sum_elder_kills,
+          count_earth_drake, count_water_drake, count_wind_drake, count_fire_drake,
+          count_hextec_drake, count_chem_drake,
+          count_earth_drake_soul, count_water_drake_soul, count_wind_drake_soul, count_fire_drake_soul,
+          count_hextec_drake_soul, count_chem_drake_soul,
+          updated_at
         )
         VALUES (
           ${idCandidate}, ${teamNum}, ${matchRankTier}, ${gameVersion}, ${win}, 1,
           ${readKills('baron')}, ${readFirst('baron')}, ${readKills('dragon')}, ${readFirst('dragon')},
           ${readKills('tower')}, ${readFirst('tower')}, ${readKills('horde')}, ${readFirst('horde')},
           ${readKills('riftHerald')}, ${readFirst('riftHerald')}, ${readKills('inhibitor')},
-          ${readFirst('champion')}, ${readKills('elderDragon')}, NOW()
+          ${readFirst('champion')}, ${elderKillsResolved},
+          ${drakeStats.earthDrake}, ${drakeStats.waterDrake}, ${drakeStats.windDrake}, ${drakeStats.fireDrake},
+          ${drakeStats.hextecDrake}, ${drakeStats.chemDrake},
+          ${drakeStats.earthSoul}, ${drakeStats.waterSoul}, ${drakeStats.windSoul}, ${drakeStats.fireSoul},
+          ${drakeStats.hextecSoul}, ${drakeStats.chemSoul},
+          NOW()
         )
         ON CONFLICT (team, rank_tier, game_version) DO UPDATE
         SET count_game = agg_team_core_stats.count_game + EXCLUDED.count_game,
@@ -714,6 +845,18 @@ export async function processRawAggregateAndBurn(
             sum_inhibitor_kills = agg_team_core_stats.sum_inhibitor_kills + EXCLUDED.sum_inhibitor_kills,
             count_first_blood = agg_team_core_stats.count_first_blood + EXCLUDED.count_first_blood,
             sum_elder_kills = agg_team_core_stats.sum_elder_kills + EXCLUDED.sum_elder_kills,
+            count_earth_drake = agg_team_core_stats.count_earth_drake + EXCLUDED.count_earth_drake,
+            count_water_drake = agg_team_core_stats.count_water_drake + EXCLUDED.count_water_drake,
+            count_wind_drake = agg_team_core_stats.count_wind_drake + EXCLUDED.count_wind_drake,
+            count_fire_drake = agg_team_core_stats.count_fire_drake + EXCLUDED.count_fire_drake,
+            count_hextec_drake = agg_team_core_stats.count_hextec_drake + EXCLUDED.count_hextec_drake,
+            count_chem_drake = agg_team_core_stats.count_chem_drake + EXCLUDED.count_chem_drake,
+            count_earth_drake_soul = agg_team_core_stats.count_earth_drake_soul + EXCLUDED.count_earth_drake_soul,
+            count_water_drake_soul = agg_team_core_stats.count_water_drake_soul + EXCLUDED.count_water_drake_soul,
+            count_wind_drake_soul = agg_team_core_stats.count_wind_drake_soul + EXCLUDED.count_wind_drake_soul,
+            count_fire_drake_soul = agg_team_core_stats.count_fire_drake_soul + EXCLUDED.count_fire_drake_soul,
+            count_hextec_drake_soul = agg_team_core_stats.count_hextec_drake_soul + EXCLUDED.count_hextec_drake_soul,
+            count_chem_drake_soul = agg_team_core_stats.count_chem_drake_soul + EXCLUDED.count_chem_drake_soul,
             updated_at = NOW()
         RETURNING id
       `
@@ -723,11 +866,24 @@ export async function processRawAggregateAndBurn(
       const objectiveBuckets = [
         ['baron', toObjectiveBucket(readKills('baron'))],
         ['dragon', toObjectiveBucket(readKills('dragon'))],
-        ['elder', toObjectiveBucket(readKills('elderDragon'))],
+        ['elder', toObjectiveBucket(elderKillsResolved)],
         ['tower', toObjectiveBucket(readKills('tower'))],
         ['inhibitor', toObjectiveBucket(readKills('inhibitor'))],
         ['riftHerald', toObjectiveBucket(readKills('riftHerald'))],
         ['horde', toObjectiveBucket(readKills('horde'))],
+        ['first_blood', toObjectiveBucket(readFirst('champion'))],
+        ['earth_drake', toObjectiveBucket(drakeStats.earthDrake)],
+        ['water_drake', toObjectiveBucket(drakeStats.waterDrake)],
+        ['wind_drake', toObjectiveBucket(drakeStats.windDrake)],
+        ['fire_drake', toObjectiveBucket(drakeStats.fireDrake)],
+        ['hextec_drake', toObjectiveBucket(drakeStats.hextecDrake)],
+        ['chem_drake', toObjectiveBucket(drakeStats.chemDrake)],
+        ['earth_soul', toObjectiveBucket(drakeStats.earthSoul)],
+        ['water_soul', toObjectiveBucket(drakeStats.waterSoul)],
+        ['wind_soul', toObjectiveBucket(drakeStats.windSoul)],
+        ['fire_soul', toObjectiveBucket(drakeStats.fireSoul)],
+        ['hextec_soul', toObjectiveBucket(drakeStats.hextecSoul)],
+        ['chem_soul', toObjectiveBucket(drakeStats.chemSoul)],
       ] as const
       for (const [objectiveKey, objectiveBucket] of objectiveBuckets) {
         await tx.$executeRaw`
@@ -753,6 +909,79 @@ export async function processRawAggregateAndBurn(
               updated_at = NOW()
         `
       }
+
+      await tx.$executeRaw`
+        WITH objective_bucket_rows AS (
+          SELECT
+            objective_key,
+            objective_bucket,
+            SUM(count_win)::int AS count_win,
+            SUM(count_game - count_win)::int AS count_loss
+          FROM agg_team_bucket
+          WHERE team_stat_id = ${sideStatId}
+          GROUP BY objective_key, objective_bucket
+        ),
+        objective_bucket_json AS (
+          SELECT
+            objective_key,
+            COALESCE(
+              jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+                FILTER (WHERE count_win > 0),
+              '{}'::jsonb
+            ) AS win_json,
+            COALESCE(
+              jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+                FILTER (WHERE count_loss > 0),
+              '{}'::jsonb
+            ) AS loss_json
+          FROM objective_bucket_rows
+          GROUP BY objective_key
+        )
+        UPDATE agg_team_core_stats atc
+        SET
+          baron_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'baron'), '{}'::jsonb),
+          baron_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'baron'), '{}'::jsonb),
+          drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'dragon'), '{}'::jsonb),
+          drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'dragon'), '{}'::jsonb),
+          void_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'horde'), '{}'::jsonb),
+          void_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'horde'), '{}'::jsonb),
+          herald_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'riftHerald'), '{}'::jsonb),
+          herald_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'riftHerald'), '{}'::jsonb),
+          inhibitor_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'inhibitor'), '{}'::jsonb),
+          inhibitor_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'inhibitor'), '{}'::jsonb),
+          tower_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'tower'), '{}'::jsonb),
+          tower_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'tower'), '{}'::jsonb),
+          first_blood_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'first_blood'), '{}'::jsonb),
+          first_blood_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'first_blood'), '{}'::jsonb),
+          elder_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'elder'), '{}'::jsonb),
+          elder_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'elder'), '{}'::jsonb),
+          earth_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'earth_drake'), '{}'::jsonb),
+          earth_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'earth_drake'), '{}'::jsonb),
+          water_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'water_drake'), '{}'::jsonb),
+          water_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'water_drake'), '{}'::jsonb),
+          wind_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'wind_drake'), '{}'::jsonb),
+          wind_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'wind_drake'), '{}'::jsonb),
+          fire_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'fire_drake'), '{}'::jsonb),
+          fire_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'fire_drake'), '{}'::jsonb),
+          hextec_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'hextec_drake'), '{}'::jsonb),
+          hextec_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'hextec_drake'), '{}'::jsonb),
+          chem_drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'chem_drake'), '{}'::jsonb),
+          chem_drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'chem_drake'), '{}'::jsonb),
+          earth_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'earth_soul'), '{}'::jsonb),
+          earth_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'earth_soul'), '{}'::jsonb),
+          water_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'water_soul'), '{}'::jsonb),
+          water_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'water_soul'), '{}'::jsonb),
+          wind_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'wind_soul'), '{}'::jsonb),
+          wind_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'wind_soul'), '{}'::jsonb),
+          fire_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'fire_soul'), '{}'::jsonb),
+          fire_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'fire_soul'), '{}'::jsonb),
+          hextec_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'hextec_soul'), '{}'::jsonb),
+          hextec_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'hextec_soul'), '{}'::jsonb),
+          chem_soul_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'chem_soul'), '{}'::jsonb),
+          chem_soul_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'chem_soul'), '{}'::jsonb),
+          updated_at = NOW()
+        WHERE atc.id = ${sideStatId}
+      `
 
       for (const ban of team.bans ?? []) {
         const bannedChampionId = toSafeInt(ban.championId)

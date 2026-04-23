@@ -1,8 +1,8 @@
-import axios, { AxiosInstance } from 'axios'
 import { join } from 'path'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
+import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 
 export interface YouTubeVideo {
   id: string
@@ -38,17 +38,22 @@ interface StoredYouTubeChannelData {
 }
 
 export class YouTubeService {
-  private readonly api: AxiosInstance
   private readonly apiKey: string | null
   private readonly dataDir: string
+  private readonly baseUrl = 'https://www.googleapis.com/youtube/v3'
 
   constructor(dataDir: string = join(process.cwd(), 'data', 'youtube')) {
     this.dataDir = dataDir
     this.apiKey = process.env.YOUTUBE_API_KEY || null
-    this.api = axios.create({
-      baseURL: 'https://www.googleapis.com/youtube/v3',
-      timeout: 30000,
-      params: { key: this.apiKey }
+  }
+
+  private async youtubeGet<T>(
+    endpoint: string,
+    params: Record<string, string | number | boolean | null | undefined>
+  ): Promise<T> {
+    return fetchJson<T>(`${this.baseUrl}${endpoint}`, {
+      timeoutMs: 30_000,
+      query: { ...params, key: this.apiKey ?? '' },
     })
   }
 
@@ -92,11 +97,11 @@ export class YouTubeService {
     }
 
     try {
-      const searchResponse = await this.api.get('/search', {
-        params: { part: 'snippet', q, type: 'channel', maxResults: 1 }
-      })
-
-      const item = searchResponse.data?.items?.[0]
+      const searchResponse = await this.youtubeGet<{ items?: Array<{ id?: { channelId?: string }; snippet?: { channelTitle?: string } }> }>(
+        '/search',
+        { part: 'snippet', q, type: 'channel', maxResults: 1 }
+      )
+      const item = searchResponse?.items?.[0]
       const channelId = item?.id?.channelId as string | undefined
       const channelName = item?.snippet?.channelTitle as string | undefined
 
@@ -106,11 +111,11 @@ export class YouTubeService {
 
       return Result.ok({ channelId, channelName: channelName || q })
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (error instanceof HttpRequestError) {
         return Result.err(
           new ExternalApiError(
             `Failed to resolve YouTube channel: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -124,16 +129,15 @@ export class YouTubeService {
     if (keyOk.isErr()) return Result.err(keyOk.unwrapErr())
 
     try {
-      const channelResponse = await this.api.get('/channels', {
-        params: { part: 'contentDetails', id: channelId }
-      })
-
-      if (!channelResponse.data?.items || channelResponse.data.items.length === 0) {
+      const channelResponse = await this.youtubeGet<{
+        items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }>
+      }>('/channels', { part: 'contentDetails', id: channelId })
+      if (!channelResponse?.items || channelResponse.items.length === 0) {
         return Result.err(new ExternalApiError(`Channel not found: ${channelId}`))
       }
 
       const uploadsPlaylistId =
-        channelResponse.data.items[0].contentDetails?.relatedPlaylists?.uploads
+        channelResponse.items[0].contentDetails?.relatedPlaylists?.uploads
 
       if (!uploadsPlaylistId) {
         return Result.err(new ExternalApiError(`No uploads playlist found for channel: ${channelId}`))
@@ -141,11 +145,11 @@ export class YouTubeService {
 
       return Result.ok(uploadsPlaylistId)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (error instanceof HttpRequestError) {
         return Result.err(
           new ExternalApiError(
             `Failed to fetch channel uploads playlist: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -171,16 +175,16 @@ export class YouTubeService {
         const remaining = maxVideos - ids.length
         const pageSize = Math.min(50, remaining)
 
-        const res = await this.api.get('/playlistItems', {
-          params: {
-            part: 'contentDetails',
-            playlistId: uploadsPlaylistId,
-            maxResults: pageSize,
-            pageToken
-          }
+        const res = await this.youtubeGet<{
+          items?: Array<{ contentDetails?: { videoId?: string } }>
+          nextPageToken?: string
+        }>('/playlistItems', {
+          part: 'contentDetails',
+          playlistId: uploadsPlaylistId,
+          maxResults: pageSize,
+          pageToken,
         })
-
-        const items = res.data?.items
+        const items = res?.items
         if (!items || items.length === 0) break
 
         const pageIds: string[] = items
@@ -199,23 +203,23 @@ export class YouTubeService {
           ids.push(...pageIds)
         }
 
-        pageToken = res.data?.nextPageToken
+        pageToken = res?.nextPageToken
         if (!pageToken) break
       }
 
       return Result.ok(ids)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(new ExternalApiError('YouTube API rate limit exceeded. Please retry later.', 429, error))
         }
-        if (error.response?.status === 403) {
+        if (error.statusCode === 403) {
           return Result.err(new ExternalApiError('YouTube API quota exceeded', 403, error))
         }
         return Result.err(
           new ExternalApiError(
             `Failed to fetch YouTube uploads list: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -233,14 +237,27 @@ export class YouTubeService {
       const videos: YouTubeVideo[] = []
       for (let i = 0; i < videoIds.length; i += 50) {
         const chunk = videoIds.slice(i, i + 50)
-        const res = await this.api.get('/videos', {
-          params: { part: 'snippet,statistics,contentDetails', id: chunk.join(',') }
-        })
+        const res = await this.youtubeGet<{ items?: Array<{
+          id: string
+          snippet?: {
+            title?: string
+            description?: string
+            publishedAt?: string
+            thumbnails?: {
+              default?: { url?: string }
+              medium?: { url?: string }
+              high?: { url?: string }
+            }
+            channelId?: string
+            channelTitle?: string
+          }
+          contentDetails?: { duration?: string }
+        }> }>('/videos', { part: 'snippet,statistics,contentDetails', id: chunk.join(',') })
 
-        if (!res.data?.items) continue
+        if (!res?.items) continue
 
         videos.push(
-          ...res.data.items.map(
+          ...res.items.map(
             (item: {
               id: string
               snippet?: {
@@ -280,17 +297,17 @@ export class YouTubeService {
 
       return Result.ok(videos)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(new ExternalApiError('YouTube API rate limit exceeded. Please retry later.', 429, error))
         }
-        if (error.response?.status === 403) {
+        if (error.statusCode === 403) {
           return Result.err(new ExternalApiError('YouTube API quota exceeded', 403, error))
         }
         return Result.err(
           new ExternalApiError(
             `Failed to fetch YouTube video details: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
@@ -311,10 +328,11 @@ export class YouTubeService {
 
       for (let i = 0; i < videoIds.length; i += 50) {
         const chunk = videoIds.slice(i, i + 50)
-        const res = await this.api.get('/videos', {
-          params: { part: 'contentDetails', id: chunk.join(',') }
-        })
-        const items = res.data?.items
+        const res = await this.youtubeGet<{ items?: Array<{ id: string; contentDetails?: { duration?: string } }> }>(
+          '/videos',
+          { part: 'contentDetails', id: chunk.join(',') }
+        )
+        const items = res?.items
         if (!items || items.length === 0) continue
 
         for (const item of items as Array<{ id: string; contentDetails?: { duration?: string } }>) {
@@ -325,17 +343,17 @@ export class YouTubeService {
 
       return Result.ok(byId)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 429) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 429) {
           return Result.err(new ExternalApiError('YouTube API rate limit exceeded. Please retry later.', 429, error))
         }
-        if (error.response?.status === 403) {
+        if (error.statusCode === 403) {
           return Result.err(new ExternalApiError('YouTube API quota exceeded', 403, error))
         }
         return Result.err(
           new ExternalApiError(
             `Failed to fetch YouTube video durations: ${error.message}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )

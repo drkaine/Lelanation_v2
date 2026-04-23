@@ -983,7 +983,32 @@ async function main(): Promise<void> {
   `)
 
   await prisma.$executeRawUnsafe(`
-    WITH team_source AS (
+    WITH drake_stats AS (
+      SELECT
+        it.id AS team_id,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%MOUNTAIN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%EARTH%' THEN 1 ELSE 0 END)::int AS count_earth_drake,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%OCEAN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WATER%' THEN 1 ELSE 0 END)::int AS count_water_drake,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CLOUD%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WIND%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%AIR%' THEN 1 ELSE 0 END)::int AS count_wind_drake,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%INFERNAL%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%FIRE%' THEN 1 ELSE 0 END)::int AS count_fire_drake,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTEC%' THEN 1 ELSE 0 END)::int AS count_hextec_drake,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEMTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEM%' THEN 1 ELSE 0 END)::int AS count_chem_drake,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('MOUNTAIN','EARTH_DRAGON','MOUNTAIN_DRAGON','EARTH_DRAGON_SOUL','MOUNTAIN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_earth_drake_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('OCEAN','WATER_DRAGON','OCEAN_DRAGON','WATER_DRAGON_SOUL','OCEAN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_water_drake_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CLOUD','AIR_DRAGON','WIND_DRAGON','CLOUD_DRAGON','AIR_DRAGON_SOUL','WIND_DRAGON_SOUL','CLOUD_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_wind_drake_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('INFERNAL','FIRE_DRAGON','INFERNAL_DRAGON','FIRE_DRAGON_SOUL','INFERNAL_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_fire_drake_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('HEXTECH','HEXTECH_DRAGON','HEXTEC_DRAGON','HEXTECH_DRAGON_SOUL','HEXTEC_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_hextec_drake_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CHEMTECH','CHEMTECH_DRAGON','CHEM_DRAGON','CHEMTECH_DRAGON_SOUL','CHEM_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS count_chem_drake_soul,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'ELDER_DRAGON' OR LOWER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'elder' THEN 1 ELSE 0 END)::int AS elder_from_timeline
+      FROM ingest_teams it
+      LEFT JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(it.drakes_json::jsonb) = 'array' THEN it.drakes_json::jsonb
+          ELSE '[]'::jsonb
+        END
+      ) AS d(elem) ON TRUE
+      GROUP BY it.id
+    ),
+    team_source AS (
       SELECT
         it.team,
         im.rank_tier,
@@ -1004,21 +1029,22 @@ async function main(): Promise<void> {
         SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END)::int AS count_rift_herald_first,
         SUM(it.inhibitor_kills)::int AS sum_inhibitor_kills,
         SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END)::int AS count_first_blood,
-        SUM(it.elder_kills)::int AS sum_elder_kills,
-        0::int AS count_earth_drake,
-        0::int AS count_water_drake,
-        0::int AS count_wind_drake,
-        0::int AS count_fire_drake,
-        0::int AS count_hextec_drake,
-        0::int AS count_chem_drake,
-        0::int AS count_earth_drake_soul,
-        0::int AS count_water_drake_soul,
-        0::int AS count_wind_drake_soul,
-        0::int AS count_fire_drake_soul,
-        0::int AS count_hextec_drake_soul,
-        0::int AS count_chem_drake_soul
+        SUM(GREATEST(COALESCE(it.elder_kills, 0), COALESCE(ds.elder_from_timeline, 0)))::int AS sum_elder_kills,
+        SUM(COALESCE(ds.count_earth_drake, 0))::int AS count_earth_drake,
+        SUM(COALESCE(ds.count_water_drake, 0))::int AS count_water_drake,
+        SUM(COALESCE(ds.count_wind_drake, 0))::int AS count_wind_drake,
+        SUM(COALESCE(ds.count_fire_drake, 0))::int AS count_fire_drake,
+        SUM(COALESCE(ds.count_hextec_drake, 0))::int AS count_hextec_drake,
+        SUM(COALESCE(ds.count_chem_drake, 0))::int AS count_chem_drake,
+        SUM(COALESCE(ds.count_earth_drake_soul, 0))::int AS count_earth_drake_soul,
+        SUM(COALESCE(ds.count_water_drake_soul, 0))::int AS count_water_drake_soul,
+        SUM(COALESCE(ds.count_wind_drake_soul, 0))::int AS count_wind_drake_soul,
+        SUM(COALESCE(ds.count_fire_drake_soul, 0))::int AS count_fire_drake_soul,
+        SUM(COALESCE(ds.count_hextec_drake_soul, 0))::int AS count_hextec_drake_soul,
+        SUM(COALESCE(ds.count_chem_drake_soul, 0))::int AS count_chem_drake_soul
       FROM ingest_teams it
       INNER JOIN ingest_matchs im ON im.id = it.match_id
+      LEFT JOIN drake_stats ds ON ds.team_id = it.id
       WHERE COALESCE(NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       GROUP BY it.team, im.rank_tier, im.game_version
     )
@@ -1167,34 +1193,104 @@ async function main(): Promise<void> {
   `)
 
   await prisma.$executeRawUnsafe(`
-    WITH source AS (
+    WITH drake_stats AS (
+      SELECT
+        it.id AS team_id,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'ELDER_DRAGON' OR LOWER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'elder' THEN 1 ELSE 0 END)::int AS elder_from_timeline,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%MOUNTAIN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%EARTH%' THEN 1 ELSE 0 END)::int AS earth_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%OCEAN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WATER%' THEN 1 ELSE 0 END)::int AS water_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CLOUD%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WIND%' THEN 1 ELSE 0 END)::int AS wind_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%INFERNAL%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%FIRE%' THEN 1 ELSE 0 END)::int AS fire_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTEC%' THEN 1 ELSE 0 END)::int AS hextec_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEMTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEM%' THEN 1 ELSE 0 END)::int AS chem_drake_count,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('MOUNTAIN','EARTH_DRAGON','MOUNTAIN_DRAGON','EARTH_DRAGON_SOUL','MOUNTAIN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS earth_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('OCEAN','WATER_DRAGON','OCEAN_DRAGON','WATER_DRAGON_SOUL','OCEAN_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS water_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CLOUD','AIR_DRAGON','WIND_DRAGON','CLOUD_DRAGON','AIR_DRAGON_SOUL','WIND_DRAGON_SOUL','CLOUD_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS wind_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('INFERNAL','FIRE_DRAGON','INFERNAL_DRAGON','FIRE_DRAGON_SOUL','INFERNAL_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS fire_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('HEXTECH','HEXTECH_DRAGON','HEXTEC_DRAGON','HEXTECH_DRAGON_SOUL','HEXTEC_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS hextec_soul,
+        MAX(CASE WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CHEMTECH','CHEMTECH_DRAGON','CHEM_DRAGON','CHEMTECH_DRAGON_SOUL','CHEM_DRAGON_SOUL') THEN 1 ELSE 0 END)::int AS chem_soul
+      FROM ingest_teams it
+      LEFT JOIN LATERAL jsonb_array_elements(
+        CASE
+          WHEN jsonb_typeof(it.drakes_json::jsonb) = 'array' THEN it.drakes_json::jsonb
+          ELSE '[]'::jsonb
+        END
+      ) AS d(elem) ON TRUE
+      GROUP BY it.id
+    ),
+    team_match_rows AS (
       SELECT
         atc.id AS team_stat_id,
-        atc.count_win,
-        atc.count_game,
-        atc.sum_baron_kills,
-        atc.sum_dragon_kills,
-        atc.sum_elder_kills,
-        atc.sum_tower_kills,
-        atc.sum_inhibitor_kills,
-        atc.sum_rift_herald_kills,
-        atc.sum_horde_kills
-      FROM agg_team_core_stats atc
+        it.win,
+        LEAST(20, GREATEST(0, COALESCE(it.baron_kills, 0)))::int AS baron_bucket,
+        LEAST(20, GREATEST(0, COALESCE(it.dragon_kills, 0)))::int AS dragon_bucket,
+        LEAST(20, GREATEST(0, GREATEST(COALESCE(it.elder_kills, 0), COALESCE(ds.elder_from_timeline, 0))))::int AS elder_bucket,
+        LEAST(20, GREATEST(0, COALESCE(it.tower_kills, 0)))::int AS tower_bucket,
+        LEAST(20, GREATEST(0, COALESCE(it.inhibitor_kills, 0)))::int AS inhibitor_bucket,
+        LEAST(20, GREATEST(0, COALESCE(it.rift_herald_kills, 0)))::int AS herald_bucket,
+        LEAST(20, GREATEST(0, COALESCE(it.horde_kills, 0)))::int AS horde_bucket,
+        CASE WHEN it.first_blood THEN 1 ELSE 0 END::int AS first_blood_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.earth_drake_count, 0)))::int AS earth_drake_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.water_drake_count, 0)))::int AS water_drake_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.wind_drake_count, 0)))::int AS wind_drake_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.fire_drake_count, 0)))::int AS fire_drake_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.hextec_drake_count, 0)))::int AS hextec_drake_bucket,
+        LEAST(20, GREATEST(0, COALESCE(ds.chem_drake_count, 0)))::int AS chem_drake_bucket,
+        CASE WHEN COALESCE(ds.earth_soul, 0) > 0 THEN 1 ELSE 0 END::int AS earth_soul_bucket,
+        CASE WHEN COALESCE(ds.water_soul, 0) > 0 THEN 1 ELSE 0 END::int AS water_soul_bucket,
+        CASE WHEN COALESCE(ds.wind_soul, 0) > 0 THEN 1 ELSE 0 END::int AS wind_soul_bucket,
+        CASE WHEN COALESCE(ds.fire_soul, 0) > 0 THEN 1 ELSE 0 END::int AS fire_soul_bucket,
+        CASE WHEN COALESCE(ds.hextec_soul, 0) > 0 THEN 1 ELSE 0 END::int AS hextec_soul_bucket,
+        CASE WHEN COALESCE(ds.chem_soul, 0) > 0 THEN 1 ELSE 0 END::int AS chem_soul_bucket
+      FROM ingest_teams it
+      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      INNER JOIN agg_team_core_stats atc
+        ON atc.team = it.team
+       AND atc.rank_tier = UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
+       AND atc.game_version = im.game_version
+      LEFT JOIN drake_stats ds ON ds.team_id = it.id
+      WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
     ),
     flattened AS (
-      SELECT team_stat_id, 'baron'::text AS objective_key, LEAST(20, GREATEST(0, sum_baron_kills)) AS objective_bucket, count_win, count_game FROM source
+      SELECT team_stat_id, 'baron'::text AS objective_key, baron_bucket AS objective_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int AS count_win, COUNT(*)::int AS count_game FROM team_match_rows GROUP BY team_stat_id, baron_bucket
       UNION ALL
-      SELECT team_stat_id, 'dragon', LEAST(20, GREATEST(0, sum_dragon_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'dragon'::text, dragon_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, dragon_bucket
       UNION ALL
-      SELECT team_stat_id, 'elder', LEAST(20, GREATEST(0, sum_elder_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'elder'::text, elder_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, elder_bucket
       UNION ALL
-      SELECT team_stat_id, 'tower', LEAST(20, GREATEST(0, sum_tower_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'tower'::text, tower_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, tower_bucket
       UNION ALL
-      SELECT team_stat_id, 'inhibitor', LEAST(20, GREATEST(0, sum_inhibitor_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'inhibitor'::text, inhibitor_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, inhibitor_bucket
       UNION ALL
-      SELECT team_stat_id, 'riftHerald', LEAST(20, GREATEST(0, sum_rift_herald_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'riftHerald'::text, herald_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, herald_bucket
       UNION ALL
-      SELECT team_stat_id, 'horde', LEAST(20, GREATEST(0, sum_horde_kills)), count_win, count_game FROM source
+      SELECT team_stat_id, 'horde'::text, horde_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, horde_bucket
+      UNION ALL
+      SELECT team_stat_id, 'first_blood'::text, first_blood_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, first_blood_bucket
+      UNION ALL
+      SELECT team_stat_id, 'earth_drake'::text, earth_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, earth_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'water_drake'::text, water_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, water_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'wind_drake'::text, wind_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, wind_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'fire_drake'::text, fire_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, fire_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'hextec_drake'::text, hextec_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, hextec_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'chem_drake'::text, chem_drake_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, chem_drake_bucket
+      UNION ALL
+      SELECT team_stat_id, 'earth_soul'::text, earth_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, earth_soul_bucket
+      UNION ALL
+      SELECT team_stat_id, 'water_soul'::text, water_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, water_soul_bucket
+      UNION ALL
+      SELECT team_stat_id, 'wind_soul'::text, wind_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, wind_soul_bucket
+      UNION ALL
+      SELECT team_stat_id, 'fire_soul'::text, fire_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, fire_soul_bucket
+      UNION ALL
+      SELECT team_stat_id, 'hextec_soul'::text, hextec_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, hextec_soul_bucket
+      UNION ALL
+      SELECT team_stat_id, 'chem_soul'::text, chem_soul_bucket, SUM(CASE WHEN win THEN 1 ELSE 0 END)::int, COUNT(*)::int FROM team_match_rows GROUP BY team_stat_id, chem_soul_bucket
     )
     INSERT INTO agg_team_bucket (team_stat_id, objective_key, objective_bucket, count_win, count_game, updated_at)
     SELECT team_stat_id, objective_key, objective_bucket, count_win, count_game, NOW()
@@ -1207,48 +1303,423 @@ async function main(): Promise<void> {
   `)
 
   await prisma.$executeRawUnsafe(`
+    WITH objective_bucket_rows AS (
+      SELECT
+        team_stat_id,
+        objective_key,
+        objective_bucket,
+        SUM(count_win)::int AS count_win,
+        SUM(count_game - count_win)::int AS count_loss
+      FROM agg_team_bucket
+      GROUP BY team_stat_id, objective_key, objective_bucket
+    ),
+    objective_bucket_json AS (
+      SELECT
+        team_stat_id,
+        objective_key,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM objective_bucket_rows
+      GROUP BY team_stat_id, objective_key
+    )
+    UPDATE agg_team_core_stats atc
+    SET
+      baron_win_team = COALESCE(ob_baron.win_json, '{}'::jsonb),
+      baron_loose_team = COALESCE(ob_baron.loss_json, '{}'::jsonb),
+      drake_win_team = COALESCE(ob_dragon.win_json, '{}'::jsonb),
+      drake_loose_team = COALESCE(ob_dragon.loss_json, '{}'::jsonb),
+      void_win_team = COALESCE(ob_horde.win_json, '{}'::jsonb),
+      void_loose_team = COALESCE(ob_horde.loss_json, '{}'::jsonb),
+      herald_win_team = COALESCE(ob_herald.win_json, '{}'::jsonb),
+      herald_loose_team = COALESCE(ob_herald.loss_json, '{}'::jsonb),
+      inhibitor_win_team = COALESCE(ob_inhibitor.win_json, '{}'::jsonb),
+      inhibitor_loose_team = COALESCE(ob_inhibitor.loss_json, '{}'::jsonb),
+      tower_win_team = COALESCE(ob_tower.win_json, '{}'::jsonb),
+      tower_loose_team = COALESCE(ob_tower.loss_json, '{}'::jsonb),
+      first_blood_win_team = COALESCE(ob_first_blood.win_json, '{}'::jsonb),
+      first_blood_loose_team = COALESCE(ob_first_blood.loss_json, '{}'::jsonb),
+      elder_win_team = COALESCE(ob_elder.win_json, '{}'::jsonb),
+      elder_loose_team = COALESCE(ob_elder.loss_json, '{}'::jsonb),
+      earth_drake_win_team = COALESCE(ob_earth_drake.win_json, '{}'::jsonb),
+      earth_drake_loose_team = COALESCE(ob_earth_drake.loss_json, '{}'::jsonb),
+      water_drake_win_team = COALESCE(ob_water_drake.win_json, '{}'::jsonb),
+      water_drake_loose_team = COALESCE(ob_water_drake.loss_json, '{}'::jsonb),
+      wind_drake_win_team = COALESCE(ob_wind_drake.win_json, '{}'::jsonb),
+      wind_drake_loose_team = COALESCE(ob_wind_drake.loss_json, '{}'::jsonb),
+      fire_drake_win_team = COALESCE(ob_fire_drake.win_json, '{}'::jsonb),
+      fire_drake_loose_team = COALESCE(ob_fire_drake.loss_json, '{}'::jsonb),
+      hextec_drake_win_team = COALESCE(ob_hextec_drake.win_json, '{}'::jsonb),
+      hextec_drake_loose_team = COALESCE(ob_hextec_drake.loss_json, '{}'::jsonb),
+      chem_drake_win_team = COALESCE(ob_chem_drake.win_json, '{}'::jsonb),
+      chem_drake_loose_team = COALESCE(ob_chem_drake.loss_json, '{}'::jsonb),
+      earth_soul_win_team = COALESCE(ob_earth_soul.win_json, '{}'::jsonb),
+      earth_soul_loose_team = COALESCE(ob_earth_soul.loss_json, '{}'::jsonb),
+      water_soul_win_team = COALESCE(ob_water_soul.win_json, '{}'::jsonb),
+      water_soul_loose_team = COALESCE(ob_water_soul.loss_json, '{}'::jsonb),
+      wind_soul_win_team = COALESCE(ob_wind_soul.win_json, '{}'::jsonb),
+      wind_soul_loose_team = COALESCE(ob_wind_soul.loss_json, '{}'::jsonb),
+      fire_soul_win_team = COALESCE(ob_fire_soul.win_json, '{}'::jsonb),
+      fire_soul_loose_team = COALESCE(ob_fire_soul.loss_json, '{}'::jsonb),
+      hextec_soul_win_team = COALESCE(ob_hextec_soul.win_json, '{}'::jsonb),
+      hextec_soul_loose_team = COALESCE(ob_hextec_soul.loss_json, '{}'::jsonb),
+      chem_soul_win_team = COALESCE(ob_chem_soul.win_json, '{}'::jsonb),
+      chem_soul_loose_team = COALESCE(ob_chem_soul.loss_json, '{}'::jsonb),
+      updated_at = NOW()
+    FROM objective_bucket_json ob_baron
+    LEFT JOIN objective_bucket_json ob_dragon
+      ON ob_dragon.team_stat_id = ob_baron.team_stat_id AND ob_dragon.objective_key = 'dragon'
+    LEFT JOIN objective_bucket_json ob_horde
+      ON ob_horde.team_stat_id = ob_baron.team_stat_id AND ob_horde.objective_key = 'horde'
+    LEFT JOIN objective_bucket_json ob_herald
+      ON ob_herald.team_stat_id = ob_baron.team_stat_id AND ob_herald.objective_key = 'riftHerald'
+    LEFT JOIN objective_bucket_json ob_inhibitor
+      ON ob_inhibitor.team_stat_id = ob_baron.team_stat_id AND ob_inhibitor.objective_key = 'inhibitor'
+    LEFT JOIN objective_bucket_json ob_tower
+      ON ob_tower.team_stat_id = ob_baron.team_stat_id AND ob_tower.objective_key = 'tower'
+    LEFT JOIN objective_bucket_json ob_first_blood
+      ON ob_first_blood.team_stat_id = ob_baron.team_stat_id AND ob_first_blood.objective_key = 'first_blood'
+    LEFT JOIN objective_bucket_json ob_elder
+      ON ob_elder.team_stat_id = ob_baron.team_stat_id AND ob_elder.objective_key = 'elder'
+    LEFT JOIN objective_bucket_json ob_earth_drake
+      ON ob_earth_drake.team_stat_id = ob_baron.team_stat_id AND ob_earth_drake.objective_key = 'earth_drake'
+    LEFT JOIN objective_bucket_json ob_water_drake
+      ON ob_water_drake.team_stat_id = ob_baron.team_stat_id AND ob_water_drake.objective_key = 'water_drake'
+    LEFT JOIN objective_bucket_json ob_wind_drake
+      ON ob_wind_drake.team_stat_id = ob_baron.team_stat_id AND ob_wind_drake.objective_key = 'wind_drake'
+    LEFT JOIN objective_bucket_json ob_fire_drake
+      ON ob_fire_drake.team_stat_id = ob_baron.team_stat_id AND ob_fire_drake.objective_key = 'fire_drake'
+    LEFT JOIN objective_bucket_json ob_hextec_drake
+      ON ob_hextec_drake.team_stat_id = ob_baron.team_stat_id AND ob_hextec_drake.objective_key = 'hextec_drake'
+    LEFT JOIN objective_bucket_json ob_chem_drake
+      ON ob_chem_drake.team_stat_id = ob_baron.team_stat_id AND ob_chem_drake.objective_key = 'chem_drake'
+    LEFT JOIN objective_bucket_json ob_earth_soul
+      ON ob_earth_soul.team_stat_id = ob_baron.team_stat_id AND ob_earth_soul.objective_key = 'earth_soul'
+    LEFT JOIN objective_bucket_json ob_water_soul
+      ON ob_water_soul.team_stat_id = ob_baron.team_stat_id AND ob_water_soul.objective_key = 'water_soul'
+    LEFT JOIN objective_bucket_json ob_wind_soul
+      ON ob_wind_soul.team_stat_id = ob_baron.team_stat_id AND ob_wind_soul.objective_key = 'wind_soul'
+    LEFT JOIN objective_bucket_json ob_fire_soul
+      ON ob_fire_soul.team_stat_id = ob_baron.team_stat_id AND ob_fire_soul.objective_key = 'fire_soul'
+    LEFT JOIN objective_bucket_json ob_hextec_soul
+      ON ob_hextec_soul.team_stat_id = ob_baron.team_stat_id AND ob_hextec_soul.objective_key = 'hextec_soul'
+    LEFT JOIN objective_bucket_json ob_chem_soul
+      ON ob_chem_soul.team_stat_id = ob_baron.team_stat_id AND ob_chem_soul.objective_key = 'chem_soul'
+    WHERE ob_baron.objective_key = 'baron'
+      AND atc.id = ob_baron.team_stat_id
+  `)
+
+  await prisma.$executeRawUnsafe(`
     INSERT INTO agg_objective_outcome_stats (
       game_version,
       rank_tier,
-      objective_key,
-      objective_bucket,
-      count_win,
-      count_loss,
-      count_game,
-      winrate_win_side,
-      winrate_other_side,
+      baron_win_team,
+      baron_loose_team,
+      drake_win_team,
+      drake_loose_team,
+      void_win_team,
+      void_loose_team,
+      herald_win_team,
+      herald_loose_team,
+      inhibitor_win_team,
+      inhibitor_loose_team,
+      tower_win_team,
+      tower_loose_team,
+      first_blood_win_team,
+      first_blood_loose_team,
+      elder_win_team,
+      elder_loose_team,
+      earth_drake_win_team,
+      earth_drake_loose_team,
+      water_drake_win_team,
+      water_drake_loose_team,
+      wind_drake_win_team,
+      wind_drake_loose_team,
+      fire_drake_win_team,
+      fire_drake_loose_team,
+      hextec_drake_win_team,
+      hextec_drake_loose_team,
+      chem_drake_win_team,
+      chem_drake_loose_team,
       updated_at
     )
+    WITH dims AS (
+      SELECT DISTINCT atc.game_version, atc.rank_tier
+      FROM agg_team_core_stats atc
+      WHERE atc.rank_tier <> 'UNRANKED'
+    ),
+    objective_bucket_rows AS (
+      SELECT
+        atc.game_version,
+        atc.rank_tier,
+        tb.objective_key,
+        tb.objective_bucket,
+        SUM(tb.count_win)::int AS count_win,
+        SUM(tb.count_game - tb.count_win)::int AS count_loss
+      FROM agg_team_bucket tb
+      INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
+      WHERE atc.rank_tier <> 'UNRANKED'
+      GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
+    ),
+    objective_bucket_json AS (
+      SELECT
+        game_version,
+        rank_tier,
+        objective_key,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM objective_bucket_rows
+      GROUP BY game_version, rank_tier, objective_key
+    ),
+    first_counts AS (
+      SELECT
+        im.game_version,
+        UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) AS rank_tier,
+        SUM(CASE WHEN it.win AND it.baron_first THEN 1 ELSE 0 END)::int AS baron_first_win,
+        SUM(CASE WHEN NOT it.win AND it.baron_first THEN 1 ELSE 0 END)::int AS baron_first_loss,
+        SUM(CASE WHEN it.win AND it.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first_win,
+        SUM(CASE WHEN NOT it.win AND it.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first_loss,
+        SUM(CASE WHEN it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_win,
+        SUM(CASE WHEN NOT it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_loss,
+        SUM(CASE WHEN it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_win,
+        SUM(CASE WHEN NOT it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_loss,
+        SUM(CASE WHEN it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_win,
+        SUM(CASE WHEN NOT it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_loss,
+        SUM(CASE WHEN it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_win,
+        SUM(CASE WHEN NOT it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_loss
+      FROM ingest_teams it
+      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
+      GROUP BY im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
+    ),
+    drake_type_per_team AS (
+      SELECT
+        src.game_version,
+        src.rank_tier,
+        src.win,
+        src.team_id,
+        SUM(CASE WHEN src.drake_type = 'earth' THEN 1 ELSE 0 END)::int AS earth_count,
+        SUM(CASE WHEN src.drake_type = 'water' THEN 1 ELSE 0 END)::int AS water_count,
+        SUM(CASE WHEN src.drake_type = 'wind' THEN 1 ELSE 0 END)::int AS wind_count,
+        SUM(CASE WHEN src.drake_type = 'fire' THEN 1 ELSE 0 END)::int AS fire_count,
+        SUM(CASE WHEN src.drake_type = 'hextec' THEN 1 ELSE 0 END)::int AS hextec_count,
+        SUM(CASE WHEN src.drake_type = 'chem' THEN 1 ELSE 0 END)::int AS chem_count,
+        MAX(CASE WHEN src.soul_type = 'earth' THEN 1 ELSE 0 END)::int AS earth_soul,
+        MAX(CASE WHEN src.soul_type = 'water' THEN 1 ELSE 0 END)::int AS water_soul,
+        MAX(CASE WHEN src.soul_type = 'wind' THEN 1 ELSE 0 END)::int AS wind_soul,
+        MAX(CASE WHEN src.soul_type = 'fire' THEN 1 ELSE 0 END)::int AS fire_soul,
+        MAX(CASE WHEN src.soul_type = 'hextec' THEN 1 ELSE 0 END)::int AS hextec_soul,
+        MAX(CASE WHEN src.soul_type = 'chem' THEN 1 ELSE 0 END)::int AS chem_soul
+      FROM (
+        SELECT
+          it.id AS team_id,
+          it.win,
+          im.game_version,
+          UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) AS rank_tier,
+          CASE
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%MOUNTAIN%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%EARTH%' THEN 'earth'
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%OCEAN%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%WATER%' THEN 'water'
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%CLOUD%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%WIND%' THEN 'wind'
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%INFERNAL%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%FIRE%' THEN 'fire'
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%HEXTECH%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%HEXTEC%' THEN 'hextec'
+            WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%CHEMTECH%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%CHEM%' THEN 'chem'
+            ELSE NULL
+          END AS drake_type,
+          CASE
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('MOUNTAIN','EARTH_DRAGON','MOUNTAIN_DRAGON','EARTH_DRAGON_SOUL','MOUNTAIN_DRAGON_SOUL') THEN 'earth'
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('OCEAN','WATER_DRAGON','OCEAN_DRAGON','WATER_DRAGON_SOUL','OCEAN_DRAGON_SOUL') THEN 'water'
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CLOUD','AIR_DRAGON','WIND_DRAGON','CLOUD_DRAGON','AIR_DRAGON_SOUL','WIND_DRAGON_SOUL','CLOUD_DRAGON_SOUL') THEN 'wind'
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('INFERNAL','FIRE_DRAGON','INFERNAL_DRAGON','FIRE_DRAGON_SOUL','INFERNAL_DRAGON_SOUL') THEN 'fire'
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('HEXTECH','HEXTECH_DRAGON','HEXTEC_DRAGON','HEXTECH_DRAGON_SOUL','HEXTEC_DRAGON_SOUL') THEN 'hextec'
+            WHEN UPPER(COALESCE(d.elem->>'soul', '')) IN ('CHEMTECH','CHEMTECH_DRAGON','CHEM_DRAGON','CHEMTECH_DRAGON_SOUL','CHEM_DRAGON_SOUL') THEN 'chem'
+            ELSE NULL
+          END AS soul_type
+        FROM ingest_teams it
+        INNER JOIN ingest_matchs im ON im.id = it.match_id
+        LEFT JOIN LATERAL jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(it.drakes_json::jsonb) = 'array' THEN it.drakes_json::jsonb
+            ELSE '[]'::jsonb
+          END
+        ) AS d(elem) ON TRUE
+        WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
+      ) src
+      GROUP BY src.game_version, src.rank_tier, src.win, src.team_id
+    ),
+    drake_type_bucket AS (
+      SELECT game_version, rank_tier, win, 'earth_drake'::text AS objective_key, earth_count AS objective_bucket FROM drake_type_per_team
+      UNION ALL
+      SELECT game_version, rank_tier, win, 'water_drake'::text, water_count FROM drake_type_per_team
+      UNION ALL
+      SELECT game_version, rank_tier, win, 'wind_drake'::text, wind_count FROM drake_type_per_team
+      UNION ALL
+      SELECT game_version, rank_tier, win, 'fire_drake'::text, fire_count FROM drake_type_per_team
+      UNION ALL
+      SELECT game_version, rank_tier, win, 'hextec_drake'::text, hextec_count FROM drake_type_per_team
+      UNION ALL
+      SELECT game_version, rank_tier, win, 'chem_drake'::text, chem_count FROM drake_type_per_team
+    ),
+    drake_type_bucket_rows AS (
+      SELECT
+        game_version,
+        rank_tier,
+        objective_key,
+        objective_bucket,
+        SUM(CASE WHEN win THEN 1 ELSE 0 END)::int AS count_win,
+        SUM(CASE WHEN win THEN 0 ELSE 1 END)::int AS count_loss
+      FROM drake_type_bucket
+      GROUP BY game_version, rank_tier, objective_key, objective_bucket
+    ),
+    drake_type_bucket_json AS (
+      SELECT
+        game_version,
+        rank_tier,
+        objective_key,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM drake_type_bucket_rows
+      GROUP BY game_version, rank_tier, objective_key
+    ),
+    drake_soul_counts AS (
+      SELECT
+        game_version,
+        rank_tier,
+        SUM(CASE WHEN win AND earth_soul = 1 THEN 1 ELSE 0 END)::int AS earth_soul_win,
+        SUM(CASE WHEN NOT win AND earth_soul = 1 THEN 1 ELSE 0 END)::int AS earth_soul_loss,
+        SUM(CASE WHEN win AND water_soul = 1 THEN 1 ELSE 0 END)::int AS water_soul_win,
+        SUM(CASE WHEN NOT win AND water_soul = 1 THEN 1 ELSE 0 END)::int AS water_soul_loss,
+        SUM(CASE WHEN win AND wind_soul = 1 THEN 1 ELSE 0 END)::int AS wind_soul_win,
+        SUM(CASE WHEN NOT win AND wind_soul = 1 THEN 1 ELSE 0 END)::int AS wind_soul_loss,
+        SUM(CASE WHEN win AND fire_soul = 1 THEN 1 ELSE 0 END)::int AS fire_soul_win,
+        SUM(CASE WHEN NOT win AND fire_soul = 1 THEN 1 ELSE 0 END)::int AS fire_soul_loss,
+        SUM(CASE WHEN win AND hextec_soul = 1 THEN 1 ELSE 0 END)::int AS hextec_soul_win,
+        SUM(CASE WHEN NOT win AND hextec_soul = 1 THEN 1 ELSE 0 END)::int AS hextec_soul_loss,
+        SUM(CASE WHEN win AND chem_soul = 1 THEN 1 ELSE 0 END)::int AS chem_soul_win,
+        SUM(CASE WHEN NOT win AND chem_soul = 1 THEN 1 ELSE 0 END)::int AS chem_soul_loss
+      FROM drake_type_per_team
+      GROUP BY game_version, rank_tier
+    )
     SELECT
-      atc.game_version,
-      atc.rank_tier,
-      tb.objective_key,
-      tb.objective_bucket,
-      SUM(tb.count_win)::int AS count_win,
-      SUM(tb.count_game - tb.count_win)::int AS count_loss,
-      SUM(tb.count_game)::int AS count_game,
-      CASE
-        WHEN SUM(tb.count_game) > 0
-          THEN ROUND((SUM(tb.count_win)::numeric / SUM(tb.count_game)::numeric) * 100.0, 2)
-        ELSE 0
-      END AS winrate_win_side,
-      CASE
-        WHEN SUM(tb.count_game) > 0
-          THEN ROUND((((SUM(tb.count_game) - SUM(tb.count_win))::numeric / SUM(tb.count_game)::numeric) * 100.0), 2)
-        ELSE 0
-      END AS winrate_other_side,
+      d.game_version,
+      d.rank_tier,
+      COALESCE(ob_baron.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_win, 0)),
+      COALESCE(ob_baron.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_loss, 0)),
+      COALESCE(ob_dragon.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_win, 0)),
+      COALESCE(ob_dragon.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_loss, 0)),
+      COALESCE(ob_horde.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_win, 0)),
+      COALESCE(ob_horde.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_loss, 0)),
+      COALESCE(ob_herald.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_win, 0)),
+      COALESCE(ob_herald.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_loss, 0)),
+      COALESCE(ob_inhibitor.win_json, '{}'::jsonb),
+      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb),
+      COALESCE(ob_tower.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_win, 0)),
+      COALESCE(ob_tower.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_loss, 0)),
+      jsonb_build_object('first', COALESCE(fc.first_blood_win, 0)),
+      jsonb_build_object('first', COALESCE(fc.first_blood_loss, 0)),
+      COALESCE(ob_elder.win_json, '{}'::jsonb),
+      COALESCE(ob_elder.loss_json, '{}'::jsonb),
+      COALESCE(dt_earth.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.earth_soul_win, 0)),
+      COALESCE(dt_earth.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.earth_soul_loss, 0)),
+      COALESCE(dt_water.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.water_soul_win, 0)),
+      COALESCE(dt_water.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.water_soul_loss, 0)),
+      COALESCE(dt_wind.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.wind_soul_win, 0)),
+      COALESCE(dt_wind.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.wind_soul_loss, 0)),
+      COALESCE(dt_fire.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.fire_soul_win, 0)),
+      COALESCE(dt_fire.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.fire_soul_loss, 0)),
+      COALESCE(dt_hextec.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.hextec_soul_win, 0)),
+      COALESCE(dt_hextec.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.hextec_soul_loss, 0)),
+      COALESCE(dt_chem.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.chem_soul_win, 0)),
+      COALESCE(dt_chem.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(dsoul.chem_soul_loss, 0)),
       NOW()
-    FROM agg_team_bucket tb
-    INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
-    WHERE atc.rank_tier <> 'UNRANKED'
-    GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
-    ON CONFLICT (game_version, rank_tier, objective_key, objective_bucket) DO UPDATE
+    FROM dims d
+    LEFT JOIN first_counts fc ON fc.game_version = d.game_version AND fc.rank_tier = d.rank_tier
+    LEFT JOIN objective_bucket_json ob_baron
+      ON ob_baron.game_version = d.game_version AND ob_baron.rank_tier = d.rank_tier AND ob_baron.objective_key = 'baron'
+    LEFT JOIN objective_bucket_json ob_dragon
+      ON ob_dragon.game_version = d.game_version AND ob_dragon.rank_tier = d.rank_tier AND ob_dragon.objective_key = 'dragon'
+    LEFT JOIN objective_bucket_json ob_horde
+      ON ob_horde.game_version = d.game_version AND ob_horde.rank_tier = d.rank_tier AND ob_horde.objective_key = 'horde'
+    LEFT JOIN objective_bucket_json ob_herald
+      ON ob_herald.game_version = d.game_version AND ob_herald.rank_tier = d.rank_tier AND ob_herald.objective_key = 'riftHerald'
+    LEFT JOIN objective_bucket_json ob_inhibitor
+      ON ob_inhibitor.game_version = d.game_version AND ob_inhibitor.rank_tier = d.rank_tier AND ob_inhibitor.objective_key = 'inhibitor'
+    LEFT JOIN objective_bucket_json ob_tower
+      ON ob_tower.game_version = d.game_version AND ob_tower.rank_tier = d.rank_tier AND ob_tower.objective_key = 'tower'
+    LEFT JOIN objective_bucket_json ob_elder
+      ON ob_elder.game_version = d.game_version AND ob_elder.rank_tier = d.rank_tier AND ob_elder.objective_key = 'elder'
+    LEFT JOIN drake_type_bucket_json dt_earth
+      ON dt_earth.game_version = d.game_version AND dt_earth.rank_tier = d.rank_tier AND dt_earth.objective_key = 'earth_drake'
+    LEFT JOIN drake_type_bucket_json dt_water
+      ON dt_water.game_version = d.game_version AND dt_water.rank_tier = d.rank_tier AND dt_water.objective_key = 'water_drake'
+    LEFT JOIN drake_type_bucket_json dt_wind
+      ON dt_wind.game_version = d.game_version AND dt_wind.rank_tier = d.rank_tier AND dt_wind.objective_key = 'wind_drake'
+    LEFT JOIN drake_type_bucket_json dt_fire
+      ON dt_fire.game_version = d.game_version AND dt_fire.rank_tier = d.rank_tier AND dt_fire.objective_key = 'fire_drake'
+    LEFT JOIN drake_type_bucket_json dt_hextec
+      ON dt_hextec.game_version = d.game_version AND dt_hextec.rank_tier = d.rank_tier AND dt_hextec.objective_key = 'hextec_drake'
+    LEFT JOIN drake_type_bucket_json dt_chem
+      ON dt_chem.game_version = d.game_version AND dt_chem.rank_tier = d.rank_tier AND dt_chem.objective_key = 'chem_drake'
+    LEFT JOIN drake_soul_counts dsoul
+      ON dsoul.game_version = d.game_version AND dsoul.rank_tier = d.rank_tier
+    ON CONFLICT (game_version, rank_tier) DO UPDATE
     SET
-      count_win = EXCLUDED.count_win,
-      count_loss = EXCLUDED.count_loss,
-      count_game = EXCLUDED.count_game,
-      winrate_win_side = EXCLUDED.winrate_win_side,
-      winrate_other_side = EXCLUDED.winrate_other_side,
+      baron_win_team = EXCLUDED.baron_win_team,
+      baron_loose_team = EXCLUDED.baron_loose_team,
+      drake_win_team = EXCLUDED.drake_win_team,
+      drake_loose_team = EXCLUDED.drake_loose_team,
+      void_win_team = EXCLUDED.void_win_team,
+      void_loose_team = EXCLUDED.void_loose_team,
+      herald_win_team = EXCLUDED.herald_win_team,
+      herald_loose_team = EXCLUDED.herald_loose_team,
+      inhibitor_win_team = EXCLUDED.inhibitor_win_team,
+      inhibitor_loose_team = EXCLUDED.inhibitor_loose_team,
+      tower_win_team = EXCLUDED.tower_win_team,
+      tower_loose_team = EXCLUDED.tower_loose_team,
+      first_blood_win_team = EXCLUDED.first_blood_win_team,
+      first_blood_loose_team = EXCLUDED.first_blood_loose_team,
+      elder_win_team = EXCLUDED.elder_win_team,
+      elder_loose_team = EXCLUDED.elder_loose_team,
+      earth_drake_win_team = EXCLUDED.earth_drake_win_team,
+      earth_drake_loose_team = EXCLUDED.earth_drake_loose_team,
+      water_drake_win_team = EXCLUDED.water_drake_win_team,
+      water_drake_loose_team = EXCLUDED.water_drake_loose_team,
+      wind_drake_win_team = EXCLUDED.wind_drake_win_team,
+      wind_drake_loose_team = EXCLUDED.wind_drake_loose_team,
+      fire_drake_win_team = EXCLUDED.fire_drake_win_team,
+      fire_drake_loose_team = EXCLUDED.fire_drake_loose_team,
+      hextec_drake_win_team = EXCLUDED.hextec_drake_win_team,
+      hextec_drake_loose_team = EXCLUDED.hextec_drake_loose_team,
+      chem_drake_win_team = EXCLUDED.chem_drake_win_team,
+      chem_drake_loose_team = EXCLUDED.chem_drake_loose_team,
       updated_at = NOW()
   `)
 

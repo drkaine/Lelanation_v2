@@ -1,9 +1,9 @@
-import axios, { AxiosInstance } from 'axios'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { Result } from '../utils/Result.js'
 import { ExternalApiError, AppError } from '../utils/errors.js'
 import { FileManager } from '../utils/fileManager.js'
+import { fetchBuffer, HttpRequestError } from '../utils/httpFetch.js'
 
 interface ImageDownloadTask {
   url: string
@@ -35,20 +35,12 @@ const RUNE_PATH_SVG_SOURCES: Array<{ name: string; url: string }> = [
 ]
 
 export class ImageService {
-  private readonly api: AxiosInstance
   private readonly baseUrl = 'https://ddragon.leagueoflegends.com/cdn'
   private readonly imagesDir: string
   private readonly latestDirName = 'latest'
 
   constructor(imagesDir: string = join(process.cwd(), 'data', 'images')) {
     this.imagesDir = imagesDir
-    this.api = axios.create({
-      timeout: 30000,
-      responseType: 'arraybuffer',
-      headers: {
-        'User-Agent': 'Lelanation/1.0'
-      }
-    })
   }
 
   /**
@@ -68,26 +60,28 @@ export class ImageService {
       }
 
       // Download image (always overwrite if exists)
-      const response = await this.api.get(url, { responseType: 'arraybuffer' })
-
-      if (!response.data || response.data.length === 0) {
+      const data = await fetchBuffer(url, {
+        timeoutMs: 30_000,
+        headers: { 'User-Agent': 'Lelanation/1.0' },
+      })
+      if (!data || data.length === 0) {
         return Result.err(
           new ExternalApiError(`Empty response when downloading image: ${url}`)
         )
       }
 
       // Save to file (overwrites if exists)
-      await fs.writeFile(localPath, response.data)
+      await fs.writeFile(localPath, data)
 
       return Result.ok(undefined)
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 404) {
+      if (error instanceof HttpRequestError) {
+        if (error.statusCode === 404) {
           return Result.err(
             new ExternalApiError(`Image not found: ${url}`, 404, error)
           )
         }
-        if (error.response?.status === 429) {
+        if (error.statusCode === 429) {
           return Result.err(
             new ExternalApiError(
               'Rate limit exceeded when downloading images',
@@ -99,7 +93,7 @@ export class ImageService {
         return Result.err(
           new ExternalApiError(
             `Failed to download image: ${url}`,
-            error.response?.status,
+            error.statusCode,
             error
           )
         )
