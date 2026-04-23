@@ -32,6 +32,18 @@ CREATE TABLE agg_objective_outcome_stats (
   hextec_drake_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
   chem_drake_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
   chem_drake_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  earth_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  earth_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  water_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  water_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  wind_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  wind_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  fire_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  fire_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  hextec_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  hextec_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  chem_soul_win_team JSONB NOT NULL DEFAULT '{}'::jsonb,
+  chem_soul_loose_team JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT agg_objective_outcome_stats_unique_patch_tier UNIQUE (game_version, rank_tier)
 );

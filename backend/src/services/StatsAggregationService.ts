@@ -77,6 +77,18 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       hextec_drake_loose_team,
       chem_drake_win_team,
       chem_drake_loose_team,
+      earth_soul_win_team,
+      earth_soul_loose_team,
+      water_soul_win_team,
+      water_soul_loose_team,
+      wind_soul_win_team,
+      wind_soul_loose_team,
+      fire_soul_win_team,
+      fire_soul_loose_team,
+      hextec_soul_win_team,
+      hextec_soul_loose_team,
+      chem_soul_win_team,
+      chem_soul_loose_team,
       updated_at
     )
     WITH dims AS (
@@ -165,6 +177,18 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       COALESCE(ob_hextec.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(sc.hextec_soul_loss, 0)),
       COALESCE(ob_chem.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(sc.chem_soul_win, 0)),
       COALESCE(ob_chem.loss_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(sc.chem_soul_loss, 0)),
+      COALESCE(ob_earth_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_earth_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_water_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_water_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_wind_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_wind_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_fire_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_fire_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_hextec_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_hextec_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_chem_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_chem_soul.loss_json, '{}'::jsonb),
       NOW()
     FROM dims d
     LEFT JOIN objective_bucket_json ob_baron
@@ -195,6 +219,18 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       ON ob_hextec.game_version = d.game_version AND ob_hextec.rank_tier = d.rank_tier AND ob_hextec.objective_key = 'hextec_drake'
     LEFT JOIN objective_bucket_json ob_chem
       ON ob_chem.game_version = d.game_version AND ob_chem.rank_tier = d.rank_tier AND ob_chem.objective_key = 'chem_drake'
+    LEFT JOIN objective_bucket_json ob_earth_soul
+      ON ob_earth_soul.game_version = d.game_version AND ob_earth_soul.rank_tier = d.rank_tier AND ob_earth_soul.objective_key = 'earth_soul'
+    LEFT JOIN objective_bucket_json ob_water_soul
+      ON ob_water_soul.game_version = d.game_version AND ob_water_soul.rank_tier = d.rank_tier AND ob_water_soul.objective_key = 'water_soul'
+    LEFT JOIN objective_bucket_json ob_wind_soul
+      ON ob_wind_soul.game_version = d.game_version AND ob_wind_soul.rank_tier = d.rank_tier AND ob_wind_soul.objective_key = 'wind_soul'
+    LEFT JOIN objective_bucket_json ob_fire_soul
+      ON ob_fire_soul.game_version = d.game_version AND ob_fire_soul.rank_tier = d.rank_tier AND ob_fire_soul.objective_key = 'fire_soul'
+    LEFT JOIN objective_bucket_json ob_hextec_soul
+      ON ob_hextec_soul.game_version = d.game_version AND ob_hextec_soul.rank_tier = d.rank_tier AND ob_hextec_soul.objective_key = 'hextec_soul'
+    LEFT JOIN objective_bucket_json ob_chem_soul
+      ON ob_chem_soul.game_version = d.game_version AND ob_chem_soul.rank_tier = d.rank_tier AND ob_chem_soul.objective_key = 'chem_soul'
     LEFT JOIN soul_counts sc
       ON sc.game_version = d.game_version AND sc.rank_tier = d.rank_tier
     ON CONFLICT (game_version, rank_tier) DO UPDATE
@@ -227,6 +263,18 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       hextec_drake_loose_team = EXCLUDED.hextec_drake_loose_team,
       chem_drake_win_team = EXCLUDED.chem_drake_win_team,
       chem_drake_loose_team = EXCLUDED.chem_drake_loose_team,
+      earth_soul_win_team = EXCLUDED.earth_soul_win_team,
+      earth_soul_loose_team = EXCLUDED.earth_soul_loose_team,
+      water_soul_win_team = EXCLUDED.water_soul_win_team,
+      water_soul_loose_team = EXCLUDED.water_soul_loose_team,
+      wind_soul_win_team = EXCLUDED.wind_soul_win_team,
+      wind_soul_loose_team = EXCLUDED.wind_soul_loose_team,
+      fire_soul_win_team = EXCLUDED.fire_soul_win_team,
+      fire_soul_loose_team = EXCLUDED.fire_soul_loose_team,
+      hextec_soul_win_team = EXCLUDED.hextec_soul_win_team,
+      hextec_soul_loose_team = EXCLUDED.hextec_soul_loose_team,
+      chem_soul_win_team = EXCLUDED.chem_soul_win_team,
+      chem_soul_loose_team = EXCLUDED.chem_soul_loose_team,
       updated_at = NOW()
   `)
   if (logger) void logger.step('Objective outcome stats refreshed', { affected })
