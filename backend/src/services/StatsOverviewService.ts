@@ -547,18 +547,26 @@ export async function getOverviewStats(
       entry.bans = banTotalsByChampion.get(cid) ?? 0
     }
 
-    const champList = Array.from(byChampion.entries())
-      .filter(([, e]) => e.games >= 20)
-      .map(([championId, e]) => ({
-        championId,
-        games: e.games,
-        wins: e.wins,
-        winrate: e.games > 0 ? (e.wins / e.games) * 100 : 0,
-        pickrate: totalParticipants > 0 ? (e.games / totalParticipants) * 100 : 0,
-        banrate:
-          totalMatches > 0 ? Math.min(100, (e.bans / (2 * totalMatches)) * 100) : 0,
-        bans: e.bans,
-      }))
+    const buildOverviewChampList = (minGames: number) =>
+      Array.from(byChampion.entries())
+        .filter(([, e]) => e.games >= minGames)
+        .map(([championId, e]) => ({
+          championId,
+          games: e.games,
+          wins: e.wins,
+          winrate: e.games > 0 ? (e.wins / e.games) * 100 : 0,
+          pickrate: totalParticipants > 0 ? (e.games / totalParticipants) * 100 : 0,
+          banrate:
+            totalMatches > 0 ? Math.min(100, (e.bans / (2 * totalMatches)) * 100) : 0,
+          bans: e.bans,
+        }))
+
+    /** Évite cartes « sans donnée » sur patch/division/rôle fins : le seuil 20 était trop haut quand le volume par champion reste bas. */
+    const minGamesPrimary = minGamesForOverviewChampionPool(totalParticipants)
+    let champList = buildOverviewChampList(minGamesPrimary)
+    if (champList.length === 0 && totalParticipants > 0 && byChampion.size > 0) {
+      champList = buildOverviewChampList(1)
+    }
 
     const topWinrateChampions = [...champList]
       .sort((a, b) => b.winrate - a.winrate)
@@ -1731,12 +1739,16 @@ export async function getOverviewProgressionStats(
 
     const oldestMap = aggByChamp(oldestRows)
     const sinceMap = aggByChamp(sinceRows)
+    const oldestTotalGamesProg = Array.from(oldestMap.values()).reduce((s, e) => s + e.games, 0)
+    const sinceTotalGamesProg = Array.from(sinceMap.values()).reduce((s, e) => s + e.games, 0)
+    const minOldProg = minGamesPerChampForProgressionSlice(oldestTotalGamesProg)
+    const minSinceProg = minGamesPerChampForProgressionSlice(sinceTotalGamesProg)
 
     const progressionRows: Array<{ championId: number; wrOldest: number; wrSince: number; delta: number }> = []
     for (const [cid, oldEntry] of oldestMap.entries()) {
-      if (oldEntry.games < 20) continue
+      if (oldEntry.games < minOldProg) continue
       const sinceEntry = sinceMap.get(cid)
-      if (!sinceEntry || sinceEntry.games < 20) continue
+      if (!sinceEntry || sinceEntry.games < minSinceProg) continue
       const wrOldest = oldEntry.wins / oldEntry.games
       const wrSince = sinceEntry.wins / sinceEntry.games
       progressionRows.push({ championId: cid, wrOldest, wrSince, delta: wrSince - wrOldest })
@@ -1836,12 +1848,14 @@ export async function getOverviewProgressionFullStats(
     const sinceMap = aggByChamp(sinceRows)
     const oldestTotalGames = Array.from(oldestMap.values()).reduce((s, e) => s + e.games, 0)
     const sinceTotalGames = Array.from(sinceMap.values()).reduce((s, e) => s + e.games, 0)
+    const minOldFull = minGamesPerChampForProgressionSlice(oldestTotalGames)
+    const minSinceFull = minGamesPerChampForProgressionSlice(sinceTotalGames)
 
     const champions: OverviewProgressionFullStats['champions'] = []
     for (const [cid, oldEntry] of oldestMap.entries()) {
-      if (oldEntry.games < 20) continue
+      if (oldEntry.games < minOldFull) continue
       const sinceEntry = sinceMap.get(cid)
-      if (!sinceEntry || sinceEntry.games < 20) continue
+      if (!sinceEntry || sinceEntry.games < minSinceFull) continue
       const banrateOldest =
         oldestTotalGames > 0 ? Math.min(100, (oldEntry.bans / (2 * oldestTotalGames)) * 100) : 0
       const banrateSince =
@@ -1896,16 +1910,64 @@ export async function getOverviewMeta(
 export interface InfosMetaCounts {
   totalMatches: number
   totalPlayers: number
-  playersWithoutLastSeen: number
+  /** DISTINCT player_id dans ingest pour les matchs du filtre patch / ligue / rôle (aligné overview). */
+  playersWithIngestMatches: number
 }
 
 /**
- * Raw global counters for Infos tab (all patches combined):
- * - total matches:      SELECT COUNT(*) FROM ingest_matchs
- * - total players:      SELECT COUNT(*) FROM players
- * - players not polled: SELECT COUNT(*) FROM players WHERE last_seen IS NULL
+ * WHERE pour `ingest_matchs im` + `ingest_match_players imp` (mêmes règles que buildRawMatchCond sur match).
  */
-export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
+function buildIngestMatchPlayerWhereSql(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): string {
+  const parts: string[] = []
+  const versions = toQueryStringArrayParam(version)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (versions.length === 1) {
+    parts.push(
+      `im.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
+    )
+  } else if (versions.length > 1) {
+    parts.push(
+      `im.game_version IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
+    )
+  }
+  if (ranks.length === 1) parts.push(`im.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1)
+    parts.push(`im.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+  else parts.push(`im.rank_tier <> 'UNRANKED'`)
+  const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
+  if (roleNorm) parts.push(`imp.role = '${roleNorm.replace(/'/g, "''")}'`)
+  return parts.join(' AND ')
+}
+
+async function countDistinctPlayersInIngest(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): Promise<number> {
+  const whereSql = buildIngestMatchPlayerWhereSql(version, rankTier, role)
+  const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(`
+    SELECT COUNT(DISTINCT imp.player_id)::bigint AS c
+    FROM ingest_match_players imp
+    INNER JOIN ingest_matchs im ON im.id = imp.match_id
+    WHERE ${whereSql}
+  `)
+  return Number(rows[0]?.c ?? 0)
+}
+
+/**
+ * Compteurs Infos :
+ * - total matches / total players : globaux (tous patches)
+ * - playersWithIngestMatches : joueurs distincts ayant au moins une ligne ingest sur le filtre patch / ligue / rôle
+ */
+export async function getInfosMetaCounts(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): Promise<InfosMetaCounts | null> {
   if (!isDatabaseConfigured()) return null
   try {
     const moUnion = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
@@ -1914,11 +1976,11 @@ export async function getInfosMetaCounts(): Promise<InfosMetaCounts | null> {
     )
     const totalMatches = Number(matchRows[0]?.c ?? 0)
     const totalPlayers = await prisma.player.count()
-    const playersWithoutLastSeen = await prisma.player.count({ where: { lastSeen: null } })
+    const playersWithIngestMatches = await countDistinctPlayersInIngest(version, rankTier, role)
     return {
       totalMatches,
       totalPlayers,
-      playersWithoutLastSeen,
+      playersWithIngestMatches,
     }
   } catch (err) {
     console.error('[getInfosMetaCounts]', err)
@@ -1966,6 +2028,26 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
 }
 
 // ── getOverviewSidesStats ────────────────────────────────────────────────────
+
+/** Seuil min. parties / champion pour les tops overview (pick/WR/ban). */
+function minGamesForOverviewChampionPool(totalParticipants: number): number {
+  const n = Number(totalParticipants) || 0
+  if (n >= 80_000) return 20
+  if (n >= 25_000) return 15
+  if (n >= 8_000) return 10
+  if (n >= 2_000) return 5
+  return 1
+}
+
+/** Seuil côté « oldest » ou « since » pour les progressions (comparaison inter-patch). */
+function minGamesPerChampForProgressionSlice(totalGamesInSlice: number): number {
+  const n = Number(totalGamesInSlice) || 0
+  if (n >= 200_000) return 20
+  if (n >= 60_000) return 15
+  if (n >= 15_000) return 10
+  if (n >= 3_000) return 5
+  return 2
+}
 
 function buildRawMatchCond(
   version?: string | string[] | null,
@@ -2496,11 +2578,13 @@ export async function getOverviewSidesProgressionFullStats(
       for (const e of oldestMap.values()) oldestTotalGames += e.games
       let sinceTotalGames = 0
       for (const e of sinceMap.values()) sinceTotalGames += e.games
+      const minOldSide = minGamesPerChampForProgressionSlice(oldestTotalGames)
+      const minSinceSide = minGamesPerChampForProgressionSlice(sinceTotalGames)
       const champions: OverviewProgressionFullStats['champions'] = []
       for (const [cid, oldEntry] of oldestMap.entries()) {
-        if (oldEntry.games < 20) continue
+        if (oldEntry.games < minOldSide) continue
         const sinceEntry = sinceMap.get(cid)
-        if (!sinceEntry || sinceEntry.games < 20) continue
+        if (!sinceEntry || sinceEntry.games < minSinceSide) continue
         const bansO = banOldest.get(cid) ?? 0
         const bansS = banSince.get(cid) ?? 0
         const banrateOldest =

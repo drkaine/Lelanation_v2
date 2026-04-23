@@ -495,7 +495,7 @@
     "overviewLastUpdate": "Dernière mise à jour",
     "overviewPlayerCount": "Joueurs récupérés",
     "overviewPlayerCountDistinct": "Joueurs total pollés",
-    "overviewPlayersWithoutLastSeen": "Joueurs non pollés (last_seen null)",
+    "overviewPlayersWithIngestMatches": "Joueurs avec parties ingérées (filtre patch / ligue)",
     "overviewMatchesByDivision": "Filtrer par division",
     "overviewDivisionAll": "Toutes",
     "overviewMatchesByVersion": "Parties par version",

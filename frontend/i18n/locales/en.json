@@ -494,7 +494,7 @@
     "overviewLastUpdate": "Last update",
     "overviewPlayerCount": "Players collected",
     "overviewPlayerCountDistinct": "Total polled players",
-    "overviewPlayersWithoutLastSeen": "Unpolled players (last_seen null)",
+    "overviewPlayersWithIngestMatches": "Players with ingested matches (patch / tier filter)",
     "overviewMatchesByDivision": "Filter by division",
     "overviewDivisionAll": "All",
     "overviewMatchesByVersion": "Matches by version (16.x)",

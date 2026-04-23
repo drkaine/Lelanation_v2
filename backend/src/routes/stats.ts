@@ -1363,14 +1363,14 @@ router.get('/infos/meta', async (req: Request, res: Response) => {
   const role = queryString(req.query.role)
   const [overview, counts] = await Promise.all([
     getOverviewStats(version, rankTier, role),
-    getInfosMetaCounts(),
+    getInfosMetaCounts(version, rankTier, role),
   ])
   return res.json({
     totalGames: overview?.totalMatches ?? 0,
     playerCount: overview?.playerCount ?? 0,
     totalMatches: counts?.totalMatches ?? 0,
     totalPlayers: counts?.totalPlayers ?? 0,
-    playersWithoutLastSeen: counts?.playersWithoutLastSeen ?? 0,
+    playersWithIngestMatches: counts?.playersWithIngestMatches ?? 0,
     matchesByDivision: overview?.matchesByDivision ?? [],
     matchesByVersion: overview?.matchesByVersion ?? [],
     otpPickrateThreshold: STATS_OTP_PICKRATE_THRESHOLD,

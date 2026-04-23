@@ -3,7 +3,7 @@
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
       type="button"
-      class="fixed left-3 top-16 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
+      class="fixed left-3 top-16 z-[46] flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
       @click="openFilters"
     >
@@ -16,14 +16,6 @@
         />
       </svg>
     </button>
-
-    <!-- Overlay mobile (fermer les filtres au clic) -->
-    <div
-      v-show="filtersOpen"
-      class="fixed inset-0 z-30 bg-black/50 lg:hidden"
-      aria-hidden="true"
-      @click="closeFilters"
-    />
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
     <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
@@ -73,20 +65,23 @@
       </button>
       <aside
         :class="[
-          'fixed left-0 top-14 z-40 flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
+          'fixed left-0 top-14 z-[50] flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
           'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
           filtersOpen
             ? 'translate-x-0 lg:w-64 lg:opacity-100'
             : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
         ]"
+        @click.stop
       >
-        <div class="flex items-center justify-between p-2">
-          <h2 class="text-lg font-semibold text-text-accent">
+        <div
+          class="flex shrink-0 items-center gap-2 border-b border-primary/25 p-2 lg:border-transparent lg:pb-2"
+        >
+          <h2 class="min-w-0 flex-1 truncate text-lg font-semibold text-text-accent">
             {{ t('statisticsPage.filtersTitle') }}
           </h2>
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
+            class="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded px-2 py-1.5 text-xs font-semibold text-blue-300 transition-colors hover:bg-blue-500/15 hover:text-blue-200"
             @click="resetStatsFilters"
           >
             <span class="iconify i-mdi:refresh" aria-hidden="true" />
@@ -94,11 +89,17 @@
           </button>
           <button
             type="button"
-            class="rounded p-1 text-text/70 hover:bg-primary/20 hover:text-text lg:hidden"
+            class="flex h-11 min-w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg text-text/90 hover:bg-primary/25 hover:text-text lg:hidden"
             :aria-label="t('statisticsPage.closeFilters')"
             @click="closeFilters"
           >
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <path
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -356,7 +357,10 @@
       </aside>
 
       <!-- Contenu principal : à côté des filtres, même hauteur -->
-      <div class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-0">
+      <div
+        class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-0"
+        :class="filtersOpen ? 'max-lg:pointer-events-none' : ''"
+      >
         <div class="w-full">
           <div v-if="!overviewData" class="mb-6 text-text/80">
             <p>{{ t('statisticsPage.description') }}</p>
@@ -433,6 +437,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Overlay mobile : après le contenu pour passer au-dessus des z-10 / sticky stats ; sous la navbar (z-58). -->
+    <div
+      v-show="filtersOpen"
+      class="fixed inset-0 z-[45] bg-black/50 lg:hidden"
+      aria-hidden="true"
+      role="presentation"
+      @click="closeFilters"
+    />
   </div>
 </template>
 
@@ -1567,7 +1580,7 @@ const infosMetaError = ref<string | null>(null)
 const infosMetaData = ref<{
   totalMatches: number
   totalPlayers: number
-  playersWithoutLastSeen: number
+  playersWithIngestMatches: number
 } | null>(null)
 const infosMatrixColumns = computed(() => {
   const rankOrder = rankTiers
@@ -1930,7 +1943,7 @@ async function loadInfosMeta() {
   infosMetaError.value = null
   try {
     infosMetaData.value = await statsFetch<typeof infosMetaData.value>(
-      apiUrl('/api/stats/infos/meta')
+      apiUrl('/api/stats/infos/meta' + overviewQueryParams())
     )
   } catch (err) {
     infosMetaData.value = null
@@ -2002,14 +2015,28 @@ async function loadOverviewAbandons() {
     statsPerfEnd('loadOverviewAbandons', t)
   }
 }
-const overviewMatchOutcomeTotal = computed(() =>
-  Number(overviewAbandonsData.value?.totalMatches ?? 0)
-)
-const overviewEarlySurrenderCount = computed(() =>
-  Math.max(0, Number(overviewAbandonsData.value?.earlySurrenderCount ?? 0))
-)
+/** Total pour le donut : abandons si dispo, sinon repli sur l’overview (évite donut vide si /overview-abandons échoue ou renvoie 0 alors qu’il y a des matchs). */
+const overviewMatchOutcomeTotal = computed(() => {
+  const ab = overviewAbandonsData.value
+  if (ab != null) {
+    const t = Number(ab.totalMatches ?? 0)
+    if (t > 0) return t
+  }
+  return Number(overviewData.value?.totalMatches ?? 0)
+})
+const overviewEarlySurrenderCount = computed(() => {
+  const ab = overviewAbandonsData.value
+  if (!ab) return 0
+  const t = Number(ab.totalMatches ?? 0)
+  if (t <= 0) return 0
+  return Math.max(0, Number(ab.earlySurrenderCount ?? 0))
+})
 const overviewSurrenderOnlyCount = computed(() => {
-  const surrender = Math.max(0, Number(overviewAbandonsData.value?.surrenderCount ?? 0))
+  const ab = overviewAbandonsData.value
+  if (!ab) return 0
+  const t = Number(ab.totalMatches ?? 0)
+  if (t <= 0) return 0
+  const surrender = Math.max(0, Number(ab.surrenderCount ?? 0))
   return Math.max(0, surrender - overviewEarlySurrenderCount.value)
 })
 const overviewPlayedCount = computed(() => {

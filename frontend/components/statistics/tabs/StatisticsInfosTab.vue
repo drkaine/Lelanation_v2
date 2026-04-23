@@ -131,10 +131,10 @@
         </div>
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-3">
           <div class="text-xs text-text/70">
-            {{ p.t('statisticsPage.overviewPlayersWithoutLastSeen') }}
+            {{ p.t('statisticsPage.overviewPlayersWithIngestMatches') }}
           </div>
           <div class="text-lg font-semibold text-text">
-            {{ (p.infosMetaData?.playersWithoutLastSeen ?? 0).toLocaleString() }}
+            {{ (p.infosMetaData?.playersWithIngestMatches ?? 0).toLocaleString() }}
           </div>
         </div>
       </div>
