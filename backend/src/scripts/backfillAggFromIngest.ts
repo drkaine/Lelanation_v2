@@ -1,7 +1,46 @@
 import 'dotenv/config'
+import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { prisma } from '../db.js'
 
-async function main(): Promise<void> {
+const RETRYABLE_DB_CODES = new Set(['40P01', '40001'])
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const BACKEND_ROOT = path.resolve(__dirname, '..', '..')
+const BACKFILL_AGG_LOCK_DIR = path.join(BACKEND_ROOT, 'data', 'locks')
+const BACKFILL_AGG_LOCK_FILE = path.join(BACKFILL_AGG_LOCK_DIR, 'backfill-agg.lock')
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function createBackfillLockFile(): Promise<void> {
+  await mkdir(BACKFILL_AGG_LOCK_DIR, { recursive: true })
+  await writeFile(
+    BACKFILL_AGG_LOCK_FILE,
+    JSON.stringify({ startedAt: new Date().toISOString(), pid: process.pid }),
+    'utf8'
+  )
+}
+
+async function releaseBackfillLockFile(): Promise<void> {
+  await unlink(BACKFILL_AGG_LOCK_FILE).catch(() => undefined)
+}
+
+function isRetryableDbError(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code
+  if (typeof code === 'string' && RETRYABLE_DB_CODES.has(code)) return true
+  const message = err instanceof Error ? err.message : String(err)
+  return (
+    message.includes('Code: `40P01`') ||
+    message.includes('Code: `40001`') ||
+    message.toLowerCase().includes('deadlock detected') ||
+    message.toLowerCase().includes('could not serialize access')
+  )
+}
+
+async function runBackfillOnce(): Promise<void> {
   console.log('[backfill-agg] starting')
 
   await prisma.$executeRawUnsafe(`
@@ -126,6 +165,12 @@ async function main(): Promise<void> {
       0::int AS count_ban,
       NOW()
     FROM core_source
+    ON CONFLICT (champion_id, role, rank_tier, game_version, region) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      count_ban = EXCLUDED.count_ban,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -225,22 +270,49 @@ async function main(): Promise<void> {
       champion_stat_id, opponent_champion_id, role, rank_tier, game_version, region, count_win, count_game, updated_at
     )
     SELECT
-      ac.id,
-      p.opponent_champion_id,
-      p.role,
-      p.rank_tier,
-      p.game_version,
-      p.region,
-      p.count_win,
-      p.count_game,
+      src.champion_stat_id,
+      src.opponent_champion_id,
+      src.role,
+      src.rank_tier,
+      src.game_version,
+      src.region,
+      SUM(src.count_win)::int AS count_win,
+      SUM(src.count_game)::int AS count_game,
       NOW()
-    FROM agg_pairs p
-    INNER JOIN agg_champion_core_stats ac
-      ON ac.champion_id = p.champion_id
-     AND ac.role = p.role
-     AND ac.rank_tier = p.rank_tier
-     AND ac.game_version = p.game_version
-     AND ac.region = p.region
+    FROM (
+      SELECT
+        ac.id AS champion_stat_id,
+        p.opponent_champion_id,
+        p.role,
+        p.rank_tier,
+        p.game_version,
+        p.region,
+        p.count_win,
+        p.count_game
+      FROM agg_pairs p
+      INNER JOIN agg_champion_core_stats ac
+        ON ac.champion_id = p.champion_id
+       AND ac.role = p.role
+       AND ac.rank_tier = p.rank_tier
+       AND ac.game_version = p.game_version
+       AND ac.region = p.region
+    ) src
+    GROUP BY
+      src.champion_stat_id,
+      src.opponent_champion_id,
+      src.role,
+      src.rank_tier,
+      src.game_version,
+      src.region
+    ON CONFLICT (champion_stat_id, opponent_champion_id) DO UPDATE
+    SET
+      role = EXCLUDED.role,
+      rank_tier = EXCLUDED.rank_tier,
+      game_version = EXCLUDED.game_version,
+      region = EXCLUDED.region,
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -314,6 +386,11 @@ async function main(): Promise<void> {
     WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
     GROUP BY ac.id, GREATEST(0, FLOOR(im.game_duration / 60.0))::int
+    ON CONFLICT (champion_stat_id, duration_bucket) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -404,6 +481,13 @@ async function main(): Promise<void> {
     FROM spell_rows
     WHERE spell_id > 0
     GROUP BY champion_stat_id, spell_id
+    ON CONFLICT (champion_stat_id, spell_id) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      count_slot0 = EXCLUDED.count_slot0,
+      count_slot1 = EXCLUDED.count_slot1,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -478,6 +562,11 @@ async function main(): Promise<void> {
     WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
     GROUP BY ac.id, to_jsonb(imp.runes)::text, array_to_string(imp.shards, ',')
+    ON CONFLICT (champion_stat_id, rune_list, shard_list) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -556,6 +645,12 @@ async function main(): Promise<void> {
       champion_stat_id, perk_id, ''::text AS style, count_win, count_game, NOW()
     FROM flat
     WHERE perk_id > 0
+    ON CONFLICT (champion_stat_id, perk_id, style) DO UPDATE
+    SET
+      style = EXCLUDED.style,
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -635,6 +730,12 @@ async function main(): Promise<void> {
     SELECT champion_stat_id, shard_id, slot, count_win, count_game, NOW()
     FROM flat
     WHERE shard_id > 0
+    ON CONFLICT (champion_stat_id, shard_id, slot) DO UPDATE
+    SET
+      slot = EXCLUDED.slot,
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -720,6 +821,15 @@ async function main(): Promise<void> {
     WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
     GROUP BY ac.id, ((i.elem ->> 'itemId')::int)
+    ON CONFLICT (champion_stat_id, item_id) DO UPDATE
+    SET
+      count_starter = EXCLUDED.count_starter,
+      count_core = EXCLUDED.count_core,
+      count_final = EXCLUDED.count_final,
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      sum_timestamp_ms = EXCLUDED.sum_timestamp_ms,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -812,6 +922,12 @@ async function main(): Promise<void> {
     WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
     GROUP BY ac.id, COALESCE(il.item_list, '[]')
+    ON CONFLICT (champion_stat_id, item_list) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      sum_timestamp_ms = EXCLUDED.sum_timestamp_ms,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -891,6 +1007,11 @@ async function main(): Promise<void> {
       imp.champion_id,
       imp.summoner_spells[1],
       imp.summoner_spells[2]
+    ON CONFLICT (game_version, rank_tier, role_norm, champion_id, spell_d, spell_f) DO UPDATE
+    SET
+      count_game = EXCLUDED.count_game,
+      count_win = EXCLUDED.count_win,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -980,6 +1101,11 @@ async function main(): Promise<void> {
     FROM starter_rows
     WHERE starter_key <> '[]'
     GROUP BY game_version, rank_tier, role_norm, champion_id, starter_key
+    ON CONFLICT (game_version, rank_tier, role_norm, champion_id, starter_key) DO UPDATE
+    SET
+      count_game = EXCLUDED.count_game,
+      count_win = EXCLUDED.count_win,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -1071,6 +1197,38 @@ async function main(): Promise<void> {
       count_wind_drake_soul, count_fire_drake_soul, count_hextec_drake_soul, count_chem_drake_soul,
       NOW()
     FROM team_source
+    ON CONFLICT (team, rank_tier, game_version) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      count_team_early_surrendered = EXCLUDED.count_team_early_surrendered,
+      count_team_surrendered = EXCLUDED.count_team_surrendered,
+      sum_baron_kills = EXCLUDED.sum_baron_kills,
+      count_baron_first = EXCLUDED.count_baron_first,
+      sum_dragon_kills = EXCLUDED.sum_dragon_kills,
+      count_dragon_first = EXCLUDED.count_dragon_first,
+      sum_tower_kills = EXCLUDED.sum_tower_kills,
+      count_tower_first = EXCLUDED.count_tower_first,
+      sum_horde_kills = EXCLUDED.sum_horde_kills,
+      count_horde_first = EXCLUDED.count_horde_first,
+      sum_rift_herald_kills = EXCLUDED.sum_rift_herald_kills,
+      count_rift_herald_first = EXCLUDED.count_rift_herald_first,
+      sum_inhibitor_kills = EXCLUDED.sum_inhibitor_kills,
+      count_first_blood = EXCLUDED.count_first_blood,
+      sum_elder_kills = EXCLUDED.sum_elder_kills,
+      count_earth_drake = EXCLUDED.count_earth_drake,
+      count_water_drake = EXCLUDED.count_water_drake,
+      count_wind_drake = EXCLUDED.count_wind_drake,
+      count_fire_drake = EXCLUDED.count_fire_drake,
+      count_hextec_drake = EXCLUDED.count_hextec_drake,
+      count_chem_drake = EXCLUDED.count_chem_drake,
+      count_earth_drake_soul = EXCLUDED.count_earth_drake_soul,
+      count_water_drake_soul = EXCLUDED.count_water_drake_soul,
+      count_wind_drake_soul = EXCLUDED.count_wind_drake_soul,
+      count_fire_drake_soul = EXCLUDED.count_fire_drake_soul,
+      count_hextec_drake_soul = EXCLUDED.count_hextec_drake_soul,
+      count_chem_drake_soul = EXCLUDED.count_chem_drake_soul,
+      updated_at = NOW()
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -1747,6 +1905,32 @@ async function main(): Promise<void> {
     console.log(`[backfill-agg] ${row.k}: ${Number(row.c)}`)
   }
   console.log('[backfill-agg] done')
+}
+
+async function main(): Promise<void> {
+  await createBackfillLockFile()
+  const maxAttemptsRaw = Number.parseInt(process.env.BACKFILL_AGG_MAX_RETRIES ?? '', 10)
+  const maxAttempts = Number.isFinite(maxAttemptsRaw) && maxAttemptsRaw > 0 ? Math.min(maxAttemptsRaw, 10) : 6
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await runBackfillOnce()
+        return
+      } catch (err) {
+        if (!isRetryableDbError(err) || attempt >= maxAttempts) throw err
+        const backoffMs = Math.min(30_000, 1000 * 2 ** (attempt - 1))
+        console.warn(
+          `[backfill-agg] retryable DB error (attempt ${attempt}/${maxAttempts}): ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+        console.warn(`[backfill-agg] retrying in ${backoffMs}ms...`)
+        await sleep(backoffMs)
+      }
+    }
+  } finally {
+    await releaseBackfillLockFile()
+  }
 }
 
 void main()

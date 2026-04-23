@@ -5,8 +5,10 @@
  * Logs to backend output (minimal mode); exposes status for admin API.
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
-import { readFile, rename, statfs, unlink } from 'node:fs/promises'
+import { access, readFile, rename, statfs, unlink } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import {
@@ -554,7 +556,7 @@ async function emitPollerSummariesIfDue(
 import { Prisma } from '../generated/prisma/index.js'
 import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
-import { runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
+import { refreshObjectiveOutcomeStats, runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches } from '../services/ActivePatchService.js'
 
 function getPlayersPerLoop(): number {
@@ -569,6 +571,7 @@ const TIMELINE_RETRY_MAX_ATTEMPTS = 8
 const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 3
 const SYNC_ACTIVE_PATCHES_EVERY_MS = 4 * 60 * 60 * 1000
+const SYNC_OBJECTIVE_OUTCOME_EVERY_MS = 5 * 60 * 1000
 const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
 const POLLER_MATCH_LOSS_ALERT_ABSOLUTE = 20
 const POLLER_MATCH_LOSS_ALERT_RATIO = 0.2
@@ -596,6 +599,7 @@ function formatSummaryTimestamp(d: Date): string {
 }
 /** Dernière sync `active_patches` depuis `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
 let lastSyncActivePatchesAt = 0
+let lastSyncObjectiveOutcomeAt = 0
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 
@@ -605,6 +609,11 @@ const DISK_ALERT_THRESHOLDS = [85, 90, 95] as const
 const DISK_STOP_THRESHOLD = 98
 const diskAlertedThresholds = new Set<number>()
 let diskStopAlertSent = false
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const BACKEND_ROOT = path.resolve(__dirname, '..', '..')
+const BACKFILL_AGG_LOCK_FILE = path.join(BACKEND_ROOT, 'data', 'locks', 'backfill-agg.lock')
+let lastBackfillAggPauseLogAtMs = 0
 
 export interface RiotPollerStatus {
   isRunning: boolean
@@ -760,6 +769,15 @@ export function getAndClearTriggerPuuidMigrationOnPollerExit(): boolean {
 
 function setState(partial: Partial<RiotPollerStatus>): void {
   state = { ...state, ...partial }
+}
+
+async function isBackfillAggLockActive(): Promise<boolean> {
+  try {
+    await access(BACKFILL_AGG_LOCK_FILE)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function is400Decrypt(body: unknown): boolean {
@@ -1960,8 +1978,23 @@ async function runStep4ForPlayer(
         if (patchPolicy.latestPatchOnly) {
           const matchPatch = normalizeGameVersionToMajorMinor(gameVersionFromMatchInfo(matchRes.data?.info))
           const allowed = priorityAllowedPatches ?? []
-          if (!allowed.includes(matchPatch)) {
+          const latestKnownPatch = normalizeGameVersionToMajorMinor(patchPolicy.latestPatch ?? '')
+          const isNewerThanLatestKnown =
+            !!matchPatch &&
+            !!latestKnownPatch &&
+            comparePatchVersionDesc(matchPatch, latestKnownPatch) < 0
+          // Guardrail: if a brand-new patch appears before version.json refresh,
+          // do not block ingestion by classifying every fresh game as DEFERRED_PATCH.
+          if (allowed.length > 0 && !allowed.includes(matchPatch) && !isNewerThanLatestKnown) {
             return { ok: false, reason: 'deferred_patch' }
+          }
+          if (isNewerThanLatestKnown) {
+            await logger.info('Match patch newer than latest known patch; ingest allowed', {
+              matchId,
+              matchPatch,
+              latestKnownPatch,
+              allowedPatches: allowed,
+            })
           }
         }
         cachedMatchDto = matchRes.data as RiotMatchDto
@@ -3110,6 +3143,20 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     let nextFileQueueRecoveryAtMs = 0
     while (!state.shouldStop && isDatabaseConfigured()) {
       loopIteration++
+      if (await isBackfillAggLockActive()) {
+        if (Date.now() - lastBackfillAggPauseLogAtMs >= 60_000) {
+          lastBackfillAggPauseLogAtMs = Date.now()
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'info',
+            script: 'poller',
+            message: 'Backfill agg lock detected: poller ingestion paused',
+            json: { lockFile: BACKFILL_AGG_LOCK_FILE },
+          })
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_000))
+        continue
+      }
       if (isMatchIngestFileQueueEnabled() && Date.now() >= nextFileQueueRecoveryAtMs) {
         const recovery = await recoverAbortedAndStaleFileQueueFiles(
           getFileQueueStaleProcessingMaxAgeMs()
@@ -3367,6 +3414,18 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           const errorMessage = err instanceof Error ? err.message : String(err)
           await logger.alerte('syncActivePatches error (non-fatal)', errorMessage)
           lastSyncActivePatchesAt = Date.now()
+        }
+      }
+
+      // ── Refresh objective outcome rollups (cadence: 5 min) ──
+      if (Date.now() - lastSyncObjectiveOutcomeAt >= SYNC_OBJECTIVE_OUTCOME_EVERY_MS) {
+        try {
+          await refreshObjectiveOutcomeStats(logger)
+          lastSyncObjectiveOutcomeAt = Date.now()
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          await logger.alerte('refreshObjectiveOutcomeStats error (non-fatal)', errorMessage)
+          lastSyncObjectiveOutcomeAt = Date.now()
         }
       }
 
