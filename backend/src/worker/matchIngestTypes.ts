@@ -1,3 +1,5 @@
+import type { RiotMatchTimelineDto } from '../services/RiotHttpClient.js'
+
 /** Shared across a batch of match ingests: one DB round-trip for max(game_date) + player rows. */
 export type MatchIngestDbPreload = {
   maxGameByPuuid: Map<string, Date>
@@ -28,4 +30,6 @@ export type MatchIngestOptions = {
    * ingest_match (e.g. raw aggregate path after league-v4 refresh).
    */
   refreshExistingIngestParticipantRanks?: boolean
+  /** Optional timeline attached to current match ingest. */
+  timelineDto?: RiotMatchTimelineDto | null
 }

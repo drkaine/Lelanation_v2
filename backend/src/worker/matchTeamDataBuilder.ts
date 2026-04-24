@@ -1,9 +1,10 @@
-import type { RiotMatchDto, RiotParticipantDto } from '../services/RiotHttpClient.js'
+import type { RiotMatchDto, RiotMatchTimelineDto, RiotParticipantDto } from '../services/RiotHttpClient.js'
 
 export function buildMatchTeamData(
   matchId: bigint,
   info: RiotMatchDto['info'],
-  participantDtos: RiotParticipantDto[]
+  participantDtos: RiotParticipantDto[],
+  timelineDto?: RiotMatchTimelineDto | null
 ): Array<{
   teamRow: {
     matchId: bigint
@@ -21,6 +22,7 @@ export function buildMatchTeamData(
     riftHeraldKills: number
     riftHeraldFirst: boolean
     inhibitorKills: number
+    inhibitorFirst: boolean
     championKills: number
     firstBlood: boolean
     elderKills: number
@@ -30,6 +32,40 @@ export function buildMatchTeamData(
   if (!info?.teams || info.teams.length === 0) return []
   const toFirst = (value: unknown): boolean => value === true
   const toKills = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+  const participantTeamById = new Map<number, number>()
+  for (const p of participantDtos) {
+    const participantId = (p as { participantId?: unknown }).participantId
+    const teamId = p.teamId
+    if (typeof participantId === 'number' && Number.isFinite(participantId) && (teamId === 100 || teamId === 200)) {
+      participantTeamById.set(participantId, teamId)
+    }
+  }
+
+  const resolveFirstInhibitorTeam = (): number | null => {
+    const frames = timelineDto?.info?.frames
+    if (!Array.isArray(frames) || frames.length === 0) return null
+    for (const frame of frames) {
+      const events = frame?.events
+      if (!Array.isArray(events) || events.length === 0) continue
+      for (const evt of events) {
+        const e = evt as Record<string, unknown>
+        if (e.type !== 'BUILDING_KILL') continue
+        if (e.buildingType !== 'INHIBITOR_BUILDING') continue
+        const killerTeamId = e.killerTeamId
+        if (killerTeamId === 100 || killerTeamId === 200) return killerTeamId
+        const killerId = e.killerId
+        if (typeof killerId === 'number' && Number.isFinite(killerId)) {
+          const team = participantTeamById.get(killerId)
+          if (team === 100 || team === 200) return team
+        }
+        const destroyedTeamId = e.teamId
+        if (destroyedTeamId === 100) return 200
+        if (destroyedTeamId === 200) return 100
+      }
+    }
+    return null
+  }
+  const firstInhibitorTeamId = resolveFirstInhibitorTeam()
 
   const teamEarlySurrendered = new Map<number, boolean>()
   for (const p of participantDtos) {
@@ -77,6 +113,7 @@ export function buildMatchTeamData(
           riftHeraldKills: toKills(riftHeraldObj.kills),
           riftHeraldFirst: toFirst(riftHeraldObj.first),
           inhibitorKills: toKills(inhibitorObj.kills),
+          inhibitorFirst: toFirst(inhibitorObj.first) || firstInhibitorTeamId === (t.teamId ?? 0),
           championKills: toKills(championObj.kills),
           firstBlood: toFirst(championObj.first),
           elderKills: toKills(elderObj.kills),

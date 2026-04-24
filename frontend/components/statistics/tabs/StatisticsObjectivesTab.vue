@@ -24,22 +24,32 @@ function pct(count: number, total: number): number | null {
   return (Number(count) / total) * 100
 }
 
-function fmtPctDelta(currentPct: number | null, baselinePct: number | null): string {
-  if (currentPct == null) return '—'
-  const current = `${currentPct.toFixed(2)}%`
-  if (baselinePct == null) return current
-  const delta = currentPct - baselinePct
-  const sign = delta > 0 ? '+' : ''
-  return `${current} (${sign}${delta.toFixed(2)} %)`
+function formatPct(value: number | null): string {
+  if (value == null) return '—'
+  return `${value.toFixed(2)}%`
 }
 
-function teamFirstPctWithDelta(objectiveKey: string, side: 'win' | 'loss'): string {
+function formatDelta(value: number | null): string {
+  if (value == null) return ''
+  const sign = value > 0 ? '+' : ''
+  return `(${sign}${value.toFixed(2)} %)`
+}
+
+function deltaColorClass(delta: number | null): string {
+  if (delta == null || delta === 0) return 'text-text/80'
+  return delta > 0 ? 'text-emerald-400' : 'text-rose-400'
+}
+
+function teamFirstPctParts(
+  objectiveKey: string,
+  side: 'win' | 'loss'
+): { current: string; delta: string; deltaClass: string } {
   const curData = p.overviewTeamsData
-  if (!curData || curData.matchCount <= 0) return '—'
+  if (!curData || curData.matchCount <= 0)
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curObj = curData.objectives?.[objectiveKey] ?? {}
   const curCount = side === 'win' ? Number(curObj.firstByWin ?? 0) : Number(curObj.firstByLoss ?? 0)
   const curPct = pct(curCount, Number(curData.matchCount))
-
   const baseData = p.overviewTeamsBaselineData
   const baseObj = baseData?.objectives?.[objectiveKey] ?? null
   const baseCount =
@@ -52,17 +62,25 @@ function teamFirstPctWithDelta(objectiveKey: string, side: 'win' | 'loss'): stri
     baseData && baseData.matchCount > 0 && baseCount != null
       ? pct(baseCount, Number(baseData.matchCount))
       : null
-  return fmtPctDelta(curPct, basePct)
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
 }
 
-function sideFirstPctWithDelta(objectiveKey: string, side: 'blue' | 'red'): string {
+function sideFirstPctParts(
+  objectiveKey: string,
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
   const curData = p.overviewSidesData
-  if (!curData || curData.matchCount <= 0) return '—'
+  if (!curData || curData.matchCount <= 0)
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
   const curObj = curData.objectivesBySideTable?.[objectiveKey] ?? {}
   const curCount =
     side === 'blue' ? Number(curObj.firstByBlue ?? 0) : Number(curObj.firstByRed ?? 0)
   const curPct = pct(curCount, Number(curData.matchCount))
-
   const baseData = p.overviewSidesBaselineData
   const baseObj = baseData?.objectivesBySideTable?.[objectiveKey] ?? null
   const baseCount =
@@ -75,7 +93,12 @@ function sideFirstPctWithDelta(objectiveKey: string, side: 'blue' | 'red'): stri
     baseData && baseData.matchCount > 0 && baseCount != null
       ? pct(baseCount, Number(baseData.matchCount))
       : null
-  return fmtPctDelta(curPct, basePct)
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
 }
 
 const openDrakeTypeKeys = ref(new Set<string>())
@@ -155,16 +178,6 @@ const soulDistTotal = computed(() => distTotal(soulDistRows.value))
 function donutTooltip(row: DistRow, total: number): string {
   return `${row.label}: ${distPct(row.value, total)} (${row.value.toLocaleString()})`
 }
-
-const legendRows = computed<DistRow[]>(() => {
-  const byKey = new Map<string, DistRow>()
-  for (const row of [...drakeDistRows.value, ...soulDistRows.value]) {
-    if (!byKey.has(row.key)) byKey.set(row.key, row)
-  }
-  return [...byKey.values()]
-})
-const legendRowsLeft = computed(() => legendRows.value.slice(0, 4))
-const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 </script>
 
 <template>
@@ -266,7 +279,7 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 
       <!-- Principal : premier par équipe + par côté -->
       <div v-if="p.objectivesPanelTab === 'objectives'" class="w-full min-w-0 overflow-x-auto">
-        <table class="w-full min-w-[480px] text-left text-sm">
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
               <th class="py-1.5 pr-2 font-medium">
@@ -292,16 +305,28 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
                 {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
               </td>
               <td class="px-1 py-1.5 text-center">
-                {{ teamFirstPctWithDelta('firstBlood', 'win') }}
+                {{ teamFirstPctParts('firstBlood', 'win').current }}
+                <span :class="teamFirstPctParts('firstBlood', 'win').deltaClass">
+                  {{ teamFirstPctParts('firstBlood', 'win').delta }}
+                </span>
               </td>
               <td class="px-1 py-1.5 text-center">
-                {{ teamFirstPctWithDelta('firstBlood', 'loss') }}
+                {{ teamFirstPctParts('firstBlood', 'loss').current }}
+                <span :class="teamFirstPctParts('firstBlood', 'loss').deltaClass">
+                  {{ teamFirstPctParts('firstBlood', 'loss').delta }}
+                </span>
               </td>
               <td class="px-1 py-1.5 text-center">
-                {{ sideFirstPctWithDelta('firstBlood', 'blue') }}
+                {{ sideFirstPctParts('firstBlood', 'blue').current }}
+                <span :class="sideFirstPctParts('firstBlood', 'blue').deltaClass">
+                  {{ sideFirstPctParts('firstBlood', 'blue').delta }}
+                </span>
               </td>
               <td class="py-1.5 pl-1 text-center">
-                {{ sideFirstPctWithDelta('firstBlood', 'red') }}
+                {{ sideFirstPctParts('firstBlood', 'red').current }}
+                <span :class="sideFirstPctParts('firstBlood', 'red').deltaClass">
+                  {{ sideFirstPctParts('firstBlood', 'red').delta }}
+                </span>
               </td>
             </tr>
             <template v-for="key in p.objectiveKeysWithKills" :key="key">
@@ -331,16 +356,28 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
                   </button>
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  {{ teamFirstPctWithDelta(key, 'win') }}
+                  {{ teamFirstPctParts(key, 'win').current }}
+                  <span :class="teamFirstPctParts(key, 'win').deltaClass">
+                    {{ teamFirstPctParts(key, 'win').delta }}
+                  </span>
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  {{ teamFirstPctWithDelta(key, 'loss') }}
+                  {{ teamFirstPctParts(key, 'loss').current }}
+                  <span :class="teamFirstPctParts(key, 'loss').deltaClass">
+                    {{ teamFirstPctParts(key, 'loss').delta }}
+                  </span>
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  {{ sideFirstPctWithDelta(key, 'blue') }}
+                  {{ sideFirstPctParts(key, 'blue').current }}
+                  <span :class="sideFirstPctParts(key, 'blue').deltaClass">
+                    {{ sideFirstPctParts(key, 'blue').delta }}
+                  </span>
                 </td>
                 <td class="py-1.5 pl-1 text-center">
-                  {{ sideFirstPctWithDelta(key, 'red') }}
+                  {{ sideFirstPctParts(key, 'red').current }}
+                  <span :class="sideFirstPctParts(key, 'red').deltaClass">
+                    {{ sideFirstPctParts(key, 'red').delta }}
+                  </span>
                 </td>
               </tr>
               <template v-if="p.openObjectiveKeys.has(key)">
@@ -383,7 +420,7 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 
       <!-- Drakes par type -->
       <div v-else-if="p.objectivesPanelTab === 'drakeTypes'" class="w-full min-w-0 overflow-x-auto">
-        <table class="w-full min-w-[480px] text-left text-sm">
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
               <th class="py-1.5 pr-2 font-medium">
@@ -418,6 +455,10 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
                       aria-hidden
                       >▼</span
                     >
+                    <span
+                      class="h-2.5 w-2.5 rounded-full"
+                      :style="{ backgroundColor: rowColor(row.key) }"
+                    />
                     <img
                       v-if="p.drakeIconSrc(row.key)"
                       :src="p.drakeIconSrc(row.key)"
@@ -521,7 +562,7 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 
       <!-- Âmes -->
       <div v-else class="w-full min-w-0 overflow-x-auto">
-        <table class="w-full min-w-[480px] text-left text-sm">
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
               <th class="py-1.5 pr-2 font-medium">
@@ -575,6 +616,10 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
               <tr>
                 <td class="py-1.5 pr-2 font-medium text-text/90">
                   <div class="flex items-center gap-2">
+                    <span
+                      class="h-2.5 w-2.5 rounded-full"
+                      :style="{ backgroundColor: rowColor(row.key) }"
+                    />
                     <img
                       v-if="p.drakeIconSrc(row.key)"
                       :src="p.drakeIconSrc(row.key)"
@@ -635,7 +680,7 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 
     <div
       v-if="drakeDistRows.length > 0 || soulDistRows.length > 0"
-      class="grid grid-cols-1 gap-4 lg:grid-cols-3"
+      class="grid grid-cols-1 gap-4 lg:grid-cols-2"
     >
       <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
         <h4 class="mb-2 text-sm font-semibold text-text/90">
@@ -712,52 +757,13 @@ const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
         </div>
         <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
       </div>
-
-      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
-        <h4 class="mb-2 text-sm font-semibold text-text/90">
-          {{ p.t('statisticsPage.overviewTeamsObjective') }}
-        </h4>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="space-y-2">
-            <div
-              v-for="row in legendRowsLeft"
-              :key="'legend-left-' + row.key"
-              class="flex h-4 items-center"
-            >
-              <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: row.color }" />
-              <img
-                v-if="p.drakeIconSrc(row.key)"
-                :src="p.drakeIconSrc(row.key)"
-                :alt="row.label"
-                class="h-4 w-4 object-contain"
-                loading="lazy"
-                decoding="async"
-                @error="p.onDrakeIconError($event, row.key)"
-              />
-              <span class="truncate text-xs text-text/90">{{ row.label }}</span>
-            </div>
-          </div>
-          <div class="space-y-2">
-            <div
-              v-for="row in legendRowsRight"
-              :key="'legend-right-' + row.key"
-              class="flex h-4 items-center"
-            >
-              <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: row.color }" />
-              <img
-                v-if="p.drakeIconSrc(row.key)"
-                :src="p.drakeIconSrc(row.key)"
-                :alt="row.label"
-                class="h-4 w-4 object-contain"
-                loading="lazy"
-                decoding="async"
-                @error="p.onDrakeIconError($event, row.key)"
-              />
-              <span class="truncate text-xs text-text/90">{{ row.label }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.objectives-zebra-cols th:nth-child(even),
+.objectives-zebra-cols td:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+</style>

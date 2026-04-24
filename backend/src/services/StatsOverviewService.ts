@@ -437,6 +437,7 @@ type TeamCoreFallback = {
   sum_rift_herald_kills: number
   count_rift_herald_first: number
   sum_inhibitor_kills: number
+  count_inhibitor_first: number
   sum_elder_kills: number
 }
 
@@ -471,6 +472,7 @@ async function loadTeamCoreFallbackFromIngest(
       sum_rift_herald_kills: bigint
       count_rift_herald_first: bigint
       sum_inhibitor_kills: bigint
+      count_inhibitor_first: bigint
       sum_elder_kills: bigint
     }>
   >(`
@@ -488,6 +490,7 @@ async function loadTeamCoreFallbackFromIngest(
       COALESCE(SUM(it.rift_herald_kills), 0)::bigint AS sum_rift_herald_kills,
       COALESCE(SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END), 0)::bigint AS count_rift_herald_first,
       COALESCE(SUM(it.inhibitor_kills), 0)::bigint AS sum_inhibitor_kills,
+      COALESCE(SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END), 0)::bigint AS count_inhibitor_first,
       COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
     FROM ingest_teams it
     INNER JOIN ingest_matchs im ON im.id = it.match_id
@@ -509,6 +512,7 @@ async function loadTeamCoreFallbackFromIngest(
       sum_rift_herald_kills: Number(row.sum_rift_herald_kills ?? 0),
       count_rift_herald_first: Number(row.count_rift_herald_first ?? 0),
       sum_inhibitor_kills: Number(row.sum_inhibitor_kills ?? 0),
+      count_inhibitor_first: Number(row.count_inhibitor_first ?? 0),
       sum_elder_kills: Number(row.sum_elder_kills ?? 0),
     })
   }
@@ -1451,6 +1455,7 @@ export async function getOverviewTeamsStats(
         sum_rift_herald_kills: bigint
         count_rift_herald_first: bigint
         sum_inhibitor_kills: bigint
+        count_inhibitor_first: bigint
         sum_elder_kills: bigint
         count_earth_drake: bigint
         count_water_drake: bigint
@@ -1482,6 +1487,7 @@ export async function getOverviewTeamsStats(
         SUM(mv.sum_rift_herald_kills)::bigint AS sum_rift_herald_kills,
         SUM(mv.count_rift_herald_first)::bigint AS count_rift_herald_first,
         SUM(mv.sum_inhibitor_kills)::bigint AS sum_inhibitor_kills,
+        SUM(mv.count_inhibitor_first)::bigint AS count_inhibitor_first,
         SUM(mv.sum_elder_kills)::bigint AS sum_elder_kills,
         SUM(mv.count_earth_drake)::bigint AS count_earth_drake,
         SUM(mv.count_water_drake)::bigint AS count_water_drake,
@@ -1524,6 +1530,7 @@ export async function getOverviewTeamsStats(
           team100.sum_rift_herald_kills = BigInt(b.sum_rift_herald_kills)
           team100.count_rift_herald_first = BigInt(b.count_rift_herald_first)
           team100.sum_inhibitor_kills = BigInt(b.sum_inhibitor_kills)
+          team100.count_inhibitor_first = BigInt(b.count_inhibitor_first)
           team100.sum_elder_kills = BigInt(b.sum_elder_kills)
         }
         if (team200 && r) {
@@ -1539,6 +1546,7 @@ export async function getOverviewTeamsStats(
           team200.sum_rift_herald_kills = BigInt(r.sum_rift_herald_kills)
           team200.count_rift_herald_first = BigInt(r.count_rift_herald_first)
           team200.sum_inhibitor_kills = BigInt(r.sum_inhibitor_kills)
+          team200.count_inhibitor_first = BigInt(r.count_inhibitor_first)
           team200.sum_elder_kills = BigInt(r.sum_elder_kills)
         }
       }
@@ -1549,7 +1557,7 @@ export async function getOverviewTeamsStats(
       dragon: { first: toN(team100?.count_dragon_first), kills: toN(team100?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team100?.sum_elder_kills) },
       tower: { first: toN(team100?.count_tower_first), kills: toN(team100?.sum_tower_kills) },
-      inhibitor: { first: 0, kills: toN(team100?.sum_inhibitor_kills) },
+      inhibitor: { first: toN(team100?.count_inhibitor_first), kills: toN(team100?.sum_inhibitor_kills) },
       riftHerald: { first: toN(team100?.count_rift_herald_first), kills: toN(team100?.sum_rift_herald_kills) },
       horde: { first: toN(team100?.count_horde_first), kills: toN(team100?.sum_horde_kills) },
     }
@@ -1559,7 +1567,7 @@ export async function getOverviewTeamsStats(
       dragon: { first: toN(team200?.count_dragon_first), kills: toN(team200?.sum_dragon_kills) },
       elder: { first: 0, kills: toN(team200?.sum_elder_kills) },
       tower: { first: toN(team200?.count_tower_first), kills: toN(team200?.sum_tower_kills) },
-      inhibitor: { first: 0, kills: toN(team200?.sum_inhibitor_kills) },
+      inhibitor: { first: toN(team200?.count_inhibitor_first), kills: toN(team200?.sum_inhibitor_kills) },
       riftHerald: { first: toN(team200?.count_rift_herald_first), kills: toN(team200?.sum_rift_herald_kills) },
       horde: { first: toN(team200?.count_horde_first), kills: toN(team200?.sum_horde_kills) },
     }
@@ -2618,6 +2626,7 @@ export async function getOverviewSidesStats(
         count_rift_herald_first: bigint
         sum_rift_herald_kills: bigint
         sum_inhibitor_kills: bigint
+        count_inhibitor_first: bigint
         count_earth_drake: bigint
         count_water_drake: bigint
         count_wind_drake: bigint
@@ -2647,6 +2656,7 @@ export async function getOverviewSidesStats(
         SUM(mv.count_rift_herald_first)::bigint AS count_rift_herald_first,
         SUM(mv.sum_rift_herald_kills)::bigint AS sum_rift_herald_kills,
         SUM(mv.sum_inhibitor_kills)::bigint AS sum_inhibitor_kills,
+        SUM(mv.count_inhibitor_first)::bigint AS count_inhibitor_first,
         SUM(mv.count_earth_drake)::bigint AS count_earth_drake,
         SUM(mv.count_water_drake)::bigint AS count_water_drake,
         SUM(mv.count_wind_drake)::bigint AS count_wind_drake,
@@ -2684,6 +2694,7 @@ export async function getOverviewSidesStats(
         row.sum_rift_herald_kills = BigInt(f.sum_rift_herald_kills)
         row.count_rift_herald_first = BigInt(f.count_rift_herald_first)
         row.sum_inhibitor_kills = BigInt(f.sum_inhibitor_kills)
+        row.count_inhibitor_first = BigInt(f.count_inhibitor_first)
         row.sum_elder_kills = BigInt(f.sum_elder_kills)
       }
     }
@@ -2721,7 +2732,7 @@ export async function getOverviewSidesStats(
         elderKills: n(blue?.sum_elder_kills),
         towerFirst: n(blue?.count_tower_first),
         towerKills: n(blue?.sum_tower_kills),
-        inhibitorFirst: 0,
+        inhibitorFirst: n(blue?.count_inhibitor_first),
         inhibitorKills: n(blue?.sum_inhibitor_kills),
         riftHeraldFirst: n(blue?.count_rift_herald_first),
         riftHeraldKills: n(blue?.sum_rift_herald_kills),
@@ -2738,7 +2749,7 @@ export async function getOverviewSidesStats(
         elderKills: n(red?.sum_elder_kills),
         towerFirst: n(red?.count_tower_first),
         towerKills: n(red?.sum_tower_kills),
-        inhibitorFirst: 0,
+        inhibitorFirst: n(red?.count_inhibitor_first),
         inhibitorKills: n(red?.sum_inhibitor_kills),
         riftHeraldFirst: n(red?.count_rift_herald_first),
         riftHeraldKills: n(red?.sum_rift_herald_kills),
@@ -2796,7 +2807,7 @@ export async function getOverviewSidesStats(
       dragon: { firstByBlue: n(blue?.count_dragon_first), firstByRed: n(red?.count_dragon_first), killsByBlue: n(blue?.sum_dragon_kills), killsByRed: n(red?.sum_dragon_kills), distributionByBlue: distDragon.blue, distributionByRed: distDragon.red },
       elder: { firstByBlue: 0, firstByRed: 0, killsByBlue: n(blue?.sum_elder_kills), killsByRed: n(red?.sum_elder_kills), distributionByBlue: distElder.blue, distributionByRed: distElder.red },
       tower: { firstByBlue: n(blue?.count_tower_first), firstByRed: n(red?.count_tower_first), killsByBlue: n(blue?.sum_tower_kills), killsByRed: n(red?.sum_tower_kills), distributionByBlue: distTower.blue, distributionByRed: distTower.red },
-      inhibitor: { firstByBlue: 0, firstByRed: 0, killsByBlue: n(blue?.sum_inhibitor_kills), killsByRed: n(red?.sum_inhibitor_kills), distributionByBlue: distInhibitor.blue, distributionByRed: distInhibitor.red },
+      inhibitor: { firstByBlue: n(blue?.count_inhibitor_first), firstByRed: n(red?.count_inhibitor_first), killsByBlue: n(blue?.sum_inhibitor_kills), killsByRed: n(red?.sum_inhibitor_kills), distributionByBlue: distInhibitor.blue, distributionByRed: distInhibitor.red },
       riftHerald: { firstByBlue: n(blue?.count_rift_herald_first), firstByRed: n(red?.count_rift_herald_first), killsByBlue: n(blue?.sum_rift_herald_kills), killsByRed: n(red?.sum_rift_herald_kills), distributionByBlue: distRiftHerald.blue, distributionByRed: distRiftHerald.red },
       horde: { firstByBlue: n(blue?.count_horde_first), firstByRed: n(red?.count_horde_first), killsByBlue: n(blue?.sum_horde_kills), killsByRed: n(red?.sum_horde_kills), distributionByBlue: distHorde.blue, distributionByRed: distHorde.red },
     }

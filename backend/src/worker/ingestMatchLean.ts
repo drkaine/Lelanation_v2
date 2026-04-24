@@ -649,7 +649,7 @@ export async function upsertIngestMatchAndParticipants(
         throw new Error(`IngestMatch row not found after createMany for ${riotMatchId}`)
       }
 
-      const teamDataItems = buildMatchTeamData(match.id, info, participantDtos)
+      const teamDataItems = buildMatchTeamData(match.id, info, participantDtos, matchIngestOptions?.timelineDto ?? null)
       const teamIdByRiotTeam = new Map<number, bigint>()
       const teamRankScoresByRiotTeam = new Map<number, number[]>()
       const matchRankScores: number[] = []

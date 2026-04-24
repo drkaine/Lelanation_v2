@@ -1662,7 +1662,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
           payload.puuidKeyVersion ?? null,
           ctx.counters,
           ctx.logger,
-          rankIngestOpts
+          { ...rankIngestOpts, timelineDto }
         )
         await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
@@ -1729,7 +1729,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         payload.puuidKeyVersion,
         ctx.counters,
         ctx.logger,
-        rankIngestOpts
+        { ...rankIngestOpts, timelineDto }
       )
       if (timelineDto) {
         await extractAndInsertJungleFirstClear(matchDbId, canonical, timelineDto, ctx.logger)
@@ -2466,7 +2466,7 @@ async function runStep4ForPlayer(
                 puuidKeyVersion,
                 counters,
                 logger,
-                phase2IngestOpts
+                { ...phase2IngestOpts, timelineDto: item.timelineDto }
               )
               if (item.timelineDto) {
                 await extractAndInsertJungleFirstClear(matchDbId, canonicalRiotMatchId, item.timelineDto, logger)

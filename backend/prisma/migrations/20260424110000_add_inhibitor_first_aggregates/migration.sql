@@ -1,0 +1,11 @@
+ALTER TABLE IF EXISTS ingest_teams
+  ADD COLUMN IF NOT EXISTS inhibitor_first BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE IF EXISTS agg_team_core_stats
+  ADD COLUMN IF NOT EXISTS count_inhibitor_first INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE IF EXISTS archive_agg_team_core_stats
+  ADD COLUMN IF NOT EXISTS count_inhibitor_first INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE IF EXISTS mv_team_core_stats
+  ADD COLUMN IF NOT EXISTS count_inhibitor_first INTEGER NOT NULL DEFAULT 0;

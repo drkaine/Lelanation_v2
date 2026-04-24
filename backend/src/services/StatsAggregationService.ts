@@ -154,6 +154,29 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       ) x
       GROUP BY game_version, rank_tier
     ),
+    first_counts AS (
+      SELECT
+        im.game_version,
+        UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) AS rank_tier,
+        SUM(CASE WHEN it.win AND it.baron_first THEN 1 ELSE 0 END)::int AS baron_first_win,
+        SUM(CASE WHEN NOT it.win AND it.baron_first THEN 1 ELSE 0 END)::int AS baron_first_loss,
+        SUM(CASE WHEN it.win AND it.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first_win,
+        SUM(CASE WHEN NOT it.win AND it.dragon_first THEN 1 ELSE 0 END)::int AS dragon_first_loss,
+        SUM(CASE WHEN it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_win,
+        SUM(CASE WHEN NOT it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_loss,
+        SUM(CASE WHEN it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_win,
+        SUM(CASE WHEN NOT it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_loss,
+        SUM(CASE WHEN it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_win,
+        SUM(CASE WHEN NOT it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_loss,
+        SUM(CASE WHEN it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_win,
+        SUM(CASE WHEN NOT it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_loss,
+        SUM(CASE WHEN it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_win,
+        SUM(CASE WHEN NOT it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_loss
+      FROM ingest_teams it
+      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
+      GROUP BY im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
+    ),
     soul_counts AS (
       SELECT
         game_version,
@@ -176,20 +199,20 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
     SELECT
       d.game_version,
       d.rank_tier,
-      COALESCE(ob_baron.win_json, '{}'::jsonb),
-      COALESCE(ob_baron.loss_json, '{}'::jsonb),
-      COALESCE(ob_drake_total.win_json, '{}'::jsonb),
-      COALESCE(ob_drake_total.loss_json, '{}'::jsonb),
-      COALESCE(ob_horde.win_json, '{}'::jsonb),
-      COALESCE(ob_horde.loss_json, '{}'::jsonb),
-      COALESCE(ob_herald.win_json, '{}'::jsonb),
-      COALESCE(ob_herald.loss_json, '{}'::jsonb),
-      COALESCE(ob_inhibitor.win_json, '{}'::jsonb),
-      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb),
-      COALESCE(ob_tower.win_json, '{}'::jsonb),
-      COALESCE(ob_tower.loss_json, '{}'::jsonb),
-      COALESCE(ob_first_blood.win_json, '{}'::jsonb),
-      COALESCE(ob_first_blood.loss_json, '{}'::jsonb),
+      COALESCE(ob_baron.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_win, 0)),
+      COALESCE(ob_baron.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_loss, 0)),
+      COALESCE(ob_drake_total.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_win, 0)),
+      COALESCE(ob_drake_total.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_loss, 0)),
+      COALESCE(ob_horde.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_win, 0)),
+      COALESCE(ob_horde.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_loss, 0)),
+      COALESCE(ob_herald.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_win, 0)),
+      COALESCE(ob_herald.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_loss, 0)),
+      COALESCE(ob_inhibitor.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.inhibitor_first_win, 0)),
+      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.inhibitor_first_loss, 0)),
+      COALESCE(ob_tower.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_win, 0)),
+      COALESCE(ob_tower.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_loss, 0)),
+      jsonb_build_object('first', COALESCE(fc.first_blood_win, 0)),
+      jsonb_build_object('first', COALESCE(fc.first_blood_loss, 0)),
       COALESCE(ob_elder.win_json, '{}'::jsonb),
       COALESCE(ob_elder.loss_json, '{}'::jsonb),
       COALESCE(ob_earth.win_json, '{}'::jsonb) || jsonb_build_object('soul', COALESCE(sc.earth_soul_win, 0)),
@@ -258,6 +281,8 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       ON ob_hextec_soul.game_version = d.game_version AND ob_hextec_soul.rank_tier = d.rank_tier AND ob_hextec_soul.objective_key = 'hextec_soul'
     LEFT JOIN objective_bucket_json ob_chem_soul
       ON ob_chem_soul.game_version = d.game_version AND ob_chem_soul.rank_tier = d.rank_tier AND ob_chem_soul.objective_key = 'chem_soul'
+    LEFT JOIN first_counts fc
+      ON fc.game_version = d.game_version AND fc.rank_tier = d.rank_tier
     LEFT JOIN soul_counts sc
       ON sc.game_version = d.game_version AND sc.rank_tier = d.rank_tier
     ON CONFLICT (game_version, rank_tier) DO UPDATE

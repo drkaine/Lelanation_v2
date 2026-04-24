@@ -297,20 +297,20 @@ async function runBackfillOnce(): Promise<void> {
     FROM (
       SELECT
         ac.id AS champion_stat_id,
-        p.opponent_champion_id,
-        p.role,
-        p.rank_tier,
-        p.game_version,
-        p.region,
-        p.count_win,
+      p.opponent_champion_id,
+      p.role,
+      p.rank_tier,
+      p.game_version,
+      p.region,
+      p.count_win,
         p.count_game
-      FROM agg_pairs p
-      INNER JOIN agg_champion_core_stats ac
-        ON ac.champion_id = p.champion_id
-       AND ac.role = p.role
-       AND ac.rank_tier = p.rank_tier
-       AND ac.game_version = p.game_version
-       AND ac.region = p.region
+    FROM agg_pairs p
+    INNER JOIN agg_champion_core_stats ac
+      ON ac.champion_id = p.champion_id
+     AND ac.role = p.role
+     AND ac.rank_tier = p.rank_tier
+     AND ac.game_version = p.game_version
+     AND ac.region = p.region
     ) src
     GROUP BY
       src.champion_stat_id,
@@ -1169,6 +1169,7 @@ async function runBackfillOnce(): Promise<void> {
         SUM(it.rift_herald_kills)::int AS sum_rift_herald_kills,
         SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END)::int AS count_rift_herald_first,
         SUM(it.inhibitor_kills)::int AS sum_inhibitor_kills,
+        SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END)::int AS count_inhibitor_first,
         SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END)::int AS count_first_blood,
         SUM(GREATEST(COALESCE(it.elder_kills, 0), COALESCE(ds.elder_from_timeline, 0)))::int AS sum_elder_kills,
         SUM(COALESCE(ds.count_earth_drake, 0))::int AS count_earth_drake,
@@ -1194,7 +1195,7 @@ async function runBackfillOnce(): Promise<void> {
       count_team_early_surrendered, count_team_surrendered,
       sum_baron_kills, count_baron_first, sum_dragon_kills, count_dragon_first,
       sum_tower_kills, count_tower_first, sum_horde_kills, count_horde_first,
-      sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills, count_first_blood,
+      sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills, count_inhibitor_first, count_first_blood,
       sum_elder_kills, count_earth_drake, count_water_drake, count_wind_drake, count_fire_drake,
       count_hextec_drake, count_chem_drake, count_earth_drake_soul, count_water_drake_soul,
       count_wind_drake_soul, count_fire_drake_soul, count_hextec_drake_soul, count_chem_drake_soul,
@@ -1206,7 +1207,7 @@ async function runBackfillOnce(): Promise<void> {
       count_team_early_surrendered, count_team_surrendered,
       sum_baron_kills, count_baron_first, sum_dragon_kills, count_dragon_first,
       sum_tower_kills, count_tower_first, sum_horde_kills, count_horde_first,
-      sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills, count_first_blood,
+      sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills, count_inhibitor_first, count_first_blood,
       sum_elder_kills, count_earth_drake, count_water_drake, count_wind_drake, count_fire_drake,
       count_hextec_drake, count_chem_drake, count_earth_drake_soul, count_water_drake_soul,
       count_wind_drake_soul, count_fire_drake_soul, count_hextec_drake_soul, count_chem_drake_soul,
@@ -1229,6 +1230,7 @@ async function runBackfillOnce(): Promise<void> {
       sum_rift_herald_kills = EXCLUDED.sum_rift_herald_kills,
       count_rift_herald_first = EXCLUDED.count_rift_herald_first,
       sum_inhibitor_kills = EXCLUDED.sum_inhibitor_kills,
+      count_inhibitor_first = EXCLUDED.count_inhibitor_first,
       count_first_blood = EXCLUDED.count_first_blood,
       sum_elder_kills = EXCLUDED.sum_elder_kills,
       count_earth_drake = EXCLUDED.count_earth_drake,
@@ -1666,17 +1668,17 @@ async function runBackfillOnce(): Promise<void> {
       WHERE atc.rank_tier <> 'UNRANKED'
     ),
     objective_bucket_rows AS (
-      SELECT
-        atc.game_version,
-        atc.rank_tier,
-        tb.objective_key,
-        tb.objective_bucket,
-        SUM(tb.count_win)::int AS count_win,
+    SELECT
+      atc.game_version,
+      atc.rank_tier,
+      tb.objective_key,
+      tb.objective_bucket,
+      SUM(tb.count_win)::int AS count_win,
         SUM(tb.count_game - tb.count_win)::int AS count_loss
-      FROM agg_team_bucket tb
-      INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
-      WHERE atc.rank_tier <> 'UNRANKED'
-      GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
+    FROM agg_team_bucket tb
+    INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
+    WHERE atc.rank_tier <> 'UNRANKED'
+    GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
     ),
     objective_bucket_json AS (
       SELECT
@@ -1735,6 +1737,8 @@ async function runBackfillOnce(): Promise<void> {
         SUM(CASE WHEN NOT it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_loss,
         SUM(CASE WHEN it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_win,
         SUM(CASE WHEN NOT it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_loss,
+        SUM(CASE WHEN it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_win,
+        SUM(CASE WHEN NOT it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_loss,
         SUM(CASE WHEN it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_win,
         SUM(CASE WHEN NOT it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_loss,
         SUM(CASE WHEN it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_win,
@@ -1876,8 +1880,8 @@ async function runBackfillOnce(): Promise<void> {
       COALESCE(ob_horde.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_loss, 0)),
       COALESCE(ob_herald.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_win, 0)),
       COALESCE(ob_herald.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_loss, 0)),
-      COALESCE(ob_inhibitor.win_json, '{}'::jsonb),
-      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb),
+      COALESCE(ob_inhibitor.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.inhibitor_first_win, 0)),
+      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.inhibitor_first_loss, 0)),
       COALESCE(ob_tower.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_win, 0)),
       COALESCE(ob_tower.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.tower_first_loss, 0)),
       jsonb_build_object('first', COALESCE(fc.first_blood_win, 0)),
