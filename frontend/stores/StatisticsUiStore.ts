@@ -4,7 +4,6 @@ const STORAGE_KEY = 'lelanation_statistics_ui'
 
 export type StatisticsMainTab =
   | 'overview'
-  | 'tierlist'
   | 'championTable'
   | 'balance'
   | 'trends'
@@ -23,7 +22,6 @@ interface StatisticsUiState {
 
 const VALID_TABS: StatisticsMainTab[] = [
   'overview',
-  'tierlist',
   'championTable',
   'balance',
   'trends',
@@ -37,7 +35,9 @@ const VALID_TABS: StatisticsMainTab[] = [
 ]
 
 function isValidTab(value: unknown): value is StatisticsMainTab {
-  return typeof value === 'string' && VALID_TABS.includes(value as StatisticsMainTab)
+  if (typeof value !== 'string') return false
+  if (value === 'tierlist') return false
+  return VALID_TABS.includes(value as StatisticsMainTab)
 }
 
 function loadUiState(): StatisticsUiState {

@@ -283,7 +283,6 @@ const onKeyDown = (event: KeyboardEvent) => {
       'overview',
       'team',
       'bans',
-      'tierlist',
       'championTable',
       'balance',
       'runes',

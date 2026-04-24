@@ -4,7 +4,11 @@
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import {
+  matchVersionedAggFrom,
+  normalizePatchMajorMinor,
+  sqlAggUnionAllLiveAndArchives,
+} from './statsAggArchive.js'
 
 export function buildRawMatchCond(
   version?: string | string[] | null,
@@ -21,6 +25,29 @@ export function buildRawMatchCond(
   else if (ranks.length > 1) parts.push(`m.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
   else parts.push(`m.rank_tier <> 'UNRANKED'`)
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
+}
+
+/**
+ * Nombre de parties (lignes `count_match`) : `agg_match_outcome_stats` ∪ archive,
+ * fusion par (game_version, rank_tier) puis somme sur toutes les divisions du filtre.
+ */
+export async function sumMatchOutcomeCountUnionLiveArchive(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null
+): Promise<number> {
+  if (!isDatabaseConfigured()) return 0
+  const moUnion = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'src')
+  const where = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'src.')
+  const rows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
+    SELECT COALESCE(SUM(b.mc), 0)::bigint AS mc
+    FROM (
+      SELECT src.game_version, src.rank_tier, SUM(src.count_match)::bigint AS mc
+      FROM ${moUnion}
+      WHERE ${where}
+      GROUP BY src.game_version, src.rank_tier
+    ) b
+  `)
+  return Math.max(0, Number(rows[0]?.mc ?? 0))
 }
 
 export type ChampionGlobalTableSide = {
@@ -97,14 +124,7 @@ export async function getChampionGlobalTable(
           ? 'SUPPORT'
           : roleFilterRaw
 
-  const matchCondMatchOutcome = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mo.')
-  const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
-  const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
-    SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
-    FROM ${moFrom}
-    WHERE ${matchCondMatchOutcome}
-  `)
-  const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
+  const matchCount = await sumMatchOutcomeCountUnionLiveArchive(version, rankTier)
   if (matchCount === 0) {
     return { matchCount: 0, rows: [] }
   }

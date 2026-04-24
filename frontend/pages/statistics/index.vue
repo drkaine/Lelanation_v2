@@ -270,7 +270,7 @@
               </select>
             </div>
           </div>
-          <div>
+          <div v-show="activeTab !== 'bans'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRole') }}
             </div>
@@ -319,7 +319,7 @@
               </button>
             </div>
           </div>
-          <div>
+          <div v-show="activeTab !== 'bans'">
             <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
               {{ t('statisticsPage.filterOtp') }}
             </label>
@@ -398,11 +398,6 @@
           <!-- Tab: Bans -->
           <div v-show="activeTab === 'bans'">
             <StatisticsBansTab />
-          </div>
-
-          <!-- Tab: Tier list -->
-          <div v-show="activeTab === 'tierlist'" class="space-y-4">
-            <StatisticsTierListTab />
           </div>
 
           <!-- Tab: Champion (tableau global bleu/rouge + dégâts + KDA) -->
@@ -508,9 +503,6 @@ const StatisticsInfosTab = defineAsyncComponent(
 const StatisticsBansTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsBansTab.vue')
 )
-const StatisticsTierListTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsTierListTab.vue')
-)
 const StatisticsChampionTableTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsChampionTableTab.vue')
 )
@@ -575,7 +567,7 @@ type StatisticsTabSection =
 
 const STATISTICS_SECTION_TABS: Record<StatisticsTabSection, StatisticsMainTab[]> = {
   'infos-overview': ['infos', 'overview'],
-  'tierlist-champion': ['tierlist', 'championTable'],
+  'tierlist-champion': ['championTable'],
   items: ['items'],
   'runes-summoner': ['runes', 'spells'],
   objectives: ['objectives'],
@@ -600,6 +592,7 @@ function normalizeTabForSection(
 }
 
 function normalizeLegacyTab(tab: string): StatisticsMainTab {
+  if (tab === 'tierlist') return 'overview'
   if (tab === 'champions') return 'infos'
   if (tab === 'progressions') return 'trends'
   if (tab === 'sides') return 'team'
@@ -609,7 +602,6 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
   if (tab === 'champion-table' || tab === 'championstable') return 'championTable'
   if (
     tab === 'overview' ||
-    tab === 'tierlist' ||
     tab === 'championTable' ||
     tab === 'balance' ||
     tab === 'trends' ||
@@ -640,7 +632,6 @@ const activeTab = ref<
   | 'overview'
   | 'team'
   | 'objectives'
-  | 'tierlist'
   | 'championTable'
   | 'balance'
   | 'trends'
@@ -665,7 +656,6 @@ const allTabs = computed(() => [
     widgetId: 'objectives',
   },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
-  { id: 'tierlist' as const, label: t('statisticsPage.tabTierList'), widgetId: 'tierlist' },
   {
     id: 'championTable' as const,
     label: t('statisticsPage.tabChampionTable'),
@@ -836,63 +826,6 @@ function setChampionsSort(col: 'games' | 'wins' | 'winrate' | 'pickrate') {
   }
 }
 
-/** Tier list: types and sort (3-state: default, asc, desc). */
-type TierListSortColumn =
-  | 'rank'
-  | 'champion'
-  | 'tier'
-  | 'mainRolePct'
-  | 'patchMainRolePctPp'
-  | 'winrate'
-  | 'pickrate'
-  | 'patchWinratePp'
-  | 'patchPickratePp'
-  | 'pbi'
-  | 'patchPbiPp'
-  | 'games'
-  | 'patchGamesDelta'
-  | 'highEloRank'
-  | 'highEloWinrate'
-  | 'patchHighEloWinratePp'
-  | 'highEloGames'
-  | 'patchHighEloGamesDelta'
-  | 'delta'
-
-const tierListViewModel = ref<'table' | 'chart'>('table')
-function setTierListViewModel(value: 'table' | 'chart') {
-  tierListViewModel.value = value
-}
-const tierListSortColumn = ref<TierListSortColumn | null>('rank')
-const tierListSortDir = ref<'asc' | 'desc'>('desc')
-const tierListPage = ref(1)
-
-/** Cartes « plus choisis / meilleurs WR / plus bannis » → tier list en mode tableau avec le bon tri. */
-function goToTierListWithSort(sort: 'winrate' | 'pickrate') {
-  tierListSortColumn.value = sort
-  tierListSortDir.value = 'desc'
-  tierListViewModel.value = 'table'
-  activeTab.value = 'tierlist'
-}
-
-const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1, F: 1 }
-
-/** High-elo row by champion id for Apex (Master+GM+Chall) columns and deltas. */
-const highEloRowsByChampionId = computed(() => {
-  const rows = tierListData.value?.highEloRows ?? []
-  const map = new Map<number, (typeof rows)[0]>()
-  for (const r of rows) map.set(r.championId, r)
-  return map
-})
-const hasTierListHighElo = computed(() => (tierListData.value?.highEloRows?.length ?? 0) > 0)
-/** Couleurs type LoLalytics pour WR % (sur 0–100). */
-function tierListWinrateClass(pct: number): string {
-  if (!Number.isFinite(pct)) return 'text-text/80'
-  if (pct >= 52.5) return 'font-medium text-green-400'
-  if (pct >= 51) return 'text-green-500/95'
-  if (pct >= 50) return 'text-sky-200/85'
-  return 'text-red-400/90'
-}
-
 /** Pickrate % (0–100) : vert / neutre / rouge pour lisibilité (tableau champion global). */
 function championGlobalPickrateClass(pct: number): string {
   if (!Number.isFinite(pct)) return 'text-text/80'
@@ -900,35 +833,6 @@ function championGlobalPickrateClass(pct: number): string {
   if (pct >= 6) return 'text-sky-200/85'
   if (pct >= 2) return 'text-text/85'
   return 'text-rose-400/90'
-}
-
-/** Tier list rows with optional delta (global winrate - highElo winrate). */
-interface TierListRowWithDelta {
-  rank: number
-  championId: number
-  tier: string
-  mainRole: string
-  mainRolePct: number
-  winrate: number
-  pickrate: number
-  banrate: number
-  pbi: number
-  games: number
-  highEloRank?: number
-  highEloWinrate?: number
-  highEloGames?: number
-  delta?: number
-  /** Points de % vs patch de référence (progressions). */
-  patchRefWinratePp?: number
-  patchRefPickratePp?: number
-  patchRefBanratePp?: number
-  /** Δ part des parties sur le rôle principal (0–100 vs ref., en points de %). */
-  patchRefMainRolePctPp?: number
-  patchRefGamesDelta?: number
-  patchRefHighEloWinratePp?: number
-  patchRefHighEloGamesDelta?: number
-  /** Écart du score matchup (brut) en points ×100 vs patch de référence. */
-  patchRefMatchupScorePp?: number
 }
 
 function formatTierListPatchDeltaPp(pp: number): string {
@@ -953,401 +857,13 @@ function tierListPatchDeltaGamesClass(n: number): string {
   return 'text-text/55'
 }
 
-const tierListRows = computed((): TierListRowWithDelta[] => {
-  const rows = tierListData.value?.rows ?? []
-  const highElo = highEloRowsByChampionId.value
-  const refS = tierListRefStatsById.value
-  const refHeMap = tierListRefHighEloById.value
-  return rows.map(r => {
-    const he = highElo.get(r.championId)
-    const winratePct = r.winrate * 100
-    const highEloWinratePct = he ? he.winrate * 100 : undefined
-    const delta = highEloWinratePct != null ? winratePct - highEloWinratePct : undefined
-    const refRow = refS.get(r.championId)
-    let patchRefWinratePp: number | undefined
-    let patchRefPickratePp: number | undefined
-    let patchRefBanratePp: number | undefined
-    let patchRefMainRolePctPp: number | undefined
-    let patchRefGamesDelta: number | undefined
-    let patchRefMatchupScorePp: number | undefined
-    if (refRow) {
-      patchRefWinratePp = (r.winrate - refRow.winrate) * 100
-      patchRefPickratePp = (r.pickrate - refRow.pickrate) * 100
-      patchRefBanratePp = (r.banrate - refRow.banrate) * 100
-      patchRefMainRolePctPp = r.mainRolePct - refRow.mainRolePct
-      patchRefGamesDelta = r.games - refRow.games
-      patchRefMatchupScorePp = (r.pbi - refRow.pbi) * 100
-    }
-    const refHe = refHeMap.get(r.championId)
-    let patchRefHighEloWinratePp: number | undefined
-    let patchRefHighEloGamesDelta: number | undefined
-    if (he && refHe) {
-      patchRefHighEloWinratePp = (he.winrate - refHe.winrate) * 100
-      patchRefHighEloGamesDelta = he.games - refHe.games
-    }
-    return {
-      ...r,
-      highEloRank: he?.rank,
-      highEloWinrate: he?.winrate,
-      highEloGames: he?.games,
-      delta,
-      patchRefWinratePp,
-      patchRefPickratePp,
-      patchRefBanratePp,
-      patchRefMainRolePctPp,
-      patchRefGamesDelta,
-      patchRefHighEloWinratePp,
-      patchRefHighEloGamesDelta,
-      patchRefMatchupScorePp,
-    }
-  })
-})
-
-/** Rôle appliqué côté API (stats du rôle choisi, y compris si ce n’est pas le rôle le plus joué). */
-const tierListRoleFilteredRows = computed(() => tierListRows.value)
-
-/** Tier list only: filtre par nom / id (champ de recherche). */
-const tierListSearchFilteredRows = computed(() => {
-  const list = tierListRoleFilteredRows.value
-  const raw = championSearchQuery.value.trim().toLowerCase()
-  if (!raw) return list
-  return list.filter(row => {
-    const name = championName(row.championId)?.toLowerCase() ?? ''
-    const idStr = String(row.championId)
-    return name.includes(raw) || idStr === raw || idStr.includes(raw)
-  })
-})
-
-/** Rank displayed in table: recomputed on filtered cohort (role filter), independent from sort columns. */
-const tierListFilteredRankByChampionId = computed(() => {
-  const map = new Map<number, number>()
-  const ordered = [...tierListRoleFilteredRows.value].sort((a, b) => a.rank - b.rank)
-  ordered.forEach((row, idx) => map.set(row.championId, idx + 1))
-  return map
-})
-
-/** Reference patch rank map, filtered with the same role filter as current table. */
-const tierListRefFilteredRankByChampionId = computed(() => {
-  const map = new Map<number, number>()
-  const list = tierListRefRows.value.filter(row =>
-    statsRoleFilter.value ? row.mainRole === statsRoleFilter.value : true
-  )
-  const ordered = [...list].sort((a, b) => a.rank - b.rank)
-  ordered.forEach((row, idx) => map.set(row.championId, idx + 1))
-  return map
-})
-
-const sortedTierListRows = computed(() => {
-  const list = tierListSearchFilteredRows.value
-  const col = tierListSortColumn.value
-  const dir = tierListSortDir.value
-  if (!col || col === 'champion') {
-    return [...list].sort((a, b) => a.rank - b.rank)
-  }
-  const mult = dir === 'desc' ? 1 : -1
-  return [...list].sort((a, b) => {
-    let diff = 0
-    if (col === 'rank') diff = a.rank - b.rank
-    else if (col === 'tier') diff = (TIER_ORDER[b.tier] ?? 0) - (TIER_ORDER[a.tier] ?? 0)
-    else if (col === 'mainRolePct') diff = a.mainRolePct - b.mainRolePct
-    else if (col === 'patchMainRolePctPp')
-      diff = (a.patchRefMainRolePctPp ?? 0) - (b.patchRefMainRolePctPp ?? 0)
-    else if (col === 'winrate') diff = a.winrate - b.winrate
-    else if (col === 'pickrate') diff = a.pickrate - b.pickrate
-    else if (col === 'patchWinratePp')
-      diff = (a.patchRefWinratePp ?? 0) - (b.patchRefWinratePp ?? 0)
-    else if (col === 'patchPickratePp')
-      diff = (a.patchRefPickratePp ?? 0) - (b.patchRefPickratePp ?? 0)
-    else if (col === 'pbi') diff = a.pbi - b.pbi
-    else if (col === 'patchPbiPp')
-      diff = (a.patchRefMatchupScorePp ?? 0) - (b.patchRefMatchupScorePp ?? 0)
-    else if (col === 'games') diff = a.games - b.games
-    else if (col === 'patchGamesDelta')
-      diff = (a.patchRefGamesDelta ?? 0) - (b.patchRefGamesDelta ?? 0)
-    else if (col === 'highEloRank') diff = (a.highEloRank ?? 0) - (b.highEloRank ?? 0)
-    else if (col === 'highEloWinrate') diff = (a.highEloWinrate ?? 0) - (b.highEloWinrate ?? 0)
-    else if (col === 'patchHighEloWinratePp')
-      diff = (a.patchRefHighEloWinratePp ?? 0) - (b.patchRefHighEloWinratePp ?? 0)
-    else if (col === 'highEloGames') diff = (a.highEloGames ?? 0) - (b.highEloGames ?? 0)
-    else if (col === 'patchHighEloGamesDelta')
-      diff = (a.patchRefHighEloGamesDelta ?? 0) - (b.patchRefHighEloGamesDelta ?? 0)
-    else if (col === 'delta') diff = (a.delta ?? 0) - (b.delta ?? 0)
-    return mult * diff
-  })
-})
-
-const totalTierListCount = computed(() => sortedTierListRows.value.length)
-const totalTierListPages = computed(() =>
-  Math.max(1, Math.ceil(totalTierListCount.value / championsPageSize.value))
-)
-const paginatedTierList = computed(() => {
-  const list = sortedTierListRows.value
-  const size = championsPageSize.value
-  const page = Math.min(tierListPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
-  const start = (page - 1) * size
-  return list.slice(start, start + size)
-})
-const tierListDisplayRankByChampionId = computed(() => {
-  return tierListFilteredRankByChampionId.value
-})
-
-function tierListPatchRankDelta(championId: number): number | null {
-  const cur = tierListFilteredRankByChampionId.value.get(championId)
-  const ref = tierListRefFilteredRankByChampionId.value.get(championId)
-  if (cur == null || ref == null) return null
-  // Positive => rank improved (e.g. 10 -> 7 => +3).
-  return ref - cur
+/** Depuis l’aperçu : page tier list avec tri initial. */
+function goToTierListWithSort(sort: 'winrate' | 'pickrate') {
+  navigateTo({
+    path: localePath('/statistics/tier-list'),
+    query: { ...route.query, sort },
+  }).catch(() => undefined)
 }
-
-function formatTierListPatchDeltaRank(delta: number): string {
-  const sign = delta > 0 ? '+' : ''
-  return `${sign}${Math.round(delta)}`
-}
-
-function tierListPatchDeltaRankClass(delta: number): string {
-  if (delta > 0) return 'text-green-400/90'
-  if (delta < 0) return 'text-red-400/90'
-  return 'text-text/55'
-}
-
-/** Tier list chart: strictly ordered by matchup score (worst -> best). */
-const tierListChartRows = computed(() =>
-  [...tierListSearchFilteredRows.value].sort((a, b) => {
-    const byScore = a.pbi - b.pbi
-    if (byScore !== 0) return byScore
-    return a.rank - b.rank
-  })
-)
-const tierListChartActiveTiers = ref<Array<'S+' | 'S' | 'A' | 'B' | 'C' | 'D'>>([])
-/** Tooltip graphique tier list : suit la souris, au-dessus du curseur. */
-const tierListChartTooltip = ref<{ championId: number; x: number; y: number } | null>(null)
-function onTierListChartBarEnter(c: TierListRowWithDelta, e: MouseEvent) {
-  tierListChartTooltip.value = { championId: c.championId, x: e.clientX, y: e.clientY }
-}
-function onTierListChartBarMove(e: MouseEvent) {
-  const t = tierListChartTooltip.value
-  if (!t) return
-  tierListChartTooltip.value = { ...t, x: e.clientX, y: e.clientY }
-}
-function onTierListChartBarLeave() {
-  tierListChartTooltip.value = null
-}
-watch([activeTab, tierListViewModel], () => {
-  tierListChartTooltip.value = null
-})
-/** API = tier « D » pour le plus bas ; l’ancienne légende utilisait « F » — on normalise pour le filtre. */
-function tierListChartApiTier(tier: string): 'S+' | 'S' | 'A' | 'B' | 'C' | 'D' {
-  const t = tier === 'F' ? 'D' : tier
-  return t as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
-}
-
-const tierListChartVisibleRows = computed(() => {
-  const active = tierListChartActiveTiers.value
-  if (!active.length) return tierListChartRows.value
-  const activeKeys = active.map(k => tierListChartApiTier(k))
-  return tierListChartRows.value.filter(row => activeKeys.includes(tierListChartApiTier(row.tier)))
-})
-const tierListChartTooltipRow = computed((): TierListRowWithDelta | null => {
-  const tip = tierListChartTooltip.value
-  if (!tip) return null
-  return tierListChartVisibleRows.value.find(r => r.championId === tip.championId) ?? null
-})
-
-/** Score matchup API (petit nombre) → échelle graphique (×100), plage théorique ±500. */
-function scaleMatchupScore(value: number): number {
-  const n = Number(value) * 100
-  return Number.isFinite(n) ? n : 0
-}
-
-const TIER_LIST_MATCHUP_CHART_ABS_MAX = 500
-
-function niceNumForTicks(range: number, round: boolean): number {
-  if (!Number.isFinite(range) || range <= 0) return 1
-  const exp = Math.floor(Math.log10(range))
-  const frac = range / 10 ** exp
-  let niceFrac: number
-  if (round) {
-    if (frac < 1.5) niceFrac = 1
-    else if (frac < 3) niceFrac = 2
-    else if (frac < 7) niceFrac = 5
-    else niceFrac = 10
-  } else if (frac <= 1) niceFrac = 1
-  else if (frac <= 2) niceFrac = 2
-  else if (frac <= 5) niceFrac = 5
-  else niceFrac = 10
-  return niceFrac * 10 ** exp
-}
-
-function computeTierListChartTicks(yMin: number, yMax: number, maxTicks = 7): number[] {
-  const span = yMax - yMin
-  if (!(span > 0) || !Number.isFinite(span)) {
-    return [yMax, yMin].filter(Number.isFinite)
-  }
-  const step = niceNumForTicks(span / Math.max(maxTicks - 1, 2), true)
-  const ticks: number[] = []
-  const start = Math.ceil((yMin - 1e-9) / step) * step
-  const end = Math.floor((yMax + 1e-9) / step) * step
-  for (let t = start; t <= end + step * 0.01; t += step) {
-    const x = Math.round(t * 1e4) / 1e4
-    if (x >= yMin - 1e-6 && x <= yMax + 1e-6) ticks.push(x)
-  }
-  if (!ticks.length) return [(yMin + yMax) / 2]
-  return [...new Set(ticks)].sort((a, b) => b - a)
-}
-
-/** Axe Y adapté aux scores visibles (×100), borné à ±500 ; inclut 0 pour la baseline divergente. */
-const tierListChartYScale = computed(() => {
-  const rows = tierListChartVisibleRows.value
-  const scores =
-    rows.length > 0 ? rows.map(r => scaleMatchupScore(r.pbi)).filter(Number.isFinite) : []
-
-  if (scores.length === 0) {
-    const yMin = -TIER_LIST_MATCHUP_CHART_ABS_MAX
-    const yMax = TIER_LIST_MATCHUP_CHART_ABS_MAX
-    return {
-      range: yMax - yMin,
-      yMin,
-      yMax,
-      ticks: [500, 250, 0, -250, -500],
-    }
-  }
-
-  const rawMin = Math.min(...scores)
-  const rawMax = Math.max(...scores)
-  const dataSpan = Math.max(rawMax - rawMin, 1e-6)
-  const pad = Math.max(dataSpan * 0.08, 6)
-  let yMin = Math.min(0, rawMin - pad)
-  let yMax = Math.max(0, rawMax + pad)
-  yMin = Math.max(yMin, -TIER_LIST_MATCHUP_CHART_ABS_MAX)
-  yMax = Math.min(yMax, TIER_LIST_MATCHUP_CHART_ABS_MAX)
-  if (yMax <= yMin) {
-    yMin -= 1
-    yMax += 1
-  }
-  return {
-    range: yMax - yMin,
-    yMin,
-    yMax,
-    ticks: computeTierListChartTicks(yMin, yMax, 7),
-  }
-})
-
-/** Valeurs hors domaine visuel : clamp (tooltip garde la valeur réelle). */
-function matchupScoreClampedForChart(pbi: number): number {
-  const s = tierListChartYScale.value
-  const v = scaleMatchupScore(pbi)
-  return Math.min(s.yMax, Math.max(s.yMin, v))
-}
-
-function tierListChartYTickBottomPct(tick: number): number {
-  const s = tierListChartYScale.value
-  const d = s.yMax - s.yMin
-  if (!(d > 0) || !Number.isFinite(d)) return 50
-  return ((tick - s.yMin) / d) * 100
-}
-
-/** Hauteur en % du tracé : distance entre la ligne 0 et le score (pas |score| / plage totale). */
-function tierListChartBarHeightPct(pbi: number): number {
-  const s = tierListChartYScale.value
-  const range = s.yMax - s.yMin
-  if (range <= 0) return 0
-  const n = matchupScoreClampedForChart(pbi)
-  const zeroPct = ((0 - s.yMin) / range) * 100
-  const valPct = ((n - s.yMin) / range) * 100
-  return Math.abs(valPct - zeroPct)
-}
-
-function tierListChartScoreBottomPct(pbi: number): number {
-  return tierListChartYTickBottomPct(matchupScoreClampedForChart(pbi))
-}
-
-function formatMatchupScore(value: number, decimals = 2): string {
-  const n = scaleMatchupScore(value)
-  if (!Number.isFinite(n)) return (0).toFixed(decimals)
-  return n.toFixed(decimals)
-}
-
-const tierListChartHeading = computed(() => {
-  const role = statsRoleFilter.value
-    ? mainRoleLabel(statsRoleFilter.value)
-    : t('statisticsPage.tierListChartAllRoles')
-  return t('statisticsPage.tierListChartHeading', { role: role.toUpperCase() })
-})
-
-const tierListChartZeroBottomPct = computed(() =>
-  Math.min(100, Math.max(0, tierListChartYTickBottomPct(0)))
-)
-
-/** Couleurs barres / légende — style diverging tier (F rouge → S+ or). */
-const TIER_CHART_COLORS: Record<'F' | 'D' | 'C' | 'B' | 'A' | 'S' | 'S+', string> = {
-  F: '#dc2626',
-  D: '#dc2626',
-  C: '#a78bfa',
-  B: '#7dd3fc',
-  A: '#3b82f6',
-  S: '#22c55e',
-  'S+': '#e5c558',
-}
-
-const TIER_DIVERGING_LEGEND: Array<{
-  key: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
-  color: string
-}> = [
-  /** Libellé i18n tierF (comme le tableau) — clé API = D */
-  { key: 'D', color: TIER_CHART_COLORS.D },
-  { key: 'C', color: TIER_CHART_COLORS.C },
-  { key: 'B', color: TIER_CHART_COLORS.B },
-  { key: 'A', color: TIER_CHART_COLORS.A },
-  { key: 'S', color: TIER_CHART_COLORS.S },
-  { key: 'S+', color: TIER_CHART_COLORS['S+'] },
-]
-
-function tierChartColor(tier: string): string {
-  return TIER_CHART_COLORS[tier as keyof typeof TIER_CHART_COLORS] ?? TIER_CHART_COLORS.D
-}
-
-function toggleTierListChartTier(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'): void {
-  const current = tierListChartActiveTiers.value
-  if (current.includes(tier)) {
-    tierListChartActiveTiers.value = current.filter(t => t !== tier)
-    return
-  }
-  tierListChartActiveTiers.value = [...current, tier]
-}
-
-function tierListChartTierEnabled(tier: 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'): boolean {
-  const active = tierListChartActiveTiers.value
-  return active.length === 0 || active.includes(tier)
-}
-
-function tierListChartBarColor(tier: string): string {
-  return tierListChartTierEnabled(tier as 'S+' | 'S' | 'A' | 'B' | 'C' | 'D')
-    ? tierChartColor(tier)
-    : 'rgb(71 85 105 / 0.45)'
-}
-
-function tierListChartChampionImage(championId: number): string | null {
-  const champ = championByKey(championId)
-  if (!champ?.image?.full) return null
-  return getChampionImageUrl(gameVersion.value, champ.image.full)
-}
-
-function cycleTierListSort(col: TierListSortColumn) {
-  if (tierListSortColumn.value === col) {
-    if (tierListSortDir.value === 'desc') tierListSortDir.value = 'asc'
-    else tierListSortColumn.value = null
-  } else {
-    tierListSortColumn.value = col
-    tierListSortDir.value = 'desc'
-  }
-}
-function tierListSortIcon(col: TierListSortColumn): string {
-  if (tierListSortColumn.value !== col) return '—'
-  return tierListSortDir.value === 'desc' ? '↓' : '↑'
-}
-watch([tierListSortColumn, tierListSortDir, championsPageSize, championSearchQuery], () => {
-  tierListPage.value = 1
-})
 
 function _formatGeneratedAt(value: string | null | undefined): string {
   if (!value) return '—'
@@ -1446,11 +962,19 @@ function syncStatisticsStateToQuery(): void {
   if (statsVersionFilter.value) nextQuery.version = statsVersionFilter.value
   else delete nextQuery.version
 
-  if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
-  else delete nextQuery.role
+  if (activeTab.value !== 'bans') {
+    if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
+    else delete nextQuery.role
+  } else {
+    delete nextQuery.role
+  }
 
-  if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
-  else delete nextQuery.otp
+  if (activeTab.value !== 'bans') {
+    if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
+    else delete nextQuery.otp
+  } else {
+    delete nextQuery.otp
+  }
 
   if (statsDivisionFilter.value.length > 0) nextQuery.rankTier = [...statsDivisionFilter.value]
   else delete nextQuery.rankTier
@@ -1551,6 +1075,20 @@ if (import.meta.client) {
   statisticsCustomStore.init()
   applyStatisticsStateFromQuery()
 }
+
+watch(
+  () => queryFirst(route.query.tab as string | string[] | null | undefined),
+  tabQ => {
+    if (!import.meta.client) return
+    if (tabQ !== 'tierlist') return
+    const q = { ...route.query } as Record<string, string | string[]>
+    delete q.tab
+    navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true }).catch(
+      () => undefined
+    )
+  },
+  { immediate: true }
+)
 
 const versionMatchCountByVersion = computed(() => {
   const map = new Map<string, number>()
@@ -3542,59 +3080,6 @@ const championsData = ref<{
 const championsPending = ref(true)
 const championsError = ref<string | null>(null)
 
-const tierListPending = ref(false)
-const tierListError = ref<string | null>(null)
-const tierListData = ref<{
-  patch: string
-  rankTier: string
-  rows: Array<{
-    rank: number
-    championId: number
-    tier: string
-    mainRole: string
-    mainRolePct: number
-    winrate: number
-    pickrate: number
-    banrate: number
-    pbi: number
-    games: number
-  }>
-  highEloRows?: Array<{
-    rank: number
-    championId: number
-    tier: string
-    mainRole: string
-    mainRolePct: number
-    winrate: number
-    pickrate: number
-    banrate: number
-    pbi: number
-    games: number
-  }>
-} | null>(null)
-/** Stats ref. patch (progressions) pour Δ WR / pick / ban / Apex. */
-const tierListRefStatsById = ref(
-  new Map<
-    number,
-    {
-      winrate: number
-      pickrate: number
-      banrate: number
-      games: number
-      mainRolePct: number
-      pbi: number
-    }
-  >()
-)
-const tierListRefHighEloById = ref(new Map<number, { winrate: number; games: number }>())
-const tierListRefRows = ref<
-  Array<{
-    rank: number
-    championId: number
-    mainRole: string
-  }>
->([])
-
 type ChampionGlobalTableRow = {
   championId: number
   blue: {
@@ -3960,18 +3445,6 @@ function patchFromVersion(version: string | null | undefined): string | null {
   if (!Number.isFinite(major) || !Number.isFinite(minor)) return null
   return `${major}.${minor}`
 }
-const effectiveTierListPatch = computed(() => {
-  const fromFilter = patchFromVersion(statsVersionFilter.value)
-  if (fromFilter) return fromFilter
-  return patchFromVersion(gameVersion.value)
-})
-
-const tierListPatchDeltaRefLabel = computed(() => {
-  const ref = patchFromVersion(progressionFromVersion.value)
-  const main = effectiveTierListPatch.value
-  if (!ref || !main || ref === main) return null
-  return ref
-})
 
 const championGlobalPatchDeltaRefLabel = computed(() => {
   const ref = patchFromVersion(progressionFromVersion.value)
@@ -3991,6 +3464,16 @@ function championGlobalTableQueryForVersion(versionFull: string | null | undefin
   return s ? `?${s}` : ''
 }
 
+/** Requête bans : patch / ligue uniquement (pas OTP ni rôle : le tableau expose déjà les bans par rôle banneur). */
+function bansTableQueryForVersion(versionFull: string | null | undefined): string {
+  const params = new URLSearchParams()
+  const v = (versionFull ?? '').trim()
+  if (v) params.set('version', v)
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  const s = params.toString()
+  return s ? `?${s}` : ''
+}
+
 /** Bans : le backend filtre les lignes (champions joués dans le rôle) mais garde les stats ban par rôle banneur — toujours afficher les colonnes. */
 const showBansRoleColumns = computed(() => true)
 
@@ -4005,7 +3488,7 @@ const bansTab = useStatisticsBansTab({
   statsFetch,
   apiUrl,
   patchFromVersion,
-  championGlobalTableQueryForVersion,
+  championGlobalTableQueryForVersion: bansTableQueryForVersion,
   statsPerfStart,
   statsPerfEnd,
   championName,
@@ -4101,137 +3584,10 @@ function formatChampionGlobalNumericDelta(d: number): string {
   return `${sign}${Number(d).toFixed(1)}`
 }
 
-function tierListQueryString(patch: string | null): string {
-  const params = new URLSearchParams()
-  if (patch) params.set('patch', patch)
-  if (statsDivisionFilter.value.length === 1) {
-    params.set('rankTier', statsDivisionFilter.value[0]!)
-  } else {
-    params.set('rankTier', 'all')
-  }
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
-  const q = params.toString()
-  return q ? `?${q}` : ''
-}
-
-type TierListFetchPayload = {
-  patch: string
-  rankTier: string
-  rows: Array<{
-    rank: number
-    championId: number
-    tier: string
-    mainRole: string
-    mainRolePct: number
-    winrate: number
-    pickrate: number
-    banrate: number
-    pbi: number
-    games: number
-  }>
-  highEloRows?: Array<{
-    rank: number
-    championId: number
-    tier: string
-    mainRole: string
-    mainRolePct: number
-    winrate: number
-    pickrate: number
-    banrate: number
-    pbi: number
-    games: number
-  }>
-  error?: string
-  message?: string
-}
-
-async function loadTierList() {
-  tierListPending.value = true
-  tierListError.value = null
-  tierListRefStatsById.value = new Map()
-  tierListRefHighEloById.value = new Map()
-  tierListRefRows.value = []
-  try {
-    const patch = effectiveTierListPatch.value
-    const data = await statsFetch<TierListFetchPayload>(
-      apiUrl(`/api/stats/tier-list${tierListQueryString(patch)}`)
-    )
-    tierListData.value = data
-    if (data?.error || data?.message) {
-      tierListError.value = [data.error, data.message].filter(Boolean).join(': ')
-    } else {
-      tierListError.value = null
-    }
-
-    const refPatch = patchFromVersion(progressionFromVersion.value)
-    if (
-      refPatch &&
-      patch &&
-      refPatch !== patch &&
-      !data?.error &&
-      data?.rows &&
-      data.rows.length > 0
-    ) {
-      try {
-        const refData = await statsFetch<TierListFetchPayload>(
-          apiUrl(`/api/stats/tier-list${tierListQueryString(refPatch)}`)
-        )
-        if (refData && !refData.error && refData.rows?.length) {
-          tierListRefRows.value = refData.rows.map(row => ({
-            rank: row.rank,
-            championId: row.championId,
-            mainRole: row.mainRole,
-          }))
-          const m = new Map<
-            number,
-            {
-              winrate: number
-              pickrate: number
-              banrate: number
-              games: number
-              mainRolePct: number
-              pbi: number
-            }
-          >()
-          for (const row of refData.rows) {
-            m.set(row.championId, {
-              winrate: row.winrate,
-              pickrate: row.pickrate,
-              banrate: row.banrate,
-              games: row.games,
-              mainRolePct: row.mainRolePct,
-              pbi: row.pbi,
-            })
-          }
-          tierListRefStatsById.value = m
-          const hm = new Map<number, { winrate: number; games: number }>()
-          if (refData.highEloRows?.length) {
-            for (const row of refData.highEloRows) {
-              hm.set(row.championId, { winrate: row.winrate, games: row.games })
-            }
-          }
-          tierListRefHighEloById.value = hm
-        }
-      } catch {
-        /* réf. patch optionnelle */
-      }
-    }
-  } catch (err) {
-    tierListError.value = err instanceof Error ? err.message : String(err)
-    tierListData.value = null
-  } finally {
-    tierListPending.value = false
-  }
-}
 watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
   const tab = activeTab.value
-  if (tab === 'tierlist' || tab === 'overview') loadChampions()
-  if (tab === 'tierlist') loadTierList()
+  if (tab === 'overview') loadChampions()
   if (tab === 'championTable') loadChampionGlobalTable()
-})
-watch(effectiveTierListPatch, (patch, oldPatch) => {
-  if (activeTab.value === 'tierlist' && (patch || oldPatch)) loadTierList()
 })
 
 /** Resolve champion by numeric id (API uses Riot champion key). */
@@ -4278,8 +3634,6 @@ watch(activeTab, async tab => {
     loadProgressionsFull()
   }
   if (tab === 'team') loadOverviewSides()
-  if (tab === 'tierlist') loadChampions()
-  if (tab === 'tierlist') loadTierList()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
   if (tab === 'infos') loadInfosMeta()
   if (tab === 'infos') loadBalanceFramework()
@@ -4305,7 +3659,10 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
-  if (activeTab.value === 'infos') loadBalanceFramework()
+  if (activeTab.value === 'infos') {
+    loadInfosPatchDivisionMatrix().catch(() => undefined)
+    loadBalanceFramework()
+  }
   if (activeTab.value === 'bans') bansTab.loadBansTable()
 })
 
@@ -4318,7 +3675,6 @@ watch(progressionFromVersion, () => {
     loadProgressionsFull()
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
-  if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
@@ -4351,7 +3707,6 @@ onMounted(async () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
-  if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
@@ -4365,7 +3720,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   CHART_W,
   PAGE_SIZE_OPTIONS,
   PLOT_H,
-  TIER_DIVERGING_LEGEND,
   bansExpandByLoss,
   bansExpandByWin,
   cardIsFavorite,
@@ -4394,7 +3748,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   balanceFrameworkError,
   balanceFrameworkPending,
   championsPageSize,
-  cycleTierListSort,
   drakeIconSrc,
   drakeSoulGlobal,
   drakeSoulRows,
@@ -4411,10 +3764,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   formatChampionGlobalNum,
   formatChampionGlobalNumericDelta,
   formatDivisionLabel,
-  formatMatchupScore,
   formatTierListPatchDeltaGames,
   formatTierListPatchDeltaPp,
-  formatTierListPatchDeltaRank,
   gameVersion,
   getChampionImageUrl,
   getItemImageUrl,
@@ -4422,7 +3773,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   goToBansTab,
   goToChampionTableWithSort,
   goToTierListWithSort,
-  hasTierListHighElo,
   infosMatrixCell,
   infosMatrixColumns,
   infosMatrixError,
@@ -4455,9 +3805,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   objectivesSidesPanelTab,
   onDrakeIconError,
   onObjectiveIconError,
-  onTierListChartBarEnter,
-  onTierListChartBarLeave,
-  onTierListChartBarMove,
   openObjectiveKeys,
   openSidesObjectiveKeys,
   overviewAbandonsData,
@@ -4496,7 +3843,6 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   paginatedItems,
   paginatedProgressionsByPickrate,
   paginatedProgressionsChampions,
-  paginatedTierList,
   percentForCount,
   percentForCountSides,
   progressionFromVersion,
@@ -4505,10 +3851,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   progressionsPage,
   progressionsPageSize,
   retryOverviewDetail,
-  scaleMatchupScore,
   setChampionGlobalSort,
   setObjectivesPanelTab,
-  setTierListViewModel,
   showBansRoleColumns,
   sidesBlueBanRows,
   sidesBlueBestWinrateRows,
@@ -4544,41 +3888,13 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   teamPercent,
-  tierListChartBarColor,
-  tierListChartBarHeightPct,
-  tierListChartChampionImage,
-  tierListChartHeading,
-  tierListChartScoreBottomPct,
-  tierListChartTierEnabled,
-  tierListChartTooltip,
-  tierListChartTooltipRow,
-  tierListChartVisibleRows,
-  tierListChartYScale,
-  tierListChartYTickBottomPct,
-  tierListChartZeroBottomPct,
-  tierListDisplayRankByChampionId,
-  tierListError,
-  tierListPage,
-  tierListPatchDeltaClass,
-  tierListPatchDeltaGamesClass,
-  tierListPatchDeltaRankClass,
-  tierListPatchDeltaRefLabel,
-  tierListPatchRankDelta,
-  tierListPending,
-  tierListSortColumn,
-  tierListSortIcon,
-  tierListViewModel,
-  tierListWinrateClass,
   toggleFavoriteCard,
   toggleObjective,
   toggleSidesObjective,
-  toggleTierListChartTier,
   totalItemsCount,
   totalItemsPages,
   totalProgressionsCount,
   totalProgressionsPages,
-  totalTierListCount,
-  totalTierListPages,
   versionStore,
 }
 
@@ -4733,9 +4049,6 @@ if (__statisticsVm?.proxy) {
   background: rgb(var(--rgb-background) / 0.3);
   border-color: rgb(var(--rgb-accent) / 0.45);
 }
-.statistics aside {
-  background: #08101f !important;
-}
 .overview-rune-no-stat {
   color: rgb(var(--rgb-text) / 0.5);
   font-size: 0.7rem;
@@ -4811,6 +4124,9 @@ if (__statisticsVm?.proxy) {
  * Surfaces & fast-stat : hors scoped pour que les composants enfants (objets, tooltips)
  * héritent le même fond #08101f que les cartes « Vue d’ensemble ».
  */
+.statistics aside {
+  background: #08101f !important;
+}
 .statistics .statistics-overview-surface {
   background-color: #08101f !important;
 }

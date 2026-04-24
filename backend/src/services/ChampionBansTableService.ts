@@ -1,10 +1,10 @@
 /**
  * Table des bans par champion, avec attribution au joueur (slot d’équipe) et au rôle du banneur.
  * Données lues depuis la table d'agrégat `agg_champion_bans_by_banner`.
- * Filtres patch / ligue alignés sur ChampionGlobalTableService.
+ * Filtres patch / ligue alignés sur ChampionGlobalTableService (sans filtre OTP : tous les champions avec des bans).
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
-import { buildRawMatchCond } from './ChampionGlobalTableService.js'
+import { buildRawMatchCond, sumMatchOutcomeCountUnionLiveArchive } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 
 export type ChampionBansTableRow = {
@@ -19,23 +19,6 @@ export type ChampionBansTableRow = {
   bansSupport: number
 }
 
-type OtpMode = 'oui' | 'non' | 'solo'
-
-function otpModeFromQuery(value: string | null | undefined): OtpMode {
-  const raw = String(value ?? '')
-    .trim()
-    .toLowerCase()
-  if (raw === 'oui' || raw === 'yes' || raw === 'true' || raw === '1' || raw === 'all') return 'oui'
-  if (raw === 'solo' || raw === 'niche') return 'solo'
-  return 'non'
-}
-
-function keepByOtpPickratePercent(pickratePercent: number, mode: OtpMode, threshold: number): boolean {
-  if (mode === 'oui') return true
-  if (mode === 'solo') return pickratePercent < threshold
-  return pickratePercent >= threshold
-}
-
 function normalizeRoleFilter(role: string | null | undefined): string | null {
   if (role == null || role === '') return null
   const u = role.trim().toUpperCase()
@@ -48,14 +31,9 @@ function normalizeRoleFilter(role: string | null | undefined): string | null {
 export async function getChampionBansTable(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
-  role?: string | null,
-  otp?: string | null
+  role?: string | null
 ): Promise<{ matchCount: number; rows: ChampionBansTableRow[] } | null> {
   if (!isDatabaseConfigured()) return null
-  const otpMode = otpModeFromQuery(otp)
-  const otpThreshold = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
-  const matchCond = buildRawMatchCond(version, rankTier)
-  const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
   const mvFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
   const csFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'cs')
   const roleFilter = normalizeRoleFilter(role)
@@ -77,12 +55,7 @@ export async function getChampionBansTable(
         )`
       : ''
 
-  const matchCountRows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(
-    `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS mc
-     FROM ${moFrom}
-     WHERE ${matchCond.replace(/\bm\./g, 'mo.')}`
-  )
-  const matchCount = Math.max(0, Number(matchCountRows[0]?.mc ?? 0))
+  const matchCount = await sumMatchOutcomeCountUnionLiveArchive(version, rankTier)
   if (matchCount === 0) {
     return { matchCount: 0, rows: [] }
   }
@@ -132,35 +105,6 @@ export async function getChampionBansTable(
     bansBottom: Number(r.bans_bottom),
     bansSupport: Number(r.bans_support),
   }))
-
-  if (otpMode !== 'oui' && rows.length > 0) {
-    const sideWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
-    const roleSql =
-      roleFilter != null ? ` AND cs.role_norm = '${roleFilter.replace(/'/g, "''")}'` : ''
-    const pickRows = await prisma.$queryRawUnsafe<Array<{ champion_id: number; games: bigint }>>(`
-      SELECT
-        cs.champion_id::int AS champion_id,
-        SUM(cs.count_game)::bigint AS games
-      FROM ${csFrom}
-      WHERE ${sideWhere}
-      ${roleSql}
-      GROUP BY cs.champion_id
-    `)
-    const gamesByChampion = new Map<number, number>()
-    let totalGames = 0
-    for (const r of pickRows) {
-      const g = Number(r.games ?? 0)
-      gamesByChampion.set(Number(r.champion_id), g)
-      totalGames += g
-    }
-    const otpFiltered = rows.filter((row) => {
-      if (totalGames <= 0) return true
-      const g = gamesByChampion.get(row.championId) ?? 0
-      const pickratePct = (g / totalGames) * 100
-      return keepByOtpPickratePercent(pickratePct, otpMode, otpThreshold)
-    })
-    return { matchCount, rows: otpFiltered.length > 0 ? otpFiltered : rows }
-  }
 
   return { matchCount, rows }
 }

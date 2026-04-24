@@ -2,14 +2,19 @@
 import { inject } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+
+withDefaults(
+  defineProps<{
+    /** When false, parent page renders the table/chart strip (e.g. tier-list.vue). */
+    showViewModelToggle?: boolean
+  }>(),
+  { showViewModelToggle: true }
+)
 </script>
 
 <template>
   <div class="space-y-4">
-    <div class="flex flex-wrap items-center gap-4">
-      <h2 class="text-xl font-semibold text-text-accent">
-        {{ p.t('statisticsPage.tierListTitle') }}
-      </h2>
+    <div v-if="showViewModelToggle" class="flex flex-wrap items-center gap-4">
       <div class="flex gap-2">
         <button
           type="button"
@@ -512,49 +517,29 @@ const p = inject('statisticsPageCtx') as any
       >
         <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
           <div class="min-w-0 flex-1">
-            <h3
-              class="mb-2 font-sans text-sm font-bold uppercase tracking-tight text-white md:text-base"
-            >
-              {{ p.tierListChartHeading }}
-            </h3>
-            <div class="mb-2 flex flex-wrap items-center gap-2">
+            <div class="mb-2 flex justify-end">
               <button
-                v-for="entry in p.TIER_DIVERGING_LEGEND"
-                :key="'tier-filter-' + entry.key"
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] font-semibold transition-colors"
-                :class="
-                  p.tierListChartTierEnabled(entry.key)
-                    ? 'border-white/40 bg-white/10 text-white'
-                    : 'border-white/20 bg-black/20 text-white/60'
-                "
-                @click="p.toggleTierListChartTier(entry.key)"
+                class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold leading-none text-amber-200/90 transition-colors hover:text-amber-100"
+                :title="p.t('statisticsPage.tierListChartPbiAxisTooltip')"
+                :aria-label="p.t('statisticsPage.tierListChartPbiAxisInfoTitle')"
               >
-                <span
-                  class="inline-block h-3 w-3 rounded-sm"
-                  :style="{ backgroundColor: entry.color }"
-                />
-                <span>{{
-                  entry.key === 'S+'
-                    ? p.t('statisticsPage.tierS+')
-                    : entry.key === 'D'
-                      ? p.t('statisticsPage.tierF')
-                      : p.t('statisticsPage.tier' + entry.key)
-                }}</span>
+                i
               </button>
             </div>
-            <p class="mb-3 text-[11px] text-amber-200/60">
-              {{ p.t('statisticsPage.tierListChartPbiAxis') }}
-            </p>
             <div class="flex gap-1">
-              <div class="relative w-9 shrink-0 text-[10px] leading-none text-amber-100/80 md:w-10">
-                <div class="relative h-[320px]">
+              <div
+                class="relative w-9 shrink-0 overflow-hidden text-[10px] leading-none text-amber-100/80 md:w-10"
+              >
+                <div class="tier-list-chart-plot relative overflow-hidden">
                   <div class="absolute inset-0">
                     <span
                       v-for="tick in p.tierListChartYScale.ticks"
                       :key="'ytick-' + tick"
-                      class="absolute right-0.5 -translate-y-1/2 tabular-nums"
-                      :style="{ bottom: p.tierListChartYTickBottomPct(tick) + '%' }"
+                      class="absolute right-0.5 tabular-nums leading-none"
+                      :style="{
+                        bottom: 'calc(' + p.tierListChartYTickBottomPct(tick) + '% - 0.35em)',
+                      }"
                     >
                       {{
                         Math.abs(tick - Math.round(tick)) < 1e-6
@@ -566,26 +551,49 @@ const p = inject('statisticsPageCtx') as any
                 </div>
               </div>
               <div class="relative min-w-0 flex-1">
-                <div class="relative h-[320px] w-full overflow-visible">
+                <div class="tier-list-chart-plot relative w-full overflow-hidden">
                   <div class="absolute inset-0">
                     <div
-                      v-for="tick in p.tierListChartYScale.ticks"
-                      :key="'grid-' + tick"
-                      class="border-p.t pointer-events-none absolute left-0 right-0 z-0 border-amber-400/20"
-                      :style="{ bottom: p.tierListChartYTickBottomPct(tick) + '%' }"
+                      v-for="(seg, idx) in p.tierListChartYBandSegments"
+                      :key="'yband-' + idx"
+                      class="pointer-events-none absolute left-0 right-0 z-0"
+                      :class="seg.shaded ? 'bg-amber-400/[0.09]' : 'bg-amber-950/[0.12]'"
+                      :style="{
+                        bottom: seg.bottomPct + '%',
+                        height: seg.heightPct + '%',
+                      }"
                     />
                     <div
-                      class="pointer-events-none absolute bottom-0 right-0 top-0 z-[1] w-[12%] bg-slate-950/35"
+                      v-for="score in p.tierListChartYScale.gridScores"
+                      :key="'hgrid-' + score"
+                      class="pointer-events-none absolute left-0 right-0 z-[1] h-px"
+                      :class="
+                        score === 0
+                          ? 'bg-amber-400/45'
+                          : Math.abs(score) === 500
+                            ? 'bg-amber-400/35'
+                            : 'bg-amber-400/12'
+                      "
+                      :style="{
+                        bottom:
+                          score === p.tierListChartYScale.yMax
+                            ? 'calc(100% - 1px)'
+                            : score === p.tierListChartYScale.yMin
+                              ? '0px'
+                              : 'calc(' + p.tierListChartYTickBottomPct(score) + '% - 0.5px)',
+                      }"
+                    />
+                    <div
+                      class="pointer-events-none absolute bottom-0 right-0 top-0 z-[2] w-[12%] bg-slate-950/35"
                       aria-hidden="true"
                     />
                     <div
-                      class="absolute bottom-0 left-0 right-0 top-0 z-[2] flex items-stretch gap-px px-0.5"
+                      class="absolute bottom-0 left-0 right-0 top-0 z-[3] flex items-stretch gap-px px-0.5"
                     >
-                      <NuxtLink
+                      <div
                         v-for="c in p.tierListChartVisibleRows"
                         :key="c.championId"
-                        :to="p.localePath('/statistics/champion/' + c.championId)"
-                        class="group relative min-w-0 flex-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+                        class="group relative min-w-0 flex-1"
                         :title="
                           (p.championName(c.championId) || c.championId) +
                           ' — Score ' +
@@ -599,12 +607,8 @@ const p = inject('statisticsPageCtx') as any
                           <div class="flex h-full w-full justify-center">
                             <div class="relative h-full w-[85%] max-w-[12px]">
                               <div
-                                class="absolute left-0 right-0 z-[1] h-px bg-amber-400/55"
-                                :style="{ bottom: p.tierListChartZeroBottomPct + '%' }"
-                              />
-                              <div
                                 v-if="p.scaleMatchupScore(c.pbi) >= 0"
-                                class="rounded-p.t-[2px] absolute left-0 right-0 transition-all group-hover:brightness-110"
+                                class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
                                 :style="{
                                   bottom: p.tierListChartZeroBottomPct + '%',
                                   height: p.tierListChartBarHeightPct(c.pbi) + '%',
@@ -623,7 +627,7 @@ const p = inject('statisticsPageCtx') as any
                             </div>
                           </div>
                         </div>
-                      </NuxtLink>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -687,7 +691,7 @@ const p = inject('statisticsPageCtx') as any
                   </div>
                 </Teleport>
                 <div
-                  class="border-p.t flex h-[52px] items-center justify-stretch gap-px border-amber-400/25 px-0.5 pt-1"
+                  class="relative z-10 flex h-[52px] items-center justify-stretch gap-px border-t border-amber-400/25 bg-[#08101f] px-0.5 pt-1"
                 >
                   <div
                     v-for="c in p.tierListChartVisibleRows"
@@ -715,12 +719,6 @@ const p = inject('statisticsPageCtx') as any
                     </span>
                   </div>
                 </div>
-                <div
-                  class="border-p.t mt-1 flex justify-between border-white/10 pt-1 text-[10px] text-amber-200/50"
-                >
-                  <span>{{ p.t('statisticsPage.tierListChartWorst') }}</span>
-                  <span>{{ p.t('statisticsPage.tierListChartBest') }}</span>
-                </div>
               </div>
             </div>
           </div>
@@ -729,3 +727,11 @@ const p = inject('statisticsPageCtx') as any
     </template>
   </div>
 </template>
+
+<style scoped>
+/* Hauteur du tracé divergent : occupe une grande part du viewport sur grands écrans */
+.tier-list-chart-plot {
+  height: min(75dvh, calc(100dvh - 14rem));
+  min-height: 280px;
+}
+</style>

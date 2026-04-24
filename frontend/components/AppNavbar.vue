@@ -96,13 +96,23 @@
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
-          :to="localePath('/statistics')"
+          :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"
-          :class="{ 'router-link-active': isStatisticsSectionActive }"
+          :class="{ 'router-link-active': isStatisticsIndexActive }"
           @click="toggleMenu"
         >
           {{ t('nav.statistics') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="statisticsTierListLink"
+          :title="t('nav.tierList')"
+          class="version"
+          :class="{ 'router-link-active': isStatisticsTierListActive }"
+          @click="toggleMenu"
+        >
+          {{ t('nav.tierList') }}
         </NuxtLink>
         <a
           :href="patchNotesUrl"
@@ -199,12 +209,21 @@
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
-          :to="localePath('/statistics')"
+          :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"
-          :class="{ 'router-link-active': isStatisticsSectionActive }"
+          :class="{ 'router-link-active': isStatisticsIndexActive }"
         >
           {{ t('nav.statistics') }}
+        </NuxtLink>
+        <NuxtLink
+          v-if="isAdminLoggedIn"
+          :to="statisticsTierListLink"
+          :title="t('nav.tierList')"
+          class="version"
+          :class="{ 'router-link-active': isStatisticsTierListActive }"
+        >
+          {{ t('nav.tierList') }}
         </NuxtLink>
         <NuxtLink
           v-if="isAdminLoggedIn"
@@ -273,7 +292,37 @@ const isMyBuildsActive = computed(() => currentBuildsTab.value === 'my-builds')
 const isFavoriteBuildsActive = computed(() => currentBuildsTab.value === 'favoris')
 const favoritesStore = useFavoritesStore()
 const hasFavorites = computed(() => favoritesStore.favoriteBuildIds.length > 0)
-const isStatisticsSectionActive = computed(() => route.path.startsWith('/statistics'))
+const isStatisticsIndexActive = computed(() => route.path === localePath('/statistics'))
+const isStatisticsTierListActive = computed(
+  () => route.path === localePath('/statistics/tier-list')
+)
+
+/** Keep version / rank / role / OTP (and tab or sort) when switching between statistics pages. */
+function pickStatisticsSharedQuery(keys: readonly string[]): Record<string, string | string[]> {
+  const q = route.query as Record<string, string | string[] | undefined>
+  const out: Record<string, string | string[]> = {}
+  for (const key of keys) {
+    const v = q[key]
+    if (v === undefined || v === null || v === '') continue
+    if (Array.isArray(v) && v.length === 0) continue
+    out[key] = v
+  }
+  return out
+}
+
+const statisticsIndexLink = computed(() =>
+  localePath({
+    path: '/statistics',
+    query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier', 'tab']),
+  })
+)
+
+const statisticsTierListLink = computed(() =>
+  localePath({
+    path: '/statistics/tier-list',
+    query: pickStatisticsSharedQuery(['version', 'role', 'otp', 'rankTier', 'sort', 'view']),
+  })
+)
 
 // Map i18n locale to Riot Games locale code
 const getRiotLocale = (locale: string): string => {

@@ -561,20 +561,18 @@ router.get('/champions/global-table', async (req: Request, res: Response) => {
   }
 })
 
-/** GET /api/stats/champions/bans-table — bans par champion (total, bleu/rouge, par rôle du banneur). Query: ?version=…&rankTier=…&role=TOP */
+/** GET /api/stats/champions/bans-table — bans par champion (total, bleu/rouge, par rôle du banneur). Query: ?version=…&rankTier=…&role=TOP (pas de filtre OTP) */
 router.get('/champions/bans-table', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
   const role = queryString(req.query.role)
-  const otp = queryString(req.query.otp)
   const sqlStart = Date.now()
   try {
     const data = await getChampionBansTable(
       version.length ? version : null,
       rankTier.length ? rankTier : null,
-      role,
-      otp
+      role
     )
     ;(res as Response & { locals: { sqlMs?: number } }).locals.sqlMs = Date.now() - sqlStart
     if (!data) {

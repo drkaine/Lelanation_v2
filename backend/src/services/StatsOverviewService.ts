@@ -17,6 +17,7 @@ import {
   normalizePatchMajorMinor,
   sqlAggUnionAllLiveAndArchives,
 } from './statsAggArchive.js'
+import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
 
 /** Surrenders imputés par côté (équipe) — mêmes agrégats que overview-sides. */
 export interface OverviewSurrenderBySide {
@@ -2302,7 +2303,9 @@ export async function getInfosPatchDivisionMatrix(): Promise<InfosPatchDivisionM
     const divisionSet = new Set<string>()
     const byVersion = new Map<string, { all: number; byDivision: Record<string, number> }>()
     for (const r of raw) {
-      const version = String(r.version ?? '').trim()
+      const rawVersion = String(r.version ?? '').trim()
+      const version =
+        normalizeGameVersionToMajorMinor(rawVersion).trim() || rawVersion
       const tier = String(r.rank_tier ?? '').trim().toUpperCase()
       const mc = Math.max(0, Number(r.match_count ?? 0))
       if (!version || !tier) continue
