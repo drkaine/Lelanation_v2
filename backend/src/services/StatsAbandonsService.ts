@@ -68,16 +68,31 @@ export async function getOverviewAbandons(
     const versions = toQueryStringArrayParam(version)
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
     const cond: string[] = ['1=1']
+    const condIngest: string[] = ['1=1']
     if (versions.length === 1)
-      cond.push(
-        `mo.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
-      )
-    else if (versions.length > 1)
-      cond.push(`mo.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
-    if (ranks.length === 1) cond.push(`mo.rank_tier = '${ranks[0]}'`)
-    else if (ranks.length > 1) cond.push(`mo.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-    else cond.push(`mo.rank_tier <> 'UNRANKED'`)
+      {
+        const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+        cond.push(`mo.game_version LIKE '${patch}%'`)
+        condIngest.push(`im.game_version LIKE '${patch}%'`)
+      }
+    else if (versions.length > 1) {
+      const versionsSql = versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')
+      cond.push(`mo.game_version IN (${versionsSql})`)
+      condIngest.push(`im.game_version IN (${versionsSql})`)
+    }
+    if (ranks.length === 1) {
+      cond.push(`mo.rank_tier = '${ranks[0]}'`)
+      condIngest.push(`im.rank_tier = '${ranks[0]}'`)
+    } else if (ranks.length > 1) {
+      const ranksSql = ranks.map((r) => `'${r}'`).join(',')
+      cond.push(`mo.rank_tier IN (${ranksSql})`)
+      condIngest.push(`im.rank_tier IN (${ranksSql})`)
+    } else {
+      cond.push(`mo.rank_tier <> 'UNRANKED'`)
+      condIngest.push(`im.rank_tier <> 'UNRANKED'`)
+    }
     const whereSql = cond.join(' AND ')
+    const whereIngestSql = condIngest.join(' AND ')
 
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', pVersion, 'mo')
     const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'tc')
@@ -117,15 +132,33 @@ export async function getOverviewAbandons(
     const earlySurrenderCount = Number(row?.early_surrender_count ?? 0)
     const surrenderCount = Number(row?.surrender_count ?? 0)
     const remakeCount = Number(row?.remake_count ?? 0)
+    // Fallback: some fresh patches can have match outcome rows before team-core surrender counters are filled.
+    const fallbackNeeded =
+      totalMatches > 0 && earlySurrenderCount === 0 && surrenderCount === 0
+    let earlyFinal = earlySurrenderCount
+    let surrenderFinal = surrenderCount
+    if (fallbackNeeded) {
+      const ingestRows = await prisma.$queryRawUnsafe<
+        Array<{ early_surrender_count: bigint; surrender_count: bigint }>
+      >(`
+        SELECT
+          COALESCE(SUM(CASE WHEN im.game_ended_in_early_surrender THEN 1 ELSE 0 END), 0)::bigint AS early_surrender_count,
+          COALESCE(SUM(CASE WHEN im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_count
+        FROM ingest_matchs im
+        WHERE ${whereIngestSql}
+      `)
+      earlyFinal = Number(ingestRows[0]?.early_surrender_count ?? 0)
+      surrenderFinal = Number(ingestRows[0]?.surrender_count ?? 0)
+    }
 
-    const rates = computeAbandonRates(totalMatches, remakeCount, earlySurrenderCount, surrenderCount)
+    const rates = computeAbandonRates(totalMatches, remakeCount, earlyFinal, surrenderFinal)
     const result: OverviewAbandonsResult = {
       totalMatches,
       remakeCount,
       remakeRate: rates.remakeRate,
-      earlySurrenderCount,
+      earlySurrenderCount: earlyFinal,
       earlySurrenderRate: rates.earlySurrenderRate,
-      surrenderCount,
+      surrenderCount: surrenderFinal,
       surrenderRate: rates.surrenderRate,
     }
     abandonsCache.set(cacheKey, { data: result, expiresAt: now + ABANDONS_CACHE_TTL_MS })

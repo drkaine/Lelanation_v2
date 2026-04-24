@@ -584,13 +584,8 @@ const STATISTICS_SECTION_TABS: Record<StatisticsTabSection, StatisticsMainTab[]>
   'synergy-botlane': ['championTable'],
 }
 
-function isStatisticsTabSection(value: string): value is StatisticsTabSection {
-  return value in STATISTICS_SECTION_TABS
-}
-
 function sectionFromQuery(): StatisticsTabSection | null {
-  const raw = queryFirst(route.query.section as string | string[] | null | undefined)
-  if (raw && isStatisticsTabSection(raw)) return raw
+  // Keep all tabs visible regardless of legacy `?section=` deep-links.
   return null
 }
 
@@ -2229,30 +2224,12 @@ const progressionFullByPickrate = computed(() => {
 })
 const progressionSinceSlices = computed(() => {
   const list = progressionFullData.value?.champions ?? []
-  const topWinrate = [...list]
-    .filter(r => r.deltaWr > 0)
-    .sort((a, b) => b.deltaWr - a.deltaWr)
-    .slice(0, 5)
-  const topPickrate = [...list]
-    .filter(r => r.deltaPick > 0)
-    .sort((a, b) => b.deltaPick - a.deltaPick)
-    .slice(0, 5)
-  const topBanrate = [...list]
-    .filter(r => r.deltaBan > 0)
-    .sort((a, b) => b.deltaBan - a.deltaBan)
-    .slice(0, 5)
-  const bottomWinrate = [...list]
-    .filter(r => r.deltaWr < 0)
-    .sort((a, b) => a.deltaWr - b.deltaWr)
-    .slice(0, 5)
-  const bottomPickrate = [...list]
-    .filter(r => r.deltaPick < 0)
-    .sort((a, b) => a.deltaPick - b.deltaPick)
-    .slice(0, 5)
-  const bottomBanrate = [...list]
-    .filter(r => r.deltaBan < 0)
-    .sort((a, b) => a.deltaBan - b.deltaBan)
-    .slice(0, 5)
+  const topWinrate = [...list].sort((a, b) => b.deltaWr - a.deltaWr).slice(0, 5)
+  const topPickrate = [...list].sort((a, b) => b.deltaPick - a.deltaPick).slice(0, 5)
+  const topBanrate = [...list].sort((a, b) => b.deltaBan - a.deltaBan).slice(0, 5)
+  const bottomWinrate = [...list].sort((a, b) => a.deltaWr - b.deltaWr).slice(0, 5)
+  const bottomPickrate = [...list].sort((a, b) => a.deltaPick - b.deltaPick).slice(0, 5)
+  const bottomBanrate = [...list].sort((a, b) => a.deltaBan - b.deltaBan).slice(0, 5)
   return { topWinrate, topPickrate, topBanrate, bottomWinrate, bottomPickrate, bottomBanrate }
 })
 const overviewTopWinrateSince = computed(() => progressionSinceSlices.value.topWinrate)

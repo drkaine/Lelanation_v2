@@ -415,6 +415,15 @@ function normalizeOverviewParam(
   return s
 }
 
+function versionAtOrAfterSql(alias: string, referencePatch: string): string {
+  const [majorRaw, minorRaw] = normalizePatchMajorMinor(referencePatch).split('.')
+  const major = Number.parseInt(majorRaw ?? '0', 10) || 0
+  const minor = Number.parseInt(minorRaw ?? '0', 10) || 0
+  const majorSql = `COALESCE(NULLIF(split_part(${alias}.game_version, '.', 1), ''), '0')::int`
+  const minorSql = `COALESCE(NULLIF(split_part(${alias}.game_version, '.', 2), ''), '0')::int`
+  return `(${majorSql} > ${major} OR (${majorSql} = ${major} AND ${minorSql} >= ${minor}))`
+}
+
 async function loadSurrenderBySideCounts(
   version: string | string[] | null | undefined,
   rankTier: string | string[] | null | undefined,
@@ -474,7 +483,11 @@ export async function getOverviewStats(
   try {
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
-    const [coreRows, matchOutcomeRows, matchDivisionRows, matchVersionRows] = await Promise.all([
+    const banFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
+    const banRoleSql = pRole
+      ? ` AND mv.banner_role_norm = '${String(pRole).trim().toUpperCase().replace(/'/g, "''")}'`
+      : ''
+    const [coreRows, matchOutcomeRows, matchDivisionRows, matchVersionRows, banAggRows] = await Promise.all([
       prisma.$queryRawUnsafe<
         Array<{
           champion_id: number
@@ -518,15 +531,20 @@ export async function getOverviewStats(
         ORDER BY match_count DESC
         LIMIT 20
       `),
+      prisma.$queryRawUnsafe<Array<{ champion_id: number; bans: bigint }>>(`
+        SELECT mv.banned_champion_id AS champion_id, COALESCE(SUM(mv.ban_count), 0)::bigint AS bans
+        FROM ${banFrom}
+        WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
+        ${banRoleSql}
+        GROUP BY mv.banned_champion_id
+      `),
     ])
 
     const totalMatches = matchOutcomeRows.reduce((acc, row) => acc + Number(row.count_match ?? 0), 0)
 
     const banTotalsByChampion = new Map<number, number>()
-    for (const row of coreRows) {
-      const cid = Number(row.champion_id)
-      const bans = Number(row.count_ban ?? 0)
-      banTotalsByChampion.set(cid, (banTotalsByChampion.get(cid) ?? 0) + bans)
+    for (const row of banAggRows) {
+      banTotalsByChampion.set(Number(row.champion_id), Number(row.bans ?? 0))
     }
 
     // Aggregate champion stats
@@ -1705,6 +1723,7 @@ export async function getOverviewProgressionStats(
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
     const oldestPrefix = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
+    const sinceOldestSql = versionAtOrAfterSql('ac', oldestPrefix)
 
     const oldestFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
@@ -1721,7 +1740,7 @@ export async function getOverviewProgressionStats(
         SELECT ac.champion_id, ac.count_win, ac.count_game
         FROM ${sinceFrom}
         WHERE ${rawCond}
-          AND ac.game_version NOT LIKE '${oldestPrefix}%'
+          AND ${sinceOldestSql}
           ${roleFilterSql}
       `),
     ])
@@ -1801,13 +1820,25 @@ export async function getOverviewProgressionFullStats(
     const roleFilterSql = pRole
       ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
       : ''
+    const roleFilterBannerSql = pRole
+      ? ` AND mv.banner_role_norm = '${String(pRole).trim().toUpperCase().replace(/'/g, "''")}'`
+      : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
+    const rawCondMv = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mv.')
+    const rawCondMo = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mo.')
     const oldestPrefixFull = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
+    const sinceAcSql = versionAtOrAfterSql('ac', oldestPrefixFull)
+    const sinceMvSql = versionAtOrAfterSql('mv', oldestPrefixFull)
+    const sinceMoSql = versionAtOrAfterSql('mo', oldestPrefixFull)
 
     const oldestFromFull = await matchVersionedAggFrom('agg_champion_core_stats', versionOldest, 'ac')
     const sinceFromFull = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
+    const oldestBanFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', versionOldest, 'mv')
+    const sinceBanFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_bans_by_banner', 'mv')
+    const oldestMoFrom = await matchVersionedAggFrom('agg_match_outcome_stats', versionOldest, 'mo')
+    const sinceMoFrom = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
 
-    const [oldestRows, sinceRows] = await Promise.all([
+    const [oldestRows, sinceRows, oldestBanRows, sinceBanRows, oldestMatchRows, sinceMatchRows] = await Promise.all([
       prisma.$queryRawUnsafe<
         Array<{ champion_id: number; count_win: bigint; count_game: bigint; count_ban: bigint }>
       >(`
@@ -1823,8 +1854,36 @@ export async function getOverviewProgressionFullStats(
         SELECT ac.champion_id, ac.count_win, ac.count_game, ac.count_ban
         FROM ${sinceFromFull}
         WHERE ${rawCond}
-          AND ac.game_version NOT LIKE '${oldestPrefixFull}%'
+          AND ${sinceAcSql}
           ${roleFilterSql}
+      `),
+      prisma.$queryRawUnsafe<Array<{ champion_id: number; bans: bigint }>>(`
+        SELECT mv.banned_champion_id AS champion_id, COALESCE(SUM(mv.ban_count), 0)::bigint AS bans
+        FROM ${oldestBanFrom}
+        WHERE ${rawCondMv}
+          AND mv.game_version LIKE '${oldestPrefixFull}%'
+          ${roleFilterBannerSql}
+        GROUP BY mv.banned_champion_id
+      `),
+      prisma.$queryRawUnsafe<Array<{ champion_id: number; bans: bigint }>>(`
+        SELECT mv.banned_champion_id AS champion_id, COALESCE(SUM(mv.ban_count), 0)::bigint AS bans
+        FROM ${sinceBanFrom}
+        WHERE ${rawCondMv}
+          AND ${sinceMvSql}
+          ${roleFilterBannerSql}
+        GROUP BY mv.banned_champion_id
+      `),
+      prisma.$queryRawUnsafe<Array<{ cnt: bigint }>>(`
+        SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS cnt
+        FROM ${oldestMoFrom}
+        WHERE ${rawCondMo}
+          AND mo.game_version LIKE '${oldestPrefixFull}%'
+      `),
+      prisma.$queryRawUnsafe<Array<{ cnt: bigint }>>(`
+        SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS cnt
+        FROM ${sinceMoFrom}
+        WHERE ${rawCondMo}
+          AND ${sinceMoSql}
       `),
     ])
 
@@ -1846,8 +1905,14 @@ export async function getOverviewProgressionFullStats(
 
     const oldestMap = aggByChamp(oldestRows)
     const sinceMap = aggByChamp(sinceRows)
+    const oldestBansMap = new Map<number, number>()
+    for (const row of oldestBanRows) oldestBansMap.set(Number(row.champion_id), Number(row.bans ?? 0))
+    const sinceBansMap = new Map<number, number>()
+    for (const row of sinceBanRows) sinceBansMap.set(Number(row.champion_id), Number(row.bans ?? 0))
     const oldestTotalGames = Array.from(oldestMap.values()).reduce((s, e) => s + e.games, 0)
     const sinceTotalGames = Array.from(sinceMap.values()).reduce((s, e) => s + e.games, 0)
+    const oldestTotalMatches = Number(oldestMatchRows[0]?.cnt ?? 0)
+    const sinceTotalMatches = Number(sinceMatchRows[0]?.cnt ?? 0)
     const minOldFull = minGamesPerChampForProgressionSlice(oldestTotalGames)
     const minSinceFull = minGamesPerChampForProgressionSlice(sinceTotalGames)
 
@@ -1856,10 +1921,12 @@ export async function getOverviewProgressionFullStats(
       if (oldEntry.games < minOldFull) continue
       const sinceEntry = sinceMap.get(cid)
       if (!sinceEntry || sinceEntry.games < minSinceFull) continue
+      const oldestBans = oldestBansMap.get(cid) ?? 0
+      const sinceBans = sinceBansMap.get(cid) ?? 0
       const banrateOldest =
-        oldestTotalGames > 0 ? Math.min(100, (oldEntry.bans / (2 * oldestTotalGames)) * 100) : 0
+        oldestTotalMatches > 0 ? Math.min(100, (oldestBans / (2 * oldestTotalMatches)) * 100) : 0
       const banrateSince =
-        sinceTotalGames > 0 ? Math.min(100, (sinceEntry.bans / (2 * sinceTotalGames)) * 100) : 0
+        sinceTotalMatches > 0 ? Math.min(100, (sinceBans / (2 * sinceTotalMatches)) * 100) : 0
       champions.push({
         championId: cid,
         wrOldest: Math.round((oldEntry.wins / oldEntry.games) * 10000) / 100,

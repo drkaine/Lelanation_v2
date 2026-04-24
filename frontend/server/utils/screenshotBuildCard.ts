@@ -1,10 +1,33 @@
+import { createRequire } from 'node:module'
+import { join } from 'node:path'
 import type { Browser } from 'playwright'
 
 let browserPromise: Promise<Browser> | null = null
+const runtimeRequire = createRequire(import.meta.url)
+
+async function loadChromium() {
+  try {
+    const { chromium } = await import('playwright')
+    return chromium
+  } catch (primaryError) {
+    // Nitro can occasionally produce an incomplete playwright-core tree in `.output/server/node_modules`.
+    // Fallback to the workspace installation so internal `third_party/*` requires (e.g. pixelmatch) resolve.
+    try {
+      const playwrightRuntimePath = runtimeRequire.resolve('playwright', {
+        paths: [process.cwd(), join(process.cwd(), '..')],
+      })
+      const playwrightRuntime = runtimeRequire(playwrightRuntimePath)
+      if (playwrightRuntime?.chromium) return playwrightRuntime.chromium
+    } catch {
+      // rethrow original import error for clearer diagnostics
+    }
+    throw primaryError
+  }
+}
 
 function createBrowserPromise(): Promise<Browser> {
   return (async () => {
-    const { chromium } = await import('playwright')
+    const chromium = await loadChromium()
     const browser = await chromium.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],

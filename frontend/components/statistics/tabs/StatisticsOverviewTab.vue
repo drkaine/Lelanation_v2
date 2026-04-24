@@ -385,8 +385,11 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.wrSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-success"
-                        >+{{ Number(row.deltaWr).toFixed(2) }}%</span
+                      <span
+                        class="ml-auto w-10 shrink-0 text-right font-medium"
+                        :class="Number(row.deltaWr) >= 0 ? 'text-success' : 'text-error'"
+                        >{{ Number(row.deltaWr) > 0 ? '+' : ''
+                        }}{{ Number(row.deltaWr).toFixed(2) }}%</span
                       >
                     </div>
                   </td>
@@ -486,8 +489,11 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.pickrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-accent"
-                        >+{{ Number(row.deltaPick).toFixed(2) }}%</span
+                      <span
+                        class="ml-auto w-10 shrink-0 text-right font-medium"
+                        :class="Number(row.deltaPick) >= 0 ? 'text-success' : 'text-error'"
+                        >{{ Number(row.deltaPick) > 0 ? '+' : ''
+                        }}{{ Number(row.deltaPick).toFixed(2) }}%</span
                       >
                     </div>
                   </td>
@@ -587,8 +593,11 @@ const p = inject('statisticsPageCtx') as any
                           {{ Number(row.banrateSince).toFixed(1) }}%
                         </div>
                       </div>
-                      <span class="ml-auto w-10 shrink-0 text-right font-medium text-error"
-                        >+{{ Number(row.deltaBan).toFixed(2) }}%</span
+                      <span
+                        class="ml-auto w-10 shrink-0 text-right font-medium"
+                        :class="Number(row.deltaBan) >= 0 ? 'text-success' : 'text-error'"
+                        >{{ Number(row.deltaBan) > 0 ? '+' : ''
+                        }}{{ Number(row.deltaBan).toFixed(2) }}%</span
                       >
                     </div>
                   </td>

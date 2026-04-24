@@ -35,6 +35,13 @@
           >
             {{ t('buildsPage.createBuild') }}
           </component>
+          <component
+            :is="linkComponent"
+            :to="localePath('/statistics')"
+            class="streamer-tab-button"
+          >
+            {{ t('buildsPage.statistics') }}
+          </component>
         </div>
         <div v-if="allowShare" class="flex flex-wrap items-center justify-center gap-2">
           <button
