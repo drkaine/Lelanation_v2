@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { computed, inject, ref, type Ref } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
 
 function syncToggleObjective(key: string) {
   p.toggleObjective(key)
@@ -17,6 +18,153 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
   const row = p.sidesDrakeSoulRows.find((r: { key: string }) => r.key === key)
   return row ? { byBlue: row.byBlue, byRed: row.byRed } : { byBlue: 0, byRed: 0 }
 }
+
+function pct(count: number, total: number): number | null {
+  if (!Number.isFinite(total) || total <= 0) return null
+  return (Number(count) / total) * 100
+}
+
+function fmtPctDelta(currentPct: number | null, baselinePct: number | null): string {
+  if (currentPct == null) return '—'
+  const current = `${currentPct.toFixed(2)}%`
+  if (baselinePct == null) return current
+  const delta = currentPct - baselinePct
+  const sign = delta > 0 ? '+' : ''
+  return `${current} (${sign}${delta.toFixed(2)} %)`
+}
+
+function teamFirstPctWithDelta(objectiveKey: string, side: 'win' | 'loss'): string {
+  const curData = p.overviewTeamsData
+  if (!curData || curData.matchCount <= 0) return '—'
+  const curObj = curData.objectives?.[objectiveKey] ?? {}
+  const curCount = side === 'win' ? Number(curObj.firstByWin ?? 0) : Number(curObj.firstByLoss ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewTeamsBaselineData
+  const baseObj = baseData?.objectives?.[objectiveKey] ?? null
+  const baseCount =
+    baseObj == null
+      ? null
+      : side === 'win'
+        ? Number(baseObj.firstByWin ?? 0)
+        : Number(baseObj.firstByLoss ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+  return fmtPctDelta(curPct, basePct)
+}
+
+function sideFirstPctWithDelta(objectiveKey: string, side: 'blue' | 'red'): string {
+  const curData = p.overviewSidesData
+  if (!curData || curData.matchCount <= 0) return '—'
+  const curObj = curData.objectivesBySideTable?.[objectiveKey] ?? {}
+  const curCount =
+    side === 'blue' ? Number(curObj.firstByBlue ?? 0) : Number(curObj.firstByRed ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewSidesBaselineData
+  const baseObj = baseData?.objectivesBySideTable?.[objectiveKey] ?? null
+  const baseCount =
+    baseObj == null
+      ? null
+      : side === 'blue'
+        ? Number(baseObj.firstByBlue ?? 0)
+        : Number(baseObj.firstByRed ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+  return fmtPctDelta(curPct, basePct)
+}
+
+const openDrakeTypeKeys = ref(new Set<string>())
+
+function toggleDrakeType(key: string) {
+  if (openDrakeTypeKeys.value.has(key)) openDrakeTypeKeys.value.delete(key)
+  else openDrakeTypeKeys.value.add(key)
+}
+
+function percentWithCount(value: number, total: number): string {
+  if (!total) return '—'
+  return `${p.teamPercent(value, total)} (${Number(value).toLocaleString()})`
+}
+
+const DONUT_RADIUS = 48
+const DONUT_STROKE = 14
+const DONUT_CIRCLE = 2 * Math.PI * DONUT_RADIUS
+
+const DONUT_COLORS: Record<string, string> = {
+  elder: '#7c3aed',
+  earth: '#f59e0b',
+  water: '#14b8a6',
+  wind: '#eff6ff',
+  fire: '#ef4444',
+  hextec: '#00e5ff',
+  chem: '#22c55e',
+}
+
+function rowColor(key: string): string {
+  return DONUT_COLORS[key] ?? '#64748b'
+}
+
+type DistRow = { key: string; label: string; value: number; color: string }
+
+function buildDistRows(
+  rows: Array<{ key: string; label: string; byWin: number; byLoss: number }>
+): DistRow[] {
+  return rows
+    .map(row => ({
+      key: row.key,
+      label: row.label,
+      value: Number(row.byWin ?? 0) + Number(row.byLoss ?? 0),
+      color: rowColor(row.key),
+    }))
+    .filter(row => row.value > 0)
+}
+
+const drakeDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeTypeRows))
+const soulDistRows = computed<DistRow[]>(() => buildDistRows(p.drakeSoulRows))
+
+function distTotal(rows: DistRow[]): number {
+  return rows.reduce((sum, row) => sum + row.value, 0)
+}
+
+function distPct(value: number, total: number): string {
+  if (!total) return '—'
+  return `${((value / total) * 100).toFixed(2)}%`
+}
+
+function donutSegments(rows: DistRow[]): Array<{ arc: number; offset: number; color: string }> {
+  const total = distTotal(rows)
+  if (!total) return []
+  let offset = 0
+  return rows.map(row => {
+    const arc = DONUT_CIRCLE * (row.value / total)
+    const segment = { arc, offset, color: row.color }
+    offset += arc
+    return segment
+  })
+}
+
+const drakeDonutSegments = computed(() => donutSegments(drakeDistRows.value))
+const soulDonutSegments = computed(() => donutSegments(soulDistRows.value))
+const drakeDistTotal = computed(() => distTotal(drakeDistRows.value))
+const soulDistTotal = computed(() => distTotal(soulDistRows.value))
+
+function donutTooltip(row: DistRow, total: number): string {
+  return `${row.label}: ${distPct(row.value, total)} (${row.value.toLocaleString()})`
+}
+
+const legendRows = computed<DistRow[]>(() => {
+  const byKey = new Map<string, DistRow>()
+  for (const row of [...drakeDistRows.value, ...soulDistRows.value]) {
+    if (!byKey.has(row.key)) byKey.set(row.key, row)
+  }
+  return [...byKey.values()]
+})
+const legendRowsLeft = computed(() => legendRows.value.slice(0, 4))
+const legendRowsRight = computed(() => legendRows.value.slice(4, 7))
 </script>
 
 <template>
@@ -144,52 +292,16 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
                 {{ p.t('statisticsPage.overviewTeamsFirstBlood') }}
               </td>
               <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{
-                    p.firstPercentByTeam(
-                      p.overviewTeamsData.objectives.firstBlood.firstByWin,
-                      p.overviewTeamsData.objectives.firstBlood.firstByLoss,
-                      p.overviewTeamsData.matchCount
-                    ).win
-                  }}
-                </template>
-                <template v-else>—</template>
+                {{ teamFirstPctWithDelta('firstBlood', 'win') }}
               </td>
               <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{
-                    p.firstPercentByTeam(
-                      p.overviewTeamsData.objectives.firstBlood.firstByWin,
-                      p.overviewTeamsData.objectives.firstBlood.firstByLoss,
-                      p.overviewTeamsData.matchCount
-                    ).loss
-                  }}
-                </template>
-                <template v-else>—</template>
+                {{ teamFirstPctWithDelta('firstBlood', 'loss') }}
               </td>
               <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{
-                    p.firstPercentBySide(
-                      p.overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ?? 0,
-                      p.overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ?? 0,
-                      p.overviewSidesData.matchCount
-                    ).blue
-                  }}
-                </template>
-                <template v-else>—</template>
+                {{ sideFirstPctWithDelta('firstBlood', 'blue') }}
               </td>
               <td class="py-1.5 pl-1 text-center">
-                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{
-                    p.firstPercentBySide(
-                      p.overviewSidesData.objectivesBySideTable?.firstBlood?.firstByBlue ?? 0,
-                      p.overviewSidesData.objectivesBySideTable?.firstBlood?.firstByRed ?? 0,
-                      p.overviewSidesData.matchCount
-                    ).red
-                  }}
-                </template>
-                <template v-else>—</template>
+                {{ sideFirstPctWithDelta('firstBlood', 'red') }}
               </td>
             </tr>
             <template v-for="key in p.objectiveKeysWithKills" :key="key">
@@ -219,52 +331,16 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
                   </button>
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{
-                      p.firstPercentByTeam(
-                        p.objectiveRow(key).firstByWin,
-                        p.objectiveRow(key).firstByLoss,
-                        p.overviewTeamsData.matchCount
-                      ).win
-                    }}
-                  </template>
-                  <template v-else>—</template>
+                  {{ teamFirstPctWithDelta(key, 'win') }}
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{
-                      p.firstPercentByTeam(
-                        p.objectiveRow(key).firstByWin,
-                        p.objectiveRow(key).firstByLoss,
-                        p.overviewTeamsData.matchCount
-                      ).loss
-                    }}
-                  </template>
-                  <template v-else>—</template>
+                  {{ teamFirstPctWithDelta(key, 'loss') }}
                 </td>
                 <td class="px-1 py-1.5 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      p.firstPercentBySide(
-                        p.objectiveRowSides(key).firstByBlue,
-                        p.objectiveRowSides(key).firstByRed,
-                        p.overviewSidesData.matchCount
-                      ).blue
-                    }}
-                  </template>
-                  <template v-else>—</template>
+                  {{ sideFirstPctWithDelta(key, 'blue') }}
                 </td>
                 <td class="py-1.5 pl-1 text-center">
-                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      p.firstPercentBySide(
-                        p.objectiveRowSides(key).firstByBlue,
-                        p.objectiveRowSides(key).firstByRed,
-                        p.overviewSidesData.matchCount
-                      ).red
-                    }}
-                  </template>
-                  <template v-else>—</template>
+                  {{ sideFirstPctWithDelta(key, 'red') }}
                 </td>
               </tr>
               <template v-if="p.openObjectiveKeys.has(key)">
@@ -328,56 +404,112 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
             </tr>
           </thead>
           <tbody class="divide-y divide-primary/20 text-text/80">
-            <tr v-for="row in p.drakeTypeRows" :key="'drake-type-' + row.key">
-              <td class="py-1.5 pr-2 font-medium text-text/90">
-                <div class="flex items-center gap-2">
-                  <img
-                    v-if="p.drakeIconSrc(row.key)"
-                    :src="p.drakeIconSrc(row.key)"
-                    :alt="row.label"
-                    class="h-4 w-4 object-contain"
-                    loading="lazy"
-                    decoding="async"
-                    @error="p.onDrakeIconError($event, row.key)"
-                  />
-                  <span>{{ row.label }}</span>
-                </div>
-              </td>
-              <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{ p.teamPercent(row.byWin, p.overviewTeamsData.matchCount) }}
-                </template>
-                <template v-else>—</template>
-              </td>
-              <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{ p.teamPercent(row.byLoss, p.overviewTeamsData.matchCount) }}
-                </template>
-                <template v-else>—</template>
-              </td>
-              <td class="px-1 py-1.5 text-center">
-                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{
-                    p.teamPercent(
-                      sidesDrakeTypeByKey(row.key).byBlue,
-                      p.overviewSidesData.matchCount
-                    )
-                  }}
-                </template>
-                <template v-else>—</template>
-              </td>
-              <td class="py-1.5 pl-1 text-center">
-                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{
-                    p.teamPercent(
-                      sidesDrakeTypeByKey(row.key).byRed,
-                      p.overviewSidesData.matchCount
-                    )
-                  }}
-                </template>
-                <template v-else>—</template>
-              </td>
-            </tr>
+            <template v-for="row in p.drakeTypeRows" :key="'drake-type-' + row.key">
+              <tr>
+                <td class="py-1.5 pr-2 font-medium text-text/90">
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 hover:text-text"
+                    @click="toggleDrakeType(row.key)"
+                  >
+                    <span
+                      class="inline-block transition-transform duration-200"
+                      :class="openDrakeTypeKeys.has(row.key) ? 'rotate-180' : ''"
+                      aria-hidden
+                      >▼</span
+                    >
+                    <img
+                      v-if="p.drakeIconSrc(row.key)"
+                      :src="p.drakeIconSrc(row.key)"
+                      :alt="row.label"
+                      class="h-4 w-4 object-contain"
+                      loading="lazy"
+                      decoding="async"
+                      @error="p.onDrakeIconError($event, row.key)"
+                    />
+                    <span>{{ row.label }}</span>
+                  </button>
+                </td>
+                <td class="px-1 py-1.5 text-center">
+                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                    {{ percentWithCount(row.byWin, p.overviewTeamsData.matchCount) }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+                <td class="px-1 py-1.5 text-center">
+                  <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                    {{ percentWithCount(row.byLoss, p.overviewTeamsData.matchCount) }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+                <td class="px-1 py-1.5 text-center">
+                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                    {{
+                      percentWithCount(
+                        sidesDrakeTypeByKey(row.key).byBlue,
+                        p.overviewSidesData.matchCount
+                      )
+                    }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+                <td class="py-1.5 pl-1 text-center">
+                  <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                    {{
+                      percentWithCount(
+                        sidesDrakeTypeByKey(row.key).byRed,
+                        p.overviewSidesData.matchCount
+                      )
+                    }}
+                  </template>
+                  <template v-else>—</template>
+                </td>
+              </tr>
+              <template v-if="openDrakeTypeKeys.has(row.key)">
+                <tr
+                  v-for="count in p.drakeTypeCounts(row.key)"
+                  :key="'drake-type-dist-' + row.key + '-' + count"
+                  class="bg-surface/30"
+                >
+                  <td class="py-1 pl-6 pr-2 text-text/70">{{ count }}</td>
+                  <td class="px-1 py-1 text-center text-text/80">
+                    {{
+                      p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
+                        ? p.drakeTypePercentForCount(row.key, count, true)
+                        : '—'
+                    }}
+                  </td>
+                  <td class="px-1 py-1 text-center text-text/80">
+                    {{
+                      p.overviewTeamsData && p.overviewTeamsData.matchCount > 0
+                        ? p.drakeTypePercentForCount(row.key, count, false)
+                        : '—'
+                    }}
+                  </td>
+                  <td class="px-1 py-1 text-center text-text/80">
+                    {{
+                      p.overviewSidesData && p.overviewSidesData.matchCount > 0
+                        ? p.drakeTypePercentForCountSides(row.key, count, true)
+                        : '—'
+                    }}
+                  </td>
+                  <td class="py-1 pl-1 text-center text-text/80">
+                    {{
+                      p.overviewSidesData && p.overviewSidesData.matchCount > 0
+                        ? p.drakeTypePercentForCountSides(row.key, count, false)
+                        : '—'
+                    }}
+                  </td>
+                </tr>
+                <tr v-if="p.drakeTypeCounts(row.key).length === 0" class="bg-surface/30">
+                  <td class="py-1 pl-6 pr-2 text-text/70">—</td>
+                  <td class="px-1 py-1 text-center text-text/80">—</td>
+                  <td class="px-1 py-1 text-center text-text/80">—</td>
+                  <td class="px-1 py-1 text-center text-text/80">—</td>
+                  <td class="py-1 pl-1 text-center text-text/80">—</td>
+                </tr>
+              </template>
+            </template>
             <tr v-if="p.drakeTypeRows.length === 0">
               <td colspan="5" class="py-2 text-center text-text/60">
                 {{ p.t('statisticsPage.noData') }}
@@ -498,6 +630,133 @@ function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <div
+      v-if="drakeDistRows.length > 0 || soulDistRows.length > 0"
+      class="grid grid-cols-1 gap-4 lg:grid-cols-3"
+    >
+      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
+        <h4 class="mb-2 text-sm font-semibold text-text/90">
+          {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
+        </h4>
+        <div v-if="drakeDistRows.length > 0" class="flex flex-col items-center gap-3">
+          <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
+            <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
+              <circle
+                cx="60"
+                cy="60"
+                :r="DONUT_RADIUS"
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.18)"
+                :stroke-width="DONUT_STROKE"
+              />
+              <circle
+                v-for="(row, idx) in drakeDistRows"
+                :key="'drake-donut-' + row.key"
+                cx="60"
+                cy="60"
+                :r="DONUT_RADIUS"
+                fill="none"
+                :stroke="drakeDonutSegments[idx]?.color"
+                :stroke-width="DONUT_STROKE"
+                :stroke-dasharray="`${drakeDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (drakeDonutSegments[idx]?.arc ?? 0)}`"
+                :stroke-dashoffset="`-${drakeDonutSegments[idx]?.offset ?? 0}`"
+              >
+                <title v-if="tooltipsEnabled">{{ donutTooltip(row, drakeDistTotal) }}</title>
+              </circle>
+            </svg>
+            <span class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+              >100%</span
+            >
+          </div>
+        </div>
+        <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
+      </div>
+
+      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
+        <h4 class="mb-2 text-sm font-semibold text-text/90">
+          {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}
+        </h4>
+        <div v-if="soulDistRows.length > 0" class="flex flex-col items-center gap-3">
+          <div class="relative inline-flex h-[132px] w-[132px] items-center justify-center">
+            <svg viewBox="0 0 120 120" class="absolute inset-0 h-full w-full -rotate-90">
+              <circle
+                cx="60"
+                cy="60"
+                :r="DONUT_RADIUS"
+                fill="none"
+                stroke="rgba(148, 163, 184, 0.18)"
+                :stroke-width="DONUT_STROKE"
+              />
+              <circle
+                v-for="(row, idx) in soulDistRows"
+                :key="'soul-donut-' + row.key"
+                cx="60"
+                cy="60"
+                :r="DONUT_RADIUS"
+                fill="none"
+                :stroke="soulDonutSegments[idx]?.color"
+                :stroke-width="DONUT_STROKE"
+                :stroke-dasharray="`${soulDonutSegments[idx]?.arc ?? 0} ${DONUT_CIRCLE - (soulDonutSegments[idx]?.arc ?? 0)}`"
+                :stroke-dashoffset="`-${soulDonutSegments[idx]?.offset ?? 0}`"
+              >
+                <title v-if="tooltipsEnabled">{{ donutTooltip(row, soulDistTotal) }}</title>
+              </circle>
+            </svg>
+            <span class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+              >100%</span
+            >
+          </div>
+        </div>
+        <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
+      </div>
+
+      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
+        <h4 class="mb-2 text-sm font-semibold text-text/90">
+          {{ p.t('statisticsPage.overviewTeamsObjective') }}
+        </h4>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="space-y-2">
+            <div
+              v-for="row in legendRowsLeft"
+              :key="'legend-left-' + row.key"
+              class="flex h-4 items-center"
+            >
+              <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: row.color }" />
+              <img
+                v-if="p.drakeIconSrc(row.key)"
+                :src="p.drakeIconSrc(row.key)"
+                :alt="row.label"
+                class="h-4 w-4 object-contain"
+                loading="lazy"
+                decoding="async"
+                @error="p.onDrakeIconError($event, row.key)"
+              />
+              <span class="truncate text-xs text-text/90">{{ row.label }}</span>
+            </div>
+          </div>
+          <div class="space-y-2">
+            <div
+              v-for="row in legendRowsRight"
+              :key="'legend-right-' + row.key"
+              class="flex h-4 items-center"
+            >
+              <span class="h-2.5 w-2.5 rounded-full" :style="{ backgroundColor: row.color }" />
+              <img
+                v-if="p.drakeIconSrc(row.key)"
+                :src="p.drakeIconSrc(row.key)"
+                :alt="row.label"
+                class="h-4 w-4 object-contain"
+                loading="lazy"
+                decoding="async"
+                @error="p.onDrakeIconError($event, row.key)"
+              />
+              <span class="truncate text-xs text-text/90">{{ row.label }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -127,6 +127,33 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       FROM objective_bucket_rows
       GROUP BY game_version, rank_tier, objective_key
     ),
+    objective_bucket_json_drake_total AS (
+      SELECT
+        game_version,
+        rank_tier,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM (
+        SELECT
+          game_version,
+          rank_tier,
+          objective_bucket,
+          SUM(count_win)::int AS count_win,
+          SUM(count_loss)::int AS count_loss
+        FROM objective_bucket_rows
+        WHERE objective_key IN ('dragon', 'elder')
+        GROUP BY game_version, rank_tier, objective_bucket
+      ) x
+      GROUP BY game_version, rank_tier
+    ),
     soul_counts AS (
       SELECT
         game_version,
@@ -151,8 +178,8 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       d.rank_tier,
       COALESCE(ob_baron.win_json, '{}'::jsonb),
       COALESCE(ob_baron.loss_json, '{}'::jsonb),
-      COALESCE(ob_dragon.win_json, '{}'::jsonb),
-      COALESCE(ob_dragon.loss_json, '{}'::jsonb),
+      COALESCE(ob_drake_total.win_json, '{}'::jsonb),
+      COALESCE(ob_drake_total.loss_json, '{}'::jsonb),
       COALESCE(ob_horde.win_json, '{}'::jsonb),
       COALESCE(ob_horde.loss_json, '{}'::jsonb),
       COALESCE(ob_herald.win_json, '{}'::jsonb),
@@ -193,8 +220,8 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
     FROM dims d
     LEFT JOIN objective_bucket_json ob_baron
       ON ob_baron.game_version = d.game_version AND ob_baron.rank_tier = d.rank_tier AND ob_baron.objective_key = 'baron'
-    LEFT JOIN objective_bucket_json ob_dragon
-      ON ob_dragon.game_version = d.game_version AND ob_dragon.rank_tier = d.rank_tier AND ob_dragon.objective_key = 'dragon'
+    LEFT JOIN objective_bucket_json_drake_total ob_drake_total
+      ON ob_drake_total.game_version = d.game_version AND ob_drake_total.rank_tier = d.rank_tier
     LEFT JOIN objective_bucket_json ob_horde
       ON ob_horde.game_version = d.game_version AND ob_horde.rank_tier = d.rank_tier AND ob_horde.objective_key = 'horde'
     LEFT JOIN objective_bucket_json ob_herald

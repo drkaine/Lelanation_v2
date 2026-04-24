@@ -2,6 +2,8 @@ import 'dotenv/config'
 import { mkdir, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { prisma } from '../db.js'
 
 const RETRYABLE_DB_CODES = new Set(['40P01', '40001'])
@@ -10,6 +12,7 @@ const __dirname = path.dirname(__filename)
 const BACKEND_ROOT = path.resolve(__dirname, '..', '..')
 const BACKFILL_AGG_LOCK_DIR = path.join(BACKEND_ROOT, 'data', 'locks')
 const BACKFILL_AGG_LOCK_FILE = path.join(BACKFILL_AGG_LOCK_DIR, 'backfill-agg.lock')
+const execFileAsync = promisify(execFile)
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -26,6 +29,18 @@ async function createBackfillLockFile(): Promise<void> {
 
 async function releaseBackfillLockFile(): Promise<void> {
   await unlink(BACKFILL_AGG_LOCK_FILE).catch(() => undefined)
+}
+
+function shouldPausePoller(): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(process.env.BACKFILL_AGG_PAUSE_POLLER ?? '')
+      .trim()
+      .toLowerCase()
+  )
+}
+
+async function runPm2Command(args: string[]): Promise<void> {
+  await execFileAsync('pm2', args, { cwd: BACKEND_ROOT })
 }
 
 function isRetryableDbError(err: unknown): boolean {
@@ -1487,13 +1502,38 @@ async function runBackfillOnce(): Promise<void> {
         ) AS loss_json
       FROM objective_bucket_rows
       GROUP BY team_stat_id, objective_key
+    ),
+    objective_bucket_json_drake_total AS (
+      SELECT
+        team_stat_id,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM (
+        SELECT
+          team_stat_id,
+          objective_bucket,
+          SUM(count_win)::int AS count_win,
+          SUM(count_loss)::int AS count_loss
+        FROM objective_bucket_rows
+        WHERE objective_key IN ('dragon', 'elder')
+        GROUP BY team_stat_id, objective_bucket
+      ) x
+      GROUP BY team_stat_id
     )
     UPDATE agg_team_core_stats atc
     SET
       baron_win_team = COALESCE(ob_baron.win_json, '{}'::jsonb),
       baron_loose_team = COALESCE(ob_baron.loss_json, '{}'::jsonb),
-      drake_win_team = COALESCE(ob_dragon.win_json, '{}'::jsonb),
-      drake_loose_team = COALESCE(ob_dragon.loss_json, '{}'::jsonb),
+      drake_win_team = COALESCE(ob_drake_total.win_json, '{}'::jsonb),
+      drake_loose_team = COALESCE(ob_drake_total.loss_json, '{}'::jsonb),
       void_win_team = COALESCE(ob_horde.win_json, '{}'::jsonb),
       void_loose_team = COALESCE(ob_horde.loss_json, '{}'::jsonb),
       herald_win_team = COALESCE(ob_herald.win_json, '{}'::jsonb),
@@ -1532,8 +1572,8 @@ async function runBackfillOnce(): Promise<void> {
       chem_soul_loose_team = COALESCE(ob_chem_soul.loss_json, '{}'::jsonb),
       updated_at = NOW()
     FROM objective_bucket_json ob_baron
-    LEFT JOIN objective_bucket_json ob_dragon
-      ON ob_dragon.team_stat_id = ob_baron.team_stat_id AND ob_dragon.objective_key = 'dragon'
+    LEFT JOIN objective_bucket_json_drake_total ob_drake_total
+      ON ob_drake_total.team_stat_id = ob_baron.team_stat_id
     LEFT JOIN objective_bucket_json ob_horde
       ON ob_horde.team_stat_id = ob_baron.team_stat_id AND ob_horde.objective_key = 'horde'
     LEFT JOIN objective_bucket_json ob_herald
@@ -1655,6 +1695,33 @@ async function runBackfillOnce(): Promise<void> {
         ) AS loss_json
       FROM objective_bucket_rows
       GROUP BY game_version, rank_tier, objective_key
+    ),
+    objective_bucket_json_drake_total AS (
+      SELECT
+        game_version,
+        rank_tier,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+            FILTER (WHERE count_win > 0),
+          '{}'::jsonb
+        ) AS win_json,
+        COALESCE(
+          jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+            FILTER (WHERE count_loss > 0),
+          '{}'::jsonb
+        ) AS loss_json
+      FROM (
+        SELECT
+          game_version,
+          rank_tier,
+          objective_bucket,
+          SUM(count_win)::int AS count_win,
+          SUM(count_loss)::int AS count_loss
+        FROM objective_bucket_rows
+        WHERE objective_key IN ('dragon', 'elder')
+        GROUP BY game_version, rank_tier, objective_bucket
+      ) x
+      GROUP BY game_version, rank_tier
     ),
     first_counts AS (
       SELECT
@@ -1803,8 +1870,8 @@ async function runBackfillOnce(): Promise<void> {
       d.rank_tier,
       COALESCE(ob_baron.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_win, 0)),
       COALESCE(ob_baron.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.baron_first_loss, 0)),
-      COALESCE(ob_dragon.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_win, 0)),
-      COALESCE(ob_dragon.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_loss, 0)),
+      COALESCE(ob_drake_total.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_win, 0)),
+      COALESCE(ob_drake_total.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.dragon_first_loss, 0)),
       COALESCE(ob_horde.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_win, 0)),
       COALESCE(ob_horde.loss_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.horde_first_loss, 0)),
       COALESCE(ob_herald.win_json, '{}'::jsonb) || jsonb_build_object('first', COALESCE(fc.herald_first_win, 0)),
@@ -1846,8 +1913,8 @@ async function runBackfillOnce(): Promise<void> {
     LEFT JOIN first_counts fc ON fc.game_version = d.game_version AND fc.rank_tier = d.rank_tier
     LEFT JOIN objective_bucket_json ob_baron
       ON ob_baron.game_version = d.game_version AND ob_baron.rank_tier = d.rank_tier AND ob_baron.objective_key = 'baron'
-    LEFT JOIN objective_bucket_json ob_dragon
-      ON ob_dragon.game_version = d.game_version AND ob_dragon.rank_tier = d.rank_tier AND ob_dragon.objective_key = 'dragon'
+    LEFT JOIN objective_bucket_json_drake_total ob_drake_total
+      ON ob_drake_total.game_version = d.game_version AND ob_drake_total.rank_tier = d.rank_tier
     LEFT JOIN objective_bucket_json ob_horde
       ON ob_horde.game_version = d.game_version AND ob_horde.rank_tier = d.rank_tier AND ob_horde.objective_key = 'horde'
     LEFT JOIN objective_bucket_json ob_herald
@@ -1957,9 +2024,20 @@ async function runBackfillOnce(): Promise<void> {
 
 async function main(): Promise<void> {
   await createBackfillLockFile()
+  const pollerWasPaused = shouldPausePoller()
   const maxAttemptsRaw = Number.parseInt(process.env.BACKFILL_AGG_MAX_RETRIES ?? '', 10)
   const maxAttempts = Number.isFinite(maxAttemptsRaw) && maxAttemptsRaw > 0 ? Math.min(maxAttemptsRaw, 10) : 6
   try {
+    if (pollerWasPaused) {
+      console.log('[backfill-agg] pausing poller (pm2 stop lelanation-poller)')
+      await runPm2Command(['stop', 'lelanation-poller']).catch((err) => {
+        console.warn(
+          `[backfill-agg] unable to stop poller automatically: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      })
+    }
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         await runBackfillOnce()
@@ -1977,6 +2055,16 @@ async function main(): Promise<void> {
       }
     }
   } finally {
+    if (pollerWasPaused) {
+      console.log('[backfill-agg] resuming poller (pm2 start lelanation-poller)')
+      await runPm2Command(['start', 'lelanation-poller']).catch((err) => {
+        console.warn(
+          `[backfill-agg] unable to restart poller automatically: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        )
+      })
+    }
     await releaseBackfillLockFile()
   }
 }

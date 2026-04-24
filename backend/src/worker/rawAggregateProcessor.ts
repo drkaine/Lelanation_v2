@@ -936,13 +936,35 @@ export async function processRawAggregateAndBurn(
             ) AS loss_json
           FROM objective_bucket_rows
           GROUP BY objective_key
+        ),
+        objective_bucket_json_drake_total AS (
+          SELECT
+            COALESCE(
+              jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket)
+                FILTER (WHERE count_win > 0),
+              '{}'::jsonb
+            ) AS win_json,
+            COALESCE(
+              jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket)
+                FILTER (WHERE count_loss > 0),
+              '{}'::jsonb
+            ) AS loss_json
+          FROM (
+            SELECT
+              objective_bucket,
+              SUM(count_win)::int AS count_win,
+              SUM(count_loss)::int AS count_loss
+            FROM objective_bucket_rows
+            WHERE objective_key IN ('dragon', 'elder')
+            GROUP BY objective_bucket
+          ) x
         )
         UPDATE agg_team_core_stats atc
         SET
           baron_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'baron'), '{}'::jsonb),
           baron_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'baron'), '{}'::jsonb),
-          drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'dragon'), '{}'::jsonb),
-          drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'dragon'), '{}'::jsonb),
+          drake_win_team = COALESCE((SELECT win_json FROM objective_bucket_json_drake_total), '{}'::jsonb),
+          drake_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json_drake_total), '{}'::jsonb),
           void_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'horde'), '{}'::jsonb),
           void_loose_team = COALESCE((SELECT loss_json FROM objective_bucket_json WHERE objective_key = 'horde'), '{}'::jsonb),
           herald_win_team = COALESCE((SELECT win_json FROM objective_bucket_json WHERE objective_key = 'riftHerald'), '{}'::jsonb),

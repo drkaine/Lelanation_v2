@@ -117,7 +117,7 @@ const p = inject('statisticsPageCtx') as any
             </div>
           </div>
           <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+            class="fast-stat-card w-full max-w-full rounded-lg border border-sky-400/55 bg-sky-500/5 p-2"
           >
             <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
               <button
@@ -221,7 +221,7 @@ const p = inject('statisticsPageCtx') as any
             </div>
           </div>
           <div
-            class="fast-stat-card w-full max-w-full rounded-lg border border-primary/30 bg-surface/30 p-2"
+            class="fast-stat-card w-full max-w-full rounded-lg border border-rose-400/55 bg-rose-500/5 p-2"
           >
             <h3 class="fast-stat-title mb-2 flex items-center gap-2 text-sm font-semibold">
               <button
@@ -431,6 +431,60 @@ const p = inject('statisticsPageCtx') as any
               :tooltip="p.t('statisticsPage.tooltipFastStatsBanrateSince')"
               variant="dBan"
               :rows="p.sidesRedTopBanrateSince"
+              @see-more="() => p.goToBansTab()"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="blue"
+              favorite-card-id="team.blueWinrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesBlue')} — ${p.t('statisticsPage.fastStatsWinrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsWinrateSinceDown')"
+              variant="dWr"
+              :rows="p.sidesBlueBottomWinrateSince"
+              @see-more="() => p.goToChampionTableWithSort('blueWinrate', 'asc')"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="red"
+              favorite-card-id="team.redWinrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesRed')} — ${p.t('statisticsPage.fastStatsWinrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsWinrateSinceDown')"
+              variant="dWr"
+              :rows="p.sidesRedBottomWinrateSince"
+              @see-more="() => p.goToChampionTableWithSort('redWinrate', 'asc')"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="blue"
+              favorite-card-id="team.bluePickrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesBlue')} — ${p.t('statisticsPage.fastStatsPickrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsPickrateSinceDown')"
+              variant="dPick"
+              :rows="p.sidesBlueBottomPickrateSince"
+              @see-more="() => p.goToChampionTableWithSort('bluePickrate', 'asc')"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="red"
+              favorite-card-id="team.redPickrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesRed')} — ${p.t('statisticsPage.fastStatsPickrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsPickrateSinceDown')"
+              variant="dPick"
+              :rows="p.sidesRedBottomPickrateSince"
+              @see-more="() => p.goToChampionTableWithSort('redPickrate', 'asc')"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="blue"
+              favorite-card-id="team.blueBanrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesBlue')} — ${p.t('statisticsPage.fastStatsBanrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsBanrateSinceDown')"
+              variant="dBan"
+              :rows="p.sidesBlueBottomBanrateSince"
+              @see-more="() => p.goToBansTab()"
+            />
+            <StatisticsTeamSideFastStatTable
+              side="red"
+              favorite-card-id="team.redBanrateSinceDown"
+              :title="`${p.t('statisticsPage.sidesRed')} — ${p.t('statisticsPage.fastStatsBanrateSinceDownTitle', { version: p.progressionFromVersion })}`"
+              :tooltip="p.t('statisticsPage.tooltipFastStatsBanrateSinceDown')"
+              variant="dBan"
+              :rows="p.sidesRedBottomBanrateSince"
               @see-more="() => p.goToBansTab()"
             />
           </template>

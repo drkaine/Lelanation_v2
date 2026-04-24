@@ -178,13 +178,13 @@ export interface OverviewTeamsStats {
   }
   drakes: {
     types: {
-      elder: { byWin: number; byLoss: number }
-      earth: { byWin: number; byLoss: number }
-      water: { byWin: number; byLoss: number }
-      wind: { byWin: number; byLoss: number }
-      fire: { byWin: number; byLoss: number }
-      hextec: { byWin: number; byLoss: number }
-      chem: { byWin: number; byLoss: number }
+      elder: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      earth: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      water: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      wind: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      fire: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      hextec: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
+      chem: { byWin: number; byLoss: number; distributionByWin: Record<string, number>; distributionByLoss: Record<string, number> }
     }
     souls: {
       earth: { byWin: number; byLoss: number }
@@ -287,7 +287,7 @@ export interface OverviewSidesApiStats {
   drakesBySide?: {
     types: Record<
       string,
-      { byBlue: number; byRed: number }
+      { byBlue: number; byRed: number; distributionByBlue?: Record<string, number>; distributionByRed?: Record<string, number> }
     >
     souls: Record<string, { byBlue: number; byRed: number }>
   }
@@ -424,6 +424,97 @@ function versionAtOrAfterSql(alias: string, referencePatch: string): string {
   return `(${majorSql} > ${major} OR (${majorSql} = ${major} AND ${minorSql} >= ${minor}))`
 }
 
+type TeamCoreFallback = {
+  count_first_blood: number
+  sum_baron_kills: number
+  count_baron_first: number
+  sum_dragon_kills: number
+  count_dragon_first: number
+  sum_tower_kills: number
+  count_tower_first: number
+  sum_horde_kills: number
+  count_horde_first: number
+  sum_rift_herald_kills: number
+  count_rift_herald_first: number
+  sum_inhibitor_kills: number
+  sum_elder_kills: number
+}
+
+async function loadTeamCoreFallbackFromIngest(
+  version: string | string[] | null | undefined,
+  rankTier: string | string[] | null | undefined
+): Promise<Map<number, TeamCoreFallback>> {
+  const versions = toQueryStringArrayParam(version)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const cond: string[] = ['1=1']
+  if (versions.length === 1) {
+    const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+    cond.push(`im.game_version LIKE '${patch}%'`)
+  } else if (versions.length > 1) {
+    cond.push(`im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`)
+  }
+  if (ranks.length === 1) cond.push(`im.rank_tier = '${ranks[0]}'`)
+  else if (ranks.length > 1) cond.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+  else cond.push(`im.rank_tier <> 'UNRANKED'`)
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{
+      team_num: number
+      count_first_blood: bigint
+      sum_baron_kills: bigint
+      count_baron_first: bigint
+      sum_dragon_kills: bigint
+      count_dragon_first: bigint
+      sum_tower_kills: bigint
+      count_tower_first: bigint
+      sum_horde_kills: bigint
+      count_horde_first: bigint
+      sum_rift_herald_kills: bigint
+      count_rift_herald_first: bigint
+      sum_inhibitor_kills: bigint
+      sum_elder_kills: bigint
+    }>
+  >(`
+    SELECT
+      it.team AS team_num,
+      COALESCE(SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END), 0)::bigint AS count_first_blood,
+      COALESCE(SUM(it.baron_kills), 0)::bigint AS sum_baron_kills,
+      COALESCE(SUM(CASE WHEN it.baron_first THEN 1 ELSE 0 END), 0)::bigint AS count_baron_first,
+      COALESCE(SUM(it.dragon_kills), 0)::bigint AS sum_dragon_kills,
+      COALESCE(SUM(CASE WHEN it.dragon_first THEN 1 ELSE 0 END), 0)::bigint AS count_dragon_first,
+      COALESCE(SUM(it.tower_kills), 0)::bigint AS sum_tower_kills,
+      COALESCE(SUM(CASE WHEN it.tower_first THEN 1 ELSE 0 END), 0)::bigint AS count_tower_first,
+      COALESCE(SUM(it.horde_kills), 0)::bigint AS sum_horde_kills,
+      COALESCE(SUM(CASE WHEN it.horde_first THEN 1 ELSE 0 END), 0)::bigint AS count_horde_first,
+      COALESCE(SUM(it.rift_herald_kills), 0)::bigint AS sum_rift_herald_kills,
+      COALESCE(SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END), 0)::bigint AS count_rift_herald_first,
+      COALESCE(SUM(it.inhibitor_kills), 0)::bigint AS sum_inhibitor_kills,
+      COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
+    FROM ingest_teams it
+    INNER JOIN ingest_matchs im ON im.id = it.match_id
+    WHERE ${cond.join(' AND ')}
+    GROUP BY it.team
+  `)
+  const out = new Map<number, TeamCoreFallback>()
+  for (const row of rows) {
+    out.set(Number(row.team_num), {
+      count_first_blood: Number(row.count_first_blood ?? 0),
+      sum_baron_kills: Number(row.sum_baron_kills ?? 0),
+      count_baron_first: Number(row.count_baron_first ?? 0),
+      sum_dragon_kills: Number(row.sum_dragon_kills ?? 0),
+      count_dragon_first: Number(row.count_dragon_first ?? 0),
+      sum_tower_kills: Number(row.sum_tower_kills ?? 0),
+      count_tower_first: Number(row.count_tower_first ?? 0),
+      sum_horde_kills: Number(row.sum_horde_kills ?? 0),
+      count_horde_first: Number(row.count_horde_first ?? 0),
+      sum_rift_herald_kills: Number(row.sum_rift_herald_kills ?? 0),
+      count_rift_herald_first: Number(row.count_rift_herald_first ?? 0),
+      sum_inhibitor_kills: Number(row.sum_inhibitor_kills ?? 0),
+      sum_elder_kills: Number(row.sum_elder_kills ?? 0),
+    })
+  }
+  return out
+}
+
 async function loadSurrenderBySideCounts(
   version: string | string[] | null | undefined,
   rankTier: string | string[] | null | undefined,
@@ -449,6 +540,49 @@ async function loadSurrenderBySideCounts(
       early: Number(row.early_cnt ?? 0),
       surrender: Number(row.surrender_cnt ?? 0),
     })
+  }
+  const hasAnyAggSurrender =
+    (byTeam.get(100)?.early ?? 0) +
+      (byTeam.get(100)?.surrender ?? 0) +
+      (byTeam.get(200)?.early ?? 0) +
+      (byTeam.get(200)?.surrender ?? 0) >
+    0
+  const hasMatches = blueMatchTotal + redMatchTotal > 0
+  if (!hasAnyAggSurrender && hasMatches) {
+    // Fallback for fresh patches where agg_team_core_stats surrender counters can lag behind match data.
+    const versions = toQueryStringArrayParam(version)
+    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+    const condIngest: string[] = ['1=1']
+    if (versions.length === 1) {
+      const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+      condIngest.push(`im.game_version LIKE '${patch}%'`)
+    } else if (versions.length > 1) {
+      condIngest.push(
+        `im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`
+      )
+    }
+    if (ranks.length === 1) condIngest.push(`im.rank_tier = '${ranks[0]}'`)
+    else if (ranks.length > 1)
+      condIngest.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+    else condIngest.push(`im.rank_tier <> 'UNRANKED'`)
+    const ingestRows = await prisma.$queryRawUnsafe<
+      Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
+    >(`
+      SELECT
+        it.team AS team_num,
+        COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
+        COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
+      FROM ingest_teams it
+      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      WHERE ${condIngest.join(' AND ')}
+      GROUP BY it.team
+    `)
+    for (const row of ingestRows) {
+      byTeam.set(Number(row.team_num), {
+        early: Number(row.early_cnt ?? 0),
+        surrender: Number(row.surrender_cnt ?? 0),
+      })
+    }
   }
   return {
     blue: {
@@ -1368,6 +1502,47 @@ export async function getOverviewTeamsStats(
     const team100 = teamRows.find((r) => Number(r.team) === 100)
     const team200 = teamRows.find((r) => Number(r.team) === 200)
     const toN = (v: bigint | number | null | undefined) => Number(v ?? 0)
+    const firstBloodCoverage =
+      matchCount > 0
+        ? (toN(team100?.count_first_blood) + toN(team200?.count_first_blood)) / matchCount
+        : 0
+    if (matchCount > 0 && firstBloodCoverage < 0.4) {
+      const fallback = await loadTeamCoreFallbackFromIngest(pVersion, rankTier)
+      const b = fallback.get(100)
+      const r = fallback.get(200)
+      if (b || r) {
+        if (team100 && b) {
+          team100.count_first_blood = BigInt(b.count_first_blood)
+          team100.sum_baron_kills = BigInt(b.sum_baron_kills)
+          team100.count_baron_first = BigInt(b.count_baron_first)
+          team100.sum_dragon_kills = BigInt(b.sum_dragon_kills)
+          team100.count_dragon_first = BigInt(b.count_dragon_first)
+          team100.sum_tower_kills = BigInt(b.sum_tower_kills)
+          team100.count_tower_first = BigInt(b.count_tower_first)
+          team100.sum_horde_kills = BigInt(b.sum_horde_kills)
+          team100.count_horde_first = BigInt(b.count_horde_first)
+          team100.sum_rift_herald_kills = BigInt(b.sum_rift_herald_kills)
+          team100.count_rift_herald_first = BigInt(b.count_rift_herald_first)
+          team100.sum_inhibitor_kills = BigInt(b.sum_inhibitor_kills)
+          team100.sum_elder_kills = BigInt(b.sum_elder_kills)
+        }
+        if (team200 && r) {
+          team200.count_first_blood = BigInt(r.count_first_blood)
+          team200.sum_baron_kills = BigInt(r.sum_baron_kills)
+          team200.count_baron_first = BigInt(r.count_baron_first)
+          team200.sum_dragon_kills = BigInt(r.sum_dragon_kills)
+          team200.count_dragon_first = BigInt(r.count_dragon_first)
+          team200.sum_tower_kills = BigInt(r.sum_tower_kills)
+          team200.count_tower_first = BigInt(r.count_tower_first)
+          team200.sum_horde_kills = BigInt(r.sum_horde_kills)
+          team200.count_horde_first = BigInt(r.count_horde_first)
+          team200.sum_rift_herald_kills = BigInt(r.sum_rift_herald_kills)
+          team200.count_rift_herald_first = BigInt(r.count_rift_herald_first)
+          team200.sum_inhibitor_kills = BigInt(r.sum_inhibitor_kills)
+          team200.sum_elder_kills = BigInt(r.sum_elder_kills)
+        }
+      }
+    }
     const aggWin = {
       firstBlood: { first: toN(team100?.count_first_blood) },
       baron: { first: toN(team100?.count_baron_first), kills: toN(team100?.sum_baron_kills) },
@@ -1415,6 +1590,12 @@ export async function getOverviewTeamsStats(
       distBaron,
       distDragon,
       distElder,
+      distEarthDrake,
+      distWaterDrake,
+      distWindDrake,
+      distFireDrake,
+      distHextecDrake,
+      distChemDrake,
       distTower,
       distInhibitor,
       distRiftHerald,
@@ -1424,6 +1605,12 @@ export async function getOverviewTeamsStats(
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'dragon'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'elder'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'earth_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'water_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'wind_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'fire_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'hextec_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'chem_drake'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'tower'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'riftHerald'),
@@ -1462,13 +1649,48 @@ export async function getOverviewTeamsStats(
       },
       drakes: {
         types: {
-          elder: { byWin: drakeByTeam.blue.types.elder, byLoss: drakeByTeam.red.types.elder },
-          earth: { byWin: drakeByTeam.blue.types.earth, byLoss: drakeByTeam.red.types.earth },
-          water: { byWin: drakeByTeam.blue.types.water, byLoss: drakeByTeam.red.types.water },
-          wind: { byWin: drakeByTeam.blue.types.wind, byLoss: drakeByTeam.red.types.wind },
-          fire: { byWin: drakeByTeam.blue.types.fire, byLoss: drakeByTeam.red.types.fire },
-          hextec: { byWin: drakeByTeam.blue.types.hextec, byLoss: drakeByTeam.red.types.hextec },
-          chem: { byWin: drakeByTeam.blue.types.chem, byLoss: drakeByTeam.red.types.chem },
+          elder: {
+            byWin: drakeByTeam.blue.types.elder,
+            byLoss: drakeByTeam.red.types.elder,
+            distributionByWin: distElder.win,
+            distributionByLoss: distElder.loss,
+          },
+          earth: {
+            byWin: drakeByTeam.blue.types.earth,
+            byLoss: drakeByTeam.red.types.earth,
+            distributionByWin: distEarthDrake.win,
+            distributionByLoss: distEarthDrake.loss,
+          },
+          water: {
+            byWin: drakeByTeam.blue.types.water,
+            byLoss: drakeByTeam.red.types.water,
+            distributionByWin: distWaterDrake.win,
+            distributionByLoss: distWaterDrake.loss,
+          },
+          wind: {
+            byWin: drakeByTeam.blue.types.wind,
+            byLoss: drakeByTeam.red.types.wind,
+            distributionByWin: distWindDrake.win,
+            distributionByLoss: distWindDrake.loss,
+          },
+          fire: {
+            byWin: drakeByTeam.blue.types.fire,
+            byLoss: drakeByTeam.red.types.fire,
+            distributionByWin: distFireDrake.win,
+            distributionByLoss: distFireDrake.loss,
+          },
+          hextec: {
+            byWin: drakeByTeam.blue.types.hextec,
+            byLoss: drakeByTeam.red.types.hextec,
+            distributionByWin: distHextecDrake.win,
+            distributionByLoss: distHextecDrake.loss,
+          },
+          chem: {
+            byWin: drakeByTeam.blue.types.chem,
+            byLoss: drakeByTeam.red.types.chem,
+            distributionByWin: distChemDrake.win,
+            distributionByLoss: distChemDrake.loss,
+          },
         },
         souls: {
           earth: { byWin: drakeByTeam.blue.souls.earth, byLoss: drakeByTeam.red.souls.earth },
@@ -2234,7 +2456,7 @@ function normalizeDrakeType(raw: string): keyof DrakeBreakdown['types'] | null {
   if (v.includes('ELDER')) return 'elder'
   if (v.includes('MOUNTAIN') || v.includes('EARTH')) return 'earth'
   if (v.includes('OCEAN') || v.includes('WATER')) return 'water'
-  if (v.includes('CLOUD') || v.includes('WIND')) return 'wind'
+  if (v.includes('CLOUD') || v.includes('WIND') || v.includes('AIR')) return 'wind'
   if (v.includes('INFERNAL') || v.includes('FIRE')) return 'fire'
   if (v.includes('HEXTECH') || v.includes('HEXTEC')) return 'hextec'
   if (v.includes('CHEMTECH') || v.includes('CHEM')) return 'chem'
@@ -2246,11 +2468,16 @@ function normalizeSoulType(rawSoul: string): keyof DrakeBreakdown['souls'] | nul
   if (!v || v === 'none' || v === 'null' || v === 'false' || v === '0') return null
   if (v.includes('mountain') || v.includes('earth')) return 'earth'
   if (v.includes('ocean') || v.includes('water')) return 'water'
-  if (v.includes('cloud') || v.includes('wind')) return 'wind'
+  if (v.includes('cloud') || v.includes('wind') || v.includes('air')) return 'wind'
   if (v.includes('infernal') || v.includes('fire')) return 'fire'
   if (v.includes('hextech') || v.includes('hextec')) return 'hextec'
   if (v.includes('chemtech') || v.includes('chem')) return 'chem'
   return null
+}
+
+function isSoulFlagEnabled(rawSoul: string): boolean {
+  const v = String(rawSoul || '').trim().toLowerCase()
+  return v === 'true' || v === '1' || v === 'yes'
 }
 
 async function loadDrakeBreakdownByTeam(
@@ -2283,7 +2510,9 @@ async function loadDrakeBreakdownByTeam(
     if (!drakeType) continue
     target.types[drakeType] += 1
 
-    const soulType = normalizeSoulType(row.soul_raw)
+    const soulType =
+      normalizeSoulType(row.soul_raw) ??
+      (isSoulFlagEnabled(row.soul_raw) && drakeType !== 'elder' ? drakeType : null)
     if (soulType) target.souls[soulType] += 1
   }
   return { blue, red }
@@ -2434,11 +2663,35 @@ export async function getOverviewSidesStats(
       WHERE ${condTeam}
       GROUP BY mv.team
     `)
+    const firstBloodCoverage =
+      matchCount > 0
+        ? teamAggRows.reduce((s, r) => s + Number(r.count_first_blood ?? 0), 0) / matchCount
+        : 0
+    if (matchCount > 0 && firstBloodCoverage < 0.4) {
+      const fallback = await loadTeamCoreFallbackFromIngest(version, rankTier)
+      for (const row of teamAggRows) {
+        const f = fallback.get(Number(row.team))
+        if (!f) continue
+        row.count_first_blood = BigInt(f.count_first_blood)
+        row.sum_baron_kills = BigInt(f.sum_baron_kills)
+        row.count_baron_first = BigInt(f.count_baron_first)
+        row.sum_dragon_kills = BigInt(f.sum_dragon_kills)
+        row.count_dragon_first = BigInt(f.count_dragon_first)
+        row.sum_tower_kills = BigInt(f.sum_tower_kills)
+        row.count_tower_first = BigInt(f.count_tower_first)
+        row.sum_horde_kills = BigInt(f.sum_horde_kills)
+        row.count_horde_first = BigInt(f.count_horde_first)
+        row.sum_rift_herald_kills = BigInt(f.sum_rift_herald_kills)
+        row.count_rift_herald_first = BigInt(f.count_rift_herald_first)
+        row.sum_inhibitor_kills = BigInt(f.sum_inhibitor_kills)
+        row.sum_elder_kills = BigInt(f.sum_elder_kills)
+      }
+    }
     const blue = teamAggRows.find((r) => Number(r.team) === 100)
     const red = teamAggRows.find((r) => Number(r.team) === 200)
     const n = (v: bigint | undefined) => Number(v ?? 0)
     const drakeByTeam = await loadDrakeBreakdownByTeam(version, rankTier)
-    const drakesBySide = {
+    const drakesBySide: NonNullable<OverviewSidesApiStats['drakesBySide']> = {
       types: {
         elder: { byBlue: drakeByTeam.blue.types.elder, byRed: drakeByTeam.red.types.elder },
         earth: { byBlue: drakeByTeam.blue.types.earth, byRed: drakeByTeam.red.types.earth },
@@ -2498,6 +2751,12 @@ export async function getOverviewSidesStats(
       distBaron,
       distDragon,
       distElder,
+      distEarthDrake,
+      distWaterDrake,
+      distWindDrake,
+      distFireDrake,
+      distHextecDrake,
+      distChemDrake,
       distTower,
       distInhibitor,
       distRiftHerald,
@@ -2506,11 +2765,31 @@ export async function getOverviewSidesStats(
       loadObjectiveDistributionBySides(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'dragon'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'elder'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'earth_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'water_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'wind_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'fire_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'hextec_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'chem_drake'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'tower'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'horde'),
     ])
+    drakesBySide.types.elder.distributionByBlue = distElder.blue
+    drakesBySide.types.elder.distributionByRed = distElder.red
+    drakesBySide.types.earth.distributionByBlue = distEarthDrake.blue
+    drakesBySide.types.earth.distributionByRed = distEarthDrake.red
+    drakesBySide.types.water.distributionByBlue = distWaterDrake.blue
+    drakesBySide.types.water.distributionByRed = distWaterDrake.red
+    drakesBySide.types.wind.distributionByBlue = distWindDrake.blue
+    drakesBySide.types.wind.distributionByRed = distWindDrake.red
+    drakesBySide.types.fire.distributionByBlue = distFireDrake.blue
+    drakesBySide.types.fire.distributionByRed = distFireDrake.red
+    drakesBySide.types.hextec.distributionByBlue = distHextecDrake.blue
+    drakesBySide.types.hextec.distributionByRed = distHextecDrake.red
+    drakesBySide.types.chem.distributionByBlue = distChemDrake.blue
+    drakesBySide.types.chem.distributionByRed = distChemDrake.red
     const objectivesBySideTable: OverviewSidesApiStats['objectivesBySideTable'] = {
       firstBlood: { firstByBlue: n(blue?.count_first_blood), firstByRed: n(red?.count_first_blood) },
       baron: { firstByBlue: n(blue?.count_baron_first), firstByRed: n(red?.count_baron_first), killsByBlue: n(blue?.sum_baron_kills), killsByRed: n(red?.sum_baron_kills), distributionByBlue: distBaron.blue, distributionByRed: distBaron.red },

@@ -3,7 +3,11 @@ import { FileManager } from '../utils/fileManager.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
 
-export type CronJobKey = 'dataDragonSync' | 'youtubeSync' | 'communityDragonSync'
+export type CronJobKey =
+  | 'dataDragonSync'
+  | 'youtubeSync'
+  | 'communityDragonSync'
+  | 'socialLinksHealthCheck'
 
 export type CronJobStatus = {
   job: CronJobKey
@@ -43,6 +47,13 @@ export class CronStatusService {
         },
         communityDragonSync: {
           job: 'communityDragonSync',
+          lastStartAt: null,
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureMessage: null
+        },
+        socialLinksHealthCheck: {
+          job: 'socialLinksHealthCheck',
           lastStartAt: null,
           lastSuccessAt: null,
           lastFailureAt: null,

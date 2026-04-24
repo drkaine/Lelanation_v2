@@ -2499,13 +2499,48 @@ const overviewTeamsData = ref<{
   }
   drakes?: {
     types: {
-      elder: { byWin: number; byLoss: number }
-      earth: { byWin: number; byLoss: number }
-      water: { byWin: number; byLoss: number }
-      wind: { byWin: number; byLoss: number }
-      fire: { byWin: number; byLoss: number }
-      hextec: { byWin: number; byLoss: number }
-      chem: { byWin: number; byLoss: number }
+      elder: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      earth: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      water: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      wind: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      fire: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      hextec: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
+      chem: {
+        byWin: number
+        byLoss: number
+        distributionByWin: Record<string, number>
+        distributionByLoss: Record<string, number>
+      }
     }
     souls: {
       earth: { byWin: number; byLoss: number }
@@ -2517,6 +2552,7 @@ const overviewTeamsData = ref<{
     }
   }
 } | null>(null)
+const overviewTeamsBaselineData = ref<typeof overviewTeamsData.value>(null)
 const overviewTeamsPending = ref(false)
 const bansExpandByWin = ref(false)
 const bansExpandByLoss = ref(false)
@@ -2566,7 +2602,15 @@ const overviewSidesData = ref<{
     red: Array<{ championId: number; count: number }>
   }
   drakesBySide?: {
-    types: Record<string, { byBlue: number; byRed: number }>
+    types: Record<
+      string,
+      {
+        byBlue: number
+        byRed: number
+        distributionByBlue?: Record<string, number>
+        distributionByRed?: Record<string, number>
+      }
+    >
     souls: Record<string, { byBlue: number; byRed: number }>
   }
   surrenderBySide?: {
@@ -2582,6 +2626,7 @@ const overviewSidesData = ref<{
     }
   }
 } | null>(null)
+const overviewSidesBaselineData = ref<typeof overviewSidesData.value>(null)
 const overviewSidesPending = ref(false)
 type OverviewSidesProgRow = {
   championId: number
@@ -2691,6 +2736,42 @@ const sidesRedTopBanrateSince = computed(() => {
   )
   return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
 })
+const sidesBlueBottomWinrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => a.deltaWr - b.deltaWr
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedBottomWinrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => a.deltaWr - b.deltaWr
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesBlueBottomPickrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => a.deltaPick - b.deltaPick
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedBottomPickrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => a.deltaPick - b.deltaPick
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesBlueBottomBanrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.blue ?? [])].sort(
+    (a, b) => a.deltaBan - b.deltaBan
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
+const sidesRedBottomBanrateSince = computed(() => {
+  const sorted = [...(overviewSidesProgressionData.value?.red ?? [])].sort(
+    (a, b) => a.deltaBan - b.deltaBan
+  )
+  return takeOverviewChampionTopN(sorted, FAST_STAT_ROW_COUNT)
+})
 const sidesDrakeTypeRows = computed(() => {
   const d = overviewSidesData.value?.drakesBySide?.types
   if (!d) return []
@@ -2700,42 +2781,56 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.overviewTeamsObjective_elder'),
       byBlue: d.elder?.byBlue ?? 0,
       byRed: d.elder?.byRed ?? 0,
+      distributionByBlue: d.elder?.distributionByBlue ?? {},
+      distributionByRed: d.elder?.distributionByRed ?? {},
     },
     {
       key: 'earth',
       label: t('statisticsPage.drakeTypeEarth'),
       byBlue: d.earth?.byBlue ?? 0,
       byRed: d.earth?.byRed ?? 0,
+      distributionByBlue: d.earth?.distributionByBlue ?? {},
+      distributionByRed: d.earth?.distributionByRed ?? {},
     },
     {
       key: 'water',
       label: t('statisticsPage.drakeTypeWater'),
       byBlue: d.water?.byBlue ?? 0,
       byRed: d.water?.byRed ?? 0,
+      distributionByBlue: d.water?.distributionByBlue ?? {},
+      distributionByRed: d.water?.distributionByRed ?? {},
     },
     {
       key: 'wind',
       label: t('statisticsPage.drakeTypeWind'),
       byBlue: d.wind?.byBlue ?? 0,
       byRed: d.wind?.byRed ?? 0,
+      distributionByBlue: d.wind?.distributionByBlue ?? {},
+      distributionByRed: d.wind?.distributionByRed ?? {},
     },
     {
       key: 'fire',
       label: t('statisticsPage.drakeTypeFire'),
       byBlue: d.fire?.byBlue ?? 0,
       byRed: d.fire?.byRed ?? 0,
+      distributionByBlue: d.fire?.distributionByBlue ?? {},
+      distributionByRed: d.fire?.distributionByRed ?? {},
     },
     {
       key: 'hextec',
       label: t('statisticsPage.drakeTypeHextec'),
       byBlue: d.hextec?.byBlue ?? 0,
       byRed: d.hextec?.byRed ?? 0,
+      distributionByBlue: d.hextec?.distributionByBlue ?? {},
+      distributionByRed: d.hextec?.distributionByRed ?? {},
     },
     {
       key: 'chem',
       label: t('statisticsPage.drakeTypeChem'),
       byBlue: d.chem?.byBlue ?? 0,
       byRed: d.chem?.byRed ?? 0,
+      distributionByBlue: d.chem?.distributionByBlue ?? {},
+      distributionByRed: d.chem?.distributionByRed ?? {},
     },
   ]
 })
@@ -2906,9 +3001,68 @@ function percentForCountSides(key: string, count: number, byBlue: boolean): stri
   const row = rows.find(r => r.count === count)
   return row ? Number(row.percent).toFixed(2) + '%' : '—'
 }
-function sidesQueryParams(): string {
+function distributionPercentRows(
+  dist: Record<string, number> | undefined,
+  total: number
+): Array<{ count: number; percent: number }> {
+  if (!dist || typeof dist !== 'object' || !total) return []
+  return Object.entries(dist)
+    .map(([countStr, n]) => ({
+      count: parseInt(countStr, 10) || 0,
+      percent: Math.round((Number(n) / total) * 10000) / 100,
+    }))
+    .filter(({ percent }) => percent > 0)
+    .sort((a, b) => a.count - b.count)
+}
+function drakeTypeDistributionPercentages(
+  key: string,
+  byWin: boolean
+): Array<{ count: number; percent: number }> {
+  const data = overviewTeamsData.value
+  if (!data?.matchCount) return []
+  const row = drakeTypeRows.value.find(r => r.key === key)
+  if (!row) return []
+  const dist = byWin ? row.distributionByWin : row.distributionByLoss
+  return distributionPercentRows(dist, data.matchCount)
+}
+function drakeTypeDistributionPercentagesSides(
+  key: string,
+  byBlue: boolean
+): Array<{ count: number; percent: number }> {
+  const data = overviewSidesData.value
+  if (!data?.matchCount) return []
+  const row = sidesDrakeTypeRows.value.find(r => r.key === key)
+  if (!row) return []
+  const dist = byBlue ? row.distributionByBlue : row.distributionByRed
+  return distributionPercentRows(dist, data.matchCount)
+}
+function drakeTypeCounts(key: string): number[] {
+  const byWin = drakeTypeDistributionPercentages(key, true)
+  const byLoss = drakeTypeDistributionPercentages(key, false)
+  const byBlue = drakeTypeDistributionPercentagesSides(key, true)
+  const byRed = drakeTypeDistributionPercentagesSides(key, false)
+  const set = new Set<number>([
+    ...byWin.map(r => r.count),
+    ...byLoss.map(r => r.count),
+    ...byBlue.map(r => r.count),
+    ...byRed.map(r => r.count),
+  ])
+  return [...set].sort((a, b) => a - b)
+}
+function drakeTypePercentForCount(key: string, count: number, byWin: boolean): string {
+  const rows = drakeTypeDistributionPercentages(key, byWin)
+  const row = rows.find(r => r.count === count)
+  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+}
+function drakeTypePercentForCountSides(key: string, count: number, byBlue: boolean): string {
+  const rows = drakeTypeDistributionPercentagesSides(key, byBlue)
+  const row = rows.find(r => r.count === count)
+  return row ? Number(row.percent).toFixed(2) + '%' : '—'
+}
+function sidesQueryParams(opts?: { version?: string | null }): string {
   const params = new URLSearchParams()
-  if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
+  const ver = opts?.version != null && opts.version !== '' ? opts.version : statsVersionFilter.value
+  if (ver) params.set('version', ver)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   const s = params.toString()
@@ -3015,6 +3169,31 @@ async function loadOverviewSides() {
   } finally {
     overviewSidesPending.value = false
     statsPerfEnd('loadOverviewSides', t)
+  }
+}
+
+async function loadObjectivesBaseline() {
+  const cmp = progressionFromVersion.value
+  const cur = statsVersionFilter.value
+  if (!cmp || (cur && cmp === cur)) {
+    overviewTeamsBaselineData.value = null
+    overviewSidesBaselineData.value = null
+    return
+  }
+  try {
+    const [teamsBase, sidesBase] = await Promise.all([
+      statsFetch<typeof overviewTeamsData.value>(
+        apiUrl('/api/stats/overview-teams' + overviewQueryParams({ version: cmp }))
+      ).catch(() => null),
+      statsFetch<typeof overviewSidesData.value>(
+        apiUrl('/api/stats/overview-sides' + sidesQueryParams({ version: cmp }))
+      ).catch(() => null),
+    ])
+    overviewTeamsBaselineData.value = teamsBase
+    overviewSidesBaselineData.value = sidesBase
+  } catch {
+    overviewTeamsBaselineData.value = null
+    overviewSidesBaselineData.value = null
   }
 }
 
@@ -3220,42 +3399,56 @@ const drakeTypeRows = computed(() => {
       label: t('statisticsPage.overviewTeamsObjective_elder'),
       byWin: d.elder?.byWin ?? 0,
       byLoss: d.elder?.byLoss ?? 0,
+      distributionByWin: d.elder?.distributionByWin ?? {},
+      distributionByLoss: d.elder?.distributionByLoss ?? {},
     },
     {
       key: 'earth',
       label: t('statisticsPage.drakeTypeEarth'),
       byWin: d.earth.byWin,
       byLoss: d.earth.byLoss,
+      distributionByWin: d.earth.distributionByWin ?? {},
+      distributionByLoss: d.earth.distributionByLoss ?? {},
     },
     {
       key: 'water',
       label: t('statisticsPage.drakeTypeWater'),
       byWin: d.water.byWin,
       byLoss: d.water.byLoss,
+      distributionByWin: d.water.distributionByWin ?? {},
+      distributionByLoss: d.water.distributionByLoss ?? {},
     },
     {
       key: 'wind',
       label: t('statisticsPage.drakeTypeWind'),
       byWin: d.wind.byWin,
       byLoss: d.wind.byLoss,
+      distributionByWin: d.wind.distributionByWin ?? {},
+      distributionByLoss: d.wind.distributionByLoss ?? {},
     },
     {
       key: 'fire',
       label: t('statisticsPage.drakeTypeFire'),
       byWin: d.fire.byWin,
       byLoss: d.fire.byLoss,
+      distributionByWin: d.fire.distributionByWin ?? {},
+      distributionByLoss: d.fire.distributionByLoss ?? {},
     },
     {
       key: 'hextec',
       label: t('statisticsPage.drakeTypeHextec'),
       byWin: d.hextec.byWin,
       byLoss: d.hextec.byLoss,
+      distributionByWin: d.hextec.distributionByWin ?? {},
+      distributionByLoss: d.hextec.distributionByLoss ?? {},
     },
     {
       key: 'chem',
       label: t('statisticsPage.drakeTypeChem'),
       byWin: d.chem.byWin,
       byLoss: d.chem.byLoss,
+      distributionByWin: d.chem.distributionByWin ?? {},
+      distributionByLoss: d.chem.distributionByLoss ?? {},
     },
   ]
 })
@@ -4076,6 +4269,7 @@ watch(activeTab, async tab => {
   if (tab === 'objectives') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
     loadOverviewSides()
+    loadObjectivesBaseline()
   }
   if (tab === 'trends') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
@@ -4106,6 +4300,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
   if (activeTab.value === 'objectives') {
     loadOverviewSides()
     loadOverviewTeams()
+    loadObjectivesBaseline()
   }
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
@@ -4129,6 +4324,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'infos') loadBalanceFramework()
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
+  if (activeTab.value === 'objectives') loadObjectivesBaseline()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()
   }
@@ -4154,6 +4350,7 @@ onMounted(async () => {
   summonerSpellsStore.loadSummonerSpells(riotLocale.value)
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
+  if (activeTab.value === 'objectives') loadObjectivesBaseline()
   if (activeTab.value === 'tierlist') loadTierList()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
@@ -4246,6 +4443,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   mainRoleIconSrc,
   mainRoleLabel,
   matchOutcomePct,
+  drakeTypeCounts,
+  drakeTypePercentForCount,
+  drakeTypePercentForCountSides,
   objectiveCounts,
   objectiveIconSrc,
   objectiveKeysWithKills,
@@ -4283,10 +4483,12 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   overviewPlayedCount,
   overviewPlayedPct,
   overviewSidesData,
+  overviewSidesBaselineData,
   overviewSidesPending,
   overviewSurrenderOnlyCount,
   overviewSurrenderOnlyPct,
   overviewTeamsData,
+  overviewTeamsBaselineData,
   overviewTopBanrateSince,
   overviewTopPickrateChampionsFiltered,
   overviewTopPickrateSince,
@@ -4310,6 +4512,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   showBansRoleColumns,
   sidesBlueBanRows,
   sidesBlueBestWinrateRows,
+  sidesBlueBottomBanrateSince,
+  sidesBlueBottomPickrateSince,
+  sidesBlueBottomWinrateSince,
   sidesBlueMostPickedRows,
   sidesBluePlayedCount,
   sidesBlueSurrenderOnlyCount,
@@ -4328,6 +4533,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesObjectiveKeysWithKills,
   sidesRedBanRows,
   sidesRedBestWinrateRows,
+  sidesRedBottomBanrateSince,
+  sidesRedBottomPickrateSince,
+  sidesRedBottomWinrateSince,
   sidesRedMostPickedRows,
   sidesRedPlayedCount,
   sidesRedSurrenderOnlyCount,

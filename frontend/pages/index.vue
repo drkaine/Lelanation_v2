@@ -94,7 +94,7 @@ interface SocialLink {
 
 const socialLinks: SocialLink[] = [
   {
-    href: 'https://discord.com/invite/RrXCpsFGrw',
+    href: 'https://discord.gg/RrXCpsFGrw',
     icon: 'mdi:discord',
     text: t('home.links.discord'),
   },
