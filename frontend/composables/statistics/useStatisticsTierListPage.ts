@@ -340,15 +340,44 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   })
 
   const totalTierListCount = computed(() => sortedTierListRows.value.length)
+  const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+  const tierListPageSizeSafe = computed(() => {
+    const n = Number(championsPageSize.value)
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+  })
+  const tierListPageSizeModel = computed({
+    get: () => tierListPageSizeSafe.value,
+    set: (value: number) => {
+      const n = Number(value)
+      const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+      championsPageSize.value = PAGE_SIZE_OPTIONS.includes(
+        next as (typeof PAGE_SIZE_OPTIONS)[number]
+      )
+        ? next
+        : 20
+    },
+  })
   const totalTierListPages = computed(() =>
-    Math.max(1, Math.ceil(totalTierListCount.value / championsPageSize.value))
+    Math.max(1, Math.ceil(totalTierListCount.value / tierListPageSizeSafe.value))
   )
   const paginatedTierList = computed(() => {
     const list = sortedTierListRows.value
-    const size = championsPageSize.value
+    const size = tierListPageSizeSafe.value
     const page = Math.min(tierListPage.value, Math.max(1, Math.ceil(list.length / size) || 1))
     const start = (page - 1) * size
     return list.slice(start, start + size)
+  })
+  const tierListRangeStart = computed(() => {
+    const total = totalTierListCount.value
+    if (total <= 0) return 0
+    const page = Math.min(tierListPage.value, totalTierListPages.value)
+    return (page - 1) * tierListPageSizeSafe.value + 1
+  })
+  const tierListRangeEnd = computed(() => {
+    const total = totalTierListCount.value
+    if (total <= 0) return 0
+    const page = Math.min(tierListPage.value, totalTierListPages.value)
+    return Math.min(page * tierListPageSizeSafe.value, total)
   })
   const tierListDisplayRankByChampionId = computed(() => {
     return tierListFilteredRankByChampionId.value
@@ -632,6 +661,12 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   watch([tierListSortColumn, tierListSortDir, championsPageSize, championSearchQuery], () => {
     tierListPage.value = 1
   })
+  watch(championsPageSize, value => {
+    const n = Number(value)
+    if (!Number.isFinite(n) || n <= 0) {
+      championsPageSize.value = 20
+    }
+  })
 
   /** Keep current page in range when the list shrinks (filters, patch, search) without resetting sort. */
   watch(totalTierListPages, maxPages => {
@@ -829,6 +864,9 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     paginatedTierList,
     totalTierListCount,
     totalTierListPages,
+    tierListPageSizeSafe,
+    tierListRangeStart,
+    tierListRangeEnd,
     tierListDisplayRankByChampionId,
     TIER_DIVERGING_LEGEND,
     CHART_H,
@@ -854,6 +892,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListChartChampionImage,
     formatMatchupScore,
     scaleMatchupScore,
-    PAGE_SIZE_OPTIONS: [10, 20, 50, 100] as const,
+    PAGE_SIZE_OPTIONS,
+    tierListPageSizeModel,
   }
 }

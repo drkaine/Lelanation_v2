@@ -60,7 +60,7 @@ withDefaults(
         v-show="p.tierListViewModel === 'table' && p.totalTierListCount > 0"
         class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
       >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[980px]">
+        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[760px]">
           <div
             class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
           >
@@ -77,20 +77,20 @@ withDefaults(
               {{ p.t('statisticsPage.tierListRank') }}{{ p.tierListSortIcon('rank') }}
             </button>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[220px] shrink-0 items-center justify-start border-b border-black px-2"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[220px] shrink-0 items-center justify-start border-b border-black px-2 max-lg:w-[56px] max-lg:justify-center max-lg:px-0.5"
             >
-              {{ p.t('statisticsPage.tierListColChampion') }}
+              <span class="max-lg:hidden">{{ p.t('statisticsPage.tierListColChampion') }}</span>
             </div>
             <button
               type="button"
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-black hover:bg-primary/25"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-10 shrink-0 cursor-pointer items-center justify-center border-b border-black hover:bg-primary/25 max-lg:w-auto max-lg:px-1"
               :title="p.t('statisticsPage.tierListTierTooltip')"
               @click="p.cycleTierListSort('tier')"
             >
               {{ p.t('statisticsPage.tierListTier') }}{{ p.tierListSortIcon('tier') }}
             </button>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-10 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
             >
               <button
                 type="button"
@@ -111,7 +111,7 @@ withDefaults(
               </button>
             </div>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
             >
               <button
                 type="button"
@@ -132,7 +132,7 @@ withDefaults(
               </button>
             </div>
             <div
-              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+              class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1 max-lg:w-auto max-lg:px-1"
             >
               <button
                 type="button"
@@ -285,22 +285,23 @@ withDefaults(
                 }}</span
               >
             </div>
-            <div class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2">
+            <div
+              class="tier-list-lolalytics-td flex w-[220px] shrink-0 items-center gap-2 px-2 max-lg:w-[56px] max-lg:justify-center max-lg:gap-0 max-lg:px-0.5"
+            >
               <img
                 v-if="p.gameVersion && p.championByKey(row.championId)"
                 :src="
                   p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
                 "
                 :alt="p.championName(row.championId) || ''"
-                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover"
+                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
                 width="50"
                 height="50"
               />
-              <span class="min-w-0 truncate text-left font-medium text-accent">{{
-                p.championName(row.championId) || row.championId
-              }}</span>
             </div>
-            <div class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center">
+            <div
+              class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center max-lg:w-auto max-lg:px-1"
+            >
               <span
                 :class="[
                   'inline-flex min-h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded px-0.5 text-[11px] font-bold leading-none text-background',
@@ -320,7 +321,7 @@ withDefaults(
               </span>
             </div>
             <div
-              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 text-center text-[11px] leading-tight"
+              class="tier-list-lolalytics-td flex w-10 shrink-0 flex-col items-center justify-center gap-0 text-center text-[11px] leading-tight max-lg:w-auto max-lg:px-1"
             >
               <img
                 v-if="p.mainRoleIconSrc(row.mainRole)"
@@ -346,7 +347,7 @@ withDefaults(
               >
             </div>
             <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight max-lg:w-auto max-lg:px-1"
             >
               <span :class="p.tierListWinrateClass(row.winrate * 100)">{{
                 (row.winrate * 100).toFixed(2)
@@ -364,7 +365,7 @@ withDefaults(
               >
             </div>
             <div
-              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
+              class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight max-lg:w-auto max-lg:px-1"
             >
               <span>{{ (row.pickrate * 100).toFixed(2) }}</span>
               <span
@@ -484,10 +485,7 @@ withDefaults(
               </select>
             </label>
             <span class="text-text/70">
-              {{ (p.tierListPage - 1) * p.championsPageSize + 1 }}-{{
-                Math.min(p.tierListPage * p.championsPageSize, p.totalTierListCount)
-              }}
-              / {{ p.totalTierListCount }}
+              {{ p.tierListRangeStart }}-{{ p.tierListRangeEnd }} / {{ p.totalTierListCount }}
             </span>
             <div class="flex gap-1">
               <button
@@ -733,7 +731,7 @@ withDefaults(
       width: 100dvh;
       min-width: 100dvh;
       height: 100dvw;
-      transform: translateY(-100%) rotate(90deg);
+      transform: rotate(90deg) translateY(-100%);
       transform-origin: top left;
     }
   }
