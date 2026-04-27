@@ -22,7 +22,7 @@ const HOME_SOCIAL_LINKS: SocialLink[] = [
   { name: 'Discord', url: 'https://discord.gg/RrXCpsFGrw', type: 'discord-invite' },
   { name: 'Instagram', url: 'https://www.instagram.com/lelariva_fr/', type: 'generic' },
   { name: 'Facebook', url: 'https://www.facebook.com/lelariva/', type: 'generic' },
-  { name: 'Patreon', url: 'https://www.patreon.com/c/Lelariva', type: 'generic' },
+  { name: 'Patreon', url: 'https://www.patreon.com/Lelariva', type: 'generic' },
   { name: 'YouTube', url: 'https://www.youtube.com/@Lelariva_LoL/featured', type: 'generic' },
   { name: 'Twitch', url: 'https://www.twitch.tv/lelariva', type: 'generic' },
   { name: 'X', url: 'https://x.com/Lelariva_fr', type: 'generic' },

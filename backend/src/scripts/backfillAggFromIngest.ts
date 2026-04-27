@@ -69,6 +69,9 @@ async function runBackfillOnce(): Promise<void> {
       agg_champion_runes_solo_stats,
       agg_champion_runes_stats,
       agg_champion_summoner_spells,
+      agg_botlane_duo_vs_duo_stats,
+      agg_champion_duo_role_stats,
+      agg_champion_duo_stats,
       agg_champion_participant_stats,
       agg_champion_damage_stats,
       agg_champion_bucket,
@@ -597,6 +600,266 @@ async function runBackfillOnce(): Promise<void> {
       rank_tier = EXCLUDED.rank_tier,
       game_version = EXCLUDED.game_version,
       region = EXCLUDED.region,
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    WITH team_role_inference AS (
+      SELECT
+        imp.match_id,
+        imp.team_id,
+        COALESCE(
+          ARRAY_AGG(DISTINCT UPPER(imp.role)) FILTER (
+            WHERE UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+          ),
+          '{}'::text[]
+        ) AS known_roles,
+        SUM(
+          CASE WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN 0 ELSE 1 END
+        )::int AS unknown_count
+      FROM ingest_match_players imp
+      GROUP BY imp.match_id, imp.team_id
+    ),
+    missing_role_by_team AS (
+      SELECT
+        tri.match_id,
+        tri.team_id,
+        CASE
+          WHEN tri.unknown_count = 1
+            AND (
+              SELECT COUNT(*)
+              FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+              WHERE NOT (r = ANY(tri.known_roles))
+            ) = 1
+          THEN (
+            SELECT r
+            FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+            WHERE NOT (r = ANY(tri.known_roles))
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS missing_role
+      FROM team_role_inference tri
+    ),
+    imp_resolved AS (
+      SELECT
+        imp.*,
+        CASE
+          WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN UPPER(imp.role)
+          WHEN mrt.missing_role IS NOT NULL THEN mrt.missing_role
+          ELSE UPPER(imp.role)
+        END AS role_resolved
+      FROM ingest_match_players imp
+      LEFT JOIN missing_role_by_team mrt
+        ON mrt.match_id = imp.match_id
+       AND mrt.team_id = imp.team_id
+    ),
+    duo_pairs AS (
+      SELECT
+        a.champion_id,
+        ally.champion_id AS ally_champion_id,
+        ally.role_resolved AS ally_role,
+        a.role_resolved AS role,
+        COALESCE(NULLIF(a.rank_tier, ''), 'UNRANKED') AS rank_tier,
+        im.game_version,
+        im.region,
+        SUM(CASE WHEN a.win THEN 1 ELSE 0 END)::int AS count_win,
+        COUNT(*)::int AS count_game
+      FROM imp_resolved a
+      INNER JOIN imp_resolved ally
+        ON ally.match_id = a.match_id
+       AND ally.team_id = a.team_id
+       AND ally.id <> a.id
+      INNER JOIN ingest_matchs im ON im.id = a.match_id
+      WHERE COALESCE(NULLIF(a.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+        AND a.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+        AND ally.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+      GROUP BY
+        a.champion_id,
+        ally.champion_id,
+        ally.role_resolved,
+        a.role_resolved,
+        COALESCE(NULLIF(a.rank_tier, ''), 'UNRANKED'),
+        im.game_version,
+        im.region
+    )
+    INSERT INTO agg_champion_duo_role_stats (
+      champion_stat_id,
+      ally_champion_id,
+      ally_role,
+      count_win,
+      count_game,
+      updated_at
+    )
+    SELECT
+      ac.id AS champion_stat_id,
+      d.ally_champion_id,
+      d.ally_role,
+      SUM(d.count_win)::int AS count_win,
+      SUM(d.count_game)::int AS count_game,
+      NOW()
+    FROM duo_pairs d
+    INNER JOIN agg_champion_core_stats ac
+      ON ac.champion_id = d.champion_id
+     AND ac.role = d.role
+     AND ac.rank_tier = d.rank_tier
+     AND ac.game_version = d.game_version
+     AND ac.region = d.region
+    GROUP BY ac.id, d.ally_champion_id, d.ally_role
+    ON CONFLICT (champion_stat_id, ally_champion_id, ally_role) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO agg_champion_duo_stats (
+      champion_stat_id,
+      ally_champion_id,
+      count_win,
+      count_game,
+      updated_at
+    )
+    SELECT
+      champion_stat_id,
+      ally_champion_id,
+      SUM(count_win)::int AS count_win,
+      SUM(count_game)::int AS count_game,
+      NOW()
+    FROM agg_champion_duo_role_stats
+    GROUP BY champion_stat_id, ally_champion_id
+    ON CONFLICT (champion_stat_id, ally_champion_id) DO UPDATE
+    SET
+      count_win = EXCLUDED.count_win,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    WITH team_role_inference AS (
+      SELECT
+        imp.match_id,
+        imp.team_id,
+        COALESCE(
+          ARRAY_AGG(DISTINCT UPPER(imp.role)) FILTER (
+            WHERE UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+          ),
+          '{}'::text[]
+        ) AS known_roles,
+        SUM(
+          CASE WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN 0 ELSE 1 END
+        )::int AS unknown_count
+      FROM ingest_match_players imp
+      GROUP BY imp.match_id, imp.team_id
+    ),
+    missing_role_by_team AS (
+      SELECT
+        tri.match_id,
+        tri.team_id,
+        CASE
+          WHEN tri.unknown_count = 1
+            AND (
+              SELECT COUNT(*)
+              FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+              WHERE NOT (r = ANY(tri.known_roles))
+            ) = 1
+          THEN (
+            SELECT r
+            FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+            WHERE NOT (r = ANY(tri.known_roles))
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS missing_role
+      FROM team_role_inference tri
+    ),
+    imp_resolved AS (
+      SELECT
+        imp.*,
+        CASE
+          WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN UPPER(imp.role)
+          WHEN mrt.missing_role IS NOT NULL THEN mrt.missing_role
+          ELSE UPPER(imp.role)
+        END AS role_resolved
+      FROM ingest_match_players imp
+      LEFT JOIN missing_role_by_team mrt
+        ON mrt.match_id = imp.match_id
+       AND mrt.team_id = imp.team_id
+    ),
+    botlane_duos AS (
+      SELECT
+        im.id AS match_id,
+        im.region,
+        im.game_version,
+        UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) AS rank_tier,
+        ir.team_id,
+        BOOL_OR(ir.win) AS team_win,
+        MAX(CASE WHEN ir.role_resolved = 'BOTTOM' THEN ir.champion_id END) AS adc_id,
+        MAX(CASE WHEN ir.role_resolved = 'SUPPORT' THEN ir.champion_id END) AS support_id
+      FROM ingest_matchs im
+      INNER JOIN imp_resolved ir ON ir.match_id = im.id
+      GROUP BY im.id, im.region, im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')), ir.team_id
+      HAVING
+        COUNT(*) FILTER (WHERE ir.role_resolved = 'BOTTOM') = 1
+        AND COUNT(*) FILTER (WHERE ir.role_resolved = 'SUPPORT') = 1
+    ),
+    duo_vs_duo AS (
+      SELECT
+        a.region,
+        a.game_version,
+        a.rank_tier,
+        a.adc_id,
+        a.support_id,
+        b.adc_id AS opp_adc_id,
+        b.support_id AS opp_support_id,
+        a.team_win
+      FROM botlane_duos a
+      INNER JOIN botlane_duos b
+        ON b.match_id = a.match_id
+       AND b.team_id <> a.team_id
+      WHERE a.rank_tier <> 'UNRANKED'
+        AND a.adc_id IS NOT NULL
+        AND a.support_id IS NOT NULL
+        AND b.adc_id IS NOT NULL
+        AND b.support_id IS NOT NULL
+    )
+    INSERT INTO agg_botlane_duo_vs_duo_stats (
+      adc_id,
+      support_id,
+      opp_adc_id,
+      opp_support_id,
+      rank_tier,
+      game_version,
+      region,
+      count_win,
+      count_game,
+      updated_at
+    )
+    SELECT
+      adc_id,
+      support_id,
+      opp_adc_id,
+      opp_support_id,
+      rank_tier,
+      game_version,
+      region,
+      SUM(CASE WHEN team_win THEN 1 ELSE 0 END)::int AS count_win,
+      COUNT(*)::int AS count_game,
+      NOW()
+    FROM duo_vs_duo
+    GROUP BY
+      adc_id,
+      support_id,
+      opp_adc_id,
+      opp_support_id,
+      rank_tier,
+      game_version,
+      region
+    ON CONFLICT (adc_id, support_id, opp_adc_id, opp_support_id, rank_tier, game_version, region) DO UPDATE
+    SET
       count_win = EXCLUDED.count_win,
       count_game = EXCLUDED.count_game,
       updated_at = NOW()
@@ -1428,8 +1691,8 @@ async function runBackfillOnce(): Promise<void> {
         im.game_version,
         SUM(CASE WHEN it.win THEN 1 ELSE 0 END)::int AS count_win,
         COUNT(*)::int AS count_game,
-        SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END)::int AS count_team_early_surrendered,
-        SUM(CASE WHEN im.game_ended_in_surrender THEN 1 ELSE 0 END)::int AS count_team_surrendered,
+        SUM(CASE WHEN it.win = false AND it.team_early_surrendered THEN 1 ELSE 0 END)::int AS count_team_early_surrendered,
+        SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END)::int AS count_team_surrendered,
         SUM(it.baron_kills)::int AS sum_baron_kills,
         SUM(CASE WHEN it.baron_first THEN 1 ELSE 0 END)::int AS count_baron_first,
         SUM(it.dragon_kills)::int AS sum_dragon_kills,
@@ -2286,6 +2549,9 @@ async function runBackfillOnce(): Promise<void> {
     UNION ALL SELECT 'agg_champion_summoner_spells', COUNT(*)::bigint FROM agg_champion_summoner_spells
     UNION ALL SELECT 'agg_champion_damage_stats', COUNT(*)::bigint FROM agg_champion_damage_stats
     UNION ALL SELECT 'agg_champion_participant_stats', COUNT(*)::bigint FROM agg_champion_participant_stats
+    UNION ALL SELECT 'agg_champion_duo_role_stats', COUNT(*)::bigint FROM agg_champion_duo_role_stats
+    UNION ALL SELECT 'agg_champion_duo_stats', COUNT(*)::bigint FROM agg_champion_duo_stats
+    UNION ALL SELECT 'agg_botlane_duo_vs_duo_stats', COUNT(*)::bigint FROM agg_botlane_duo_vs_duo_stats
     UNION ALL SELECT 'agg_champion_bucket', COUNT(*)::bigint FROM agg_champion_bucket
     UNION ALL SELECT 'agg_champion_vs_stats', COUNT(*)::bigint FROM agg_champion_vs_stats
     UNION ALL SELECT 'agg_match_outcome_stats', COUNT(*)::bigint FROM agg_match_outcome_stats

@@ -672,6 +672,58 @@ export async function processRawAggregateAndBurn(
         `
       }
 
+      for (let allyIdx = 0; allyIdx < participantsForAgg.length; allyIdx++) {
+        if (allyIdx === idx) continue
+        const ally = participantsForAgg[allyIdx]
+        if (toSafeInt(ally.teamId) !== teamId) continue
+        const allyChampionId = toSafeInt(ally.championId)
+        if (allyChampionId <= 0) continue
+        const allyRole = resolvedRoles[allyIdx] ?? roleFromPosition(ally)
+        if (!isAllowedRole(allyRole)) continue
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_duo_role_stats (
+            champion_stat_id,
+            ally_champion_id,
+            ally_role,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (
+            ${statId},
+            ${allyChampionId},
+            ${allyRole},
+            ${wins},
+            1,
+            NOW()
+          )
+          ON CONFLICT (champion_stat_id, ally_champion_id, ally_role) DO UPDATE
+          SET count_game = agg_champion_duo_role_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_duo_role_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_duo_stats (
+            champion_stat_id,
+            ally_champion_id,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (
+            ${statId},
+            ${allyChampionId},
+            ${wins},
+            1,
+            NOW()
+          )
+          ON CONFLICT (champion_stat_id, ally_champion_id) DO UPDATE
+          SET count_game = agg_champion_duo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_duo_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
+
       await tx.$executeRaw`
         INSERT INTO agg_champion_bucket (
           champion_stat_id,
@@ -855,6 +907,90 @@ export async function processRawAggregateAndBurn(
         `
       }
 
+    }
+
+    const botTeam100 = (participantByTeamRole.get('100|BOTTOM') ?? [])[0]
+    const supTeam100 = (participantByTeamRole.get('100|SUPPORT') ?? [])[0]
+    const botTeam200 = (participantByTeamRole.get('200|BOTTOM') ?? [])[0]
+    const supTeam200 = (participantByTeamRole.get('200|SUPPORT') ?? [])[0]
+    if (botTeam100 && supTeam100 && botTeam200 && supTeam200) {
+      const adc100 = toSafeInt(botTeam100.championId)
+      const support100 = toSafeInt(supTeam100.championId)
+      const adc200 = toSafeInt(botTeam200.championId)
+      const support200 = toSafeInt(supTeam200.championId)
+      const rankTier100 = normalizeRankTier(botTeam100)
+      const rankTier200 = normalizeRankTier(botTeam200)
+      if (
+        adc100 > 0 &&
+        support100 > 0 &&
+        adc200 > 0 &&
+        support200 > 0 &&
+        rankTier100 !== 'UNRANKED' &&
+        rankTier200 !== 'UNRANKED'
+      ) {
+        const win100 = botTeam100.win === true ? 1 : 0
+        const win200 = botTeam200.win === true ? 1 : 0
+        await tx.$executeRaw`
+          INSERT INTO agg_botlane_duo_vs_duo_stats (
+            adc_id,
+            support_id,
+            opp_adc_id,
+            opp_support_id,
+            rank_tier,
+            game_version,
+            region,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (
+            ${adc100},
+            ${support100},
+            ${adc200},
+            ${support200},
+            ${rankTier100},
+            ${gameVersion},
+            ${region},
+            ${win100},
+            1,
+            NOW()
+          )
+          ON CONFLICT (adc_id, support_id, opp_adc_id, opp_support_id, rank_tier, game_version, region) DO UPDATE
+          SET count_game = agg_botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+        await tx.$executeRaw`
+          INSERT INTO agg_botlane_duo_vs_duo_stats (
+            adc_id,
+            support_id,
+            opp_adc_id,
+            opp_support_id,
+            rank_tier,
+            game_version,
+            region,
+            count_win,
+            count_game,
+            updated_at
+          )
+          VALUES (
+            ${adc200},
+            ${support200},
+            ${adc100},
+            ${support100},
+            ${rankTier200},
+            ${gameVersion},
+            ${region},
+            ${win200},
+            1,
+            NOW()
+          )
+          ON CONFLICT (adc_id, support_id, opp_adc_id, opp_support_id, rank_tier, game_version, region) DO UPDATE
+          SET count_game = agg_botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
     }
 
     const pairRows = await tx.$queryRaw<

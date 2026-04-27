@@ -848,6 +848,8 @@ export async function upsertIngestMatchAndParticipants(
           runes: runePayload.runes,
           shards: shardList,
           summonerSpells: summSpells,
+          items: buildFallbackItemsFromParticipant(p as unknown as Record<string, unknown>) as Prisma.InputJsonValue,
+          skillOrder: [] as Prisma.InputJsonValue,
           win,
           kills: n('kills'),
           deaths: n('deaths'),
@@ -901,6 +903,40 @@ function toInt(raw: unknown): number {
     return Number.isFinite(n) ? Math.trunc(n) : 0
   }
   return 0
+}
+
+function buildFallbackItemsFromParticipant(participant: Record<string, unknown>): Array<{
+  itemId: number
+  starter: boolean
+  core: boolean
+  order: number
+  timestampMs: number
+}> {
+  const TRINKET_IDS = new Set([3340, 3363, 3364])
+  const raw = [
+    toInt(participant.item0),
+    toInt(participant.item1),
+    toInt(participant.item2),
+    toInt(participant.item3),
+    toInt(participant.item4),
+    toInt(participant.item5),
+  ]
+  const seen = new Set<number>()
+  const items: number[] = []
+  for (const itemId of raw) {
+    if (!Number.isFinite(itemId) || itemId <= 0) continue
+    if (TRINKET_IDS.has(itemId)) continue
+    if (seen.has(itemId)) continue
+    seen.add(itemId)
+    items.push(itemId)
+  }
+  return items.slice(0, 6).map((itemId, index) => ({
+    itemId,
+    starter: false,
+    core: false,
+    order: index,
+    timestampMs: 0,
+  }))
 }
 
 export async function extractIngestTimelineExtras(
@@ -1098,7 +1134,7 @@ export async function extractIngestTimelineExtras(
           timestampMs: row.timestampMs,
         })) as Prisma.InputJsonValue,
         summonerSpells: buildSummonerSpellIds(tSummoner1, tSummoner2),
-        ...(skillOrder?.length ? { skillOrder } : {}),
+        skillOrder: (skillOrder?.length ? skillOrder : []) as Prisma.InputJsonValue,
         stats: mergedStats as Prisma.InputJsonValue,
       },
     })

@@ -21,6 +21,7 @@
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
     "script:league-xp": "tsx src/worker/runScript.ts league-xp",
     "script:backfill-agg": "tsx src/scripts/backfillAggFromIngest.ts",
+    "script:backfill-ingest-player-extras": "tsx src/scripts/backfillIngestPlayerExtras.ts",
     "script:repair-missing-ranks": "tsx src/scripts/repairMissingRanks.ts",
     "script:repair-players-metadata": "tsx src/scripts/repairPlayersMetadata.ts",
     "script:recompute-ingest-ranks": "tsx src/scripts/recomputeIngestRanks.ts",

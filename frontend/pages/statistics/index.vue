@@ -4221,6 +4221,10 @@ if (__statisticsVm?.proxy) {
   word-break: break-word;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
+.statistics .fast-stat-tooltip-popover--objectives {
+  min-width: 24rem;
+  max-width: min(36rem, calc(100vw - 1.5rem));
+}
 @media (min-width: 1024px) {
   .statistics .fast-stat-tooltip-popover--start {
     left: 0;

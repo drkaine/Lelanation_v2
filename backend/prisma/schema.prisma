@@ -710,6 +710,45 @@ model AggChampionParticipantStat {
   @@map("agg_champion_participant_stats")
 }
 
+model AggChampionDuoRoleStat {
+  championStatId BigInt   @map("champion_stat_id")
+  allyChampionId Int      @map("ally_champion_id")
+  allyRole       String   @map("ally_role")
+  countWin       Int      @default(0) @map("count_win")
+  countGame      Int      @default(0) @map("count_game")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([championStatId, allyChampionId, allyRole])
+  @@map("agg_champion_duo_role_stats")
+}
+
+model AggChampionDuoStat {
+  championStatId BigInt   @map("champion_stat_id")
+  allyChampionId Int      @map("ally_champion_id")
+  countWin       Int      @default(0) @map("count_win")
+  countGame      Int      @default(0) @map("count_game")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([championStatId, allyChampionId])
+  @@map("agg_champion_duo_stats")
+}
+
+model AggBotlaneDuoVsDuoStat {
+  adcId        Int      @map("adc_id")
+  supportId    Int      @map("support_id")
+  oppAdcId     Int      @map("opp_adc_id")
+  oppSupportId Int      @map("opp_support_id")
+  rankTier     String   @map("rank_tier")
+  gameVersion  String   @map("game_version")
+  region       String
+  countWin     Int      @default(0) @map("count_win")
+  countGame    Int      @default(0) @map("count_game")
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@id([adcId, supportId, oppAdcId, oppSupportId, rankTier, gameVersion, region])
+  @@map("agg_botlane_duo_vs_duo_stats")
+}
+
 model AggObjectiveOutcomeStat {
   id                  BigInt   @id @default(autoincrement())
   gameVersion         String   @map("game_version")

@@ -109,7 +109,7 @@ const socialLinks: SocialLink[] = [
     text: t('home.links.facebook'),
   },
   {
-    href: 'https://www.patreon.com/c/Lelariva',
+    href: 'https://www.patreon.com/Lelariva',
     icon: 'mdi:patreon',
     text: t('home.links.patreon'),
   },

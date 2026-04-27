@@ -268,7 +268,10 @@ function donutTooltip(row: DistRow, total: number): string {
           :aria-label="p.t('statisticsPage.tooltipOverviewObjectives')"
         >
           ⓘ
-          <span role="tooltip" class="fast-stat-tooltip-popover hidden group-hover/stat-tip:block">
+          <span
+            role="tooltip"
+            class="fast-stat-tooltip-popover fast-stat-tooltip-popover--objectives hidden group-hover/stat-tip:block"
+          >
             {{ p.t('statisticsPage.tooltipOverviewObjectives') }}
             <span class="mt-1 block border-t border-primary/20 pt-1 text-text/80">
               {{ p.t('statisticsPage.tooltipSidesObjectives') }}

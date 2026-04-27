@@ -553,7 +553,12 @@ async function loadSurrenderBySideCounts(
       (byTeam.get(200)?.surrender ?? 0) >
     0
   const hasMatches = blueMatchTotal + redMatchTotal > 0
-  if (!hasAnyAggSurrender && hasMatches) {
+  const aggLooksInvalid =
+    (byTeam.get(100)?.surrender ?? 0) > blueMatchTotal ||
+    (byTeam.get(200)?.surrender ?? 0) > redMatchTotal ||
+    (byTeam.get(100)?.early ?? 0) > (byTeam.get(100)?.surrender ?? 0) ||
+    (byTeam.get(200)?.early ?? 0) > (byTeam.get(200)?.surrender ?? 0)
+  if ((!hasAnyAggSurrender || aggLooksInvalid) && hasMatches) {
     // Fallback for fresh patches where agg_team_core_stats surrender counters can lag behind match data.
     const versions = toQueryStringArrayParam(version)
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
@@ -592,13 +597,25 @@ async function loadSurrenderBySideCounts(
   return {
     blue: {
       total: blueMatchTotal,
-      earlySurrenderCount: byTeam.get(100)?.early ?? 0,
-      surrenderCount: byTeam.get(100)?.surrender ?? 0,
+      earlySurrenderCount: Math.min(
+        blueMatchTotal,
+        Math.max(0, byTeam.get(100)?.early ?? 0)
+      ),
+      surrenderCount: Math.min(
+        blueMatchTotal,
+        Math.max(0, byTeam.get(100)?.surrender ?? 0)
+      ),
     },
     red: {
       total: redMatchTotal,
-      earlySurrenderCount: byTeam.get(200)?.early ?? 0,
-      surrenderCount: byTeam.get(200)?.surrender ?? 0,
+      earlySurrenderCount: Math.min(
+        redMatchTotal,
+        Math.max(0, byTeam.get(200)?.early ?? 0)
+      ),
+      surrenderCount: Math.min(
+        redMatchTotal,
+        Math.max(0, byTeam.get(200)?.surrender ?? 0)
+      ),
     },
   }
 }
@@ -1605,11 +1622,16 @@ export async function getOverviewTeamsStats(
       distFireDrake,
       distHextecDrake,
       distChemDrake,
+      distEarthSoul,
+      distWaterSoul,
+      distWindSoul,
+      distFireSoul,
+      distHextecSoul,
+      distChemSoul,
       distTower,
       distInhibitor,
       distRiftHerald,
       distHorde,
-      drakeByTeam,
     ] = await Promise.all([
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'dragon'),
@@ -1620,11 +1642,16 @@ export async function getOverviewTeamsStats(
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'fire_drake'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'hextec_drake'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'chem_drake'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'earth_soul'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'water_soul'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'wind_soul'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'fire_soul'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'hextec_soul'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'chem_soul'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'tower'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'horde'),
-      loadDrakeBreakdownByTeam(pVersion, rankTier),
     ])
     const objData = (
       win: { first: number; kills: number },
@@ -1659,55 +1686,73 @@ export async function getOverviewTeamsStats(
       drakes: {
         types: {
           elder: {
-            byWin: drakeByTeam.blue.types.elder,
-            byLoss: drakeByTeam.red.types.elder,
+            byWin: sumObjectiveCountFromDistribution(distElder.win),
+            byLoss: sumObjectiveCountFromDistribution(distElder.loss),
             distributionByWin: distElder.win,
             distributionByLoss: distElder.loss,
           },
           earth: {
-            byWin: drakeByTeam.blue.types.earth,
-            byLoss: drakeByTeam.red.types.earth,
+            byWin: sumObjectiveCountFromDistribution(distEarthDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distEarthDrake.loss),
             distributionByWin: distEarthDrake.win,
             distributionByLoss: distEarthDrake.loss,
           },
           water: {
-            byWin: drakeByTeam.blue.types.water,
-            byLoss: drakeByTeam.red.types.water,
+            byWin: sumObjectiveCountFromDistribution(distWaterDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distWaterDrake.loss),
             distributionByWin: distWaterDrake.win,
             distributionByLoss: distWaterDrake.loss,
           },
           wind: {
-            byWin: drakeByTeam.blue.types.wind,
-            byLoss: drakeByTeam.red.types.wind,
+            byWin: sumObjectiveCountFromDistribution(distWindDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distWindDrake.loss),
             distributionByWin: distWindDrake.win,
             distributionByLoss: distWindDrake.loss,
           },
           fire: {
-            byWin: drakeByTeam.blue.types.fire,
-            byLoss: drakeByTeam.red.types.fire,
+            byWin: sumObjectiveCountFromDistribution(distFireDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distFireDrake.loss),
             distributionByWin: distFireDrake.win,
             distributionByLoss: distFireDrake.loss,
           },
           hextec: {
-            byWin: drakeByTeam.blue.types.hextec,
-            byLoss: drakeByTeam.red.types.hextec,
+            byWin: sumObjectiveCountFromDistribution(distHextecDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distHextecDrake.loss),
             distributionByWin: distHextecDrake.win,
             distributionByLoss: distHextecDrake.loss,
           },
           chem: {
-            byWin: drakeByTeam.blue.types.chem,
-            byLoss: drakeByTeam.red.types.chem,
+            byWin: sumObjectiveCountFromDistribution(distChemDrake.win),
+            byLoss: sumObjectiveCountFromDistribution(distChemDrake.loss),
             distributionByWin: distChemDrake.win,
             distributionByLoss: distChemDrake.loss,
           },
         },
         souls: {
-          earth: { byWin: drakeByTeam.blue.souls.earth, byLoss: drakeByTeam.red.souls.earth },
-          water: { byWin: drakeByTeam.blue.souls.water, byLoss: drakeByTeam.red.souls.water },
-          wind: { byWin: drakeByTeam.blue.souls.wind, byLoss: drakeByTeam.red.souls.wind },
-          fire: { byWin: drakeByTeam.blue.souls.fire, byLoss: drakeByTeam.red.souls.fire },
-          hextec: { byWin: drakeByTeam.blue.souls.hextec, byLoss: drakeByTeam.red.souls.hextec },
-          chem: { byWin: drakeByTeam.blue.souls.chem, byLoss: drakeByTeam.red.souls.chem },
+          earth: {
+            byWin: sumObjectiveCountFromDistribution(distEarthSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distEarthSoul.loss),
+          },
+          water: {
+            byWin: sumObjectiveCountFromDistribution(distWaterSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distWaterSoul.loss),
+          },
+          wind: {
+            byWin: sumObjectiveCountFromDistribution(distWindSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distWindSoul.loss),
+          },
+          fire: {
+            byWin: sumObjectiveCountFromDistribution(distFireSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distFireSoul.loss),
+          },
+          hextec: {
+            byWin: sumObjectiveCountFromDistribution(distHextecSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distHextecSoul.loss),
+          },
+          chem: {
+            byWin: sumObjectiveCountFromDistribution(distChemSoul.win),
+            byLoss: sumObjectiveCountFromDistribution(distChemSoul.loss),
+          },
         },
       },
     }
@@ -2430,103 +2475,64 @@ async function loadObjectiveDistributionByOutcome(
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
 ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
-  const bySide = await loadObjectiveDistributionBySides(pVersion, rankTier, objectiveKey)
-  return { win: bySide.blue, loss: bySide.red }
-}
-
-type DrakeBreakdown = {
-  types: {
-    elder: number
-    earth: number
-    water: number
-    wind: number
-    fire: number
-    hextec: number
-    chem: number
+  const conditions = ['1=1']
+  if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
+  else if (ranks.length > 1) {
+    conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+  } else {
+    conditions.push(`b.rank_tier <> 'UNRANKED'`)
   }
-  souls: {
-    earth: number
-    water: number
-    wind: number
-    fire: number
-    hextec: number
-    chem: number
-  }
-}
-
-function emptyDrakeBreakdown(): DrakeBreakdown {
-  return {
-    types: { elder: 0, earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 },
-    souls: { earth: 0, water: 0, wind: 0, fire: 0, hextec: 0, chem: 0 },
-  }
-}
-
-function normalizeDrakeType(raw: string): keyof DrakeBreakdown['types'] | null {
-  const v = String(raw || '').trim().toUpperCase()
-  if (!v) return null
-  if (v.includes('ELDER')) return 'elder'
-  if (v.includes('MOUNTAIN') || v.includes('EARTH')) return 'earth'
-  if (v.includes('OCEAN') || v.includes('WATER')) return 'water'
-  if (v.includes('CLOUD') || v.includes('WIND') || v.includes('AIR')) return 'wind'
-  if (v.includes('INFERNAL') || v.includes('FIRE')) return 'fire'
-  if (v.includes('HEXTECH') || v.includes('HEXTEC')) return 'hextec'
-  if (v.includes('CHEMTECH') || v.includes('CHEM')) return 'chem'
-  return null
-}
-
-function normalizeSoulType(rawSoul: string): keyof DrakeBreakdown['souls'] | null {
-  const v = String(rawSoul || '').trim().toLowerCase()
-  if (!v || v === 'none' || v === 'null' || v === 'false' || v === '0') return null
-  if (v.includes('mountain') || v.includes('earth')) return 'earth'
-  if (v.includes('ocean') || v.includes('water')) return 'water'
-  if (v.includes('cloud') || v.includes('wind') || v.includes('air')) return 'wind'
-  if (v.includes('infernal') || v.includes('fire')) return 'fire'
-  if (v.includes('hextech') || v.includes('hextec')) return 'hextec'
-  if (v.includes('chemtech') || v.includes('chem')) return 'chem'
-  return null
-}
-
-function isSoulFlagEnabled(rawSoul: string): boolean {
-  const v = String(rawSoul || '').trim().toLowerCase()
-  return v === 'true' || v === '1' || v === 'yes'
-}
-
-async function loadDrakeBreakdownByTeam(
-  version?: string | string[] | null,
-  rankTier?: string | string[] | null
-): Promise<{ blue: DrakeBreakdown; red: DrakeBreakdown }> {
-  const cond = buildRawMatchCond(version, rankTier)
-  const rows = await prisma.$queryRawUnsafe<Array<{ team: number; drake_type: string; soul_raw: string }>>(`
+  const whereSql = conditions.join(' AND ')
+  const safeKey = objectiveKey.replace(/'/g, "''")
+  try {
+    const tbFrom = await matchVersionedAggFrom('agg_team_bucket', pVersion, 'tb')
+    const bFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'b')
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ objective_bucket: number; win_cnt: number; loss_cnt: number }>
+    >(`
       SELECT
-        it.team,
-        UPPER(COALESCE(d.elem->>'drakeType', '')) AS drake_type,
-        LOWER(COALESCE(d.elem->>'soul', '')) AS soul_raw
-      FROM ingest_teams it
-      INNER JOIN ingest_matchs m ON m.id = it.match_id
-      LEFT JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN jsonb_typeof(it.drakes_json::jsonb) = 'array' THEN it.drakes_json::jsonb
-          ELSE '[]'::jsonb
-        END
-      ) AS d(elem) ON TRUE
-      WHERE ${cond}
-  `)
-  const blue = emptyDrakeBreakdown()
-  const red = emptyDrakeBreakdown()
-  for (const row of rows) {
-    const team = Number(row.team)
-    const target = team === 100 ? blue : team === 200 ? red : null
-    if (!target) continue
-    const drakeType = normalizeDrakeType(row.drake_type)
-    if (!drakeType) continue
-    target.types[drakeType] += 1
-
-    const soulType =
-      normalizeSoulType(row.soul_raw) ??
-      (isSoulFlagEnabled(row.soul_raw) && drakeType !== 'elder' ? drakeType : null)
-    if (soulType) target.souls[soulType] += 1
+        tb.objective_bucket,
+        SUM(tb.count_win)::int AS win_cnt,
+        SUM(tb.count_game - tb.count_win)::int AS loss_cnt
+      FROM ${tbFrom}
+      JOIN ${bFrom} ON b.id = tb.team_stat_id
+      WHERE tb.objective_key = '${safeKey}'
+        AND ${whereSql}
+      GROUP BY tb.objective_bucket
+    `)
+    const win: Record<string, number> = {}
+    const loss: Record<string, number> = {}
+    for (const r of rows) {
+      const bucket = String(Number(r.objective_bucket ?? 0))
+      win[bucket] = (win[bucket] ?? 0) + Number(r.win_cnt ?? 0)
+      loss[bucket] = (loss[bucket] ?? 0) + Number(r.loss_cnt ?? 0)
+    }
+    return { win, loss }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (message.includes('42P01') || message.includes('agg_team_bucket')) {
+      if (!hasWarnedMissingTeamBucket) {
+        hasWarnedMissingTeamBucket = true
+        console.warn('[loadObjectiveDistributionByOutcome] agg_team_bucket missing; empty distributions')
+      }
+      return { win: {}, loss: {} }
+    }
+    throw err
   }
-  return { blue, red }
+}
+
+function sumObjectiveCountFromDistribution(dist: Record<string, number> | undefined): number {
+  if (!dist) return 0
+  let total = 0
+  for (const [bucketRaw, countRaw] of Object.entries(dist)) {
+    const bucket = Number(bucketRaw)
+    const count = Number(countRaw)
+    if (!Number.isFinite(bucket) || !Number.isFinite(count)) continue
+    total += bucket * count
+  }
+  return Math.max(0, Math.round(total))
 }
 
 export async function getOverviewSidesStats(
@@ -2704,24 +2710,23 @@ export async function getOverviewSidesStats(
     const blue = teamAggRows.find((r) => Number(r.team) === 100)
     const red = teamAggRows.find((r) => Number(r.team) === 200)
     const n = (v: bigint | undefined) => Number(v ?? 0)
-    const drakeByTeam = await loadDrakeBreakdownByTeam(version, rankTier)
     const drakesBySide: NonNullable<OverviewSidesApiStats['drakesBySide']> = {
       types: {
-        elder: { byBlue: drakeByTeam.blue.types.elder, byRed: drakeByTeam.red.types.elder },
-        earth: { byBlue: drakeByTeam.blue.types.earth, byRed: drakeByTeam.red.types.earth },
-        water: { byBlue: drakeByTeam.blue.types.water, byRed: drakeByTeam.red.types.water },
-        wind: { byBlue: drakeByTeam.blue.types.wind, byRed: drakeByTeam.red.types.wind },
-        fire: { byBlue: drakeByTeam.blue.types.fire, byRed: drakeByTeam.red.types.fire },
-        hextec: { byBlue: drakeByTeam.blue.types.hextec, byRed: drakeByTeam.red.types.hextec },
-        chem: { byBlue: drakeByTeam.blue.types.chem, byRed: drakeByTeam.red.types.chem },
+        elder: { byBlue: 0, byRed: 0 },
+        earth: { byBlue: 0, byRed: 0 },
+        water: { byBlue: 0, byRed: 0 },
+        wind: { byBlue: 0, byRed: 0 },
+        fire: { byBlue: 0, byRed: 0 },
+        hextec: { byBlue: 0, byRed: 0 },
+        chem: { byBlue: 0, byRed: 0 },
       },
       souls: {
-        earth: { byBlue: drakeByTeam.blue.souls.earth, byRed: drakeByTeam.red.souls.earth },
-        water: { byBlue: drakeByTeam.blue.souls.water, byRed: drakeByTeam.red.souls.water },
-        wind: { byBlue: drakeByTeam.blue.souls.wind, byRed: drakeByTeam.red.souls.wind },
-        fire: { byBlue: drakeByTeam.blue.souls.fire, byRed: drakeByTeam.red.souls.fire },
-        hextec: { byBlue: drakeByTeam.blue.souls.hextec, byRed: drakeByTeam.red.souls.hextec },
-        chem: { byBlue: drakeByTeam.blue.souls.chem, byRed: drakeByTeam.red.souls.chem },
+        earth: { byBlue: 0, byRed: 0 },
+        water: { byBlue: 0, byRed: 0 },
+        wind: { byBlue: 0, byRed: 0 },
+        fire: { byBlue: 0, byRed: 0 },
+        hextec: { byBlue: 0, byRed: 0 },
+        chem: { byBlue: 0, byRed: 0 },
       },
     }
     const objectivesBySide = {
@@ -2771,6 +2776,12 @@ export async function getOverviewSidesStats(
       distFireDrake,
       distHextecDrake,
       distChemDrake,
+      distEarthSoul,
+      distWaterSoul,
+      distWindSoul,
+      distFireSoul,
+      distHextecSoul,
+      distChemSoul,
       distTower,
       distInhibitor,
       distRiftHerald,
@@ -2785,11 +2796,43 @@ export async function getOverviewSidesStats(
       loadObjectiveDistributionBySides(pVersion, rankTier, 'fire_drake'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'hextec_drake'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'chem_drake'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'earth_soul'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'water_soul'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'wind_soul'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'fire_soul'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'hextec_soul'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'chem_soul'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'tower'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'horde'),
     ])
+    drakesBySide.types.elder.byBlue = sumObjectiveCountFromDistribution(distElder.blue)
+    drakesBySide.types.elder.byRed = sumObjectiveCountFromDistribution(distElder.red)
+    drakesBySide.types.earth.byBlue = sumObjectiveCountFromDistribution(distEarthDrake.blue)
+    drakesBySide.types.earth.byRed = sumObjectiveCountFromDistribution(distEarthDrake.red)
+    drakesBySide.types.water.byBlue = sumObjectiveCountFromDistribution(distWaterDrake.blue)
+    drakesBySide.types.water.byRed = sumObjectiveCountFromDistribution(distWaterDrake.red)
+    drakesBySide.types.wind.byBlue = sumObjectiveCountFromDistribution(distWindDrake.blue)
+    drakesBySide.types.wind.byRed = sumObjectiveCountFromDistribution(distWindDrake.red)
+    drakesBySide.types.fire.byBlue = sumObjectiveCountFromDistribution(distFireDrake.blue)
+    drakesBySide.types.fire.byRed = sumObjectiveCountFromDistribution(distFireDrake.red)
+    drakesBySide.types.hextec.byBlue = sumObjectiveCountFromDistribution(distHextecDrake.blue)
+    drakesBySide.types.hextec.byRed = sumObjectiveCountFromDistribution(distHextecDrake.red)
+    drakesBySide.types.chem.byBlue = sumObjectiveCountFromDistribution(distChemDrake.blue)
+    drakesBySide.types.chem.byRed = sumObjectiveCountFromDistribution(distChemDrake.red)
+    drakesBySide.souls.earth.byBlue = sumObjectiveCountFromDistribution(distEarthSoul.blue)
+    drakesBySide.souls.earth.byRed = sumObjectiveCountFromDistribution(distEarthSoul.red)
+    drakesBySide.souls.water.byBlue = sumObjectiveCountFromDistribution(distWaterSoul.blue)
+    drakesBySide.souls.water.byRed = sumObjectiveCountFromDistribution(distWaterSoul.red)
+    drakesBySide.souls.wind.byBlue = sumObjectiveCountFromDistribution(distWindSoul.blue)
+    drakesBySide.souls.wind.byRed = sumObjectiveCountFromDistribution(distWindSoul.red)
+    drakesBySide.souls.fire.byBlue = sumObjectiveCountFromDistribution(distFireSoul.blue)
+    drakesBySide.souls.fire.byRed = sumObjectiveCountFromDistribution(distFireSoul.red)
+    drakesBySide.souls.hextec.byBlue = sumObjectiveCountFromDistribution(distHextecSoul.blue)
+    drakesBySide.souls.hextec.byRed = sumObjectiveCountFromDistribution(distHextecSoul.red)
+    drakesBySide.souls.chem.byBlue = sumObjectiveCountFromDistribution(distChemSoul.blue)
+    drakesBySide.souls.chem.byRed = sumObjectiveCountFromDistribution(distChemSoul.red)
     drakesBySide.types.elder.distributionByBlue = distElder.blue
     drakesBySide.types.elder.distributionByRed = distElder.red
     drakesBySide.types.earth.distributionByBlue = distEarthDrake.blue

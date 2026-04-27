@@ -39,6 +39,12 @@
                     </button>
                   </div>
                 </th>
+                <th class="px-3 py-1.5 font-semibold text-text">
+                  {{ p.t('statisticsPage.overviewTeamsByWin') }}
+                </th>
+                <th class="px-3 py-1.5 font-semibold text-text">
+                  {{ p.t('statisticsPage.overviewTeamsByLoss') }}
+                </th>
                 <th class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text">
                   <div class="flex items-center gap-1">
                     <button type="button" class="text-blue-300" @click="p.setBansSort('blue')">
@@ -138,6 +144,28 @@
                       p.bansDeltaPct(row, 'bansTotal', 2)!.toFixed(2)
                     }}%
                   </div>
+                </td>
+                <td class="px-3 py-1 tabular-nums text-text/90">
+                  {{
+                    p
+                      .banPctForCount(
+                        bansByWinMap.get(row.championId) ?? 0,
+                        p.bansTableData?.matchCount ?? 0,
+                        1
+                      )
+                      .toFixed(2)
+                  }}%
+                </td>
+                <td class="px-3 py-1 tabular-nums text-text/90">
+                  {{
+                    p
+                      .banPctForCount(
+                        bansByLossMap.get(row.championId) ?? 0,
+                        p.bansTableData?.matchCount ?? 0,
+                        1
+                      )
+                      .toFixed(2)
+                  }}%
                 </td>
                 <td class="px-3 py-1 tabular-nums text-text/90">
                   {{
@@ -308,10 +336,24 @@
 </template>
 
 <script setup lang="ts">
-import { inject, unref } from 'vue'
+import { computed, inject, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 
 const p = inject('statisticsPageCtx') as any
+
+const bansByWinMap = computed(() => {
+  const out = new Map<number, number>()
+  const rows = p.overviewTeamsData?.bans?.byWin ?? []
+  for (const row of rows) out.set(Number(row.championId), Number(row.count ?? 0))
+  return out
+})
+
+const bansByLossMap = computed(() => {
+  const out = new Map<number, number>()
+  const rows = p.overviewTeamsData?.bans?.byLoss ?? []
+  for (const row of rows) out.set(Number(row.championId), Number(row.count ?? 0))
+  return out
+})
 
 function onPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null
