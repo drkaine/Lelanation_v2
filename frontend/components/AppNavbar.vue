@@ -216,7 +216,6 @@
           {{ t('nav.statistics') }}
         </NuxtLink>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="statisticsTierListLink"
           :title="t('nav.tierList')"
           class="version"

@@ -738,6 +738,7 @@
     "championStatsPopularity": "Popularity",
     "championStatsWinratePercent": "Win rate",
     "championStatsBanrateTitle": "Ban rate",
+    "championStatsDamageSplitTitle": "Damage split",
     "championStatsMainRole": "Main role",
     "championStatsMainRoleStats": "{games} games · {winrate}% win",
     "championStatsTrendsTitle": "Division trends",

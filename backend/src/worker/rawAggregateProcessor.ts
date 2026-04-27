@@ -13,6 +13,9 @@ type RawParticipant = {
   deaths?: number
   assists?: number
   totalDamageDealtToChampions?: number
+  physicalDamageDealtToChampions?: number
+  magicDamageDealtToChampions?: number
+  trueDamageDealtToChampions?: number
   tier?: string
   rankTier?: string
   summoner1Id?: number
@@ -161,6 +164,101 @@ function resolveParticipantRoles(participants: RawParticipant[]): string[] {
   }
 
   return roles
+}
+
+type FlatParticipantMetric = { key: string; kind: 'number' | 'boolean'; value: number }
+
+type ParticipantMetricAgg = {
+  numericSums: Record<string, number>
+  numericCounts: Record<string, number>
+  boolTrueCounts: Record<string, number>
+  boolCounts: Record<string, number>
+}
+
+const PARTICIPANT_METRIC_ROOT_SKIP = new Set([
+  'puuid',
+  'riotIdGameName',
+  'riotIdTagline',
+  'summonerId',
+  'summonerName',
+  'participantId',
+  'championId',
+  'championName',
+  'teamId',
+  'teamPosition',
+  'individualPosition',
+  'lane',
+  'role',
+  'perks',
+  '_runes',
+  '_shards',
+  '_summonerSpells',
+])
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function walkParticipantMetrics(
+  value: unknown,
+  prefix: string,
+  out: FlatParticipantMetric[],
+  depth: number
+): void {
+  if (depth > 4) return
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    out.push({ key: prefix, kind: 'number', value })
+    return
+  }
+  if (typeof value === 'boolean') {
+    out.push({ key: prefix, kind: 'boolean', value: value ? 1 : 0 })
+    return
+  }
+  if (!isPlainObject(value)) return
+  for (const [k, v] of Object.entries(value)) {
+    if (!k) continue
+    const key = prefix ? `${prefix}.${k}` : k
+    walkParticipantMetrics(v, key, out, depth + 1)
+  }
+}
+
+function buildParticipantMetricAgg(participant: RawParticipant): ParticipantMetricAgg {
+  const root = participant as unknown as Record<string, unknown>
+  const flat: FlatParticipantMetric[] = []
+  for (const [k, v] of Object.entries(root)) {
+    if (!k || PARTICIPANT_METRIC_ROOT_SKIP.has(k)) continue
+    walkParticipantMetrics(v, k, flat, 0)
+  }
+  const numericSums: Record<string, number> = {}
+  const numericCounts: Record<string, number> = {}
+  const boolTrueCounts: Record<string, number> = {}
+  const boolCounts: Record<string, number> = {}
+  for (const m of flat) {
+    if (m.kind === 'number') {
+      numericSums[m.key] = (numericSums[m.key] ?? 0) + m.value
+      numericCounts[m.key] = (numericCounts[m.key] ?? 0) + 1
+    } else {
+      boolTrueCounts[m.key] = (boolTrueCounts[m.key] ?? 0) + m.value
+      boolCounts[m.key] = (boolCounts[m.key] ?? 0) + 1
+    }
+  }
+  return { numericSums, numericCounts, boolTrueCounts, boolCounts }
+}
+
+function parseNumberMap(raw: unknown): Record<string, number> {
+  if (!isPlainObject(raw)) return {}
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    const n = typeof v === 'number' ? v : Number(v)
+    if (Number.isFinite(n)) out[k] = n
+  }
+  return out
+}
+
+function mergeNumberMaps(base: Record<string, number>, delta: Record<string, number>): Record<string, number> {
+  const out: Record<string, number> = { ...base }
+  for (const [k, v] of Object.entries(delta)) out[k] = (out[k] ?? 0) + v
+  return out
 }
 
 function coreStatId(
@@ -436,6 +534,108 @@ export async function processRawAggregateAndBurn(
       `
       const statId = coreRows[0]?.id
       if (statId == null) continue
+      const physToChamps = toSafeInt(p.physicalDamageDealtToChampions)
+      const magicToChamps = toSafeInt(p.magicDamageDealtToChampions)
+      const trueToChamps = toSafeInt(p.trueDamageDealtToChampions)
+      const totalToChampsRaw = toSafeInt(p.totalDamageDealtToChampions)
+      const totalToChamps =
+        totalToChampsRaw > 0 ? totalToChampsRaw : physToChamps + magicToChamps + trueToChamps
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_damage_stats (
+          champion_stat_id,
+          sum_physical_damage_to_champions,
+          sum_magic_damage_to_champions,
+          sum_true_damage_to_champions,
+          sum_total_damage_to_champions,
+          count_game,
+          updated_at
+        )
+        VALUES (
+          ${statId},
+          ${physToChamps},
+          ${magicToChamps},
+          ${trueToChamps},
+          ${totalToChamps},
+          1,
+          NOW()
+        )
+        ON CONFLICT (champion_stat_id) DO UPDATE
+        SET
+          sum_physical_damage_to_champions =
+            agg_champion_damage_stats.sum_physical_damage_to_champions
+            + EXCLUDED.sum_physical_damage_to_champions,
+          sum_magic_damage_to_champions =
+            agg_champion_damage_stats.sum_magic_damage_to_champions
+            + EXCLUDED.sum_magic_damage_to_champions,
+          sum_true_damage_to_champions =
+            agg_champion_damage_stats.sum_true_damage_to_champions
+            + EXCLUDED.sum_true_damage_to_champions,
+          sum_total_damage_to_champions =
+            agg_champion_damage_stats.sum_total_damage_to_champions
+            + EXCLUDED.sum_total_damage_to_champions,
+          count_game = agg_champion_damage_stats.count_game + EXCLUDED.count_game,
+          updated_at = NOW()
+      `
+      const participantMetricAgg = buildParticipantMetricAgg(p)
+      const existingMetricRows = await tx.$queryRaw<
+        Array<{
+          numeric_sums: unknown
+          numeric_counts: unknown
+          bool_true_counts: unknown
+          bool_counts: unknown
+        }>
+      >`
+        SELECT
+          numeric_sums,
+          numeric_counts,
+          bool_true_counts,
+          bool_counts
+        FROM agg_champion_participant_stats
+        WHERE champion_stat_id = ${statId}
+        FOR UPDATE
+      `
+      const existingMetricRow = existingMetricRows[0]
+      const mergedNumericSums = mergeNumberMaps(
+        parseNumberMap(existingMetricRow?.numeric_sums),
+        participantMetricAgg.numericSums
+      )
+      const mergedNumericCounts = mergeNumberMaps(
+        parseNumberMap(existingMetricRow?.numeric_counts),
+        participantMetricAgg.numericCounts
+      )
+      const mergedBoolTrueCounts = mergeNumberMaps(
+        parseNumberMap(existingMetricRow?.bool_true_counts),
+        participantMetricAgg.boolTrueCounts
+      )
+      const mergedBoolCounts = mergeNumberMaps(
+        parseNumberMap(existingMetricRow?.bool_counts),
+        participantMetricAgg.boolCounts
+      )
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_participant_stats (
+          champion_stat_id,
+          numeric_sums,
+          numeric_counts,
+          bool_true_counts,
+          bool_counts,
+          updated_at
+        )
+        VALUES (
+          ${statId},
+          ${JSON.stringify(mergedNumericSums)}::jsonb,
+          ${JSON.stringify(mergedNumericCounts)}::jsonb,
+          ${JSON.stringify(mergedBoolTrueCounts)}::jsonb,
+          ${JSON.stringify(mergedBoolCounts)}::jsonb,
+          NOW()
+        )
+        ON CONFLICT (champion_stat_id) DO UPDATE
+        SET
+          numeric_sums = EXCLUDED.numeric_sums,
+          numeric_counts = EXCLUDED.numeric_counts,
+          bool_true_counts = EXCLUDED.bool_true_counts,
+          bool_counts = EXCLUDED.bool_counts,
+          updated_at = NOW()
+      `
 
       const teamId = toSafeInt(p.teamId)
       const opponentTeamId = teamId === 100 ? 200 : 100

@@ -22,6 +22,8 @@ function isSafeIdentSegment(s: string): boolean {
 /** Satellites keyed by champion_stat_id (no game_version on row). */
 const CHAMPION_SATELLITE_TABLES = new Set([
   'agg_champion_bucket',
+  'agg_champion_damage_stats',
+  'agg_champion_participant_stats',
   'agg_champion_summoner_spells',
   'agg_champion_runes_stats',
   'agg_champion_runes_solo_stats',

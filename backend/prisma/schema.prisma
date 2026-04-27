@@ -687,6 +687,29 @@ model AggTeamCoreStat {
   @@map("agg_team_core_stats")
 }
 
+model AggChampionDamageStat {
+  championStatId               BigInt   @id @map("champion_stat_id")
+  sumPhysicalDamageToChampions BigInt   @default(0) @map("sum_physical_damage_to_champions")
+  sumMagicDamageToChampions    BigInt   @default(0) @map("sum_magic_damage_to_champions")
+  sumTrueDamageToChampions     BigInt   @default(0) @map("sum_true_damage_to_champions")
+  sumTotalDamageToChampions    BigInt   @default(0) @map("sum_total_damage_to_champions")
+  countGame                    Int      @default(0) @map("count_game")
+  updatedAt                    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("agg_champion_damage_stats")
+}
+
+model AggChampionParticipantStat {
+  championStatId BigInt   @id @map("champion_stat_id")
+  numericSums    Json     @default("{}") @map("numeric_sums")
+  numericCounts  Json     @default("{}") @map("numeric_counts")
+  boolTrueCounts Json     @default("{}") @map("bool_true_counts")
+  boolCounts     Json     @default("{}") @map("bool_counts")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("agg_champion_participant_stats")
+}
+
 model AggObjectiveOutcomeStat {
   id                  BigInt   @id @default(autoincrement())
   gameVersion         String   @map("game_version")

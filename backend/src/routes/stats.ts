@@ -15,6 +15,7 @@ import {
 import { getTierList } from '../services/TierListService.js'
 import { getChampionGlobalTable } from '../services/ChampionGlobalTableService.js'
 import { getChampionBansTable } from '../services/ChampionBansTableService.js'
+import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import {
   getTopPlayers,
   getTopPlayersByChampion,
@@ -655,6 +656,49 @@ router.get('/champions/:championId', async (req: Request, res: Response) => {
     totalGames: data.totalGames,
     generatedAt: data.generatedAt
   })
+})
+
+/** GET /api/stats/champions/:championId/damage-split — dégâts moyens vs champions (phys/magic/true). */
+router.get('/champions/:championId/damage-split', async (req: Request, res: Response) => {
+  const championId = parseInt(String(req.params.championId), 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid championId' })
+  }
+  const version = queryStringArray(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  try {
+    const data = await getChampionDamageSplit(
+      championId,
+      version.length ? version : null,
+      rankTier,
+      role
+    )
+    if (!data) {
+      return res.status(200).json({
+        championId,
+        games: 0,
+        avgPhysicalDamageToChampions: 0,
+        avgMagicDamageToChampions: 0,
+        avgTrueDamageToChampions: 0,
+        avgTotalDamageToChampions: 0,
+      })
+    }
+    return res.json(data)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[champions/:championId/damage-split]', message, err)
+    return res.status(200).json({
+      championId,
+      games: 0,
+      avgPhysicalDamageToChampions: 0,
+      avgMagicDamageToChampions: 0,
+      avgTrueDamageToChampions: 0,
+      avgTotalDamageToChampions: 0,
+      error: 'Champion damage split failed',
+      message,
+    })
+  }
 })
 
 /** GET /api/stats/champions/:championId/duration-winrate - duration (5-min buckets) vs winrate for this champion. Query: ?version=16.1 &rankTier=GOLD */

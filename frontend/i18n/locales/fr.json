@@ -740,6 +740,7 @@
     "championStatsPopularity": "Popularité",
     "championStatsWinratePercent": "% victoire",
     "championStatsBanrateTitle": "Taux de ban",
+    "championStatsDamageSplitTitle": "Répartition des dégâts",
     "championStatsMainRole": "Rôle principal",
     "championStatsMainRoleStats": "{games} parties · {winrate}% victoire",
     "championStatsTrendsTitle": "Tendances par division",

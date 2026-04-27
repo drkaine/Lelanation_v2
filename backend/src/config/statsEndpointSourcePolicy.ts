@@ -77,6 +77,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     allowedSources: ['agg_champion_side_stats', 'agg_champion_bans_by_banner'],
   },
   {
+    path: '/champions/:championId/damage-split',
+    policy: 'mv_only',
+    allowedSources: ['agg_champion_core_stats', 'agg_champion_damage_stats'],
+  },
+  {
     path: '/champions/bans-table',
     policy: 'mv_only',
     allowedSources: ['agg_champion_bans_by_banner', 'agg_match_outcome_stats'],

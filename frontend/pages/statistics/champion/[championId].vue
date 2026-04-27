@@ -335,7 +335,34 @@
                   </span>
                 </div>
               </div>
-              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85">
+              <div
+                v-if="championDamageSplit"
+                class="mx-1 flex items-center gap-3 self-center rounded bg-surface/40 px-2 py-1.5"
+              >
+                <div
+                  class="h-12 w-12 shrink-0 rounded-full"
+                  :style="championDamageDonutStyle"
+                  :title="t('statisticsPage.championStatsDamageSplitTitle')"
+                  aria-hidden="true"
+                />
+                <div class="space-y-0.5 text-[10px] leading-tight text-text/85">
+                  <div class="text-[11px] font-semibold text-text">
+                    {{ t('statisticsPage.championStatsDamageSplitTitle') }}
+                  </div>
+                  <div
+                    v-for="entry in championDamageShareLegend"
+                    :key="entry.key"
+                    class="flex items-center gap-1"
+                  >
+                    <span
+                      class="inline-block h-2.5 w-2.5 rounded-sm"
+                      :style="{ backgroundColor: entry.color }"
+                    />
+                    <span>{{ entry.label }}: {{ entry.pct.toFixed(1) }}%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text/85">
                 <span
                   >{{ t('statisticsPage.pickrate') }}:
                   <strong>{{ formatDonutPercent(championStats.pickrate ?? 0) }}%</strong></span
@@ -1863,6 +1890,12 @@ const championStats = ref<{
   totalGames: number
   generatedAt: string | null
 } | null>(null)
+const championDamageSplit = ref<{
+  phys: number
+  magic: number
+  trueDamage: number
+  total: number
+} | null>(null)
 
 const CHAMPION_ROLE_ORDER = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const
 
@@ -1933,6 +1966,53 @@ function roleIconPath(role: string) {
 function formatDonutPercent(value: number) {
   return Number.isFinite(value) ? Number(value).toFixed(2) : '0'
 }
+
+const championDamageShareLegend = computed(() => {
+  const d = championDamageSplit.value
+  if (!d) return [] as Array<{ key: string; label: string; pct: number; color: string }>
+  const toPct = (v: number) => (d.total > 0 ? (v / d.total) * 100 : 0)
+  return [
+    {
+      key: 'phys',
+      label: t('statisticsPage.championTableColPhys'),
+      pct: toPct(d.phys),
+      color: '#f59e0b',
+    },
+    {
+      key: 'magic',
+      label: t('statisticsPage.championTableColMagic'),
+      pct: toPct(d.magic),
+      color: '#3b82f6',
+    },
+    {
+      key: 'true',
+      label: t('statisticsPage.championTableColBrut'),
+      pct: toPct(d.trueDamage),
+      color: '#22c55e',
+    },
+  ]
+})
+
+const championDamageDonutStyle = computed(() => {
+  const entries = championDamageShareLegend.value
+  if (!entries.length) {
+    return {
+      background:
+        'radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), rgb(var(--rgb-primary) / 0.25)',
+    } as Record<string, string>
+  }
+  const parts: string[] = []
+  let cursor = 0
+  for (const e of entries) {
+    const start = cursor
+    const end = cursor + e.pct
+    parts.push(`${e.color} ${start.toFixed(3)}% ${end.toFixed(3)}%`)
+    cursor = end
+  }
+  return {
+    background: `radial-gradient(circle at center, rgb(var(--rgb-surface)) 58%, transparent 59%), conic-gradient(${parts.join(',')})`,
+  } as Record<string, string>
+})
 
 const buildsPending = ref(false)
 const buildsData = ref<{
@@ -2175,6 +2255,35 @@ async function loadChampion() {
   } finally {
     pending.value = false
     statsPerfEnd('loadChampion', t)
+  }
+}
+
+async function loadChampionDamageSplit() {
+  if (!championId.value || Number.isNaN(championId.value)) {
+    championDamageSplit.value = null
+    return
+  }
+  try {
+    const q = queryParams()
+    const data = await statsFetch<{
+      avgPhysicalDamageToChampions?: number
+      avgMagicDamageToChampions?: number
+      avgTrueDamageToChampions?: number
+      avgTotalDamageToChampions?: number
+    }>(apiUrl(`/api/stats/champions/${championId.value}/damage-split${q}`))
+    const phys = Number(data?.avgPhysicalDamageToChampions ?? 0)
+    const magic = Number(data?.avgMagicDamageToChampions ?? 0)
+    const trueDamage = Number(data?.avgTrueDamageToChampions ?? 0)
+    const totalFromParts = phys + magic + trueDamage
+    const total = totalFromParts > 0 ? totalFromParts : Number(data?.avgTotalDamageToChampions ?? 0)
+    championDamageSplit.value = {
+      phys: Number.isFinite(phys) ? phys : 0,
+      magic: Number.isFinite(magic) ? magic : 0,
+      trueDamage: Number.isFinite(trueDamage) ? trueDamage : 0,
+      total: Number.isFinite(total) ? total : 0,
+    }
+  } catch {
+    championDamageSplit.value = null
   }
 }
 
@@ -3081,6 +3190,7 @@ watch(
   () => {
     if (!championId.value || Number.isNaN(championId.value)) return
     loadChampion()
+    loadChampionDamageSplit()
     loadBuilds()
     loadRunes()
     loadMatchups()
@@ -3171,6 +3281,7 @@ onMounted(async () => {
   ])
   if (championId.value && !Number.isNaN(championId.value)) {
     await loadChampion()
+    loadChampionDamageSplit()
     loadBuilds()
     loadRunes()
     loadMatchups()

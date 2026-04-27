@@ -69,6 +69,8 @@ async function runBackfillOnce(): Promise<void> {
       agg_champion_runes_solo_stats,
       agg_champion_runes_stats,
       agg_champion_summoner_spells,
+      agg_champion_participant_stats,
+      agg_champion_damage_stats,
       agg_champion_bucket,
       agg_team_bucket,
       agg_champion_bans_by_banner,
@@ -185,6 +187,276 @@ async function runBackfillOnce(): Promise<void> {
       count_win = EXCLUDED.count_win,
       count_game = EXCLUDED.count_game,
       count_ban = EXCLUDED.count_ban,
+      updated_at = NOW()
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    WITH team_role_inference AS (
+      SELECT
+        imp.match_id,
+        imp.team_id,
+        COALESCE(
+          ARRAY_AGG(DISTINCT UPPER(imp.role)) FILTER (
+            WHERE UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+          ),
+          '{}'::text[]
+        ) AS known_roles,
+        SUM(
+          CASE WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN 0 ELSE 1 END
+        )::int AS unknown_count
+      FROM ingest_match_players imp
+      GROUP BY imp.match_id, imp.team_id
+    ),
+    missing_role_by_team AS (
+      SELECT
+        tri.match_id,
+        tri.team_id,
+        CASE
+          WHEN tri.unknown_count = 1
+            AND (
+              SELECT COUNT(*)
+              FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+              WHERE NOT (r = ANY(tri.known_roles))
+            ) = 1
+          THEN (
+            SELECT r
+            FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+            WHERE NOT (r = ANY(tri.known_roles))
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS missing_role
+      FROM team_role_inference tri
+    ),
+    imp_resolved AS (
+      SELECT
+        imp.*,
+        CASE
+          WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN UPPER(imp.role)
+          WHEN mrt.missing_role IS NOT NULL THEN mrt.missing_role
+          ELSE UPPER(imp.role)
+        END AS role_resolved
+      FROM ingest_match_players imp
+      LEFT JOIN missing_role_by_team mrt
+        ON mrt.match_id = imp.match_id
+       AND mrt.team_id = imp.team_id
+    ),
+    damage_source AS (
+      SELECT
+        ac.id AS champion_stat_id,
+        SUM(COALESCE((imp.stats ->> 'physicalDamageDealtToChampions')::bigint, 0))::bigint AS sum_phys_d,
+        SUM(COALESCE((imp.stats ->> 'magicDamageDealtToChampions')::bigint, 0))::bigint AS sum_magic_d,
+        SUM(COALESCE((imp.stats ->> 'trueDamageDealtToChampions')::bigint, 0))::bigint AS sum_true_d,
+        SUM(COALESCE((imp.stats ->> 'totalDamageDealtToChampions')::bigint, 0))::bigint AS sum_total_d,
+        COUNT(*)::int AS count_game
+      FROM imp_resolved imp
+      INNER JOIN ingest_matchs im ON im.id = imp.match_id
+      INNER JOIN agg_champion_core_stats ac
+        ON ac.champion_id = imp.champion_id
+       AND ac.role = imp.role_resolved
+       AND ac.rank_tier = COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED')
+       AND ac.game_version = im.game_version
+       AND ac.region = im.region
+      WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+        AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+      GROUP BY ac.id
+    )
+    INSERT INTO agg_champion_damage_stats (
+      champion_stat_id,
+      sum_physical_damage_to_champions,
+      sum_magic_damage_to_champions,
+      sum_true_damage_to_champions,
+      sum_total_damage_to_champions,
+      count_game,
+      updated_at
+    )
+    SELECT
+      champion_stat_id,
+      sum_phys_d,
+      sum_magic_d,
+      sum_true_d,
+      CASE
+        WHEN sum_total_d > 0 THEN sum_total_d
+        ELSE sum_phys_d + sum_magic_d + sum_true_d
+      END AS sum_total_d,
+      count_game,
+      NOW()
+    FROM damage_source
+    ON CONFLICT (champion_stat_id) DO UPDATE
+    SET
+      sum_physical_damage_to_champions = EXCLUDED.sum_physical_damage_to_champions,
+      sum_magic_damage_to_champions = EXCLUDED.sum_magic_damage_to_champions,
+      sum_true_damage_to_champions = EXCLUDED.sum_true_damage_to_champions,
+      sum_total_damage_to_champions = EXCLUDED.sum_total_damage_to_champions,
+      count_game = EXCLUDED.count_game,
+      updated_at = NOW()
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    WITH team_role_inference AS (
+      SELECT
+        imp.match_id,
+        imp.team_id,
+        COALESCE(
+          ARRAY_AGG(DISTINCT UPPER(imp.role)) FILTER (
+            WHERE UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+          ),
+          '{}'::text[]
+        ) AS known_roles,
+        SUM(
+          CASE WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN 0 ELSE 1 END
+        )::int AS unknown_count
+      FROM ingest_match_players imp
+      GROUP BY imp.match_id, imp.team_id
+    ),
+    missing_role_by_team AS (
+      SELECT
+        tri.match_id,
+        tri.team_id,
+        CASE
+          WHEN tri.unknown_count = 1
+            AND (
+              SELECT COUNT(*)
+              FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+              WHERE NOT (r = ANY(tri.known_roles))
+            ) = 1
+          THEN (
+            SELECT r
+            FROM unnest(ARRAY['TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT']::text[]) AS r
+            WHERE NOT (r = ANY(tri.known_roles))
+            LIMIT 1
+          )
+          ELSE NULL
+        END AS missing_role
+      FROM team_role_inference tri
+    ),
+    imp_resolved AS (
+      SELECT
+        imp.*,
+        CASE
+          WHEN UPPER(imp.role) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT') THEN UPPER(imp.role)
+          WHEN mrt.missing_role IS NOT NULL THEN mrt.missing_role
+          ELSE UPPER(imp.role)
+        END AS role_resolved
+      FROM ingest_match_players imp
+      LEFT JOIN missing_role_by_team mrt
+        ON mrt.match_id = imp.match_id
+       AND mrt.team_id = imp.team_id
+    ),
+    base AS (
+      SELECT
+        ac.id AS champion_stat_id,
+        imp.stats
+      FROM imp_resolved imp
+      INNER JOIN ingest_matchs im ON im.id = imp.match_id
+      INNER JOIN agg_champion_core_stats ac
+        ON ac.champion_id = imp.champion_id
+       AND ac.role = imp.role_resolved
+       AND ac.rank_tier = COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED')
+       AND ac.game_version = im.game_version
+       AND ac.region = im.region
+      WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+        AND imp.role_resolved IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+    ),
+    metric_rows AS (
+      SELECT
+        b.champion_stat_id,
+        e.key AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats, '{}'::jsonb)) e
+      WHERE e.key NOT IN (
+        'puuid', 'riotIdGameName', 'riotIdTagline', 'summonerId', 'summonerName',
+        'participantId', 'championId', 'championName', 'teamId', 'teamPosition',
+        'individualPosition', 'lane', 'role', 'perks', '_runes', '_shards', '_summonerSpells',
+        'challenges', 'missions'
+      )
+        AND jsonb_typeof(e.value) IN ('number', 'boolean')
+      UNION ALL
+      SELECT
+        b.champion_stat_id,
+        ('challenges.' || e.key) AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats -> 'challenges', '{}'::jsonb)) e
+      WHERE jsonb_typeof(e.value) IN ('number', 'boolean')
+      UNION ALL
+      SELECT
+        b.champion_stat_id,
+        ('missions.' || e.key) AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats -> 'missions', '{}'::jsonb)) e
+      WHERE jsonb_typeof(e.value) IN ('number', 'boolean')
+    ),
+    num_rows AS (
+      SELECT
+        champion_stat_id,
+        metric_key,
+        SUM((metric_value::text)::numeric)::double precision AS sum_val,
+        COUNT(*)::int AS cnt_val
+      FROM metric_rows
+      WHERE jsonb_typeof(metric_value) = 'number'
+      GROUP BY champion_stat_id, metric_key
+    ),
+    bool_rows AS (
+      SELECT
+        champion_stat_id,
+        metric_key,
+        SUM(CASE WHEN metric_value = 'true'::jsonb THEN 1 ELSE 0 END)::int AS true_cnt,
+        COUNT(*)::int AS cnt_val
+      FROM metric_rows
+      WHERE jsonb_typeof(metric_value) = 'boolean'
+      GROUP BY champion_stat_id, metric_key
+    ),
+    num_json AS (
+      SELECT
+        champion_stat_id,
+        jsonb_object_agg(metric_key, sum_val) AS numeric_sums,
+        jsonb_object_agg(metric_key, cnt_val) AS numeric_counts
+      FROM num_rows
+      GROUP BY champion_stat_id
+    ),
+    bool_json AS (
+      SELECT
+        champion_stat_id,
+        jsonb_object_agg(metric_key, true_cnt) AS bool_true_counts,
+        jsonb_object_agg(metric_key, cnt_val) AS bool_counts
+      FROM bool_rows
+      GROUP BY champion_stat_id
+    ),
+    merged AS (
+      SELECT
+        COALESCE(n.champion_stat_id, b.champion_stat_id) AS champion_stat_id,
+        COALESCE(n.numeric_sums, '{}'::jsonb) AS numeric_sums,
+        COALESCE(n.numeric_counts, '{}'::jsonb) AS numeric_counts,
+        COALESCE(b.bool_true_counts, '{}'::jsonb) AS bool_true_counts,
+        COALESCE(b.bool_counts, '{}'::jsonb) AS bool_counts
+      FROM num_json n
+      FULL OUTER JOIN bool_json b ON b.champion_stat_id = n.champion_stat_id
+    )
+    INSERT INTO agg_champion_participant_stats (
+      champion_stat_id,
+      numeric_sums,
+      numeric_counts,
+      bool_true_counts,
+      bool_counts,
+      updated_at
+    )
+    SELECT
+      champion_stat_id,
+      numeric_sums,
+      numeric_counts,
+      bool_true_counts,
+      bool_counts,
+      NOW()
+    FROM merged
+    ON CONFLICT (champion_stat_id) DO UPDATE
+    SET
+      numeric_sums = EXCLUDED.numeric_sums,
+      numeric_counts = EXCLUDED.numeric_counts,
+      bool_true_counts = EXCLUDED.bool_true_counts,
+      bool_counts = EXCLUDED.bool_counts,
       updated_at = NOW()
   `)
 
@@ -2012,6 +2284,8 @@ async function runBackfillOnce(): Promise<void> {
     UNION ALL SELECT 'agg_champion_runes_solo_stats', COUNT(*)::bigint FROM agg_champion_runes_solo_stats
     UNION ALL SELECT 'agg_champion_shard_solo_stats', COUNT(*)::bigint FROM agg_champion_shard_solo_stats
     UNION ALL SELECT 'agg_champion_summoner_spells', COUNT(*)::bigint FROM agg_champion_summoner_spells
+    UNION ALL SELECT 'agg_champion_damage_stats', COUNT(*)::bigint FROM agg_champion_damage_stats
+    UNION ALL SELECT 'agg_champion_participant_stats', COUNT(*)::bigint FROM agg_champion_participant_stats
     UNION ALL SELECT 'agg_champion_bucket', COUNT(*)::bigint FROM agg_champion_bucket
     UNION ALL SELECT 'agg_champion_vs_stats', COUNT(*)::bigint FROM agg_champion_vs_stats
     UNION ALL SELECT 'agg_match_outcome_stats', COUNT(*)::bigint FROM agg_match_outcome_stats
