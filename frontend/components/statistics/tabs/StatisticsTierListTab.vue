@@ -58,9 +58,9 @@ withDefaults(
       <!-- Vue tableau (grille type LoLalytics, couleurs Lelanation) -->
       <div
         v-show="p.tierListViewModel === 'table' && p.totalTierListCount > 0"
-        class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
+        class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
       >
-        <div class="tier-list-lolalytics w-full min-w-0 text-[13px]">
+        <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[980px]">
           <div
             class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
           >
@@ -513,33 +513,21 @@ withDefaults(
       <!-- Vue graphique : barres divergentes (PBI), style analytics sombre -->
       <div
         v-show="p.tierListViewModel === 'chart' && p.totalTierListCount > 0"
-        class="tier-list-diverging-wrap statistics-overview-surface overflow-x-auto rounded-xl border border-primary/30 p-4 shadow-inner"
+        class="tier-list-mobile-rotate tier-list-diverging-wrap statistics-overview-surface overflow-x-auto rounded-xl border border-primary/30 py-4 pl-2 pr-4 shadow-inner"
       >
-        <div class="flex min-w-[640px] flex-col gap-3 lg:min-w-0">
+        <div class="flex min-w-[640px] flex-col gap-3 max-lg:min-w-[920px] lg:min-w-0">
           <div class="min-w-0 flex-1">
-            <div class="mb-2 flex justify-end">
-              <button
-                type="button"
-                class="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-bold leading-none text-amber-200/90 transition-colors hover:text-amber-100"
-                :title="p.t('statisticsPage.tierListChartPbiAxisTooltip')"
-                :aria-label="p.t('statisticsPage.tierListChartPbiAxisInfoTitle')"
-              >
-                i
-              </button>
-            </div>
-            <div class="flex gap-1">
+            <div class="flex gap-0.5">
               <div
-                class="relative w-9 shrink-0 overflow-hidden text-[10px] leading-none text-amber-100/80 md:w-10"
+                class="relative z-[4] w-7 shrink-0 overflow-visible text-[10px] leading-none text-amber-100/80 md:w-8"
               >
-                <div class="tier-list-chart-plot relative overflow-hidden">
-                  <div class="absolute inset-0">
+                <div class="tier-list-chart-plot relative overflow-visible">
+                  <div class="absolute inset-0 overflow-visible">
                     <span
                       v-for="tick in p.tierListChartYScale.ticks"
                       :key="'ytick-' + tick"
-                      class="absolute right-0.5 tabular-nums leading-none"
-                      :style="{
-                        bottom: 'calc(' + p.tierListChartYTickBottomPct(tick) + '% - 0.35em)',
-                      }"
+                      class="absolute right-0.5 whitespace-nowrap tabular-nums leading-none"
+                      :style="p.tierListChartYTickLabelStyle(tick)"
                     >
                       {{
                         Math.abs(tick - Math.round(tick)) < 1e-6
@@ -593,36 +581,34 @@ withDefaults(
                       <div
                         v-for="c in p.tierListChartVisibleRows"
                         :key="c.championId"
-                        class="group relative min-w-0 flex-1"
-                        :title="
-                          (p.championName(c.championId) || c.championId) +
-                          ' — Score ' +
-                          p.formatMatchupScore(c.pbi, 2)
-                        "
-                        @mouseenter="p.onTierListChartBarEnter(c, $event)"
-                        @mousemove="p.onTierListChartBarMove"
-                        @mouseleave="p.onTierListChartBarLeave"
+                        class="group pointer-events-none relative min-w-0 flex-1"
                       >
-                        <div class="relative h-full w-full">
-                          <div class="flex h-full w-full justify-center">
-                            <div class="relative h-full w-[85%] max-w-[12px]">
+                        <div class="pointer-events-none relative h-full w-full">
+                          <div class="pointer-events-none flex h-full w-full justify-center">
+                            <div class="pointer-events-none relative h-full w-[85%] max-w-[12px]">
                               <div
                                 v-if="p.scaleMatchupScore(c.pbi) >= 0"
-                                class="absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
+                                class="pointer-events-auto absolute left-0 right-0 rounded-t-[2px] transition-all group-hover:brightness-110"
                                 :style="{
                                   bottom: p.tierListChartZeroBottomPct + '%',
                                   height: p.tierListChartBarHeightPct(c.pbi) + '%',
                                   backgroundColor: p.tierListChartBarColor(c.tier),
                                 }"
+                                @mouseenter="p.onTierListChartBarEnter(c, $event)"
+                                @mousemove="p.onTierListChartBarMove"
+                                @mouseleave="p.onTierListChartBarLeave"
                               />
                               <div
                                 v-else
-                                class="absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
+                                class="pointer-events-auto absolute left-0 right-0 rounded-b-[2px] transition-all group-hover:brightness-110"
                                 :style="{
                                   bottom: p.tierListChartScoreBottomPct(c.pbi) + '%',
                                   height: p.tierListChartBarHeightPct(c.pbi) + '%',
                                   backgroundColor: p.tierListChartBarColor(c.tier),
                                 }"
+                                @mouseenter="p.onTierListChartBarEnter(c, $event)"
+                                @mousemove="p.onTierListChartBarMove"
+                                @mouseleave="p.onTierListChartBarLeave"
                               />
                             </div>
                           </div>
@@ -733,5 +719,23 @@ withDefaults(
 .tier-list-chart-plot {
   height: min(75dvh, calc(100dvh - 14rem));
   min-height: 280px;
+}
+
+@media (max-width: 1023px) {
+  .tier-list-chart-plot {
+    height: min(50dvh, 320px);
+    min-height: 220px;
+  }
+
+  /* Force landscape rendering on phones held in portrait. */
+  @media (orientation: portrait) {
+    .tier-list-mobile-rotate {
+      width: 100dvh;
+      min-width: 100dvh;
+      height: 100dvw;
+      transform: translateY(-100%) rotate(90deg);
+      transform-origin: top left;
+    }
+  }
 }
 </style>

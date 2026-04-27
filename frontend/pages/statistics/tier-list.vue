@@ -2,17 +2,19 @@
   <div class="statistics flex min-h-screen flex-col text-text">
     <button
       type="button"
-      class="fixed left-3 top-16 z-[46] flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
-      :aria-label="t('statisticsPage.openFilters')"
-      @click="openFilters"
+      class="filters-collapse-floating fixed left-3 top-2 z-[60] flex lg:hidden"
+      :aria-label="filtersOpen ? t('statisticsPage.closeFilters') : t('statisticsPage.openFilters')"
+      @click="toggleFiltersOpen"
     >
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M4 6h16M4 12h16M4 18h16"
-        />
+      <svg
+        class="h-2 w-2 transition-transform duration-200"
+        :class="filtersOpen ? 'rotate-180' : ''"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg>
     </button>
 
@@ -659,9 +661,6 @@ const filtersOpen = computed({
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
 
-function openFilters() {
-  filtersOpen.value = true
-}
 function closeFilters() {
   filtersOpen.value = false
 }

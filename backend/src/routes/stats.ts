@@ -121,6 +121,7 @@ const OVERVIEW_TIMEOUT_MS = 50_000
  * - otp=solo (que les OTP / niche) : uniquement pickrate < seuil (champions niche).
  */
 const STATS_OTP_PICKRATE_THRESHOLD = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
+const TIER_LIST_OTP_MIN_GAMES = 100
 const STATS_TREND_WR_DELTA_PCT = Number(process.env.STATS_TREND_WR_DELTA_PCT ?? '5')
 const STATS_TREND_PICK_DELTA_PCT = Number(process.env.STATS_TREND_PICK_DELTA_PCT ?? '10')
 const STATS_TREND_GAMES_DELTA_PCT = Number(process.env.STATS_TREND_GAMES_DELTA_PCT ?? '15')
@@ -167,11 +168,18 @@ function keepByOtpPickrateRatio(pickrateRatio: number, mode: OtpMode): boolean {
   return keepByOtpPickratePercent(pickrateRatio * 100, mode)
 }
 
-/** Tier list : pickrate API = ratio 0–1. */
-function filterTierListRowsByOtp<T extends { pickrate: number }>(rows: T[], mode: OtpMode): T[] {
-  if (mode === 'oui' || rows.length === 0) return rows
-  const filtered = rows.filter((row) => keepByOtpPickrateRatio(row.pickrate, mode))
-  return filtered.length > 0 ? filtered : rows
+/** Tier list : pickrate API = ratio 0–1. OTP mode enforces a minimum games floor. */
+function filterTierListRowsByOtp<T extends { pickrate: number; games: number }>(
+  rows: T[],
+  mode: OtpMode
+): T[] {
+  if (rows.length === 0) return rows
+  const otpGamesFiltered =
+    mode === 'non' ? rows : rows.filter((row) => Number(row.games) >= TIER_LIST_OTP_MIN_GAMES)
+  if (mode === 'oui') return otpGamesFiltered
+  const filtered = otpGamesFiltered.filter((row) => keepByOtpPickrateRatio(row.pickrate, mode))
+  // Preserve previous behavior for pickrate-only filtering: if no row matches, keep OTP games floor.
+  return filtered.length > 0 ? filtered : otpGamesFiltered
 }
 
 /** Champions / overview : pickrate = % 0–100 (agrégateur). Si tout serait filtré, on renvoie la liste d’origine. */

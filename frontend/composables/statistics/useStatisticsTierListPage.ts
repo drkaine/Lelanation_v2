@@ -418,13 +418,11 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return tierListChartVisibleRows.value.find(r => r.championId === tip.championId) ?? null
   })
 
-  /** Score matchup API (petit nombre) → échelle graphique (×100), plage théorique ±500. */
+  /** Score matchup API (petit nombre) → échelle graphique (×100). */
   function scaleMatchupScore(value: number): number {
     const n = Number(value) * 100
     return Number.isFinite(n) ? n : 0
   }
-
-  const TIER_LIST_MATCHUP_CHART_ABS_MAX = 500
 
   function buildGridScoresEvery100(yMin: number, yMax: number): number[] {
     const lo = Math.floor(yMin / 100) * 100
@@ -436,15 +434,15 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return [...new Set(out)].sort((a, b) => b - a)
   }
 
-  /** Axe Y sur les min/max des scores visibles (×100), avec 0 dans la plage ; borné à ±500 ; grille tous les 100. */
+  /** Axe Y sur les min/max des scores visibles (×100), avec 0 dans la plage ; grille tous les 100. */
   const tierListChartYScale = computed(() => {
     const rows = tierListChartVisibleRows.value
     const scores =
       rows.length > 0 ? rows.map(r => scaleMatchupScore(r.pbi)).filter(Number.isFinite) : []
 
     if (scores.length === 0) {
-      const yMin = -TIER_LIST_MATCHUP_CHART_ABS_MAX
-      const yMax = TIER_LIST_MATCHUP_CHART_ABS_MAX
+      const yMin = -500
+      const yMax = 500
       const gridScores = buildGridScoresEvery100(yMin, yMax)
       return {
         range: yMax - yMin,
@@ -457,19 +455,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
 
     const rawMin = Math.min(...scores)
     const rawMax = Math.max(...scores)
-    const hitsPosCap = scores.some(s => s >= TIER_LIST_MATCHUP_CHART_ABS_MAX)
-    const hitsNegCap = scores.some(s => s <= -TIER_LIST_MATCHUP_CHART_ABS_MAX)
-    const dataSpan = Math.max(rawMax - rawMin, 1e-6)
-    const pad = Math.max(dataSpan * 0.08, 6)
-
-    let yMin = Math.min(0, rawMin - pad)
-    let yMax = Math.max(0, rawMax + pad)
-
-    if (hitsNegCap) yMin = -TIER_LIST_MATCHUP_CHART_ABS_MAX
-    if (hitsPosCap) yMax = TIER_LIST_MATCHUP_CHART_ABS_MAX
-
-    yMin = Math.max(yMin, -TIER_LIST_MATCHUP_CHART_ABS_MAX)
-    yMax = Math.min(yMax, TIER_LIST_MATCHUP_CHART_ABS_MAX)
+    // Keep axis tight to real scores (plus 0), then snap to hundreds.
+    // Example: min=-250 max=280 -> yMin=-300, yMax=300.
+    let yMin = Math.min(0, rawMin)
+    let yMax = Math.max(0, rawMax)
 
     if (yMax <= yMin) {
       yMin -= 1
@@ -521,6 +510,20 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     const d = s.yMax - s.yMin
     if (!(d > 0) || !Number.isFinite(d)) return 50
     return ((tick - s.yMin) / d) * 100
+  }
+
+  /** Position libellé axe Y : évite le rognage en haut / bas du bloc (overflow). */
+  function tierListChartYTickLabelStyle(tick: number): Record<string, string> {
+    const s = tierListChartYScale.value
+    const pct = tierListChartYTickBottomPct(tick)
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-4
+    if (near(tick, s.yMax)) {
+      return { bottom: '100%', transform: 'translateY(100%)' }
+    }
+    if (near(tick, s.yMin)) {
+      return { bottom: '0%', transform: 'translateY(-100%)' }
+    }
+    return { bottom: `calc(${pct}% - 0.35em)`, transform: 'none' }
   }
 
   /** Hauteur en % du tracé : distance entre la ligne 0 et le score (pas |score| / plage totale). */
@@ -836,6 +839,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     tierListChartYScale,
     tierListChartYBandSegments,
     tierListChartYTickBottomPct,
+    tierListChartYTickLabelStyle,
     tierListChartBarHeightPct,
     tierListChartScoreBottomPct,
     tierListChartVisibleRows,
