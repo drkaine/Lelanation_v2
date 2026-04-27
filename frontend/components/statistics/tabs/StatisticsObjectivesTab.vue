@@ -9,11 +9,6 @@ function syncToggleObjective(key: string) {
   p.toggleSidesObjective(key)
 }
 
-function sidesDrakeTypeByKey(key: string): { byBlue: number; byRed: number } {
-  const row = p.sidesDrakeTypeRows.find((r: { key: string }) => r.key === key)
-  return row ? { byBlue: row.byBlue, byRed: row.byRed } : { byBlue: 0, byRed: 0 }
-}
-
 function sidesDrakeSoulByKey(key: string): { byBlue: number; byRed: number } {
   const row = p.sidesDrakeSoulRows.find((r: { key: string }) => r.key === key)
   return row ? { byBlue: row.byBlue, byRed: row.byRed } : { byBlue: 0, byRed: 0 }
@@ -108,9 +103,70 @@ function toggleDrakeType(key: string) {
   else openDrakeTypeKeys.value.add(key)
 }
 
-function percentWithCount(value: number, total: number): string {
-  if (!total) return '—'
-  return `${p.teamPercent(value, total)} (${Number(value).toLocaleString()})`
+function drakeTypePctParts(
+  key: string,
+  side: 'win' | 'loss'
+): { current: string; delta: string; deltaClass: string } {
+  const curData = p.overviewTeamsData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curRow = p.drakeTypeRows.find((r: { key: string }) => r.key === key)
+  const curCount = side === 'win' ? Number(curRow?.byWin ?? 0) : Number(curRow?.byLoss ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewTeamsBaselineData
+  const baseDrakes = baseData?.drakes?.types?.[key]
+  const baseCount =
+    baseDrakes == null
+      ? null
+      : side === 'win'
+        ? Number(baseDrakes.byWin ?? 0)
+        : Number(baseDrakes.byLoss ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function drakeTypePctPartsSides(
+  key: string,
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
+  const curData = p.overviewSidesData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curRow = p.sidesDrakeTypeRows.find((r: { key: string }) => r.key === key)
+  const curCount = side === 'blue' ? Number(curRow?.byBlue ?? 0) : Number(curRow?.byRed ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewSidesBaselineData
+  const baseDrakes = baseData?.drakesBySide?.types?.[key]
+  const baseCount =
+    baseDrakes == null
+      ? null
+      : side === 'blue'
+        ? Number(baseDrakes.byBlue ?? 0)
+        : Number(baseDrakes.byRed ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
 }
 
 const DONUT_RADIUS = 48
@@ -476,35 +532,37 @@ function donutTooltip(row: DistRow, total: number): string {
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ percentWithCount(row.byWin, p.overviewTeamsData.matchCount) }}
+                    {{ drakeTypePctParts(row.key, 'win').current }}
+                    <span :class="drakeTypePctParts(row.key, 'win').deltaClass">
+                      {{ drakeTypePctParts(row.key, 'win').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ percentWithCount(row.byLoss, p.overviewTeamsData.matchCount) }}
+                    {{ drakeTypePctParts(row.key, 'loss').current }}
+                    <span :class="drakeTypePctParts(row.key, 'loss').deltaClass">
+                      {{ drakeTypePctParts(row.key, 'loss').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      percentWithCount(
-                        sidesDrakeTypeByKey(row.key).byBlue,
-                        p.overviewSidesData.matchCount
-                      )
-                    }}
+                    {{ drakeTypePctPartsSides(row.key, 'blue').current }}
+                    <span :class="drakeTypePctPartsSides(row.key, 'blue').deltaClass">
+                      {{ drakeTypePctPartsSides(row.key, 'blue').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="py-1.5 pl-1 text-center">
                   <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      percentWithCount(
-                        sidesDrakeTypeByKey(row.key).byRed,
-                        p.overviewSidesData.matchCount
-                      )
-                    }}
+                    {{ drakeTypePctPartsSides(row.key, 'red').current }}
+                    <span :class="drakeTypePctPartsSides(row.key, 'red').deltaClass">
+                      {{ drakeTypePctPartsSides(row.key, 'red').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
@@ -685,7 +743,9 @@ function donutTooltip(row: DistRow, total: number): string {
       v-if="drakeDistRows.length > 0 || soulDistRows.length > 0"
       class="grid grid-cols-1 gap-4 lg:grid-cols-2"
     >
-      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
+      <div
+        class="fast-stat-card mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+      >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
         </h4>
@@ -719,11 +779,29 @@ function donutTooltip(row: DistRow, total: number): string {
               >100%</span
             >
           </div>
+          <ul class="grid w-full max-w-[340px] grid-cols-1 gap-1 text-xs text-text/85">
+            <li
+              v-for="row in drakeDistRows"
+              :key="'drake-dist-legend-' + row.key"
+              class="flex items-center justify-between gap-2"
+            >
+              <span class="inline-flex min-w-0 items-center gap-2">
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  :style="{ backgroundColor: row.color }"
+                />
+                <span class="truncate">{{ row.label }}</span>
+              </span>
+              <span class="shrink-0 font-semibold">{{ distPct(row.value, drakeDistTotal) }}</span>
+            </li>
+          </ul>
         </div>
         <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
       </div>
 
-      <div class="fast-stat-card w-full rounded-lg border border-primary/30 bg-surface/30 p-3">
+      <div
+        class="fast-stat-card mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"
+      >
         <h4 class="mb-2 text-sm font-semibold text-text/90">
           {{ p.t('statisticsPage.objectivesSoulDistributionCardTitle') }}
         </h4>
@@ -757,6 +835,22 @@ function donutTooltip(row: DistRow, total: number): string {
               >100%</span
             >
           </div>
+          <ul class="grid w-full max-w-[340px] grid-cols-1 gap-1 text-xs text-text/85">
+            <li
+              v-for="row in soulDistRows"
+              :key="'soul-dist-legend-' + row.key"
+              class="flex items-center justify-between gap-2"
+            >
+              <span class="inline-flex min-w-0 items-center gap-2">
+                <span
+                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                  :style="{ backgroundColor: row.color }"
+                />
+                <span class="truncate">{{ row.label }}</span>
+              </span>
+              <span class="shrink-0 font-semibold">{{ distPct(row.value, soulDistTotal) }}</span>
+            </li>
+          </ul>
         </div>
         <div v-else class="text-sm text-text/60">{{ p.t('statisticsPage.noData') }}</div>
       </div>

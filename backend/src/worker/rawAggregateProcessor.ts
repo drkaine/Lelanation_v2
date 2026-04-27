@@ -434,6 +434,29 @@ function extractTeamDrakeStatsByTeam(payload: MatchIngestQueuePayloadV1): Map<nu
   return out
 }
 
+function extractFirstInhibitorTeamId(payload: MatchIngestQueuePayloadV1): number | null {
+  const timeline = payload.timelineDto as { info?: { frames?: Array<{ events?: TimelineEvent[] }> } } | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return null
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      const evType = String(ev?.type ?? '').trim().toUpperCase()
+      if (evType !== 'BUILDING_KILL') continue
+      const buildingType = String((ev as { buildingType?: unknown })?.buildingType ?? '')
+        .trim()
+        .toUpperCase()
+      if (buildingType !== 'INHIBITOR_BUILDING') continue
+      const killerTeamId = toSafeInt((ev as { killerTeamId?: unknown })?.killerTeamId)
+      if (killerTeamId === 100 || killerTeamId === 200) return killerTeamId
+      const destroyedTeamId = toSafeInt((ev as { teamId?: unknown })?.teamId)
+      if (destroyedTeamId === 100) return 200
+      if (destroyedTeamId === 200) return 100
+      return null
+    }
+  }
+  return null
+}
+
 export async function processRawAggregateAndBurn(
   rawId: bigint,
   payload: MatchIngestQueuePayloadV1,
@@ -466,6 +489,7 @@ export async function processRawAggregateAndBurn(
   const dbRankByPuuid = await loadIngestRankTiersByPuuid(trackedMatchId)
   const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
   const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
+  const firstInhibitorTeamId = extractFirstInhibitorTeamId(payload)
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -1136,6 +1160,8 @@ export async function processRawAggregateAndBurn(
       const objectives = team.objectives ?? {}
       const readKills = (k: string) => toSafeInt(objectives[k]?.kills)
       const readFirst = (k: string) => (objectives[k]?.first === true ? 1 : 0)
+      const inhibitorFirstResolved =
+        readFirst('inhibitor') > 0 || firstInhibitorTeamId === teamNum ? 1 : 0
       const win = team.win === true ? 1 : 0
       const drakeStats = drakeStatsByTeam.get(teamNum) ?? initTeamDrakeStats()
       const elderKillsResolved = Math.max(readKills('elderDragon'), drakeStats.elderKills)
@@ -1157,7 +1183,7 @@ export async function processRawAggregateAndBurn(
           ${idCandidate}, ${teamNum}, ${matchRankTier}, ${gameVersion}, ${win}, 1,
           ${readKills('baron')}, ${readFirst('baron')}, ${readKills('dragon')}, ${readFirst('dragon')},
           ${readKills('tower')}, ${readFirst('tower')}, ${readKills('horde')}, ${readFirst('horde')},
-          ${readKills('riftHerald')}, ${readFirst('riftHerald')}, ${readKills('inhibitor')}, ${readFirst('inhibitor')},
+          ${readKills('riftHerald')}, ${readFirst('riftHerald')}, ${readKills('inhibitor')}, ${inhibitorFirstResolved},
           ${readFirst('champion')}, ${elderKillsResolved},
           ${drakeStats.earthDrake}, ${drakeStats.waterDrake}, ${drakeStats.windDrake}, ${drakeStats.fireDrake},
           ${drakeStats.hextecDrake}, ${drakeStats.chemDrake},

@@ -1684,6 +1684,45 @@ async function runBackfillOnce(): Promise<void> {
       ) AS d(elem) ON TRUE
       GROUP BY it.id
     ),
+    first_inhibitor_by_match AS (
+      SELECT z.match_id, z.first_inhibitor_team
+      FROM (
+        SELECT
+          im.id AS match_id,
+          CASE
+            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
+            THEN (ev.evt->>'killerTeamId')::int
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 100
+            THEN 200
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 200
+            THEN 100
+            ELSE NULL
+          END AS first_inhibitor_team,
+          ROW_NUMBER() OVER (
+            PARTITION BY im.id
+            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
+          ) AS rn
+        FROM ingest_matchs im
+        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
+        CROSS JOIN LATERAL (
+          SELECT
+            e.evt,
+            f.frame_ord,
+            e.event_ord
+          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
+            WITH ORDINALITY AS f(frame, frame_ord)
+          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
+            WITH ORDINALITY AS e(evt, event_ord)
+          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
+            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
+        ) ev
+      ) z
+      WHERE z.rn = 1
+        AND z.first_inhibitor_team IN (100, 200)
+    ),
     team_source AS (
       SELECT
         it.team,
@@ -1704,7 +1743,12 @@ async function runBackfillOnce(): Promise<void> {
         SUM(it.rift_herald_kills)::int AS sum_rift_herald_kills,
         SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END)::int AS count_rift_herald_first,
         SUM(it.inhibitor_kills)::int AS sum_inhibitor_kills,
-        SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END)::int AS count_inhibitor_first,
+        SUM(
+          CASE
+            WHEN it.inhibitor_first OR fibm.first_inhibitor_team = it.team THEN 1
+            ELSE 0
+          END
+        )::int AS count_inhibitor_first,
         SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END)::int AS count_first_blood,
         SUM(GREATEST(COALESCE(it.elder_kills, 0), COALESCE(ds.elder_from_timeline, 0)))::int AS sum_elder_kills,
         SUM(COALESCE(ds.count_earth_drake, 0))::int AS count_earth_drake,
@@ -1722,6 +1766,7 @@ async function runBackfillOnce(): Promise<void> {
       FROM ingest_teams it
       INNER JOIN ingest_matchs im ON im.id = it.match_id
       LEFT JOIN drake_stats ds ON ds.team_id = it.id
+      LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
       WHERE COALESCE(NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
       GROUP BY it.team, im.rank_tier, im.game_version
     )
@@ -1909,7 +1954,7 @@ async function runBackfillOnce(): Promise<void> {
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'ELDER_DRAGON' OR LOWER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) = 'elder' THEN 1 ELSE 0 END)::int AS elder_from_timeline,
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%MOUNTAIN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%EARTH%' THEN 1 ELSE 0 END)::int AS earth_drake_count,
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%OCEAN%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WATER%' THEN 1 ELSE 0 END)::int AS water_drake_count,
-        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CLOUD%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WIND%' THEN 1 ELSE 0 END)::int AS wind_drake_count,
+        SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CLOUD%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%WIND%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%AIR%' THEN 1 ELSE 0 END)::int AS wind_drake_count,
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%INFERNAL%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%FIRE%' THEN 1 ELSE 0 END)::int AS fire_drake_count,
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%HEXTEC%' THEN 1 ELSE 0 END)::int AS hextec_drake_count,
         SUM(CASE WHEN UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEMTECH%' OR UPPER(COALESCE(d.elem->>'drakeType', d.elem->>'drake_type', '')) LIKE '%CHEM%' THEN 1 ELSE 0 END)::int AS chem_drake_count,
@@ -2260,6 +2305,45 @@ async function runBackfillOnce(): Promise<void> {
       ) x
       GROUP BY game_version, rank_tier
     ),
+    first_inhibitor_by_match AS (
+      SELECT z.match_id, z.first_inhibitor_team
+      FROM (
+        SELECT
+          im.id AS match_id,
+          CASE
+            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
+            THEN (ev.evt->>'killerTeamId')::int
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 100
+            THEN 200
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 200
+            THEN 100
+            ELSE NULL
+          END AS first_inhibitor_team,
+          ROW_NUMBER() OVER (
+            PARTITION BY im.id
+            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
+          ) AS rn
+        FROM ingest_matchs im
+        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
+        CROSS JOIN LATERAL (
+          SELECT
+            e.evt,
+            f.frame_ord,
+            e.event_ord
+          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
+            WITH ORDINALITY AS f(frame, frame_ord)
+          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
+            WITH ORDINALITY AS e(evt, event_ord)
+          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
+            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
+        ) ev
+      ) z
+      WHERE z.rn = 1
+        AND z.first_inhibitor_team IN (100, 200)
+    ),
     first_counts AS (
       SELECT
         im.game_version,
@@ -2272,14 +2356,15 @@ async function runBackfillOnce(): Promise<void> {
         SUM(CASE WHEN NOT it.win AND it.horde_first THEN 1 ELSE 0 END)::int AS horde_first_loss,
         SUM(CASE WHEN it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_win,
         SUM(CASE WHEN NOT it.win AND it.rift_herald_first THEN 1 ELSE 0 END)::int AS herald_first_loss,
-        SUM(CASE WHEN it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_win,
-        SUM(CASE WHEN NOT it.win AND it.inhibitor_first THEN 1 ELSE 0 END)::int AS inhibitor_first_loss,
+        SUM(CASE WHEN it.win AND (it.inhibitor_first OR fibm.first_inhibitor_team = it.team) THEN 1 ELSE 0 END)::int AS inhibitor_first_win,
+        SUM(CASE WHEN NOT it.win AND (it.inhibitor_first OR fibm.first_inhibitor_team = it.team) THEN 1 ELSE 0 END)::int AS inhibitor_first_loss,
         SUM(CASE WHEN it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_win,
         SUM(CASE WHEN NOT it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_loss,
         SUM(CASE WHEN it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_win,
         SUM(CASE WHEN NOT it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_loss
       FROM ingest_teams it
       INNER JOIN ingest_matchs im ON im.id = it.match_id
+      LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
       WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
       GROUP BY im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
     ),
@@ -2313,7 +2398,8 @@ async function runBackfillOnce(): Promise<void> {
             WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%OCEAN%'
               OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%WATER%' THEN 'water'
             WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%CLOUD%'
-              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%WIND%' THEN 'wind'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%WIND%'
+              OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%AIR%' THEN 'wind'
             WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%INFERNAL%'
               OR UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%FIRE%' THEN 'fire'
             WHEN UPPER(COALESCE(d.elem->>'drakeType', '')) LIKE '%HEXTECH%'

@@ -477,6 +477,45 @@ async function loadTeamCoreFallbackFromIngest(
       sum_elder_kills: bigint
     }>
   >(`
+    WITH first_inhibitor_by_match AS (
+      SELECT z.match_id, z.first_inhibitor_team
+      FROM (
+        SELECT
+          im.id AS match_id,
+          CASE
+            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
+            THEN (ev.evt->>'killerTeamId')::int
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 100
+            THEN 200
+            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
+              AND (ev.evt->>'teamId')::int = 200
+            THEN 100
+            ELSE NULL
+          END AS first_inhibitor_team,
+          ROW_NUMBER() OVER (
+            PARTITION BY im.id
+            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
+          ) AS rn
+        FROM ingest_matchs im
+        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
+        CROSS JOIN LATERAL (
+          SELECT
+            e.evt,
+            f.frame_ord,
+            e.event_ord
+          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
+            WITH ORDINALITY AS f(frame, frame_ord)
+          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
+            WITH ORDINALITY AS e(evt, event_ord)
+          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
+            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
+        ) ev
+      ) z
+      WHERE z.rn = 1
+        AND z.first_inhibitor_team IN (100, 200)
+    )
     SELECT
       it.team AS team_num,
       COALESCE(SUM(CASE WHEN it.first_blood THEN 1 ELSE 0 END), 0)::bigint AS count_first_blood,
@@ -491,10 +530,19 @@ async function loadTeamCoreFallbackFromIngest(
       COALESCE(SUM(it.rift_herald_kills), 0)::bigint AS sum_rift_herald_kills,
       COALESCE(SUM(CASE WHEN it.rift_herald_first THEN 1 ELSE 0 END), 0)::bigint AS count_rift_herald_first,
       COALESCE(SUM(it.inhibitor_kills), 0)::bigint AS sum_inhibitor_kills,
-      COALESCE(SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END), 0)::bigint AS count_inhibitor_first,
+      COALESCE(
+        SUM(
+          CASE
+            WHEN it.inhibitor_first OR fibm.first_inhibitor_team = it.team THEN 1
+            ELSE 0
+          END
+        ),
+        0
+      )::bigint AS count_inhibitor_first,
       COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
     FROM ingest_teams it
     INNER JOIN ingest_matchs im ON im.id = it.match_id
+    LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
     WHERE ${cond.join(' AND ')}
     GROUP BY it.team
   `)

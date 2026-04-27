@@ -66,7 +66,7 @@
       <aside
         :class="[
           'fixed left-0 top-14 z-[50] flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
-          'lg:static lg:sticky lg:top-4 lg:z-0 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
+          'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
           filtersOpen
             ? 'translate-x-0 lg:w-64 lg:opacity-100'
             : '-translate-x-full lg:w-0 lg:translate-x-0 lg:opacity-0',
@@ -109,7 +109,7 @@
             </svg>
           </button>
         </div>
-        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-2 lg:flex-none">
           <div>
             <label for="stats-filter-version" class="mb-1 block text-sm font-medium text-text">
               {{ t('statisticsPage.overviewFilterByVersion') }}
@@ -270,7 +270,7 @@
               </select>
             </div>
           </div>
-          <div v-show="activeTab !== 'bans'">
+          <div>
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRole') }}
             </div>
@@ -316,6 +316,76 @@
                   width="12"
                   height="12"
                 />
+              </button>
+            </div>
+          </div>
+          <div v-show="activeTab === 'bans'">
+            <div class="mb-1 text-sm font-medium text-text">Colonnes bans</div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showBansTeamColumns
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleBansTeamColumns()"
+              >
+                Équipe
+              </button>
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showBansRoleColumnsToggle
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleBansRoleColumns()"
+              >
+                Rôle
+              </button>
+            </div>
+          </div>
+          <div v-show="activeTab === 'championTable'">
+            <div class="mb-1 text-sm font-medium text-text">Colonnes champion</div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showChampionSideColumns
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleChampionColumnGroup('side')"
+              >
+                Côté
+              </button>
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showChampionDealtColumns
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleChampionColumnGroup('dealt')"
+              >
+                Dégâts infligés
+              </button>
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showChampionTakenColumns
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleChampionColumnGroup('taken')"
+              >
+                Dégâts subis
               </button>
             </div>
           </div>
@@ -835,6 +905,14 @@ function championGlobalPickrateClass(pct: number): string {
   return 'text-rose-400/90'
 }
 
+function tierListWinrateClass(pct: number): string {
+  if (!Number.isFinite(pct)) return 'text-text/80'
+  if (pct >= 52.5) return 'font-medium text-green-400'
+  if (pct >= 51) return 'text-green-500/95'
+  if (pct >= 50) return 'text-sky-200/85'
+  return 'text-red-400/90'
+}
+
 function formatTierListPatchDeltaPp(pp: number): string {
   const sign = pp > 0 ? '+' : ''
   return `${sign}${pp.toFixed(2)}`
@@ -962,12 +1040,8 @@ function syncStatisticsStateToQuery(): void {
   if (statsVersionFilter.value) nextQuery.version = statsVersionFilter.value
   else delete nextQuery.version
 
-  if (activeTab.value !== 'bans') {
-    if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
-    else delete nextQuery.role
-  } else {
-    delete nextQuery.role
-  }
+  if (statsRoleFilter.value) nextQuery.role = statsRoleFilter.value
+  else delete nextQuery.role
 
   if (activeTab.value !== 'bans') {
     if (statsOtpFilter.value !== 'non') nextQuery.otp = statsOtpFilter.value
@@ -1163,6 +1237,47 @@ function selectAllRoles() {
   statsRoleFilter.value = ''
   onStatsFilterChange()
 }
+const showBansTeamColumns = ref(true)
+const showBansRoleColumnsToggle = ref(true)
+const showChampionSideColumns = ref(true)
+const showChampionDealtColumns = ref(true)
+const showChampionTakenColumns = ref(true)
+const roleToBansColumnKey = Object.freeze({
+  TOP: 'top',
+  JUNGLE: 'jungle',
+  MIDDLE: 'middle',
+  BOTTOM: 'bottom',
+  SUPPORT: 'support',
+} as const)
+
+function toggleBansTeamColumns() {
+  if (showBansTeamColumns.value && !showBansRoleColumnsToggle.value) return
+  showBansTeamColumns.value = !showBansTeamColumns.value
+}
+
+function toggleBansRoleColumns() {
+  if (!showBansTeamColumns.value && showBansRoleColumnsToggle.value) return
+  showBansRoleColumnsToggle.value = !showBansRoleColumnsToggle.value
+}
+
+function toggleChampionColumnGroup(group: 'side' | 'dealt' | 'taken') {
+  const activeCount =
+    Number(showChampionSideColumns.value) +
+    Number(showChampionDealtColumns.value) +
+    Number(showChampionTakenColumns.value)
+  if (group === 'side') {
+    if (showChampionSideColumns.value && activeCount <= 1) return
+    showChampionSideColumns.value = !showChampionSideColumns.value
+    return
+  }
+  if (group === 'dealt') {
+    if (showChampionDealtColumns.value && activeCount <= 1) return
+    showChampionDealtColumns.value = !showChampionDealtColumns.value
+    return
+  }
+  if (showChampionTakenColumns.value && activeCount <= 1) return
+  showChampionTakenColumns.value = !showChampionTakenColumns.value
+}
 function toggleDivisionFilter(tier: string) {
   const arr = statsDivisionFilter.value
   const idx = arr.indexOf(tier)
@@ -1223,6 +1338,11 @@ function resetStatsFilters() {
   balanceEliteFilter.value = 'ALL'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
+  showBansTeamColumns.value = true
+  showBansRoleColumnsToggle.value = true
+  showChampionSideColumns.value = true
+  showChampionDealtColumns.value = true
+  showChampionTakenColumns.value = true
   onStatsFilterChange()
 }
 
@@ -3464,18 +3584,29 @@ function championGlobalTableQueryForVersion(versionFull: string | null | undefin
   return s ? `?${s}` : ''
 }
 
-/** Requête bans : patch / ligue uniquement (pas OTP ni rôle : le tableau expose déjà les bans par rôle banneur). */
+/** Requête bans : patch / ligue + rôle (quand choisi). */
 function bansTableQueryForVersion(versionFull: string | null | undefined): string {
   const params = new URLSearchParams()
   const v = (versionFull ?? '').trim()
   if (v) params.set('version', v)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
   const s = params.toString()
   return s ? `?${s}` : ''
 }
 
-/** Bans : le backend filtre les lignes (champions joués dans le rôle) mais garde les stats ban par rôle banneur — toujours afficher les colonnes. */
-const showBansRoleColumns = computed(() => true)
+const activeBansRoleColumn = computed(() => {
+  const role = (statsRoleFilter.value || '')
+    .trim()
+    .toUpperCase() as keyof typeof roleToBansColumnKey
+  return roleToBansColumnKey[role] ?? null
+})
+const showBansRoleColumns = computed(() => showBansRoleColumnsToggle.value)
+function showBansRoleColumn(key: string): boolean {
+  if (!showBansRoleColumns.value) return false
+  if (!activeBansRoleColumn.value) return true
+  return key === activeBansRoleColumn.value
+}
 
 // Keep the composable return as one object — bundlers drop destructured bindings that are only used via
 // provide/inject in child SFCs, which breaks SSR (e.g. bansSortHint).
@@ -3492,6 +3623,8 @@ const bansTab = useStatisticsBansTab({
   statsPerfStart,
   statsPerfEnd,
   championName,
+  overviewTeamsData,
+  overviewTeamsBaselineData,
 })
 
 async function loadChampionGlobalTable() {
@@ -3853,6 +3986,11 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   retryOverviewDetail,
   setChampionGlobalSort,
   setObjectivesPanelTab,
+  showBansTeamColumns,
+  showChampionDealtColumns,
+  showChampionSideColumns,
+  showChampionTakenColumns,
+  showBansRoleColumn,
   showBansRoleColumns,
   sidesBlueBanRows,
   sidesBlueBestWinrateRows,
@@ -3888,6 +4026,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   teamPercent,
+  tierListWinrateClass,
   toggleFavoriteCard,
   toggleObjective,
   toggleSidesObjective,

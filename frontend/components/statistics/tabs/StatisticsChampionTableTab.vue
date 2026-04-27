@@ -43,6 +43,7 @@ const p = inject('statisticsPageCtx') as any
           </button>
           <!-- Bleu : couleur uniquement sur le texte des titres -->
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -68,6 +69,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -94,6 +96,7 @@ const p = inject('statisticsPageCtx') as any
           </div>
           <!-- Rouge -->
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -119,6 +122,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -145,6 +149,7 @@ const p = inject('statisticsPageCtx') as any
           </div>
           <!-- Dégâts infligés -->
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -167,6 +172,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -189,6 +195,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -211,6 +218,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -234,6 +242,7 @@ const p = inject('statisticsPageCtx') as any
           </div>
           <!-- Dégâts subis -->
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -256,6 +265,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -278,6 +288,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -300,6 +311,7 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
@@ -423,6 +435,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
           >
             <span
@@ -453,6 +466,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
           >
             <span
@@ -485,6 +499,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
           >
             <span
@@ -515,6 +530,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionSideColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 text-center leading-tight"
           >
             <span
@@ -547,6 +563,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
@@ -574,6 +591,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsPhys) }}</span>
@@ -601,6 +619,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsMagic) }}</span>
@@ -628,6 +647,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionDealtColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsTrue) }}</span>
@@ -655,6 +675,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTotal) }}</span>
@@ -683,6 +704,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenPhys) }}</span>
@@ -711,6 +733,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenMagic) }}</span>
@@ -739,6 +762,7 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
+            v-show="p.showChampionTakenColumns"
             class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
           >
             <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTrue) }}</span>

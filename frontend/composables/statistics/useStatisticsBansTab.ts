@@ -15,6 +15,10 @@ export type BansTableRow = {
 export type BansSortCol =
   | 'rate'
   | 'rateDelta'
+  | 'win'
+  | 'winDelta'
+  | 'loss'
+  | 'lossDelta'
   | 'blue'
   | 'blueDelta'
   | 'red'
@@ -65,6 +69,20 @@ export function useStatisticsBansTab(params: {
   statsPerfStart: (name: string) => number
   statsPerfEnd: (name: string, startedAt: number) => void
   championName: (championId: number) => string | null
+  overviewTeamsData: Ref<{
+    matchCount: number
+    bans?: {
+      byWin?: Array<{ championId: number; count: number }>
+      byLoss?: Array<{ championId: number; count: number }>
+    }
+  } | null>
+  overviewTeamsBaselineData: Ref<{
+    matchCount: number
+    bans?: {
+      byWin?: Array<{ championId: number; count: number }>
+      byLoss?: Array<{ championId: number; count: number }>
+    }
+  } | null>
 }) {
   const bansTableData = ref<BansApiPayload | null>(null)
   const bansTableRefData = ref<RefPayload | null>(null)
@@ -110,6 +128,65 @@ export function useStatisticsBansTab(params: {
     return 'text-text/60'
   }
 
+  const bansByWinMap = computed(() => {
+    const out = new Map<number, number>()
+    for (const row of params.overviewTeamsData.value?.bans?.byWin ?? []) {
+      out.set(Number(row.championId), Number(row.count ?? 0))
+    }
+    return out
+  })
+
+  const bansByLossMap = computed(() => {
+    const out = new Map<number, number>()
+    for (const row of params.overviewTeamsData.value?.bans?.byLoss ?? []) {
+      out.set(Number(row.championId), Number(row.count ?? 0))
+    }
+    return out
+  })
+
+  const bansByWinRefMap = computed(() => {
+    const out = new Map<number, number>()
+    for (const row of params.overviewTeamsBaselineData.value?.bans?.byWin ?? []) {
+      out.set(Number(row.championId), Number(row.count ?? 0))
+    }
+    return out
+  })
+
+  const bansByLossRefMap = computed(() => {
+    const out = new Map<number, number>()
+    for (const row of params.overviewTeamsBaselineData.value?.bans?.byLoss ?? []) {
+      out.set(Number(row.championId), Number(row.count ?? 0))
+    }
+    return out
+  })
+
+  function bansOutcomePct(championId: number, outcome: 'win' | 'loss'): number {
+    const matchCount = bansTableData.value?.matchCount ?? 0
+    if (matchCount <= 0) return 0
+    const count =
+      outcome === 'win'
+        ? (bansByWinMap.value.get(championId) ?? 0)
+        : (bansByLossMap.value.get(championId) ?? 0)
+    return banPctForCount(count, matchCount, 1)
+  }
+
+  function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
+    const currMc = bansTableData.value?.matchCount ?? 0
+    const refMc = params.overviewTeamsBaselineData.value?.matchCount ?? 0
+    if (currMc <= 0 || refMc <= 0) return null
+    const currCount =
+      outcome === 'win'
+        ? (bansByWinMap.value.get(championId) ?? 0)
+        : (bansByLossMap.value.get(championId) ?? 0)
+    const refCount =
+      outcome === 'win'
+        ? (bansByWinRefMap.value.get(championId) ?? 0)
+        : (bansByLossRefMap.value.get(championId) ?? 0)
+    const currPct = banPctForCount(currCount, currMc, 1)
+    const refPct = banPctForCount(refCount, refMc, 1)
+    return Math.round((currPct - refPct) * 100) / 100
+  }
+
   function bansSortHint(col: BansSortCol): string {
     if (bansSortColumn.value !== col) return ''
     return bansSortDir.value === 'desc' ? ' ↓' : ' ↑'
@@ -139,6 +216,22 @@ export function useStatisticsBansTab(params: {
         case 'rateDelta':
           va = bansDeltaPct(a, 'bansTotal', 2) ?? 0
           vb = bansDeltaPct(b, 'bansTotal', 2) ?? 0
+          break
+        case 'win':
+          va = bansOutcomePct(a.championId, 'win')
+          vb = bansOutcomePct(b.championId, 'win')
+          break
+        case 'winDelta':
+          va = bansOutcomeDeltaPct(a.championId, 'win') ?? 0
+          vb = bansOutcomeDeltaPct(b.championId, 'win') ?? 0
+          break
+        case 'loss':
+          va = bansOutcomePct(a.championId, 'loss')
+          vb = bansOutcomePct(b.championId, 'loss')
+          break
+        case 'lossDelta':
+          va = bansOutcomeDeltaPct(a.championId, 'loss') ?? 0
+          vb = bansOutcomeDeltaPct(b.championId, 'loss') ?? 0
           break
         case 'blue':
           va = a.bansBlue
@@ -290,6 +383,8 @@ export function useStatisticsBansTab(params: {
     banRateForBansRow,
     banPctForCount,
     bansDeltaPct,
+    bansOutcomeDeltaPct,
+    bansOutcomePct,
     pctDeltaClass,
     bansSortHint,
     filteredBansRows,
