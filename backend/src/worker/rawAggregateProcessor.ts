@@ -1747,13 +1747,30 @@ export async function processRawAggregateAndBurn(
     }
 
     await tx.$executeRaw`
-      UPDATE tracked_matches
+      INSERT INTO tracked_matches (
+        match_id,
+        status,
+        created_at,
+        aggregate_status,
+        aggregate_attempt_count,
+        aggregate_last_error,
+        aggregated_at
+      )
+      VALUES (
+        ${trackedMatchId},
+        'INGESTED',
+        NOW(),
+        'AGGREGATED',
+        1,
+        NULL,
+        NOW()
+      )
+      ON CONFLICT (match_id) DO UPDATE
       SET status = 'INGESTED',
           aggregate_status = 'AGGREGATED',
-          aggregate_attempt_count = aggregate_attempt_count + 1,
+          aggregate_attempt_count = tracked_matches.aggregate_attempt_count + 1,
           aggregate_last_error = NULL,
           aggregated_at = NOW()
-      WHERE match_id = ${trackedMatchId}
     `
 
     await tx.$executeRaw`

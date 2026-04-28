@@ -349,18 +349,6 @@
               >
                 Côté
               </button>
-              <button
-                type="button"
-                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
-                :class="
-                  showBansRoleColumnsToggle
-                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
-                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
-                "
-                @click="toggleBansRoleColumns()"
-              >
-                Rôle
-              </button>
             </div>
           </div>
           <div v-show="activeTab === 'championTable'">
@@ -1259,7 +1247,6 @@ function selectAllRoles() {
 }
 const showBansOutcomeColumns = ref(true)
 const showBansSideColumns = ref(true)
-const showBansRoleColumnsToggle = ref(true)
 const showChampionSideColumns = ref(true)
 const showChampionDealtColumns = ref(true)
 const showChampionTakenColumns = ref(true)
@@ -1277,10 +1264,6 @@ function toggleBansOutcomeColumns() {
 
 function toggleBansSideColumns() {
   showBansSideColumns.value = !showBansSideColumns.value
-}
-
-function toggleBansRoleColumns() {
-  showBansRoleColumnsToggle.value = !showBansRoleColumnsToggle.value
 }
 
 function toggleChampionColumnGroup(group: 'side' | 'dealt' | 'taken') {
@@ -1363,7 +1346,6 @@ function resetStatsFilters() {
   championSearchQuery.value = ''
   showBansOutcomeColumns.value = true
   showBansSideColumns.value = true
-  showBansRoleColumnsToggle.value = true
   showChampionSideColumns.value = true
   showChampionDealtColumns.value = true
   showChampionTakenColumns.value = true
@@ -3625,7 +3607,7 @@ const activeBansRoleColumn = computed(() => {
     .toUpperCase() as keyof typeof roleToBansColumnKey
   return roleToBansColumnKey[role] ?? null
 })
-const showBansRoleColumns = computed(() => showBansRoleColumnsToggle.value)
+const showBansRoleColumns = computed(() => true)
 function showBansRoleColumn(key: string): boolean {
   if (!showBansRoleColumns.value) return false
   if (!activeBansRoleColumn.value) return true
@@ -4051,6 +4033,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
   teamPercent,
+  tierListPatchDeltaClass,
+  tierListPatchDeltaGamesClass,
   tierListWinrateClass,
   toggleFavoriteCard,
   toggleObjective,

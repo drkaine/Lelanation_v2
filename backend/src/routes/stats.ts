@@ -123,6 +123,7 @@ const OVERVIEW_TIMEOUT_MS = 50_000
  */
 const STATS_OTP_PICKRATE_THRESHOLD = Number(process.env.STATS_OTP_PICKRATE_THRESHOLD ?? '1')
 const TIER_LIST_OTP_MIN_GAMES = 100
+const CHAMPION_GLOBAL_OTP_MIN_GAMES = Number(process.env.CHAMPION_GLOBAL_OTP_MIN_GAMES ?? '1000')
 const STATS_TREND_WR_DELTA_PCT = Number(process.env.STATS_TREND_WR_DELTA_PCT ?? '5')
 const STATS_TREND_PICK_DELTA_PCT = Number(process.env.STATS_TREND_PICK_DELTA_PCT ?? '10')
 const STATS_TREND_GAMES_DELTA_PCT = Number(process.env.STATS_TREND_GAMES_DELTA_PCT ?? '15')
@@ -219,16 +220,22 @@ function filterChampionGlobalRowsByOtp<
   T extends {
     blue?: { pickrate?: number }
     red?: { pickrate?: number }
+    totalGames?: number
   },
 >(rows: T[], mode: OtpMode): T[] {
-  if (mode === 'oui' || rows.length === 0) return rows
-  const filtered = rows.filter((row) => {
+  if (rows.length === 0) return rows
+  const otpGamesFiltered =
+    mode === 'non'
+      ? rows
+      : rows.filter((row) => Number(row.totalGames ?? 0) >= CHAMPION_GLOBAL_OTP_MIN_GAMES)
+  if (mode === 'oui') return otpGamesFiltered
+  const filtered = otpGamesFiltered.filter((row) => {
     const pBlue = parsePickrateNumber(row.blue?.pickrate)
     const pRed = parsePickrateNumber(row.red?.pickrate)
     const p = Math.max(pBlue, pRed)
     return keepByOtpPickratePercent(p, mode)
   })
-  return filtered.length > 0 ? filtered : rows
+  return filtered.length > 0 ? filtered : otpGamesFiltered
 }
 
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD or &rankTier=GOLD&rankTier=PLATINUM */

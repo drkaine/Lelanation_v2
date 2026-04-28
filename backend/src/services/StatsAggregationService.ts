@@ -45,6 +45,13 @@ export async function runPatchCleanupFromConfig(logger?: LoggerType): Promise<vo
 
 export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise<number> {
   if (!isDatabaseConfigured()) return 0
+  const hasIngestTeams = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT to_regclass('public.ingest_teams') IS NOT NULL AS ok
+  `
+  if (!hasIngestTeams[0]?.ok) {
+    if (logger) void logger.step('Objective outcome refresh skipped (ingest tables absent)', { table: 'ingest_teams' })
+    return 0
+  }
   const affected = await prisma.$executeRawUnsafe(`
     INSERT INTO agg_objective_outcome_stats (
       game_version,

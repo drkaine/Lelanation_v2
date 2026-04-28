@@ -56,6 +56,7 @@ import {
 import {
   tryReserveTrackedMatch,
   markTrackedMatchAggregateError,
+  markTrackedMatchAggregated,
   setTrackedMatchStatus,
   releaseTrackedMatch,
   releaseTrackedErrorMatches,
@@ -1675,6 +1676,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     if (rawId != null) {
       try {
         await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
+        await markTrackedMatchAggregated(canonicalRiotMatchId).catch(() => undefined)
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)

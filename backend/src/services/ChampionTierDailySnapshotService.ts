@@ -47,6 +47,12 @@ export async function runChampionTierSnapshotForWindow(params: {
   logger?: Logger
 }): Promise<{ insertedEstimate: number }> {
   if (!isDatabaseConfigured()) return { insertedEstimate: 0 }
+  const hasIngest = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT (to_regclass('public.ingest_matchs') IS NOT NULL
+      AND to_regclass('public.ingest_match_players') IS NOT NULL
+      AND to_regclass('public.ingest_teams') IS NOT NULL) AS ok
+  `
+  if (!hasIngest[0]?.ok) return { insertedEstimate: 0 }
 
   const { windowStart, windowEnd, dateOfGame, logger } = params
   const result = await prisma.$executeRaw`
@@ -193,6 +199,10 @@ function getUtcDateWindowForDay(dateOfGame: Date): { windowStart: Date; windowEn
 }
 
 async function getActiveSnapshotDates(): Promise<Date[]> {
+  const hasIngestMatchs = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT to_regclass('public.ingest_matchs') IS NOT NULL AS ok
+  `
+  if (!hasIngestMatchs[0]?.ok) return []
   const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
   const dates = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT (m.game_date AT TIME ZONE 'UTC')::date AS d

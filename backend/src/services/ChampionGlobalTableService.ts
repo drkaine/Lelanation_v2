@@ -123,6 +123,16 @@ export async function getChampionGlobalTable(
         : roleFilterRaw === 'UTILITY'
           ? 'SUPPORT'
           : roleFilterRaw
+  const roleFilterValues =
+    roleFilter === 'TOP'
+      ? ['TOP', 'TOPLANE']
+      : roleFilter === 'BOTTOM'
+        ? ['BOTTOM', 'ADC', 'BOT']
+        : roleFilter
+          ? [roleFilter]
+          : []
+  const roleFilterSqlValueList =
+    roleFilterValues.length > 0 ? roleFilterValues.map((r) => `'${r.replace(/'/g, "''")}'`).join(',') : ''
 
   const matchCount = await sumMatchOutcomeCountUnionLiveArchive(version, rankTier)
   if (matchCount === 0) {
@@ -148,19 +158,30 @@ export async function getChampionGlobalTable(
     sum_a: bigint
   }
 
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cs')
+  const coreRoleFromForSide = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cf')
   const matchCondSide = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
+  const coreWhereForRole = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cf.')
+  const rolePlayedCond = roleFilterSqlValueList
+    ? ` AND EXISTS (
+          SELECT 1
+          FROM ${coreRoleFromForSide}
+          WHERE cf.champion_id = mv.champion_id
+            AND ${coreWhereForRole}
+            AND cf.role IN (${roleFilterSqlValueList})
+            AND cf.count_game > 0
+        )`
+    : ''
   const sideFrom = await matchVersionedAggFrom('agg_champion_side_stats', version, 'mv')
-  const roleSql =
-    roleFilter !== '' ? ` AND mv.role_norm = '${roleFilter.replace(/'/g, "''")}'` : ''
   const aggSql = `
     SELECT
       mv.team_num AS team_id,
       mv.champion_id AS champion_id,
       SUM(mv.count_game)::int AS games,
       SUM(mv.count_win)::int AS wins,
-      0::bigint AS sum_phys_d,
-      0::bigint AS sum_magic_d,
-      0::bigint AS sum_true_d,
+      COALESCE(SUM(mv.sum_physical_damage_to_champions), 0)::bigint AS sum_phys_d,
+      COALESCE(SUM(mv.sum_magic_damage_to_champions), 0)::bigint AS sum_magic_d,
+      COALESCE(SUM(mv.sum_true_damage_to_champions), 0)::bigint AS sum_true_d,
       0::bigint AS sum_phys_t,
       0::bigint AS sum_magic_t,
       0::bigint AS sum_true_t,
@@ -170,10 +191,63 @@ export async function getChampionGlobalTable(
       0::bigint AS sum_a
     FROM ${sideFrom}
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
-    ${roleSql}
+    ${rolePlayedCond}
     GROUP BY mv.team_num, mv.champion_id
   `
   const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)
+
+  const partFrom = await matchVersionedAggFrom('agg_champion_participant_stats', version, 'ps')
+  const bucketFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
+  const coreWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
+  const coreRoleSql = roleFilterSqlValueList ? ` AND cs.role IN (${roleFilterSqlValueList})` : ''
+
+  const kdaRows = await prisma.$queryRawUnsafe<
+    Array<{ champion_id: number; sum_k: bigint; sum_de: bigint; sum_a: bigint }>
+  >(`
+    SELECT
+      cs.champion_id,
+      COALESCE(SUM(ps.sum_kills), 0)::bigint AS sum_k,
+      COALESCE(SUM(ps.sum_deaths_by_enemy_champs), 0)::bigint AS sum_de,
+      COALESCE(SUM(ps.sum_assists), 0)::bigint AS sum_a
+    FROM ${coreFrom}
+    JOIN ${partFrom} ON ps.champion_stat_id = cs.id
+    WHERE ${coreWhere}
+    ${coreRoleSql}
+    GROUP BY cs.champion_id
+  `)
+  const kdaByChampion = new Map<number, { k: number; d: number; a: number }>()
+  for (const r of kdaRows) {
+    kdaByChampion.set(Number(r.champion_id), {
+      k: Number(r.sum_k ?? 0),
+      d: Number(r.sum_de ?? 0),
+      a: Number(r.sum_a ?? 0),
+    })
+  }
+
+  const takenRows = await prisma.$queryRawUnsafe<
+    Array<{ champion_id: number; phys_t: bigint; magic_t: bigint; true_t: bigint; total_t: bigint }>
+  >(`
+    SELECT
+      cs.champion_id,
+      COALESCE(SUM(cb.sum_physical_damage_taken), 0)::bigint AS phys_t,
+      COALESCE(SUM(cb.sum_magic_damage_taken), 0)::bigint AS magic_t,
+      COALESCE(SUM(cb.sum_true_damage_taken), 0)::bigint AS true_t,
+      COALESCE(SUM(cb.sum_total_damage_taken), 0)::bigint AS total_t
+    FROM ${coreFrom}
+    JOIN ${bucketFrom} ON cb.champion_stat_id = cs.id
+    WHERE ${coreWhere}
+    ${coreRoleSql}
+    GROUP BY cs.champion_id
+  `)
+  const takenByChampion = new Map<number, { phys: number; magic: number; true: number; total: number }>()
+  for (const r of takenRows) {
+    takenByChampion.set(Number(r.champion_id), {
+      phys: Number(r.phys_t ?? 0),
+      magic: Number(r.magic_t ?? 0),
+      true: Number(r.true_t ?? 0),
+      total: Number(r.total_t ?? 0),
+    })
+  }
 
   const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
@@ -238,14 +312,16 @@ export async function getChampionGlobalTable(
     const totalTrueD = sides.blue.sum_true_d + sides.red.sum_true_d
     const totalDmgToChamps = totalPhysD + totalMagicD + totalTrueD
 
-    const totalPhysT = sides.blue.sum_phys_t + sides.red.sum_phys_t
-    const totalMagicT = sides.blue.sum_magic_t + sides.red.sum_magic_t
-    const totalTrueT = sides.blue.sum_true_t + sides.red.sum_true_t
-    const totalTakenT = sides.blue.sum_total_t + sides.red.sum_total_t
+    const taken = takenByChampion.get(championId)
+    const totalPhysT = taken?.phys ?? sides.blue.sum_phys_t + sides.red.sum_phys_t
+    const totalMagicT = taken?.magic ?? sides.blue.sum_magic_t + sides.red.sum_magic_t
+    const totalTrueT = taken?.true ?? sides.blue.sum_true_t + sides.red.sum_true_t
+    const totalTakenT = taken?.total ?? sides.blue.sum_total_t + sides.red.sum_total_t
 
-    const totalK = sides.blue.sum_k + sides.red.sum_k
-    const totalDe = sides.blue.sum_de + sides.red.sum_de
-    const totalA = sides.blue.sum_a + sides.red.sum_a
+    const kda = kdaByChampion.get(championId)
+    const totalK = kda?.k ?? sides.blue.sum_k + sides.red.sum_k
+    const totalDe = kda?.d ?? sides.blue.sum_de + sides.red.sum_de
+    const totalA = kda?.a ?? sides.blue.sum_a + sides.red.sum_a
 
     rows.push({
       championId,

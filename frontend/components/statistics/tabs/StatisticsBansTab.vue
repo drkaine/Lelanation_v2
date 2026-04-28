@@ -23,10 +23,7 @@
                 <th class="px-3 py-1.5 font-semibold text-text">
                   {{ p.t('statisticsPage.champion') }}
                 </th>
-                <th
-                  v-show="p.showBansOutcomeColumns"
-                  class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
-                >
+                <th class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text">
                   <div class="flex items-center gap-1">
                     <button type="button" @click="p.setBansSort('rate')">
                       {{ p.t('statisticsPage.bansColRate') }}{{ p.bansSortHint('rate') }}
