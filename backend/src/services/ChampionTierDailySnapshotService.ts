@@ -67,9 +67,9 @@ export async function runChampionTierSnapshotForWindow(params: {
         imp.champion_id,
         COUNT(*)::int AS games,
         SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins
-      FROM match_players imp
-      INNER JOIN matchs m ON m.id = imp.match_id
-      INNER JOIN teams t ON t.id = imp.team_id
+      FROM ingest_match_players imp
+      INNER JOIN ingest_matchs m ON m.id = imp.match_id
+      INNER JOIN ingest_teams t ON t.id = imp.team_id
       CROSS JOIN window_params wp
       WHERE m.game_date >= wp.w_start
         AND m.game_date < wp.w_end
@@ -88,8 +88,8 @@ export async function runChampionTierSnapshotForWindow(params: {
         split_part(UPPER(TRIM(COALESCE(m.rank_tier, 'UNRANKED'))), '_', 1) AS rank_tier_norm,
         COALESCE((ban.elem->>'championId')::int, (ban.elem->>'champion_id')::int) AS champion_id,
         COUNT(*)::int AS ban_count
-      FROM teams t
-      INNER JOIN matchs m ON m.id = t.match_id
+      FROM ingest_teams t
+      INNER JOIN ingest_matchs m ON m.id = t.match_id
       CROSS JOIN LATERAL jsonb_array_elements(
         CASE WHEN jsonb_typeof(t.bans_json) = 'array' THEN t.bans_json ELSE '[]'::jsonb END
       ) AS ban(elem)
@@ -196,7 +196,7 @@ async function getActiveSnapshotDates(): Promise<Date[]> {
   const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
   const dates = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT (m.game_date AT TIME ZONE 'UTC')::date AS d
-    FROM matchs m
+    FROM ingest_matchs m
     JOIN active_patches ap
       ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
     WHERE m.game_date IS NOT NULL
@@ -265,7 +265,7 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<num
   const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT c.date_of_game::date AS d
     FROM champion_tier_daily_snapshots c
-    JOIN matchs m
+    JOIN ingest_matchs m
       ON m.game_date >= c.date_of_game
      AND m.game_date < (c.date_of_game + INTERVAL '1 day')
     JOIN active_patches ap

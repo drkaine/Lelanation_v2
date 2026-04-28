@@ -261,6 +261,8 @@ export type AdminDataCollectStats = {
   lastPlayerLastSeenAt: string | null
   totalTrackedMatches: number
   trackedMatchesCreatedLast1h: number
+  trackedAggregateStatus: Record<string, number>
+  trackedLastAggregatedAt: string | null
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
   pollerResume: {
@@ -313,6 +315,8 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
     lastPlayerLastSeenAt: null,
     totalTrackedMatches: 0,
     trackedMatchesCreatedLast1h: 0,
+    trackedAggregateStatus: {},
+    trackedLastAggregatedAt: null,
     playersCreatedLast1h: 0,
     playersLastSeenLast1h: 0,
     pollerResume: null,
@@ -325,6 +329,8 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
       totalPlayers,
       trackedTotal,
       tracked1h,
+      trackedAggByStatus,
+      trackedLastAggregatedAt,
       playersWrongKeyVersion,
       playersCreated1h,
       playersLastSeen1h,
@@ -336,6 +342,15 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
       prisma.$queryRaw<Array<{ c: bigint }>>`SELECT COUNT(*)::bigint AS c FROM tracked_matches`,
       prisma.$queryRaw<Array<{ c: bigint }>>`
         SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE created_at >= ${since1h}
+      `,
+      prisma.$queryRaw<Array<{ aggregate_status: string; c: bigint }>>`
+        SELECT aggregate_status, COUNT(*)::bigint AS c
+        FROM tracked_matches
+        GROUP BY aggregate_status
+      `,
+      prisma.$queryRaw<Array<{ d: Date | null }>>`
+        SELECT MAX(aggregated_at) AS d
+        FROM tracked_matches
       `,
       prisma.player.count({ where: { puuidKeyVersion: null } }),
       prisma.player.count({ where: { createdAt: { gte: since1h } } }),
@@ -350,6 +365,10 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
       lastPlayerLastSeenAt: maxLastSeenAgg._max.lastSeen?.toISOString() ?? null,
       totalTrackedMatches: Number(trackedTotal[0]?.c ?? 0),
       trackedMatchesCreatedLast1h: Number(tracked1h[0]?.c ?? 0),
+      trackedAggregateStatus: Object.fromEntries(
+        trackedAggByStatus.map((r) => [r.aggregate_status, Number(r.c ?? 0)])
+      ),
+      trackedLastAggregatedAt: trackedLastAggregatedAt[0]?.d?.toISOString() ?? null,
       playersCreatedLast1h: playersCreated1h,
       playersLastSeenLast1h: playersLastSeen1h,
       pollerResume: latest ? pollerResumeFromUnifiedEntry(latest) : null,

@@ -169,6 +169,142 @@ function drakeTypePctPartsSides(
   }
 }
 
+function drakeSoulPctParts(
+  key: string,
+  side: 'win' | 'loss'
+): { current: string; delta: string; deltaClass: string } {
+  const curData = p.overviewTeamsData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curRow = p.drakeSoulRows.find((r: { key: string }) => r.key === key)
+  const curCount = side === 'win' ? Number(curRow?.byWin ?? 0) : Number(curRow?.byLoss ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewTeamsBaselineData
+  const baseSoul = baseData?.drakes?.souls?.[key]
+  const baseCount =
+    baseSoul == null
+      ? null
+      : side === 'win'
+        ? Number(baseSoul.byWin ?? 0)
+        : Number(baseSoul.byLoss ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function drakeSoulPctPartsSides(
+  key: string,
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
+  const curData = p.overviewSidesData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curSoul = sidesDrakeSoulByKey(key)
+  const curCount = side === 'blue' ? Number(curSoul.byBlue ?? 0) : Number(curSoul.byRed ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewSidesBaselineData
+  const baseSoul = baseData?.drakesBySide?.souls?.[key]
+  const baseCount =
+    baseSoul == null
+      ? null
+      : side === 'blue'
+        ? Number(baseSoul.byBlue ?? 0)
+        : Number(baseSoul.byRed ?? 0)
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function soulGlobalPctParts(side: 'win' | 'loss'): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curData = p.overviewTeamsData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curCount =
+    side === 'win' ? Number(p.drakeSoulGlobal.byWin ?? 0) : Number(p.drakeSoulGlobal.byLoss ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewTeamsBaselineData
+  const baseSouls = baseData?.drakes?.souls
+  const baseCount =
+    baseSouls == null
+      ? null
+      : Object.values(baseSouls).reduce(
+          (acc, soul) => acc + Number(side === 'win' ? (soul?.byWin ?? 0) : (soul?.byLoss ?? 0)),
+          0
+        )
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function soulGlobalPctPartsSides(side: 'blue' | 'red'): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curData = p.overviewSidesData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', delta: '', deltaClass: 'text-text/80' }
+  }
+  const curCount =
+    side === 'blue'
+      ? Number(p.sidesDrakeSoulGlobal.byBlue ?? 0)
+      : Number(p.sidesDrakeSoulGlobal.byRed ?? 0)
+  const curPct = pct(curCount, Number(curData.matchCount))
+
+  const baseData = p.overviewSidesBaselineData
+  const baseSouls = baseData?.drakesBySide?.souls
+  const baseCount =
+    baseSouls == null
+      ? null
+      : Object.values(baseSouls).reduce(
+          (acc, soul) => acc + Number(side === 'blue' ? (soul?.byBlue ?? 0) : (soul?.byRed ?? 0)),
+          0
+        )
+  const basePct =
+    baseData && baseData.matchCount > 0 && baseCount != null
+      ? pct(baseCount, Number(baseData.matchCount))
+      : null
+  const delta = curPct != null && basePct != null ? curPct - basePct : null
+  return {
+    current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
 const DONUT_RADIUS = 48
 const DONUT_STROKE = 14
 const DONUT_CIRCLE = 2 * Math.PI * DONUT_RADIUS
@@ -650,25 +786,37 @@ function donutTooltip(row: DistRow, total: number): string {
               </td>
               <td class="px-1 py-1.5 text-center">
                 <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{ p.teamPercent(p.drakeSoulGlobal.byWin, p.overviewTeamsData.matchCount) }}
+                  {{ soulGlobalPctParts('win').current }}
+                  <span :class="soulGlobalPctParts('win').deltaClass">
+                    {{ soulGlobalPctParts('win').delta }}
+                  </span>
                 </template>
                 <template v-else>—</template>
               </td>
               <td class="px-1 py-1.5 text-center">
                 <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                  {{ p.teamPercent(p.drakeSoulGlobal.byLoss, p.overviewTeamsData.matchCount) }}
+                  {{ soulGlobalPctParts('loss').current }}
+                  <span :class="soulGlobalPctParts('loss').deltaClass">
+                    {{ soulGlobalPctParts('loss').delta }}
+                  </span>
                 </template>
                 <template v-else>—</template>
               </td>
               <td class="px-1 py-1.5 text-center">
                 <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{ p.teamPercent(p.sidesDrakeSoulGlobal.byBlue, p.overviewSidesData.matchCount) }}
+                  {{ soulGlobalPctPartsSides('blue').current }}
+                  <span :class="soulGlobalPctPartsSides('blue').deltaClass">
+                    {{ soulGlobalPctPartsSides('blue').delta }}
+                  </span>
                 </template>
                 <template v-else>—</template>
               </td>
               <td class="py-1.5 pl-1 text-center">
                 <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                  {{ p.teamPercent(p.sidesDrakeSoulGlobal.byRed, p.overviewSidesData.matchCount) }}
+                  {{ soulGlobalPctPartsSides('red').current }}
+                  <span :class="soulGlobalPctPartsSides('red').deltaClass">
+                    {{ soulGlobalPctPartsSides('red').delta }}
+                  </span>
                 </template>
                 <template v-else>—</template>
               </td>
@@ -695,35 +843,37 @@ function donutTooltip(row: DistRow, total: number): string {
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ p.teamPercent(row.byWin, p.overviewTeamsData.matchCount) }}
+                    {{ drakeSoulPctParts(row.key, 'win').current }}
+                    <span :class="drakeSoulPctParts(row.key, 'win').deltaClass">
+                      {{ drakeSoulPctParts(row.key, 'win').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
-                    {{ p.teamPercent(row.byLoss, p.overviewTeamsData.matchCount) }}
+                    {{ drakeSoulPctParts(row.key, 'loss').current }}
+                    <span :class="drakeSoulPctParts(row.key, 'loss').deltaClass">
+                      {{ drakeSoulPctParts(row.key, 'loss').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="px-1 py-1.5 text-center">
                   <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      p.teamPercent(
-                        sidesDrakeSoulByKey(row.key).byBlue,
-                        p.overviewSidesData.matchCount
-                      )
-                    }}
+                    {{ drakeSoulPctPartsSides(row.key, 'blue').current }}
+                    <span :class="drakeSoulPctPartsSides(row.key, 'blue').deltaClass">
+                      {{ drakeSoulPctPartsSides(row.key, 'blue').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
                 <td class="py-1.5 pl-1 text-center">
                   <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
-                    {{
-                      p.teamPercent(
-                        sidesDrakeSoulByKey(row.key).byRed,
-                        p.overviewSidesData.matchCount
-                      )
-                    }}
+                    {{ drakeSoulPctPartsSides(row.key, 'red').current }}
+                    <span :class="drakeSoulPctPartsSides(row.key, 'red').deltaClass">
+                      {{ drakeSoulPctPartsSides(row.key, 'red').delta }}
+                    </span>
                   </template>
                   <template v-else>—</template>
                 </td>
@@ -779,7 +929,7 @@ function donutTooltip(row: DistRow, total: number): string {
               >100%</span
             >
           </div>
-          <ul class="grid w-full max-w-[340px] grid-cols-1 gap-1 text-xs text-text/85">
+          <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
             <li
               v-for="row in drakeDistRows"
               :key="'drake-dist-legend-' + row.key"
@@ -835,7 +985,7 @@ function donutTooltip(row: DistRow, total: number): string {
               >100%</span
             >
           </div>
-          <ul class="grid w-full max-w-[340px] grid-cols-1 gap-1 text-xs text-text/85">
+          <ul class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85">
             <li
               v-for="row in soulDistRows"
               :key="'soul-dist-legend-' + row.key"

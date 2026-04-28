@@ -1004,15 +1004,6 @@ const p = inject('statisticsPageCtx') as any
             <div v-else class="py-3 text-center text-text/60">
               {{ p.t('statisticsPage.overviewNoData') }}
             </div>
-            <div v-if="p.overviewMatchOutcomeTotal > 0" class="mt-2 text-center">
-              <button
-                type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                @click="p.goToChampionTableWithSort('totalGames')"
-              >
-                {{ p.t('statisticsPage.fastStatsSeeMore') }}
-              </button>
-            </div>
           </div>
 
           <!-- Bans par équipe gagnante -->

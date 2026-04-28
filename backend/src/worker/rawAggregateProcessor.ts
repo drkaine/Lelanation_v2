@@ -1748,7 +1748,11 @@ export async function processRawAggregateAndBurn(
 
     await tx.$executeRaw`
       UPDATE tracked_matches
-      SET status = 'INGESTED'
+      SET status = 'INGESTED',
+          aggregate_status = 'AGGREGATED',
+          aggregate_attempt_count = aggregate_attempt_count + 1,
+          aggregate_last_error = NULL,
+          aggregated_at = NOW()
       WHERE match_id = ${trackedMatchId}
     `
 

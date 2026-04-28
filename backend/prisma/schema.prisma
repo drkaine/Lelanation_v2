@@ -184,6 +184,20 @@ model MatchIngestRaw {
   @@map("match_ingest_raw")
 }
 
+model TrackedMatch {
+  matchId              String   @id @map("match_id")
+  status               String   @default("PENDING")
+  createdAt            DateTime @default(now()) @map("created_at")
+  aggregateStatus      String   @default("PENDING") @map("aggregate_status")
+  aggregateAttemptCount Int      @default(0) @map("aggregate_attempt_count")
+  aggregateLastError   String?  @map("aggregate_last_error")
+  aggregatedAt         DateTime? @map("aggregated_at")
+
+  @@index([aggregateStatus], map: "idx_tracked_matches_aggregate_status")
+  @@index([aggregatedAt], map: "idx_tracked_matches_aggregated_at")
+  @@map("tracked_matches")
+}
+
 model MvChampionCoreStat {
   id                             BigInt  @id
   championId                     Int     @map("champion_id")

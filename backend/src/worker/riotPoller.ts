@@ -55,6 +55,7 @@ import {
 } from './matchIngestRawQueue.js'
 import {
   tryReserveTrackedMatch,
+  markTrackedMatchAggregateError,
   setTrackedMatchStatus,
   releaseTrackedMatch,
   releaseTrackedErrorMatches,
@@ -1691,6 +1692,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         }
         if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
+          await markTrackedMatchAggregateError(
+            canonicalRiotMatchId,
+            'invalid_raw_payload_shape'
+          ).catch(() => undefined)
           await markRawIngestError(rawId, 'invalid_raw_payload_shape', 5 * 60_000)
         } else if (isTransientAggregateConflictError(err)) {
           // Transient write race around aggregate rows: retry later, do not poison tracked row as ERROR.
@@ -1698,6 +1703,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
           await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
         } else {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
+          await markTrackedMatchAggregateError(
+            canonicalRiotMatchId,
+            err instanceof Error ? err.message : String(err)
+          ).catch(() => undefined)
           const delay = Math.min(30 * 60_000, Math.max(60_000, 60_000))
           await markRawIngestError(rawId, err instanceof Error ? err.message : String(err), delay)
         }

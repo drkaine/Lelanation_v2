@@ -487,7 +487,7 @@ async function loadTeamCoreFallbackFromIngest(
           THEN MAX(CASE WHEN it.inhibitor_kills > 0 THEN it.team END)
           ELSE NULL
         END AS first_inhibitor_team
-      FROM teams it
+      FROM ingest_teams it
       GROUP BY it.match_id
     )
     SELECT
@@ -514,8 +514,8 @@ async function loadTeamCoreFallbackFromIngest(
         0
       )::bigint AS count_inhibitor_first,
       COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
-    FROM teams it
-    INNER JOIN matchs im ON im.id = it.match_id
+    FROM ingest_teams it
+    INNER JOIN ingest_matchs im ON im.id = it.match_id
     LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
     WHERE ${cond.join(' AND ')}
     GROUP BY it.team
@@ -604,8 +604,8 @@ async function loadSurrenderBySideCounts(
         it.team AS team_num,
         COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
         COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
-      FROM teams it
-      INNER JOIN matchs im ON im.id = it.match_id
+      FROM ingest_teams it
+      INNER JOIN ingest_matchs im ON im.id = it.match_id
       WHERE ${condIngest.join(' AND ')}
       GROUP BY it.team
     `)
@@ -2316,8 +2316,8 @@ async function countDistinctPlayersInMatches(
   const whereSql = buildIngestMatchPlayerWhereSql(version, rankTier, role)
   const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(`
     SELECT COUNT(DISTINCT imp.player_id)::bigint AS c
-    FROM match_players imp
-    INNER JOIN matchs im ON im.id = imp.match_id
+    FROM ingest_match_players imp
+    INNER JOIN ingest_matchs im ON im.id = imp.match_id
     WHERE ${whereSql}
   `)
   return Number(rows[0]?.c ?? 0)

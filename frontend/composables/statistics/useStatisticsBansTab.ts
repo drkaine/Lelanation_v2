@@ -167,7 +167,7 @@ export function useStatisticsBansTab(params: {
       outcome === 'win'
         ? (bansByWinMap.value.get(championId) ?? 0)
         : (bansByLossMap.value.get(championId) ?? 0)
-    return banPctForCount(count, matchCount, 1)
+    return banPctForCount(count, matchCount, 2)
   }
 
   function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
@@ -182,8 +182,8 @@ export function useStatisticsBansTab(params: {
       outcome === 'win'
         ? (bansByWinRefMap.value.get(championId) ?? 0)
         : (bansByLossRefMap.value.get(championId) ?? 0)
-    const currPct = banPctForCount(currCount, currMc, 1)
-    const refPct = banPctForCount(refCount, refMc, 1)
+    const currPct = banPctForCount(currCount, currMc, 2)
+    const refPct = banPctForCount(refCount, refMc, 2)
     return Math.round((currPct - refPct) * 100) / 100
   }
 

@@ -23,7 +23,7 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
       WHERE rank_tier <> 'UNRANKED'
         AND COALESCE(NULLIF(TRIM(game_version), ''), '') <> ''
       GROUP BY 1
-    ),
+    )
     SELECT patch, cnt
     FROM agg_per_patch
     WHERE COALESCE(NULLIF(TRIM(patch), ''), '') <> ''

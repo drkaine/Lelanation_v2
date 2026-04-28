@@ -329,13 +329,25 @@
                 type="button"
                 class="rounded border px-2 py-1 text-xs font-medium transition-colors"
                 :class="
-                  showBansTeamColumns
+                  showBansOutcomeColumns
                     ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
                     : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
                 "
-                @click="toggleBansTeamColumns()"
+                @click="toggleBansOutcomeColumns()"
               >
                 Équipe
+              </button>
+              <button
+                type="button"
+                class="rounded border px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  showBansSideColumns
+                    ? 'border-blue-400/60 bg-blue-500/20 text-blue-200'
+                    : 'border-primary/40 bg-black/20 text-text/80 hover:bg-white/10'
+                "
+                @click="toggleBansSideColumns()"
+              >
+                Côté
               </button>
               <button
                 type="button"
@@ -1245,7 +1257,8 @@ function selectAllRoles() {
   statsRoleFilter.value = ''
   onStatsFilterChange()
 }
-const showBansTeamColumns = ref(true)
+const showBansOutcomeColumns = ref(true)
+const showBansSideColumns = ref(true)
 const showBansRoleColumnsToggle = ref(true)
 const showChampionSideColumns = ref(true)
 const showChampionDealtColumns = ref(true)
@@ -1258,13 +1271,15 @@ const roleToBansColumnKey = Object.freeze({
   SUPPORT: 'support',
 } as const)
 
-function toggleBansTeamColumns() {
-  if (showBansTeamColumns.value && !showBansRoleColumnsToggle.value) return
-  showBansTeamColumns.value = !showBansTeamColumns.value
+function toggleBansOutcomeColumns() {
+  showBansOutcomeColumns.value = !showBansOutcomeColumns.value
+}
+
+function toggleBansSideColumns() {
+  showBansSideColumns.value = !showBansSideColumns.value
 }
 
 function toggleBansRoleColumns() {
-  if (!showBansTeamColumns.value && showBansRoleColumnsToggle.value) return
   showBansRoleColumnsToggle.value = !showBansRoleColumnsToggle.value
 }
 
@@ -1346,7 +1361,8 @@ function resetStatsFilters() {
   balanceEliteFilter.value = 'ALL'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
-  showBansTeamColumns.value = true
+  showBansOutcomeColumns.value = true
+  showBansSideColumns.value = true
   showBansRoleColumnsToggle.value = true
   showChampionSideColumns.value = true
   showChampionDealtColumns.value = true
@@ -3994,7 +4010,8 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   retryOverviewDetail,
   setChampionGlobalSort,
   setObjectivesPanelTab,
-  showBansTeamColumns,
+  showBansOutcomeColumns,
+  showBansSideColumns,
   showChampionDealtColumns,
   showChampionSideColumns,
   showChampionTakenColumns,

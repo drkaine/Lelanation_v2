@@ -24,7 +24,7 @@
                   {{ p.t('statisticsPage.champion') }}
                 </th>
                 <th
-                  v-show="p.showBansTeamColumns"
+                  v-show="p.showBansOutcomeColumns"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -43,7 +43,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansTeamColumns"
+                  v-show="p.showBansOutcomeColumns"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -62,7 +62,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansTeamColumns"
+                  v-show="p.showBansOutcomeColumns"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -81,7 +81,7 @@
                   </div>
                 </th>
                 <th
-                  v-show="p.showBansTeamColumns"
+                  v-show="p.showBansSideColumns"
                   class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
                 >
                   <div class="flex items-center gap-1">
@@ -99,7 +99,10 @@
                     </button>
                   </div>
                 </th>
-                <th class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text">
+                <th
+                  v-show="p.showBansSideColumns"
+                  class="cursor-pointer select-none px-3 py-1.5 font-semibold text-text"
+                >
                   <div class="flex items-center gap-1">
                     <button type="button" class="text-red-300" @click="p.setBansSort('red')">
                       {{ p.t('statisticsPage.bansColRedSide') }}{{ p.bansSortHint('red') }}
@@ -170,7 +173,7 @@
                     }}</span>
                   </div>
                 </td>
-                <td v-show="p.showBansTeamColumns" class="px-3 py-1 tabular-nums text-text/90">
+                <td class="px-3 py-1 tabular-nums text-text/90">
                   {{ p.banRateForBansRow(row, p.bansTableData?.matchCount ?? 0).toFixed(2) }}%
                   <div
                     v-if="p.bansDeltaPct(row, 'bansTotal', 2) != null"
@@ -183,16 +186,8 @@
                     }}%
                   </div>
                 </td>
-                <td v-show="p.showBansTeamColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{
-                    p
-                      .banPctForCount(
-                        bansByWinMap.get(row.championId) ?? 0,
-                        p.bansTableData?.matchCount ?? 0,
-                        1
-                      )
-                      .toFixed(2)
-                  }}%
+                <td v-show="p.showBansOutcomeColumns" class="px-3 py-1 tabular-nums text-text/90">
+                  {{ p.bansOutcomePct(row.championId, 'win').toFixed(2) }}%
                   <div
                     v-if="p.bansOutcomeDeltaPct(row.championId, 'win') != null"
                     class="text-[11px]"
@@ -204,16 +199,8 @@
                     }}%
                   </div>
                 </td>
-                <td v-show="p.showBansTeamColumns" class="px-3 py-1 tabular-nums text-text/90">
-                  {{
-                    p
-                      .banPctForCount(
-                        bansByLossMap.get(row.championId) ?? 0,
-                        p.bansTableData?.matchCount ?? 0,
-                        1
-                      )
-                      .toFixed(2)
-                  }}%
+                <td v-show="p.showBansOutcomeColumns" class="px-3 py-1 tabular-nums text-text/90">
+                  {{ p.bansOutcomePct(row.championId, 'loss').toFixed(2) }}%
                   <div
                     v-if="p.bansOutcomeDeltaPct(row.championId, 'loss') != null"
                     class="text-[11px]"
@@ -225,7 +212,7 @@
                     }}%
                   </div>
                 </td>
-                <td v-show="p.showBansTeamColumns" class="px-3 py-1 tabular-nums text-text/90">
+                <td v-show="p.showBansSideColumns" class="px-3 py-1 tabular-nums text-text/90">
                   {{
                     p.banPctForCount(row.bansBlue, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
                   }}%
@@ -240,7 +227,7 @@
                     }}%
                   </div>
                 </td>
-                <td class="px-3 py-1 tabular-nums text-text/90">
+                <td v-show="p.showBansSideColumns" class="px-3 py-1 tabular-nums text-text/90">
                   {{
                     p.banPctForCount(row.bansRed, p.bansTableData?.matchCount ?? 0, 1).toFixed(2)
                   }}%
@@ -409,24 +396,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, unref } from 'vue'
+import { inject, unref } from 'vue'
 import type { BansSortCol } from '~/composables/statistics/useStatisticsBansTab'
 
 const p = inject('statisticsPageCtx') as any
-
-const bansByWinMap = computed(() => {
-  const out = new Map<number, number>()
-  const rows = p.overviewTeamsData?.bans?.byWin ?? []
-  for (const row of rows) out.set(Number(row.championId), Number(row.count ?? 0))
-  return out
-})
-
-const bansByLossMap = computed(() => {
-  const out = new Map<number, number>()
-  const rows = p.overviewTeamsData?.bans?.byLoss ?? []
-  for (const row of rows) out.set(Number(row.championId), Number(row.count ?? 0))
-  return out
-})
 
 function onPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null

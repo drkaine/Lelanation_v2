@@ -6,7 +6,10 @@ export async function tryReserveTrackedMatch(matchId: string): Promise<boolean> 
     VALUES (${matchId})
     ON CONFLICT (match_id) DO UPDATE
       SET status = 'PENDING',
-          created_at = NOW()
+          created_at = NOW(),
+          aggregate_status = 'PENDING',
+          aggregate_last_error = NULL,
+          aggregated_at = NULL
     WHERE tracked_matches.status = 'ERROR'
        OR tracked_matches.status LIKE 'DEFERRED_%'
     RETURNING match_id;
@@ -18,6 +21,17 @@ export async function setTrackedMatchStatus(matchId: string, status: string): Pr
   await prisma.$executeRaw`
     UPDATE tracked_matches
     SET status = ${status}
+    WHERE match_id = ${matchId}
+  `
+}
+
+export async function markTrackedMatchAggregateError(matchId: string, message: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE tracked_matches
+    SET aggregate_status = 'ERROR',
+        aggregate_attempt_count = aggregate_attempt_count + 1,
+        aggregate_last_error = LEFT(${message}, 2000),
+        aggregated_at = NULL
     WHERE match_id = ${matchId}
   `
 }

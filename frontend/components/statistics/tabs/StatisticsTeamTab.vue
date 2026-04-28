@@ -106,15 +106,6 @@ const p = inject('statisticsPageCtx') as any
                 </span>
               </div>
             </div>
-            <div class="mt-2 w-full text-center">
-              <button
-                type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                @click="p.goToChampionTableWithSort('totalGames')"
-              >
-                {{ p.t('statisticsPage.fastStatsSeeMore') }}
-              </button>
-            </div>
           </div>
           <div
             class="fast-stat-card w-full max-w-full rounded-lg border border-sky-400/55 bg-sky-500/5 p-2"
@@ -210,15 +201,6 @@ const p = inject('statisticsPageCtx') as any
             <div v-else class="py-3 text-center text-text/60">
               {{ p.t('statisticsPage.overviewNoData') }}
             </div>
-            <div v-if="Number(p.sidesSurrenderBySide.blue.total) > 0" class="mt-2 text-center">
-              <button
-                type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                @click="p.goToChampionTableWithSort('blueWinrate')"
-              >
-                {{ p.t('statisticsPage.fastStatsSeeMore') }}
-              </button>
-            </div>
           </div>
           <div
             class="fast-stat-card w-full max-w-full rounded-lg border border-rose-400/55 bg-rose-500/5 p-2"
@@ -313,15 +295,6 @@ const p = inject('statisticsPageCtx') as any
             </div>
             <div v-else class="py-3 text-center text-text/60">
               {{ p.t('statisticsPage.overviewNoData') }}
-            </div>
-            <div v-if="Number(p.sidesSurrenderBySide.red.total) > 0" class="mt-2 text-center">
-              <button
-                type="button"
-                class="fast-stat-button rounded bg-accent px-2 py-1 text-xs font-medium text-background transition-colors hover:opacity-90"
-                @click="p.goToChampionTableWithSort('redWinrate')"
-              >
-                {{ p.t('statisticsPage.fastStatsSeeMore') }}
-              </button>
             </div>
           </div>
           <StatisticsTeamSideFastStatTable
