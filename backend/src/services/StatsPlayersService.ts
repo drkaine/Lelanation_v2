@@ -1,5 +1,5 @@
 /**
- * Top players and champion stats: computed on the fly from ingest_match_players.
+ * Top players and champion stats: computed on the fly from match_players.
  */
 import { Prisma } from '../generated/prisma/index.js'
 import { prisma } from '../db.js'
@@ -90,8 +90,8 @@ export async function getTopPlayers(options: {
           COUNT(imp.id) AS total_games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END) AS total_wins
         FROM players pl
-        INNER JOIN ingest_match_players imp ON imp.player_id = pl.id
-        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        INNER JOIN match_players imp ON imp.player_id = pl.id
+        INNER JOIN teams t ON t.id = imp.team_id
         WHERE 1=1 ${rankTierFilter}
         GROUP BY pl.id
         HAVING COUNT(imp.id) >= ${minGames}
@@ -149,8 +149,8 @@ export async function getPlayerBySummonerName(summonerName: string): Promise<Pla
           COUNT(imp.id) AS total_games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END) AS total_wins
         FROM players pl
-        INNER JOIN ingest_match_players imp ON imp.player_id = pl.id
-        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        INNER JOIN match_players imp ON imp.player_id = pl.id
+        INNER JOIN teams t ON t.id = imp.team_id
         WHERE pl.game_name ILIKE ${pattern} OR pl.tag_name ILIKE ${pattern}
         GROUP BY pl.puuid, pl.game_name, pl.tag_name, pl.region
         LIMIT 1
@@ -192,8 +192,8 @@ export async function getChampionStatsForPlayer(
           COUNT(imp.id)::int AS games,
           SUM(CASE WHEN t.win THEN 1 ELSE 0 END)::int AS wins,
           ROUND(100.0 * SUM(CASE WHEN t.win THEN 1 ELSE 0 END) / NULLIF(COUNT(imp.id), 0), 2)::double precision AS winrate
-        FROM ingest_match_players imp
-        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        FROM match_players imp
+        INNER JOIN teams t ON t.id = imp.team_id
         WHERE imp.player_id = ${player.id}
         GROUP BY imp.champion_id
         ORDER BY games DESC
@@ -249,7 +249,7 @@ export async function getTopPlayersByChampion(options: {
       Prisma.sql`
         WITH latest_rank AS (
           SELECT DISTINCT ON (imp2.player_id) imp2.player_id, imp2.rank_tier
-          FROM ingest_match_players imp2
+          FROM match_players imp2
           WHERE imp2.champion_id = ${championId}
           ORDER BY imp2.player_id, imp2.match_id DESC
         )
@@ -265,8 +265,8 @@ export async function getTopPlayersByChampion(options: {
           ROUND(AVG(imp.kills)::numeric, 2)::double precision AS avg_kills,
           ROUND(AVG(imp.deaths)::numeric, 2)::double precision AS avg_deaths,
           ROUND(AVG(imp.assists)::numeric, 2)::double precision AS avg_assists
-        FROM ingest_match_players imp
-        INNER JOIN ingest_teams t ON t.id = imp.team_id
+        FROM match_players imp
+        INNER JOIN teams t ON t.id = imp.team_id
         JOIN players pl ON pl.id = imp.player_id
         LEFT JOIN latest_rank lr ON lr.player_id = imp.player_id
         WHERE imp.champion_id = ${championId}

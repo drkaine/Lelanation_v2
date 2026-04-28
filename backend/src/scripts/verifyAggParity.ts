@@ -83,7 +83,7 @@ const CHECKS: ScopedCheck[] = [
   {
     name: 'mv_champion_summoner_spell_pair_stats -> agg_champion_summoner_spell_pair_stats',
     legacySql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM mv_champion_summoner_spell_pair_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
-    aggSql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM agg_champion_summoner_spell_pair_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role_norm) IN (${ALLOWED_ROLES_SQL})`,
+    aggSql: `SELECT COALESCE(SUM(s.count_game), 0) AS v FROM agg_champion_summoner_spell_pair_stats s WHERE s.rank_tier <> 'UNRANKED' AND UPPER(s.role) IN (${ALLOWED_ROLES_SQL})`,
   },
   {
     name: 'mv_champion_item_starter_set_stats -> agg_champion_item_starter_set_stats',

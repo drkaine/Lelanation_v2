@@ -2,6 +2,7 @@
   <div class="statistics flex min-h-screen flex-col text-text">
     <!-- Burger pour ouvrir les filtres (mobile) -->
     <button
+      v-if="showFiltersPanel"
       type="button"
       class="fixed left-3 top-16 z-[46] flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-surface/90 text-text shadow lg:hidden"
       :aria-label="t('statisticsPage.openFilters')"
@@ -40,6 +41,7 @@
     <!-- Filtres + contenu : même hauteur -->
     <div class="flex min-h-0 flex-1">
       <button
+        v-if="showFiltersPanel"
         type="button"
         class="filters-collapse-floating hidden lg:sticky lg:top-4 lg:z-20 lg:mr-2 lg:flex lg:shrink-0 lg:self-start"
         :aria-label="
@@ -64,6 +66,7 @@
         </svg>
       </button>
       <aside
+        v-if="showFiltersPanel"
         :class="[
           'fixed left-0 top-14 z-[50] flex h-[calc(100dvh-3.5rem)] w-72 max-w-[88vw] shrink-0 flex-col rounded-r-lg bg-surface/95 shadow-lg transition-transform duration-200',
           'lg:static lg:sticky lg:top-4 lg:z-0 lg:h-auto lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overflow-x-hidden lg:rounded-lg lg:shadow-none lg:transition-[width,opacity] lg:duration-200',
@@ -428,8 +431,11 @@
 
       <!-- Contenu principal : à côté des filtres, même hauteur -->
       <div
-        class="min-w-0 flex-1 p-4 pt-14 lg:px-3 lg:pb-4 lg:pt-0"
-        :class="filtersOpen ? 'max-lg:pointer-events-none' : ''"
+        class="min-w-0 flex-1 p-4 lg:px-3 lg:pb-4 lg:pt-0"
+        :class="[
+          showFiltersPanel ? 'pt-14' : 'pt-2',
+          showFiltersPanel && filtersOpen ? 'max-lg:pointer-events-none' : '',
+        ]"
       >
         <div class="w-full">
           <div v-if="!overviewData" class="mb-6 text-text/80">
@@ -505,6 +511,7 @@
 
     <!-- Overlay mobile : après le contenu pour passer au-dessus des z-10 / sticky stats ; sous la navbar (z-58). -->
     <div
+      v-if="showFiltersPanel"
       v-show="filtersOpen"
       class="fixed inset-0 z-[45] bg-black/50 lg:hidden"
       aria-hidden="true"
@@ -1062,6 +1069,7 @@ const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
+const showFiltersPanel = computed(() => activeTab.value !== 'infos')
 function openFilters() {
   filtersOpen.value = true
 }

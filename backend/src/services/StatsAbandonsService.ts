@@ -144,7 +144,7 @@ export async function getOverviewAbandons(
         SELECT
           COALESCE(SUM(CASE WHEN im.game_ended_in_early_surrender THEN 1 ELSE 0 END), 0)::bigint AS early_surrender_count,
           COALESCE(SUM(CASE WHEN im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_count
-        FROM ingest_matchs im
+        FROM matchs im
         WHERE ${whereIngestSql}
       `)
       earlyFinal = Number(ingestRows[0]?.early_surrender_count ?? 0)

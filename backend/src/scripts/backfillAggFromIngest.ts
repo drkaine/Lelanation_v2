@@ -63,6 +63,7 @@ async function runBackfillOnce(): Promise<void> {
       agg_objective_outcome_stats,
       agg_champion_item_starter_set_stats,
       agg_champion_summoner_spell_pair_stats,
+      agg_champion_spells_stats,
       agg_champion_item_solo_stats,
       agg_champion_item_stats,
       agg_champion_shard_solo_stats,
@@ -71,7 +72,6 @@ async function runBackfillOnce(): Promise<void> {
       agg_champion_summoner_spells,
       agg_botlane_duo_vs_duo_stats,
       agg_champion_duo_role_stats,
-      agg_champion_duo_stats,
       agg_champion_participant_stats,
       agg_champion_damage_stats,
       agg_champion_bucket,
@@ -95,6 +95,188 @@ async function runBackfillOnce(): Promise<void> {
     FROM ingest_matchs im
     WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
     GROUP BY im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO agg_champion_spells_stats (
+      champion_stat_id,
+      spell1_casts,
+      spell2_casts,
+      spell3_casts,
+      spell4_casts,
+      spell_order,
+      count_game,
+      count_win,
+      updated_at
+    )
+    SELECT
+      ac.id AS champion_stat_id,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell1Casts', '')::int, 0))::int AS spell1_casts,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell2Casts', '')::int, 0))::int AS spell2_casts,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell3Casts', '')::int, 0))::int AS spell3_casts,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell4Casts', '')::int, 0))::int AS spell4_casts,
+      '{}'::jsonb AS spell_order,
+      COUNT(*)::int AS count_game,
+      SUM(CASE WHEN imp.win THEN 1 ELSE 0 END)::int AS count_win,
+      NOW()
+    FROM ingest_match_players imp
+    INNER JOIN ingest_matchs im ON im.id = imp.match_id
+    INNER JOIN agg_champion_core_stats ac
+      ON ac.champion_id = imp.champion_id
+     AND ac.role = UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))
+     AND ac.rank_tier = COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED')
+     AND ac.game_version = im.game_version
+     AND ac.region = im.region
+    WHERE COALESCE(NULLIF(imp.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
+      AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT')
+    GROUP BY ac.id
+    ON CONFLICT (champion_stat_id) DO UPDATE
+    SET
+      spell1_casts = EXCLUDED.spell1_casts,
+      spell2_casts = EXCLUDED.spell2_casts,
+      spell3_casts = EXCLUDED.spell3_casts,
+      spell4_casts = EXCLUDED.spell4_casts,
+      spell_order = EXCLUDED.spell_order,
+      count_game = EXCLUDED.count_game,
+      count_win = EXCLUDED.count_win,
+      updated_at = NOW()
+  `)
+
+  const participantColumns = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'agg_champion_participant_stats'
+      AND column_name NOT IN ('champion_stat_id', 'updated_at')
+    ORDER BY ordinal_position
+  `
+  const exprForColumn = (column: string): string => {
+    const snakeToCamel = (v: string): string =>
+      v.replace(/_([a-z0-9])/g, (_, m: string) => String(m).toUpperCase())
+    if (column.startsWith('sum_')) {
+      const metricKey = snakeToCamel(column.slice(4))
+      return `COALESCE((numeric_sums->>'${metricKey}')::bigint, 0)`
+    }
+    if (column.startsWith('count_') && column.endsWith('_true')) {
+      const metricKey = snakeToCamel(column.slice(6, -5))
+      return `COALESCE((bool_true_counts->>'${metricKey}')::bigint, 0)`
+    }
+    if (column.startsWith('count_') && column.endsWith('_false')) {
+      const metricKey = snakeToCamel(column.slice(6, -6))
+      return `(COALESCE((bool_counts->>'${metricKey}')::bigint, 0) - COALESCE((bool_true_counts->>'${metricKey}')::bigint, 0))`
+    }
+    if (column.startsWith('count_')) {
+      const metricKey = snakeToCamel(column.slice(6))
+      return `COALESCE((numeric_sums->>'${metricKey}')::bigint, 0)`
+    }
+    return '0'
+  }
+  const participantSelectMetricsSql = participantColumns
+    .map((r) => {
+      const col = String(r.column_name)
+      return `${exprForColumn(col)} AS ${col}`
+    })
+    .join(',\n      ')
+  const participantUpdateSetSql = participantColumns
+    .map((r) => {
+      const col = String(r.column_name)
+      return `${col} = src.${col}`
+    })
+    .join(',\n      ')
+  await prisma.$executeRawUnsafe(`
+    WITH base AS (
+      SELECT
+        ac.id AS champion_stat_id,
+        imp.stats::jsonb AS stats
+      FROM ingest_match_players imp
+      INNER JOIN ingest_matchs im ON im.id = imp.match_id
+      INNER JOIN agg_champion_core_stats ac
+        ON ac.champion_id = imp.champion_id
+       AND ac.role = UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN'))
+       AND ac.rank_tier = UPPER(COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED'))
+       AND ac.game_version = im.game_version
+       AND ac.region = im.region
+      WHERE UPPER(COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
+        AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT')
+    ),
+    metric_rows AS (
+      SELECT
+        b.champion_stat_id,
+        e.key AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats, '{}'::jsonb)) e
+      WHERE jsonb_typeof(e.value) IN ('number', 'boolean')
+      UNION ALL
+      SELECT
+        b.champion_stat_id,
+        ('challenges.' || e.key) AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats -> 'challenges', '{}'::jsonb)) e
+      WHERE jsonb_typeof(e.value) IN ('number', 'boolean')
+      UNION ALL
+      SELECT
+        b.champion_stat_id,
+        ('missions.' || e.key) AS metric_key,
+        e.value AS metric_value
+      FROM base b
+      CROSS JOIN LATERAL jsonb_each(COALESCE(b.stats -> 'missions', '{}'::jsonb)) e
+      WHERE jsonb_typeof(e.value) IN ('number', 'boolean')
+    ),
+    num_rows AS (
+      SELECT
+        champion_stat_id,
+        replace(metric_key, 'challenges.', '') AS metric_key,
+        SUM((metric_value::text)::numeric)::double precision AS sum_val
+      FROM metric_rows
+      WHERE jsonb_typeof(metric_value) = 'number'
+      GROUP BY champion_stat_id, replace(metric_key, 'challenges.', '')
+    ),
+    bool_rows AS (
+      SELECT
+        champion_stat_id,
+        replace(metric_key, 'challenges.', '') AS metric_key,
+        SUM(CASE WHEN metric_value = 'true'::jsonb THEN 1 ELSE 0 END)::int AS true_cnt,
+        COUNT(*)::int AS cnt_val
+      FROM metric_rows
+      WHERE jsonb_typeof(metric_value) = 'boolean'
+      GROUP BY champion_stat_id, replace(metric_key, 'challenges.', '')
+    ),
+    num_json AS (
+      SELECT champion_stat_id, jsonb_object_agg(metric_key, sum_val) AS numeric_sums
+      FROM num_rows
+      GROUP BY champion_stat_id
+    ),
+    bool_json AS (
+      SELECT
+        champion_stat_id,
+        jsonb_object_agg(metric_key, true_cnt) AS bool_true_counts,
+        jsonb_object_agg(metric_key, cnt_val) AS bool_counts
+      FROM bool_rows
+      GROUP BY champion_stat_id
+    ),
+    merged AS (
+      SELECT
+        COALESCE(n.champion_stat_id, b.champion_stat_id) AS champion_stat_id,
+        COALESCE(n.numeric_sums, '{}'::jsonb) AS numeric_sums,
+        COALESCE(b.bool_true_counts, '{}'::jsonb) AS bool_true_counts,
+        COALESCE(b.bool_counts, '{}'::jsonb) AS bool_counts
+      FROM num_json n
+      FULL OUTER JOIN bool_json b ON b.champion_stat_id = n.champion_stat_id
+    ),
+    src AS (
+      SELECT
+        champion_stat_id,
+        ${participantSelectMetricsSql}
+      FROM merged
+    )
+    UPDATE agg_champion_participant_stats aps
+    SET
+      ${participantUpdateSetSql},
+      updated_at = NOW()
+    FROM src
+    WHERE aps.champion_stat_id = src.champion_stat_id
   `)
 
   await prisma.$executeRawUnsafe(`
@@ -440,26 +622,83 @@ async function runBackfillOnce(): Promise<void> {
     )
     INSERT INTO agg_champion_participant_stats (
       champion_stat_id,
-      numeric_sums,
-      numeric_counts,
-      bool_true_counts,
-      bool_counts,
+      sum_all_in_pings,
+      sum_assist_me_pings,
+      sum_assists,
+      sum_baron_kills,
+      sum_basic_pings,
+      sum_bounty_gold,
+      sum_control_wards_placed,
+      sum_damage_per_minute,
+      sum_damage_self_mitigated,
+      sum_gold_earned,
+      sum_kills,
+      sum_time_played,
+      sum_total_damage_dealt_to_champions,
+      sum_total_minions_killed,
+      sum_total_time_cc_dealt,
+      sum_total_units_healed,
+      sum_vision_score,
+      sum_wards_killed,
+      sum_wards_placed,
+      count_first_blood_kill_true,
+      count_first_blood_assist_true,
+      count_first_tower_kill_true,
+      count_first_tower_assist_true,
       updated_at
     )
     SELECT
       champion_stat_id,
-      numeric_sums,
-      numeric_counts,
-      bool_true_counts,
-      bool_counts,
+      COALESCE((numeric_sums->>'allInPings')::bigint, 0),
+      COALESCE((numeric_sums->>'assistMePings')::bigint, 0),
+      COALESCE((numeric_sums->>'assists')::bigint, 0),
+      COALESCE((numeric_sums->>'baronKills')::bigint, 0),
+      COALESCE((numeric_sums->>'basicPings')::bigint, 0),
+      COALESCE((numeric_sums->>'bountyGold')::bigint, 0),
+      COALESCE((numeric_sums->>'controlWardsPlaced')::bigint, 0),
+      COALESCE((numeric_sums->>'damagePerMinute')::bigint, 0),
+      COALESCE((numeric_sums->>'damageSelfMitigated')::bigint, 0),
+      COALESCE((numeric_sums->>'goldEarned')::bigint, 0),
+      COALESCE((numeric_sums->>'kills')::bigint, 0),
+      COALESCE((numeric_sums->>'timePlayed')::bigint, 0),
+      COALESCE((numeric_sums->>'totalDamageDealtToChampions')::bigint, 0),
+      COALESCE((numeric_sums->>'totalMinionsKilled')::bigint, 0),
+      COALESCE((numeric_sums->>'totalTimeCCDealt')::bigint, 0),
+      COALESCE((numeric_sums->>'totalUnitsHealed')::bigint, 0),
+      COALESCE((numeric_sums->>'visionScore')::bigint, 0),
+      COALESCE((numeric_sums->>'wardsKilled')::bigint, 0),
+      COALESCE((numeric_sums->>'wardsPlaced')::bigint, 0),
+      COALESCE((bool_true_counts->>'firstBloodKill')::bigint, 0),
+      COALESCE((bool_true_counts->>'firstBloodAssist')::bigint, 0),
+      COALESCE((bool_true_counts->>'firstTowerKill')::bigint, 0),
+      COALESCE((bool_true_counts->>'firstTowerAssist')::bigint, 0),
       NOW()
     FROM merged
     ON CONFLICT (champion_stat_id) DO UPDATE
     SET
-      numeric_sums = EXCLUDED.numeric_sums,
-      numeric_counts = EXCLUDED.numeric_counts,
-      bool_true_counts = EXCLUDED.bool_true_counts,
-      bool_counts = EXCLUDED.bool_counts,
+      sum_all_in_pings = EXCLUDED.sum_all_in_pings,
+      sum_assist_me_pings = EXCLUDED.sum_assist_me_pings,
+      sum_assists = EXCLUDED.sum_assists,
+      sum_baron_kills = EXCLUDED.sum_baron_kills,
+      sum_basic_pings = EXCLUDED.sum_basic_pings,
+      sum_bounty_gold = EXCLUDED.sum_bounty_gold,
+      sum_control_wards_placed = EXCLUDED.sum_control_wards_placed,
+      sum_damage_per_minute = EXCLUDED.sum_damage_per_minute,
+      sum_damage_self_mitigated = EXCLUDED.sum_damage_self_mitigated,
+      sum_gold_earned = EXCLUDED.sum_gold_earned,
+      sum_kills = EXCLUDED.sum_kills,
+      sum_time_played = EXCLUDED.sum_time_played,
+      sum_total_damage_dealt_to_champions = EXCLUDED.sum_total_damage_dealt_to_champions,
+      sum_total_minions_killed = EXCLUDED.sum_total_minions_killed,
+      sum_total_time_cc_dealt = EXCLUDED.sum_total_time_cc_dealt,
+      sum_total_units_healed = EXCLUDED.sum_total_units_healed,
+      sum_vision_score = EXCLUDED.sum_vision_score,
+      sum_wards_killed = EXCLUDED.sum_wards_killed,
+      sum_wards_placed = EXCLUDED.sum_wards_placed,
+      count_first_blood_kill_true = EXCLUDED.count_first_blood_kill_true,
+      count_first_blood_assist_true = EXCLUDED.count_first_blood_assist_true,
+      count_first_tower_kill_true = EXCLUDED.count_first_tower_kill_true,
+      count_first_tower_assist_true = EXCLUDED.count_first_tower_assist_true,
       updated_at = NOW()
   `)
 
@@ -709,29 +948,6 @@ async function runBackfillOnce(): Promise<void> {
      AND ac.region = d.region
     GROUP BY ac.id, d.ally_champion_id, d.ally_role
     ON CONFLICT (champion_stat_id, ally_champion_id, ally_role) DO UPDATE
-    SET
-      count_win = EXCLUDED.count_win,
-      count_game = EXCLUDED.count_game,
-      updated_at = NOW()
-  `)
-
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO agg_champion_duo_stats (
-      champion_stat_id,
-      ally_champion_id,
-      count_win,
-      count_game,
-      updated_at
-    )
-    SELECT
-      champion_stat_id,
-      ally_champion_id,
-      SUM(count_win)::int AS count_win,
-      SUM(count_game)::int AS count_game,
-      NOW()
-    FROM agg_champion_duo_role_stats
-    GROUP BY champion_stat_id, ally_champion_id
-    ON CONFLICT (champion_stat_id, ally_champion_id) DO UPDATE
     SET
       count_win = EXCLUDED.count_win,
       count_game = EXCLUDED.count_game,
@@ -1189,15 +1405,14 @@ async function runBackfillOnce(): Promise<void> {
       GROUP BY ac.id, unnest(imp.runes)
     )
     INSERT INTO agg_champion_runes_solo_stats (
-      champion_stat_id, perk_id, style, count_win, count_game, updated_at
+      champion_stat_id, perk_id, count_win, count_game, updated_at
     )
     SELECT
-      champion_stat_id, perk_id, ''::text AS style, count_win, count_game, NOW()
+      champion_stat_id, perk_id, count_win, count_game, NOW()
     FROM flat
     WHERE perk_id > 0
-    ON CONFLICT (champion_stat_id, perk_id, style) DO UPDATE
+    ON CONFLICT (champion_stat_id, perk_id) DO UPDATE
     SET
-      style = EXCLUDED.style,
       count_win = EXCLUDED.count_win,
       count_game = EXCLUDED.count_game,
       updated_at = NOW()
@@ -1532,15 +1747,17 @@ async function runBackfillOnce(): Promise<void> {
        AND mrt.team_id = imp.team_id
     )
     INSERT INTO agg_champion_summoner_spell_pair_stats (
-      game_version, rank_tier, role_norm, champion_id, spell_d, spell_f, count_game, count_win, updated_at
+      game_version, rank_tier, role, champion_id, spell_d, spell_f, spell1_casts, spell2_casts, count_game, count_win, updated_at
     )
     SELECT
       im.game_version,
       COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') AS rank_tier,
-      imp.role_resolved AS role_norm,
+      imp.role_resolved AS role,
       imp.champion_id,
       imp.summoner_spells[1]::int AS spell_d,
       imp.summoner_spells[2]::int AS spell_f,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell1Casts', '')::bigint, 0))::bigint AS spell1_casts,
+      SUM(COALESCE(NULLIF(imp.stats::jsonb->>'spell2Casts', '')::bigint, 0))::bigint AS spell2_casts,
       COUNT(*)::bigint AS count_game,
       SUM(CASE WHEN it.win THEN 1 ELSE 0 END)::bigint AS count_win,
       NOW()
@@ -1557,8 +1774,10 @@ async function runBackfillOnce(): Promise<void> {
       imp.champion_id,
       imp.summoner_spells[1],
       imp.summoner_spells[2]
-    ON CONFLICT (game_version, rank_tier, role_norm, champion_id, spell_d, spell_f) DO UPDATE
+    ON CONFLICT (game_version, rank_tier, role, champion_id, spell_d, spell_f) DO UPDATE
     SET
+      spell1_casts = EXCLUDED.spell1_casts,
+      spell2_casts = EXCLUDED.spell2_casts,
       count_game = EXCLUDED.count_game,
       count_win = EXCLUDED.count_win,
       updated_at = NOW()
@@ -1685,43 +1904,17 @@ async function runBackfillOnce(): Promise<void> {
       GROUP BY it.id
     ),
     first_inhibitor_by_match AS (
-      SELECT z.match_id, z.first_inhibitor_team
-      FROM (
-        SELECT
-          im.id AS match_id,
-          CASE
-            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
-            THEN (ev.evt->>'killerTeamId')::int
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 100
-            THEN 200
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 200
-            THEN 100
-            ELSE NULL
-          END AS first_inhibitor_team,
-          ROW_NUMBER() OVER (
-            PARTITION BY im.id
-            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
-          ) AS rn
-        FROM ingest_matchs im
-        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
-        CROSS JOIN LATERAL (
-          SELECT
-            e.evt,
-            f.frame_ord,
-            e.event_ord
-          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
-            WITH ORDINALITY AS f(frame, frame_ord)
-          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
-            WITH ORDINALITY AS e(evt, event_ord)
-          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
-            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
-        ) ev
-      ) z
-      WHERE z.rn = 1
-        AND z.first_inhibitor_team IN (100, 200)
+      SELECT
+        it.match_id,
+        CASE
+          WHEN SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_first THEN it.team END)
+          WHEN SUM(CASE WHEN it.inhibitor_kills > 0 THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_kills > 0 THEN it.team END)
+          ELSE NULL
+        END AS first_inhibitor_team
+      FROM ingest_teams it
+      GROUP BY it.match_id
     ),
     team_source AS (
       SELECT
@@ -1829,15 +2022,17 @@ async function runBackfillOnce(): Promise<void> {
   `)
 
   await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE agg_champion_bans_by_banner;
+
     WITH bans AS (
       SELECT
         it.team AS team_num,
         CASE
-          WHEN COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int) = 1 THEN 'TOP'
-          WHEN COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int) = 2 THEN 'JUNGLE'
-          WHEN COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int) = 3 THEN 'MIDDLE'
-          WHEN COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int) = 4 THEN 'BOTTOM'
-          WHEN COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int) = 5 THEN 'SUPPORT'
+          WHEN ((COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int, 0) - 1) % 5) + 1 = 1 THEN 'TOP'
+          WHEN ((COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int, 0) - 1) % 5) + 1 = 2 THEN 'JUNGLE'
+          WHEN ((COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int, 0) - 1) % 5) + 1 = 3 THEN 'MIDDLE'
+          WHEN ((COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int, 0) - 1) % 5) + 1 = 4 THEN 'BOTTOM'
+          WHEN ((COALESCE((be.elem->>'pickOrder')::int, (be.elem->>'pickTurn')::int, 0) - 1) % 5) + 1 = 5 THEN 'SUPPORT'
           ELSE 'UNKNOWN'
         END AS banner_role_norm,
         (be.elem->>'championId')::int AS banned_champion_id,
@@ -2306,43 +2501,17 @@ async function runBackfillOnce(): Promise<void> {
       GROUP BY game_version, rank_tier
     ),
     first_inhibitor_by_match AS (
-      SELECT z.match_id, z.first_inhibitor_team
-      FROM (
-        SELECT
-          im.id AS match_id,
-          CASE
-            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
-            THEN (ev.evt->>'killerTeamId')::int
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 100
-            THEN 200
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 200
-            THEN 100
-            ELSE NULL
-          END AS first_inhibitor_team,
-          ROW_NUMBER() OVER (
-            PARTITION BY im.id
-            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
-          ) AS rn
-        FROM ingest_matchs im
-        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
-        CROSS JOIN LATERAL (
-          SELECT
-            e.evt,
-            f.frame_ord,
-            e.event_ord
-          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
-            WITH ORDINALITY AS f(frame, frame_ord)
-          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
-            WITH ORDINALITY AS e(evt, event_ord)
-          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
-            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
-        ) ev
-      ) z
-      WHERE z.rn = 1
-        AND z.first_inhibitor_team IN (100, 200)
+      SELECT
+        it.match_id,
+        CASE
+          WHEN SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_first THEN it.team END)
+          WHEN SUM(CASE WHEN it.inhibitor_kills > 0 THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_kills > 0 THEN it.team END)
+          ELSE NULL
+        END AS first_inhibitor_team
+      FROM ingest_teams it
+      GROUP BY it.match_id
     ),
     first_counts AS (
       SELECT
@@ -2626,6 +2795,7 @@ async function runBackfillOnce(): Promise<void> {
     UNION ALL
     SELECT 'agg_champion_core_stats'::text AS k, COUNT(*)::bigint AS c FROM agg_champion_core_stats
     UNION ALL SELECT 'agg_champion_summoner_spell_pair_stats', COUNT(*)::bigint FROM agg_champion_summoner_spell_pair_stats
+    UNION ALL SELECT 'agg_champion_spells_stats', COUNT(*)::bigint FROM agg_champion_spells_stats
     UNION ALL SELECT 'agg_champion_item_starter_set_stats', COUNT(*)::bigint FROM agg_champion_item_starter_set_stats
     UNION ALL SELECT 'agg_champion_item_stats', COUNT(*)::bigint FROM agg_champion_item_stats
     UNION ALL SELECT 'agg_champion_item_solo_stats', COUNT(*)::bigint FROM agg_champion_item_solo_stats
@@ -2636,7 +2806,6 @@ async function runBackfillOnce(): Promise<void> {
     UNION ALL SELECT 'agg_champion_damage_stats', COUNT(*)::bigint FROM agg_champion_damage_stats
     UNION ALL SELECT 'agg_champion_participant_stats', COUNT(*)::bigint FROM agg_champion_participant_stats
     UNION ALL SELECT 'agg_champion_duo_role_stats', COUNT(*)::bigint FROM agg_champion_duo_role_stats
-    UNION ALL SELECT 'agg_champion_duo_stats', COUNT(*)::bigint FROM agg_champion_duo_stats
     UNION ALL SELECT 'agg_botlane_duo_vs_duo_stats', COUNT(*)::bigint FROM agg_botlane_duo_vs_duo_stats
     UNION ALL SELECT 'agg_champion_bucket', COUNT(*)::bigint FROM agg_champion_bucket
     UNION ALL SELECT 'agg_champion_vs_stats', COUNT(*)::bigint FROM agg_champion_vs_stats

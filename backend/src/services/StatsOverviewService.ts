@@ -1,6 +1,6 @@
 /**
  * Overview stats for the statistics page: total matches, last update, top winrate champions,
- * matches per division, distinct participant count (unique player_id in ingest_match_players).
+ * matches per division, distinct participant count (unique player_id in match_players).
  * Uses incremental aggregate tables (`agg_*`) plus legacy MVs for metrics not yet migrated.
  */
 import { prisma } from '../db.js'
@@ -120,7 +120,7 @@ export interface OverviewDetailStats {
     highEloWinrate?: number
     highEloRank?: number
   }>
-  /** Paires D→F (ordre Riot) depuis ingest_match_players. */
+  /** Paires D→F (ordre Riot) depuis match_players. */
   summonerSpellSets: Array<{
     spellIdD: number
     spellIdF: number
@@ -478,43 +478,17 @@ async function loadTeamCoreFallbackFromIngest(
     }>
   >(`
     WITH first_inhibitor_by_match AS (
-      SELECT z.match_id, z.first_inhibitor_team
-      FROM (
-        SELECT
-          im.id AS match_id,
-          CASE
-            WHEN COALESCE(ev.evt->>'killerTeamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'killerTeamId')::int IN (100, 200)
-            THEN (ev.evt->>'killerTeamId')::int
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 100
-            THEN 200
-            WHEN COALESCE(ev.evt->>'teamId', '') ~ '^[0-9]+$'
-              AND (ev.evt->>'teamId')::int = 200
-            THEN 100
-            ELSE NULL
-          END AS first_inhibitor_team,
-          ROW_NUMBER() OVER (
-            PARTITION BY im.id
-            ORDER BY COALESCE(NULLIF(ev.evt->>'timestamp', '')::bigint, 0), ev.frame_ord, ev.event_ord
-          ) AS rn
-        FROM ingest_matchs im
-        INNER JOIN match_ingest_raw mir ON mir.riot_match_id = im.riot_match_id
-        CROSS JOIN LATERAL (
-          SELECT
-            e.evt,
-            f.frame_ord,
-            e.event_ord
-          FROM jsonb_array_elements(COALESCE(mir.timeline_json->'info'->'frames', '[]'::jsonb))
-            WITH ORDINALITY AS f(frame, frame_ord)
-          CROSS JOIN LATERAL jsonb_array_elements(COALESCE(f.frame->'events', '[]'::jsonb))
-            WITH ORDINALITY AS e(evt, event_ord)
-          WHERE UPPER(COALESCE(e.evt->>'type', '')) = 'BUILDING_KILL'
-            AND UPPER(COALESCE(e.evt->>'buildingType', '')) = 'INHIBITOR_BUILDING'
-        ) ev
-      ) z
-      WHERE z.rn = 1
-        AND z.first_inhibitor_team IN (100, 200)
+      SELECT
+        it.match_id,
+        CASE
+          WHEN SUM(CASE WHEN it.inhibitor_first THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_first THEN it.team END)
+          WHEN SUM(CASE WHEN it.inhibitor_kills > 0 THEN 1 ELSE 0 END) = 1
+          THEN MAX(CASE WHEN it.inhibitor_kills > 0 THEN it.team END)
+          ELSE NULL
+        END AS first_inhibitor_team
+      FROM teams it
+      GROUP BY it.match_id
     )
     SELECT
       it.team AS team_num,
@@ -540,8 +514,8 @@ async function loadTeamCoreFallbackFromIngest(
         0
       )::bigint AS count_inhibitor_first,
       COALESCE(SUM(it.elder_kills), 0)::bigint AS sum_elder_kills
-    FROM ingest_teams it
-    INNER JOIN ingest_matchs im ON im.id = it.match_id
+    FROM teams it
+    INNER JOIN matchs im ON im.id = it.match_id
     LEFT JOIN first_inhibitor_by_match fibm ON fibm.match_id = im.id
     WHERE ${cond.join(' AND ')}
     GROUP BY it.team
@@ -630,8 +604,8 @@ async function loadSurrenderBySideCounts(
         it.team AS team_num,
         COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
         COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
-      FROM ingest_teams it
-      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      FROM teams it
+      INNER JOIN matchs im ON im.id = it.match_id
       WHERE ${condIngest.join(' AND ')}
       GROUP BY it.team
     `)
@@ -885,7 +859,7 @@ async function loadSummonerSpellPairsFromMatches(
     'ag.'
   )
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleSql = roleNorm ? ` AND ag.role = '${roleNorm.replace(/'/g, "''")}'` : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `
@@ -923,7 +897,7 @@ async function loadItemStarterSetsFromMatches(
 ): Promise<ItemStarterSetSqlRow[]> {
   const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ag.')
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND ag.role_norm = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleSql = roleNorm ? ` AND ag.role = '${roleNorm.replace(/'/g, "''")}'` : ''
   const agFrom = await matchVersionedAggFrom('agg_champion_item_starter_set_stats', version, 'ag')
   const sql = `
       SELECT
@@ -2301,12 +2275,12 @@ export async function getOverviewMeta(
 export interface InfosMetaCounts {
   totalMatches: number
   totalPlayers: number
-  /** DISTINCT player_id dans ingest pour les matchs du filtre patch / ligue / rôle (aligné overview). */
+  /** DISTINCT player_id dans match_players pour les matchs du filtre patch / ligue / rôle (aligné overview). */
   playersWithIngestMatches: number
 }
 
 /**
- * WHERE pour `ingest_matchs im` + `ingest_match_players imp` (mêmes règles que buildRawMatchCond sur match).
+ * WHERE pour `matchs im` + `match_players imp` (mêmes règles que buildRawMatchCond sur match).
  */
 function buildIngestMatchPlayerWhereSql(
   version?: string | string[] | null,
@@ -2334,7 +2308,7 @@ function buildIngestMatchPlayerWhereSql(
   return parts.join(' AND ')
 }
 
-async function countDistinctPlayersInIngest(
+async function countDistinctPlayersInMatches(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
   role?: string | null
@@ -2342,8 +2316,8 @@ async function countDistinctPlayersInIngest(
   const whereSql = buildIngestMatchPlayerWhereSql(version, rankTier, role)
   const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(`
     SELECT COUNT(DISTINCT imp.player_id)::bigint AS c
-    FROM ingest_match_players imp
-    INNER JOIN ingest_matchs im ON im.id = imp.match_id
+    FROM match_players imp
+    INNER JOIN matchs im ON im.id = imp.match_id
     WHERE ${whereSql}
   `)
   return Number(rows[0]?.c ?? 0)
@@ -2352,7 +2326,7 @@ async function countDistinctPlayersInIngest(
 /**
  * Compteurs Infos :
  * - total matches / total players : globaux (tous patches)
- * - playersWithIngestMatches : joueurs distincts ayant au moins une ligne ingest sur le filtre patch / ligue / rôle
+ * - playersWithIngestMatches : joueurs distincts ayant au moins une ligne match_players sur le filtre patch / ligue / rôle
  */
 export async function getInfosMetaCounts(
   version?: string | string[] | null,
@@ -2367,7 +2341,7 @@ export async function getInfosMetaCounts(
     )
     const totalMatches = Number(matchRows[0]?.c ?? 0)
     const totalPlayers = await prisma.player.count()
-    const playersWithIngestMatches = await countDistinctPlayersInIngest(version, rankTier, role)
+    const playersWithIngestMatches = await countDistinctPlayersInMatches(version, rankTier, role)
     return {
       totalMatches,
       totalPlayers,

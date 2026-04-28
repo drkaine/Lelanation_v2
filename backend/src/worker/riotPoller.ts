@@ -46,7 +46,7 @@ import {
   isRawIngestQueueEnabled,
   tryInsertRawIngestPayload,
   claimRawIngestRows,
-  deleteRawIngestRow,
+  markRawIngestDone,
   markRawIngestError,
   countRawIngestByStatus,
   requeueRawIngestErrors,
@@ -246,6 +246,7 @@ async function emitPollerSummariesIfDue(
   sw: PollerSummaryWindows
 ): Promise<void> {
   const now = Date.now()
+  const rawQueueEnabled = isRawIngestQueueEnabled()
   if (now - sw.summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
     const db1h = await loadPollerDbWindowMetrics(60 * 60 * 1000).catch(() => ({
       matchesRecovered: 0,
@@ -283,6 +284,8 @@ async function emitPollerSummariesIfDue(
     const http429PauseDelta = limiterStats.http429PauseCount - sw.summary30mHttp429PauseCount
     const windowHours = elapsedMs / (60 * 60 * 1000)
     const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
+    const matchesStoredDelta = rawQueueEnabled ? matchesApiDelta : matchesDbDelta
+    const matchesStoredLabel = rawQueueEnabled ? 'normalises_raw' : 'nouveaux_db'
     const httpWin30 = buildPollerHttpWindowStats(
       sw.summary30mWindowStartedAtMs,
       now,
@@ -293,7 +296,7 @@ async function emitPollerSummariesIfDue(
       section: 'back',
       type: 'info',
       script: 'poller_30m',
-      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchsDb:+${matchesDbDelta} rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} moy:${httpWin30.httpAvgPerMinuteOverall}/min moy2min(uniforme):${httpWin30.httpAvgPer2MinUniform} moy2min(réel,${httpWin30.httpTwoMinBucketsComplete} tranches):${httpWin30.httpTwoMinBucketAvg ?? 'n/a'} pic2min:${httpWin30.httpTwoMinBucketPeak} (${httpWin30.httpTwoMinBucketPeakCount}×) (~${httpRequestsProjectedPerHour}/h proj) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
+      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchesStored:+${matchesStoredDelta}(${matchesStoredLabel}) rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} moy:${httpWin30.httpAvgPerMinuteOverall}/min moy2min(uniforme):${httpWin30.httpAvgPer2MinUniform} moy2min(réel,${httpWin30.httpTwoMinBucketsComplete} tranches):${httpWin30.httpTwoMinBucketAvg ?? 'n/a'} pic2min:${httpWin30.httpTwoMinBucketPeak} (${httpWin30.httpTwoMinBucketPeakCount}×) (~${httpRequestsProjectedPerHour}/h proj) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
@@ -307,6 +310,8 @@ async function emitPollerSummariesIfDue(
           matchIdsFromApi: matchIdsFromApiDelta,
           existingMatchesSkipped: existingMatchesSkippedDelta,
           matchesInsertedDb: matchesDbDelta,
+          matchesStored: matchesStoredDelta,
+          matchesStoredLabel,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
           newPlayersRankFetched: newPlayersRankFetchedDelta,
@@ -331,6 +336,8 @@ async function emitPollerSummariesIfDue(
           playersPolled: state.playersPolled,
           newPlayers: state.playersFetched,
           matchesInsertedDb: state.matchesFetched,
+          matchesStored: rawQueueEnabled ? state.matchesApiIngestComplete : state.matchesFetched,
+          matchesStoredLabel,
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
           newPlayersRankFetched: state.newPlayersRankFetched,
@@ -407,7 +414,9 @@ async function emitPollerSummariesIfDue(
     const windowHours = elapsedMs / (60 * 60 * 1000)
     const httpRequestsProjectedPerHour = Math.round((httpRequestsDelta * (60 * 60 * 1000)) / elapsedMs)
     const discoveryRate = playersPolledDelta > 0 ? matchIdsFromApiDelta / playersPolledDelta : 0
-    const efficiency = matchIdsFromApiDelta > 0 ? (matchesDbDelta / matchIdsFromApiDelta) * 100 : 0
+    const matchesStoredDelta = rawQueueEnabled ? matchesApiDelta : matchesDbDelta
+    const matchesStoredLabel = rawQueueEnabled ? 'normalises_raw' : 'nouveaux_db'
+    const efficiency = matchIdsFromApiDelta > 0 ? (matchesStoredDelta / matchIdsFromApiDelta) * 100 : 0
     const appTarget120 = getRiotAppTargetPer120s()
     const requestBudget = Math.max(
       appTarget120,
@@ -428,7 +437,7 @@ async function emitPollerSummariesIfDue(
       `- Matches recuperes (tracked_matches.created_at, 1h): ${db1h.matchesRecovered}`,
       `- Matches tracked skip/defer (1h): skipped_version=${db1h.skippedVersion} deferred_patch=${db1h.deferredPatch}`,
       `- Joueurs polles (delta process): ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
-      `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesDbDelta} nouveaux en DB | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
+      `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesStoredDelta} ${matchesStoredLabel} | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
       `- API HTTP (fenêtre): +${httpRequestsDelta} | moy ${httpWinH.httpAvgPerMinuteOverall}/min | moy/2min uniforme ${httpWinH.httpAvgPer2MinUniform} | moy/2min réel (${httpWinH.httpTwoMinBucketsComplete} tranches) ${httpWinH.httpTwoMinBucketAvg ?? 'n/a'} | pic/2min ${httpWinH.httpTwoMinBucketPeak} (${httpWinH.httpTwoMinBucketPeakCount}×) | budget ${httpRequestsDelta}/${requestBudget} (usage ${requestUsagePct.toFixed(1)}%)`,
       `- Max Token Peak: ${limiterStats.maxApp120CountObserved}/${appTarget120} (Safety Margin: ${peakOk ? 'OK' : 'HIGH'})`,
       `- Participants indexes: ${playersFetchedDelta} nouveaux PUUIDs`,
@@ -454,6 +463,8 @@ async function emitPollerSummariesIfDue(
           matchIdsFromApi: matchIdsFromApiDelta,
           existingMatchesSkipped: existingMatchesSkippedDelta,
           matchesInsertedDb: matchesDbDelta,
+          matchesStored: matchesStoredDelta,
+          matchesStoredLabel,
           matchesApiIngestComplete: matchesApiDelta,
           playersRankLeagueUpdated: playersRankDelta,
           newPlayersRankFetched: newPlayersRankFetchedDelta,
@@ -483,6 +494,8 @@ async function emitPollerSummariesIfDue(
           matchIdsFromApi: state.matchIdsFromApi,
           existingMatchesSkipped: state.existingMatchesSkipped,
           matchesInsertedDb: state.matchesFetched,
+          matchesStored: rawQueueEnabled ? state.matchesApiIngestComplete : state.matchesFetched,
+          matchesStoredLabel,
           matchesApiIngestComplete: state.matchesApiIngestComplete,
           playersRankLeagueUpdated: state.playersRankUpdatedLeague,
           newPlayersRankFetched: state.newPlayersRankFetched,
@@ -504,9 +517,9 @@ async function emitPollerSummariesIfDue(
       0,
       matchIdsFromApiDelta - existingMatchesSkippedDelta - db1h.skippedVersion - db1h.deferredPatch
     )
-    const matchLoss = Math.max(0, effectiveProcessable - matchesDbDelta)
+    const matchLoss = Math.max(0, effectiveProcessable - matchesStoredDelta)
     const backlogLikely =
-      matchIdsFromApiDelta > 500 && matchesApiDelta === 0 && matchesDbDelta === 0
+      matchIdsFromApiDelta > 500 && matchesApiDelta === 0 && matchesStoredDelta === 0
     if (
       !backlogLikely &&
       matchLoss >= POLLER_MATCH_LOSS_ALERT_ABSOLUTE &&
@@ -517,11 +530,13 @@ async function emitPollerSummariesIfDue(
         section: 'back',
         type: 'warning',
         script: 'poller_hourly',
-        message: `Alerte perte matchs: trouves=${matchIdsFromApiDelta} processables=${effectiveProcessable} inseresDb=${matchesDbDelta} perte=${matchLoss}`,
+        message: `Alerte perte matchs: trouves=${matchIdsFromApiDelta} processables=${effectiveProcessable} stockes=${matchesStoredDelta} mode=${matchesStoredLabel} perte=${matchLoss}`,
         json: {
           matchIdsFromApiDelta,
           effectiveProcessable,
           matchesInsertedDbDelta: matchesDbDelta,
+          matchesStoredDelta,
+          matchesStoredLabel,
           existingMatchesSkippedDelta,
           trackedSkippedVersion1h: db1h.skippedVersion,
           trackedDeferredPatch1h: db1h.deferredPatch,
@@ -1420,10 +1435,10 @@ function getRawIngestDoneCleanupBatch(): number {
   return Math.min(200_000, raw)
 }
 
-/** Min age of `match_ingest_raw.normalized_at` before a `done` row may be purged (default 12 h). */
+/** Min age of `match_ingest_raw.normalized_at` before a `done` row may be purged (default 24 h). */
 function getRawIngestDoneRetentionMs(): number {
   const raw = parseInt(process.env.RAW_INGEST_DONE_RETENTION_MS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 0) return 12 * 60 * 60 * 1000
+  if (!Number.isFinite(raw) || raw < 0) return 24 * 60 * 60 * 1000
   return Math.min(30 * 24 * 60 * 60 * 1000, raw)
 }
 
@@ -1549,7 +1564,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   type Parsed = { path: string | null; rawId: bigint | null; payload: MatchIngestQueuePayloadV1 }
   const parsed: Parsed[] = []
   const useRaw = isRawIngestQueueEnabled()
-  const useFile = isMatchIngestFileQueueEnabled()
+  const useFile = isMatchIngestFileQueueEnabled() && !useRaw
   if (useRaw) {
     const rows = await claimRawIngestRows(getMatchIngestBatchSize())
     if (rows.length > 0) {
@@ -1614,33 +1629,37 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     const dto = payload.matchDto as RiotMatchDto
     canonicalIds.push(resolveRiotMatchIdForIngest(payload.matchId, dto))
   }
-  const existingRows = await prisma.ingestMatch.findMany({
-    where: { riotMatchId: { in: canonicalIds } },
-    select: { riotMatchId: true, id: true },
-  })
-  const existingMatchIdByRiot = new Map(existingRows.map((r) => [r.riotMatchId, r.id]))
-
-  const puuidsToPreload: string[] = []
-  const batchHasRawIngest = parsed.some((row) => row.rawId != null)
-  for (let i = 0; i < parsed.length; i++) {
-    const { payload, rawId } = parsed[i]
-    const cid = canonicalIds[i]
-    if (existingMatchIdByRiot.has(cid) && rawId == null) continue
-    const dto = payload.matchDto as RiotMatchDto
-    const part = dto.info?.participants as RiotParticipantDto[] | undefined
-    for (const p of part ?? []) {
-      if (p.puuid) puuidsToPreload.push(p.puuid)
+  const hasFileRows = parsed.some((row) => row.rawId == null)
+  const existingMatchIdByRiot = new Map<string, bigint>()
+  let rankIngestOpts: MatchIngestOptions | null = null
+  if (hasFileRows) {
+    const existingRows = await prisma.ingestMatch.findMany({
+      where: { riotMatchId: { in: canonicalIds } },
+      select: { riotMatchId: true, id: true },
+    })
+    for (const row of existingRows) existingMatchIdByRiot.set(row.riotMatchId, row.id)
+    const puuidsToPreload: string[] = []
+    const batchHasRawIngest = parsed.some((row) => row.rawId != null)
+    for (let i = 0; i < parsed.length; i++) {
+      const { payload, rawId } = parsed[i]
+      const cid = canonicalIds[i]
+      if (existingMatchIdByRiot.has(cid) && rawId == null) continue
+      const dto = payload.matchDto as RiotMatchDto
+      const part = dto.info?.participants as RiotParticipantDto[] | undefined
+      for (const p of part ?? []) {
+        if (p.puuid) puuidsToPreload.push(p.puuid)
+      }
     }
-  }
-  const ingestPreload = await preloadIngestLeanMatchDbData(puuidsToPreload)
-  const sharedAccountRankCache: MatchIngestRankCache = new Map()
-  const rankIngestOpts: MatchIngestOptions = {
-    ingestPreload,
-    sharedAccountRankCache,
-    shouldAbort: () => state.shouldStop,
-    allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
-    forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
-    refreshExistingIngestParticipantRanks: batchHasRawIngest,
+    const ingestPreload = await preloadIngestLeanMatchDbData(puuidsToPreload)
+    const sharedAccountRankCache: MatchIngestRankCache = new Map()
+    rankIngestOpts = {
+      ingestPreload,
+      sharedAccountRankCache,
+      shouldAbort: () => state.shouldStop,
+      allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
+      forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
+      refreshExistingIngestParticipantRanks: batchHasRawIngest,
+    }
   }
 
   for (let i = 0; i < parsed.length; i++) {
@@ -1654,16 +1673,6 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
 
     if (rawId != null) {
       try {
-        await upsertIngestMatchAndParticipants(
-          client,
-          payload.region,
-          matchId,
-          matchDto,
-          payload.puuidKeyVersion ?? null,
-          ctx.counters,
-          ctx.logger,
-          { ...rankIngestOpts, timelineDto }
-        )
         await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
@@ -1677,7 +1686,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
           })
           noteMatchIngestProcessed(payload.enqueuedAt)
           await setTrackedMatchStatus(canonicalRiotMatchId, `SKIPPED_${skipped.reason}`).catch(() => undefined)
-          await deleteRawIngestRow(rawId)
+          await markRawIngestDone(rawId).catch(() => undefined)
           continue
         }
         if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
@@ -1715,7 +1724,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
       await setTrackedMatchStatus(canonicalRiotMatchId, 'INGESTED').catch(() => undefined)
-      if (rawId != null) await deleteRawIngestRow(rawId)
+      if (rawId != null) await markRawIngestDone(rawId).catch(() => undefined)
       else await unlink(p!).catch(() => undefined)
       continue
     }
@@ -1729,7 +1738,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         payload.puuidKeyVersion,
         ctx.counters,
         ctx.logger,
-        { ...rankIngestOpts, timelineDto }
+        rankIngestOpts ? { ...rankIngestOpts, timelineDto } : { timelineDto }
       )
       if (timelineDto) {
         await extractAndInsertJungleFirstClear(matchDbId, canonical, timelineDto, ctx.logger)
@@ -1748,7 +1757,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       ctx.syncLiveCounters()
       noteMatchIngestProcessed(payload.enqueuedAt)
       await setTrackedMatchStatus(canonical, 'INGESTED').catch(() => undefined)
-      if (rawId != null) await deleteRawIngestRow(rawId)
+      if (rawId != null) await markRawIngestDone(rawId).catch(() => undefined)
       else await unlink(p!).catch(() => undefined)
     } catch (err) {
       const skipped = unwrapMatchIngestSkipped(err)
@@ -1759,7 +1768,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         })
         noteMatchIngestProcessed(payload.enqueuedAt)
         await setTrackedMatchStatus(canonicalRiotMatchId, `SKIPPED_${skipped.reason}`).catch(() => undefined)
-        if (rawId != null) await deleteRawIngestRow(rawId)
+        if (rawId != null) await markRawIngestDone(rawId).catch(() => undefined)
         else await unlink(p!).catch(() => undefined)
         continue
       }

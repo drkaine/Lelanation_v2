@@ -172,8 +172,8 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
         SUM(CASE WHEN NOT it.win AND it.tower_first THEN 1 ELSE 0 END)::int AS tower_first_loss,
         SUM(CASE WHEN it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_win,
         SUM(CASE WHEN NOT it.win AND it.first_blood THEN 1 ELSE 0 END)::int AS first_blood_loss
-      FROM ingest_teams it
-      INNER JOIN ingest_matchs im ON im.id = it.match_id
+      FROM teams it
+      INNER JOIN matchs im ON im.id = it.match_id
       WHERE UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED')) <> 'UNRANKED'
       GROUP BY im.game_version, UPPER(COALESCE(NULLIF(TRIM(im.rank_tier), ''), 'UNRANKED'))
     ),

@@ -1,6 +1,6 @@
 /**
  * Summoner spell stats by champion from champion_summoner_spells_agg aggregate table.
- * Individual spell stats from MV; duos from raw ingest_match_players.summoner_spells.
+ * Individual spell stats from MV; duos from agg_champion_summoner_spell_pair_stats.
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'
@@ -141,69 +141,45 @@ export async function getSummonerSpellsDuosByChampion(
   const pVersion = norm(version)
 
   try {
-    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
-    if (statIds.length === 0) return { totalGames: 0, duos: [] }
-
-    // Duos from ingest_match_players.summoner_spells (ordered D/F)
+    const { totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
     const versionClause = pVersion
-      ? `AND m.game_version LIKE '${pVersion.replace(/'/g, "''")}%'`
+      ? `AND sp.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`
       : ''
     const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
     const rankClause =
       ranks.length === 1
-        ? `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') = '${ranks[0]!.replace(/'/g, "''")}'`
+        ? `AND sp.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`
         : ranks.length > 1
-          ? `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
-          : `AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(m.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'`
-
-    const matchPlayersRows = await prisma.$queryRawUnsafe<
-      Array<{ win: boolean; summonerSpells: number[] }>
+          ? `AND sp.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
+          : `AND sp.rank_tier <> 'UNRANKED'`
+    const pairFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', pVersion, 'sp')
+    const pairRows = await prisma.$queryRawUnsafe<
+      Array<{ spellId1: number; spellId2: number; games: bigint; wins: bigint }>
     >(`
       SELECT
-        it.win AS win,
-        imp.summoner_spells AS "summonerSpells"
-      FROM ingest_match_players imp
-      INNER JOIN ingest_matchs m ON m.id = imp.match_id
-      INNER JOIN ingest_teams it ON it.id = imp.team_id
-      WHERE imp.champion_id = ${championId}
+        sp.spell_d AS "spellId1",
+        sp.spell_f AS "spellId2",
+        SUM(sp.count_game)::bigint AS games,
+        SUM(sp.count_win)::bigint AS wins
+      FROM ${pairFrom}
+      WHERE sp.champion_id = ${championId}
         ${versionClause}
         ${rankClause}
-      LIMIT 50000
+      GROUP BY sp.spell_d, sp.spell_f
+      ORDER BY SUM(sp.count_game) DESC
+      LIMIT 50
     `)
-
-    const totalGamesRaw = matchPlayersRows.length
-    if (totalGamesRaw === 0) return { totalGames: totalGames, duos: [] }
-
-    const duoMap = new Map<string, { id1: number; id2: number; games: number; wins: number }>()
-    for (const mp of matchPlayersRows) {
-      const spellIds = [...mp.summonerSpells].sort((a, b) => a - b)
-      if (spellIds.length < 2) continue
-      const id1 = spellIds[0]
-      const id2 = spellIds[1]
-      const key = `${id1}:${id2}`
-      const win = mp.win ?? false
-      let entry = duoMap.get(key)
-      if (!entry) {
-        entry = { id1, id2, games: 0, wins: 0 }
-        duoMap.set(key, entry)
+    const duos: SummonerSpellDuoRow[] = pairRows.map((r) => {
+      const games = Number(r.games ?? 0)
+      const wins = Number(r.wins ?? 0)
+      return {
+        spellId1: Number(r.spellId1),
+        spellId2: Number(r.spellId2),
+        games,
+        wins,
+        winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
       }
-      entry.games++
-      if (win) entry.wins++
-    }
-
-    const duos: SummonerSpellDuoRow[] = []
-    for (const entry of duoMap.values()) {
-      duos.push({
-        spellId1: entry.id1,
-        spellId2: entry.id2,
-        games: entry.games,
-        wins: entry.wins,
-        winrate: entry.games > 0 ? Math.round((entry.wins / entry.games) * 10000) / 100 : 0,
-      })
-    }
-    duos.sort((a, b) => b.games - a.games)
-    duos.splice(50)
-
+    })
     return { totalGames, duos }
   } catch (err) {
     console.warn('[getSummonerSpellsDuosByChampion]', err)

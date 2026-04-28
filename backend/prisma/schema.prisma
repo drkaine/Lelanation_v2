@@ -701,13 +701,46 @@ model AggChampionDamageStat {
 
 model AggChampionParticipantStat {
   championStatId BigInt   @id @map("champion_stat_id")
-  numericSums    Json     @default("{}") @map("numeric_sums")
-  numericCounts  Json     @default("{}") @map("numeric_counts")
-  boolTrueCounts Json     @default("{}") @map("bool_true_counts")
-  boolCounts     Json     @default("{}") @map("bool_counts")
+  sumAllInPings  BigInt   @default(0) @map("sum_all_in_pings")
+  sumAssistMePings BigInt @default(0) @map("sum_assist_me_pings")
+  sumAssists     BigInt   @default(0) @map("sum_assists")
+  sumBaronKills  BigInt   @default(0) @map("sum_baron_kills")
+  sumBasicPings  BigInt   @default(0) @map("sum_basic_pings")
+  sumBountyGold  BigInt   @default(0) @map("sum_bounty_gold")
+  sumControlWardsPlaced BigInt @default(0) @map("sum_control_wards_placed")
+  sumDamagePerMinute BigInt @default(0) @map("sum_damage_per_minute")
+  sumDamageSelfMitigated BigInt @default(0) @map("sum_damage_self_mitigated")
+  sumGoldEarned  BigInt   @default(0) @map("sum_gold_earned")
+  sumKills       BigInt   @default(0) @map("sum_kills")
+  sumTimePlayed  BigInt   @default(0) @map("sum_time_played")
+  sumTotalDamageDealtToChampions BigInt @default(0) @map("sum_total_damage_dealt_to_champions")
+  sumTotalMinionsKilled BigInt @default(0) @map("sum_total_minions_killed")
+  sumTotalTimeCCDealt BigInt @default(0) @map("sum_total_time_cc_dealt")
+  sumTotalUnitsHealed BigInt @default(0) @map("sum_total_units_healed")
+  sumVisionScore BigInt @default(0) @map("sum_vision_score")
+  sumWardsKilled BigInt @default(0) @map("sum_wards_killed")
+  sumWardsPlaced BigInt @default(0) @map("sum_wards_placed")
+  countFirstBloodKillTrue BigInt @default(0) @map("count_first_blood_kill_true")
+  countFirstBloodAssistTrue BigInt @default(0) @map("count_first_blood_assist_true")
+  countFirstTowerKillTrue BigInt @default(0) @map("count_first_tower_kill_true")
+  countFirstTowerAssistTrue BigInt @default(0) @map("count_first_tower_assist_true")
   updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@map("agg_champion_participant_stats")
+}
+
+model AggChampionSpellsStat {
+  championStatId BigInt   @id @map("champion_stat_id")
+  spell1Casts    Int      @default(0) @map("spell1_casts")
+  spell2Casts    Int      @default(0) @map("spell2_casts")
+  spell3Casts    Int      @default(0) @map("spell3_casts")
+  spell4Casts    Int      @default(0) @map("spell4_casts")
+  spellOrder     Json     @default("{}") @map("spell_order")
+  countGame      Int      @default(0) @map("count_game")
+  countWin       Int      @default(0) @map("count_win")
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("agg_champion_spells_stats")
 }
 
 model AggChampionDuoRoleStat {
@@ -720,17 +753,6 @@ model AggChampionDuoRoleStat {
 
   @@id([championStatId, allyChampionId, allyRole])
   @@map("agg_champion_duo_role_stats")
-}
-
-model AggChampionDuoStat {
-  championStatId BigInt   @map("champion_stat_id")
-  allyChampionId Int      @map("ally_champion_id")
-  countWin       Int      @default(0) @map("count_win")
-  countGame      Int      @default(0) @map("count_game")
-  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
-
-  @@id([championStatId, allyChampionId])
-  @@map("agg_champion_duo_stats")
 }
 
 model AggBotlaneDuoVsDuoStat {

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 
 type RawParticipant = {
   puuid?: string
+  participantId?: number
   championId?: number
   teamId?: number
   teamPosition?: string
@@ -32,6 +33,12 @@ type RawParticipant = {
   item3?: number
   item4?: number
   item5?: number
+  spell1Casts?: number
+  spell2Casts?: number
+  spell3Casts?: number
+  spell4Casts?: number
+  spellOrder?: number[]
+  skillOrder?: number[]
 }
 
 type RawTeam = {
@@ -75,6 +82,36 @@ function toSafeInt(v: unknown): number {
   return 0
 }
 
+function readParticipantMetricInt(
+  participant: RawParticipant,
+  key: string,
+  challengeKey?: string
+): number {
+  const p = participant as unknown as Record<string, unknown>
+  const direct = toSafeInt(p[key])
+  if (direct !== 0) return direct
+  const challenges = p.challenges as Record<string, unknown> | undefined
+  if (!challenges) return 0
+  return toSafeInt(challenges[challengeKey ?? key])
+}
+
+function readParticipantMetricNumber(
+  participant: RawParticipant,
+  key: string,
+  challengeKey?: string
+): number {
+  const p = participant as unknown as Record<string, unknown>
+  const directRaw = p[key]
+  if (typeof directRaw === 'boolean') return directRaw ? 1 : 0
+  const direct = toSafeInt(directRaw)
+  if (direct !== 0) return direct
+  const challenges = p.challenges as Record<string, unknown> | undefined
+  if (!challenges) return 0
+  const cRaw = challenges[challengeKey ?? key]
+  if (typeof cRaw === 'boolean') return cRaw ? 1 : 0
+  return toSafeInt(cRaw)
+}
+
 function normalizeRankTier(p: RawParticipant): string {
   const raw = (p.tier ?? p.rankTier ?? 'UNRANKED').toString().trim().toUpperCase()
   if (!raw || raw === 'UNRANKED') return 'UNRANKED'
@@ -89,19 +126,23 @@ function normalizeGameVersion(raw: unknown): string {
   return `${major}.${minor}`
 }
 
-async function loadIngestRankTiersByPuuid(riotMatchId: string): Promise<Map<string, string>> {
-  const rows = await prisma.$queryRaw<Array<{ puuid: string; rank_tier: string }>>`
-    SELECT pl.puuid::text AS puuid,
-           UPPER(TRIM(COALESCE(NULLIF(TRIM(imp.rank_tier), ''), 'UNRANKED'))) AS rank_tier
-    FROM ingest_match_players imp
-    INNER JOIN players pl ON pl.id = imp.player_id
-    INNER JOIN ingest_matchs im ON im.id = imp.match_id
-    WHERE im.riot_match_id = ${riotMatchId}
-  `
+async function loadPlayerRankTiersByPuuid(puuids: string[]): Promise<Map<string, string>> {
+  const uniq = Array.from(
+    new Set(
+      puuids
+        .map((v) => String(v ?? '').trim())
+        .filter((v) => v.length > 0)
+    )
+  )
+  if (uniq.length === 0) return new Map<string, string>()
+  const rows = await prisma.player.findMany({
+    where: { puuid: { in: uniq } },
+    select: { puuid: true, rankTier: true },
+  })
   const m = new Map<string, string>()
   for (const r of rows) {
     const pu = String(r.puuid ?? '').trim().toLowerCase()
-    const tier = String(r.rank_tier ?? 'UNRANKED').trim().toUpperCase()
+    const tier = String(r.rankTier ?? 'UNRANKED').trim().toUpperCase()
     if (pu) m.set(pu, tier)
   }
   return m
@@ -166,100 +207,74 @@ function resolveParticipantRoles(participants: RawParticipant[]): string[] {
   return roles
 }
 
-type FlatParticipantMetric = { key: string; kind: 'number' | 'boolean'; value: number }
-
-type ParticipantMetricAgg = {
-  numericSums: Record<string, number>
-  numericCounts: Record<string, number>
-  boolTrueCounts: Record<string, number>
-  boolCounts: Record<string, number>
-}
-
-const PARTICIPANT_METRIC_ROOT_SKIP = new Set([
-  'puuid',
-  'riotIdGameName',
-  'riotIdTagline',
-  'summonerId',
-  'summonerName',
-  'participantId',
-  'championId',
-  'championName',
-  'teamId',
-  'teamPosition',
-  'individualPosition',
-  'lane',
-  'role',
-  'perks',
-  '_runes',
-  '_shards',
-  '_summonerSpells',
-])
-
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }
 
-function walkParticipantMetrics(
-  value: unknown,
-  prefix: string,
-  out: FlatParticipantMetric[],
-  depth: number
-): void {
-  if (depth > 4) return
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    out.push({ key: prefix, kind: 'number', value })
-    return
-  }
-  if (typeof value === 'boolean') {
-    out.push({ key: prefix, kind: 'boolean', value: value ? 1 : 0 })
-    return
-  }
-  if (!isPlainObject(value)) return
-  for (const [k, v] of Object.entries(value)) {
-    if (!k) continue
-    const key = prefix ? `${prefix}.${k}` : k
-    walkParticipantMetrics(v, key, out, depth + 1)
-  }
+function readParticipantBoolTrue(
+  participant: RawParticipant,
+  key: string,
+  challengeKey?: string
+): number {
+  const p = participant as unknown as Record<string, unknown>
+  const direct = p[key]
+  if (typeof direct === 'boolean') return direct ? 1 : 0
+  const challenges = p.challenges as Record<string, unknown> | undefined
+  const v = challenges?.[challengeKey ?? key]
+  if (typeof v === 'boolean') return v ? 1 : 0
+  const n = toSafeInt(v)
+  return n > 0 ? 1 : 0
 }
 
-function buildParticipantMetricAgg(participant: RawParticipant): ParticipantMetricAgg {
-  const root = participant as unknown as Record<string, unknown>
-  const flat: FlatParticipantMetric[] = []
-  for (const [k, v] of Object.entries(root)) {
-    if (!k || PARTICIPANT_METRIC_ROOT_SKIP.has(k)) continue
-    walkParticipantMetrics(v, k, flat, 0)
-  }
-  const numericSums: Record<string, number> = {}
-  const numericCounts: Record<string, number> = {}
-  const boolTrueCounts: Record<string, number> = {}
-  const boolCounts: Record<string, number> = {}
-  for (const m of flat) {
-    if (m.kind === 'number') {
-      numericSums[m.key] = (numericSums[m.key] ?? 0) + m.value
-      numericCounts[m.key] = (numericCounts[m.key] ?? 0) + 1
-    } else {
-      boolTrueCounts[m.key] = (boolTrueCounts[m.key] ?? 0) + m.value
-      boolCounts[m.key] = (boolCounts[m.key] ?? 0) + 1
-    }
-  }
-  return { numericSums, numericCounts, boolTrueCounts, boolCounts }
+function readParticipantBoolFalse(
+  participant: RawParticipant,
+  key: string,
+  challengeKey?: string
+): number {
+  return readParticipantBoolTrue(participant, key, challengeKey) > 0 ? 0 : 1
 }
 
-function parseNumberMap(raw: unknown): Record<string, number> {
-  if (!isPlainObject(raw)) return {}
-  const out: Record<string, number> = {}
-  for (const [k, v] of Object.entries(raw)) {
-    const n = typeof v === 'number' ? v : Number(v)
-    if (Number.isFinite(n)) out[k] = n
-  }
-  return out
+function snakeToCamel(snake: string): string {
+  return snake.replace(/_([a-z0-9])/g, (_, m: string) => m.toUpperCase())
 }
 
-function mergeNumberMaps(base: Record<string, number>, delta: Record<string, number>): Record<string, number> {
-  const out: Record<string, number> = { ...base }
-  for (const [k, v] of Object.entries(delta)) out[k] = (out[k] ?? 0) + v
-  return out
+let participantAggColumnsPromise: Promise<string[]> | null = null
+async function getParticipantAggColumns(): Promise<string[]> {
+  if (!participantAggColumnsPromise) {
+    participantAggColumnsPromise = prisma
+      .$queryRaw<Array<{ column_name: string }>>`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'agg_champion_participant_stats'
+          AND column_name NOT IN ('champion_stat_id', 'updated_at')
+        ORDER BY ordinal_position
+      `
+      .then((rows) => rows.map((r) => String(r.column_name)))
+  }
+  return participantAggColumnsPromise
 }
+
+function participantValueForAggColumn(participant: RawParticipant, column: string): number {
+  if (column.startsWith('sum_')) {
+    const metricKey = snakeToCamel(column.slice(4))
+    return readParticipantMetricNumber(participant, metricKey)
+  }
+  if (column.startsWith('count_') && column.endsWith('_true')) {
+    const metricKey = snakeToCamel(column.slice(6, -5))
+    return readParticipantBoolTrue(participant, metricKey)
+  }
+  if (column.startsWith('count_') && column.endsWith('_false')) {
+    const metricKey = snakeToCamel(column.slice(6, -6))
+    return readParticipantBoolFalse(participant, metricKey)
+  }
+  if (column.startsWith('count_')) {
+    const metricKey = snakeToCamel(column.slice(6))
+    return readParticipantMetricNumber(participant, metricKey)
+  }
+  return 0
+}
+
 
 function coreStatId(
   championId: number,
@@ -321,6 +336,45 @@ function extractFinalItems(p: RawParticipant): number[] {
   return ids
 }
 
+function extractSpellOrder(p: RawParticipant): number[] {
+  const raw = (p.spellOrder ?? p.skillOrder ?? []) as unknown
+  if (!Array.isArray(raw)) return []
+  return raw.map((v) => toSafeInt(v)).filter((v) => v >= 1 && v <= 4).slice(0, 18)
+}
+
+function extractTimelineSpellOrdersByParticipant(payload: MatchIngestQueuePayloadV1): Map<number, number[]> {
+  const out = new Map<number, number[]>()
+  const timeline = payload.timelineDto as
+    | {
+        info?: {
+          frames?: Array<{
+            events?: Array<{
+              type?: string
+              participantId?: number
+              skillSlot?: number
+            }>
+          }>
+        }
+      }
+    | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return out
+
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      if (String(ev?.type ?? '').trim().toUpperCase() !== 'SKILL_LEVEL_UP') continue
+      const participantId = toSafeInt(ev?.participantId)
+      const skillSlot = toSafeInt(ev?.skillSlot)
+      if (participantId <= 0 || skillSlot < 1 || skillSlot > 4) continue
+      const prev = out.get(participantId) ?? []
+      prev.push(skillSlot)
+      out.set(participantId, prev.slice(0, 18))
+    }
+  }
+
+  return out
+}
+
 function toDurationBucket(gameDurationSeconds: number): number {
   if (!Number.isFinite(gameDurationSeconds) || gameDurationSeconds <= 0) return 0
   return Math.max(0, Math.trunc(gameDurationSeconds / 60))
@@ -328,17 +382,38 @@ function toDurationBucket(gameDurationSeconds: number): number {
 
 function bannerRoleFromPickOrder(pickOrderRaw: unknown): string {
   const pickOrder = toSafeInt(pickOrderRaw)
-  if (pickOrder === 1) return 'TOP'
-  if (pickOrder === 2) return 'JUNGLE'
-  if (pickOrder === 3) return 'MIDDLE'
-  if (pickOrder === 4) return 'BOTTOM'
-  if (pickOrder === 5) return 'SUPPORT'
+  if (pickOrder <= 0) return 'UNKNOWN'
+  const normalized = ((pickOrder - 1) % 5) + 1
+  if (normalized === 1) return 'TOP'
+  if (normalized === 2) return 'JUNGLE'
+  if (normalized === 3) return 'MIDDLE'
+  if (normalized === 4) return 'BOTTOM'
+  if (normalized === 5) return 'SUPPORT'
   return 'UNKNOWN'
 }
 
 function isRetryableTxError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err)
   return message.includes('40P01') || message.toLowerCase().includes('deadlock detected')
+}
+
+type SpellOrderAggEntry = {
+  order: number[]
+  number_of_games: number
+  number_of_wins: number
+}
+
+function parseSpellOrderMap(raw: unknown): Record<string, SpellOrderAggEntry> {
+  if (!isPlainObject(raw)) return {}
+  const out: Record<string, SpellOrderAggEntry> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (!isPlainObject(v)) continue
+    const order = Array.isArray(v.order) ? v.order.map((x) => toSafeInt(x)).filter((x) => x >= 1 && x <= 4) : []
+    const number_of_games = toSafeInt(v.number_of_games)
+    const number_of_wins = toSafeInt(v.number_of_wins)
+    out[k] = { order, number_of_games, number_of_wins }
+  }
+  return out
 }
 
 function initTeamDrakeStats(): TeamDrakeObjectiveStats {
@@ -486,8 +561,11 @@ export async function processRawAggregateAndBurn(
     }
   }
 
-  const dbRankByPuuid = await loadIngestRankTiersByPuuid(trackedMatchId)
+  const dbRankByPuuid = await loadPlayerRankTiersByPuuid(
+    participants.map((p) => String(p.puuid ?? '')).filter((p) => p.length > 0)
+  )
   const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
+  const timelineSpellOrdersByParticipant = extractTimelineSpellOrdersByParticipant(payload)
   const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
   const firstInhibitorTeamId = extractFirstInhibitorTeamId(payload)
 
@@ -558,6 +636,35 @@ export async function processRawAggregateAndBurn(
       `
       const statId = coreRows[0]?.id
       if (statId == null) continue
+      const sumGoldEarned = readParticipantMetricInt(p, 'goldEarned')
+      const sumGoldSpent = readParticipantMetricInt(p, 'goldSpent')
+      const sumMaxLevelLeadLaneOpponent = readParticipantMetricInt(p, 'maxLevelLeadLaneOpponent')
+      const sumMaxKillDeficit = readParticipantMetricInt(p, 'maxKillDeficit')
+      const sumMoreEnemyJungleThanOpponent = readParticipantMetricInt(p, 'moreEnemyJungleThanOpponent')
+      const sumMaxCsAdvantageOnLaneOpponent = readParticipantMetricInt(p, 'maxCsAdvantageOnLaneOpponent')
+      const sumVisionScoreAdvantageLaneOpponent = readParticipantMetricInt(p, 'visionScoreAdvantageLaneOpponent')
+      const sumLaningPhaseGoldExpAdvantage = readParticipantMetricInt(
+        p,
+        'laningPhaseGoldExpAdvantage'
+      )
+      const sumEarlyLaningPhaseGoldExpAdvantage = readParticipantMetricInt(
+        p,
+        'earlyLaningPhaseGoldExpAdvantage'
+      )
+      await tx.$executeRaw`
+        UPDATE agg_champion_core_stats
+        SET
+          sum_gold_earned = agg_champion_core_stats.sum_gold_earned + ${sumGoldEarned},
+          sum_gold_spent = agg_champion_core_stats.sum_gold_spent + ${sumGoldSpent},
+          sum_max_level_lead_lane_opponent = agg_champion_core_stats.sum_max_level_lead_lane_opponent + ${sumMaxLevelLeadLaneOpponent},
+          sum_max_kill_deficit = agg_champion_core_stats.sum_max_kill_deficit + ${sumMaxKillDeficit},
+          sum_more_enemy_jungle_than_opponent = agg_champion_core_stats.sum_more_enemy_jungle_than_opponent + ${sumMoreEnemyJungleThanOpponent},
+          sum_max_cs_advantage_on_lane_opponent = agg_champion_core_stats.sum_max_cs_advantage_on_lane_opponent + ${sumMaxCsAdvantageOnLaneOpponent},
+          sum_vision_score_advantage_lane_opponent = agg_champion_core_stats.sum_vision_score_advantage_lane_opponent + ${sumVisionScoreAdvantageLaneOpponent},
+          sum_laning_phase_gold_exp_advantage = agg_champion_core_stats.sum_laning_phase_gold_exp_advantage + ${sumLaningPhaseGoldExpAdvantage},
+          sum_early_laning_phase_gold_exp_advantage = agg_champion_core_stats.sum_early_laning_phase_gold_exp_advantage + ${sumEarlyLaningPhaseGoldExpAdvantage}
+        WHERE id = ${statId}
+      `
       const physToChamps = toSafeInt(p.physicalDamageDealtToChampions)
       const magicToChamps = toSafeInt(p.magicDamageDealtToChampions)
       const trueToChamps = toSafeInt(p.trueDamageDealtToChampions)
@@ -571,6 +678,30 @@ export async function processRawAggregateAndBurn(
           sum_magic_damage_to_champions,
           sum_true_damage_to_champions,
           sum_total_damage_to_champions,
+          sum_true_damage_taken,
+          sum_physical_damage_taken,
+          sum_magic_damage_taken,
+          sum_true_damage_done,
+          sum_physical_damage_done,
+          sum_magic_damage_done,
+          sum_true_damage_done_to_champions,
+          sum_physical_damage_done_to_champions,
+          sum_magic_damage_done_to_champions,
+          count_time_enemy_spent_controlled,
+          sum_total_units_healed,
+          sum_total_units_healed_to_champions,
+          sum_heal_from_map_sources,
+          sum_damage_per_minute,
+          sum_effective_heal_and_shielding,
+          sum_damage_dealt_to_buildings,
+          sum_damage_dealt_to_epic_monsters,
+          sum_damage_dealt_to_objectives,
+          sum_damage_dealt_to_turrets,
+          sum_damage_self_mitigated,
+          sum_total_time_cc_dealt,
+          sum_largest_critical_strike,
+          sum_total_heal,
+          sum_total_heals_on_teammates,
           count_game,
           updated_at
         )
@@ -580,6 +711,30 @@ export async function processRawAggregateAndBurn(
           ${magicToChamps},
           ${trueToChamps},
           ${totalToChamps},
+          ${readParticipantMetricInt(p, 'trueDamageTaken')},
+          ${readParticipantMetricInt(p, 'physicalDamageTaken')},
+          ${readParticipantMetricInt(p, 'magicDamageTaken')},
+          ${readParticipantMetricInt(p, 'trueDamageDealt')},
+          ${readParticipantMetricInt(p, 'physicalDamageDealt')},
+          ${readParticipantMetricInt(p, 'magicDamageDealt')},
+          ${readParticipantMetricInt(p, 'trueDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'physicalDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'magicDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'timeEnemySpentControlled') > 0 ? 1 : 0},
+          ${readParticipantMetricInt(p, 'totalUnitsHealed')},
+          ${readParticipantMetricInt(p, 'totalUnitsHealedToChampions')},
+          ${readParticipantMetricInt(p, 'healFromMapSources')},
+          ${readParticipantMetricInt(p, 'damagePerMinute')},
+          ${readParticipantMetricInt(p, 'effectiveHealAndShielding')},
+          ${readParticipantMetricInt(p, 'damageDealtToBuildings')},
+          ${readParticipantMetricInt(p, 'damageDealtToEpicMonsters')},
+          ${readParticipantMetricInt(p, 'damageDealtToObjectives')},
+          ${readParticipantMetricInt(p, 'damageDealtToTurrets')},
+          ${readParticipantMetricInt(p, 'damageSelfMitigated')},
+          ${readParticipantMetricInt(p, 'totalTimeCCDealt')},
+          ${readParticipantMetricInt(p, 'largestCriticalStrike')},
+          ${readParticipantMetricInt(p, 'totalHeal')},
+          ${readParticipantMetricInt(p, 'totalHealsOnTeammates')},
           1,
           NOW()
         )
@@ -597,69 +752,71 @@ export async function processRawAggregateAndBurn(
           sum_total_damage_to_champions =
             agg_champion_damage_stats.sum_total_damage_to_champions
             + EXCLUDED.sum_total_damage_to_champions,
+          sum_true_damage_taken = agg_champion_damage_stats.sum_true_damage_taken + EXCLUDED.sum_true_damage_taken,
+          sum_physical_damage_taken = agg_champion_damage_stats.sum_physical_damage_taken + EXCLUDED.sum_physical_damage_taken,
+          sum_magic_damage_taken = agg_champion_damage_stats.sum_magic_damage_taken + EXCLUDED.sum_magic_damage_taken,
+          sum_true_damage_done = agg_champion_damage_stats.sum_true_damage_done + EXCLUDED.sum_true_damage_done,
+          sum_physical_damage_done = agg_champion_damage_stats.sum_physical_damage_done + EXCLUDED.sum_physical_damage_done,
+          sum_magic_damage_done = agg_champion_damage_stats.sum_magic_damage_done + EXCLUDED.sum_magic_damage_done,
+          sum_true_damage_done_to_champions =
+            agg_champion_damage_stats.sum_true_damage_done_to_champions + EXCLUDED.sum_true_damage_done_to_champions,
+          sum_physical_damage_done_to_champions =
+            agg_champion_damage_stats.sum_physical_damage_done_to_champions + EXCLUDED.sum_physical_damage_done_to_champions,
+          sum_magic_damage_done_to_champions =
+            agg_champion_damage_stats.sum_magic_damage_done_to_champions + EXCLUDED.sum_magic_damage_done_to_champions,
+          count_time_enemy_spent_controlled =
+            agg_champion_damage_stats.count_time_enemy_spent_controlled + EXCLUDED.count_time_enemy_spent_controlled,
+          sum_total_units_healed = agg_champion_damage_stats.sum_total_units_healed + EXCLUDED.sum_total_units_healed,
+          sum_total_units_healed_to_champions =
+            agg_champion_damage_stats.sum_total_units_healed_to_champions + EXCLUDED.sum_total_units_healed_to_champions,
+          sum_heal_from_map_sources = agg_champion_damage_stats.sum_heal_from_map_sources + EXCLUDED.sum_heal_from_map_sources,
+          sum_damage_per_minute = agg_champion_damage_stats.sum_damage_per_minute + EXCLUDED.sum_damage_per_minute,
+          sum_effective_heal_and_shielding =
+            agg_champion_damage_stats.sum_effective_heal_and_shielding + EXCLUDED.sum_effective_heal_and_shielding,
+          sum_damage_dealt_to_buildings =
+            agg_champion_damage_stats.sum_damage_dealt_to_buildings + EXCLUDED.sum_damage_dealt_to_buildings,
+          sum_damage_dealt_to_epic_monsters =
+            agg_champion_damage_stats.sum_damage_dealt_to_epic_monsters + EXCLUDED.sum_damage_dealt_to_epic_monsters,
+          sum_damage_dealt_to_objectives =
+            agg_champion_damage_stats.sum_damage_dealt_to_objectives + EXCLUDED.sum_damage_dealt_to_objectives,
+          sum_damage_dealt_to_turrets =
+            agg_champion_damage_stats.sum_damage_dealt_to_turrets + EXCLUDED.sum_damage_dealt_to_turrets,
+          sum_damage_self_mitigated =
+            agg_champion_damage_stats.sum_damage_self_mitigated + EXCLUDED.sum_damage_self_mitigated,
+          sum_total_time_cc_dealt = agg_champion_damage_stats.sum_total_time_cc_dealt + EXCLUDED.sum_total_time_cc_dealt,
+          sum_largest_critical_strike =
+            agg_champion_damage_stats.sum_largest_critical_strike + EXCLUDED.sum_largest_critical_strike,
+          sum_total_heal = agg_champion_damage_stats.sum_total_heal + EXCLUDED.sum_total_heal,
+          sum_total_heals_on_teammates =
+            agg_champion_damage_stats.sum_total_heals_on_teammates + EXCLUDED.sum_total_heals_on_teammates,
           count_game = agg_champion_damage_stats.count_game + EXCLUDED.count_game,
           updated_at = NOW()
       `
-      const participantMetricAgg = buildParticipantMetricAgg(p)
-      const existingMetricRows = await tx.$queryRaw<
-        Array<{
-          numeric_sums: unknown
-          numeric_counts: unknown
-          bool_true_counts: unknown
-          bool_counts: unknown
-        }>
-      >`
-        SELECT
-          numeric_sums,
-          numeric_counts,
-          bool_true_counts,
-          bool_counts
-        FROM agg_champion_participant_stats
-        WHERE champion_stat_id = ${statId}
-        FOR UPDATE
-      `
-      const existingMetricRow = existingMetricRows[0]
-      const mergedNumericSums = mergeNumberMaps(
-        parseNumberMap(existingMetricRow?.numeric_sums),
-        participantMetricAgg.numericSums
+      const participantAggColumns = await getParticipantAggColumns()
+      const participantAggValues = participantAggColumns.map((c) =>
+        Math.trunc(participantValueForAggColumn(p, c))
       )
-      const mergedNumericCounts = mergeNumberMaps(
-        parseNumberMap(existingMetricRow?.numeric_counts),
-        participantMetricAgg.numericCounts
-      )
-      const mergedBoolTrueCounts = mergeNumberMaps(
-        parseNumberMap(existingMetricRow?.bool_true_counts),
-        participantMetricAgg.boolTrueCounts
-      )
-      const mergedBoolCounts = mergeNumberMaps(
-        parseNumberMap(existingMetricRow?.bool_counts),
-        participantMetricAgg.boolCounts
-      )
-      await tx.$executeRaw`
+      const participantColumnsSql = participantAggColumns.join(', ')
+      const participantValuesSql = participantAggValues.join(', ')
+      const participantSetSql = participantAggColumns
+        .map((c) => `${c} = agg_champion_participant_stats.${c} + EXCLUDED.${c}`)
+        .join(', ')
+      await tx.$executeRawUnsafe(`
         INSERT INTO agg_champion_participant_stats (
           champion_stat_id,
-          numeric_sums,
-          numeric_counts,
-          bool_true_counts,
-          bool_counts,
+          ${participantColumnsSql},
           updated_at
         )
         VALUES (
-          ${statId},
-          ${JSON.stringify(mergedNumericSums)}::jsonb,
-          ${JSON.stringify(mergedNumericCounts)}::jsonb,
-          ${JSON.stringify(mergedBoolTrueCounts)}::jsonb,
-          ${JSON.stringify(mergedBoolCounts)}::jsonb,
+          ${statId.toString()},
+          ${participantValuesSql},
           NOW()
         )
         ON CONFLICT (champion_stat_id) DO UPDATE
         SET
-          numeric_sums = EXCLUDED.numeric_sums,
-          numeric_counts = EXCLUDED.numeric_counts,
-          bool_true_counts = EXCLUDED.bool_true_counts,
-          bool_counts = EXCLUDED.bool_counts,
+          ${participantSetSql},
           updated_at = NOW()
-      `
+      `)
 
       const teamId = toSafeInt(p.teamId)
       const opponentTeamId = teamId === 100 ? 200 : 100
@@ -676,6 +833,15 @@ export async function processRawAggregateAndBurn(
             region,
             count_win,
             count_game,
+            sum_gold_earned,
+            sum_gold_spent,
+            sum_max_level_lead_lane_opponent,
+            sum_max_kill_deficit,
+            sum_more_enemy_jungle_than_opponent,
+            sum_max_cs_advantage_on_lane_opponent,
+            sum_vision_score_advantage_lane_opponent,
+            sum_laning_phase_gold_exp_advantage,
+            sum_early_laning_phase_gold_exp_advantage,
             updated_at
           )
           VALUES (
@@ -687,11 +853,29 @@ export async function processRawAggregateAndBurn(
             ${region},
             ${wins},
             1,
+            ${sumGoldEarned},
+            ${sumGoldSpent},
+            ${sumMaxLevelLeadLaneOpponent},
+            ${sumMaxKillDeficit},
+            ${sumMoreEnemyJungleThanOpponent},
+            ${sumMaxCsAdvantageOnLaneOpponent},
+            ${sumVisionScoreAdvantageLaneOpponent},
+            ${sumLaningPhaseGoldExpAdvantage},
+            ${sumEarlyLaningPhaseGoldExpAdvantage},
             NOW()
           )
           ON CONFLICT (champion_stat_id, opponent_champion_id) DO UPDATE
           SET count_game = agg_champion_vs_stats.count_game + EXCLUDED.count_game,
               count_win = agg_champion_vs_stats.count_win + EXCLUDED.count_win,
+              sum_gold_earned = agg_champion_vs_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
+              sum_gold_spent = agg_champion_vs_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
+              sum_max_level_lead_lane_opponent = agg_champion_vs_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
+              sum_max_kill_deficit = agg_champion_vs_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
+              sum_more_enemy_jungle_than_opponent = agg_champion_vs_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
+              sum_max_cs_advantage_on_lane_opponent = agg_champion_vs_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
+              sum_vision_score_advantage_lane_opponent = agg_champion_vs_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
+              sum_laning_phase_gold_exp_advantage = agg_champion_vs_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
+              sum_early_laning_phase_gold_exp_advantage = agg_champion_vs_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
               updated_at = NOW()
         `
       }
@@ -711,6 +895,15 @@ export async function processRawAggregateAndBurn(
             ally_role,
             count_win,
             count_game,
+            sum_gold_earned,
+            sum_gold_spent,
+            sum_max_level_lead_lane_opponent,
+            sum_max_kill_deficit,
+            sum_more_enemy_jungle_than_opponent,
+            sum_max_cs_advantage_on_lane_opponent,
+            sum_vision_score_advantage_lane_opponent,
+            sum_laning_phase_gold_exp_advantage,
+            sum_early_laning_phase_gold_exp_advantage,
             updated_at
           )
           VALUES (
@@ -719,31 +912,29 @@ export async function processRawAggregateAndBurn(
             ${allyRole},
             ${wins},
             1,
+            ${sumGoldEarned},
+            ${sumGoldSpent},
+            ${sumMaxLevelLeadLaneOpponent},
+            ${sumMaxKillDeficit},
+            ${sumMoreEnemyJungleThanOpponent},
+            ${sumMaxCsAdvantageOnLaneOpponent},
+            ${sumVisionScoreAdvantageLaneOpponent},
+            ${sumLaningPhaseGoldExpAdvantage},
+            ${sumEarlyLaningPhaseGoldExpAdvantage},
             NOW()
           )
           ON CONFLICT (champion_stat_id, ally_champion_id, ally_role) DO UPDATE
           SET count_game = agg_champion_duo_role_stats.count_game + EXCLUDED.count_game,
               count_win = agg_champion_duo_role_stats.count_win + EXCLUDED.count_win,
-              updated_at = NOW()
-        `
-        await tx.$executeRaw`
-          INSERT INTO agg_champion_duo_stats (
-            champion_stat_id,
-            ally_champion_id,
-            count_win,
-            count_game,
-            updated_at
-          )
-          VALUES (
-            ${statId},
-            ${allyChampionId},
-            ${wins},
-            1,
-            NOW()
-          )
-          ON CONFLICT (champion_stat_id, ally_champion_id) DO UPDATE
-          SET count_game = agg_champion_duo_stats.count_game + EXCLUDED.count_game,
-              count_win = agg_champion_duo_stats.count_win + EXCLUDED.count_win,
+              sum_gold_earned = agg_champion_duo_role_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
+              sum_gold_spent = agg_champion_duo_role_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
+              sum_max_level_lead_lane_opponent = agg_champion_duo_role_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
+              sum_max_kill_deficit = agg_champion_duo_role_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
+              sum_more_enemy_jungle_than_opponent = agg_champion_duo_role_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
+              sum_max_cs_advantage_on_lane_opponent = agg_champion_duo_role_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
+              sum_vision_score_advantage_lane_opponent = agg_champion_duo_role_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
+              sum_laning_phase_gold_exp_advantage = agg_champion_duo_role_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
+              sum_early_laning_phase_gold_exp_advantage = agg_champion_duo_role_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
               updated_at = NOW()
         `
       }
@@ -754,6 +945,26 @@ export async function processRawAggregateAndBurn(
           duration_bucket,
           count_win,
           count_game,
+          sum_current_gold,
+          sum_magic_damage_done,
+          sum_magic_damage_done_to_champion,
+          sum_magic_damage_taken,
+          sum_physical_damage_done,
+          sum_physical_damage_done_to_champion,
+          sum_physical_damage_taken,
+          sum_total_damage_done,
+          sum_total_damage_done_to_champion,
+          sum_total_damage_taken,
+          sum_true_damage_done,
+          sum_true_damage_done_to_champion,
+          sum_true_damage_taken,
+          sum_jungle_minions_killed,
+          sum_level,
+          sum_minions_killed,
+          sum_time_enemy_spent_controlled,
+          sum_total_gold,
+          count_game_end,
+          count_time_enemy_spent_controlled,
           updated_at
         )
         VALUES (
@@ -761,16 +972,122 @@ export async function processRawAggregateAndBurn(
           ${durationBucket},
           ${wins},
           1,
+          ${readParticipantMetricInt(p, 'currentGold')},
+          ${readParticipantMetricInt(p, 'magicDamageDealt')},
+          ${readParticipantMetricInt(p, 'magicDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'magicDamageTaken')},
+          ${readParticipantMetricInt(p, 'physicalDamageDealt')},
+          ${readParticipantMetricInt(p, 'physicalDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'physicalDamageTaken')},
+          ${readParticipantMetricInt(p, 'totalDamageDealt')},
+          ${readParticipantMetricInt(p, 'totalDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'totalDamageTaken')},
+          ${readParticipantMetricInt(p, 'trueDamageDealt')},
+          ${readParticipantMetricInt(p, 'trueDamageDealtToChampions')},
+          ${readParticipantMetricInt(p, 'trueDamageTaken')},
+          ${readParticipantMetricInt(p, 'jungleMinionsKilled')},
+          ${readParticipantMetricInt(p, 'champLevel')},
+          ${readParticipantMetricInt(p, 'totalMinionsKilled')},
+          ${readParticipantMetricInt(p, 'timeEnemySpentControlled')},
+          ${readParticipantMetricInt(p, 'goldEarned')},
+          1,
+          ${readParticipantMetricInt(p, 'timeEnemySpentControlled') > 0 ? 1 : 0},
           NOW()
         )
         ON CONFLICT (champion_stat_id, duration_bucket) DO UPDATE
         SET count_game = agg_champion_bucket.count_game + EXCLUDED.count_game,
             count_win = agg_champion_bucket.count_win + EXCLUDED.count_win,
+            sum_current_gold = agg_champion_bucket.sum_current_gold + EXCLUDED.sum_current_gold,
+            sum_magic_damage_done = agg_champion_bucket.sum_magic_damage_done + EXCLUDED.sum_magic_damage_done,
+            sum_magic_damage_done_to_champion =
+              agg_champion_bucket.sum_magic_damage_done_to_champion + EXCLUDED.sum_magic_damage_done_to_champion,
+            sum_magic_damage_taken = agg_champion_bucket.sum_magic_damage_taken + EXCLUDED.sum_magic_damage_taken,
+            sum_physical_damage_done = agg_champion_bucket.sum_physical_damage_done + EXCLUDED.sum_physical_damage_done,
+            sum_physical_damage_done_to_champion =
+              agg_champion_bucket.sum_physical_damage_done_to_champion + EXCLUDED.sum_physical_damage_done_to_champion,
+            sum_physical_damage_taken = agg_champion_bucket.sum_physical_damage_taken + EXCLUDED.sum_physical_damage_taken,
+            sum_total_damage_done = agg_champion_bucket.sum_total_damage_done + EXCLUDED.sum_total_damage_done,
+            sum_total_damage_done_to_champion =
+              agg_champion_bucket.sum_total_damage_done_to_champion + EXCLUDED.sum_total_damage_done_to_champion,
+            sum_total_damage_taken = agg_champion_bucket.sum_total_damage_taken + EXCLUDED.sum_total_damage_taken,
+            sum_true_damage_done = agg_champion_bucket.sum_true_damage_done + EXCLUDED.sum_true_damage_done,
+            sum_true_damage_done_to_champion =
+              agg_champion_bucket.sum_true_damage_done_to_champion + EXCLUDED.sum_true_damage_done_to_champion,
+            sum_true_damage_taken = agg_champion_bucket.sum_true_damage_taken + EXCLUDED.sum_true_damage_taken,
+            sum_jungle_minions_killed =
+              agg_champion_bucket.sum_jungle_minions_killed + EXCLUDED.sum_jungle_minions_killed,
+            sum_level = agg_champion_bucket.sum_level + EXCLUDED.sum_level,
+            sum_minions_killed = agg_champion_bucket.sum_minions_killed + EXCLUDED.sum_minions_killed,
+            sum_time_enemy_spent_controlled =
+              agg_champion_bucket.sum_time_enemy_spent_controlled + EXCLUDED.sum_time_enemy_spent_controlled,
+            sum_total_gold = agg_champion_bucket.sum_total_gold + EXCLUDED.sum_total_gold,
+            count_game_end = agg_champion_bucket.count_game_end + EXCLUDED.count_game_end,
+            count_time_enemy_spent_controlled =
+              agg_champion_bucket.count_time_enemy_spent_controlled + EXCLUDED.count_time_enemy_spent_controlled,
             updated_at = NOW()
       `
 
       const spellD = toSafeInt((p as RawParticipant).summoner1Id)
       const spellF = toSafeInt((p as RawParticipant).summoner2Id)
+      const participantId = toSafeInt(p.participantId)
+      const timelineSpellOrder =
+        participantId > 0 ? timelineSpellOrdersByParticipant.get(participantId) ?? [] : []
+      const spellOrder =
+        timelineSpellOrder.length > 0 ? timelineSpellOrder : extractSpellOrder(p)
+      const spellOrderKey = spellOrder.length > 0 ? spellOrder.join('-') : ''
+      const existingSpellRows = await tx.$queryRaw<Array<{ spell_order: unknown }>>`
+        SELECT spell_order
+        FROM agg_champion_spells_stats
+        WHERE champion_stat_id = ${statId}
+        FOR UPDATE
+      `
+      const existingSpellOrderMap = parseSpellOrderMap(existingSpellRows[0]?.spell_order)
+      if (spellOrderKey) {
+        const prev = existingSpellOrderMap[spellOrderKey] ?? {
+          order: spellOrder,
+          number_of_games: 0,
+          number_of_wins: 0,
+        }
+        existingSpellOrderMap[spellOrderKey] = {
+          order: spellOrder,
+          number_of_games: prev.number_of_games + 1,
+          number_of_wins: prev.number_of_wins + wins,
+        }
+      }
+      await tx.$executeRaw`
+        INSERT INTO agg_champion_spells_stats (
+          champion_stat_id,
+          spell1_casts,
+          spell2_casts,
+          spell3_casts,
+          spell4_casts,
+          spell_order,
+          count_game,
+          count_win,
+          updated_at
+        )
+        VALUES (
+          ${statId},
+          ${toSafeInt((p as RawParticipant).spell1Casts)},
+          ${toSafeInt((p as RawParticipant).spell2Casts)},
+          ${toSafeInt((p as RawParticipant).spell3Casts)},
+          ${toSafeInt((p as RawParticipant).spell4Casts)},
+          ${JSON.stringify(existingSpellOrderMap)}::jsonb,
+          1,
+          ${wins},
+          NOW()
+        )
+        ON CONFLICT (champion_stat_id) DO UPDATE
+        SET
+          spell1_casts = agg_champion_spells_stats.spell1_casts + EXCLUDED.spell1_casts,
+          spell2_casts = agg_champion_spells_stats.spell2_casts + EXCLUDED.spell2_casts,
+          spell3_casts = agg_champion_spells_stats.spell3_casts + EXCLUDED.spell3_casts,
+          spell4_casts = agg_champion_spells_stats.spell4_casts + EXCLUDED.spell4_casts,
+          spell_order = EXCLUDED.spell_order,
+          count_game = agg_champion_spells_stats.count_game + EXCLUDED.count_game,
+          count_win = agg_champion_spells_stats.count_win + EXCLUDED.count_win,
+          updated_at = NOW()
+      `
       if (spellD > 0) {
         await tx.$executeRaw`
           INSERT INTO agg_champion_summoner_spells (
@@ -828,7 +1145,7 @@ export async function processRawAggregateAndBurn(
         `
       }
 
-      const { runes, shards, stylesByRune } = extractRunesAndShards(p)
+      const { runes, shards } = extractRunesAndShards(p)
       if (runes.length > 0 || shards.length > 0) {
         const runeList = JSON.stringify(runes)
         const shardList = shards.join(',')
@@ -850,18 +1167,16 @@ export async function processRawAggregateAndBurn(
       }
 
       for (const runeId of runes) {
-        const style = stylesByRune.get(runeId) ?? ''
         await tx.$executeRaw`
           INSERT INTO agg_champion_runes_solo_stats (
             champion_stat_id,
             perk_id,
-            style,
             count_win,
             count_game,
             updated_at
           )
-          VALUES (${statId}, ${runeId}, ${style}, ${wins}, 1, NOW())
-          ON CONFLICT (champion_stat_id, perk_id, style) DO UPDATE
+          VALUES (${statId}, ${runeId}, ${wins}, 1, NOW())
+          ON CONFLICT (champion_stat_id, perk_id) DO UPDATE
           SET count_game = agg_champion_runes_solo_stats.count_game + EXCLUDED.count_game,
               count_win = agg_champion_runes_solo_stats.count_win + EXCLUDED.count_win,
               updated_at = NOW()
@@ -1017,95 +1332,34 @@ export async function processRawAggregateAndBurn(
       }
     }
 
-    const pairRows = await tx.$queryRaw<
-      Array<{ rank_tier: string; role_norm: string; champion_id: number; spell_d: number; spell_f: number; count_game: bigint; count_win: bigint }>
-    >`
-      SELECT
-        COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') AS rank_tier,
-        UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) AS role_norm,
-        imp.champion_id,
-        imp.summoner_spells[1]::int AS spell_d,
-        imp.summoner_spells[2]::int AS spell_f,
-        COUNT(*)::bigint AS count_game,
-        SUM(CASE WHEN it.win THEN 1 ELSE 0 END)::bigint AS count_win
-      FROM ingest_match_players imp
-      INNER JOIN ingest_matchs im ON im.id = imp.match_id
-      INNER JOIN ingest_teams it ON it.id = imp.team_id
-      WHERE im.riot_match_id = ${trackedMatchId}
-        AND cardinality(imp.summoner_spells) >= 2
-        AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
-        AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT')
-      GROUP BY
-        COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED'),
-        UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')),
-        imp.champion_id,
-        imp.summoner_spells[1],
-        imp.summoner_spells[2]
-    `
-    for (const r of pairRows) {
+    for (let idx = 0; idx < participantsForAgg.length; idx++) {
+      const participant = participantsForAgg[idx]
+      const rankTier = normalizeRankTier(participant)
+      if (rankTier === 'UNRANKED') continue
+      const role = resolvedRoles[idx] ?? roleFromPosition(participant)
+      if (!isAllowedRole(role)) continue
+      const championId = toSafeInt(participant.championId)
+      if (championId <= 0) continue
+      const spellD = toSafeInt(participant.summoner1Id)
+      const spellF = toSafeInt(participant.summoner2Id)
+      if (spellD <= 0 || spellF <= 0) continue
+      const spell1Casts = readParticipantMetricInt(participant, 'spell1Casts')
+      const spell2Casts = readParticipantMetricInt(participant, 'spell2Casts')
+      const countWin = participant.win === true ? 1 : 0
       await tx.$executeRaw`
         INSERT INTO agg_champion_summoner_spell_pair_stats (
-          game_version, rank_tier, role_norm, champion_id, spell_d, spell_f, count_game, count_win, updated_at
+          game_version, rank_tier, role, champion_id, spell_d, spell_f, spell1_casts, spell2_casts, count_game, count_win, updated_at
         )
         VALUES (
-          ${gameVersion}, ${r.rank_tier}, ${r.role_norm}, ${r.champion_id}, ${r.spell_d}, ${r.spell_f},
-          ${Number(r.count_game ?? 0)}, ${Number(r.count_win ?? 0)}, NOW()
+          ${gameVersion}, ${rankTier}, ${role}, ${championId}, ${spellD}, ${spellF},
+          ${spell1Casts}, ${spell2Casts},
+          1, ${countWin}, NOW()
         )
-        ON CONFLICT (game_version, rank_tier, role_norm, champion_id, spell_d, spell_f) DO UPDATE
+        ON CONFLICT (game_version, rank_tier, role, champion_id, spell_d, spell_f) DO UPDATE
         SET count_game = agg_champion_summoner_spell_pair_stats.count_game + EXCLUDED.count_game,
             count_win = agg_champion_summoner_spell_pair_stats.count_win + EXCLUDED.count_win,
-            updated_at = NOW()
-      `
-    }
-
-    const starterRows = await tx.$queryRaw<
-      Array<{ rank_tier: string; role_norm: string; champion_id: number; starter_key: string; count_game: bigint; count_win: bigint }>
-    >`
-      WITH starter_rows AS (
-        SELECT
-          COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') AS rank_tier,
-          UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) AS role_norm,
-          imp.champion_id,
-          it.win,
-          COALESCE(
-            (
-              SELECT '[' || string_agg((e ->> 'itemId')::text, ',' ORDER BY (e ->> 'order')::int, (e ->> 'timestampMs')::bigint) || ']'
-              FROM jsonb_array_elements(COALESCE(imp.items::jsonb, '[]'::jsonb)) AS e
-              WHERE COALESCE((e ->> 'starter')::boolean, false)
-                AND (e ->> 'itemId')::int NOT IN (
-                  3340, 3364, 3363, 2055,
-                  2003, 2009, 2010, 2031, 2032, 2033, 2060, 2138, 2139, 2140
-                )
-            ),
-            '[]'
-          ) AS starter_key
-        FROM ingest_match_players imp
-        INNER JOIN ingest_matchs im ON im.id = imp.match_id
-        INNER JOIN ingest_teams it ON it.id = imp.team_id
-        WHERE im.riot_match_id = ${trackedMatchId}
-          AND COALESCE(NULLIF(imp.rank_tier, ''), NULLIF(im.rank_tier, ''), 'UNRANKED') <> 'UNRANKED'
-          AND UPPER(COALESCE(NULLIF(TRIM(imp.role), ''), 'UNKNOWN')) IN ('TOP','JUNGLE','MIDDLE','BOTTOM','SUPPORT')
-      )
-      SELECT
-        rank_tier, role_norm, champion_id, starter_key,
-        COUNT(*)::bigint AS count_game,
-        SUM(CASE WHEN win THEN 1 ELSE 0 END)::bigint AS count_win
-      FROM starter_rows
-      WHERE starter_key <> '[]'
-      GROUP BY rank_tier, role_norm, champion_id, starter_key
-    `
-    for (const r of starterRows) {
-      await tx.$executeRaw`
-        INSERT INTO agg_champion_item_starter_set_stats (
-          game_version, rank_tier, role_norm, champion_id, starter_key, count_game, count_win, updated_at
-        )
-        VALUES (
-          ${gameVersion}, ${r.rank_tier}, ${r.role_norm}, ${r.champion_id}, ${r.starter_key},
-          ${Number(r.count_game ?? 0)}, ${Number(r.count_win ?? 0)}, NOW()
-        )
-        ON CONFLICT (game_version, rank_tier, role_norm, champion_id, starter_key) DO UPDATE
-        SET count_game = agg_champion_item_starter_set_stats.count_game + EXCLUDED.count_game,
-            count_win = agg_champion_item_starter_set_stats.count_win + EXCLUDED.count_win,
+            spell1_casts = agg_champion_summoner_spell_pair_stats.spell1_casts + EXCLUDED.spell1_casts,
+            spell2_casts = agg_champion_summoner_spell_pair_stats.spell2_casts + EXCLUDED.spell2_casts,
             updated_at = NOW()
       `
     }
@@ -1133,6 +1387,30 @@ export async function processRawAggregateAndBurn(
       const rankTier = normalizeRankTier(p)
       if (rankTier === 'UNRANKED') continue
       const wins = p.win === true ? 1 : 0
+      const sumGoldEarned = readParticipantMetricInt(p, 'goldEarned')
+      const sumGoldSpent = readParticipantMetricInt(p, 'goldSpent')
+      const sumMaxLevelLeadLaneOpponent = readParticipantMetricInt(p, 'maxLevelLeadLaneOpponent')
+      const sumMaxKillDeficit = readParticipantMetricInt(p, 'maxKillDeficit')
+      const sumMoreEnemyJungleThanOpponent = readParticipantMetricInt(p, 'moreEnemyJungleThanOpponent')
+      const sumMaxCsAdvantageOnLaneOpponent = readParticipantMetricInt(
+        p,
+        'maxCsAdvantageOnLaneOpponent'
+      )
+      const sumVisionScoreAdvantageLaneOpponent = readParticipantMetricInt(
+        p,
+        'visionScoreAdvantageLaneOpponent'
+      )
+      const sumLaningPhaseGoldExpAdvantage = readParticipantMetricInt(
+        p,
+        'laningPhaseGoldExpAdvantage'
+      )
+      const sumEarlyLaningPhaseGoldExpAdvantage = readParticipantMetricInt(
+        p,
+        'earlyLaningPhaseGoldExpAdvantage'
+      )
+      const physToChamps = toSafeInt(p.physicalDamageDealtToChampions)
+      const magicToChamps = toSafeInt(p.magicDamageDealtToChampions)
+      const trueToChamps = toSafeInt(p.trueDamageDealtToChampions)
       await tx.$executeRaw`
         INSERT INTO agg_champion_side_stats (
           team_num,
@@ -1142,12 +1420,88 @@ export async function processRawAggregateAndBurn(
           rank_tier,
           count_win,
           count_game,
+          sum_gold_earned,
+          sum_gold_spent,
+          sum_max_level_lead_lane_opponent,
+          sum_max_kill_deficit,
+          sum_more_enemy_jungle_than_opponent,
+          sum_max_cs_advantage_on_lane_opponent,
+          sum_vision_score_advantage_lane_opponent,
+          sum_laning_phase_gold_exp_advantage,
+          sum_early_laning_phase_gold_exp_advantage,
+          sum_physical_damage_to_champions,
+          sum_magic_damage_to_champions,
+          sum_true_damage_to_champions,
+          sum_total_units_healed,
+          sum_total_units_healed_to_champions,
+          sum_heal_from_map_sources,
+          sum_damage_per_minute,
+          sum_effective_heal_and_shielding,
+          sum_damage_dealt_to_buildings,
+          sum_damage_dealt_to_epic_monsters,
+          sum_damage_dealt_to_objectives,
+          sum_damage_dealt_to_turrets,
+          sum_damage_self_mitigated,
           updated_at
         )
-        VALUES (${teamNum}, ${championId}, ${role}, ${gameVersion}, ${rankTier}, ${wins}, 1, NOW())
+        VALUES (
+          ${teamNum}, ${championId}, ${role}, ${gameVersion}, ${rankTier}, ${wins}, 1,
+          ${sumGoldEarned}, ${sumGoldSpent}, ${sumMaxLevelLeadLaneOpponent}, ${sumMaxKillDeficit},
+          ${sumMoreEnemyJungleThanOpponent}, ${sumMaxCsAdvantageOnLaneOpponent}, ${sumVisionScoreAdvantageLaneOpponent},
+          ${sumLaningPhaseGoldExpAdvantage}, ${sumEarlyLaningPhaseGoldExpAdvantage},
+          ${physToChamps}, ${magicToChamps}, ${trueToChamps},
+          ${readParticipantMetricInt(p, 'totalUnitsHealed')},
+          ${readParticipantMetricInt(p, 'totalUnitsHealedToChampions')},
+          ${readParticipantMetricInt(p, 'healFromMapSources')},
+          ${readParticipantMetricInt(p, 'damagePerMinute')},
+          ${readParticipantMetricInt(p, 'effectiveHealAndShielding')},
+          ${readParticipantMetricInt(p, 'damageDealtToBuildings')},
+          ${readParticipantMetricInt(p, 'damageDealtToEpicMonsters')},
+          ${readParticipantMetricInt(p, 'damageDealtToObjectives')},
+          ${readParticipantMetricInt(p, 'damageDealtToTurrets')},
+          ${readParticipantMetricInt(p, 'damageSelfMitigated')},
+          NOW()
+        )
         ON CONFLICT (team_num, champion_id, role_norm, game_version, rank_tier) DO UPDATE
         SET count_game = agg_champion_side_stats.count_game + EXCLUDED.count_game,
             count_win = agg_champion_side_stats.count_win + EXCLUDED.count_win,
+            sum_gold_earned = agg_champion_side_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
+            sum_gold_spent = agg_champion_side_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
+            sum_max_level_lead_lane_opponent = agg_champion_side_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
+            sum_max_kill_deficit = agg_champion_side_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
+            sum_more_enemy_jungle_than_opponent = agg_champion_side_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
+            sum_max_cs_advantage_on_lane_opponent = agg_champion_side_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
+            sum_vision_score_advantage_lane_opponent =
+              agg_champion_side_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
+            sum_laning_phase_gold_exp_advantage =
+              agg_champion_side_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
+            sum_early_laning_phase_gold_exp_advantage =
+              agg_champion_side_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
+            sum_physical_damage_to_champions =
+              agg_champion_side_stats.sum_physical_damage_to_champions + EXCLUDED.sum_physical_damage_to_champions,
+            sum_magic_damage_to_champions =
+              agg_champion_side_stats.sum_magic_damage_to_champions + EXCLUDED.sum_magic_damage_to_champions,
+            sum_true_damage_to_champions =
+              agg_champion_side_stats.sum_true_damage_to_champions + EXCLUDED.sum_true_damage_to_champions,
+            sum_total_units_healed =
+              agg_champion_side_stats.sum_total_units_healed + EXCLUDED.sum_total_units_healed,
+            sum_total_units_healed_to_champions =
+              agg_champion_side_stats.sum_total_units_healed_to_champions + EXCLUDED.sum_total_units_healed_to_champions,
+            sum_heal_from_map_sources =
+              agg_champion_side_stats.sum_heal_from_map_sources + EXCLUDED.sum_heal_from_map_sources,
+            sum_damage_per_minute = agg_champion_side_stats.sum_damage_per_minute + EXCLUDED.sum_damage_per_minute,
+            sum_effective_heal_and_shielding =
+              agg_champion_side_stats.sum_effective_heal_and_shielding + EXCLUDED.sum_effective_heal_and_shielding,
+            sum_damage_dealt_to_buildings =
+              agg_champion_side_stats.sum_damage_dealt_to_buildings + EXCLUDED.sum_damage_dealt_to_buildings,
+            sum_damage_dealt_to_epic_monsters =
+              agg_champion_side_stats.sum_damage_dealt_to_epic_monsters + EXCLUDED.sum_damage_dealt_to_epic_monsters,
+            sum_damage_dealt_to_objectives =
+              agg_champion_side_stats.sum_damage_dealt_to_objectives + EXCLUDED.sum_damage_dealt_to_objectives,
+            sum_damage_dealt_to_turrets =
+              agg_champion_side_stats.sum_damage_dealt_to_turrets + EXCLUDED.sum_damage_dealt_to_turrets,
+            sum_damage_self_mitigated =
+              agg_champion_side_stats.sum_damage_self_mitigated + EXCLUDED.sum_damage_self_mitigated,
             updated_at = NOW()
       `
     }
@@ -1368,12 +1722,13 @@ export async function processRawAggregateAndBurn(
         WHERE atc.id = ${sideStatId}
       `
 
-      for (const ban of team.bans ?? []) {
+      for (const [banIdx, ban] of (team.bans ?? []).entries()) {
         const bannedChampionId = toSafeInt(ban.championId)
         if (bannedChampionId <= 0) continue
         const byPickOrder = bannerRoleFromPickOrder(
           (ban as { pickOrder?: number; pickTurn?: number }).pickOrder ??
-            (ban as { pickOrder?: number; pickTurn?: number }).pickTurn
+            (ban as { pickOrder?: number; pickTurn?: number }).pickTurn ??
+            (banIdx + 1)
         )
         const bannerRoleNorm =
           byPickOrder !== 'UNKNOWN'
@@ -1403,14 +1758,13 @@ export async function processRawAggregateAndBurn(
       ON CONFLICT (game_version) DO NOTHING
     `
 
-    // Ingest lean is only a staging area for this pipeline; counts/UI patches come from agg + sync.
     await tx.$executeRaw`
-      DELETE FROM ingest_matchs
-      WHERE riot_match_id = ${trackedMatchId}
-    `
-
-    await tx.$executeRaw`
-      DELETE FROM match_ingest_raw
+      UPDATE match_ingest_raw
+      SET status = 'done',
+          normalized_at = NOW(),
+          processing_started_at = NULL,
+          last_error = NULL,
+          next_retry_at = NULL
       WHERE id = ${rawId}
     `
       })

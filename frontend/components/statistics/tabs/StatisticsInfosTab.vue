@@ -79,6 +79,14 @@
           </tbody>
         </table>
       </div>
+      <div class="rounded-lg border border-primary/30 bg-surface/20 p-2">
+        <img
+          src="/images/champion-balance-framework.png"
+          alt="Champion Balance Framework"
+          class="mx-auto w-full max-w-3xl rounded object-contain"
+          loading="lazy"
+        />
+      </div>
     </div>
   </div>
 </template>
