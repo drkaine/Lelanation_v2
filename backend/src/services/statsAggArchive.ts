@@ -79,6 +79,7 @@ async function patchHasRowsInUnifiedArchive(patchKey: string): Promise<boolean> 
 
 /**
  * FROM fragment for one patch: live agg or filtered rows from unified archive table.
+ * Exported so callers can probe columns on the same physical branch as `matchVersionedAggFrom`.
  */
 export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: string): Promise<string | null> {
   if (!isSafeIdentSegment(aggTableName)) return null

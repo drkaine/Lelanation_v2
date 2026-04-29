@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, ref, unref, watch } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
 
@@ -57,9 +57,9 @@ function relationToOp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): st
   const abr = abrByLevel.value[level] || 0
   const ratio = abr > 0 ? row.banrate / abr : 0
   if (level === 'elite') {
-    return `WR ${fmt(row.winrate)}% (seuil OP ${fmt(op.winrateHigh)}%) | BR ${fmt(row.banrate)}% (${fmt(ratio)}x ABR) | PRÉS ${fmt(row.presence)}%`
+    return `Winrate ${fmt(row.winrate)}% (overpowered threshold ${fmt(op.winrateHigh)}%), banrate ${fmt(row.banrate)}% (${fmt(ratio)} x average banrate), presence ${fmt(row.presence)}%`
   }
-  return `WR ${fmt(row.winrate)}% (OP ${fmt(op.winrateHigh)}%) | BR ${fmt(row.banrate)}% (${fmt(ratio)}x ABR) | UP < ${fmt(r.underpowered.winrateMax)}%`
+  return `Winrate ${fmt(row.winrate)}% (overpowered threshold ${fmt(op.winrateHigh)}%), banrate ${fmt(row.banrate)}% (${fmt(ratio)} x average banrate), underpowered below ${fmt(r.underpowered.winrateMax)}% winrate`
 }
 
 function relationToUp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): string {
@@ -67,10 +67,10 @@ function relationToUp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): st
   if (!r) return ''
   if (level === 'elite') {
     const upPresence = Number(r.underpowered.presenceMax ?? 0)
-    return `Distance UP (présence): ${(row.presence - upPresence).toFixed(2)} pts`
+    return `Distance to underpowered threshold by presence: ${(row.presence - upPresence).toFixed(2)} points`
   }
   const up = Number(r.underpowered.winrateMax ?? 0)
-  return `Distance UP (WR): ${(row.winrate - up).toFixed(2)} pts`
+  return `Distance to underpowered threshold by winrate: ${(row.winrate - up).toFixed(2)} points`
 }
 
 function statusLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
@@ -107,13 +107,6 @@ function statusClass(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
   return 'text-success'
 }
 
-function deltaClass(v: string | null): string {
-  if (!v) return 'text-text/55'
-  if (v.includes('OVERPOWERED')) return 'text-error'
-  if (v.includes('UNDERPOWERED')) return 'text-sky-300'
-  return 'text-success'
-}
-
 const filteredRows = computed<BalanceRow[]>(() => {
   const out = rows.value.filter(row => {
     if (searchQuery.value) {
@@ -140,6 +133,45 @@ const filteredRows = computed<BalanceRow[]>(() => {
   })
   return out
 })
+
+const balancePage = ref(1)
+const pageSize = computed(() => Number(unref(p.championsPageSize) ?? 20))
+const totalRowsCount = computed(() => filteredRows.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value)))
+const paginatedRows = computed(() => {
+  const pnum = Math.min(balancePage.value, totalPages.value)
+  const start = (pnum - 1) * pageSize.value
+  return filteredRows.value.slice(start, start + pageSize.value)
+})
+
+watch([filteredRows, pageSize], () => {
+  balancePage.value = 1
+})
+
+function onPageSizeChange(event: Event): void {
+  const target = event.target as HTMLSelectElement | null
+  const fallback = unref(p.championsPageSize)
+  p.onBansPageSizeUpdated(Number(target?.value ?? fallback))
+}
+
+function levelTooltip(row: BalanceRow, level: 'average' | 'skilled' | 'elite'): string {
+  const lv = row[level]
+  if (!lv || lv.games <= 0) return 'No games for this champion on this bracket in current patch.'
+  return [
+    `Status: ${statusLabel(lv.status)}`,
+    relationToOp(lv, level),
+    relationToUp(lv, level),
+    lv.delta
+      ? `Status change: ${formatDeltaLabel(lv.delta)}`
+      : 'Status unchanged versus reference patch.',
+  ].join(' ')
+}
+
+function globalTooltip(row: BalanceRow): string {
+  return row.globalDelta
+    ? `Global status: ${statusLabel(row.globalStatus)}. Change versus reference patch: ${formatDeltaLabel(row.globalDelta)}.`
+    : `Global status: ${statusLabel(row.globalStatus)}.`
+}
 </script>
 
 <template>
@@ -152,10 +184,10 @@ const filteredRows = computed<BalanceRow[]>(() => {
     </div>
     <template v-else>
       <div
-        v-if="filteredRows.length"
+        v-if="paginatedRows.length"
         class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
       >
-        <table class="w-full min-w-[1350px] text-left text-sm">
+        <table class="w-full min-w-[900px] text-left text-sm">
           <thead class="border-b border-primary/30 bg-black/25">
             <tr>
               <th
@@ -178,21 +210,9 @@ const filteredRows = computed<BalanceRow[]>(() => {
               </th>
               <th
                 class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipAverageDelta')"
-              >
-                Δ Average
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
                 :title="p.t('statisticsPage.balanceTooltipSkilled')"
               >
                 Skilled
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipSkilledDelta')"
-              >
-                Δ Skilled
               </th>
               <th
                 class="px-3 py-2 font-semibold text-text"
@@ -202,27 +222,15 @@ const filteredRows = computed<BalanceRow[]>(() => {
               </th>
               <th
                 class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipEliteDelta')"
-              >
-                Δ Elite
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
                 :title="p.t('statisticsPage.balanceTooltipGlobal')"
               >
                 {{ p.t('statisticsPage.balanceGlobalStatus') }}
-              </th>
-              <th
-                class="px-3 py-2 font-semibold text-text"
-                :title="p.t('statisticsPage.balanceTooltipGlobalDelta')"
-              >
-                Δ Global
               </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-primary/20">
             <tr
-              v-for="row in filteredRows"
+              v-for="row in paginatedRows"
               :key="`${row.championId}-${row.role}`"
               class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
             >
@@ -245,51 +253,81 @@ const filteredRows = computed<BalanceRow[]>(() => {
                 </div>
               </td>
               <td class="px-3 py-2 text-text/90">{{ row.role }}</td>
-              <td class="px-3 py-2 font-medium" :class="statusClass(row.average.status)">
-                <div>{{ statusLabel(row.average.status) }}</div>
-                <div class="mt-0.5 text-[11px] font-normal text-text/70">
-                  {{ relationToOp(row.average, 'average') }}
-                </div>
-                <div class="text-[11px] font-normal text-text/70">
-                  {{ relationToUp(row.average, 'average') }}
-                </div>
+              <td
+                class="px-3 py-2 font-medium"
+                :class="statusClass(row.average.status)"
+                :title="levelTooltip(row, 'average')"
+              >
+                {{ statusLabel(row.average.status) }}
               </td>
-              <td class="px-3 py-2 text-xs" :class="deltaClass(row.average.delta)">
-                {{ formatDeltaLabel(row.average.delta) }}
+              <td
+                class="px-3 py-2 font-medium"
+                :class="statusClass(row.skilled.status)"
+                :title="levelTooltip(row, 'skilled')"
+              >
+                {{ statusLabel(row.skilled.status) }}
               </td>
-              <td class="px-3 py-2 font-medium" :class="statusClass(row.skilled.status)">
-                <div>{{ statusLabel(row.skilled.status) }}</div>
-                <div class="mt-0.5 text-[11px] font-normal text-text/70">
-                  {{ relationToOp(row.skilled, 'skilled') }}
-                </div>
-                <div class="text-[11px] font-normal text-text/70">
-                  {{ relationToUp(row.skilled, 'skilled') }}
-                </div>
+              <td
+                class="px-3 py-2 font-medium"
+                :class="statusClass(row.elite.status)"
+                :title="levelTooltip(row, 'elite')"
+              >
+                {{ statusLabel(row.elite.status) }}
               </td>
-              <td class="px-3 py-2 text-xs" :class="deltaClass(row.skilled.delta)">
-                {{ formatDeltaLabel(row.skilled.delta) }}
-              </td>
-              <td class="px-3 py-2 font-medium" :class="statusClass(row.elite.status)">
-                <div>{{ statusLabel(row.elite.status) }}</div>
-                <div class="mt-0.5 text-[11px] font-normal text-text/70">
-                  {{ relationToOp(row.elite, 'elite') }}
-                </div>
-                <div class="text-[11px] font-normal text-text/70">
-                  {{ relationToUp(row.elite, 'elite') }}
-                </div>
-              </td>
-              <td class="px-3 py-2 text-xs" :class="deltaClass(row.elite.delta)">
-                {{ formatDeltaLabel(row.elite.delta) }}
-              </td>
-              <td class="px-3 py-2 font-semibold" :class="statusClass(row.globalStatus)">
+              <td
+                class="px-3 py-2 font-semibold"
+                :class="statusClass(row.globalStatus)"
+                :title="globalTooltip(row)"
+              >
                 {{ statusLabel(row.globalStatus) }}
-              </td>
-              <td class="px-3 py-2 text-xs" :class="deltaClass(row.globalDelta)">
-                {{ formatDeltaLabel(row.globalDelta) }}
               </td>
             </tr>
           </tbody>
         </table>
+        <div
+          v-if="totalRowsCount > 0"
+          class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+        >
+          <span>{{ p.t('statisticsPage.showing') }} {{ totalRowsCount }}</span>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1.5">
+              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+              <select
+                :value="p.championsPageSize"
+                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                @change="onPageSizeChange"
+              >
+                <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="'balance-ps-' + n" :value="n">
+                  {{ n }}
+                </option>
+              </select>
+            </label>
+            <span class="text-text/70">
+              {{ (balancePage - 1) * pageSize + 1 }}-{{
+                Math.min(balancePage * pageSize, totalRowsCount)
+              }}
+              / {{ totalRowsCount }}
+            </span>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="balancePage <= 1"
+                @click="balancePage = Math.max(1, balancePage - 1)"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="balancePage >= totalPages"
+                @click="balancePage = Math.min(totalPages, balancePage + 1)"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
 

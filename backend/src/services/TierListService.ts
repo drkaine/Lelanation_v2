@@ -107,6 +107,25 @@ function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
   return tiers
 }
 
+function ensureTierCoverage(tiers: Tier[], n: number): Tier[] {
+  if (n < 6) return tiers
+  const out = [...tiers]
+  const desired: Tier[] = ['S+', 'S', 'A', 'B', 'C', 'D']
+  const targetIndexForTier = (tier: Tier): number => {
+    if (tier === 'S+') return 0
+    if (tier === 'S') return Math.min(n - 1, Math.max(1, Math.ceil(n * 0.1) - 1))
+    if (tier === 'A') return Math.min(n - 1, Math.max(2, Math.ceil(n * 0.25) - 1))
+    if (tier === 'B') return Math.min(n - 1, Math.max(3, Math.ceil(n * 0.5) - 1))
+    if (tier === 'C') return Math.min(n - 1, Math.max(4, Math.ceil(n * 0.75) - 1))
+    return n - 1
+  }
+  for (const tier of desired) {
+    if (out.includes(tier)) continue
+    out[targetIndexForTier(tier)] = tier
+  }
+  return out
+}
+
 function deltaToMatchupBaseScore(delta: number): number {
   if (delta < -5) return -10
   if (delta < -2) return -6
@@ -299,11 +318,14 @@ function buildTierListRows(
   }
   const sorted = [...filtered].sort((a, b) => b.tierScore - a.tierScore)
   sorted.forEach(r => {
-    // Keep tier boundaries aligned with displayed chart score precision (x100 with 2 decimals).
     r.tierScore = Number(r.pbi.toFixed(4))
   })
   sorted.sort((a, b) => b.tierScore - a.tierScore)
-  const tiers = assignTier(sorted)
+  const focusNorm = focus ? normalizeTierListRole(focus) : null
+  const shouldEnsureAllTiers = focusNorm == null || focusNorm !== 'BOTTOM'
+  const tiers = shouldEnsureAllTiers
+    ? ensureTierCoverage(assignTier(sorted), sorted.length)
+    : assignTier(sorted)
   sorted.forEach((r, i) => {
     r.tier = tiers[i] ?? 'D'
   })

@@ -185,11 +185,10 @@ export async function getRuneStatsByChampion(
     const soloFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
 
     const soloRows = await prisma.$queryRawUnsafe<
-      Array<{ perkId: number; style: string; countWin: number; countGame: number }>
+      Array<{ perkId: number; countWin: number; countGame: number }>
     >(`
       SELECT
         perk_id AS "perkId",
-        style,
         count_win AS "countWin",
         count_game AS "countGame"
       FROM ${soloFrom}

@@ -472,10 +472,22 @@ type TeamCoreFallback = {
   sum_elder_kills: number
 }
 
+async function ingestTeamLeanTablesExist(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name IN ('ingest_teams', 'ingest_matchs')
+  `
+  return Number(rows[0]?.c ?? 0) === 2
+}
+
 async function loadTeamCoreFallbackFromIngest(
   version: string | string[] | null | undefined,
   rankTier: string | string[] | null | undefined
 ): Promise<Map<number, TeamCoreFallback>> {
+  if (!(await ingestTeamLeanTablesExist())) return new Map()
   const versions = toQueryStringArrayParam(version)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   const cond: string[] = ['1=1']
@@ -612,38 +624,44 @@ async function loadSurrenderBySideCounts(
     (byTeam.get(200)?.early ?? 0) > (byTeam.get(200)?.surrender ?? 0)
   if ((!hasAnyAggSurrender || aggLooksInvalid) && hasMatches) {
     // Fallback for fresh patches where agg_team_core_stats surrender counters can lag behind match data.
-    const versions = toQueryStringArrayParam(version)
-    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
-    const condIngest: string[] = ['1=1']
-    if (versions.length === 1) {
-      const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
-      condIngest.push(`im.game_version LIKE '${patch}%'`)
-    } else if (versions.length > 1) {
-      condIngest.push(
-        `im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`
-      )
-    }
-    if (ranks.length === 1) condIngest.push(`im.rank_tier = '${ranks[0]}'`)
-    else if (ranks.length > 1)
-      condIngest.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-    else condIngest.push(`im.rank_tier <> 'UNRANKED'`)
-    const ingestRows = await prisma.$queryRawUnsafe<
-      Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
-    >(`
-      SELECT
-        it.team AS team_num,
-        COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
-        COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
-      FROM ingest_teams it
-      INNER JOIN ingest_matchs im ON im.id = it.match_id
-      WHERE ${condIngest.join(' AND ')}
-      GROUP BY it.team
-    `)
-    for (const row of ingestRows) {
-      byTeam.set(Number(row.team_num), {
-        early: Number(row.early_cnt ?? 0),
-        surrender: Number(row.surrender_cnt ?? 0),
-      })
+    if (await ingestTeamLeanTablesExist()) {
+      try {
+        const versions = toQueryStringArrayParam(version)
+        const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+        const condIngest: string[] = ['1=1']
+        if (versions.length === 1) {
+          const patch = normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")
+          condIngest.push(`im.game_version LIKE '${patch}%'`)
+        } else if (versions.length > 1) {
+          condIngest.push(
+            `im.game_version IN (${versions.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')})`
+          )
+        }
+        if (ranks.length === 1) condIngest.push(`im.rank_tier = '${ranks[0]}'`)
+        else if (ranks.length > 1)
+          condIngest.push(`im.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+        else condIngest.push(`im.rank_tier <> 'UNRANKED'`)
+        const ingestRows = await prisma.$queryRawUnsafe<
+          Array<{ team_num: number; early_cnt: bigint; surrender_cnt: bigint }>
+        >(`
+          SELECT
+            it.team AS team_num,
+            COALESCE(SUM(CASE WHEN it.team_early_surrendered THEN 1 ELSE 0 END), 0)::bigint AS early_cnt,
+            COALESCE(SUM(CASE WHEN it.win = false AND im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_cnt
+          FROM ingest_teams it
+          INNER JOIN ingest_matchs im ON im.id = it.match_id
+          WHERE ${condIngest.join(' AND ')}
+          GROUP BY it.team
+        `)
+        for (const row of ingestRows) {
+          byTeam.set(Number(row.team_num), {
+            early: Number(row.early_cnt ?? 0),
+            surrender: Number(row.surrender_cnt ?? 0),
+          })
+        }
+      } catch (err) {
+        console.warn('[loadSurrenderBySideCounts] ingest fallback', err instanceof Error ? err.message : err)
+      }
     }
   }
   return {
@@ -875,6 +893,29 @@ const OVERVIEW_STARTER_SLICE_EXCLUDED_IDS = new Set([
 
 const APEX_LADDER_TIERS = ['MASTER', 'GRANDMASTER', 'CHALLENGER'] as const
 
+/** Some DBs still use `role_norm` on agg tables; newer migrations use `role` on spell-pair only. */
+const aggTableRoleColumnNameCache = new Map<string, 'role' | 'role_norm'>()
+
+async function resolveAggTableRoleColumn(
+  tableName: 'agg_champion_summoner_spell_pair_stats' | 'agg_champion_item_starter_set_stats'
+): Promise<'role' | 'role_norm'> {
+  const cached = aggTableRoleColumnNameCache.get(tableName)
+  if (cached) return cached
+  const safeTable = tableName.replace(/'/g, "''")
+  const rows = await prisma.$queryRawUnsafe<Array<{ col: string }>>(`
+    SELECT column_name AS col
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = '${safeTable}'
+      AND column_name IN ('role', 'role_norm')
+    ORDER BY CASE WHEN column_name = 'role' THEN 0 ELSE 1 END
+    LIMIT 1
+  `)
+  const col = rows[0]?.col === 'role' ? 'role' : 'role_norm'
+  aggTableRoleColumnNameCache.set(tableName, col)
+  return col
+}
+
 type SpellPairSqlRow = { spell_d: number; spell_f: number; games: number; wins: number }
 
 async function loadSummonerSpellPairsFromMatches(
@@ -889,7 +930,8 @@ async function loadSummonerSpellPairsFromMatches(
     'ag.'
   )
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND ag.role = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleCol = await resolveAggTableRoleColumn('agg_champion_summoner_spell_pair_stats')
+  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${roleNorm.replace(/'/g, "''")}'` : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `
@@ -927,7 +969,8 @@ async function loadItemStarterSetsFromMatches(
 ): Promise<ItemStarterSetSqlRow[]> {
   const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ag.')
   const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleSql = roleNorm ? ` AND ag.role = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleCol = await resolveAggTableRoleColumn('agg_champion_item_starter_set_stats')
+  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${roleNorm.replace(/'/g, "''")}'` : ''
   const agFrom = await matchVersionedAggFrom('agg_champion_item_starter_set_stats', version, 'ag')
   const sql = `
       SELECT
@@ -2350,11 +2393,14 @@ function buildIngestMatchPlayerWhereSql(
 }
 
 async function ingestMatchLeanTablesExist(): Promise<boolean> {
-  const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-    SELECT to_regclass('public.ingest_match_players') IS NOT NULL
-      AND to_regclass('public.ingest_matchs') IS NOT NULL AS ok
+  const rows = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name IN ('ingest_match_players', 'ingest_matchs')
   `
-  return Boolean(rows[0]?.ok)
+  return Number(rows[0]?.c ?? 0) === 2
 }
 
 /** Raw-only / post-decommission: distinct puuids from `match_ingest_raw` + `players.rank_tier` (snapshot). */
@@ -2425,13 +2471,31 @@ async function countDistinctPlayersInMatches(
   return Number(rows[0]?.c ?? 0)
 }
 
+function isMissingRelationIngestError(err: unknown): boolean {
+  const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : ''
+  const metaCode =
+    err && typeof err === 'object' && 'meta' in err
+      ? String((err as { meta?: { code?: string } }).meta?.code ?? '')
+      : ''
+  if (code === 'P2010' && metaCode === '42P01') return true
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes('42P01') && msg.includes('ingest_match')
+}
+
 async function countDistinctPlayersInMatchesAdaptive(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
   role?: string | null
 ): Promise<number> {
   if (await ingestMatchLeanTablesExist()) {
-    return countDistinctPlayersInMatches(version, rankTier, role)
+    try {
+      return await countDistinctPlayersInMatches(version, rankTier, role)
+    } catch (err) {
+      if (isMissingRelationIngestError(err)) {
+        return countDistinctPlayersInMatchesFromRaw(version, rankTier, role)
+      }
+      throw err
+    }
   }
   return countDistinctPlayersInMatchesFromRaw(version, rankTier, role)
 }

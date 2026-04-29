@@ -7,6 +7,7 @@ import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import {
   matchVersionedAggFrom,
   normalizePatchMajorMinor,
+  sqlAggOrArchiveRelation,
   sqlAggUnionAllLiveAndArchives,
 } from './statsAggArchive.js'
 
@@ -147,16 +148,60 @@ export async function getChampionGlobalTable(
 
   const pickDenom = 5 * matchCount
   const hasColumn = async (tableName: string, columnName: string): Promise<boolean> => {
+    if (!/^[a-z][a-z0-9_]*$/.test(tableName) || !/^[a-z][a-z0-9_]*$/.test(columnName)) return false
     const rows = await prisma.$queryRawUnsafe<Array<{ ok: number }>>(`
       SELECT CASE WHEN EXISTS (
         SELECT 1
         FROM information_schema.columns c
         WHERE c.table_schema = 'public'
-          AND c.table_name = '${tableName.replace(/'/g, "''")}'
-          AND c.column_name = '${columnName.replace(/'/g, "''")}'
+          AND c.table_name = '${tableName}'
+          AND c.column_name = '${columnName}'
       ) THEN 1 ELSE 0 END AS ok
     `)
     return Number(rows[0]?.ok ?? 0) === 1
+  }
+
+  /** Column must exist on every physical table that can appear in `matchVersionedAggFrom` for this version. */
+  const normalizeSingleVersionKey = (v: string | string[] | null | undefined): string | null => {
+    const arr = toQueryStringArrayParam(v)
+    if (arr.length !== 1) return null
+    return normalizePatchMajorMinor(arr[0]!)
+  }
+
+  const archiveAggExists = async (aggTableName: string): Promise<boolean> => {
+    if (!/^[a-z][a-z0-9_]*$/.test(aggTableName)) return false
+    const archive = `archive_${aggTableName}`
+    const rows = await prisma.$queryRawUnsafe<Array<{ ok: number }>>(
+      `SELECT CASE WHEN to_regclass('public.${archive}') IS NOT NULL THEN 1 ELSE 0 END AS ok`
+    )
+    return Number(rows[0]?.ok ?? 0) === 1
+  }
+
+  const physicalAggTablesForVersion = async (
+    aggTableName: string,
+    version: string | string[] | null | undefined
+  ): Promise<string[]> => {
+    if (!/^[a-z][a-z0-9_]*$/.test(aggTableName)) return [aggTableName]
+    const single = normalizeSingleVersionKey(version)
+    if (single) {
+      const rel = await sqlAggOrArchiveRelation(aggTableName, single)
+      const r = rel ?? aggTableName
+      if (r.includes('(')) return [`archive_${aggTableName}`]
+      return [aggTableName]
+    }
+    if (await archiveAggExists(aggTableName)) return [aggTableName, `archive_${aggTableName}`]
+    return [aggTableName]
+  }
+
+  const hasColumnOnAllBranches = async (
+    aggTableName: string,
+    columnName: string
+  ): Promise<boolean> => {
+    const tables = await physicalAggTablesForVersion(aggTableName, version)
+    for (const t of tables) {
+      if (!(await hasColumn(t, columnName))) return false
+    }
+    return true
   }
 
   type AggRow = {
@@ -222,13 +267,13 @@ export async function getChampionGlobalTable(
   const partFrom = await matchVersionedAggFrom('agg_champion_participant_stats', version, 'ps')
   const coreWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
   const coreRoleSql = roleFilterSqlValueList ? ` AND cs.role IN (${roleFilterSqlValueList})` : ''
-  const coreHasSumKills = await hasColumn('agg_champion_core_stats', 'sum_kills')
-  const coreHasSumDeaths = await hasColumn('agg_champion_core_stats', 'sum_deaths')
-  const coreHasSumAssists = await hasColumn('agg_champion_core_stats', 'sum_assists')
-  const partHasSumKills = await hasColumn('agg_champion_participant_stats', 'sum_kills')
-  const partHasSumAssists = await hasColumn('agg_champion_participant_stats', 'sum_assists')
-  const partHasSumDeaths = await hasColumn('agg_champion_participant_stats', 'sum_deaths')
-  const partHasSumDeathsByEnemy = await hasColumn(
+  const coreHasSumKills = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_kills')
+  const coreHasSumDeaths = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_deaths')
+  const coreHasSumAssists = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_assists')
+  const partHasSumKills = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_kills')
+  const partHasSumAssists = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_assists')
+  const partHasSumDeaths = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_deaths')
+  const partHasSumDeathsByEnemy = await hasColumnOnAllBranches(
     'agg_champion_participant_stats',
     'sum_deaths_by_enemy_champs'
   )

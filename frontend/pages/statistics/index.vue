@@ -1598,6 +1598,10 @@ function progressionRequestKey(prefix: string, oldest: string): string {
   return `${prefix}:${oldest}|${div}|${role}`
 }
 
+function runInBackground<T>(promise: Promise<T>): void {
+  promise.catch(() => undefined)
+}
+
 async function loadOverview() {
   const t = statsPerfStart('loadOverview')
   overviewPending.value = true
@@ -1610,11 +1614,12 @@ async function loadOverview() {
     })
     overviewData.value = overviewRes as typeof overviewData.value
     mergeKnownVersions(overviewData.value?.matchesByVersion)
-    await loadOverviewProgression()
-    loadProgressionsFull()
-    loadOverviewAbandons()
-    loadOverviewTeams()
-    loadOverviewDurationWinrate()
+    // Keep initial overview render fast: trigger secondary datasets in background.
+    runInBackground(loadOverviewProgression())
+    runInBackground(loadProgressionsFull())
+    runInBackground(loadOverviewAbandons())
+    runInBackground(loadOverviewTeams())
+    runInBackground(loadOverviewDurationWinrate())
   } catch (err) {
     overviewData.value = null
     const errData =
@@ -1922,7 +1927,8 @@ function applyDefaultVersionFiltersFromKnownVersions(): boolean {
   if (!versions.length) return false
   let changed = false
   if (!statsVersionFilter.value) {
-    statsVersionFilter.value = versions[0]?.version ?? ''
+    const withData = versions.find(v => Number(v.matchCount ?? 0) > 0)
+    statsVersionFilter.value = withData?.version ?? versions[0]?.version ?? ''
     changed = true
   }
   const progChanged = syncProgressionDeltaToVersionBeforeFilter()
@@ -3954,10 +3960,14 @@ onMounted(async () => {
   await versionPromise
   statsPerfEnd('version', tVersion)
   await loadKnownVersionsFromGameData()
-  applyDefaultVersionFiltersFromKnownVersions()
   await loadOverview()
-  await loadInfosMeta()
-  await loadInfosPatchDivisionMatrix()
+  // Apply default version only after first overview call, so we can prefer patches
+  // that actually have matches (matchesByVersion), not only catalog versions.
+  const defaultVersionApplied = applyDefaultVersionFiltersFromKnownVersions()
+  if (defaultVersionApplied) {
+    await loadOverview()
+  }
+  runInBackground(Promise.allSettled([loadInfosMeta(), loadInfosPatchDivisionMatrix()]))
   statsPerfEnd('page mount', tPage)
   championsStore.loadChampions(riotLocale.value)
   itemsStore.loadItems(riotLocale.value)
@@ -3970,7 +3980,7 @@ onMounted(async () => {
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
-  if (activeTab.value === 'bans') await bansTab.loadBansTable()
+  if (activeTab.value === 'bans') runInBackground(bansTab.loadBansTable())
 })
 
 // Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).

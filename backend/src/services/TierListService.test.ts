@@ -67,3 +67,15 @@ test('assignTier keeps same tier for equal score ties', () => {
   const tiers = assignTier(sorted)
   assert.equal(tiers[18], tiers[19])
 })
+
+test('assignTier keeps all tiers represented on large cohorts', () => {
+  const { assignTier } = __testables
+  const sorted = Array.from({ length: 40 }, (_, i) => ({ tierScore: 100 - i }))
+  const tiers = assignTier(sorted)
+  assert.ok(tiers.includes('S+'))
+  assert.ok(tiers.includes('S'))
+  assert.ok(tiers.includes('A'))
+  assert.ok(tiers.includes('B'))
+  assert.ok(tiers.includes('C'))
+  assert.ok(tiers.includes('D'))
+})

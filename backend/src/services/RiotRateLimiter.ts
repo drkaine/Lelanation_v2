@@ -14,7 +14,7 @@
  * (disabled) so sustained throughput stays closer to the drip target; set to 1 for the
  * old conservative behaviour.
  *
- * minTime: 50 ms (20 req/s) uses the 1 s bucket fully; do not lower further.
+ * minTime: default 50 ms (20 req/s) uses the 1 s bucket fully; do not set `RIOT_LIMITER_MIN_TIME_MS` below 50.
  *
  * On 429: schedule() blocks until Retry-After + buffer expires.
  * Concurrent penalize429 calls only extend (never shorten) the wait.
@@ -62,6 +62,17 @@ function readMaxConcurrent(): number {
   const raw = Number.parseInt(process.env.RIOT_LIMITER_MAX_CONCURRENT ?? '', 10)
   if (!Number.isFinite(raw)) return 24
   return Math.min(64, Math.max(1, raw))
+}
+
+/**
+ * Minimum spacing (ms) between starting two jobs — backs the Riot **1 s** app bucket (20 req/s).
+ * Default 50 ms as documented; values above 50 reduce short-term throughput and can keep
+ * `x-app-rate-limit-count` peaks well below 100/120s even when the 120 s reservoir allows more.
+ */
+function readLimiterMinTimeMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_LIMITER_MIN_TIME_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return 50
+  return Math.min(250, Math.max(50, raw))
 }
 
 /** If 1, apply short breath when 120s bucket has ≤1 slot left (99/100). If 0, disabled. */
@@ -146,7 +157,7 @@ export class RiotRateLimiter {
       reservoirIncreaseInterval: dripMs,
       reservoirIncreaseMaximum: readReservoirMax(),
       maxConcurrent: readMaxConcurrent(),
-      minTime: 110,
+      minTime: readLimiterMinTimeMs(),
     })
   }
 

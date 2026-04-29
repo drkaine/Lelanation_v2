@@ -296,17 +296,21 @@ export async function getOverviewAbandons(
     let earlyFinal = earlySurrenderCount
     let surrenderFinal = surrenderCount
     if (fallbackNeeded) {
-      const ingestRows = await prisma.$queryRawUnsafe<
-        Array<{ early_surrender_count: bigint; surrender_count: bigint }>
-      >(`
-        SELECT
-          COALESCE(SUM(CASE WHEN im.game_ended_in_early_surrender THEN 1 ELSE 0 END), 0)::bigint AS early_surrender_count,
-          COALESCE(SUM(CASE WHEN im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_count
-        FROM ingest_matchs im
-        WHERE ${whereIngestSql}
-      `)
-      earlyFinal = Number(ingestRows[0]?.early_surrender_count ?? 0)
-      surrenderFinal = Number(ingestRows[0]?.surrender_count ?? 0)
+      try {
+        const ingestRows = await prisma.$queryRawUnsafe<
+          Array<{ early_surrender_count: bigint; surrender_count: bigint }>
+        >(`
+          SELECT
+            COALESCE(SUM(CASE WHEN im.game_ended_in_early_surrender THEN 1 ELSE 0 END), 0)::bigint AS early_surrender_count,
+            COALESCE(SUM(CASE WHEN im.game_ended_in_surrender THEN 1 ELSE 0 END), 0)::bigint AS surrender_count
+          FROM ingest_matchs im
+          WHERE ${whereIngestSql}
+        `)
+        earlyFinal = Number(ingestRows[0]?.early_surrender_count ?? 0)
+        surrenderFinal = Number(ingestRows[0]?.surrender_count ?? 0)
+      } catch {
+        /* ingest_matchs removed — keep counts from agg (often 0 on fresh patch) */
+      }
     }
 
     const rates = computeAbandonRates(totalMatches, remakeCount, earlyFinal, surrenderFinal)
