@@ -197,7 +197,12 @@ async function buildPatchSnapshot(
     role: string
     count_game: number
     count_win: number
-    count_ban: number
+  }
+  type BanRow = {
+    banned_champion_id: number
+    rank_tier: string
+    banner_role_norm: string
+    ban_count: number
   }
   const allTiers = new Set<string>()
   ;(['average', 'skilled', 'elite'] as const).forEach((k) => {
@@ -210,11 +215,20 @@ async function buildPatchSnapshot(
   const roleSql = role ? `AND role = '${String(role).replace(/'/g, "''")}'` : ''
   const patchLike = `${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%`
   const coreRows = await prisma.$queryRawUnsafe<CoreRow[]>(`
-      SELECT champion_id, rank_tier, role, count_game, count_win, count_ban
+      SELECT champion_id, rank_tier, role, count_game, count_win
       FROM ${coreFrom}
       WHERE game_version LIKE '${patchLike}'
         AND rank_tier IN (${tiersSql})
         ${roleSql}
+    `)
+  const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
+  const banRoleSql = role ? `AND banner_role_norm = '${String(role).replace(/'/g, "''")}'` : ''
+  const banRows = await prisma.$queryRawUnsafe<BanRow[]>(`
+      SELECT banned_champion_id, rank_tier, banner_role_norm, ban_count
+      FROM ${bansFrom}
+      WHERE game_version LIKE '${patchLike}'
+        AND rank_tier IN (${tiersSql})
+        ${banRoleSql}
     `)
 
   const byLevel: Record<BalanceLevelKey, Map<string, ChampionAgg>> = {
@@ -227,6 +241,11 @@ async function buildPatchSnapshot(
     skilled: 0,
     elite: 0,
   }
+  const participantsByLevelByRole: Record<BalanceLevelKey, Map<string, number>> = {
+    average: new Map(),
+    skilled: new Map(),
+    elite: new Map(),
+  }
   for (const r of coreRows) {
     const rankTier = String(r.rank_tier).toUpperCase()
     const roleNorm = String(r.role ?? '').toUpperCase()
@@ -235,14 +254,29 @@ async function buildPatchSnapshot(
     const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
     const games = r.count_game
     const wins = r.count_win
-    const bans = r.count_ban
-
     ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
       if (!rules.levels[lvl].tiers.includes(rankTier)) return
       participantsByLevel[lvl] += games
+      participantsByLevelByRole[lvl].set(
+        roleNorm,
+        (participantsByLevelByRole[lvl].get(roleNorm) ?? 0) + games
+      )
       const agg = initChampionAggMap(key, byLevel[lvl])
       agg.games += games
       agg.wins += wins
+    })
+  }
+
+  for (const r of banRows) {
+    const rankTier = String(r.rank_tier).toUpperCase()
+    const roleNorm = String(r.banner_role_norm ?? '').toUpperCase()
+    if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
+    const cid = r.banned_champion_id
+    const key = makeChampionRoleKey(cid, roleNorm || 'UNKNOWN')
+    const bans = r.ban_count
+    ;(['average', 'skilled', 'elite'] as const).forEach((lvl) => {
+      if (!rules.levels[lvl].tiers.includes(rankTier)) return
+      const agg = initChampionAggMap(key, byLevel[lvl])
       agg.bans += bans
     })
   }
@@ -255,7 +289,10 @@ async function buildPatchSnapshot(
     const byChampionRole = new Map<string, LevelSnapshotChampion>()
     for (const [key, a] of byLevel[lvl].entries()) {
       const { championId, role: championRole } = parseChampionRoleKey(key)
-      const pickrate = participantTotal > 0 ? (a.games / participantTotal) * 100 : 0
+      const roleParticipantTotal = role
+        ? participantTotal
+        : Number(participantsByLevelByRole[lvl].get((championRole || '').toUpperCase()) ?? 0)
+      const pickrate = roleParticipantTotal > 0 ? (a.games / roleParticipantTotal) * 100 : 0
       const winrate = a.games > 0 ? (a.wins / a.games) * 100 : 0
       const banrate = matchTotal > 0 ? (a.bans / (2 * matchTotal)) * 100 : 0
       const presence = pickrate + banrate

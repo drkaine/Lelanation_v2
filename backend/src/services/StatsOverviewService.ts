@@ -2500,6 +2500,24 @@ async function countDistinctPlayersInMatchesAdaptive(
   return countDistinctPlayersInMatchesFromRaw(version, rankTier, role)
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${timeoutMs}ms`))
+    }, Math.max(1, timeoutMs))
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      }
+    )
+  })
+}
+
 /**
  * Compteurs Infos :
  * - total matches / total players : globaux (tous patches)
@@ -2513,12 +2531,26 @@ export async function getInfosMetaCounts(
   if (!isDatabaseConfigured()) return null
   try {
     const moUnion = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'mo')
-    const matchRows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
-      `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS c FROM ${moUnion}`
-    )
+    const [matchRows, totalPlayers] = await Promise.all([
+      prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
+        `SELECT COALESCE(SUM(mo.count_match), 0)::bigint AS c FROM ${moUnion}`
+      ),
+      prisma.player.count(),
+    ])
     const totalMatches = Number(matchRows[0]?.c ?? 0)
-    const totalPlayers = await prisma.player.count()
-    const playersWithIngestMatches = await countDistinctPlayersInMatchesAdaptive(version, rankTier, role)
+    let playersWithIngestMatches = totalPlayers
+    try {
+      playersWithIngestMatches = await withTimeout(
+        countDistinctPlayersInMatchesAdaptive(version, rankTier, role),
+        1500,
+        'countDistinctPlayersInMatchesAdaptive'
+      )
+    } catch (err) {
+      console.warn(
+        '[getInfosMetaCounts] slow playersWithIngestMatches fallback',
+        err instanceof Error ? err.message : err
+      )
+    }
     return {
       totalMatches,
       totalPlayers,

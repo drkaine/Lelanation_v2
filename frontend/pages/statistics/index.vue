@@ -227,6 +227,27 @@
                 <option value="BALANCED">{{ t('statisticsPage.balanceStatusBalanced') }}</option>
               </select>
               <select
+                v-model="balanceNeedFilter"
+                class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+              >
+                <option value="ALL">
+                  {{ t('statisticsPage.balanceNeedColumn') }} ·
+                  {{ t('statisticsPage.overviewVersionAll') }}
+                </option>
+                <option value="NERF">
+                  {{ t('statisticsPage.balanceNeedColumn') }} ·
+                  {{ t('statisticsPage.balanceNeedNerf') }}
+                </option>
+                <option value="BUFF">
+                  {{ t('statisticsPage.balanceNeedColumn') }} ·
+                  {{ t('statisticsPage.balanceNeedBuff') }}
+                </option>
+                <option value="NORMAL">
+                  {{ t('statisticsPage.balanceNeedColumn') }} ·
+                  {{ t('statisticsPage.balanceNeedNormal') }}
+                </option>
+              </select>
+              <select
                 v-model="balanceAverageFilter"
                 class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
               >
@@ -1050,6 +1071,7 @@ const statsDivisionFilter = ref<string[]>([])
 const statsRoleFilter = ref('')
 const statsOtpFilter = ref<'oui' | 'non' | 'solo'>('non')
 const balanceGlobalFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
+const balanceNeedFilter = ref<'ALL' | 'NERF' | 'BUFF' | 'NORMAL'>('ALL')
 const balanceAverageFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
 const balanceSkilledFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
 const balanceEliteFilter = ref<'ALL' | 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'>('ALL')
@@ -1391,6 +1413,7 @@ function resetStatsFilters() {
   statsRoleFilter.value = ''
   statsOtpFilter.value = 'non'
   balanceGlobalFilter.value = 'ALL'
+  balanceNeedFilter.value = 'ALL'
   balanceAverageFilter.value = 'ALL'
   balanceSkilledFilter.value = 'ALL'
   balanceEliteFilter.value = 'ALL'
@@ -4014,6 +4037,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   balanceAverageFilter,
   balanceEliteFilter,
   balanceGlobalFilter,
+  balanceNeedFilter,
   balanceSkilledFilter,
   balanceFrameworkData,
   balanceFrameworkError,

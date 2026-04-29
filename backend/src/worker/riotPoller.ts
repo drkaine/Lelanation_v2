@@ -3025,17 +3025,18 @@ async function refreshPriorityRanksOffCriticalIngestPath(
         const rankTier = normalizeRankTier(solo?.tier)
         const rankDivision = normalizeRankDivision(solo?.rank)
         const rankLp = normalizeRankLp(solo?.leaguePoints)
+        const hasSoloRank = rankTier != null
         setCachedRank(next.puuid, {
-          rankTier: rankTier ?? undefined,
-          rankDivision,
-          rankLp,
+          rankTier: hasSoloRank ? rankTier : undefined,
+          rankDivision: hasSoloRank ? rankDivision : null,
+          rankLp: hasSoloRank ? rankLp : null,
         })
         const res = await prisma.player.updateMany({
           where: { puuid: next.puuid },
           data: {
-            rankTier,
-            rankDivision,
-            rankLp,
+            rankTier: hasSoloRank ? rankTier : null,
+            rankDivision: hasSoloRank ? rankDivision : null,
+            rankLp: hasSoloRank ? rankLp : null,
             rankSnapshotGameDate: new Date(),
           },
         })

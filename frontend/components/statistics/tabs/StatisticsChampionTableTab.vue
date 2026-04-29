@@ -163,7 +163,7 @@ function onChampionPageSizeChange(event: Event): void {
               :title="p.t('statisticsPage.championTableTooltipDealt')"
               @click="p.setChampionGlobalSort('dmgTotal')"
             >
-              {{ p.t('statisticsPage.championTableColTotal')
+              {{ p.t('statisticsPage.championTableColTotalInflicted')
               }}{{ p.championGlobalSortIcon('dmgTotal') }}
             </button>
             <button
@@ -264,7 +264,7 @@ function onChampionPageSizeChange(event: Event): void {
               :title="p.t('statisticsPage.championTableTooltipTaken')"
               @click="p.setChampionGlobalSort('takenTotal')"
             >
-              {{ p.t('statisticsPage.championTableColTotal')
+              {{ p.t('statisticsPage.championTableColTotalTaken')
               }}{{ p.championGlobalSortIcon('takenTotal') }}
             </button>
             <button

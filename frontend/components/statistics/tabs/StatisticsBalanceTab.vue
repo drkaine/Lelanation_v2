@@ -50,6 +50,10 @@ function fmt(v: number): string {
   return Number.isFinite(v) ? v.toFixed(2) : '0.00'
 }
 
+function fmt3(v: number): string {
+  return Number.isFinite(v) ? v.toFixed(3) : '0.000'
+}
+
 function relationToOp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): string {
   const r = rules.value?.levels?.[level]
   if (!r) return ''
@@ -57,9 +61,21 @@ function relationToOp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): st
   const abr = abrByLevel.value[level] || 0
   const ratio = abr > 0 ? row.banrate / abr : 0
   if (level === 'elite') {
-    return `Winrate ${fmt(row.winrate)}% (overpowered threshold ${fmt(op.winrateHigh)}%), banrate ${fmt(row.banrate)}% (${fmt(ratio)} x average banrate), presence ${fmt(row.presence)}%`
+    return p.t('statisticsPage.balanceTooltipRelationOpElite', {
+      winrate: fmt(row.winrate),
+      wrHigh: fmt(op.winrateHigh),
+      banrate: fmt3(row.banrate),
+      ratio: fmt3(ratio),
+      presence: fmt(row.presence),
+    })
   }
-  return `Winrate ${fmt(row.winrate)}% (overpowered threshold ${fmt(op.winrateHigh)}%), banrate ${fmt(row.banrate)}% (${fmt(ratio)} x average banrate), underpowered below ${fmt(r.underpowered.winrateMax)}% winrate`
+  return p.t('statisticsPage.balanceTooltipRelationOp', {
+    winrate: fmt(row.winrate),
+    wrHigh: fmt(op.winrateHigh),
+    banrate: fmt3(row.banrate),
+    ratio: fmt3(ratio),
+    wrLow: fmt(r.underpowered.winrateMax),
+  })
 }
 
 function relationToUp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): string {
@@ -67,10 +83,14 @@ function relationToUp(row: LevelRow, level: 'average' | 'skilled' | 'elite'): st
   if (!r) return ''
   if (level === 'elite') {
     const upPresence = Number(r.underpowered.presenceMax ?? 0)
-    return `Distance to underpowered threshold by presence: ${(row.presence - upPresence).toFixed(2)} points`
+    return p.t('statisticsPage.balanceTooltipRelationUpElite', {
+      delta: (row.presence - upPresence).toFixed(2),
+    })
   }
   const up = Number(r.underpowered.winrateMax ?? 0)
-  return `Distance to underpowered threshold by winrate: ${(row.winrate - up).toFixed(2)} points`
+  return p.t('statisticsPage.balanceTooltipRelationUp', {
+    delta: (row.winrate - up).toFixed(2),
+  })
 }
 
 function statusLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
@@ -107,6 +127,29 @@ function statusClass(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
   return 'text-success'
 }
 
+function frameworkNeedLabel(v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'): string {
+  if (v === 'OVERPOWERED') return p.t('statisticsPage.balanceNeedNerf')
+  if (v === 'UNDERPOWERED') return p.t('statisticsPage.balanceNeedBuff')
+  return p.t('statisticsPage.balanceNeedNormal')
+}
+
+function frameworkNeedCode(
+  v: 'OVERPOWERED' | 'UNDERPOWERED' | 'BALANCED'
+): 'NERF' | 'BUFF' | 'NORMAL' {
+  if (v === 'OVERPOWERED') return 'NERF'
+  if (v === 'UNDERPOWERED') return 'BUFF'
+  return 'NORMAL'
+}
+
+function isOtpRoleRow(row: BalanceRow): boolean {
+  const pickMax = Math.max(
+    Number(row.average?.pickrate ?? 0),
+    Number(row.skilled?.pickrate ?? 0),
+    Number(row.elite?.pickrate ?? 0)
+  )
+  return pickMax < 1
+}
+
 const filteredRows = computed<BalanceRow[]>(() => {
   const out = rows.value.filter(row => {
     if (searchQuery.value) {
@@ -119,9 +162,15 @@ const filteredRows = computed<BalanceRow[]>(() => {
     const sf = (p.balanceSkilledFilter as StatusFilter) ?? 'ALL'
     const ef = (p.balanceEliteFilter as StatusFilter) ?? 'ALL'
     if (!statusMatches(row.globalStatus, gf)) return false
+    const needFilter = String(p.balanceNeedFilter ?? 'ALL')
+    if (needFilter !== 'ALL' && frameworkNeedCode(row.globalStatus) !== needFilter) return false
     if (!statusMatches(row.average.status, af)) return false
     if (!statusMatches(row.skilled.status, sf)) return false
     if (!statusMatches(row.elite.status, ef)) return false
+    const otpFilter = String(p.statsOtpFilter ?? 'non')
+    const isOtpRole = isOtpRoleRow(row)
+    if (otpFilter === 'non' && isOtpRole) return false
+    if (otpFilter === 'solo' && !isOtpRole) return false
     return true
   })
 
@@ -156,21 +205,24 @@ function onPageSizeChange(event: Event): void {
 
 function levelTooltip(row: BalanceRow, level: 'average' | 'skilled' | 'elite'): string {
   const lv = row[level]
-  if (!lv || lv.games <= 0) return 'No games for this champion on this bracket in current patch.'
+  if (!lv || lv.games <= 0) return p.t('statisticsPage.balanceTooltipNoGames')
   return [
-    `Status: ${statusLabel(lv.status)}`,
+    p.t('statisticsPage.balanceTooltipStatus', { status: statusLabel(lv.status) }),
     relationToOp(lv, level),
     relationToUp(lv, level),
     lv.delta
-      ? `Status change: ${formatDeltaLabel(lv.delta)}`
-      : 'Status unchanged versus reference patch.',
+      ? p.t('statisticsPage.balanceTooltipStatusChange', { delta: formatDeltaLabel(lv.delta) })
+      : p.t('statisticsPage.balanceTooltipStatusUnchanged'),
   ].join(' ')
 }
 
 function globalTooltip(row: BalanceRow): string {
   return row.globalDelta
-    ? `Global status: ${statusLabel(row.globalStatus)}. Change versus reference patch: ${formatDeltaLabel(row.globalDelta)}.`
-    : `Global status: ${statusLabel(row.globalStatus)}.`
+    ? p.t('statisticsPage.balanceTooltipGlobalStatusChange', {
+        status: statusLabel(row.globalStatus),
+        delta: formatDeltaLabel(row.globalDelta),
+      })
+    : p.t('statisticsPage.balanceTooltipGlobalStatus', { status: statusLabel(row.globalStatus) })
 }
 </script>
 
@@ -226,6 +278,18 @@ function globalTooltip(row: BalanceRow): string {
               >
                 {{ p.t('statisticsPage.balanceGlobalStatus') }}
               </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.balanceTooltipNeed')"
+              >
+                {{ p.t('statisticsPage.balanceNeedColumn') }}
+              </th>
+              <th
+                class="px-3 py-2 font-semibold text-text"
+                :title="p.t('statisticsPage.balanceTooltipGlobalDelta')"
+              >
+                {{ p.t('statisticsPage.balanceAbbrevDelta') }}
+              </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-primary/20">
@@ -280,6 +344,12 @@ function globalTooltip(row: BalanceRow): string {
                 :title="globalTooltip(row)"
               >
                 {{ statusLabel(row.globalStatus) }}
+              </td>
+              <td class="px-3 py-2 text-text/90">
+                {{ frameworkNeedLabel(row.globalStatus) }}
+              </td>
+              <td class="px-3 py-2 text-text/80">
+                {{ formatDeltaLabel(row.globalDelta) }}
               </td>
             </tr>
           </tbody>
