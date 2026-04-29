@@ -148,7 +148,7 @@ const paginatedRows = computed(() => {
   return sortedRows.value.slice(start, start + pageSize.value)
 })
 
-watch([itemTypeFilter, sortBy, sortDir, pageSize], () => {
+watch([itemTypeFilter, sortBy, sortDir, pageSize, itemSearchQuery], () => {
   page.value = 1
 })
 

@@ -494,7 +494,7 @@ withDefaults(
             <label class="flex items-center gap-1.5">
               <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
               <select
-                v-model.number="p.championsPageSize"
+                v-model.number="p.tierListPageSizeModel"
                 class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
               >
                 <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>

@@ -792,6 +792,14 @@ const searchInputPlaceholder = computed(() =>
 const championsPageSize = ref(20)
 const championsPage = ref(1)
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+const championsPageSizeModel = computed({
+  get: () => championsPageSize.value,
+  set: (value: number) => {
+    const n = Number(value)
+    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+    championsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+  },
+})
 /** Pagination Objets (onglet items). */
 const itemsPageSize = ref(20)
 const itemsPage = ref(1)
@@ -842,23 +850,52 @@ const paginatedItems = computed(() => {
 /** Pagination Progressions (onglet progressions). */
 const progressionsPageSize = ref(20)
 const progressionsPage = ref(1)
-const totalProgressionsCount = computed(() => progressionFullData.value?.champions?.length ?? 0)
+const progressionsPageSizeModel = computed({
+  get: () => progressionsPageSize.value,
+  set: (value: number) => {
+    const n = Number(value)
+    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+    progressionsPageSize.value = PAGE_SIZE_OPTIONS.includes(next) ? next : 20
+  },
+})
+const filteredProgressionsChampions = computed(() => {
+  const list = progressionFullData.value?.champions ?? []
+  const q = championSearchQuery.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(row => {
+    const name = championName(row.championId)?.toLowerCase() ?? ''
+    return name.includes(q) || String(row.championId).includes(q)
+  })
+})
+const filteredProgressionsByPickrate = computed(() => {
+  const list = progressionFullByPickrate.value
+  const q = championSearchQuery.value.trim().toLowerCase()
+  if (!q) return list
+  return list.filter(row => {
+    const name = championName(row.championId)?.toLowerCase() ?? ''
+    return name.includes(q) || String(row.championId).includes(q)
+  })
+})
+const totalProgressionsCount = computed(() => filteredProgressionsChampions.value.length)
 const totalProgressionsPages = computed(() =>
   Math.max(1, Math.ceil(totalProgressionsCount.value / progressionsPageSize.value))
 )
 const paginatedProgressionsChampions = computed(() => {
-  const list = progressionFullData.value?.champions ?? []
+  const list = filteredProgressionsChampions.value
   const size = progressionsPageSize.value
   const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
   const start = (page - 1) * size
   return list.slice(start, start + size)
 })
 const paginatedProgressionsByPickrate = computed(() => {
-  const list = progressionFullByPickrate.value
+  const list = filteredProgressionsByPickrate.value
   const size = progressionsPageSize.value
   const page = Math.min(progressionsPage.value, totalProgressionsPages.value)
   const start = (page - 1) * size
   return list.slice(start, start + size)
+})
+watch([championSearchQuery, progressionsPageSize], () => {
+  progressionsPage.value = 1
 })
 /** Sort order for Champions tab (from Fast Stats "Voir plus" or selector). */
 const championsSortOrder = ref<'winrate' | 'pickrate' | 'games' | 'wins'>('winrate')
@@ -3961,6 +3998,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   paginatedChampionGlobalRows,
   totalChampionGlobalCount,
   totalChampionGlobalPages,
+  championsPageSizeModel,
   championName,
   championSearchQuery,
   balanceAverageFilter,
@@ -4075,6 +4113,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   progressionFullData,
   progressionFullPending,
   progressionsPage,
+  progressionsPageSizeModel,
   progressionsPageSize,
   retryOverviewDetail,
   setChampionGlobalSort,

@@ -527,16 +527,14 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
   const rows = buildTierListRows(roleRows, matchupRows, focusRole)
 
   let highEloRows: TierListRow[] | undefined
-  if (rankTier === 'all') {
-    try {
-      const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
-      if (highEloRoleRows.length > 0) {
-        const highEloMatchupRows = await fetchMatchupRoleRows(patch, 'high_elo')
-        highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows, focusRole)
-      }
-    } catch {
-      // optional: skip high-elo block on error
+  try {
+    const highEloRoleRows = await fetchRoleRows(patch, platformId, 'high_elo')
+    if (highEloRoleRows.length > 0) {
+      const highEloMatchupRows = await fetchMatchupRoleRows(patch, 'high_elo')
+      highEloRows = buildTierListRows(highEloRoleRows, highEloMatchupRows, focusRole)
     }
+  } catch {
+    // optional: skip high-elo block on error
   }
 
   return {

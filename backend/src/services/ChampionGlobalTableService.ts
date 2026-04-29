@@ -126,6 +126,12 @@ export async function getChampionGlobalTable(
   const roleFilterValues =
     roleFilter === 'TOP'
       ? ['TOP', 'TOPLANE']
+      : roleFilter === 'JUNGLE'
+        ? ['JUNGLE', 'JGL']
+        : roleFilter === 'MIDDLE'
+          ? ['MIDDLE', 'MID', 'MIDLANE']
+          : roleFilter === 'SUPPORT'
+            ? ['SUPPORT', 'UTILITY']
       : roleFilter === 'BOTTOM'
         ? ['BOTTOM', 'ADC', 'BOT']
         : roleFilter
@@ -140,6 +146,18 @@ export async function getChampionGlobalTable(
   }
 
   const pickDenom = 5 * matchCount
+  const hasColumn = async (tableName: string, columnName: string): Promise<boolean> => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ ok: number }>>(`
+      SELECT CASE WHEN EXISTS (
+        SELECT 1
+        FROM information_schema.columns c
+        WHERE c.table_schema = 'public'
+          AND c.table_name = '${tableName.replace(/'/g, "''")}'
+          AND c.column_name = '${columnName.replace(/'/g, "''")}'
+      ) THEN 1 ELSE 0 END AS ok
+    `)
+    return Number(rows[0]?.ok ?? 0) === 1
+  }
 
   type AggRow = {
     team_id: number
@@ -158,10 +176,12 @@ export async function getChampionGlobalTable(
     sum_a: bigint
   }
 
-  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cs')
   const coreRoleFromForSide = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cf')
   const matchCondSide = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
   const coreWhereForRole = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cf.')
+  const sideRoleSql = roleFilterSqlValueList
+    ? ` AND upper(mv.role_norm::text) IN (${roleFilterSqlValueList})`
+    : ''
   const rolePlayedCond = roleFilterSqlValueList
     ? ` AND EXISTS (
           SELECT 1
@@ -191,26 +211,64 @@ export async function getChampionGlobalTable(
       0::bigint AS sum_a
     FROM ${sideFrom}
     WHERE ${matchCondSide} AND mv.team_num IN (100, 200)
+    ${sideRoleSql}
     ${rolePlayedCond}
     GROUP BY mv.team_num, mv.champion_id
   `
   const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)
 
-  const partFrom = await matchVersionedAggFrom('agg_champion_participant_stats', version, 'ps')
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cs')
   const bucketFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
+  const partFrom = await matchVersionedAggFrom('agg_champion_participant_stats', version, 'ps')
   const coreWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
   const coreRoleSql = roleFilterSqlValueList ? ` AND cs.role IN (${roleFilterSqlValueList})` : ''
+  const coreHasSumKills = await hasColumn('agg_champion_core_stats', 'sum_kills')
+  const coreHasSumDeaths = await hasColumn('agg_champion_core_stats', 'sum_deaths')
+  const coreHasSumAssists = await hasColumn('agg_champion_core_stats', 'sum_assists')
+  const partHasSumKills = await hasColumn('agg_champion_participant_stats', 'sum_kills')
+  const partHasSumAssists = await hasColumn('agg_champion_participant_stats', 'sum_assists')
+  const partHasSumDeaths = await hasColumn('agg_champion_participant_stats', 'sum_deaths')
+  const partHasSumDeathsByEnemy = await hasColumn(
+    'agg_champion_participant_stats',
+    'sum_deaths_by_enemy_champs'
+  )
+  const usePartForKda =
+    !coreHasSumKills ||
+    !coreHasSumDeaths ||
+    !coreHasSumAssists ||
+    partHasSumKills ||
+    partHasSumAssists ||
+    partHasSumDeaths ||
+    partHasSumDeathsByEnemy
+  const kExpr = coreHasSumKills
+    ? 'COALESCE(SUM(cs.sum_kills), 0)::bigint'
+    : partHasSumKills
+      ? 'COALESCE(SUM(ps.sum_kills), 0)::bigint'
+      : '0::bigint'
+  const dExpr = coreHasSumDeaths
+    ? 'COALESCE(SUM(cs.sum_deaths), 0)::bigint'
+    : partHasSumDeaths
+      ? 'COALESCE(SUM(ps.sum_deaths), 0)::bigint'
+      : partHasSumDeathsByEnemy
+        ? 'COALESCE(SUM(ps.sum_deaths_by_enemy_champs), 0)::bigint'
+        : '0::bigint'
+  const aExpr = coreHasSumAssists
+    ? 'COALESCE(SUM(cs.sum_assists), 0)::bigint'
+    : partHasSumAssists
+      ? 'COALESCE(SUM(ps.sum_assists), 0)::bigint'
+      : '0::bigint'
+  const kdaJoinSql = usePartForKda ? ` LEFT JOIN ${partFrom} ON ps.champion_stat_id = cs.id` : ''
 
   const kdaRows = await prisma.$queryRawUnsafe<
     Array<{ champion_id: number; sum_k: bigint; sum_de: bigint; sum_a: bigint }>
   >(`
     SELECT
       cs.champion_id,
-      COALESCE(SUM(ps.sum_kills), 0)::bigint AS sum_k,
-      COALESCE(SUM(ps.sum_deaths_by_enemy_champs), 0)::bigint AS sum_de,
-      COALESCE(SUM(ps.sum_assists), 0)::bigint AS sum_a
+      ${kExpr} AS sum_k,
+      ${dExpr} AS sum_de,
+      ${aExpr} AS sum_a
     FROM ${coreFrom}
-    JOIN ${partFrom} ON ps.champion_stat_id = cs.id
+    ${kdaJoinSql}
     WHERE ${coreWhere}
     ${coreRoleSql}
     GROUP BY cs.champion_id

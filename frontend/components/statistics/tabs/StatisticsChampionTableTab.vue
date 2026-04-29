@@ -534,7 +534,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionDealtColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium">{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
             <span
@@ -562,7 +562,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-amber-300">{{
               p.formatChampionGlobalNum(row.avgDamageToChampsPhys)
@@ -592,7 +592,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-violet-300">{{
               p.formatChampionGlobalNum(row.avgDamageToChampsMagic)
@@ -622,7 +622,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-slate-200">{{
               p.formatChampionGlobalNum(row.avgDamageToChampsTrue)
@@ -652,7 +652,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionTakenColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium">{{
               p.formatChampionGlobalNum(row.avgDamageTakenTotal)
@@ -683,7 +683,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-amber-300">{{
               p.formatChampionGlobalNum(row.avgDamageTakenPhys)
@@ -714,7 +714,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-violet-300">{{
               p.formatChampionGlobalNum(row.avgDamageTakenMagic)
@@ -745,7 +745,7 @@ const showChampionTakenBreakdown = ref(false)
           </div>
           <div
             v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[13px] leading-tight"
           >
             <span class="font-medium text-slate-200">{{
               p.formatChampionGlobalNum(row.avgDamageTakenTrue)
@@ -775,7 +775,7 @@ const showChampionTakenBreakdown = ref(false)
             >
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-40 shrink-0 flex-col items-center justify-center gap-0.5 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-40 shrink-0 flex-col items-center justify-center gap-0.5 font-mono text-[13px] leading-tight"
           >
             <span class="font-semibold">
               {{ p.formatChampionGlobalNum(row.avgKills) }} /
@@ -784,7 +784,7 @@ const showChampionTakenBreakdown = ref(false)
             </span>
             <span
               v-if="p.championGlobalPatchDeltaRefLabel"
-              class="text-[9px] leading-none text-text/75"
+              class="text-[10px] leading-none text-text/75"
             >
               <span
                 :class="
@@ -829,7 +829,7 @@ const showChampionTakenBreakdown = ref(false)
                 }}</span
               >
             </span>
-            <span v-else class="text-[9px] leading-none text-text/55">—</span>
+            <span v-else class="text-[10px] leading-none text-text/55">—</span>
           </div>
         </div>
         <div
@@ -841,7 +841,7 @@ const showChampionTakenBreakdown = ref(false)
             <label class="flex items-center gap-1.5">
               <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
               <select
-                v-model.number="p.championsPageSize"
+                v-model.number="p.championsPageSizeModel"
                 class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
               >
                 <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
