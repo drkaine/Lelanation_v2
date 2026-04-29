@@ -699,10 +699,12 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   function tierListQueryString(patch: string | null): string {
     const params = new URLSearchParams()
     if (patch) params.set('patch', patch)
-    if (statsDivisionFilter.value.length === 1) {
-      params.set('rankTier', statsDivisionFilter.value[0]!)
-    } else {
+    if (statsDivisionFilter.value.length === 0) {
       params.set('rankTier', 'all')
+    } else {
+      for (const tier of statsDivisionFilter.value) {
+        params.append('rankTier', tier)
+      }
     }
     if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
     params.set('otp', statsOtpFilter.value)

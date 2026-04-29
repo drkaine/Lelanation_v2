@@ -40,7 +40,7 @@ export interface TierListRow {
 export interface GetTierListOptions {
   patch?: string | null
   platformId?: string | null
-  rankTier?: 'all' | string | null
+  rankTier?: 'all' | string | string[] | null
   /** Si défini (TOP, JUNGLE, MIDDLE, …) : une ligne par champion ayant assez de games sur ce rôle, stats = ce rôle (pas seulement le rôle le plus joué). */
   role?: string | null
 }
@@ -85,7 +85,15 @@ function assignTier(sortedByTierScore: Array<{ tierScore: number }>): Tier[] {
   const n = sortedByTierScore.length
   if (n === 0) return []
   const tiers: Tier[] = []
+  const sameScore = (a: number, b: number): boolean => Math.abs(a - b) < 1e-9
   for (let i = 0; i < n; i++) {
+    if (
+      i > 0 &&
+      sameScore(sortedByTierScore[i]!.tierScore, sortedByTierScore[i - 1]!.tierScore)
+    ) {
+      tiers.push(tiers[i - 1]!)
+      continue
+    }
     const pct = ((i + 1) / n) * 100
     let t: Tier = 'D'
     for (const { tier, maxPct } of TIER_PERCENTILES) {
@@ -283,10 +291,16 @@ function buildTierListRows(
     filtered.map(r => ({ championId: r.championId, mainRole: r.mainRole, games: r.games })),
     matchupRows
   )
-  for (const row of filtered) row.pbi = notes.get(row.championId) ?? 0
+  const hasMatchupNotes = notes.size > 0
+  for (const row of filtered) {
+    // Sparse cohorts (e.g. one selected division) can yield no matchup signal at all.
+    // Keep a meaningful chart score by falling back to the precomputed tier score.
+    row.pbi = hasMatchupNotes ? (notes.get(row.championId) ?? 0) : row.tierScore
+  }
   const sorted = [...filtered].sort((a, b) => b.tierScore - a.tierScore)
   sorted.forEach(r => {
-    r.tierScore = r.pbi
+    // Keep tier boundaries aligned with displayed chart score precision (x100 with 2 decimals).
+    r.tierScore = Number(r.pbi.toFixed(4))
   })
   sorted.sort((a, b) => b.tierScore - a.tierScore)
   const tiers = assignTier(sorted)
@@ -317,7 +331,7 @@ function normalizePatch(gameVersion: string): string {
 async function fetchRoleRows(
   patch: string,
   _platformId: string | null,
-  rankFilter: 'all' | 'high_elo' | string | null
+  rankFilter: 'all' | 'high_elo' | string | string[] | null
 ): Promise<RoleRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
 
@@ -326,6 +340,13 @@ async function fetchRoleRows(
   const filters: string[] = []
   if (highEloOnly) {
     filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
+  } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
+    const tiers = rankFilter
+      .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+      .filter(Boolean)
+    if (tiers.length > 0) {
+      filters.push(`rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
+    }
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
     const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
     filters.push(`rank_tier = '${rf}'`)
@@ -415,13 +436,20 @@ async function fetchRoleRows(
 
 async function fetchMatchupRoleRows(
   patch: string,
-  rankFilter: 'all' | 'high_elo' | string | null
+  rankFilter: 'all' | 'high_elo' | string | string[] | null
 ): Promise<MatchupRoleRow[]> {
   const highEloOnly = rankFilter === 'high_elo'
   const HIGH_ELO_TIERS = ['CHALLENGER', 'GRANDMASTER', 'MASTER']
   const filters: string[] = []
   if (highEloOnly) {
     filters.push(`rank_tier IN (${HIGH_ELO_TIERS.map((t) => `'${t}'`).join(',')})`)
+  } else if (Array.isArray(rankFilter) && rankFilter.length > 0) {
+    const tiers = rankFilter
+      .map((t) => String(t).toUpperCase().replace(/'/g, "''"))
+      .filter(Boolean)
+    if (tiers.length > 0) {
+      filters.push(`rank_tier IN (${tiers.map((t) => `'${t}'`).join(',')})`)
+    }
   } else if (rankFilter && rankFilter !== 'all' && rankFilter !== null) {
     const rf = String(rankFilter).toUpperCase().replace(/'/g, "''")
     filters.push(`rank_tier = '${rf}'`)
@@ -498,9 +526,21 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
   }
 
   const platformId = options.platformId?.trim() || null
-  const rankTier = options.rankTier === 'all' || options.rankTier == null || options.rankTier === '' ? 'all' : options.rankTier
-
-  const rankFilter = rankTier === 'all' ? null : rankTier
+  const rankTierRaw = options.rankTier
+  const rankTier =
+    rankTierRaw === 'all' || rankTierRaw == null || rankTierRaw === ''
+      ? 'all'
+      : Array.isArray(rankTierRaw)
+        ? rankTierRaw
+            .map((t) => String(t).trim().toUpperCase())
+            .filter(Boolean)
+        : String(rankTierRaw).trim().toUpperCase()
+  const rankFilter =
+    rankTier === 'all'
+      ? null
+      : Array.isArray(rankTier) && rankTier.length === 0
+        ? null
+        : rankTier
   let roleRows: RoleRow[]
   try {
     roleRows = await fetchRoleRows(patch, platformId, rankFilter)
@@ -539,7 +579,7 @@ export async function getTierList(options: GetTierListOptions): Promise<GetTierL
 
   return {
     patch,
-    rankTier: rankTier === 'all' ? 'all' : rankTier,
+    rankTier: rankTier === 'all' ? 'all' : Array.isArray(rankTier) ? rankTier.join(',') : rankTier,
     rows,
     highEloRows,
   }

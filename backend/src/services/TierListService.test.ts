@@ -39,3 +39,31 @@ test('assignTier empty returns empty', () => {
   const { assignTier } = __testables
   assert.deepEqual(assignTier([]), [])
 })
+
+test('assignTier keeps same tier for equal score ties', () => {
+  const { assignTier } = __testables
+  const sorted = [
+    { tierScore: 100 },
+    { tierScore: 99 },
+    { tierScore: 98 },
+    { tierScore: 97 },
+    { tierScore: 96 },
+    { tierScore: 95 },
+    { tierScore: 94 },
+    { tierScore: 93 },
+    { tierScore: 92 },
+    { tierScore: 91 },
+    { tierScore: 90 },
+    { tierScore: 89 },
+    { tierScore: 88 },
+    { tierScore: 87 },
+    { tierScore: 86 },
+    { tierScore: 85 },
+    { tierScore: 84 },
+    { tierScore: 83 },
+    { tierScore: 82 },
+    { tierScore: 82 },
+  ]
+  const tiers = assignTier(sorted)
+  assert.equal(tiers[18], tiers[19])
+})

@@ -186,7 +186,7 @@ function filterTierListRowsByOtp<T extends { pickrate: number; games: number }>(
 
 /** Champions / overview : pickrate = % 0–100 (agrégateur). Si tout serait filtré, on renvoie la liste d’origine. */
 function filterChampionRowsByOtp<T extends { pickrate?: number }>(rows: T[], mode: OtpMode): T[] {
-  if (mode === 'oui' || rows.length === 0) return rows
+  if (mode === 'non' || rows.length === 0) return rows
   const filtered = rows.filter((row) =>
     keepByOtpPickratePercent(parsePickrateNumber(row.pickrate), mode)
   )
@@ -201,7 +201,7 @@ function filterBalanceRowsByOtp<
     elite?: { pickrate?: number }
   },
 >(rows: T[], mode: OtpMode, hasRoleFilter: boolean): T[] {
-  if (mode === 'oui' || rows.length === 0) return rows
+  if (mode === 'non' || rows.length === 0) return rows
   const filtered = rows.filter((row) => {
     const a = parsePickrateNumber(row.average?.pickrate)
     const s = parsePickrateNumber(row.skilled?.pickrate)
@@ -224,10 +224,9 @@ function filterChampionGlobalRowsByOtp<
   },
 >(rows: T[], mode: OtpMode): T[] {
   if (rows.length === 0) return rows
+  if (mode === 'non') return rows
   const otpGamesFiltered =
-    mode === 'non'
-      ? rows
-      : rows.filter((row) => Number(row.totalGames ?? 0) >= CHAMPION_GLOBAL_OTP_MIN_GAMES)
+    rows.filter((row) => Number(row.totalGames ?? 0) >= CHAMPION_GLOBAL_OTP_MIN_GAMES)
   if (mode === 'oui') return otpGamesFiltered
   const filtered = otpGamesFiltered.filter((row) => {
     const pBlue = parsePickrateNumber(row.blue?.pickrate)
@@ -558,7 +557,8 @@ router.get('/champions', async (req: Request, res: Response) => {
 
 /** GET /api/stats/champions/global-table — tableau par champion : WR/pick/ban bleu & rouge, dégâts moyens, KDA. Query: ?version=…&rankTier=… (comme overview-sides). */
 router.get('/champions/global-table', async (req: Request, res: Response) => {
-  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  // Prevent stale table responses after rapid filter/schema fixes.
+  res.set('Cache-Control', 'no-store')
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
   const role = queryString(req.query.role)
@@ -907,8 +907,13 @@ router.get('/tier-list', async (req: Request, res: Response) => {
   res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
   const patch = resolvePatchFromQuery(req.query.patch, req.query.version) ?? undefined
   const platformId = queryString(req.query.platformId) ?? null
-  const rankTierRaw = queryString(req.query.rankTier)
-  const rankTier = rankTierRaw === 'all' || !rankTierRaw ? 'all' : rankTierRaw
+  const rankTierList = rankTierParam(req.query.rankTier)
+  const rankTier =
+    !rankTierList || rankTierList.includes('ALL')
+      ? 'all'
+      : rankTierList.length === 1
+        ? rankTierList[0]!
+        : rankTierList
   const roleFocus = queryString(req.query.role)?.trim() || null
   const otpMode = otpModeFromQuery(req.query.otp)
   try {
@@ -1353,8 +1358,7 @@ router.get('/items/solo', async (req: Request, res: Response) => {
 router.get('/tierlist', async (req: Request, res: Response) => {
   const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
   const rt = rankTierParam(req.query.rankTier)
-  const rankTier =
-    rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
+  const rankTier = rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt
   const roleFocus = queryString(req.query.role)?.trim() || null
   const data = await getTierList({ patch, rankTier, role: roleFocus })
   return res.json(data ?? { patch: patch ?? null, rankTier, rows: [], highEloRows: [] })
@@ -1363,8 +1367,7 @@ router.get('/tierlist', async (req: Request, res: Response) => {
 router.get('/tierlist-graph', async (req: Request, res: Response) => {
   const patch = resolvePatchFromQuery(req.query.patch, req.query.version)
   const rt = rankTierParam(req.query.rankTier)
-  const rankTier =
-    rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt.join(',')
+  const rankTier = rt == null || rt.length === 0 ? 'all' : rt.length === 1 ? rt[0] : rt
   const roleFocus = queryString(req.query.role)?.trim() || null
   const data = await getTierList({ patch, rankTier, role: roleFocus })
   const rows = data?.rows ?? []

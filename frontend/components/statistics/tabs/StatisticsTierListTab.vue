@@ -606,6 +606,7 @@ withDefaults(
                                 :style="{
                                   bottom: p.tierListChartZeroBottomPct + '%',
                                   height: p.tierListChartBarHeightPct(c.pbi) + '%',
+                                  minHeight: '2px',
                                   backgroundColor: p.tierListChartBarColor(c.tier),
                                 }"
                                 @mouseenter="p.onTierListChartBarEnter(c, $event)"
@@ -618,6 +619,7 @@ withDefaults(
                                 :style="{
                                   bottom: p.tierListChartScoreBottomPct(c.pbi) + '%',
                                   height: p.tierListChartBarHeightPct(c.pbi) + '%',
+                                  minHeight: '2px',
                                   backgroundColor: p.tierListChartBarColor(c.tier),
                                 }"
                                 @mouseenter="p.onTierListChartBarEnter(c, $event)"

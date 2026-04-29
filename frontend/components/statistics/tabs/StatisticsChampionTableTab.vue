@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { inject, ref } from 'vue'
+import { inject, ref, unref } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
+
+function onChampionPageSizeChange(event: Event): void {
+  const target = event.target as HTMLSelectElement | null
+  const fallback = unref(p.championsPageSize)
+  p.onChampionGlobalPageSizeUpdated(Number(target?.value ?? fallback))
+}
 </script>
 
 <template>
@@ -841,8 +847,9 @@ const showChampionTakenBreakdown = ref(false)
             <label class="flex items-center gap-1.5">
               <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
               <select
-                v-model.number="p.championsPageSizeModel"
+                :value="p.championsPageSize"
                 class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+                @change="onChampionPageSizeChange"
               >
                 <option v-for="n in p.PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
               </select>
@@ -858,7 +865,7 @@ const showChampionTakenBreakdown = ref(false)
                 type="button"
                 class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
                 :disabled="p.championGlobalPage <= 1"
-                @click="p.championGlobalPage = Math.max(1, p.championGlobalPage - 1)"
+                @click="p.onChampionGlobalPageUpdated(Math.max(1, p.championGlobalPage - 1))"
               >
                 ‹
               </button>
@@ -867,9 +874,8 @@ const showChampionTakenBreakdown = ref(false)
                 class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
                 :disabled="p.championGlobalPage >= p.totalChampionGlobalPages"
                 @click="
-                  p.championGlobalPage = Math.min(
-                    p.totalChampionGlobalPages,
-                    p.championGlobalPage + 1
+                  p.onChampionGlobalPageUpdated(
+                    Math.min(p.totalChampionGlobalPages, p.championGlobalPage + 1)
                   )
                 "
               >

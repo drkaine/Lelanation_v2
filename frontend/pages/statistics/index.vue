@@ -4192,6 +4192,16 @@ if (__statisticsVm?.proxy) {
             championsPageSize.value = v
           }
         }
+        if (key === 'onChampionGlobalPageUpdated') {
+          return (v: number) => {
+            championGlobalPage.value = v
+          }
+        }
+        if (key === 'onChampionGlobalPageSizeUpdated') {
+          return (v: number) => {
+            championsPageSizeModel.value = v
+          }
+        }
         if (Object.prototype.hasOwnProperty.call(bansTab, key)) {
           return unref((bansTab as any)[key])
         }
