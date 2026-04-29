@@ -55,15 +55,15 @@ import {
 } from './matchIngestRawQueue.js'
 import {
   tryReserveTrackedMatch,
-  markTrackedMatchAggregateError,
-  markTrackedMatchAggregated,
+  markTrackedMatchAggregateErrorForAliases,
+  markTrackedMatchAggregatedForAliases,
   setTrackedMatchStatus,
-  releaseTrackedMatch,
+  setTrackedMatchStatusForAliases,
   releaseTrackedErrorMatches,
   releaseStalePendingTrackedMatches,
 } from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
-import { resolveRiotMatchIdForIngest } from './matchIngestIds.js'
+import { resolveRiotMatchIdForIngest, trackedMatchIdAliases } from './matchIngestIds.js'
 import { processRawAggregateAndBurn } from './rawAggregateProcessor.js'
 import {
   upsertIngestMatchAndParticipants,
@@ -71,7 +71,12 @@ import {
   preloadIngestLeanMatchDbData,
 } from './ingestMatchLean.js'
 import type { MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
-import { cleanupGlobalRankCache, dequeuePriorityPuuids, setCachedRank } from './matchIngestRankCache.js'
+import {
+  cleanupGlobalRankCache,
+  dequeuePriorityPuuids,
+  enqueuePriorityPuuid,
+  setCachedRank,
+} from './matchIngestRankCache.js'
 
 export type { MatchIngestDbPreload, MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
 
@@ -1397,8 +1402,10 @@ function getRawIngestErrorRequeueBatch(): number {
 
 function getTrackedPendingCleanupMaxAgeMs(): number {
   const raw = parseInt(process.env.TRACKED_PENDING_CLEANUP_MAX_AGE_MS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 60_000) return 30 * 60_000
-  return Math.min(7 * 24 * 60 * 60 * 1000, raw)
+  // Default ~2 weeks: `tracked_matches` is the dedup key for the patch; deleting PENDING rows too
+  // early would allow the same Riot match id to be reserved and processed again.
+  if (!Number.isFinite(raw) || raw < 60_000) return 14 * 24 * 60 * 60 * 1000
+  return Math.min(60 * 24 * 60 * 60 * 1000, raw)
 }
 
 function getTrackedPendingCleanupBatch(): number {
@@ -1437,10 +1444,10 @@ function getRawIngestDoneCleanupBatch(): number {
   return Math.min(200_000, raw)
 }
 
-/** Min age of `match_ingest_raw.normalized_at` before a `done` row may be purged (default 24 h). */
+/** Min age of `match_ingest_raw.normalized_at` before a `done` row may be purged (default 36 h). */
 function getRawIngestDoneRetentionMs(): number {
   const raw = parseInt(process.env.RAW_INGEST_DONE_RETENTION_MS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 0) return 24 * 60 * 60 * 1000
+  if (!Number.isFinite(raw) || raw < 0) return 36 * 60 * 60 * 1000
   return Math.min(30 * 24 * 60 * 60 * 1000, raw)
 }
 
@@ -1474,6 +1481,12 @@ function getAsyncPriorityRankRefreshConcurrency(): number {
   const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_CONCURRENCY ?? '', 10)
   if (!Number.isFinite(raw) || raw < 1) return 4
   return Math.min(32, raw)
+}
+
+function getAsyncPriorityRankRefreshFallbackMaxAgeMs(): number {
+  const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_FALLBACK_MAX_AGE_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 6 * 60 * 60 * 1000
+  return Math.min(30 * 24 * 60 * 60 * 1000, raw)
 }
 
 function getFileQueueRecoveryIntervalMs(): number {
@@ -1672,11 +1685,22 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     const trackerIdx = payload.trackerIdx
     const tracker = ctx.playerTrackers?.[trackerIdx]
     const canonicalRiotMatchId = canonicalIds[i]
+    const trackedIdAliases = trackedMatchIdAliases(payload.matchId, canonicalRiotMatchId)
+    const trackedRowKeyForAgg = trackedIdAliases[0] ?? canonicalRiotMatchId
 
     if (rawId != null) {
       try {
-        await processRawAggregateAndBurn(rawId, payload, canonicalRiotMatchId)
-        await markTrackedMatchAggregated(canonicalRiotMatchId).catch(() => undefined)
+        const rawParticipants = matchDto.info?.participants as RiotParticipantDto[] | undefined
+        for (const p of rawParticipants ?? []) {
+          if (p?.puuid) enqueuePriorityPuuid(p.puuid)
+        }
+        await processRawAggregateAndBurn(rawId, payload, trackedRowKeyForAgg)
+        await markTrackedMatchAggregatedForAliases(trackedIdAliases).catch((e) =>
+          void ctx.logger.alerte('markTrackedMatchAggregatedForAliases failed', {
+            aliases: trackedIdAliases,
+            message: e instanceof Error ? e.message : String(e),
+          })
+        )
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)
@@ -1688,25 +1712,31 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             reason: skipped.reason,
           })
           noteMatchIngestProcessed(payload.enqueuedAt)
-          await setTrackedMatchStatus(canonicalRiotMatchId, `SKIPPED_${skipped.reason}`).catch(() => undefined)
+          await setTrackedMatchStatusForAliases(
+            trackedIdAliases,
+            `SKIPPED_${skipped.reason}`
+          ).catch(() => undefined)
           await markRawIngestDone(rawId).catch(() => undefined)
           continue
         }
         if (err instanceof Error && err.message === 'invalid_raw_payload_shape') {
-          await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
-          await markTrackedMatchAggregateError(
-            canonicalRiotMatchId,
+          await setTrackedMatchStatusForAliases(trackedIdAliases, 'ERROR').catch(() => undefined)
+          await markTrackedMatchAggregateErrorForAliases(
+            trackedIdAliases,
             'invalid_raw_payload_shape'
           ).catch(() => undefined)
           await markRawIngestError(rawId, 'invalid_raw_payload_shape', 5 * 60_000)
         } else if (isTransientAggregateConflictError(err)) {
           // Transient write race around aggregate rows: retry later, do not poison tracked row as ERROR.
-          await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
+          await setTrackedMatchStatusForAliases(
+            trackedIdAliases,
+            'DEFERRED_AGGREGATE_RETRY'
+          ).catch(() => undefined)
           await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
         } else {
-          await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
-          await markTrackedMatchAggregateError(
-            canonicalRiotMatchId,
+          await setTrackedMatchStatusForAliases(trackedIdAliases, 'ERROR').catch(() => undefined)
+          await markTrackedMatchAggregateErrorForAliases(
+            trackedIdAliases,
             err instanceof Error ? err.message : String(err)
           ).catch(() => undefined)
           const delay = Math.min(30 * 60_000, Math.max(60_000, 60_000))
@@ -1785,7 +1815,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       }
       if (err instanceof Error && err.message === RIOT_INGEST_ABORTED_MESSAGE) {
         noteMatchIngestProcessed(payload.enqueuedAt)
-        await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
+        await setTrackedMatchStatusForAliases(
+          trackedIdAliases,
+          'DEFERRED_POLLER_ABORT'
+        ).catch(() => undefined)
         if (rawId != null) {
           await markRawIngestError(rawId, RIOT_INGEST_ABORTED_MESSAGE, 30_000)
         } else {
@@ -1807,7 +1840,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
       noteMatchIngestProcessed(payload.enqueuedAt)
       if (rawId != null) {
         if (isTransientAggregateConflictError(err)) {
-          await releaseTrackedMatch(canonicalRiotMatchId).catch(() => undefined)
+          await setTrackedMatchStatusForAliases(
+            trackedIdAliases,
+            'DEFERRED_AGGREGATE_RETRY'
+          ).catch(() => undefined)
           await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
         } else {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
@@ -2572,7 +2608,7 @@ async function runStep4ForPlayer(
             if (strict.reason === 'transient') {
               if (!strict.matchDto) {
                 matchIngestPending.delete(work.matchId)
-                await releaseTrackedMatch(work.matchId).catch(() => undefined)
+                await setTrackedMatchStatus(work.matchId, 'DEFERRED_FETCH_RETRY').catch(() => undefined)
                 await recordMatchIngestFailure(work.matchId, logger)
                 await logger.info('Match detail fetch failed (API), will retry later', {
                   playerId: tracker.player.id.toString(),
@@ -2711,7 +2747,7 @@ async function runStep4ForPlayer(
                   matchId: work.matchId,
                   error: e instanceof Error ? e.message : String(e),
                 })
-                await releaseTrackedMatch(work.matchId).catch(() => undefined)
+                await setTrackedMatchStatus(work.matchId, 'DEFERRED_QUEUE_WRITE').catch(() => undefined)
               }
               continue
             }
@@ -2769,7 +2805,7 @@ async function runStep4ForPlayer(
               matchId: work.matchId,
               error: e instanceof Error ? e.message : String(e),
             })
-            await releaseTrackedMatch(work.matchId).catch(() => undefined)
+            await setTrackedMatchStatus(work.matchId, 'DEFERRED_QUEUE_WRITE').catch(() => undefined)
           }
         }
       }
@@ -2931,13 +2967,30 @@ async function refreshPriorityRanksOffCriticalIngestPath(
   const maxPerLoop = getAsyncPriorityRankRefreshPerLoop()
   if (maxPerLoop <= 0) return 0
 
+  let players: Array<{ puuid: string; region: string }> = []
   const priorityPuuids = dequeuePriorityPuuids(maxPerLoop)
-  if (priorityPuuids.length === 0) return 0
-
-  const players = await prisma.player.findMany({
-    where: { puuid: { in: priorityPuuids } },
-    select: { puuid: true, region: true },
-  })
+  if (priorityPuuids.length > 0) {
+    players = await prisma.player.findMany({
+      where: { puuid: { in: priorityPuuids } },
+      select: { puuid: true, region: true },
+    })
+  } else {
+    const staleBefore = new Date(Date.now() - getAsyncPriorityRankRefreshFallbackMaxAgeMs())
+    players = await prisma.player.findMany({
+      where: {
+        puuid: { not: '' },
+        region: { not: '' },
+        puuidKeyVersion: { notIn: ['erreur', 'perdu'] },
+        OR: [
+          { rankSnapshotGameDate: null },
+          { rankSnapshotGameDate: { lt: staleBefore } },
+        ],
+      },
+      orderBy: [{ rankSnapshotGameDate: { sort: 'asc', nulls: 'first' } }, { lastSeen: 'desc' }],
+      take: maxPerLoop,
+      select: { puuid: true, region: true },
+    })
+  }
   if (players.length === 0) return 0
 
   const queue = players.slice()

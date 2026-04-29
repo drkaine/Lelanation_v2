@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { prisma } from '../db.js'
+import { processRawAggregateAndBurn } from '../worker/rawAggregateProcessor.js'
+import type { MatchIngestQueuePayloadV1 } from '../worker/matchIngestQueue.js'
 
 const RETRYABLE_DB_CODES = new Set(['40P01', '40001'])
 const __filename = fileURLToPath(import.meta.url)
@@ -84,6 +86,53 @@ async function runBackfillOnce(): Promise<void> {
       agg_champion_core_stats
     RESTART IDENTITY
   `)
+
+  const ingestTablesPresent = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT (
+      to_regclass('public.ingest_matchs') IS NOT NULL
+      AND to_regclass('public.ingest_match_players') IS NOT NULL
+      AND to_regclass('public.ingest_teams') IS NOT NULL
+    ) AS ok
+  `
+  if (!ingestTablesPresent[0]?.ok) {
+    console.log('[backfill-agg] ingest_* absent -> rebuilding aggregates from match_ingest_raw')
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: bigint
+        riot_match_id: string
+        region: string
+        payload_json: unknown
+        timeline_json: unknown | null
+        ingested_at: Date
+      }>
+    >`
+      SELECT id, riot_match_id, region, payload_json, timeline_json, ingested_at
+      FROM match_ingest_raw
+      WHERE payload_json IS NOT NULL
+      ORDER BY id ASC
+    `
+    let processed = 0
+    for (const row of rows) {
+      const payload: MatchIngestQueuePayloadV1 = {
+        v: 1,
+        stepId: 'backfill-raw',
+        matchId: row.riot_match_id,
+        region: row.region,
+        matchDto: row.payload_json,
+        timelineDto: row.timeline_json,
+        puuidKeyVersion: null,
+        trackerIdx: -1,
+        enqueuedAt: row.ingested_at.getTime(),
+      }
+      await processRawAggregateAndBurn(row.id, payload, row.riot_match_id)
+      processed++
+      if (processed % 200 === 0) {
+        console.log(`[backfill-agg] raw processed: ${processed}/${rows.length}`)
+      }
+    }
+    console.log(`[backfill-agg] raw rebuild done: ${processed} matches`)
+    return
+  }
 
   await prisma.$executeRawUnsafe(`
     INSERT INTO agg_match_outcome_stats (game_version, rank_tier, count_match, updated_at)

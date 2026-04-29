@@ -38,7 +38,7 @@ import {
   getInfosMetaCounts,
   getObjectiveOutcomeAggByPatchDivision,
 } from '../services/StatsOverviewService.js'
-import { getOverviewAbandons } from '../services/StatsAbandonsService.js'
+import { getOverviewAbandons, getSurrenderMatrix } from '../services/StatsAbandonsService.js'
 import {
   getSummonerSpellsByChampion,
   getSummonerSpellsDuosByChampion,
@@ -371,6 +371,18 @@ router.get('/overview-abandons', async (req: Request, res: Response) => {
   return res.json(data)
 })
 
+/** GET /api/stats/surrender-matrix - surrender/early rates by rank x team + deltas vs baseline patch. */
+router.get('/surrender-matrix', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryString(req.query.version)
+  const baselineVersion = queryString(req.query.fromVersion)
+  const data = await getSurrenderMatrix(version, baselineVersion)
+  if (!data) {
+    return res.status(200).json({ version: null, baselineVersion: null, rows: [] })
+  }
+  return res.json(data)
+})
+
 /** GET /api/stats/overview-progression - WR delta from oldest version to all since. Query: ?version=16.1 &rankTier=GOLD */
 router.get('/overview-progression', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
@@ -437,9 +449,11 @@ router.get('/overview-teams', async (req: Request, res: Response) => {
 router.get('/overview-sides', async (req: Request, res: Response) => {
   const version = queryStringArray(req.query.version)
   const rankTier = queryStringArray(req.query.rankTier)
+  const role = queryString(req.query.role)
   const data = await getOverviewSidesStats(
     version.length ? version : null,
-    rankTier.length ? rankTier : null
+    rankTier.length ? rankTier : null,
+    role
   )
   if (!data) {
     const emptyObjTable = {

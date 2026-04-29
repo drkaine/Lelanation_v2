@@ -16,6 +16,14 @@ type Logger = ReturnType<typeof createRiotPollerLogger>
 let lastActiveRefreshAtMs = 0
 const SNAPSHOT_ALLOWED_ROLES = ['TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM'] as const
 
+function isMissingRelationError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return (
+    msg.includes('Code: `42P01`') ||
+    (msg.toLowerCase().includes('relation "') && msg.toLowerCase().includes('does not exist'))
+  )
+}
+
 function parseUtcSchedule(): { hour: number; minute: number } {
   const hour = Math.min(23, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_HOUR ?? '0', 10) || 0))
   const minute = Math.min(59, Math.max(0, parseInt(process.env.CHAMPION_TIER_SNAPSHOT_UTC_MINUTE ?? '0', 10) || 0))
@@ -52,9 +60,139 @@ export async function runChampionTierSnapshotForWindow(params: {
       AND to_regclass('public.ingest_match_players') IS NOT NULL
       AND to_regclass('public.ingest_teams') IS NOT NULL) AS ok
   `
-  if (!hasIngest[0]?.ok) return { insertedEstimate: 0 }
 
   const { windowStart, windowEnd, dateOfGame, logger } = params
+  if (!hasIngest[0]?.ok) {
+    const rawResult = await prisma.$executeRaw`
+      WITH window_params AS (
+        SELECT ${windowStart}::timestamptz AS w_start,
+               ${windowEnd}::timestamptz AS w_end,
+               ${dateOfGame}::date AS game_date
+      ),
+      base AS (
+        SELECT
+          r.payload_json AS payload,
+          split_part(
+            UPPER(
+              TRIM(
+                COALESCE(
+                  NULLIF(
+                    TRIM(
+                      jsonb_path_query_first(r.payload_json, '$.info.participants[0].tier') #>> '{}'
+                    ),
+                    ''
+                  ),
+                  NULLIF(
+                    TRIM(
+                      jsonb_path_query_first(r.payload_json, '$.info.participants[0].rankTier') #>> '{}'
+                    ),
+                    ''
+                  ),
+                  'UNRANKED'
+                )
+              )
+            ),
+            '_',
+            1
+          ) AS rank_tier_norm
+        FROM match_ingest_raw r
+        CROSS JOIN window_params wp
+        WHERE r.status = 'done'
+          AND r.normalized_at IS NOT NULL
+          AND r.normalized_at >= wp.w_start
+          AND r.normalized_at < wp.w_end
+      ),
+      participants AS (
+        SELECT
+          p.elem AS p,
+          b.rank_tier_norm
+        FROM base b
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(b.payload->'info'->'participants', '[]'::jsonb)) p(elem)
+      ),
+      picks AS (
+        SELECT
+          split_part(
+            UPPER(TRIM(COALESCE(NULLIF(TRIM(p.p->>'tier'), ''), NULLIF(TRIM(p.p->>'rankTier'), ''), p.rank_tier_norm, 'UNRANKED'))),
+            '_',
+            1
+          ) AS rank_tier_norm,
+          CASE
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(p.p->>'teamPosition'), ''), NULLIF(TRIM(p.p->>'individualPosition'), ''), 'UNKNOWN'))) = 'MID' THEN 'MIDDLE'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(p.p->>'teamPosition'), ''), NULLIF(TRIM(p.p->>'individualPosition'), ''), 'UNKNOWN'))) = 'ADC' THEN 'BOTTOM'
+            WHEN UPPER(TRIM(COALESCE(NULLIF(TRIM(p.p->>'teamPosition'), ''), NULLIF(TRIM(p.p->>'individualPosition'), ''), 'UNKNOWN'))) IN ('SUPPORT', 'UTILITY') THEN 'SUPPORT'
+            ELSE UPPER(TRIM(COALESCE(NULLIF(TRIM(p.p->>'teamPosition'), ''), NULLIF(TRIM(p.p->>'individualPosition'), ''), 'UNKNOWN')))
+          END AS role_norm,
+          COALESCE(NULLIF((p.p->>'championId')::int, 0), 0) AS champion_id,
+          COUNT(*)::int AS games,
+          SUM(CASE WHEN COALESCE((p.p->>'win')::boolean, false) THEN 1 ELSE 0 END)::int AS wins
+        FROM participants p
+        WHERE COALESCE(NULLIF((p.p->>'championId')::int, 0), 0) > 0
+        GROUP BY 1, 2, 3
+      ),
+      bans AS (
+        SELECT
+          b.rank_tier_norm,
+          COALESCE((ban.elem->>'championId')::int, (ban.elem->>'champion_id')::int) AS champion_id,
+          COUNT(*)::int AS ban_count
+        FROM base b
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(b.payload->'info'->'teams', '[]'::jsonb)) t(elem)
+        CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(t.elem->'bans') = 'array' THEN t.elem->'bans' ELSE '[]'::jsonb END
+        ) AS ban(elem)
+        GROUP BY 1, 2
+      ),
+      tier_totals AS (
+        SELECT rank_tier_norm AS rank_tier, role_norm AS role, SUM(games)::bigint AS total_picks
+        FROM picks
+        WHERE role_norm IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
+        GROUP BY rank_tier_norm, role_norm
+      ),
+      tier_ban_totals AS (
+        SELECT rank_tier_norm AS rank_tier, SUM(ban_count)::bigint AS total_bans
+        FROM bans
+        GROUP BY rank_tier_norm
+      )
+      INSERT INTO champion_tier_daily_snapshots (
+        date_of_game, rank_tier, role, champion_id, games, wins, ban_rate_pct, pick_rate_pct
+      )
+      SELECT
+        wp.game_date,
+        p.rank_tier_norm,
+        p.role_norm,
+        p.champion_id,
+        p.games,
+        p.wins,
+        CASE WHEN tbt.total_bans > 0
+          THEN ROUND((100.0 * COALESCE(b.ban_count, 0)::float8 / tbt.total_bans::float8)::numeric, 3)::float8
+          ELSE 0::float8
+        END AS ban_rate_pct,
+        CASE WHEN tt.total_picks > 0
+          THEN ROUND((100.0 * p.games::float8 / tt.total_picks::float8)::numeric, 3)::float8
+          ELSE 0::float8
+        END
+      FROM picks p
+      INNER JOIN tier_totals tt ON tt.rank_tier = p.rank_tier_norm AND tt.role = p.role_norm
+      LEFT JOIN bans b ON b.rank_tier_norm = p.rank_tier_norm AND b.champion_id = p.champion_id
+      LEFT JOIN tier_ban_totals tbt ON tbt.rank_tier = p.rank_tier_norm
+      CROSS JOIN window_params wp
+      WHERE p.role_norm IN ('TOP', 'JUNGLE', 'MIDDLE', 'SUPPORT', 'BOTTOM')
+      ON CONFLICT (date_of_game, rank_tier, role, champion_id) DO UPDATE
+      SET
+        games = EXCLUDED.games,
+        wins = EXCLUDED.wins,
+        ban_rate_pct = EXCLUDED.ban_rate_pct,
+        pick_rate_pct = EXCLUDED.pick_rate_pct
+    `
+    const insertedEstimate = typeof rawResult === 'number' ? rawResult : 0
+    if (logger && insertedEstimate > 0) {
+      void logger.step('Champion tier daily snapshot (raw)', {
+        dateOfGame: dateOfGame.toISOString().slice(0, 10),
+        rowsTouched: insertedEstimate,
+      })
+    }
+    return { insertedEstimate }
+  }
+
   const result = await prisma.$executeRaw`
     WITH window_params AS (
       SELECT ${windowStart}::timestamptz AS w_start,
@@ -199,10 +337,15 @@ function getUtcDateWindowForDay(dateOfGame: Date): { windowStart: Date; windowEn
 }
 
 async function getActiveSnapshotDates(): Promise<Date[]> {
-  const hasIngestMatchs = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-    SELECT to_regclass('public.ingest_matchs') IS NOT NULL AS ok
-  `
-  if (!hasIngestMatchs[0]?.ok) return []
+  try {
+    const hasIngestMatchs = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+      SELECT to_regclass('public.ingest_matchs') IS NOT NULL AS ok
+    `
+    if (!hasIngestMatchs[0]?.ok) return []
+  } catch (err) {
+    if (isMissingRelationError(err)) return []
+    throw err
+  }
   const limit = Math.max(1, Number.parseInt(process.env.CHAMPION_TIER_SNAPSHOT_ACTIVE_DAYS_LIMIT ?? '60', 10) || 60)
   const dates = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT (m.game_date AT TIME ZONE 'UTC')::date AS d
@@ -272,7 +415,9 @@ export async function archiveChampionTierDailySnapshotsInDateRange(
 async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<number> {
   // Archive daily snapshots whose date belongs to a completed patch.
   await ensureChampionTierSnapshotArchiveTable()
-  const rows = await prisma.$queryRaw<Array<{ d: Date }>>`
+  let rows: Array<{ d: Date }>
+  try {
+    rows = await prisma.$queryRaw<Array<{ d: Date }>>`
     SELECT DISTINCT c.date_of_game::date AS d
     FROM champion_tier_daily_snapshots c
     JOIN ingest_matchs m
@@ -282,7 +427,11 @@ async function archiveSnapshotsForCompletedPatches(logger?: Logger): Promise<num
       ON ap.game_version = (split_part(m.game_version, '.', 1) || '.' || split_part(m.game_version, '.', 2))
     WHERE ap.game_number_max > 0
       AND ap.games_number >= ap.game_number_max
-  `
+    `
+  } catch (err) {
+    if (isMissingRelationError(err)) return 0
+    throw err
+  }
   if (rows.length === 0) return 0
   for (const r of rows) {
     const date = r.d

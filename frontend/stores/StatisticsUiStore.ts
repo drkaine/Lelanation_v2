@@ -9,6 +9,7 @@ export type StatisticsMainTab =
   | 'trends'
   | 'team'
   | 'objectives'
+  | 'surrender'
   | 'runes'
   | 'items'
   | 'spells'
@@ -27,6 +28,7 @@ const VALID_TABS: StatisticsMainTab[] = [
   'trends',
   'team',
   'objectives',
+  'surrender',
   'runes',
   'items',
   'spells',

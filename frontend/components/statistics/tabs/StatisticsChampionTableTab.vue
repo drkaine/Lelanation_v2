@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { inject, ref } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+const showChampionDealtBreakdown = ref(false)
+const showChampionTakenBreakdown = ref(false)
 </script>
 
 <template>
@@ -32,15 +34,12 @@ const p = inject('statisticsPageCtx') as any
         <div
           class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
         >
-          <button
-            type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[110px] shrink-0 cursor-pointer items-center justify-start border-b border-black px-1.5 hover:bg-primary/25"
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex w-[110px] shrink-0 items-center justify-start border-b border-black px-1.5"
             :title="p.t('statisticsPage.championTableTooltipChampion')"
-            @click="p.setChampionGlobalSort('champion')"
           >
-            {{ p.t('statisticsPage.tierListColChampion')
-            }}{{ p.championGlobalSortIcon('champion') }}
-          </button>
+            {{ p.t('statisticsPage.tierListColChampion') }}
+          </div>
           <!-- Bleu : couleur uniquement sur le texte des titres -->
           <div
             v-show="p.showChampionSideColumns"
@@ -170,14 +169,22 @@ const p = inject('statisticsPageCtx') as any
               {{ p.t('statisticsPage.championTableDeltaSymbol')
               }}{{ p.championGlobalSortIcon('dmgTotalDelta') }}
             </button>
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[10px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="showChampionDealtBreakdown ? 'Masquer le détail' : 'Afficher le détail'"
+              @click="showChampionDealtBreakdown = !showChampionDealtBreakdown"
+            >
+              {{ showChampionDealtBreakdown ? '▴' : '▾' }}
+            </button>
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-amber-300 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtPhys')"
               @click="p.setChampionGlobalSort('dmgPhys')"
             >
@@ -195,12 +202,12 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-violet-300 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtMagic')"
               @click="p.setChampionGlobalSort('dmgMagic')"
             >
@@ -218,12 +225,12 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-slate-200 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableDealtTrue')"
               @click="p.setChampionGlobalSort('dmgTrue')"
             >
@@ -263,14 +270,22 @@ const p = inject('statisticsPageCtx') as any
               {{ p.t('statisticsPage.championTableDeltaSymbol')
               }}{{ p.championGlobalSortIcon('takenTotalDelta') }}
             </button>
+            <button
+              type="button"
+              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[10px] leading-tight text-text/80 hover:bg-primary/20"
+              :title="showChampionTakenBreakdown ? 'Masquer le détail' : 'Afficher le détail'"
+              @click="showChampionTakenBreakdown = !showChampionTakenBreakdown"
+            >
+              {{ showChampionTakenBreakdown ? '▴' : '▾' }}
+            </button>
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-amber-300 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenPhys')"
               @click="p.setChampionGlobalSort('takenPhys')"
             >
@@ -288,12 +303,12 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-violet-300 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenMagic')"
               @click="p.setChampionGlobalSort('takenMagic')"
             >
@@ -311,12 +326,12 @@ const p = inject('statisticsPageCtx') as any
             </button>
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
           >
             <button
               type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
+              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight text-slate-200 hover:bg-primary/25"
               :title="p.t('statisticsPage.championTableTakenTrue')"
               @click="p.setChampionGlobalSort('takenTrue')"
             >
@@ -333,72 +348,39 @@ const p = inject('statisticsPageCtx') as any
               }}{{ p.championGlobalSortIcon('takenTrueDelta') }}
             </button>
           </div>
-          <!-- KDA -->
+          <!-- KDA compact -->
           <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-40 shrink-0 flex-col items-stretch justify-center border-b border-black px-1 py-1"
           >
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-              :title="p.t('statisticsPage.championTableTooltipKda')"
-              @click="p.setChampionGlobalSort('kills')"
-            >
-              {{ p.t('statisticsPage.championTableColKill')
-              }}{{ p.championGlobalSortIcon('kills') }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-              @click="p.setChampionGlobalSort('killsDelta')"
-            >
-              {{ p.t('statisticsPage.championTableDeltaSymbol')
-              }}{{ p.championGlobalSortIcon('killsDelta') }}
-            </button>
-          </div>
-          <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
-          >
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-              :title="p.t('statisticsPage.championTableTooltipKda')"
-              @click="p.setChampionGlobalSort('deaths')"
-            >
-              {{ p.t('statisticsPage.championTableColDeath')
-              }}{{ p.championGlobalSortIcon('deaths') }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-              @click="p.setChampionGlobalSort('deathsDelta')"
-            >
-              {{ p.t('statisticsPage.championTableDeltaSymbol')
-              }}{{ p.championGlobalSortIcon('deathsDelta') }}
-            </button>
-          </div>
-          <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all border-p.t border-p.t-[var(--color-grey-300)] flex min-h-8 w-12 shrink-0 flex-row items-center justify-center gap-0.5 border-b border-black px-0.5 py-1"
-          >
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center px-0.5 text-center text-[10px] leading-tight hover:bg-primary/25"
-              :title="p.t('statisticsPage.championTableTooltipKda')"
-              @click="p.setChampionGlobalSort('assists')"
-            >
-              {{ p.t('statisticsPage.championTableColAssist')
-              }}{{ p.championGlobalSortIcon('assists') }}
-            </button>
-            <button
-              type="button"
-              class="inline-flex shrink-0 items-center justify-center border-l border-black/25 pl-0.5 text-center text-[9px] leading-tight text-text/80 hover:bg-primary/20"
-              :title="p.t('statisticsPage.tierListPatchDeltaSortTooltip')"
-              @click="p.setChampionGlobalSort('assistsDelta')"
-            >
-              {{ p.t('statisticsPage.championTableDeltaSymbol')
-              }}{{ p.championGlobalSortIcon('assistsDelta') }}
-            </button>
+            <div class="text-center text-[10px] font-semibold leading-tight text-text/90">
+              K / D / A
+            </div>
+            <div class="mt-0.5 flex items-center justify-center gap-1 text-[9px] leading-tight">
+              <button
+                type="button"
+                class="rounded px-1 hover:bg-primary/20"
+                :title="p.t('statisticsPage.championTableColKill')"
+                @click="p.setChampionGlobalSort('kills')"
+              >
+                K{{ p.championGlobalSortIcon('kills') }}
+              </button>
+              <button
+                type="button"
+                class="rounded px-1 hover:bg-primary/20"
+                :title="p.t('statisticsPage.championTableColDeath')"
+                @click="p.setChampionGlobalSort('deaths')"
+              >
+                D{{ p.championGlobalSortIcon('deaths') }}
+              </button>
+              <button
+                type="button"
+                class="rounded px-1 hover:bg-primary/20"
+                :title="p.t('statisticsPage.championTableColAssist')"
+                @click="p.setChampionGlobalSort('assists')"
+              >
+                A{{ p.championGlobalSortIcon('assists') }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -443,24 +425,21 @@ const p = inject('statisticsPageCtx') as any
               >{{ row.blue.games ? row.blue.winrate.toFixed(2) : '—' }}</span
             >
             <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') != null
-              "
+              v-if="row.blue.games"
               class="text-[10px] leading-none"
               :class="
                 p.tierListPatchDeltaClass(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') ?? 0
                 )
               "
               :title="
                 p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
+                  ref: p.championGlobalPatchDeltaRefLabel ?? 'ref',
                 })
               "
               >{{
                 p.formatTierListPatchDeltaPp(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'winrate') ?? 0
                 )
               }}</span
             >
@@ -476,24 +455,21 @@ const p = inject('statisticsPageCtx') as any
               >{{ row.blue.games ? row.blue.pickrate.toFixed(2) : '—' }}</span
             >
             <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') != null
-              "
+              v-if="row.blue.games"
               class="text-[10px] leading-none"
               :class="
                 p.tierListPatchDeltaClass(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') ?? 0
                 )
               "
               :title="
                 p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
+                  ref: p.championGlobalPatchDeltaRefLabel ?? 'ref',
                 })
               "
               >{{
                 p.formatTierListPatchDeltaPp(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'blue', 'pickrate') ?? 0
                 )
               }}</span
             >
@@ -507,24 +483,21 @@ const p = inject('statisticsPageCtx') as any
               >{{ row.red.games ? row.red.winrate.toFixed(2) : '—' }}</span
             >
             <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') != null
-              "
+              v-if="row.red.games"
               class="text-[10px] leading-none"
               :class="
                 p.tierListPatchDeltaClass(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') ?? 0
                 )
               "
               :title="
                 p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
+                  ref: p.championGlobalPatchDeltaRefLabel ?? 'ref',
                 })
               "
               >{{
                 p.formatTierListPatchDeltaPp(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'winrate') ?? 0
                 )
               }}</span
             >
@@ -540,33 +513,30 @@ const p = inject('statisticsPageCtx') as any
               >{{ row.red.games ? row.red.pickrate.toFixed(2) : '—' }}</span
             >
             <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') != null
-              "
+              v-if="row.red.games"
               class="text-[10px] leading-none"
               :class="
                 p.tierListPatchDeltaClass(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') ?? 0
                 )
               "
               :title="
                 p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
+                  ref: p.championGlobalPatchDeltaRefLabel ?? 'ref',
                 })
               "
               >{{
                 p.formatTierListPatchDeltaPp(
-                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate')!
+                  p.championGlobalSideStatDeltaPp(row.championId, 'red', 'pickrate') ?? 0
                 )
               }}</span
             >
           </div>
           <div
             v-show="p.showChampionDealtColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
+            <span class="font-medium">{{ p.formatChampionGlobalNum(row.avgDamageToChamps) }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -591,10 +561,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsPhys) }}</span>
+            <span class="font-medium text-amber-300">{{
+              p.formatChampionGlobalNum(row.avgDamageToChampsPhys)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -619,10 +591,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsMagic) }}</span>
+            <span class="font-medium text-violet-300">{{
+              p.formatChampionGlobalNum(row.avgDamageToChampsMagic)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -647,10 +621,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionDealtColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionDealtColumns && showChampionDealtBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageToChampsTrue) }}</span>
+            <span class="font-medium text-slate-200">{{
+              p.formatChampionGlobalNum(row.avgDamageToChampsTrue)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -676,9 +652,11 @@ const p = inject('statisticsPageCtx') as any
           </div>
           <div
             v-show="p.showChampionTakenColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTotal) }}</span>
+            <span class="font-medium">{{
+              p.formatChampionGlobalNum(row.avgDamageTakenTotal)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -704,10 +682,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenPhys) }}</span>
+            <span class="font-medium text-amber-300">{{
+              p.formatChampionGlobalNum(row.avgDamageTakenPhys)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -733,10 +713,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenMagic) }}</span>
+            <span class="font-medium text-violet-300">{{
+              p.formatChampionGlobalNum(row.avgDamageTakenMagic)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -762,10 +744,12 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            v-show="p.showChampionTakenColumns"
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            v-show="p.showChampionTakenColumns && showChampionTakenBreakdown"
+            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[12px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgDamageTakenTrue) }}</span>
+            <span class="font-medium text-slate-200">{{
+              p.formatChampionGlobalNum(row.avgDamageTakenTrue)
+            }}</span>
             <span
               v-if="
                 p.championGlobalPatchDeltaRefLabel &&
@@ -791,86 +775,61 @@ const p = inject('statisticsPageCtx') as any
             >
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
+            class="tier-list-lolalytics-td flex w-40 shrink-0 flex-col items-center justify-center gap-0.5 font-mono text-[10px] leading-tight"
           >
-            <span>{{ p.formatChampionGlobalNum(row.avgKills) }}</span>
+            <span class="font-semibold">
+              {{ p.formatChampionGlobalNum(row.avgKills) }} /
+              {{ p.formatChampionGlobalNum(row.avgDeaths) }} /
+              {{ p.formatChampionGlobalNum(row.avgAssists) }}
+            </span>
             <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalNumericDelta(row.championId, 'avgKills') != null
-              "
-              class="text-[10px] leading-none"
-              :class="
-                p.championGlobalNumericDeltaClass(
-                  p.championGlobalNumericDelta(row.championId, 'avgKills')!
-                )
-              "
-              :title="
-                p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
-                })
-              "
-              >{{
-                p.formatChampionGlobalNumericDelta(
-                  p.championGlobalNumericDelta(row.championId, 'avgKills')!
-                )
-              }}</span
+              v-if="p.championGlobalPatchDeltaRefLabel"
+              class="text-[9px] leading-none text-text/75"
             >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-          >
-            <span>{{ p.formatChampionGlobalNum(row.avgDeaths) }}</span>
-            <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalNumericDelta(row.championId, 'avgDeaths') != null
-              "
-              class="text-[10px] leading-none"
-              :class="
-                p.championGlobalNumericDeltaClass(
-                  p.championGlobalNumericDelta(row.championId, 'avgDeaths')!,
-                  true
-                )
-              "
-              :title="
-                p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
-                })
-              "
-              >{{
-                p.formatChampionGlobalNumericDelta(
-                  p.championGlobalNumericDelta(row.championId, 'avgDeaths')!
-                )
-              }}</span
-            >
-          </div>
-          <div
-            class="tier-list-lolalytics-td flex w-12 shrink-0 flex-col items-center justify-center gap-0 font-mono text-[10px] leading-tight"
-          >
-            <span>{{ p.formatChampionGlobalNum(row.avgAssists) }}</span>
-            <span
-              v-if="
-                p.championGlobalPatchDeltaRefLabel &&
-                p.championGlobalNumericDelta(row.championId, 'avgAssists') != null
-              "
-              class="text-[10px] leading-none"
-              :class="
-                p.championGlobalNumericDeltaClass(
-                  p.championGlobalNumericDelta(row.championId, 'avgAssists')!
-                )
-              "
-              :title="
-                p.t('statisticsPage.tierListPatchDeltaTitle', {
-                  ref: p.championGlobalPatchDeltaRefLabel,
-                })
-              "
-              >{{
-                p.formatChampionGlobalNumericDelta(
-                  p.championGlobalNumericDelta(row.championId, 'avgAssists')!
-                )
-              }}</span
-            >
+              <span
+                :class="
+                  p.championGlobalNumericDeltaClass(
+                    p.championGlobalNumericDelta(row.championId, 'avgKills') ?? 0
+                  )
+                "
+                >K
+                {{
+                  p.formatChampionGlobalNumericDelta(
+                    p.championGlobalNumericDelta(row.championId, 'avgKills') ?? 0
+                  )
+                }}</span
+              >
+              <span class="px-1 text-text/45">|</span>
+              <span
+                :class="
+                  p.championGlobalNumericDeltaClass(
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') ?? 0,
+                    true
+                  )
+                "
+                >D
+                {{
+                  p.formatChampionGlobalNumericDelta(
+                    p.championGlobalNumericDelta(row.championId, 'avgDeaths') ?? 0
+                  )
+                }}</span
+              >
+              <span class="px-1 text-text/45">|</span>
+              <span
+                :class="
+                  p.championGlobalNumericDeltaClass(
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') ?? 0
+                  )
+                "
+                >A
+                {{
+                  p.formatChampionGlobalNumericDelta(
+                    p.championGlobalNumericDelta(row.championId, 'avgAssists') ?? 0
+                  )
+                }}</span
+              >
+            </span>
+            <span v-else class="text-[9px] leading-none text-text/55">—</span>
           </div>
         </div>
         <div

@@ -1,5 +1,17 @@
 import { prisma } from '../db.js'
 
+function dedupeNonEmptyTrackedIds(ids: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of ids) {
+    const k = String(raw ?? '').trim()
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(k)
+  }
+  return out
+}
+
 export async function tryReserveTrackedMatch(matchId: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<Array<{ match_id: string }>>`
     INSERT INTO tracked_matches (match_id)
@@ -63,6 +75,31 @@ export async function markTrackedMatchAggregated(matchId: string): Promise<void>
         aggregate_last_error = NULL,
         aggregated_at = NOW()
   `
+}
+
+/** Same as {@link markTrackedMatchAggregated} for every distinct id (queue vs canonical riot id). */
+export async function markTrackedMatchAggregatedForAliases(ids: string[]): Promise<void> {
+  for (const id of dedupeNonEmptyTrackedIds(ids)) {
+    await markTrackedMatchAggregated(id)
+  }
+}
+
+export async function markTrackedMatchAggregateErrorForAliases(ids: string[], message: string): Promise<void> {
+  for (const id of dedupeNonEmptyTrackedIds(ids)) {
+    await markTrackedMatchAggregateError(id, message)
+  }
+}
+
+export async function setTrackedMatchStatusForAliases(ids: string[], status: string): Promise<void> {
+  for (const id of dedupeNonEmptyTrackedIds(ids)) {
+    await setTrackedMatchStatus(id, status)
+  }
+}
+
+export async function releaseTrackedMatchForAliases(ids: string[]): Promise<void> {
+  for (const id of dedupeNonEmptyTrackedIds(ids)) {
+    await releaseTrackedMatch(id)
+  }
 }
 
 export async function releaseTrackedMatch(matchId: string): Promise<void> {

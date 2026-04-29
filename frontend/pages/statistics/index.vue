@@ -273,7 +273,7 @@
               </select>
             </div>
           </div>
-          <div>
+          <div v-if="activeTab !== 'objectives'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRole') }}
             </div>
@@ -392,7 +392,9 @@
               </button>
             </div>
           </div>
-          <div v-show="activeTab !== 'bans'">
+          <div
+            v-show="activeTab !== 'bans' && activeTab !== 'objectives' && activeTab !== 'surrender'"
+          >
             <label for="otp-filter" class="mb-1 block text-sm font-medium text-text">
               {{ t('statisticsPage.filterOtp') }}
             </label>
@@ -407,7 +409,7 @@
               <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
             </select>
           </div>
-          <div>
+          <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
             <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
               searchInputLabel
             }}</label>
@@ -464,6 +466,10 @@
 
           <div v-show="activeTab === 'objectives'" class="space-y-6">
             <StatisticsObjectivesTab />
+          </div>
+
+          <div v-show="activeTab === 'surrender'" class="space-y-6">
+            <StatisticsSurrenderTab />
           </div>
 
           <!-- Tab: Infos -->
@@ -573,6 +579,9 @@ const StatisticsTeamTab = defineAsyncComponent(
 )
 const StatisticsObjectivesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsObjectivesTab.vue')
+)
+const StatisticsSurrenderTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsSurrenderTab.vue')
 )
 const StatisticsInfosTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsInfosTab.vue')
@@ -684,6 +693,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'trends' ||
     tab === 'team' ||
     tab === 'objectives' ||
+    tab === 'surrender' ||
     tab === 'bans' ||
     tab === 'runes' ||
     tab === 'items' ||
@@ -709,6 +719,7 @@ const activeTab = ref<
   | 'overview'
   | 'team'
   | 'objectives'
+  | 'surrender'
   | 'championTable'
   | 'balance'
   | 'trends'
@@ -732,6 +743,7 @@ const allTabs = computed(() => [
     label: t('statisticsPage.tabObjectives'),
     widgetId: 'objectives',
   },
+  { id: 'surrender' as const, label: t('statisticsPage.tabSurrender'), widgetId: 'surrender' },
   { id: 'bans' as const, label: t('statisticsPage.tabBans'), widgetId: 'bans' },
   {
     id: 'championTable' as const,
@@ -1069,7 +1081,9 @@ const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
-const showFiltersPanel = computed(() => activeTab.value !== 'infos')
+const showFiltersPanel = computed(
+  () => activeTab.value !== 'infos' && activeTab.value !== 'surrender'
+)
 function openFilters() {
   filtersOpen.value = true
 }
@@ -1326,6 +1340,7 @@ function onStatsFilterChange() {
     loadOverview()
     loadOverviewSides()
   }
+  if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (statsVersionOptions.value.length <= 1) {
@@ -1672,6 +1687,48 @@ async function loadOverviewAbandons() {
   } finally {
     overviewAbandonsPending.value = false
     statsPerfEnd('loadOverviewAbandons', t)
+  }
+}
+
+const surrenderMatrixData = ref<{
+  version: string | null
+  baselineVersion: string | null
+  rows: Array<{
+    rankTier: string
+    team: 'ALL' | 100 | 200
+    matchCount: number
+    surrenderCount: number
+    earlySurrenderCount: number
+    surrenderRate: number
+    earlySurrenderRate: number
+    surrenderDelta: number | null
+    earlySurrenderDelta: number | null
+  }>
+} | null>(null)
+const surrenderMatrixPending = ref(false)
+const surrenderMatrixBaselineLabel = computed(
+  () => surrenderMatrixData.value?.baselineVersion ?? t('statisticsPage.overviewVersionAll')
+)
+const surrenderMatrixRows = computed(() => surrenderMatrixData.value?.rows ?? [])
+function surrenderMatrixQueryParams(): string {
+  const params = new URLSearchParams()
+  if (statsVersionFilter.value) params.set('version', statsVersionFilter.value)
+  if (progressionFromVersion.value) params.set('fromVersion', progressionFromVersion.value)
+  const s = params.toString()
+  return s ? `?${s}` : ''
+}
+async function loadSurrenderMatrix() {
+  const tStart = statsPerfStart('loadSurrenderMatrix')
+  surrenderMatrixPending.value = true
+  try {
+    surrenderMatrixData.value = await statsFetch(
+      apiUrl('/api/stats/surrender-matrix' + surrenderMatrixQueryParams())
+    )
+  } catch {
+    surrenderMatrixData.value = null
+  } finally {
+    surrenderMatrixPending.value = false
+    statsPerfEnd('loadSurrenderMatrix', tStart)
   }
 }
 /** Total pour le donut : abandons si dispo, sinon repli sur l’overview (évite donut vide si /overview-abandons échoue ou renvoie 0 alors qu’il y a des matchs). */
@@ -2097,6 +2154,15 @@ async function loadOverviewDetailBaseline() {
 /** Overview teams: bans and objectives (first + distribution for %). */
 const overviewTeamsData = ref<{
   matchCount: number
+  objectiveFirstWinrateGlobal?: {
+    firstBlood: number | null
+    baron: number | null
+    dragon: number | null
+    tower: number | null
+    inhibitor: number | null
+    riftHerald: number | null
+    horde: number | null
+  }
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
@@ -2232,6 +2298,15 @@ function teamPercent(value: number, matchCount: number): string {
 // Overview by side (Blue / Red)
 const overviewSidesData = ref<{
   matchCount: number
+  objectiveFirstWinrateBySide?: {
+    firstBlood: { blue: number | null; red: number | null }
+    baron: { blue: number | null; red: number | null }
+    dragon: { blue: number | null; red: number | null }
+    tower: { blue: number | null; red: number | null }
+    inhibitor: { blue: number | null; red: number | null }
+    riftHerald: { blue: number | null; red: number | null }
+    horde: { blue: number | null; red: number | null }
+  }
   sideWinrate: {
     blue: { matches: number; wins: number; winrate: number }
     red: { matches: number; wins: number; winrate: number }
@@ -2249,7 +2324,12 @@ const overviewSidesData = ref<{
     red: Record<string, number>
   }
   objectivesBySideTable?: {
-    firstBlood: { firstByBlue: number; firstByRed: number }
+    firstBlood: {
+      firstByBlue: number
+      firstByRed: number
+      distributionByBlue?: Record<string, number>
+      distributionByRed?: Record<string, number>
+    }
     [key: string]:
       | {
           firstByBlue?: number
@@ -3784,6 +3864,7 @@ watch(activeTab, async tab => {
     if (tab === 'runes' || tab === 'items' || tab === 'spells') loadOverviewDetailBaseline()
   }
   if (tab === 'abandons') loadOverviewAbandons()
+  if (tab === 'surrender') loadSurrenderMatrix()
 })
 watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
   if (activeTab.value === 'team') {
@@ -3803,6 +3884,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadBalanceFramework()
   }
   if (activeTab.value === 'bans') bansTab.loadBansTable()
+  if (activeTab.value === 'surrender') loadSurrenderMatrix()
 })
 
 watch([activeTab, statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
@@ -3820,6 +3902,7 @@ watch(progressionFromVersion, () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
+  if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'runes' || activeTab.value === 'items' || activeTab.value === 'spells') {
     loadOverviewDetailBaseline()
   }
@@ -3846,6 +3929,7 @@ onMounted(async () => {
   if (activeTab.value === 'team') loadOverviewSides()
   if (activeTab.value === 'objectives') loadOverviewSides()
   if (activeTab.value === 'objectives') loadObjectivesBaseline()
+  if (activeTab.value === 'surrender') loadSurrenderMatrix()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
@@ -3948,6 +4032,9 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   openSidesObjectiveKeys,
   overviewAbandonsData,
   overviewAbandonsPending,
+  surrenderMatrixBaselineLabel,
+  surrenderMatrixPending,
+  surrenderMatrixRows,
   overviewBottomBanrateSince,
   overviewBottomPickrateSince,
   overviewBottomWinrateSince,

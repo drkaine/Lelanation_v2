@@ -9,6 +9,11 @@ import { closePatch } from './PatchLifecycleService.js'
 
 type LoggerType = ReturnType<typeof createRiotPollerLogger>
 
+function isMissingRelationError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes('Code: `42P01`') || msg.toLowerCase().includes('relation "') && msg.toLowerCase().includes('does not exist')
+}
+
 /**
  * Load active patch counters and close patches that have reached their target.
  * Contrainte : on ne clôture un patch que si games_number >= game_number_max.
@@ -45,14 +50,15 @@ export async function runPatchCleanupFromConfig(logger?: LoggerType): Promise<vo
 
 export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise<number> {
   if (!isDatabaseConfigured()) return 0
-  const hasIngestTeams = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-    SELECT to_regclass('public.ingest_teams') IS NOT NULL AS ok
-  `
-  if (!hasIngestTeams[0]?.ok) {
-    if (logger) void logger.step('Objective outcome refresh skipped (ingest tables absent)', { table: 'ingest_teams' })
-    return 0
-  }
-  const affected = await prisma.$executeRawUnsafe(`
+  try {
+    const hasIngestTeams = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+      SELECT to_regclass('public.ingest_teams') IS NOT NULL AS ok
+    `
+    if (!hasIngestTeams[0]?.ok) {
+      if (logger) void logger.step('Objective outcome refresh skipped (ingest tables absent)', { table: 'ingest_teams' })
+      return 0
+    }
+    const affected = await prisma.$executeRawUnsafe(`
     INSERT INTO agg_objective_outcome_stats (
       game_version,
       rank_tier,
@@ -335,7 +341,14 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
       chem_soul_win_team = EXCLUDED.chem_soul_win_team,
       chem_soul_loose_team = EXCLUDED.chem_soul_loose_team,
       updated_at = NOW()
-  `)
-  if (logger) void logger.step('Objective outcome stats refreshed', { affected })
-  return Number(affected ?? 0)
+    `)
+    if (logger) void logger.step('Objective outcome stats refreshed', { affected })
+    return Number(affected ?? 0)
+  } catch (err) {
+    if (isMissingRelationError(err)) {
+      if (logger) void logger.step('Objective outcome refresh skipped (ingest relation missing)', { error: String(err) })
+      return 0
+    }
+    throw err
+  }
 }

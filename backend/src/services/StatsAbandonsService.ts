@@ -27,6 +27,26 @@ export interface OverviewAbandonsResult {
   surrenderRate: number
 }
 
+export type SurrenderMatrixTeam = 'ALL' | 100 | 200
+
+export interface SurrenderMatrixRow {
+  rankTier: string
+  team: SurrenderMatrixTeam
+  matchCount: number
+  surrenderCount: number
+  earlySurrenderCount: number
+  surrenderRate: number
+  earlySurrenderRate: number
+  surrenderDelta: number | null
+  earlySurrenderDelta: number | null
+}
+
+export interface SurrenderMatrixResult {
+  version: string | null
+  baselineVersion: string | null
+  rows: SurrenderMatrixRow[]
+}
+
 export function computeAbandonRates(
   totalMatches: number,
   remakeCount: number,
@@ -51,6 +71,144 @@ function normalizeParam(value: string | string[] | null | undefined): string | n
   const s = Array.isArray(value) ? value[0] : value
   if (typeof s !== 'string' || s === '' || s.startsWith('[')) return null
   return s
+}
+
+function previousPatchVersion(version: string | null): string | null {
+  if (!version) return null
+  const patch = normalizePatchMajorMinor(version)
+  const m = /^(\d+)\.(\d+)$/.exec(patch)
+  if (!m) return null
+  const major = Number(m[1])
+  const minor = Number(m[2])
+  if (!Number.isFinite(major) || !Number.isFinite(minor) || minor <= 0) return null
+  return `${major}.${minor - 1}`
+}
+
+function toRate(count: number, total: number): number {
+  if (!Number.isFinite(total) || total <= 0) return 0
+  return (count / total) * 100
+}
+
+const SURRENDER_MATRIX_CACHE_TTL_MS = 2 * 60 * 1000
+const surrenderMatrixCache = new Map<string, { data: SurrenderMatrixResult; expiresAt: number }>()
+
+function surrenderMatrixCacheKey(version: string | null, baselineVersion: string | null): string {
+  return `${version ?? ''}|${baselineVersion ?? ''}`
+}
+
+type TeamAggRow = {
+  rank_tier: string
+  team: number
+  match_count: bigint
+  surrender_count: bigint
+  early_surrender_count: bigint
+}
+
+type Cell = {
+  matchCount: number
+  surrenderCount: number
+  earlySurrenderCount: number
+}
+
+function buildSurrenderCells(rows: TeamAggRow[]): Map<string, Cell> {
+  const byKey = new Map<string, Cell>()
+  const add = (rank: string, team: SurrenderMatrixTeam, match: number, surrender: number, early: number) => {
+    const key = `${rank}|${String(team)}`
+    const cur = byKey.get(key) ?? { matchCount: 0, surrenderCount: 0, earlySurrenderCount: 0 }
+    cur.matchCount += match
+    cur.surrenderCount += surrender
+    cur.earlySurrenderCount += early
+    byKey.set(key, cur)
+  }
+  for (const r of rows) {
+    const rank = String(r.rank_tier ?? '').toUpperCase()
+    if (!rank || rank === 'UNRANKED') continue
+    const team = Number(r.team) as 100 | 200
+    if (team !== 100 && team !== 200) continue
+    const match = Number(r.match_count ?? 0)
+    const surrender = Number(r.surrender_count ?? 0)
+    const early = Number(r.early_surrender_count ?? 0)
+    add(rank, team, match, surrender, early)
+    add(rank, 'ALL', match, surrender, early)
+    add('ALL', team, match, surrender, early)
+    add('ALL', 'ALL', match, surrender, early)
+  }
+  return byKey
+}
+
+async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[]> {
+  const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'tc')
+  return prisma.$queryRawUnsafe<TeamAggRow[]>(`
+    SELECT
+      tc.rank_tier,
+      tc.team,
+      COALESCE(SUM(tc.count_game), 0)::bigint AS match_count,
+      COALESCE(SUM(tc.count_team_surrendered), 0)::bigint AS surrender_count,
+      COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count
+    FROM ${tcFrom}
+    WHERE tc.rank_tier <> 'UNRANKED'
+    GROUP BY tc.rank_tier, tc.team
+  `)
+}
+
+export async function getSurrenderMatrix(
+  version?: string | string[] | null,
+  baselineVersion?: string | string[] | null
+): Promise<SurrenderMatrixResult | null> {
+  if (!isDatabaseConfigured()) return null
+  const curVersion = normalizeParam(version)
+  const curPatch = curVersion ? normalizePatchMajorMinor(curVersion) : null
+  const baselineRaw = normalizeParam(baselineVersion)
+  const baselinePatch = baselineRaw
+    ? normalizePatchMajorMinor(baselineRaw)
+    : previousPatchVersion(curPatch)
+  const cacheKey = surrenderMatrixCacheKey(curPatch, baselinePatch)
+  const now = Date.now()
+  const cached = surrenderMatrixCache.get(cacheKey)
+  if (cached && cached.expiresAt > now) return cached.data
+  try {
+    const [curRows, baseRows] = await Promise.all([
+      loadSurrenderTeamAgg(curPatch),
+      baselinePatch ? loadSurrenderTeamAgg(baselinePatch) : Promise.resolve([]),
+    ])
+    const curCells = buildSurrenderCells(curRows)
+    const baseCells = buildSurrenderCells(baseRows)
+    const rankOrder = ['ALL', 'IRON', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER', 'GRANDMASTER', 'CHALLENGER']
+    const teamOrder: SurrenderMatrixTeam[] = ['ALL', 100, 200]
+    const rows: SurrenderMatrixRow[] = []
+    for (const rankTier of rankOrder) {
+      for (const team of teamOrder) {
+        const k = `${rankTier}|${String(team)}`
+        const cur = curCells.get(k) ?? { matchCount: 0, surrenderCount: 0, earlySurrenderCount: 0 }
+        const base = baseCells.get(k)
+        const surrenderRate = toRate(cur.surrenderCount, cur.matchCount)
+        const earlyRate = toRate(cur.earlySurrenderCount, cur.matchCount)
+        const surrenderDelta = base ? surrenderRate - toRate(base.surrenderCount, base.matchCount) : null
+        const earlyDelta = base ? earlyRate - toRate(base.earlySurrenderCount, base.matchCount) : null
+        rows.push({
+          rankTier,
+          team,
+          matchCount: cur.matchCount,
+          surrenderCount: cur.surrenderCount,
+          earlySurrenderCount: cur.earlySurrenderCount,
+          surrenderRate,
+          earlySurrenderRate: earlyRate,
+          surrenderDelta,
+          earlySurrenderDelta: earlyDelta,
+        })
+      }
+    }
+    const result: SurrenderMatrixResult = {
+      version: curPatch,
+      baselineVersion: baselinePatch,
+      rows,
+    }
+    surrenderMatrixCache.set(cacheKey, { data: result, expiresAt: now + SURRENDER_MATRIX_CACHE_TTL_MS })
+    return result
+  } catch (err) {
+    console.warn('[getSurrenderMatrix]', err)
+    return null
+  }
 }
 
 export async function getOverviewAbandons(

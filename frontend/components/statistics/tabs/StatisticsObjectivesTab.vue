@@ -3,6 +3,7 @@ import { computed, inject, ref, type Ref } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
 const tooltipsEnabled = inject('tooltipsEnabled', ref(true)) as Ref<boolean>
+const objectivesDisplayMode = ref<'obtention' | 'winrate'>('obtention')
 
 function syncToggleObjective(key: string) {
   p.toggleObjective(key)
@@ -91,6 +92,84 @@ function sideFirstPctParts(
   const delta = curPct != null && basePct != null ? curPct - basePct : null
   return {
     current: formatPct(curPct),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+const FIRST_WINRATE_KEYS = [
+  'firstBlood',
+  'baron',
+  'dragon',
+  'tower',
+  'inhibitor',
+  'riftHerald',
+  'horde',
+] as const
+
+function formatFirstObjectiveWr(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return `${Number(value).toFixed(2)}%`
+}
+
+function firstWinrateObjectiveLabel(key: (typeof FIRST_WINRATE_KEYS)[number]): string {
+  if (key === 'firstBlood') return p.t('statisticsPage.overviewTeamsFirstBlood')
+  return p.t(`statisticsPage.overviewTeamsObjective_${key}`)
+}
+
+function objectiveFirstWinrateGlobalParts(key: (typeof FIRST_WINRATE_KEYS)[number]): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const cur = p.overviewTeamsData?.objectiveFirstWinrateGlobal?.[key]
+  const base = p.overviewTeamsBaselineData?.objectiveFirstWinrateGlobal?.[key]
+  const curV = cur ?? null
+  const baseV = base ?? null
+  const delta = curV != null && baseV != null ? curV - baseV : null
+  return {
+    current: formatFirstObjectiveWr(curV),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function objectiveFirstWinrateSideParts(
+  key: (typeof FIRST_WINRATE_KEYS)[number],
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
+  const cur = p.overviewSidesData?.objectiveFirstWinrateBySide?.[key]?.[side]
+  const base = p.overviewSidesBaselineData?.objectiveFirstWinrateBySide?.[key]?.[side]
+  const curV = cur ?? null
+  const baseV = base ?? null
+  const delta = curV != null && baseV != null ? curV - baseV : null
+  return {
+    current: formatFirstObjectiveWr(curV),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function drakeTypeWinrateGlobalParts(key: string): {
+  current: string
+  delta: string
+  deltaClass: string
+} {
+  const curRow = p.drakeTypeRows.find((r: { key: string }) => r.key === key)
+  const cw = Number(curRow?.byWin ?? 0)
+  const cl = Number(curRow?.byLoss ?? 0)
+  const cn = cw + cl
+  const curWr = cn > 0 ? (cw / cn) * 100 : null
+
+  const baseData = p.overviewTeamsBaselineData
+  const baseRow = baseData?.drakes?.types?.[key]
+  const bw = Number(baseRow?.byWin ?? 0)
+  const bl = Number(baseRow?.byLoss ?? 0)
+  const bn = bw + bl
+  const baseWr = bn > 0 ? (bw / bn) * 100 : null
+  const delta = curWr != null && baseWr != null ? curWr - baseWr : null
+  return {
+    current: formatFirstObjectiveWr(curWr),
     delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
@@ -370,6 +449,63 @@ const soulDistTotal = computed(() => distTotal(soulDistRows.value))
 function donutTooltip(row: DistRow, total: number): string {
   return `${row.label}: ${distPct(row.value, total)} (${row.value.toLocaleString()})`
 }
+
+/** % victoire de l'équipe qui a obtenu la soul (byWin = victoires avec soul, byLoss = défaites avec soul). */
+function soulSecureWinrateParts(key: string): {
+  current: string
+  value: number | null
+  delta: string
+  deltaDisplay: string
+  deltaClass: string
+} {
+  const curData = p.overviewTeamsData
+  if (!curData || curData.matchCount <= 0) {
+    return { current: '—', value: null, delta: '', deltaDisplay: '—', deltaClass: 'text-text/60' }
+  }
+  const curRow = p.drakeSoulRows.find((r: { key: string }) => r.key === key)
+  const cw = Number(curRow?.byWin ?? 0)
+  const cl = Number(curRow?.byLoss ?? 0)
+  const cn = cw + cl
+  const curWr = cn > 0 ? (cw / cn) * 100 : null
+  const current = curWr == null ? '—' : `${curWr.toFixed(2)}%`
+
+  const baseData = p.overviewTeamsBaselineData
+  const souls = baseData?.drakes?.souls as
+    | Record<string, { byWin?: number; byLoss?: number }>
+    | undefined
+  const baseSoul = souls?.[key]
+  const bw = Number(baseSoul?.byWin ?? 0)
+  const bl = Number(baseSoul?.byLoss ?? 0)
+  const bn = bw + bl
+  const baseWr = bn > 0 ? (bw / bn) * 100 : null
+  const delta = curWr != null && baseWr != null ? curWr - baseWr : null
+  const deltaFmt = formatDelta(delta)
+  return {
+    current,
+    value: curWr,
+    delta: deltaFmt,
+    deltaDisplay: deltaFmt || '—',
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+const drakeTypeWinrateRows = computed(() =>
+  (p.drakeTypeRows as Array<{ key: string; label: string; byWin: number; byLoss: number }>)
+    .map(row => {
+      const parts = drakeTypeWinrateGlobalParts(row.key)
+      return { ...row, parts, wr: Number(parts.current.replace('%', '')) || 0 }
+    })
+    .sort((a, b) => b.wr - a.wr)
+)
+
+const drakeSoulWinrateRows = computed(() =>
+  (p.drakeSoulRows as Array<{ key: string; label: string; byWin: number; byLoss: number }>)
+    .map(row => {
+      const parts = soulSecureWinrateParts(row.key)
+      return { ...row, parts, wr: parts.value ?? -1 }
+    })
+    .sort((a, b) => b.wr - a.wr)
+)
 </script>
 
 <template>
@@ -455,6 +591,32 @@ function donutTooltip(row: DistRow, total: number): string {
         >
           {{ p.t('statisticsPage.objectivesTabSouls') }}
         </button>
+        <div class="ml-auto inline-flex overflow-hidden rounded border border-primary/30 text-xs">
+          <button
+            type="button"
+            class="px-2 py-1 font-semibold transition-colors"
+            :class="
+              objectivesDisplayMode === 'obtention'
+                ? 'bg-accent text-background'
+                : 'bg-black/20 text-text/80 hover:bg-white/10'
+            "
+            @click="objectivesDisplayMode = 'obtention'"
+          >
+            {{ p.t('statisticsPage.objectivesModeObtention') }}
+          </button>
+          <button
+            type="button"
+            class="border-l border-primary/30 px-2 py-1 font-semibold transition-colors"
+            :class="
+              objectivesDisplayMode === 'winrate'
+                ? 'bg-accent text-background'
+                : 'bg-black/20 text-text/80 hover:bg-white/10'
+            "
+            @click="objectivesDisplayMode = 'winrate'"
+          >
+            {{ p.t('statisticsPage.objectivesModeWinrate') }}
+          </button>
+        </div>
         <span
           class="group/stat-tip relative inline-flex shrink-0 cursor-help text-text/50"
           :aria-label="p.t('statisticsPage.tooltipOverviewObjectives')"
@@ -473,7 +635,10 @@ function donutTooltip(row: DistRow, total: number): string {
       </div>
 
       <!-- Principal : premier par équipe + par côté -->
-      <div v-if="p.objectivesPanelTab === 'objectives'" class="w-full min-w-0 overflow-x-auto">
+      <div
+        v-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'obtention'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
         <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
@@ -614,7 +779,10 @@ function donutTooltip(row: DistRow, total: number): string {
       </div>
 
       <!-- Drakes par type -->
-      <div v-else-if="p.objectivesPanelTab === 'drakeTypes'" class="w-full min-w-0 overflow-x-auto">
+      <div
+        v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'obtention'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
         <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
@@ -757,8 +925,138 @@ function donutTooltip(row: DistRow, total: number): string {
         </table>
       </div>
 
+      <div
+        v-else-if="p.objectivesPanelTab === 'drakeTypes' && objectivesDisplayMode === 'winrate'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+          <thead>
+            <tr class="border-b border-primary/30 text-text/70">
+              <th class="py-1.5 pr-2 font-medium">
+                {{ p.t('statisticsPage.overviewTeamsObjective') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium">
+                {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                {{ p.t('statisticsPage.sidesBlue') }}
+              </th>
+              <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                {{ p.t('statisticsPage.sidesRed') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-primary/20 text-text/80">
+            <tr v-for="row in drakeTypeWinrateRows" :key="'drake-type-wr-' + row.key">
+              <td class="py-1.5 pr-2">
+                <span class="inline-flex items-center gap-2 font-medium text-text/90">
+                  <span
+                    class="h-2.5 w-2.5 rounded-full"
+                    :style="{ backgroundColor: rowColor(row.key) }"
+                  />
+                  <img
+                    v-if="p.drakeIconSrc(row.key)"
+                    :src="p.drakeIconSrc(row.key)"
+                    :alt="row.label"
+                    class="h-4 w-4 object-contain"
+                    loading="lazy"
+                    decoding="async"
+                    @error="p.onDrakeIconError($event, row.key)"
+                  />
+                  <span>{{ row.label }}</span>
+                </span>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                {{ row.parts.current }}
+                <span :class="row.parts.deltaClass">{{ row.parts.delta }}</span>
+              </td>
+              <td class="px-1 py-1.5 text-center">—</td>
+              <td class="py-1.5 pl-1 text-center">—</td>
+            </tr>
+            <tr v-if="drakeTypeWinrateRows.length === 0">
+              <td colspan="4" class="py-2 text-center text-text/60">
+                {{ p.t('statisticsPage.noData') }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Winrate quand first (global + par côté) -->
+      <div
+        v-else-if="p.objectivesPanelTab === 'objectives' && objectivesDisplayMode === 'winrate'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+          <thead>
+            <tr class="border-b border-primary/30 text-text/70">
+              <th class="py-1.5 pr-2 font-medium">
+                {{ p.t('statisticsPage.overviewTeamsObjective') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium">
+                {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                {{ p.t('statisticsPage.sidesBlue') }}
+              </th>
+              <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                {{ p.t('statisticsPage.sidesRed') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-primary/20 text-text/80">
+            <tr v-for="wrKey in FIRST_WINRATE_KEYS" :key="'first-wr-' + wrKey">
+              <td class="py-1.5 pr-2">
+                <span class="inline-flex items-center gap-2 font-medium text-text/90">
+                  <img
+                    v-if="wrKey !== 'firstBlood' && p.objectiveIconSrc(wrKey)"
+                    :src="p.objectiveIconSrc(wrKey)"
+                    :alt="firstWinrateObjectiveLabel(wrKey)"
+                    class="h-4 w-4 object-contain"
+                    loading="lazy"
+                    decoding="async"
+                    @error="p.onObjectiveIconError($event, wrKey)"
+                  />
+                  {{ firstWinrateObjectiveLabel(wrKey) }}
+                </span>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                <template v-if="p.overviewTeamsData && p.overviewTeamsData.matchCount > 0">
+                  {{ objectiveFirstWinrateGlobalParts(wrKey).current }}
+                  <span :class="objectiveFirstWinrateGlobalParts(wrKey).deltaClass">
+                    {{ objectiveFirstWinrateGlobalParts(wrKey).delta }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                  {{ objectiveFirstWinrateSideParts(wrKey, 'blue').current }}
+                  <span :class="objectiveFirstWinrateSideParts(wrKey, 'blue').deltaClass">
+                    {{ objectiveFirstWinrateSideParts(wrKey, 'blue').delta }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+              <td class="py-1.5 pl-1 text-center">
+                <template v-if="p.overviewSidesData && p.overviewSidesData.matchCount > 0">
+                  {{ objectiveFirstWinrateSideParts(wrKey, 'red').current }}
+                  <span :class="objectiveFirstWinrateSideParts(wrKey, 'red').deltaClass">
+                    {{ objectiveFirstWinrateSideParts(wrKey, 'red').delta }}
+                  </span>
+                </template>
+                <template v-else>—</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <!-- Âmes -->
-      <div v-else class="w-full min-w-0 overflow-x-auto">
+      <div
+        v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'obtention'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
         <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
           <thead>
             <tr class="border-b border-primary/30 text-text/70">
@@ -887,11 +1185,68 @@ function donutTooltip(row: DistRow, total: number): string {
           </tbody>
         </table>
       </div>
+
+      <div
+        v-else-if="p.objectivesPanelTab === 'drakeSouls' && objectivesDisplayMode === 'winrate'"
+        class="w-full min-w-0 overflow-x-auto"
+      >
+        <table class="objectives-zebra-cols w-full min-w-[480px] text-left text-sm">
+          <thead>
+            <tr class="border-b border-primary/30 text-text/70">
+              <th class="py-1.5 pr-2 font-medium">
+                {{ p.t('statisticsPage.overviewTeamsObjective') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium">
+                {{ p.t('statisticsPage.objectivesFirstWinrateColGlobal') }}
+              </th>
+              <th class="px-1 py-1.5 text-center font-medium text-blue-600 dark:text-blue-400">
+                {{ p.t('statisticsPage.sidesBlue') }}
+              </th>
+              <th class="py-1.5 pl-1 text-center font-medium text-red-600 dark:text-red-400">
+                {{ p.t('statisticsPage.sidesRed') }}
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-primary/20 text-text/80">
+            <tr v-for="row in drakeSoulWinrateRows" :key="'drake-soul-wr-' + row.key">
+              <td class="py-1.5 pr-2">
+                <span class="inline-flex items-center gap-2 font-medium text-text/90">
+                  <span
+                    class="h-2.5 w-2.5 rounded-full"
+                    :style="{ backgroundColor: rowColor(row.key) }"
+                  />
+                  <img
+                    v-if="p.drakeIconSrc(row.key)"
+                    :src="p.drakeIconSrc(row.key)"
+                    :alt="row.label"
+                    class="h-4 w-4 object-contain"
+                    loading="lazy"
+                    decoding="async"
+                    @error="p.onDrakeIconError($event, row.key)"
+                  />
+                  <span>{{ row.label }}</span>
+                </span>
+              </td>
+              <td class="px-1 py-1.5 text-center">
+                {{ row.parts.current }}
+                <span :class="row.parts.deltaClass">{{ row.parts.deltaDisplay }}</span>
+              </td>
+              <td class="px-1 py-1.5 text-center">—</td>
+              <td class="py-1.5 pl-1 text-center">—</td>
+            </tr>
+            <tr v-if="drakeSoulWinrateRows.length === 0">
+              <td colspan="4" class="py-2 text-center text-text/60">
+                {{ p.t('statisticsPage.noData') }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <div
       v-if="drakeDistRows.length > 0 || soulDistRows.length > 0"
-      class="grid grid-cols-1 gap-4 lg:grid-cols-2"
+      class="grid grid-cols-1 gap-4 lg:grid-cols-3"
     >
       <div
         class="fast-stat-card mx-auto w-full max-w-[420px] rounded-lg border border-primary/30 bg-surface/30 p-3"

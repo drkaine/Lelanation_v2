@@ -160,8 +160,30 @@ export const EMPTY_OVERVIEW_DETAIL: OverviewDetailStats = {
   shards: [],
 }
 
+/** Winrate (%) quand l'équipe a le « first » (bucket 1 dans agg_team_bucket). */
+export type ObjectiveFirstWinrateGlobal = {
+  firstBlood: number | null
+  baron: number | null
+  dragon: number | null
+  tower: number | null
+  inhibitor: number | null
+  riftHerald: number | null
+  horde: number | null
+}
+
+export type ObjectiveFirstWinrateBySide = {
+  firstBlood: { blue: number | null; red: number | null }
+  baron: { blue: number | null; red: number | null }
+  dragon: { blue: number | null; red: number | null }
+  tower: { blue: number | null; red: number | null }
+  inhibitor: { blue: number | null; red: number | null }
+  riftHerald: { blue: number | null; red: number | null }
+  horde: { blue: number | null; red: number | null }
+}
+
 export interface OverviewTeamsStats {
   matchCount: number
+  objectiveFirstWinrateGlobal?: ObjectiveFirstWinrateGlobal
   bans: {
     byWin: Array<{ championId: number; count: number; banRatePercent: string }>
     byLoss: Array<{ championId: number; count: number; banRatePercent: string }>
@@ -293,12 +315,18 @@ export interface OverviewSidesApiStats {
     souls: Record<string, { byBlue: number; byRed: number }>
   }
   surrenderBySide?: OverviewSurrenderBySide
+  objectiveFirstWinrateBySide?: ObjectiveFirstWinrateBySide
   objectivesBySide: {
     blue: Record<string, number>
     red: Record<string, number>
   }
   objectivesBySideTable: {
-    firstBlood: { firstByBlue: number; firstByRed: number }
+    firstBlood: {
+      firstByBlue: number
+      firstByRed: number
+      distributionByBlue?: Record<string, number>
+      distributionByRed?: Record<string, number>
+    }
     [key: string]:
       | {
           firstByBlue?: number
@@ -392,11 +420,13 @@ function overviewDetailCacheKey(
 }
 function sidesCacheKey(
   version: string | string[] | null | undefined,
-  rankTier: string | string[] | null | undefined
+  rankTier: string | string[] | null | undefined,
+  role: string | null | undefined
 ): string {
   const v = Array.isArray(version) ? version.join(',') : version ?? ''
   const r = rankTierCacheKey(rankTier) ?? ''
-  return `${v}|${r}`
+  const ro = (role ?? '').toUpperCase()
+  return `${v}|${r}|${ro}`
 }
 
 // ── Param normalisation ──────────────────────────────────────────────────────
@@ -1654,6 +1684,7 @@ export async function getOverviewTeamsStats(
       distInhibitor,
       distRiftHerald,
       distHorde,
+      distFirstBlood,
     ] = await Promise.all([
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'dragon'),
@@ -1674,6 +1705,7 @@ export async function getOverviewTeamsStats(
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'horde'),
+      loadObjectiveDistributionByOutcome(pVersion, rankTier, 'first_blood'),
     ])
     const objData = (
       win: { first: number; kills: number },
@@ -1690,6 +1722,15 @@ export async function getOverviewTeamsStats(
 
     const result: OverviewTeamsStats = {
       matchCount,
+      objectiveFirstWinrateGlobal: {
+        firstBlood: firstBucketWinrateFromOutcome(distFirstBlood),
+        baron: firstBucketWinrateFromOutcome(distBaron),
+        dragon: firstBucketWinrateFromOutcome(distDragon),
+        tower: firstBucketWinrateFromOutcome(distTower),
+        inhibitor: firstBucketWinrateFromOutcome(distInhibitor),
+        riftHerald: firstBucketWinrateFromOutcome(distRiftHerald),
+        horde: firstBucketWinrateFromOutcome(distHorde),
+      },
       bans: {
         byWin: top20Total,
         byLoss: top20Total,
@@ -2308,6 +2349,67 @@ function buildIngestMatchPlayerWhereSql(
   return parts.join(' AND ')
 }
 
+async function ingestMatchLeanTablesExist(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT to_regclass('public.ingest_match_players') IS NOT NULL
+      AND to_regclass('public.ingest_matchs') IS NOT NULL AS ok
+  `
+  return Boolean(rows[0]?.ok)
+}
+
+/** Raw-only / post-decommission: distinct puuids from `match_ingest_raw` + `players.rank_tier` (snapshot). */
+function buildRawMirPlayerWhereSql(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): string {
+  const parts: string[] = []
+  const versions = toQueryStringArrayParam(version)
+  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  if (versions.length === 1) {
+    parts.push(
+      `(mir.payload_json->'info'->>'gameVersion') LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`
+    )
+  } else if (versions.length > 1) {
+    parts.push(
+      `(mir.payload_json->'info'->>'gameVersion') IN (${versions.map((v) => `'${String(v).replace(/'/g, "''")}'`).join(',')})`
+    )
+  }
+  if (ranks.length === 1) parts.push(`UPPER(COALESCE(pl.rank_tier,'')) = '${ranks[0]!.replace(/'/g, "''")}'`)
+  else if (ranks.length > 1)
+    parts.push(
+      `UPPER(COALESCE(pl.rank_tier,'')) IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
+    )
+  else parts.push(`UPPER(COALESCE(pl.rank_tier,'')) <> 'UNRANKED'`)
+  const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
+  if (roleNorm) {
+    parts.push(
+      `UPPER(TRIM(COALESCE(NULLIF(participant->>'teamPosition',''), NULLIF(participant->>'individualPosition','')))) = '${roleNorm.replace(/'/g, "''")}'`
+    )
+  }
+  return parts.join(' AND ')
+}
+
+async function countDistinctPlayersInMatchesFromRaw(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): Promise<number> {
+  const whereSql = buildRawMirPlayerWhereSql(version, rankTier, role)
+  const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(`
+    SELECT COUNT(DISTINCT (participant->>'puuid'))::bigint AS c
+    FROM match_ingest_raw mir
+    CROSS JOIN LATERAL jsonb_array_elements(
+      COALESCE(mir.payload_json->'info'->'participants', '[]'::jsonb)
+    ) AS x(participant)
+    INNER JOIN players pl ON pl.puuid = (participant->>'puuid')
+    WHERE (participant->>'puuid') IS NOT NULL
+      AND length(trim(participant->>'puuid')) > 0
+      AND ${whereSql}
+  `)
+  return Number(rows[0]?.c ?? 0)
+}
+
 async function countDistinctPlayersInMatches(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
@@ -2323,10 +2425,21 @@ async function countDistinctPlayersInMatches(
   return Number(rows[0]?.c ?? 0)
 }
 
+async function countDistinctPlayersInMatchesAdaptive(
+  version?: string | string[] | null,
+  rankTier?: string | string[] | null,
+  role?: string | null
+): Promise<number> {
+  if (await ingestMatchLeanTablesExist()) {
+    return countDistinctPlayersInMatches(version, rankTier, role)
+  }
+  return countDistinctPlayersInMatchesFromRaw(version, rankTier, role)
+}
+
 /**
  * Compteurs Infos :
  * - total matches / total players : globaux (tous patches)
- * - playersWithIngestMatches : joueurs distincts ayant au moins une ligne match_players sur le filtre patch / ligue / rôle
+ * - playersWithIngestMatches : joueurs distincts sur le filtre patch / ligue / rôle (ingest_match_players si présent, sinon match_ingest_raw + players.rank_tier)
  */
 export async function getInfosMetaCounts(
   version?: string | string[] | null,
@@ -2341,7 +2454,7 @@ export async function getInfosMetaCounts(
     )
     const totalMatches = Number(matchRows[0]?.c ?? 0)
     const totalPlayers = await prisma.player.count()
-    const playersWithIngestMatches = await countDistinctPlayersInMatches(version, rankTier, role)
+    const playersWithIngestMatches = await countDistinctPlayersInMatchesAdaptive(version, rankTier, role)
     return {
       totalMatches,
       totalPlayers,
@@ -2440,7 +2553,7 @@ async function loadObjectiveDistributionBySides(
   pVersion: string | null,
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
-): Promise<{ blue: Record<string, number>; red: Record<string, number> }> {
+): Promise<ObjectiveDistributionSides> {
   const conditions = ['1=1']
   if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
@@ -2471,14 +2584,22 @@ async function loadObjectiveDistributionBySides(
         `)
     const blue: Record<string, number> = {}
     const red: Record<string, number> = {}
+    const blueWins: Record<string, number> = {}
+    const redWins: Record<string, number> = {}
     for (const r of rows) {
       const bucket = String(Number(r.objective_bucket ?? 0))
       const g = Number(r.count_game ?? 0)
+      const w = Number(r.count_win ?? 0)
       const tid = Number(r.team)
-      if (tid === 100) blue[bucket] = (blue[bucket] ?? 0) + g
-      else if (tid === 200) red[bucket] = (red[bucket] ?? 0) + g
+      if (tid === 100) {
+        blue[bucket] = (blue[bucket] ?? 0) + g
+        blueWins[bucket] = (blueWins[bucket] ?? 0) + w
+      } else if (tid === 200) {
+        red[bucket] = (red[bucket] ?? 0) + g
+        redWins[bucket] = (redWins[bucket] ?? 0) + w
+      }
     }
-    return { blue, red }
+    return { blue, red, blueWins, redWins }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     if (message.includes('42P01') || message.includes('agg_team_bucket')) {
@@ -2486,7 +2607,7 @@ async function loadObjectiveDistributionBySides(
         hasWarnedMissingTeamBucket = true
         console.warn('[loadObjectiveDistributionBySides] agg_team_bucket missing; empty distributions')
       }
-      return { blue: {}, red: {} }
+      return { blue: {}, red: {}, blueWins: {}, redWins: {} }
     }
     throw err
   }
@@ -2557,16 +2678,51 @@ function sumObjectiveCountFromDistribution(dist: Record<string, number> | undefi
   return Math.max(0, Math.round(total))
 }
 
+/** Winrate global (tous côtés) quand l'équipe a le first sur l'objectif (bucket 1). */
+function firstBucketWinrateFromOutcome(dist: {
+  win: Record<string, number>
+  loss: Record<string, number>
+}): number | null {
+  const w = Number(dist.win['1'] ?? 0)
+  const l = Number(dist.loss['1'] ?? 0)
+  const t = w + l
+  if (t <= 0) return null
+  return (w / t) * 100
+}
+
+export type ObjectiveDistributionSides = {
+  blue: Record<string, number>
+  red: Record<string, number>
+  blueWins: Record<string, number>
+  redWins: Record<string, number>
+}
+
+function firstBucketWinrateBySide(dist: ObjectiveDistributionSides): {
+  blue: number | null
+  red: number | null
+} {
+  const bG = Number(dist.blue['1'] ?? 0)
+  const bW = Number(dist.blueWins['1'] ?? 0)
+  const rG = Number(dist.red['1'] ?? 0)
+  const rW = Number(dist.redWins['1'] ?? 0)
+  return {
+    blue: bG > 0 ? (bW / bG) * 100 : null,
+    red: rG > 0 ? (rW / rG) * 100 : null,
+  }
+}
+
 export async function getOverviewSidesStats(
   version?: string | string[] | null,
-  rankTier?: string | string[] | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<OverviewSidesApiStats | null> {
   if (!isDatabaseConfigured()) return null
   const now = Date.now()
-  const cacheKey = sidesCacheKey(version, rankTier)
+  const cacheKey = sidesCacheKey(version, rankTier, role)
   const cached = overviewSidesCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   const pVersion = toQueryStringArrayParam(version).length === 1 ? toQueryStringArrayParam(version)[0] : null
+  const pRole = normalizeOverviewParam(role)?.toUpperCase() ?? null
   try {
     const condTeam = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
     const mvSidesA = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
@@ -2598,6 +2754,7 @@ export async function getOverviewSidesStats(
         SUM(mv.count_win)::bigint AS wins
       FROM ${sideChampFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
+      ${pRole ? `AND upper(mv.role_norm::text) = '${pRole.replace(/'/g, "''")}'` : ''}
       GROUP BY mv.team_num, mv.champion_id
       HAVING SUM(mv.count_game) >= 5
     `)
@@ -2625,6 +2782,7 @@ export async function getOverviewSidesStats(
         SUM(mv.ban_count)::bigint AS cnt
       FROM ${banSidesFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
+      ${pRole ? `AND upper(mv.banner_role_norm::text) = '${pRole.replace(/'/g, "''")}'` : ''}
       GROUP BY mv.team_num, mv.banned_champion_id
     `)
     const bansBlue = banRows
@@ -2808,6 +2966,7 @@ export async function getOverviewSidesStats(
       distInhibitor,
       distRiftHerald,
       distHorde,
+      distFirstBloodSides,
     ] = await Promise.all([
       loadObjectiveDistributionBySides(pVersion, rankTier, 'baron'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'dragon'),
@@ -2828,6 +2987,7 @@ export async function getOverviewSidesStats(
       loadObjectiveDistributionBySides(pVersion, rankTier, 'inhibitor'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'riftHerald'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'horde'),
+      loadObjectiveDistributionBySides(pVersion, rankTier, 'first_blood'),
     ])
     drakesBySide.types.elder.byBlue = sumObjectiveCountFromDistribution(distElder.blue)
     drakesBySide.types.elder.byRed = sumObjectiveCountFromDistribution(distElder.red)
@@ -2870,7 +3030,12 @@ export async function getOverviewSidesStats(
     drakesBySide.types.chem.distributionByBlue = distChemDrake.blue
     drakesBySide.types.chem.distributionByRed = distChemDrake.red
     const objectivesBySideTable: OverviewSidesApiStats['objectivesBySideTable'] = {
-      firstBlood: { firstByBlue: n(blue?.count_first_blood), firstByRed: n(red?.count_first_blood) },
+      firstBlood: {
+        firstByBlue: n(blue?.count_first_blood),
+        firstByRed: n(red?.count_first_blood),
+        distributionByBlue: distFirstBloodSides.blue,
+        distributionByRed: distFirstBloodSides.red,
+      },
       baron: { firstByBlue: n(blue?.count_baron_first), firstByRed: n(red?.count_baron_first), killsByBlue: n(blue?.sum_baron_kills), killsByRed: n(red?.sum_baron_kills), distributionByBlue: distBaron.blue, distributionByRed: distBaron.red },
       dragon: { firstByBlue: n(blue?.count_dragon_first), firstByRed: n(red?.count_dragon_first), killsByBlue: n(blue?.sum_dragon_kills), killsByRed: n(red?.sum_dragon_kills), distributionByBlue: distDragon.blue, distributionByRed: distDragon.red },
       elder: { firstByBlue: 0, firstByRed: 0, killsByBlue: n(blue?.sum_elder_kills), killsByRed: n(red?.sum_elder_kills), distributionByBlue: distElder.blue, distributionByRed: distElder.red },
@@ -2887,6 +3052,15 @@ export async function getOverviewSidesStats(
       championPickBySide,
       bansBySide,
       surrenderBySide,
+      objectiveFirstWinrateBySide: {
+        firstBlood: firstBucketWinrateBySide(distFirstBloodSides),
+        baron: firstBucketWinrateBySide(distBaron),
+        dragon: firstBucketWinrateBySide(distDragon),
+        tower: firstBucketWinrateBySide(distTower),
+        inhibitor: firstBucketWinrateBySide(distInhibitor),
+        riftHerald: firstBucketWinrateBySide(distRiftHerald),
+        horde: firstBucketWinrateBySide(distHorde),
+      },
       drakesBySide,
       objectivesBySide,
       objectivesBySideTable,
