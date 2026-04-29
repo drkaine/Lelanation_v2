@@ -792,7 +792,12 @@
     "balanceNeedBuff": "Needs buff",
     "balanceNeedNerf": "Needs nerf",
     "balanceNeedNormal": "Normal",
-    "balanceTooltipNeed": "Suggested action based on Riot framework global status."
+    "balanceTooltipNeed": "Suggested action based on Riot framework global status.",
+    "spellsModeSolo": "Solo",
+    "spellsModePair": "Pair",
+    "spellsCasts": "Casts",
+    "spellsTooltipCasts": "Total number of spell casts (or Cast1/Cast2 for pairs).",
+    "spellsTooltipDeltaCasts": "Cast difference vs reference patch (or ΔCast1/ΔCast2 for pairs)."
   },
   "stats": {
     "title": "Statistics",

@@ -108,6 +108,7 @@ export interface OverviewDetailStats {
     spellId: number
     games: number
     wins: number
+    casts: number
     pickrate: number
     winrate: number
     countSlot0: number
@@ -126,6 +127,8 @@ export interface OverviewDetailStats {
     spellIdF: number
     games: number
     wins: number
+    spell1Casts: number
+    spell2Casts: number
     pickrate: number
     winrate: number
     highEloGames?: number
@@ -916,7 +919,14 @@ async function resolveAggTableRoleColumn(
   return col
 }
 
-type SpellPairSqlRow = { spell_d: number; spell_f: number; games: number; wins: number }
+type SpellPairSqlRow = {
+  spell_d: number
+  spell_f: number
+  games: number
+  wins: number
+  spell1_casts: bigint
+  spell2_casts: bigint
+}
 
 async function loadSummonerSpellPairsFromMatches(
   version: string | null,
@@ -939,7 +949,9 @@ async function loadSummonerSpellPairsFromMatches(
         ag.spell_d::int AS spell_d,
         ag.spell_f::int AS spell_f,
         SUM(ag.count_game)::int AS games,
-        SUM(ag.count_win)::int AS wins
+        SUM(ag.count_win)::int AS wins,
+        COALESCE(SUM(ag.spell1_casts), 0)::bigint AS spell1_casts,
+        COALESCE(SUM(ag.spell2_casts), 0)::bigint AS spell2_casts
       FROM ${agFrom}
       WHERE ${matchCond}${roleSql}${smiteSql}
       GROUP BY ag.spell_d, ag.spell_f
@@ -1295,6 +1307,7 @@ export async function getOverviewDetailStats(
           spellId,
           games: g,
           wins: e.wins,
+          casts: 0,
           pickrate: totalParticipants > 0 ? Math.round((g / totalParticipants) * 10000) / 100 : 0,
           winrate: g > 0 ? Math.round((e.wins / g) * 10000) / 100 : 0,
           countSlot0: e.slot0,
@@ -1335,6 +1348,8 @@ export async function getOverviewDetailStats(
       const spellIdF = Number(r.spell_f)
       const games = Number(r.games)
       const wins = Number(r.wins)
+      const spell1Casts = Number(r.spell1_casts ?? 0)
+      const spell2Casts = Number(r.spell2_casts ?? 0)
       const key = `${spellIdD}:${spellIdF}`
       const ax = apexPairMap.get(key)
       const heG = ax?.games
@@ -1344,6 +1359,8 @@ export async function getOverviewDetailStats(
         spellIdF,
         games,
         wins,
+        spell1Casts,
+        spell2Casts,
         pickrate:
           totalParticipants > 0 ? Math.round((games / totalParticipants) * 10000) / 100 : 0,
         winrate: games > 0 ? Math.round((wins / games) * 10000) / 100 : 0,
@@ -1362,6 +1379,15 @@ export async function getOverviewDetailStats(
     summonerSpellSets = summonerSpellSets.map((s) => ({
       ...s,
       highEloRank: setHeRankMap.get(`${s.spellIdD}:${s.spellIdF}`),
+    }))
+    const spellCastMap = new Map<number, number>()
+    for (const s of summonerSpellSets) {
+      spellCastMap.set(s.spellIdD, (spellCastMap.get(s.spellIdD) ?? 0) + Number(s.spell1Casts ?? 0))
+      spellCastMap.set(s.spellIdF, (spellCastMap.get(s.spellIdF) ?? 0) + Number(s.spell2Casts ?? 0))
+    }
+    summonerSpells = summonerSpells.map((s) => ({
+      ...s,
+      casts: spellCastMap.get(s.spellId) ?? 0,
     }))
 
     // Item sets (combinations) - from champion_item_stats

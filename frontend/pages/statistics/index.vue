@@ -20,11 +20,15 @@
 
     <!-- Onglets : pleine largeur au-dessus des filtres et du contenu -->
     <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
-      <div class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2">
+      <div
+        ref="tabsNavEl"
+        class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
+      >
         <button
           v-for="tab in tabs"
           :key="tab.id"
           type="button"
+          :data-tab-id="tab.id"
           :class="[
             'rounded px-3 py-1.5 text-sm font-medium transition-colors',
             activeTab === tab.id
@@ -32,6 +36,8 @@
               : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
           ]"
           @click="activeTab = tab.id"
+          @keydown.left.prevent="focusPrevNextTab(tab.id, -1)"
+          @keydown.right.prevent="focusPrevNextTab(tab.id, 1)"
         >
           {{ tab.label }}
         </button>
@@ -476,9 +482,9 @@
           </div>
 
           <!-- Tab: Progressions (depuis la version la plus ancienne, type LeagueOfGraphs) -->
-          <div v-show="activeTab === 'trends'" class="space-y-6">
+          <!-- <div v-show="activeTab === 'trends'" class="space-y-6">
             <StatisticsTrendsTab />
-          </div>
+          </div> -->
 
           <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
           <div v-show="activeTab === 'team'" class="space-y-6">
@@ -592,9 +598,9 @@ const StatisticsOverviewTab = defineAsyncComponent(
 const StatisticsRunesTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsRunesTab.vue')
 )
-const StatisticsTrendsTab = defineAsyncComponent(
-  () => import('~/components/statistics/tabs/StatisticsTrendsTab.vue')
-)
+// const StatisticsTrendsTab = defineAsyncComponent(
+//   () => import('~/components/statistics/tabs/StatisticsTrendsTab.vue')
+// )
 const StatisticsTeamTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsTeamTab.vue')
 )
@@ -701,7 +707,7 @@ function normalizeTabForSection(
 function normalizeLegacyTab(tab: string): StatisticsMainTab {
   if (tab === 'tierlist') return 'overview'
   if (tab === 'champions') return 'infos'
-  if (tab === 'progressions') return 'trends'
+  // if (tab === 'progressions') return 'trends'
   if (tab === 'sides') return 'team'
   if (tab === 'detail') return 'runes'
   if (tab === 'duration') return 'team'
@@ -711,7 +717,7 @@ function normalizeLegacyTab(tab: string): StatisticsMainTab {
     tab === 'overview' ||
     tab === 'championTable' ||
     tab === 'balance' ||
-    tab === 'trends' ||
+    // tab === 'trends' ||
     tab === 'team' ||
     tab === 'objectives' ||
     tab === 'surrender' ||
@@ -743,7 +749,7 @@ const activeTab = ref<
   | 'surrender'
   | 'championTable'
   | 'balance'
-  | 'trends'
+  // | 'trends'
   | 'runes'
   | 'items'
   | 'spells'
@@ -772,7 +778,7 @@ const allTabs = computed(() => [
     widgetId: 'championTable',
   },
   { id: 'balance' as const, label: t('statisticsPage.tabBalance'), widgetId: 'balance' },
-  { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
+  // { id: 'trends' as const, label: t('statisticsPage.tabTrends'), widgetId: 'trends' },
   { id: 'runes' as const, label: t('statisticsPage.tabRunes'), widgetId: 'runes' },
   { id: 'spells' as const, label: t('statisticsPage.tabSummonerSpells'), widgetId: 'spells' },
   { id: 'items' as const, label: t('statisticsPage.tabItems'), widgetId: 'items' },
@@ -785,6 +791,23 @@ const tabs = computed(() => {
   const visibleTabIds = new Set(STATISTICS_SECTION_TABS[section])
   return allTabs.value.filter(tab => visibleTabIds.has(tab.id))
 })
+const tabsNavEl = ref<HTMLElement | null>(null)
+type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
+
+function focusPrevNextTab(currentTabId: VisibleStatisticsTabId, direction: -1 | 1): void {
+  const ids = tabs.value.map(t => t.id) as VisibleStatisticsTabId[]
+  const idx = ids.indexOf(currentTabId)
+  if (idx < 0 || ids.length === 0) return
+  const nextIdx = (idx + direction + ids.length) % ids.length
+  const nextId = ids[nextIdx]
+  if (!nextId) return
+  activeTab.value = nextId
+  if (!import.meta.client) return
+  requestAnimationFrame(() => {
+    const el = tabsNavEl.value?.querySelector<HTMLButtonElement>(`button[data-tab-id="${nextId}"]`)
+    el?.focus()
+  })
+}
 
 function cardIsFavorite(cardId: string): boolean {
   return statisticsCustomStore.isFavorite(cardId)
@@ -1400,7 +1423,7 @@ function onStatsFilterChange() {
     loadOverviewSides()
   }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
-  if (activeTab.value === 'trends') loadProgressionsFull()
+  // if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'abandons') loadOverviewAbandons()
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog()
@@ -3912,12 +3935,12 @@ watch(activeTab, async tab => {
     loadOverviewSides()
     loadObjectivesBaseline()
   }
-  if (tab === 'trends') {
-    if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
-    if (!progressionFromVersion.value && !versionStore.currentVersion)
-      await versionStore.loadCurrentVersion()
-    loadProgressionsFull()
-  }
+  // if (tab === 'trends') {
+  //   if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
+  //   if (!progressionFromVersion.value && !versionStore.currentVersion)
+  //     await versionStore.loadCurrentVersion()
+  //   loadProgressionsFull()
+  // }
   if (tab === 'team') loadOverviewSides()
   if (tab === 'infos') loadInfosPatchDivisionMatrix()
   if (tab === 'infos') loadInfosMeta()
@@ -3942,7 +3965,7 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadOverviewTeams()
     loadObjectivesBaseline()
   }
-  if (activeTab.value === 'trends') loadProgressionsFull()
+  // if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') {
@@ -3961,7 +3984,7 @@ watch(progressionFromVersion, () => {
     loadOverviewProgression()
     loadProgressionsFull()
   }
-  if (activeTab.value === 'trends') loadProgressionsFull()
+  // if (activeTab.value === 'trends') loadProgressionsFull()
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()

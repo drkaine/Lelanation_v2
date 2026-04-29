@@ -794,7 +794,12 @@
     "balanceNeedBuff": "Besoin buff",
     "balanceNeedNerf": "Besoin nerf",
     "balanceNeedNormal": "Normal",
-    "balanceTooltipNeed": "Action suggérée selon le statut global du framework Riot."
+    "balanceTooltipNeed": "Action suggérée selon le statut global du framework Riot.",
+    "spellsModeSolo": "Solo",
+    "spellsModePair": "Pair",
+    "spellsCasts": "Casts",
+    "spellsTooltipCasts": "Nombre total de casts du sort (ou Cast1/Cast2 pour les paires).",
+    "spellsTooltipDeltaCasts": "Écart de casts vs patch de référence (ou ΔCast1/ΔCast2 pour les paires)."
   },
   "stats": {
     "title": "Statistiques",
