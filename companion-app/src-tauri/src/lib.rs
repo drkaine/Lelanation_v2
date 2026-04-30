@@ -1,10 +1,14 @@
 //! Lelanation Companion: LCU integration and Tauri commands.
 
+mod app_config;
 mod image_cache;
 mod lcu;
 
+use app_config::{load_companion_config, save_companion_config, CompanionConfig};
+
 use image_cache::ImageCacheState;
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -15,11 +19,93 @@ use std::process::Command;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+fn sanitize_item_set_stem(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars().take(48) {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+            out.push(c);
+        } else if c.is_whitespace() {
+            out.push('_');
+        }
+    }
+    if out.is_empty() {
+        "build".into()
+    } else {
+        out
+    }
+}
+
+/// Writes an official-format item set JSON under
+/// `<League>/Config/Champions/<ChampionId>/Recommended/lelanation_<stem>.json`.
+#[tauri::command]
+fn companion_write_champion_item_set(
+    champion_key: String,
+    title_stem: String,
+    json_content: String,
+) -> Result<String, String> {
+    let cfg = load_companion_config();
+    let root = cfg
+        .league_install_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            "League of Legends install folder is not configured (complete onboarding)."
+                .to_string()
+        })?;
+
+    let safe_champ: String = champion_key
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    if safe_champ.is_empty() {
+        return Err("Invalid champion id for item set file path.".into());
+    }
+
+    let stem = sanitize_item_set_stem(&title_stem);
+    let dir = PathBuf::from(root)
+        .join("Config")
+        .join("Champions")
+        .join(&safe_champ)
+        .join("Recommended");
+
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Cannot create League Recommended folder: {e}"))?;
+
+    let path = dir.join(format!("lelanation_{stem}.json"));
+    std::fs::write(&path, json_content.as_bytes())
+        .map_err(|e| format!("Cannot write item set file: {e}"))?;
+
+    Ok(path.display().to_string())
+}
+
 #[derive(Serialize)]
 pub struct LcuConnectionResult {
     pub ok: bool,
     pub port: Option<u16>,
     pub error: Option<String>,
+}
+
+#[tauri::command]
+fn companion_get_config() -> CompanionConfig {
+    let mut cfg = load_companion_config();
+    if let Some(p) = app_config::take_installer_league_path_hint() {
+        let path_empty = cfg
+            .league_install_path
+            .as_deref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true);
+        if path_empty {
+            cfg.league_install_path = Some(p);
+            let _ = save_companion_config(&cfg);
+        }
+    }
+    cfg
+}
+
+#[tauri::command]
+fn companion_save_config(cfg: CompanionConfig) -> Result<(), String> {
+    save_companion_config(&cfg)
 }
 
 #[derive(Serialize)]
@@ -211,9 +297,13 @@ pub fn run() {
             }
         })
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
+            companion_get_config,
+            companion_save_config,
+            companion_write_champion_item_set,
             get_lcu_connection,
             lcu_request,
             lcu_debug,

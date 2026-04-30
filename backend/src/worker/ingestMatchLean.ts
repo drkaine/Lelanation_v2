@@ -129,6 +129,29 @@ function fillParticipantRankFromPeers(idx: number, ranks: ResolvedParticipantRan
   return { tier: avg.tier, division: avg.division || null, lp: null }
 }
 
+function buildRankEnrichedMatchPayload(
+  dto: RiotMatchDto,
+  participantDtos: RiotParticipantDto[],
+  resolvedRanks: ResolvedParticipantRank[]
+): Prisma.InputJsonValue {
+  const info = dto.info as Record<string, unknown>
+  const enrichedParticipants = participantDtos.map((p, idx) => {
+    const rr = resolvedRanks[idx] ?? { tier: 'UNRANKED', division: null, lp: null }
+    return {
+      ...(p as unknown as Record<string, unknown>),
+      rankTier: rr.tier,
+      rankDivision: rr.division,
+    }
+  })
+  return {
+    ...(dto as unknown as Record<string, unknown>),
+    info: {
+      ...info,
+      participants: enrichedParticipants,
+    },
+  } as Prisma.InputJsonValue
+}
+
 const RANK_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 function isRankUpdateRequired(player: { rankSnapshotGameDate: Date | null } | null): boolean {
@@ -513,6 +536,21 @@ export async function upsertIngestMatchAndParticipants(
     if (needsRankPeerFill(resolvedRanks[ri])) {
       resolvedRanks[ri] = fillParticipantRankFromPeers(ri, resolvedRanks)
     }
+  }
+
+  // Keep match_ingest_raw payload_json enriched with participant rank snapshot used by ingest.
+  try {
+    const enrichedPayloadJson = buildRankEnrichedMatchPayload(dto, participantDtos, resolvedRanks)
+    await prisma.$executeRaw`
+      UPDATE match_ingest_raw
+      SET payload_json = ${enrichedPayloadJson}::jsonb
+      WHERE riot_match_id = ${riotMatchId}
+    `
+  } catch (err) {
+    await logger?.info?.('DB: match_ingest_raw payload rank enrichment skipped', {
+      riotMatchId,
+      reason: err instanceof Error ? err.message : String(err),
+    })
   }
 
   const gameEndedInSurrender = participantDtos.some(

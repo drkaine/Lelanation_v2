@@ -1,23 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { hasConsent } from "./consent";
-import ConsentView from "./views/ConsentView.vue";
-import MainView from "./views/MainView.vue";
+import { onMounted, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import OnboardingView from "./views/OnboardingView.vue";
+import BuildsView from "./views/BuildsView.vue";
+import type { CompanionConfig } from "./companionConfig";
 
-const consented = ref(false);
+const booted = ref(false);
+const needsOnboarding = ref(true);
 
-onMounted(() => {
-  consented.value = hasConsent();
+onMounted(async () => {
+  try {
+    const cfg = await invoke<CompanionConfig>("companion_get_config");
+    needsOnboarding.value = cfg.onboardingComplete !== true;
+  } catch {
+    needsOnboarding.value = true;
+  } finally {
+    booted.value = true;
+  }
 });
 
-function onConsentAccepted() {
-  consented.value = true;
+function onOnboardingDone() {
+  needsOnboarding.value = false;
 }
 </script>
 
 <template>
-  <ConsentView v-if="!consented" @accepted="onConsentAccepted" />
-  <MainView v-else />
+  <div v-if="booted">
+    <OnboardingView v-if="needsOnboarding" @done="onOnboardingDone" />
+    <BuildsView v-else />
+  </div>
+  <div v-else class="boot">…</div>
 </template>
 
 <style>
@@ -42,5 +54,10 @@ body {
 }
 #app {
   min-height: 100vh;
+}
+.boot {
+  padding: 2rem;
+  text-align: center;
+  color: rgba(240, 230, 210, 0.85);
 }
 </style>

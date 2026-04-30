@@ -11,10 +11,21 @@ use base64::Engine;
 use serde::Deserialize;
 use std::path::PathBuf;
 
+fn push_user_league_paths(candidates: &mut Vec<PathBuf>, league_install: Option<&str>) {
+    let Some(dir) = league_install.map(str::trim).filter(|s| !s.is_empty()) else {
+        return;
+    };
+    let root = PathBuf::from(dir);
+    candidates.push(root.join("lockfile"));
+    candidates.push(root.join("Config").join("lockfile"));
+    candidates.push(root.join("Game").join("lockfile"));
+}
+
 #[cfg(target_os = "windows")]
-fn lockfile_candidates() -> Vec<PathBuf> {
+fn lockfile_candidates(league_install: Option<&str>) -> Vec<PathBuf> {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "".into());
     let mut candidates = Vec::new();
+    push_user_league_paths(&mut candidates, league_install);
     // 0. Manual override (e.g. LELANATION_LCU_LOCKFILE=C:\Games\LoL\lockfile)
     if let Ok(custom) = std::env::var("LELANATION_LCU_LOCKFILE") {
         let p = PathBuf::from(custom.trim());
@@ -54,9 +65,10 @@ fn lockfile_candidates() -> Vec<PathBuf> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn lockfile_candidates() -> Vec<PathBuf> {
+fn lockfile_candidates(league_install: Option<&str>) -> Vec<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "".into());
     let mut candidates = Vec::new();
+    push_user_league_paths(&mut candidates, league_install);
     // 0. Manual override (e.g. LELANATION_LCU_LOCKFILE=~/.lol/lockfile)
     if let Ok(custom) = std::env::var("LELANATION_LCU_LOCKFILE") {
         let s = custom.trim();
@@ -240,8 +252,10 @@ fn read_from_process() -> Option<LockfileData> {
 
 /// Debug info for troubleshooting connection issues.
 pub fn debug_info() -> Result<String, String> {
+    let cfg = crate::app_config::load_companion_config();
+    let user_dir = cfg.league_install_path.as_deref();
     let mut lines = Vec::new();
-    for path in lockfile_candidates() {
+    for path in lockfile_candidates(user_dir) {
         let exists = path.exists();
         let mut info = format!("{}: {}", path.display(), if exists { "exists" } else { "absent" });
         if exists {
@@ -273,7 +287,9 @@ pub fn debug_info() -> Result<String, String> {
 
 /// Read and parse the LCU lockfile. Tries lockfile paths first, then process method on Windows.
 pub fn read_lockfile() -> Result<LockfileData, String> {
-    for path in lockfile_candidates() {
+    let cfg = crate::app_config::load_companion_config();
+    let user_dir = cfg.league_install_path.as_deref();
+    for path in lockfile_candidates(user_dir) {
         if let Ok(contents) = std::fs::read_to_string(&path) {
             if let Ok(data) = parse_lockfile_contents(&contents) {
                 return Ok(data);
@@ -283,7 +299,7 @@ pub fn read_lockfile() -> Result<LockfileData, String> {
     if let Some(data) = read_from_process() {
         return Ok(data);
     }
-    let tried: Vec<String> = lockfile_candidates()
+    let tried: Vec<String> = lockfile_candidates(user_dir)
         .into_iter()
         .map(|p| p.display().to_string())
         .collect();

@@ -1,6 +1,6 @@
 <template>
   <div class="companion-builds-panel">
-    <nav class="tabs">
+    <nav v-if="companionMode === 'full'" class="tabs">
     <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="emit('update:activeTab', 'builds')">
       {{ t('tabs.discover') }}
     </button>
@@ -23,6 +23,20 @@
     <button class="tab-btn" :class="{ active: activeTab === 'settings' }" @click="emit('update:activeTab', 'settings')">
       {{ t('tabs.settings') }}
     </button>
+    </nav>
+
+    <nav v-else class="tabs">
+      <button class="tab-btn" :class="{ active: activeTab === 'builds' }" @click="emit('update:activeTab', 'builds')">
+        {{ t('tabs.discover') }}
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'favoris' }"
+        :disabled="favoriteCount === 0"
+        @click="emit('update:activeTab', 'favoris')"
+      >
+        {{ t('tabs.favorites') }} ({{ favoriteCount }})
+      </button>
     </nav>
 
     <div v-if="activeTab !== 'settings'" class="filters-bar">
@@ -95,6 +109,29 @@
           <div class="card-actions">
             <button
               type="button"
+              class="import-btn action-icon-button"
+              :disabled="!lcuReady || importInProgress"
+              :title="importInProgress ? t('importInProgress') : t('importToClientTitle')"
+              @click="emit('import-to-lcu', b)"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12" />
+                <path d="m8 11 4 4 4-4" />
+                <path d="M4 21h16" />
+              </svg>
+            </button>
+            <button
+              type="button"
               class="action-icon-button"
               :class="{ on: isFavorite(b.id) }"
               :title="isFavorite(b.id) ? t('favorite.remove') : t('favorite.add')"
@@ -148,26 +185,34 @@ import type { ImageResolvers, RuneLookup } from './BuildSheet.vue'
 import BuildsFilterBar from './BuildsFilterBar.vue'
 import BuildCardFlip from './BuildCardFlip.vue'
 
-defineProps<{
-  t: (key: string, params?: Record<string, string | number>) => string
-  activeTab: 'builds' | 'mes-builds' | 'favoris' | 'settings'
-  importedBuildsCount: number
-  favoriteCount: number
-  loading: boolean
-  displayedBuilds: Build[]
-  importedBuildIds: Set<string>
-  searchQuery: string
-  selectedRole: Role | null
-  onlyUpToDate: boolean
-  sortBy: 'recent' | 'name'
-  hasActiveFilters: boolean
-  roleOptions: Array<{ value: Role; label: string; icon: string }>
-  sortOptions: Array<{ value: string; label: string }>
-  imageResolvers: ImageResolvers
-  runeLookup: RuneLookup
-  isFavorite: (buildId: string) => boolean
-  buildVersion: (build: Build) => string
-}>()
+withDefaults(
+  defineProps<{
+    t: (key: string, params?: Record<string, string | number>) => string
+    activeTab: 'builds' | 'mes-builds' | 'favoris' | 'settings'
+    importedBuildsCount: number
+    favoriteCount: number
+    loading: boolean
+    displayedBuilds: Build[]
+    importedBuildIds: Set<string>
+    searchQuery: string
+    selectedRole: Role | null
+    onlyUpToDate: boolean
+    sortBy: 'recent' | 'name'
+    hasActiveFilters: boolean
+    roleOptions: Array<{ value: Role; label: string; icon: string }>
+    sortOptions: Array<{ value: string; label: string }>
+    imageResolvers: ImageResolvers
+    runeLookup: RuneLookup
+    isFavorite: (buildId: string) => boolean
+    buildVersion: (build: Build) => string
+    /** When true, LCU lockfile detected — import to client is possible. */
+    lcuReady?: boolean
+    importInProgress?: boolean
+    /** `public`: discover + favorites only; `full`: all tabs. */
+    companionMode?: 'full' | 'public'
+  }>(),
+  { companionMode: 'full', lcuReady: false, importInProgress: false }
+)
 
 const emit = defineEmits<{
   'update:activeTab': [value: 'builds' | 'mes-builds' | 'favoris' | 'settings']
@@ -179,6 +224,7 @@ const emit = defineEmits<{
   'toggle-favorite': [buildId: string]
   'open-detail': [build: Build]
   'variant-change': [payload: { buildId: string; idx: number | null }]
+  'import-to-lcu': [build: Build]
 }>()
 
 const onSortByUpdate = (value: string) => {

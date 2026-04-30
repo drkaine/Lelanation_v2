@@ -6,15 +6,20 @@ import type { Build, SubBuild } from "@lelanation/shared-types";
 import { linkifyDescription } from "../utils/linkifyDescription";
 import BuildStatsTable from "../components/BuildStatsTable.vue";
 
-const props = defineProps<{
-  build: Build;
-  imageResolvers: ImageResolvers;
-  runeLookup: RuneLookup;
-  buildVersion: (b: Build) => string;
-  t: (key: string, params?: Record<string, string | number>) => string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    build: Build;
+    imageResolvers: ImageResolvers;
+    runeLookup: RuneLookup;
+    buildVersion: (b: Build) => string;
+    t: (key: string, params?: Record<string, string | number>) => string;
+    lcuConnected?: boolean;
+    importInProgress?: boolean;
+  }>(),
+  { lcuConnected: false, importInProgress: false }
+);
 
-const emit = defineEmits<{ back: [] }>();
+const emit = defineEmits<{ back: []; "import-to-lcu": [build: Build] }>();
 
 const detailSubIdx = ref<number | null>(null);
 
@@ -105,6 +110,16 @@ function formatDate(dateString: string): string {
             <p v-if="build.createdAt" class="detail-date">
               {{ t('detailCreated') }} {{ formatDate(build.createdAt) }}
             </p>
+            <button
+              type="button"
+              class="import-client-btn"
+              :disabled="!lcuConnected || importInProgress"
+              :title="t('importToClientTitle')"
+              @click="emit('import-to-lcu', detailDisplayedBuild)"
+            >
+              {{ importInProgress ? t('importInProgress') : t('importToClient') }}
+            </button>
+            <p v-if="!lcuConnected" class="import-hint">{{ t('importNeedClient') }}</p>
           </div>
         </div>
 
@@ -242,6 +257,36 @@ function formatDate(dateString: string): string {
   margin: 0;
   font-size: 0.82rem;
   color: rgba(240, 230, 210, 0.6);
+}
+
+.import-client-btn {
+  margin-top: 0.5rem;
+  width: 100%;
+  max-width: 280px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(3, 151, 171, 0.75);
+  background: rgba(10, 50, 60, 0.85);
+  color: #cdfafa;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.import-client-btn:hover:not(:disabled) {
+  background: rgba(3, 151, 171, 0.35);
+  border-color: rgba(10, 200, 185, 0.95);
+}
+.import-client-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.import-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: rgba(240, 200, 120, 0.85);
+  text-align: center;
+  max-width: 280px;
 }
 
 .detail-description {

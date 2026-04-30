@@ -105,4 +105,8 @@ Pour la **signature de code Windows** (éditeur « Darkaine »), voir [CODE_SIGN
 
 ## Import build (runes/items/sorts)
 
-Le bouton « Importer » est branché sur la détection LCU ; l’envoi effectif des runes/items/sorts au client LoL nécessite de construire les payloads LCU (format Riot) à partir du build et d’appeler les endpoints appropriés (`/lol-perks/v1/pages`, item sets, etc.). À compléter selon la doc LCU.
+- **Runes + fragments** : mise à jour LCU via `lol-perks/v1/pages` (`GET` page courante, `PUT` ou `DELETE`+`POST`).
+- **Objets** : fichier JSON Riot dans `Config/Champions/<ChampionId>/Recommended/lelanation_*.json` (chemin install LoL depuis l’onboarding).
+- **Sorts** : `PATCH` sur `lol-champ-select/.../my-selection` en sélection de champion (si les IDs sorts du build sont numériques).
+
+UI : bouton sur la fiche détail + icône sur chaque carte ; cases à cocher dans **Paramètres**.

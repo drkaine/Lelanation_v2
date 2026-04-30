@@ -207,49 +207,61 @@ async function runBackfillOnce(): Promise<void> {
     )
   }
 
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      agg_objective_outcome_stats,
-      agg_champion_item_starter_set_stats,
-      agg_champion_summoner_spell_pair_stats,
-      agg_champion_spells_stats,
-      agg_champion_item_solo_stats,
-      agg_champion_item_stats,
-      agg_champion_shard_solo_stats,
-      agg_champion_runes_solo_stats,
-      agg_champion_runes_stats,
-      agg_champion_summoner_spells,
-      agg_botlane_duo_vs_duo_stats,
-      agg_champion_duo_role_stats,
-      agg_champion_participant_stats,
-      agg_champion_damage_stats,
-      agg_champion_bucket,
-      agg_team_bucket,
-      agg_champion_bans_by_banner,
-      agg_champion_side_stats,
-      agg_champion_vs_stats,
-      agg_team_core_stats,
-      agg_match_outcome_stats,
-      agg_champion_core_stats
-    RESTART IDENTITY
-  `)
+  const rawResumeEnabled = useRawOnly
+    ? ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.BACKFILL_AGG_RAW_RESUME ?? '')
+          .trim()
+          .toLowerCase()
+      )
+    : false
+  const rawResumeLastId = rawResumeEnabled ? await loadRawResumeLastId() : 0n
+  const hasRawResumeCheckpoint = rawResumeEnabled && rawResumeLastId > 0n
+  if (hasRawResumeCheckpoint) {
+    console.log(
+      `[backfill-agg] resume checkpoint detected -> preserving current agg tables and continuing from id>${rawResumeLastId.toString()}`
+    )
+  }
+
+  if (!hasRawResumeCheckpoint) {
+    await prisma.$executeRawUnsafe(`
+      TRUNCATE TABLE
+        agg_objective_outcome_stats,
+        agg_champion_item_starter_set_stats,
+        agg_champion_summoner_spell_pair_stats,
+        agg_champion_spells_stats,
+        agg_champion_item_solo_stats,
+        agg_champion_item_stats,
+        agg_champion_shard_solo_stats,
+        agg_champion_runes_solo_stats,
+        agg_champion_runes_stats,
+        agg_champion_summoner_spells,
+        agg_botlane_duo_vs_duo_stats,
+        agg_champion_duo_role_stats,
+        agg_champion_participant_stats,
+        agg_champion_damage_stats,
+        agg_champion_bucket,
+        agg_team_bucket,
+        agg_champion_bans_by_banner,
+        agg_champion_side_stats,
+        agg_champion_vs_stats,
+        agg_team_core_stats,
+        agg_match_outcome_stats,
+        agg_champion_core_stats
+      RESTART IDENTITY
+    `)
+  }
 
   if (useRawOnly) {
     const batchSize = Math.max(50, Math.min(2000, Number(process.env.BACKFILL_AGG_RAW_BATCH_SIZE ?? 300)))
     const concurrency = Math.max(1, Math.min(16, Number(process.env.BACKFILL_AGG_RAW_CONCURRENCY ?? 1)))
-    const rawResumeEnabled = ['1', 'true', 'yes', 'on'].includes(
-      String(process.env.BACKFILL_AGG_RAW_RESUME ?? '')
-        .trim()
-        .toLowerCase()
-    )
     console.log(
       `[backfill-agg] raw mode config: batchSize=${batchSize} concurrency=${concurrency} resume=${rawResumeEnabled}`
     )
-    let lastId = rawResumeEnabled ? await loadRawResumeLastId() : 0n
+    let lastId = rawResumeLastId
     if (rawResumeEnabled && lastId > 0n) {
       console.log(`[backfill-agg] raw resume enabled -> starting from id>${lastId.toString()}`)
     }
-    if (rawResumeEnabled) {
+    if (rawResumeEnabled && !hasRawResumeCheckpoint) {
       await seedLivePatchesFromArchive()
     }
     let processed = 0
