@@ -25,7 +25,7 @@ help:
 	@echo "Lelanation v2 - Make targets"
 	@echo ""
 	@echo "Setup"
-	@echo "  make setup              Install all deps (workspaces: root/backend/frontend/companion/packages)"
+	@echo "  make setup              Install all deps (workspaces: root/backend/frontend/companion/packages; Node ^20.19.0 || >=22.12.0, see .nvmrc)"
 	@echo ""
 	@echo "Dev"
 	@echo "  make dev                Run backend + frontend dev servers (parallel)"

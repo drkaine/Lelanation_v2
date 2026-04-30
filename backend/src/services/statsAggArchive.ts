@@ -64,21 +64,8 @@ async function unifiedArchiveRelationExists(archiveName: string): Promise<boolea
   return Boolean(rows[0]?.x)
 }
 
-async function patchHasRowsInUnifiedArchive(patchKey: string): Promise<boolean> {
-  const p = normalizePatchMajorMinor(patchKey)
-  if (!/^\d+\.\d+$/.test(p)) return false
-  const like = `${p}.%`
-  const rows = await prisma.$queryRaw<[{ ok: boolean }]>`
-    SELECT EXISTS (
-      SELECT 1 FROM archive_agg_champion_core_stats a
-      WHERE a.game_version = ${p} OR a.game_version LIKE ${like}
-    ) AS ok
-  `
-  return Boolean(rows[0]?.ok)
-}
-
 /**
- * FROM fragment for one patch: live agg or filtered rows from unified archive table.
+ * FROM fragment for one patch: filtered rows from unified archive table only.
  * Exported so callers can probe columns on the same physical branch as `matchVersionedAggFrom`.
  */
 export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: string): Promise<string | null> {
@@ -86,18 +73,10 @@ export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: st
   const p = normalizePatchMajorMinor(patchKey)
   if (!/^\d+\.\d+$/.test(p)) return null
 
-  const row = await prisma.activePatch.findUnique({
-    where: { gameVersion: p },
-    select: { archivedAt: true },
-  })
-
-  const inArchive =
-    row?.archivedAt != null || (row == null && (await patchHasRowsInUnifiedArchive(p)))
-
-  if (!inArchive) return aggTableName
-
   const archiveName = unifiedArchiveTableName(aggTableName)
-  if (!(await unifiedArchiveRelationExists(archiveName))) return aggTableName
+  if (!(await unifiedArchiveRelationExists(archiveName))) {
+    throw new Error(`[statsAggArchive] required archive table missing: ${archiveName}`)
+  }
 
   return sqlArchivedSinglePatchFragment(aggTableName, p)
 }
@@ -117,12 +96,12 @@ export async function matchVersionedAggFrom(
   asAlias: string
 ): Promise<string> {
   if (!isSafeIdentSegment(aggTableName) || !/^[a-z][a-z0-9_]*$/.test(asAlias)) {
-    return `${aggTableName} ${asAlias}`
+    throw new Error(`[statsAggArchive] invalid identifier for archive read: ${aggTableName} ${asAlias}`)
   }
   const single = normalizeSingleVersionKey(version)
   if (single) {
     const rel = await sqlAggOrArchiveRelation(aggTableName, single)
-    const physical = rel ?? aggTableName
+    const physical = rel ?? sqlArchivedSinglePatchFragment(aggTableName, normalizePatchMajorMinor(single))
     return `${physical} ${asAlias}`
   }
   return sqlAggUnionAllLiveAndArchives(aggTableName, asAlias)
@@ -130,23 +109,19 @@ export async function matchVersionedAggFrom(
 
 export async function sqlAggUnionAllLiveAndArchives(aggTableName: string, asAlias: string): Promise<string> {
   if (!isSafeIdentSegment(aggTableName) || !/^[a-z][a-z0-9_]*$/.test(asAlias)) {
-    return `${aggTableName} ${asAlias}`
+    throw new Error(`[statsAggArchive] invalid identifier for archive read: ${aggTableName} ${asAlias}`)
   }
   const archive = unifiedArchiveTableName(aggTableName)
   if (!(await unifiedArchiveRelationExists(archive))) {
-    return `${aggTableName} ${asAlias}`
+    throw new Error(`[statsAggArchive] required archive table missing: ${archive}`)
   }
   if (CHAMPION_SATELLITE_TABLES.has(aggTableName)) {
-    return `(SELECT * FROM ${aggTableName}
-      UNION ALL
-      SELECT s.* FROM ${archive} s
+    return `(SELECT s.* FROM ${archive} s
       INNER JOIN archive_agg_champion_core_stats c ON c.id = s.champion_stat_id) AS ${asAlias}`
   }
   if (aggTableName === 'agg_team_bucket') {
-    return `(SELECT * FROM ${aggTableName}
-      UNION ALL
-      SELECT tb.* FROM ${archive} tb
+    return `(SELECT tb.* FROM ${archive} tb
       INNER JOIN archive_agg_team_core_stats t ON t.id = tb.team_stat_id) AS ${asAlias}`
   }
-  return `(SELECT * FROM ${aggTableName} UNION ALL SELECT * FROM ${archive}) AS ${asAlias}`
+  return `(SELECT * FROM ${archive}) AS ${asAlias}`
 }

@@ -1022,6 +1022,7 @@ router.post('/cron/trigger/:job', async (req, res) => {
           success: true,
           livePatches: result.livePatches ?? [],
           copiedTables: result.copiedTables ?? [],
+          deletedRawRows: result.deletedRawRows ?? 0,
         })
       }
       return res.status(500).json({ success: false, error: result.error })
