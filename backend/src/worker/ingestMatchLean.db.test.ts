@@ -329,7 +329,7 @@ test(
         undefined,
         { shouldAbort: () => false }
       )
-      assert.equal(leagueCalls, 2, 'league-v4 must not run again while snapshot < 4h')
+      assert.equal(leagueCalls, 2, 'league-v4 must not run again while snapshot < 24h')
 
       const ingest2 = await prisma.ingestMatch.findUnique({
         where: { riotMatchId: matchId2 },

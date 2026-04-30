@@ -129,7 +129,7 @@ function fillParticipantRankFromPeers(idx: number, ranks: ResolvedParticipantRan
   return { tier: avg.tier, division: avg.division || null, lp: null }
 }
 
-const RANK_REFRESH_INTERVAL_MS = 4 * 60 * 60 * 1000
+const RANK_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 function isRankUpdateRequired(player: { rankSnapshotGameDate: Date | null } | null): boolean {
   if (!player) return true
@@ -534,7 +534,7 @@ export async function upsertIngestMatchAndParticipants(
             select: {
               id: true,
               playerId: true,
-              player: { select: { puuid: true, rankTier: true } },
+              player: { select: { puuid: true, rankTier: true, gameName: true, tagName: true } },
             },
           })
           const impByPuuid = new Map(matchRows.map((r) => [r.player.puuid, r]))
@@ -550,6 +550,7 @@ export async function upsertIngestMatchAndParticipants(
             const impRow = impByPuuid.get(puuid)
             const riotTeamId = p.teamId ?? 100
             if (impRow) {
+              const { gn: partGameName, tl: partTagName } = participantNames(p)
               await tx.ingestMatchPlayer.update({
                 where: { id: impRow.id },
                 data: {
@@ -558,10 +559,18 @@ export async function upsertIngestMatchAndParticipants(
                 },
               })
               const prevRankTier = impRow.player.rankTier
+              const playerMetaPatch: Record<string, unknown> = {}
+              if (partGameName && partGameName !== impRow.player.gameName) {
+                playerMetaPatch['gameName'] = partGameName
+              }
+              if (partTagName && partTagName !== impRow.player.tagName) {
+                playerMetaPatch['tagName'] = partTagName
+              }
               if (gameDate && isNewestStoredMatchForPuuid(puuid)) {
                 await tx.player.update({
                   where: { id: impRow.playerId },
                   data: {
+                    ...playerMetaPatch,
                     rankTier: rr.tier === 'UNRANKED' ? null : rr.tier,
                     rankDivision: rr.division,
                     rankLp: rr.lp,
@@ -572,11 +581,17 @@ export async function upsertIngestMatchAndParticipants(
                 await tx.player.update({
                   where: { id: impRow.playerId },
                   data: {
+                    ...playerMetaPatch,
                     rankTier: rr.tier,
                     rankDivision: rr.division,
                     rankLp: rr.lp,
                     rankSnapshotGameDate: new Date(),
                   },
+                })
+              } else if (Object.keys(playerMetaPatch).length > 0) {
+                await tx.player.update({
+                  where: { id: impRow.playerId },
+                  data: playerMetaPatch,
                 })
               }
             }
@@ -617,7 +632,7 @@ export async function upsertIngestMatchAndParticipants(
 
       const existingPlayers = await tx.player.findMany({
         where: { puuid: { in: puuids } },
-        select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, rankTier: true },
+        select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, tagName: true, rankTier: true },
       })
       const existingByPuuid = new Map(existingPlayers.map((p) => [p.puuid, p]))
 
@@ -685,6 +700,7 @@ export async function upsertIngestMatchAndParticipants(
                 puuid: string
                 puuidKeyVersion: string | null
                 gameName: string | null
+                tagName: string | null
                 rankTier: string | null
               }
             | null = null
@@ -707,7 +723,7 @@ export async function upsertIngestMatchAndParticipants(
                 rankLp: createdRankLp,
                 rankSnapshotGameDate: gameDate ?? new Date(),
               },
-              select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, rankTier: true },
+              select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, tagName: true, rankTier: true },
             })
             playerRow = newPlayer
             createdNow = true
@@ -720,7 +736,7 @@ export async function upsertIngestMatchAndParticipants(
             await tx.$executeRaw(Prisma.sql`ROLLBACK TO SAVEPOINT player_insert_sp`)
             const existing = await tx.player.findUnique({
               where: { puuid },
-              select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, rankTier: true },
+              select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, tagName: true, rankTier: true },
             })
             if (!existing) throw e
             playerRow = existing
@@ -731,6 +747,7 @@ export async function upsertIngestMatchAndParticipants(
             puuid: playerRow.puuid,
             puuidKeyVersion: playerRow.puuidKeyVersion,
             gameName: playerRow.gameName,
+            tagName: playerRow.tagName,
             rankTier: playerRow.rankTier,
           })
           if (createdNow) {
@@ -748,8 +765,11 @@ export async function upsertIngestMatchAndParticipants(
           }
           if (partGameName && existingPlayer.gameName !== partGameName) {
             playerUpdates['gameName'] = partGameName
-            playerUpdates['tagName'] = partTagName || null
             existingPlayer.gameName = partGameName
+          }
+          if (partTagName && existingPlayer.tagName !== partTagName) {
+            playerUpdates['tagName'] = partTagName
+            existingPlayer.tagName = partTagName
           }
           if (Object.keys(playerUpdates).length > 0) {
             await tx.player.update({ where: { id: existingPlayer.id }, data: playerUpdates })
