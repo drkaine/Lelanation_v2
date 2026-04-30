@@ -92,6 +92,13 @@ function toRate(count: number, total: number): number {
 const SURRENDER_MATRIX_CACHE_TTL_MS = 2 * 60 * 1000
 const surrenderMatrixCache = new Map<string, { data: SurrenderMatrixResult; expiresAt: number }>()
 
+async function ingestMatchsTableExists(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT to_regclass('public.ingest_matchs') IS NOT NULL AS ok
+  `
+  return Boolean(rows[0]?.ok)
+}
+
 function surrenderMatrixCacheKey(version: string | null, baselineVersion: string | null): string {
   return `${version ?? ''}|${baselineVersion ?? ''}`
 }
@@ -138,6 +145,9 @@ function buildSurrenderCells(rows: TeamAggRow[]): Map<string, Cell> {
 
 async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[]> {
   const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', version, 'tc')
+  const versionWhere = version
+    ? ` AND tc.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
+    : ''
   return prisma.$queryRawUnsafe<TeamAggRow[]>(`
     SELECT
       tc.rank_tier,
@@ -147,6 +157,7 @@ async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[
       COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count
     FROM ${tcFrom}
     WHERE tc.rank_tier <> 'UNRANKED'
+      ${versionWhere}
     GROUP BY tc.rank_tier, tc.team
   `)
 }
@@ -295,7 +306,7 @@ export async function getOverviewAbandons(
       totalMatches > 0 && earlySurrenderCount === 0 && surrenderCount === 0
     let earlyFinal = earlySurrenderCount
     let surrenderFinal = surrenderCount
-    if (fallbackNeeded) {
+    if (fallbackNeeded && (await ingestMatchsTableExists())) {
       try {
         const ingestRows = await prisma.$queryRawUnsafe<
           Array<{ early_surrender_count: bigint; surrender_count: bigint }>
@@ -309,7 +320,7 @@ export async function getOverviewAbandons(
         earlyFinal = Number(ingestRows[0]?.early_surrender_count ?? 0)
         surrenderFinal = Number(ingestRows[0]?.surrender_count ?? 0)
       } catch {
-        /* ingest_matchs removed — keep counts from agg (often 0 on fresh patch) */
+        /* ingest_matchs removed between existence check and query — keep agg values */
       }
     }
 

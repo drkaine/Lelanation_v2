@@ -95,6 +95,73 @@ test('RiotRateLimiter: syncFromResponseHeaders tracks buckets', () => {
   assert.equal(stats.maxApp120CountObserved, 42)
 })
 
+test('RiotRateLimiter: auto-tuning decreases and increases adaptive target from app 120s headers', () => {
+  process.env.RIOT_APP_120S_AUTOTUNE_ENABLED = '1'
+  process.env.RIOT_APP_TARGET_PER_120S = '95'
+  process.env.RIOT_APP_120S_AUTOTUNE_MIN_TARGET_PER_120S = '80'
+  process.env.RIOT_APP_120S_AUTOTUNE_MAX_TARGET_PER_120S = '95'
+  process.env.RIOT_APP_120S_AUTOTUNE_COOLDOWN_MS = '0'
+  process.env.RIOT_APP_120S_AUTOTUNE_DOWN_HARD_REMAINING_MAX = '2'
+  process.env.RIOT_APP_120S_AUTOTUNE_DOWN_SOFT_REMAINING_MAX = '6'
+  process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_HARD = '5'
+  process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_SOFT = '2'
+  process.env.RIOT_APP_120S_AUTOTUNE_UP_REMAINING_MIN = '20'
+  process.env.RIOT_APP_120S_AUTOTUNE_UP_STREAK_REQUIRED = '2'
+  process.env.RIOT_APP_120S_AUTOTUNE_STEP_UP = '1'
+  try {
+    const limiter = new RiotRateLimiter()
+    const nearCap = new Headers({
+      'x-app-rate-limit': '20:1,100:120',
+      'x-app-rate-limit-count': '98:120',
+    })
+    limiter.syncFromResponseHeaders(nearCap)
+    assert.equal(limiter.getStats().adaptiveTargetPer120s, 90)
+
+    const plentyHeadroom = new Headers({
+      'x-app-rate-limit': '20:1,100:120',
+      'x-app-rate-limit-count': '70:120',
+    })
+    limiter.syncFromResponseHeaders(plentyHeadroom)
+    limiter.syncFromResponseHeaders(plentyHeadroom)
+    const stats = limiter.getStats()
+    assert.equal(stats.adaptiveTargetPer120s, 91)
+    assert.equal(stats.autoTuneAdjustDownCount, 1)
+    assert.equal(stats.autoTuneAdjustUpCount, 1)
+  } finally {
+    delete process.env.RIOT_APP_120S_AUTOTUNE_ENABLED
+    delete process.env.RIOT_APP_TARGET_PER_120S
+    delete process.env.RIOT_APP_120S_AUTOTUNE_MIN_TARGET_PER_120S
+    delete process.env.RIOT_APP_120S_AUTOTUNE_MAX_TARGET_PER_120S
+    delete process.env.RIOT_APP_120S_AUTOTUNE_COOLDOWN_MS
+    delete process.env.RIOT_APP_120S_AUTOTUNE_DOWN_HARD_REMAINING_MAX
+    delete process.env.RIOT_APP_120S_AUTOTUNE_DOWN_SOFT_REMAINING_MAX
+    delete process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_HARD
+    delete process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_SOFT
+    delete process.env.RIOT_APP_120S_AUTOTUNE_UP_REMAINING_MIN
+    delete process.env.RIOT_APP_120S_AUTOTUNE_UP_STREAK_REQUIRED
+    delete process.env.RIOT_APP_120S_AUTOTUNE_STEP_UP
+  }
+})
+
+test('RiotRateLimiter: auto-tuning also reduces target after HTTP 429', () => {
+  process.env.RIOT_APP_120S_AUTOTUNE_ENABLED = '1'
+  process.env.RIOT_APP_TARGET_PER_120S = '95'
+  process.env.RIOT_APP_120S_AUTOTUNE_MIN_TARGET_PER_120S = '80'
+  process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_HARD = '5'
+  try {
+    const limiter = new RiotRateLimiter()
+    limiter.penalize429(1)
+    const stats = limiter.getStats()
+    assert.equal(stats.adaptiveTargetPer120s, 90)
+    assert.equal(stats.autoTuneAdjustDownCount, 1)
+  } finally {
+    delete process.env.RIOT_APP_120S_AUTOTUNE_ENABLED
+    delete process.env.RIOT_APP_TARGET_PER_120S
+    delete process.env.RIOT_APP_120S_AUTOTUNE_MIN_TARGET_PER_120S
+    delete process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_HARD
+  }
+})
+
 test('RiotRateLimiter: disconnect unblocks pending schedule calls', async () => {
   const limiter = new RiotRateLimiter()
   limiter.penalize429(120)

@@ -2,6 +2,51 @@
 import { inject } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+
+function banPctForCount(count: number, matchCount: number, bansPerMatch: number): number {
+  if (matchCount <= 0 || bansPerMatch <= 0) return 0
+  return Math.round((10000 * count) / (bansPerMatch * matchCount)) / 100
+}
+
+function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
+  const currMc = Number(p.overviewTeamsData?.matchCount ?? 0)
+  const refMc = Number(p.overviewTeamsBaselineData?.matchCount ?? 0)
+  if (currMc <= 0 || refMc <= 0) return null
+
+  const currentRows =
+    outcome === 'win'
+      ? (p.overviewTeamsData?.bans?.byWin ?? [])
+      : (p.overviewTeamsData?.bans?.byLoss ?? [])
+  const baselineRows =
+    outcome === 'win'
+      ? (p.overviewTeamsBaselineData?.bans?.byWin ?? [])
+      : (p.overviewTeamsBaselineData?.bans?.byLoss ?? [])
+
+  const currentMap = new Map<number, number>(
+    currentRows.map((row: { championId: number; count: number }) => [
+      Number(row.championId),
+      Number(row.count ?? 0),
+    ])
+  )
+  const baselineMap = new Map<number, number>(
+    baselineRows.map((row: { championId: number; count: number }) => [
+      Number(row.championId),
+      Number(row.count ?? 0),
+    ])
+  )
+
+  const currCount = currentMap.get(championId) ?? 0
+  const refCount = baselineMap.get(championId) ?? 0
+  const currPct = banPctForCount(currCount, currMc, 2)
+  const refPct = banPctForCount(refCount, refMc, 2)
+  return Math.round((currPct - refPct) * 100) / 100
+}
+
+function pctDeltaClass(delta: number): string {
+  if (delta > 0) return 'text-success'
+  if (delta < 0) return 'text-error'
+  return 'text-text/60'
+}
 </script>
 
 <template>
@@ -1069,6 +1114,16 @@ const p = inject('statisticsPageCtx') as any
                       <span class="ml-auto w-9 shrink-0 text-right font-medium text-text">{{
                         b.banRatePercent
                       }}</span>
+                      <span
+                        v-if="bansOutcomeDeltaPct(b.championId, 'win') != null"
+                        class="ml-1 w-12 shrink-0 text-right text-[11px]"
+                        :class="pctDeltaClass(bansOutcomeDeltaPct(b.championId, 'win')!)"
+                      >
+                        {{
+                          (bansOutcomeDeltaPct(b.championId, 'win')! > 0 ? '+' : '') +
+                          bansOutcomeDeltaPct(b.championId, 'win')!.toFixed(2)
+                        }}%
+                      </span>
                     </div>
                   </td>
                 </tr>
@@ -1148,6 +1203,16 @@ const p = inject('statisticsPageCtx') as any
                       <span class="ml-auto w-9 shrink-0 text-right font-medium text-text">{{
                         b.banRatePercent
                       }}</span>
+                      <span
+                        v-if="bansOutcomeDeltaPct(b.championId, 'loss') != null"
+                        class="ml-1 w-12 shrink-0 text-right text-[11px]"
+                        :class="pctDeltaClass(bansOutcomeDeltaPct(b.championId, 'loss')!)"
+                      >
+                        {{
+                          (bansOutcomeDeltaPct(b.championId, 'loss')! > 0 ? '+' : '') +
+                          bansOutcomeDeltaPct(b.championId, 'loss')!.toFixed(2)
+                        }}%
+                      </span>
                     </div>
                   </td>
                 </tr>

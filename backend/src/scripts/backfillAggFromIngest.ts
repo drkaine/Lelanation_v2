@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename)
 const BACKEND_ROOT = path.resolve(__dirname, '..', '..')
 const BACKFILL_AGG_LOCK_DIR = path.join(BACKEND_ROOT, 'data', 'locks')
 const BACKFILL_AGG_LOCK_FILE = path.join(BACKFILL_AGG_LOCK_DIR, 'backfill-agg.lock')
+const BACKFILL_AGG_PROGRESS_FILE = path.join(BACKFILL_AGG_LOCK_DIR, 'backfill-agg-raw-progress.json')
 const execFileAsync = promisify(execFile)
 
 function sleep(ms: number): Promise<void> {
@@ -31,6 +32,27 @@ async function createBackfillLockFile(): Promise<void> {
 
 async function releaseBackfillLockFile(): Promise<void> {
   await unlink(BACKFILL_AGG_LOCK_FILE).catch(() => undefined)
+}
+
+async function loadRawResumeLastId(): Promise<bigint> {
+  try {
+    const raw = JSON.parse(await readFile(BACKFILL_AGG_PROGRESS_FILE, 'utf8')) as {
+      lastId?: string | number
+    }
+    const parsed = BigInt(String(raw.lastId ?? '0'))
+    return parsed > 0n ? parsed : 0n
+  } catch {
+    return 0n
+  }
+}
+
+async function saveRawResumeLastId(lastId: bigint): Promise<void> {
+  await mkdir(BACKFILL_AGG_LOCK_DIR, { recursive: true })
+  await writeFile(
+    BACKFILL_AGG_PROGRESS_FILE,
+    JSON.stringify({ lastId: lastId.toString(), updatedAt: new Date().toISOString() }),
+    'utf8'
+  )
 }
 
 function shouldPausePoller(): boolean {
@@ -60,6 +82,38 @@ function isRetryableDbError(err: unknown): boolean {
 async function runBackfillOnce(): Promise<void> {
   console.log('[backfill-agg] starting')
 
+  const ingestTablesPresent = await prisma.$queryRaw<Array<{ ok: boolean }>>`
+    SELECT (
+      to_regclass('public.ingest_matchs') IS NOT NULL
+      AND to_regclass('public.ingest_match_players') IS NOT NULL
+      AND to_regclass('public.ingest_teams') IS NOT NULL
+    ) AS ok
+  `
+  const useRawOnly = !ingestTablesPresent[0]?.ok
+  let rawRowCount = 0
+  if (useRawOnly) {
+    const rawCountRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM match_ingest_raw
+      WHERE payload_json IS NOT NULL
+    `
+    rawRowCount = Number(rawCountRows[0]?.count ?? 0n)
+    const allowRawOnly = ['1', 'true', 'yes', 'on'].includes(
+      String(process.env.BACKFILL_AGG_ALLOW_RAW_ONLY ?? '')
+        .trim()
+        .toLowerCase()
+    )
+    if (!allowRawOnly) {
+      throw new Error(
+        `[backfill-agg] ingest_* absent and rebuild would rely only on match_ingest_raw (${rawRowCount} rows). ` +
+          'Set BACKFILL_AGG_ALLOW_RAW_ONLY=1 to confirm this potentially partial rebuild.'
+      )
+    }
+    console.log(
+      `[backfill-agg] ingest_* absent -> rebuilding aggregates from match_ingest_raw (${rawRowCount} rows)`
+    )
+  }
+
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       agg_objective_outcome_stats,
@@ -87,50 +141,73 @@ async function runBackfillOnce(): Promise<void> {
     RESTART IDENTITY
   `)
 
-  const ingestTablesPresent = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-    SELECT (
-      to_regclass('public.ingest_matchs') IS NOT NULL
-      AND to_regclass('public.ingest_match_players') IS NOT NULL
-      AND to_regclass('public.ingest_teams') IS NOT NULL
-    ) AS ok
-  `
-  if (!ingestTablesPresent[0]?.ok) {
-    console.log('[backfill-agg] ingest_* absent -> rebuilding aggregates from match_ingest_raw')
-    const rows = await prisma.$queryRaw<
-      Array<{
-        id: bigint
-        riot_match_id: string
-        region: string
-        payload_json: unknown
-        timeline_json: unknown | null
-        ingested_at: Date
-      }>
-    >`
-      SELECT id, riot_match_id, region, payload_json, timeline_json, ingested_at
-      FROM match_ingest_raw
-      WHERE payload_json IS NOT NULL
-      ORDER BY id ASC
-    `
+  if (useRawOnly) {
+    const batchSize = Math.max(50, Math.min(2000, Number(process.env.BACKFILL_AGG_RAW_BATCH_SIZE ?? 300)))
+    const concurrency = Math.max(1, Math.min(16, Number(process.env.BACKFILL_AGG_RAW_CONCURRENCY ?? 1)))
+    const rawResumeEnabled = ['1', 'true', 'yes', 'on'].includes(
+      String(process.env.BACKFILL_AGG_RAW_RESUME ?? '')
+        .trim()
+        .toLowerCase()
+    )
+    console.log(
+      `[backfill-agg] raw mode config: batchSize=${batchSize} concurrency=${concurrency} resume=${rawResumeEnabled}`
+    )
+    let lastId = rawResumeEnabled ? await loadRawResumeLastId() : 0n
+    if (rawResumeEnabled && lastId > 0n) {
+      console.log(`[backfill-agg] raw resume enabled -> starting from id>${lastId.toString()}`)
+    }
     let processed = 0
-    for (const row of rows) {
-      const payload: MatchIngestQueuePayloadV1 = {
-        v: 1,
-        stepId: 'backfill-raw',
-        matchId: row.riot_match_id,
-        region: row.region,
-        matchDto: row.payload_json,
-        timelineDto: row.timeline_json,
-        puuidKeyVersion: null,
-        trackerIdx: -1,
-        enqueuedAt: row.ingested_at.getTime(),
+    while (true) {
+      const rows = await prisma.$queryRaw<
+        Array<{
+          id: bigint
+          riot_match_id: string
+          region: string
+          payload_json: unknown
+          timeline_json: unknown | null
+          ingested_at: Date
+        }>
+      >`
+        SELECT id, riot_match_id, region, payload_json, timeline_json, ingested_at
+        FROM match_ingest_raw
+        WHERE payload_json IS NOT NULL
+          AND id > ${lastId}
+        ORDER BY id ASC
+        LIMIT ${batchSize}
+      `
+      if (rows.length === 0) break
+      lastId = rows[rows.length - 1]!.id
+      for (let i = 0; i < rows.length; i += concurrency) {
+        const chunk = rows.slice(i, i + concurrency)
+        await Promise.all(
+          chunk.map(async (row) => {
+            const payload: MatchIngestQueuePayloadV1 = {
+              v: 1,
+              stepId: 'backfill-raw',
+              matchId: row.riot_match_id,
+              region: row.region,
+              matchDto: row.payload_json,
+              timelineDto: row.timeline_json,
+              puuidKeyVersion: null,
+              trackerIdx: -1,
+              enqueuedAt: row.ingested_at.getTime(),
+            }
+            await processRawAggregateAndBurn(row.id, payload, row.riot_match_id)
+            processed++
+            if (processed % 200 === 0) {
+              console.log(`[backfill-agg] raw processed: ${processed}/${rawRowCount}`)
+            }
+          })
+        )
       }
-      await processRawAggregateAndBurn(row.id, payload, row.riot_match_id)
-      processed++
-      if (processed % 200 === 0) {
-        console.log(`[backfill-agg] raw processed: ${processed}/${rows.length}`)
+      if (rawResumeEnabled) {
+        await saveRawResumeLastId(lastId)
       }
     }
-    console.log(`[backfill-agg] raw rebuild done: ${processed} matches`)
+    console.log(`[backfill-agg] raw rebuild done: ${processed}/${rawRowCount} matches`)
+    if (rawResumeEnabled) {
+      await unlink(BACKFILL_AGG_PROGRESS_FILE).catch(() => undefined)
+    }
     return
   }
 

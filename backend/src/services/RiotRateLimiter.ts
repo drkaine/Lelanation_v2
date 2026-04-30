@@ -40,11 +40,89 @@ export const RIOT_429_MIN_PENALTY_MS = 5_000
 
 const MAX_429_PENALTY_MS = 120_000
 const PENALTY_BUFFER_MS = 2_500
+const AUTO_TUNE_COOLDOWN_MS_DEFAULT = 8_000
+const AUTO_TUNE_MIN_TARGET_DEFAULT = 75
+const AUTO_TUNE_UP_REMAINING_MIN_DEFAULT = 15
+const AUTO_TUNE_DOWN_SOFT_REMAINING_MAX_DEFAULT = 6
+const AUTO_TUNE_DOWN_HARD_REMAINING_MAX_DEFAULT = 2
+const AUTO_TUNE_STEP_UP_DEFAULT = 1
+const AUTO_TUNE_STEP_DOWN_SOFT_DEFAULT = 2
+const AUTO_TUNE_STEP_DOWN_HARD_DEFAULT = 5
+const AUTO_TUNE_UP_STREAK_REQUIRED_DEFAULT = 3
+
+function clampInt(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, Math.trunc(n)))
+}
 
 function readTargetAppRequestsPer120s(): number {
   const raw = Number.parseInt(process.env.RIOT_APP_TARGET_PER_120S ?? '', 10)
   if (!Number.isFinite(raw)) return 95
   return Math.min(100, Math.max(1, raw))
+}
+
+function readAutoTuneEnabled(): boolean {
+  const raw = (process.env.RIOT_APP_120S_AUTOTUNE_ENABLED ?? '').trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
+}
+
+function readAutoTuneMinTargetPer120s(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_MIN_TARGET_PER_120S ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_MIN_TARGET_DEFAULT
+  return clampInt(raw, 1, 100)
+}
+
+function readAutoTuneMaxTargetPer120s(configuredTarget: number): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_MAX_TARGET_PER_120S ?? '', 10)
+  if (!Number.isFinite(raw)) return configuredTarget
+  return clampInt(raw, 1, 100)
+}
+
+function readAutoTuneCooldownMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_COOLDOWN_MS ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_COOLDOWN_MS_DEFAULT
+  return clampInt(raw, 0, 120_000)
+}
+
+function readAutoTuneUpRemainingMin(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_UP_REMAINING_MIN ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_UP_REMAINING_MIN_DEFAULT
+  return clampInt(raw, 0, 100)
+}
+
+function readAutoTuneDownSoftRemainingMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_DOWN_SOFT_REMAINING_MAX ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_DOWN_SOFT_REMAINING_MAX_DEFAULT
+  return clampInt(raw, 0, 100)
+}
+
+function readAutoTuneDownHardRemainingMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_DOWN_HARD_REMAINING_MAX ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_DOWN_HARD_REMAINING_MAX_DEFAULT
+  return clampInt(raw, 0, 100)
+}
+
+function readAutoTuneStepUp(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_STEP_UP ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_STEP_UP_DEFAULT
+  return clampInt(raw, 1, 20)
+}
+
+function readAutoTuneStepDownSoft(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_SOFT ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_STEP_DOWN_SOFT_DEFAULT
+  return clampInt(raw, 1, 20)
+}
+
+function readAutoTuneStepDownHard(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_STEP_DOWN_HARD ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_STEP_DOWN_HARD_DEFAULT
+  return clampInt(raw, 1, 40)
+}
+
+function readAutoTuneUpStreakRequired(): number {
+  const raw = Number.parseInt(process.env.RIOT_APP_120S_AUTOTUNE_UP_STREAK_REQUIRED ?? '', 10)
+  if (!Number.isFinite(raw)) return AUTO_TUNE_UP_STREAK_REQUIRED_DEFAULT
+  return clampInt(raw, 1, 20)
 }
 
 /** Exported for poller summaries / budget lines (reads env each time). */
@@ -136,6 +214,16 @@ type BucketSnapshot = {
 
 export class RiotRateLimiter {
   private limiter: Bottleneck
+  private readonly configuredTargetPer120s: number
+  private readonly autoTuneEnabled: boolean
+  private readonly autoTuneMinTargetPer120s: number
+  private readonly autoTuneMaxTargetPer120s: number
+  private adaptiveTargetPer120s: number
+  private adaptiveDripMs: number
+  private autoTuneLastAdjustMs = 0
+  private autoTuneUpStreak = 0
+  private autoTuneAdjustUpCount = 0
+  private autoTuneAdjustDownCount = 0
   private nearLimitPauseCount = 0
   private http429PauseCount = 0
   private appBuckets: BucketSnapshot[] = []
@@ -149,12 +237,22 @@ export class RiotRateLimiter {
   private stopped = false
 
   constructor() {
-    const target = readTargetAppRequestsPer120s()
-    const dripMs = Math.max(1, Math.floor(120_000 / target))
+    this.configuredTargetPer120s = readTargetAppRequestsPer120s()
+    this.autoTuneEnabled = readAutoTuneEnabled()
+    const rawMin = readAutoTuneMinTargetPer120s()
+    const rawMax = readAutoTuneMaxTargetPer120s(this.configuredTargetPer120s)
+    this.autoTuneMinTargetPer120s = Math.min(rawMin, rawMax)
+    this.autoTuneMaxTargetPer120s = Math.max(rawMin, rawMax)
+    this.adaptiveTargetPer120s = clampInt(
+      this.configuredTargetPer120s,
+      this.autoTuneMinTargetPer120s,
+      this.autoTuneMaxTargetPer120s
+    )
+    this.adaptiveDripMs = Math.max(1, Math.floor(120_000 / this.adaptiveTargetPer120s))
     this.limiter = new Bottleneck({
       reservoir: 1,
       reservoirIncreaseAmount: 1,
-      reservoirIncreaseInterval: dripMs,
+      reservoirIncreaseInterval: this.adaptiveDripMs,
       reservoirIncreaseMaximum: readReservoirMax(),
       maxConcurrent: readMaxConcurrent(),
       minTime: readLimiterMinTimeMs(),
@@ -204,6 +302,7 @@ export class RiotRateLimiter {
     if (newUntil > this.penaltyUntil) {
       this.penaltyUntil = newUntil
     }
+    this.adjustAdaptiveTarget(-readAutoTuneStepDownHard(), Date.now(), true)
   }
 
   /** @deprecated Prefer penalize429(). */
@@ -227,6 +326,7 @@ export class RiotRateLimiter {
     const app120 = this.appBuckets.find((b) => b.windowSec === 120)
     if (app120 && app120.limit > 0) {
       this.maxApp120CountObserved = Math.max(this.maxApp120CountObserved, app120.count)
+      this.autoTuneFromApp120Bucket(app120, now)
       // remaining120 <= 1 ⟺ count >= limit - 1 (e.g. ≥ RIOT_HEADER_APP_120S_NEAR_LIMIT when limit is 100).
       const remaining120 = app120.limit - app120.count
       const hardStopRemainingMax = readApp120sHardStopRemainingMax()
@@ -258,6 +358,11 @@ export class RiotRateLimiter {
     appBuckets: BucketSnapshot[]
     methodBuckets: BucketSnapshot[]
     maxApp120CountObserved: number
+    autoTuneEnabled: boolean
+    adaptiveTargetPer120s: number
+    adaptiveDripMs: number
+    autoTuneAdjustUpCount: number
+    autoTuneAdjustDownCount: number
   } {
     return {
       nearLimitPauseCount: this.nearLimitPauseCount,
@@ -266,6 +371,11 @@ export class RiotRateLimiter {
       appBuckets: [...this.appBuckets],
       methodBuckets: [...this.methodBuckets],
       maxApp120CountObserved: this.maxApp120CountObserved,
+      autoTuneEnabled: this.autoTuneEnabled,
+      adaptiveTargetPer120s: this.adaptiveTargetPer120s,
+      adaptiveDripMs: this.adaptiveDripMs,
+      autoTuneAdjustUpCount: this.autoTuneAdjustUpCount,
+      autoTuneAdjustDownCount: this.autoTuneAdjustDownCount,
     }
   }
 
@@ -300,5 +410,66 @@ export class RiotRateLimiter {
       windowSec: l.windowSec,
       recordedAt: now,
     }))
+  }
+
+  private autoTuneFromApp120Bucket(app120: BucketSnapshot, now: number): void {
+    if (!this.autoTuneEnabled || app120.limit <= 0) return
+    const remaining120 = app120.limit - app120.count
+    const downHardRemainingMax = readAutoTuneDownHardRemainingMax()
+    const downSoftRemainingMax = readAutoTuneDownSoftRemainingMax()
+    const upRemainingMin = readAutoTuneUpRemainingMin()
+
+    if (remaining120 <= downHardRemainingMax) {
+      this.autoTuneUpStreak = 0
+      this.adjustAdaptiveTarget(-readAutoTuneStepDownHard(), now, false)
+      return
+    }
+    if (remaining120 <= downSoftRemainingMax) {
+      this.autoTuneUpStreak = 0
+      this.adjustAdaptiveTarget(-readAutoTuneStepDownSoft(), now, false)
+      return
+    }
+
+    if (remaining120 >= upRemainingMin) {
+      this.autoTuneUpStreak += 1
+      if (this.autoTuneUpStreak >= readAutoTuneUpStreakRequired()) {
+        this.autoTuneUpStreak = 0
+        this.adjustAdaptiveTarget(readAutoTuneStepUp(), now, false)
+      }
+      return
+    }
+
+    this.autoTuneUpStreak = 0
+  }
+
+  private adjustAdaptiveTarget(delta: number, now: number, bypassCooldown: boolean): void {
+    if (!this.autoTuneEnabled || delta === 0) return
+    if (!bypassCooldown) {
+      const cooldownMs = readAutoTuneCooldownMs()
+      if (cooldownMs > 0 && now - this.autoTuneLastAdjustMs < cooldownMs) return
+    }
+
+    const nextTarget = clampInt(
+      this.adaptiveTargetPer120s + delta,
+      this.autoTuneMinTargetPer120s,
+      this.autoTuneMaxTargetPer120s
+    )
+    if (nextTarget === this.adaptiveTargetPer120s) return
+
+    this.adaptiveTargetPer120s = nextTarget
+    this.autoTuneLastAdjustMs = now
+    if (delta > 0) this.autoTuneAdjustUpCount += 1
+    else this.autoTuneAdjustDownCount += 1
+
+    const nextDripMs = Math.max(1, Math.floor(120_000 / this.adaptiveTargetPer120s))
+    if (nextDripMs === this.adaptiveDripMs) return
+    this.adaptiveDripMs = nextDripMs
+
+    const maybeUpdatable = this.limiter as unknown as {
+      updateSettings?: (settings: { reservoirIncreaseInterval: number }) => unknown
+    }
+    if (typeof maybeUpdatable.updateSettings === 'function') {
+      void maybeUpdatable.updateSettings({ reservoirIncreaseInterval: nextDripMs })
+    }
   }
 }

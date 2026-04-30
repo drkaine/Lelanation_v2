@@ -52,10 +52,13 @@ export async function refreshObjectiveOutcomeStats(logger?: LoggerType): Promise
   if (!isDatabaseConfigured()) return 0
   try {
     const hasIngestTeams = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-      SELECT to_regclass('public.ingest_teams') IS NOT NULL AS ok
+      SELECT (
+        to_regclass('public.ingest_teams') IS NOT NULL
+        AND to_regclass('public.ingest_matchs') IS NOT NULL
+      ) AS ok
     `
     if (!hasIngestTeams[0]?.ok) {
-      if (logger) void logger.step('Objective outcome refresh skipped (ingest tables absent)', { table: 'ingest_teams' })
+      if (logger) void logger.step('Objective outcome refresh skipped (ingest tables absent)', { table: 'ingest_teams/ingest_matchs' })
       return 0
     }
     const affected = await prisma.$executeRawUnsafe(`

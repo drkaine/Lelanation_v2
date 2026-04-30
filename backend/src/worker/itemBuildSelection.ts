@@ -45,6 +45,7 @@ const STARTER_PATTERNS = [
 const FORCED_LEGENDARY_IDS = new Set(['2526'])
 const CONSUMABLE_IDS = new Set(['2003', '2009', '2010', '2031', '2032', '2033', '2055', '2060'])
 const TRINKET_IDS = new Set(['3340', '3363', '3364'])
+const STARTER_WINDOW_MS = 3 * 60 * 1000
 
 let itemMetaCache: Map<number, ItemMeta> | null = null
 let itemMetaLoadPromise: Promise<Map<number, ItemMeta>> | null = null
@@ -170,7 +171,10 @@ export async function selectMatchPlayerItems(params: {
   const firstTs = firstTimestampByItem(params.events, params.participantId)
 
   const starterCandidates = Array.from(firstTs.keys())
-    .filter((itemId) => isStarter(itemMeta.get(itemId), itemId))
+    .filter((itemId) => {
+      const ts = firstTs.get(itemId) ?? Number.MAX_SAFE_INTEGER
+      return ts <= STARTER_WINDOW_MS && isStarter(itemMeta.get(itemId), itemId)
+    })
     .sort((a, b) => (firstTs.get(a) ?? 0) - (firstTs.get(b) ?? 0))
   const starters = uniqueStable(starterCandidates).slice(0, 2)
 
@@ -197,7 +201,7 @@ export async function selectMatchPlayerItems(params: {
     ...legendaries,
   ]).slice(0, 6)
 
-  const coreSet = new Set<number>([...(boot != null ? [boot] : []), ...legendaries])
+  const coreSet = new Set<number>([...legendaries])
   const starterSet = new Set<number>(starters)
 
   return selected.map((itemId, idx) => ({

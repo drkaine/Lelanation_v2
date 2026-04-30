@@ -95,6 +95,14 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+async function tableExists(tableName: string): Promise<boolean> {
+  if (!/^[a-z0-9_]+$/i.test(tableName)) return false
+  const rows = await prisma.$queryRawUnsafe<Array<{ ok: boolean }>>(
+    `SELECT to_regclass('public.${tableName}') IS NOT NULL AS ok`
+  )
+  return Boolean(rows[0]?.ok)
+}
+
 function findPreviousPatch(current: string, available: string[]): string | null {
   const sorted = [...available].sort((a, b) => comparePatch(b, a))
   const idx = sorted.findIndex((p) => p === current)
@@ -104,9 +112,20 @@ function findPreviousPatch(current: string, available: string[]): string | null 
 
 async function listAvailablePatches(): Promise<string[]> {
   const union = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 't')
-  const rows = await prisma.$queryRawUnsafe<Array<{ game_version: string }>>(
-    `SELECT DISTINCT game_version FROM ${union}`
-  )
+  const hasMvChampionCore = await tableExists('mv_champion_core_stats')
+  const mvUnionSql = hasMvChampionCore
+    ? `UNION ALL
+      SELECT mv.game_version AS game_version
+      FROM mv_champion_core_stats mv`
+    : ''
+  const rows = await prisma.$queryRawUnsafe<Array<{ game_version: string }>>(`
+    SELECT DISTINCT game_version
+    FROM (
+      SELECT t.game_version AS game_version
+      FROM ${union}
+      ${mvUnionSql}
+    ) v
+  `)
   return [
     ...new Set(
       rows
@@ -221,6 +240,19 @@ async function buildPatchSnapshot(
         AND rank_tier IN (${tiersSql})
         ${roleSql}
     `)
+  const coreRowsEffective =
+    coreRows.length > 0
+      ? coreRows
+      : await (async () => {
+          const coreMvFrom = await matchVersionedAggFrom('mv_champion_core_stats', patch, 'cc')
+          return prisma.$queryRawUnsafe<CoreRow[]>(`
+            SELECT champion_id, rank_tier, role, count_game, count_win
+            FROM ${coreMvFrom}
+            WHERE game_version LIKE '${patchLike}'
+              AND rank_tier IN (${tiersSql})
+              ${roleSql}
+          `)
+        })()
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
   const banRoleSql = role ? `AND banner_role_norm = '${String(role).replace(/'/g, "''")}'` : ''
   const banRows = await prisma.$queryRawUnsafe<BanRow[]>(`
@@ -230,6 +262,19 @@ async function buildPatchSnapshot(
         AND rank_tier IN (${tiersSql})
         ${banRoleSql}
     `)
+  const banRowsEffective =
+    banRows.length > 0
+      ? banRows
+      : await (async () => {
+          const bansMvFrom = await matchVersionedAggFrom('mv_champion_bans_by_banner', patch, 'bb')
+          return prisma.$queryRawUnsafe<BanRow[]>(`
+            SELECT banned_champion_id, rank_tier, banner_role_norm, ban_count
+            FROM ${bansMvFrom}
+            WHERE game_version LIKE '${patchLike}'
+              AND rank_tier IN (${tiersSql})
+              ${banRoleSql}
+          `)
+        })()
 
   const byLevel: Record<BalanceLevelKey, Map<string, ChampionAgg>> = {
     average: new Map(),
@@ -246,7 +291,7 @@ async function buildPatchSnapshot(
     skilled: new Map(),
     elite: new Map(),
   }
-  for (const r of coreRows) {
+  for (const r of coreRowsEffective) {
     const rankTier = String(r.rank_tier).toUpperCase()
     const roleNorm = String(r.role ?? '').toUpperCase()
     if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue
@@ -267,7 +312,7 @@ async function buildPatchSnapshot(
     })
   }
 
-  for (const r of banRows) {
+  for (const r of banRowsEffective) {
     const rankTier = String(r.rank_tier).toUpperCase()
     const roleNorm = String(r.banner_role_norm ?? '').toUpperCase()
     if (!BALANCE_ALLOWED_ROLES.has(roleNorm)) continue

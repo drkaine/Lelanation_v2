@@ -313,9 +313,16 @@ export interface OverviewSidesApiStats {
   drakesBySide?: {
     types: Record<
       string,
-      { byBlue: number; byRed: number; distributionByBlue?: Record<string, number>; distributionByRed?: Record<string, number> }
+      {
+        byBlue: number
+        byRed: number
+        winrateBlue?: number | null
+        winrateRed?: number | null
+        distributionByBlue?: Record<string, number>
+        distributionByRed?: Record<string, number>
+      }
     >
-    souls: Record<string, { byBlue: number; byRed: number }>
+    souls: Record<string, { byBlue: number; byRed: number; winrateBlue?: number | null; winrateRed?: number | null }>
   }
   surrenderBySide?: OverviewSurrenderBySide
   objectiveFirstWinrateBySide?: ObjectiveFirstWinrateBySide
@@ -2833,6 +2840,33 @@ function firstBucketWinrateBySide(dist: ObjectiveDistributionSides): {
   }
 }
 
+/** Winrate quand le côté sécurise l'objectif (bucket >= 1). */
+function objectiveSecuredWinrateBySide(dist: ObjectiveDistributionSides): {
+  blue: number | null
+  red: number | null
+} {
+  let blueGames = 0
+  let blueWins = 0
+  let redGames = 0
+  let redWins = 0
+  for (const [bucketRaw, gamesRaw] of Object.entries(dist.blue)) {
+    const bucket = Number(bucketRaw)
+    if (!Number.isFinite(bucket) || bucket < 1) continue
+    blueGames += Number(gamesRaw ?? 0)
+    blueWins += Number(dist.blueWins[bucketRaw] ?? 0)
+  }
+  for (const [bucketRaw, gamesRaw] of Object.entries(dist.red)) {
+    const bucket = Number(bucketRaw)
+    if (!Number.isFinite(bucket) || bucket < 1) continue
+    redGames += Number(gamesRaw ?? 0)
+    redWins += Number(dist.redWins[bucketRaw] ?? 0)
+  }
+  return {
+    blue: blueGames > 0 ? (blueWins / blueGames) * 100 : null,
+    red: redGames > 0 ? (redWins / redGames) * 100 : null,
+  }
+}
+
 export async function getOverviewSidesStats(
   version?: string | string[] | null,
   rankTier?: string | string[] | null,
@@ -3014,21 +3048,21 @@ export async function getOverviewSidesStats(
     const n = (v: bigint | undefined) => Number(v ?? 0)
     const drakesBySide: NonNullable<OverviewSidesApiStats['drakesBySide']> = {
       types: {
-        elder: { byBlue: 0, byRed: 0 },
-        earth: { byBlue: 0, byRed: 0 },
-        water: { byBlue: 0, byRed: 0 },
-        wind: { byBlue: 0, byRed: 0 },
-        fire: { byBlue: 0, byRed: 0 },
-        hextec: { byBlue: 0, byRed: 0 },
-        chem: { byBlue: 0, byRed: 0 },
+        elder: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        earth: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        water: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        wind: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        fire: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        hextec: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        chem: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
       },
       souls: {
-        earth: { byBlue: 0, byRed: 0 },
-        water: { byBlue: 0, byRed: 0 },
-        wind: { byBlue: 0, byRed: 0 },
-        fire: { byBlue: 0, byRed: 0 },
-        hextec: { byBlue: 0, byRed: 0 },
-        chem: { byBlue: 0, byRed: 0 },
+        earth: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        water: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        wind: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        fire: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        hextec: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
+        chem: { byBlue: 0, byRed: 0, winrateBlue: null, winrateRed: null },
       },
     }
     const objectivesBySide = {
@@ -3151,6 +3185,45 @@ export async function getOverviewSidesStats(
     drakesBySide.types.hextec.distributionByRed = distHextecDrake.red
     drakesBySide.types.chem.distributionByBlue = distChemDrake.blue
     drakesBySide.types.chem.distributionByRed = distChemDrake.red
+    const wrElder = objectiveSecuredWinrateBySide(distElder)
+    drakesBySide.types.elder.winrateBlue = wrElder.blue
+    drakesBySide.types.elder.winrateRed = wrElder.red
+    const wrEarth = objectiveSecuredWinrateBySide(distEarthDrake)
+    drakesBySide.types.earth.winrateBlue = wrEarth.blue
+    drakesBySide.types.earth.winrateRed = wrEarth.red
+    const wrWater = objectiveSecuredWinrateBySide(distWaterDrake)
+    drakesBySide.types.water.winrateBlue = wrWater.blue
+    drakesBySide.types.water.winrateRed = wrWater.red
+    const wrWind = objectiveSecuredWinrateBySide(distWindDrake)
+    drakesBySide.types.wind.winrateBlue = wrWind.blue
+    drakesBySide.types.wind.winrateRed = wrWind.red
+    const wrFire = objectiveSecuredWinrateBySide(distFireDrake)
+    drakesBySide.types.fire.winrateBlue = wrFire.blue
+    drakesBySide.types.fire.winrateRed = wrFire.red
+    const wrHextec = objectiveSecuredWinrateBySide(distHextecDrake)
+    drakesBySide.types.hextec.winrateBlue = wrHextec.blue
+    drakesBySide.types.hextec.winrateRed = wrHextec.red
+    const wrChem = objectiveSecuredWinrateBySide(distChemDrake)
+    drakesBySide.types.chem.winrateBlue = wrChem.blue
+    drakesBySide.types.chem.winrateRed = wrChem.red
+    const wrEarthSoul = objectiveSecuredWinrateBySide(distEarthSoul)
+    drakesBySide.souls.earth.winrateBlue = wrEarthSoul.blue
+    drakesBySide.souls.earth.winrateRed = wrEarthSoul.red
+    const wrWaterSoul = objectiveSecuredWinrateBySide(distWaterSoul)
+    drakesBySide.souls.water.winrateBlue = wrWaterSoul.blue
+    drakesBySide.souls.water.winrateRed = wrWaterSoul.red
+    const wrWindSoul = objectiveSecuredWinrateBySide(distWindSoul)
+    drakesBySide.souls.wind.winrateBlue = wrWindSoul.blue
+    drakesBySide.souls.wind.winrateRed = wrWindSoul.red
+    const wrFireSoul = objectiveSecuredWinrateBySide(distFireSoul)
+    drakesBySide.souls.fire.winrateBlue = wrFireSoul.blue
+    drakesBySide.souls.fire.winrateRed = wrFireSoul.red
+    const wrHextecSoul = objectiveSecuredWinrateBySide(distHextecSoul)
+    drakesBySide.souls.hextec.winrateBlue = wrHextecSoul.blue
+    drakesBySide.souls.hextec.winrateRed = wrHextecSoul.red
+    const wrChemSoul = objectiveSecuredWinrateBySide(distChemSoul)
+    drakesBySide.souls.chem.winrateBlue = wrChemSoul.blue
+    drakesBySide.souls.chem.winrateRed = wrChemSoul.red
     const objectivesBySideTable: OverviewSidesApiStats['objectivesBySideTable'] = {
       firstBlood: {
         firstByBlue: n(blue?.count_first_blood),

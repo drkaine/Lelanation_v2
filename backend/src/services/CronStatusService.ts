@@ -8,6 +8,7 @@ export type CronJobKey =
   | 'youtubeSync'
   | 'communityDragonSync'
   | 'socialLinksHealthCheck'
+  | 'liveAggArchiveCheckpoint'
 
 export type CronJobStatus = {
   job: CronJobKey
@@ -54,6 +55,13 @@ export class CronStatusService {
         },
         socialLinksHealthCheck: {
           job: 'socialLinksHealthCheck',
+          lastStartAt: null,
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureMessage: null
+        },
+        liveAggArchiveCheckpoint: {
+          job: 'liveAggArchiveCheckpoint',
           lastStartAt: null,
           lastSuccessAt: null,
           lastFailureAt: null,

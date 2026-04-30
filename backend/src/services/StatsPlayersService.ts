@@ -43,6 +43,17 @@ function maskPuuid(puuid: string): string {
   return `${puuid.slice(0, 4)}****...${puuid.slice(-4)}`
 }
 
+async function ingestPlayerTablesExist(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name IN ('ingest_match_players', 'ingest_teams')
+  `
+  return Number(rows[0]?.c ?? 0) === 2
+}
+
 
 function rankTierMatchPlayerSql(
   rankTier: string | string[] | null | undefined,
@@ -65,6 +76,7 @@ export async function getTopPlayers(options: {
   limit?: number
 }): Promise<PlayerRow[]> {
   if (!isDatabaseConfigured()) return []
+  if (!(await ingestPlayerTablesExist())) return []
   const { rankTier, highRankOnly = false, minGames = 50, limit = 100 } = options
   try {
     type StatsRow = {
@@ -128,6 +140,7 @@ export interface PlayerChampionStatRow {
 
 export async function getPlayerBySummonerName(summonerName: string): Promise<PlayerRow | null> {
   if (!isDatabaseConfigured() || !summonerName?.trim()) return null
+  if (!(await ingestPlayerTablesExist())) return null
   const name = summonerName.trim()
   const pattern = `%${name}%`
   try {
@@ -180,6 +193,7 @@ export async function getChampionStatsForPlayer(
   limit = 50
 ): Promise<PlayerChampionStatRow[]> {
   if (!isDatabaseConfigured()) return []
+  if (!(await ingestPlayerTablesExist())) return []
   try {
     const player = await prisma.player.findUnique({ where: { puuid }, select: { id: true } })
     if (!player) return []
@@ -219,6 +233,7 @@ export async function getTopPlayersByChampion(options: {
   limit?: number
 }): Promise<ChampionPlayerRow[]> {
   if (!isDatabaseConfigured()) return []
+  if (!(await ingestPlayerTablesExist())) return []
   const { championId, rankTier, highRankOnly = false, minGames = 20, limit = 50 } = options
   try {
     type Row = {

@@ -16,6 +16,7 @@ import { setupDataDragonSync } from './cron/dataDragonSync.js'
 import { setupYouTubeSync } from './cron/youtubeSync.js'
 import { setupCommunityDragonSync } from './cron/communityDragonSync.js'
 import { setupSocialLinksHealthCheck } from './cron/socialLinksHealthCheck.js'
+import { setupLiveAggArchiveCheckpoint } from './cron/liveAggArchiveCheckpoint.js'
 // import { runStatsPrecomputedRefreshOnce } from './cron/statsPrecomputedRefresh.js'
 import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
@@ -62,6 +63,7 @@ try {
   setupYouTubeSync()
   setupCommunityDragonSync()
   setupSocialLinksHealthCheck()
+  setupLiveAggArchiveCheckpoint()
 } catch (error) {
   console.error('[Server] ❌ Failed to initialize cron jobs:', error)
   // Don't exit - server can still run without cron

@@ -175,6 +175,30 @@ function drakeTypeWinrateGlobalParts(key: string): {
   }
 }
 
+function drakeTypeWinrateSideParts(
+  key: string,
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
+  const curRow = p.sidesDrakeTypeRows.find((r: { key: string }) => r.key === key)
+  const curWr =
+    side === 'blue'
+      ? (curRow?.winrateBlue as number | null | undefined)
+      : (curRow?.winrateRed as number | null | undefined)
+  const baseRow = p.overviewSidesBaselineData?.drakesBySide?.types?.[key]
+  const baseWr =
+    side === 'blue'
+      ? (baseRow?.winrateBlue as number | null | undefined)
+      : (baseRow?.winrateRed as number | null | undefined)
+  const curV = curWr ?? null
+  const baseV = baseWr ?? null
+  const delta = curV != null && baseV != null ? curV - baseV : null
+  return {
+    current: formatFirstObjectiveWr(curV),
+    delta: formatDelta(delta),
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
 const openDrakeTypeKeys = ref(new Set<string>())
 
 function toggleDrakeType(key: string) {
@@ -328,7 +352,9 @@ function soulGlobalPctParts(side: 'win' | 'loss'): {
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewTeamsBaselineData
-  const baseSouls = baseData?.drakes?.souls
+  const baseSouls = baseData?.drakes?.souls as
+    | Record<string, { byWin?: number; byLoss?: number }>
+    | undefined
   const baseCount =
     baseSouls == null
       ? null
@@ -364,7 +390,9 @@ function soulGlobalPctPartsSides(side: 'blue' | 'red'): {
   const curPct = pct(curCount, Number(curData.matchCount))
 
   const baseData = p.overviewSidesBaselineData
-  const baseSouls = baseData?.drakesBySide?.souls
+  const baseSouls = baseData?.drakesBySide?.souls as
+    | Record<string, { byBlue?: number; byRed?: number }>
+    | undefined
   const baseCount =
     baseSouls == null
       ? null
@@ -485,6 +513,30 @@ function soulSecureWinrateParts(key: string): {
     value: curWr,
     delta: deltaFmt,
     deltaDisplay: deltaFmt || '—',
+    deltaClass: deltaColorClass(delta),
+  }
+}
+
+function soulSecureWinrateSideParts(
+  key: string,
+  side: 'blue' | 'red'
+): { current: string; delta: string; deltaClass: string } {
+  const curRow = p.sidesDrakeSoulRows.find((r: { key: string }) => r.key === key)
+  const curWr =
+    side === 'blue'
+      ? (curRow?.winrateBlue as number | null | undefined)
+      : (curRow?.winrateRed as number | null | undefined)
+  const baseRow = p.overviewSidesBaselineData?.drakesBySide?.souls?.[key]
+  const baseWr =
+    side === 'blue'
+      ? (baseRow?.winrateBlue as number | null | undefined)
+      : (baseRow?.winrateRed as number | null | undefined)
+  const curV = curWr ?? null
+  const baseV = baseWr ?? null
+  const delta = curV != null && baseV != null ? curV - baseV : null
+  return {
+    current: formatFirstObjectiveWr(curV),
+    delta: formatDelta(delta),
     deltaClass: deltaColorClass(delta),
   }
 }
@@ -970,8 +1022,18 @@ const drakeSoulWinrateRows = computed(() =>
                 {{ row.parts.current }}
                 <span :class="row.parts.deltaClass">{{ row.parts.delta }}</span>
               </td>
-              <td class="px-1 py-1.5 text-center">—</td>
-              <td class="py-1.5 pl-1 text-center">—</td>
+              <td class="px-1 py-1.5 text-center">
+                {{ drakeTypeWinrateSideParts(row.key, 'blue').current }}
+                <span :class="drakeTypeWinrateSideParts(row.key, 'blue').deltaClass">
+                  {{ drakeTypeWinrateSideParts(row.key, 'blue').delta }}
+                </span>
+              </td>
+              <td class="py-1.5 pl-1 text-center">
+                {{ drakeTypeWinrateSideParts(row.key, 'red').current }}
+                <span :class="drakeTypeWinrateSideParts(row.key, 'red').deltaClass">
+                  {{ drakeTypeWinrateSideParts(row.key, 'red').delta }}
+                </span>
+              </td>
             </tr>
             <tr v-if="drakeTypeWinrateRows.length === 0">
               <td colspan="4" class="py-2 text-center text-text/60">
@@ -1231,8 +1293,18 @@ const drakeSoulWinrateRows = computed(() =>
                 {{ row.parts.current }}
                 <span :class="row.parts.deltaClass">{{ row.parts.deltaDisplay }}</span>
               </td>
-              <td class="px-1 py-1.5 text-center">—</td>
-              <td class="py-1.5 pl-1 text-center">—</td>
+              <td class="px-1 py-1.5 text-center">
+                {{ soulSecureWinrateSideParts(row.key, 'blue').current }}
+                <span :class="soulSecureWinrateSideParts(row.key, 'blue').deltaClass">
+                  {{ soulSecureWinrateSideParts(row.key, 'blue').delta }}
+                </span>
+              </td>
+              <td class="py-1.5 pl-1 text-center">
+                {{ soulSecureWinrateSideParts(row.key, 'red').current }}
+                <span :class="soulSecureWinrateSideParts(row.key, 'red').deltaClass">
+                  {{ soulSecureWinrateSideParts(row.key, 'red').delta }}
+                </span>
+              </td>
             </tr>
             <tr v-if="drakeSoulWinrateRows.length === 0">
               <td colspan="4" class="py-2 text-center text-text/60">

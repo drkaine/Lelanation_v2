@@ -16,6 +16,7 @@ import { runStatsPrecomputedRefreshOnce } from '../cron/statsPrecomputedRefresh.
 import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
+import { runLiveAggArchiveCheckpointCronOnce } from '../cron/liveAggArchiveCheckpoint.js'
 import { prisma } from '../db.js'
 import { closePatch } from '../services/PatchLifecycleService.js'
 import { archiveChampionTierDailySnapshotsInDateRange } from '../services/ChampionTierDailySnapshotService.js'
@@ -525,6 +526,7 @@ const CRON_JOBS: Array<{ key: string; label: string }> = [
   { key: 'dataDragonSync', label: 'dataDragonSync' },
   { key: 'youtubeSync', label: 'youtubeSync' },
   { key: 'communityDragonSync', label: 'communityDragonSync' },
+  { key: 'liveAggArchiveCheckpoint', label: 'liveAggArchiveCheckpoint' },
 ]
 
 router.get('/riot-scripts-status', async (_req, res) => {
@@ -535,6 +537,7 @@ router.get('/riot-scripts-status', async (_req, res) => {
         dataDragonSync: { job: 'dataDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
         youtubeSync: { job: 'youtubeSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
         communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
+        liveAggArchiveCheckpoint: { job: 'liveAggArchiveCheckpoint', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
       } as Record<CronJobKey, CronJobStatus>)
 
   const crons = CRON_JOBS.map(({ key, label }) => {
@@ -978,8 +981,13 @@ router.post('/client-log', async (req, res) => {
   }
 })
 
-/** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync). */
-const CRON_TRIGGER_JOBS = new Set(['dataDragonSync', 'youtubeSync', 'communityDragonSync'])
+/** Trigger a cron job manually (dataDragonSync, youtubeSync, communityDragonSync, liveAggArchiveCheckpoint). */
+const CRON_TRIGGER_JOBS = new Set([
+  'dataDragonSync',
+  'youtubeSync',
+  'communityDragonSync',
+  'liveAggArchiveCheckpoint',
+])
 router.post('/cron/trigger/:job', async (req, res) => {
   const job = typeof req.params?.job === 'string' ? req.params.job.trim() : ''
   if (!CRON_TRIGGER_JOBS.has(job)) {
@@ -1004,6 +1012,17 @@ router.post('/cron/trigger/:job', async (req, res) => {
       const result = await runCommunityDragonSyncOnce()
       if (result.ok) {
         return res.json({ success: true, synced: result.synced, failed: result.failed, skipped: result.skipped })
+      }
+      return res.status(500).json({ success: false, error: result.error })
+    }
+    if (job === 'liveAggArchiveCheckpoint') {
+      const result = await runLiveAggArchiveCheckpointCronOnce()
+      if (result.ok) {
+        return res.json({
+          success: true,
+          livePatches: result.livePatches ?? [],
+          copiedTables: result.copiedTables ?? [],
+        })
       }
       return res.status(500).json({ success: false, error: result.error })
     }

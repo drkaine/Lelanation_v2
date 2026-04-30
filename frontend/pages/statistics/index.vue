@@ -1960,7 +1960,8 @@ function syncProgressionDeltaToVersionBeforeFilter(): boolean {
   }
   const idx = list.findIndex(v => v.version === filter)
   if (idx < 0) return false
-  const prev = list[idx + 1]?.version ?? ''
+  const prevWithData = list.slice(idx + 1).find(v => Number(v.matchCount ?? 0) > 0)?.version
+  const prev = prevWithData ?? list[idx + 1]?.version ?? ''
   if (before === prev) return false
   progressionFromVersionOverride.value = prev
   return true
@@ -1970,6 +1971,17 @@ function syncProgressionDeltaToVersionBeforeFilter(): boolean {
 const progressionFromVersion = computed(() => {
   if (progressionFromVersionOverride.value) return progressionFromVersionOverride.value
   const versions = statsVersionOptions.value
+  if (statsVersionFilter.value) {
+    const idx = versions.findIndex(v => v.version === statsVersionFilter.value)
+    if (idx >= 0) {
+      const prevWithData = versions.slice(idx + 1).find(v => Number(v.matchCount ?? 0) > 0)?.version
+      if (prevWithData) return prevWithData
+      const nextVersion = versions[idx + 1]?.version
+      if (nextVersion) return nextVersion
+    }
+  }
+  const fallbackWithData = versions.find(v => Number(v.matchCount ?? 0) > 0)?.version
+  if (fallbackWithData) return fallbackWithData
   if (versions.length >= 2) return versions[1]?.version ?? null
   if (versions.length === 1) return versions[0]?.version ?? null
   return normalizeVersionToPrefix(versionStore.currentVersion)
@@ -2473,11 +2485,16 @@ const overviewSidesData = ref<{
       {
         byBlue: number
         byRed: number
+        winrateBlue?: number | null
+        winrateRed?: number | null
         distributionByBlue?: Record<string, number>
         distributionByRed?: Record<string, number>
       }
     >
-    souls: Record<string, { byBlue: number; byRed: number }>
+    souls: Record<
+      string,
+      { byBlue: number; byRed: number; winrateBlue?: number | null; winrateRed?: number | null }
+    >
   }
   surrenderBySide?: {
     blue: {
@@ -2647,6 +2664,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.overviewTeamsObjective_elder'),
       byBlue: d.elder?.byBlue ?? 0,
       byRed: d.elder?.byRed ?? 0,
+      winrateBlue: d.elder?.winrateBlue ?? null,
+      winrateRed: d.elder?.winrateRed ?? null,
       distributionByBlue: d.elder?.distributionByBlue ?? {},
       distributionByRed: d.elder?.distributionByRed ?? {},
     },
@@ -2655,6 +2674,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeEarth'),
       byBlue: d.earth?.byBlue ?? 0,
       byRed: d.earth?.byRed ?? 0,
+      winrateBlue: d.earth?.winrateBlue ?? null,
+      winrateRed: d.earth?.winrateRed ?? null,
       distributionByBlue: d.earth?.distributionByBlue ?? {},
       distributionByRed: d.earth?.distributionByRed ?? {},
     },
@@ -2663,6 +2684,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeWater'),
       byBlue: d.water?.byBlue ?? 0,
       byRed: d.water?.byRed ?? 0,
+      winrateBlue: d.water?.winrateBlue ?? null,
+      winrateRed: d.water?.winrateRed ?? null,
       distributionByBlue: d.water?.distributionByBlue ?? {},
       distributionByRed: d.water?.distributionByRed ?? {},
     },
@@ -2671,6 +2694,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeWind'),
       byBlue: d.wind?.byBlue ?? 0,
       byRed: d.wind?.byRed ?? 0,
+      winrateBlue: d.wind?.winrateBlue ?? null,
+      winrateRed: d.wind?.winrateRed ?? null,
       distributionByBlue: d.wind?.distributionByBlue ?? {},
       distributionByRed: d.wind?.distributionByRed ?? {},
     },
@@ -2679,6 +2704,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeFire'),
       byBlue: d.fire?.byBlue ?? 0,
       byRed: d.fire?.byRed ?? 0,
+      winrateBlue: d.fire?.winrateBlue ?? null,
+      winrateRed: d.fire?.winrateRed ?? null,
       distributionByBlue: d.fire?.distributionByBlue ?? {},
       distributionByRed: d.fire?.distributionByRed ?? {},
     },
@@ -2687,6 +2714,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeHextec'),
       byBlue: d.hextec?.byBlue ?? 0,
       byRed: d.hextec?.byRed ?? 0,
+      winrateBlue: d.hextec?.winrateBlue ?? null,
+      winrateRed: d.hextec?.winrateRed ?? null,
       distributionByBlue: d.hextec?.distributionByBlue ?? {},
       distributionByRed: d.hextec?.distributionByRed ?? {},
     },
@@ -2695,6 +2724,8 @@ const sidesDrakeTypeRows = computed(() => {
       label: t('statisticsPage.drakeTypeChem'),
       byBlue: d.chem?.byBlue ?? 0,
       byRed: d.chem?.byRed ?? 0,
+      winrateBlue: d.chem?.winrateBlue ?? null,
+      winrateRed: d.chem?.winrateRed ?? null,
       distributionByBlue: d.chem?.distributionByBlue ?? {},
       distributionByRed: d.chem?.distributionByRed ?? {},
     },
@@ -2709,36 +2740,48 @@ const sidesDrakeSoulRows = computed(() => {
       label: t('statisticsPage.drakeTypeEarth'),
       byBlue: d.earth?.byBlue ?? 0,
       byRed: d.earth?.byRed ?? 0,
+      winrateBlue: d.earth?.winrateBlue ?? null,
+      winrateRed: d.earth?.winrateRed ?? null,
     },
     {
       key: 'water',
       label: t('statisticsPage.drakeTypeWater'),
       byBlue: d.water?.byBlue ?? 0,
       byRed: d.water?.byRed ?? 0,
+      winrateBlue: d.water?.winrateBlue ?? null,
+      winrateRed: d.water?.winrateRed ?? null,
     },
     {
       key: 'wind',
       label: t('statisticsPage.drakeTypeWind'),
       byBlue: d.wind?.byBlue ?? 0,
       byRed: d.wind?.byRed ?? 0,
+      winrateBlue: d.wind?.winrateBlue ?? null,
+      winrateRed: d.wind?.winrateRed ?? null,
     },
     {
       key: 'fire',
       label: t('statisticsPage.drakeTypeFire'),
       byBlue: d.fire?.byBlue ?? 0,
       byRed: d.fire?.byRed ?? 0,
+      winrateBlue: d.fire?.winrateBlue ?? null,
+      winrateRed: d.fire?.winrateRed ?? null,
     },
     {
       key: 'hextec',
       label: t('statisticsPage.drakeTypeHextec'),
       byBlue: d.hextec?.byBlue ?? 0,
       byRed: d.hextec?.byRed ?? 0,
+      winrateBlue: d.hextec?.winrateBlue ?? null,
+      winrateRed: d.hextec?.winrateRed ?? null,
     },
     {
       key: 'chem',
       label: t('statisticsPage.drakeTypeChem'),
       byBlue: d.chem?.byBlue ?? 0,
       byRed: d.chem?.byRed ?? 0,
+      winrateBlue: d.chem?.winrateBlue ?? null,
+      winrateRed: d.chem?.winrateRed ?? null,
     },
   ]
 })

@@ -20,7 +20,7 @@ function pct(value: number | null | undefined): string {
 }
 
 function delta(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return ''
+  if (value == null || !Number.isFinite(value)) return '(—)'
   const sign = value > 0 ? '+' : ''
   return `(${sign}${Number(value).toFixed(2)} %)`
 }

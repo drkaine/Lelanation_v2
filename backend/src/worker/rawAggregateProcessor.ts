@@ -1,6 +1,7 @@
 import { prisma } from '../db.js'
 import type { MatchIngestQueuePayloadV1 } from './matchIngestQueue.js'
 import { createHash } from 'node:crypto'
+import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
 type RawParticipant = {
   puuid?: string
@@ -336,6 +337,48 @@ function extractFinalItems(p: RawParticipant): number[] {
   return ids
 }
 
+function extractTimelineItemEvents(payload: MatchIngestQueuePayloadV1): Array<{
+  type: string
+  timestamp?: number
+  participantId?: number
+  itemId?: number
+  beforeId?: number
+  afterId?: number
+}> {
+  const timeline = payload.timelineDto as
+    | {
+        info?: {
+          frames?: Array<{
+            events?: Array<Record<string, unknown>>
+          }>
+        }
+      }
+    | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return []
+  const out: Array<{
+    type: string
+    timestamp?: number
+    participantId?: number
+    itemId?: number
+    beforeId?: number
+    afterId?: number
+  }> = []
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      out.push({
+        type: String(ev?.type ?? ''),
+        timestamp: toSafeInt(ev?.timestamp),
+        participantId: toSafeInt(ev?.participantId),
+        itemId: toSafeInt(ev?.itemId),
+        beforeId: toSafeInt(ev?.beforeId),
+        afterId: toSafeInt(ev?.afterId),
+      })
+    }
+  }
+  return out
+}
+
 function extractSpellOrder(p: RawParticipant): number[] {
   const raw = (p.spellOrder ?? p.skillOrder ?? []) as unknown
   if (!Array.isArray(raw)) return []
@@ -566,6 +609,7 @@ export async function processRawAggregateAndBurn(
   )
   const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
   const timelineSpellOrdersByParticipant = extractTimelineSpellOrdersByParticipant(payload)
+  const timelineItemEvents = extractTimelineItemEvents(payload)
   const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
   const firstInhibitorTeamId = extractFirstInhibitorTeamId(payload)
 
@@ -1221,7 +1265,21 @@ export async function processRawAggregateAndBurn(
             updated_at = NOW()
       `
 
-      for (const itemId of finalItems) {
+      const participantIdForItems = toSafeInt(p.participantId)
+      const selectedItems =
+        participantIdForItems > 0
+          ? await selectMatchPlayerItems({
+              participant: p as unknown as Record<string, unknown>,
+              participantId: participantIdForItems,
+              events: timelineItemEvents,
+            })
+          : []
+      for (const item of selectedItems) {
+        const itemId = toSafeInt(item.itemId)
+        if (itemId <= 0) continue
+        const isStarter = item.starter === true ? 1 : 0
+        const isCore = item.core === true ? 1 : 0
+        const isFinal = isStarter === 0 && isCore === 0 ? 1 : 0
         await tx.$executeRaw`
           INSERT INTO agg_champion_item_solo_stats (
             champion_stat_id,
@@ -1234,7 +1292,7 @@ export async function processRawAggregateAndBurn(
             sum_timestamp_ms,
             updated_at
           )
-          VALUES (${statId}, ${itemId}, 0, 0, 1, ${wins}, 1, 0, NOW())
+          VALUES (${statId}, ${itemId}, ${isStarter}, ${isCore}, ${isFinal}, ${wins}, 1, ${toSafeInt(item.timestampMs)}, NOW())
           ON CONFLICT (champion_stat_id, item_id) DO UPDATE
           SET count_starter = agg_champion_item_solo_stats.count_starter + EXCLUDED.count_starter,
               count_core = agg_champion_item_solo_stats.count_core + EXCLUDED.count_core,
