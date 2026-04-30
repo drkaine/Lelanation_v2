@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, unref } from 'vue'
+import { computed, inject, ref, unref, watch } from 'vue'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { getSpellImageUrl } from '~/utils/imageUrl'
 
@@ -60,6 +60,8 @@ type DisplayRow = {
   key: string
   label: string
   imageSpellId: number | null
+  imageSpellId2?: number | null
+  imageOnly?: boolean
   pickrate: number
   deltaPick: number | null
   castsLabel: string
@@ -76,7 +78,19 @@ type DisplayRow = {
 
 const sortBy = ref<SortKey | null>(null)
 const sortDir = ref<'asc' | 'desc'>('desc')
-const spellsMode = ref<'solo' | 'pair'>('solo')
+const spellsMode = computed<'solo' | 'pair'>({
+  get: () => (p.spellsModeFilter === 'pair' ? 'pair' : 'solo'),
+  set: (value: 'solo' | 'pair') => {
+    p.spellsModeFilter = value
+  },
+})
+const pageSize = ref<number>(20)
+const page = ref<number>(1)
+const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
+  Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
+    ? p.PAGE_SIZE_OPTIONS
+    : [10, 20, 50, 100]
+)
 
 const rows = computed<SoloRow[]>(() => p.overviewDetailData?.summonerSpells ?? [])
 const pairRows = computed<PairRow[]>(() => p.overviewDetailData?.summonerSpellSets ?? [])
@@ -96,10 +110,13 @@ const baselineByPair = computed<Map<string, PairRow>>(() => {
 const enrichedRows = computed<EnrichedRow[]>(() =>
   rows.value.map(r => {
     const b = baselineBySpell.value.get(r.spellId)
+    const castsAvg = Number(r.casts ?? 0) / Math.max(1, Number(r.games ?? 0))
+    const baselineCastsAvg =
+      b != null ? Number(b.casts ?? 0) / Math.max(1, Number(b.games ?? 0)) : null
     return {
       ...r,
       deltaPick: b ? r.pickrate - b.pickrate : null,
-      deltaCasts: b && r.casts != null && b.casts != null ? r.casts - b.casts : null,
+      deltaCasts: b ? castsAvg - Number(baselineCastsAvg ?? 0) : null,
       deltaWin: b ? r.winrate - b.winrate : null,
       deltaD: b && r.pctSlotD != null && b.pctSlotD != null ? r.pctSlotD - b.pctSlotD : null,
       deltaF: b && r.pctSlotF != null && b.pctSlotF != null ? r.pctSlotF - b.pctSlotF : null,
@@ -110,31 +127,50 @@ const enrichedRows = computed<EnrichedRow[]>(() =>
 const enrichedPairRows = computed<EnrichedPairRow[]>(() =>
   pairRows.value.map(r => {
     const b = baselineByPair.value.get(`${r.spellIdD}:${r.spellIdF}`)
+    const spell1Avg = Number(r.spell1Casts ?? 0) / Math.max(1, Number(r.games ?? 0))
+    const spell2Avg = Number(r.spell2Casts ?? 0) / Math.max(1, Number(r.games ?? 0))
+    const baselineSpell1Avg =
+      b != null ? Number(b.spell1Casts ?? 0) / Math.max(1, Number(b.games ?? 0)) : null
+    const baselineSpell2Avg =
+      b != null ? Number(b.spell2Casts ?? 0) / Math.max(1, Number(b.games ?? 0)) : null
     return {
       ...r,
       deltaPick: b ? r.pickrate - b.pickrate : null,
-      deltaSpell1Casts:
-        b && r.spell1Casts != null && b.spell1Casts != null ? r.spell1Casts - b.spell1Casts : null,
-      deltaSpell2Casts:
-        b && r.spell2Casts != null && b.spell2Casts != null ? r.spell2Casts - b.spell2Casts : null,
+      deltaSpell1Casts: b ? spell1Avg - Number(baselineSpell1Avg ?? 0) : null,
+      deltaSpell2Casts: b ? spell2Avg - Number(baselineSpell2Avg ?? 0) : null,
       deltaWin: b ? r.winrate - b.winrate : null,
     }
   })
 )
 
-const spellSearchQuery = computed(() =>
-  String(unref(p.championSearchQuery) ?? '')
+const spellSearchQuery = computed(() => normalizeSearch(String(unref(p.championSearchQuery) ?? '')))
+
+function normalizeSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036F]/g, '')
     .trim()
     .toLowerCase()
-)
+}
+
+function spellSearchText(spellId: number): string {
+  const spell = summonerSpellsStore.getSpellById(String(spellId))
+  const parts = [
+    spell?.name ?? '',
+    spell?.id ?? '', // ex: SummonerSmite
+    spell?.key ?? '',
+    spell?.image?.full ?? '',
+    String(spellId),
+  ]
+  return normalizeSearch(parts.join(' '))
+}
 
 const filteredRows = computed<EnrichedRow[]>(() => {
   if (spellsMode.value !== 'solo') return []
   const q = spellSearchQuery.value
   if (!q) return enrichedRows.value
   return enrichedRows.value.filter(r => {
-    const name = spellName(r.spellId).toLowerCase()
-    return name.includes(q) || String(r.spellId).includes(q)
+    return spellSearchText(r.spellId).includes(q)
   })
 })
 
@@ -143,16 +179,7 @@ const filteredPairRows = computed<EnrichedPairRow[]>(() => {
   const q = spellSearchQuery.value
   if (!q) return enrichedPairRows.value
   return enrichedPairRows.value.filter(r => {
-    const nameD = spellName(r.spellIdD).toLowerCase()
-    const nameF = spellName(r.spellIdF).toLowerCase()
-    const pairName = `${nameD} + ${nameF}`
-    return (
-      pairName.includes(q) ||
-      nameD.includes(q) ||
-      nameF.includes(q) ||
-      String(r.spellIdD).includes(q) ||
-      String(r.spellIdF).includes(q)
-    )
+    return spellSearchText(r.spellIdD).includes(q) || spellSearchText(r.spellIdF).includes(q)
   })
 })
 
@@ -183,7 +210,7 @@ function sortIcon(key: SortKey): string {
   return sortDir.value === 'asc' ? ' ▲' : ' ▼'
 }
 
-function n(v: number | null | undefined): number {
+function numOrNegInf(v: number | null | undefined): number {
   return v == null ? Number.NEGATIVE_INFINITY : v
 }
 
@@ -201,16 +228,16 @@ const sortedRows = computed<EnrichedRow[]>(() => {
       return dir === 'asc' ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     }
     const mult = dir === 'asc' ? 1 : -1
-    if (key === 'pickrate') return mult * (n(a.pickrate) - n(b.pickrate))
-    if (key === 'deltaPick') return mult * (n(a.deltaPick) - n(b.deltaPick))
-    if (key === 'casts') return mult * (n(a.casts) - n(b.casts))
-    if (key === 'deltaCasts') return mult * (n(a.deltaCasts) - n(b.deltaCasts))
-    if (key === 'winrate') return mult * (n(a.winrate) - n(b.winrate))
-    if (key === 'deltaWin') return mult * (n(a.deltaWin) - n(b.deltaWin))
-    if (key === 'pctD') return mult * (n(a.pctSlotD) - n(b.pctSlotD))
-    if (key === 'deltaD') return mult * (n(a.deltaD) - n(b.deltaD))
-    if (key === 'pctF') return mult * (n(a.pctSlotF) - n(b.pctSlotF))
-    return mult * (n(a.deltaF) - n(b.deltaF))
+    if (key === 'pickrate') return mult * (numOrNegInf(a.pickrate) - numOrNegInf(b.pickrate))
+    if (key === 'deltaPick') return mult * (numOrNegInf(a.deltaPick) - numOrNegInf(b.deltaPick))
+    if (key === 'casts') return mult * (numOrNegInf(a.casts) - numOrNegInf(b.casts))
+    if (key === 'deltaCasts') return mult * (numOrNegInf(a.deltaCasts) - numOrNegInf(b.deltaCasts))
+    if (key === 'winrate') return mult * (numOrNegInf(a.winrate) - numOrNegInf(b.winrate))
+    if (key === 'deltaWin') return mult * (numOrNegInf(a.deltaWin) - numOrNegInf(b.deltaWin))
+    if (key === 'pctD') return mult * (numOrNegInf(a.pctSlotD) - numOrNegInf(b.pctSlotD))
+    if (key === 'deltaD') return mult * (numOrNegInf(a.deltaD) - numOrNegInf(b.deltaD))
+    if (key === 'pctF') return mult * (numOrNegInf(a.pctSlotF) - numOrNegInf(b.pctSlotF))
+    return mult * (numOrNegInf(a.deltaF) - numOrNegInf(b.deltaF))
   })
   return out
 })
@@ -229,28 +256,35 @@ const sortedPairRows = computed<EnrichedPairRow[]>(() => {
       return dir === 'asc' ? (av < bv ? -1 : 1) : av < bv ? 1 : -1
     }
     const mult = dir === 'asc' ? 1 : -1
-    if (key === 'pickrate') return mult * (n(a.pickrate) - n(b.pickrate))
-    if (key === 'deltaPick') return mult * (n(a.deltaPick) - n(b.deltaPick))
+    if (key === 'pickrate') return mult * (numOrNegInf(a.pickrate) - numOrNegInf(b.pickrate))
+    if (key === 'deltaPick') return mult * (numOrNegInf(a.deltaPick) - numOrNegInf(b.deltaPick))
     if (key === 'casts')
       return (
         mult *
-        (n(Number(a.spell1Casts ?? 0) + Number(a.spell2Casts ?? 0)) -
-          n(Number(b.spell1Casts ?? 0) + Number(b.spell2Casts ?? 0)))
+        (numOrNegInf(
+          (Number(a.spell1Casts ?? 0) + Number(a.spell2Casts ?? 0)) /
+            Math.max(1, Number(a.games ?? 0))
+        ) -
+          numOrNegInf(
+            (Number(b.spell1Casts ?? 0) + Number(b.spell2Casts ?? 0)) /
+              Math.max(1, Number(b.games ?? 0))
+          ))
       )
     if (key === 'deltaCasts')
       return (
         mult *
-        (n(Number(a.deltaSpell1Casts ?? 0) + Number(a.deltaSpell2Casts ?? 0)) -
-          n(Number(b.deltaSpell1Casts ?? 0) + Number(b.deltaSpell2Casts ?? 0)))
+        (numOrNegInf(Number(a.deltaSpell1Casts ?? 0) + Number(a.deltaSpell2Casts ?? 0)) -
+          numOrNegInf(Number(b.deltaSpell1Casts ?? 0) + Number(b.deltaSpell2Casts ?? 0)))
       )
-    if (key === 'winrate') return mult * (n(a.winrate) - n(b.winrate))
-    if (key === 'deltaWin') return mult * (n(a.deltaWin) - n(b.deltaWin))
+    if (key === 'winrate') return mult * (numOrNegInf(a.winrate) - numOrNegInf(b.winrate))
+    if (key === 'deltaWin') return mult * (numOrNegInf(a.deltaWin) - numOrNegInf(b.deltaWin))
     return 0
   })
   return out
 })
 
 const displayRows = computed<DisplayRow[]>(() => {
+  const soloBySpell = new Map<number, EnrichedRow>(enrichedRows.value.map(r => [r.spellId, r]))
   if (spellsMode.value === 'solo') {
     return sortedRows.value.map(r => ({
       key: `s-${r.spellId}`,
@@ -258,9 +292,10 @@ const displayRows = computed<DisplayRow[]>(() => {
       imageSpellId: r.spellId,
       pickrate: r.pickrate,
       deltaPick: r.deltaPick,
-      castsLabel: Number(r.casts ?? 0).toLocaleString(),
-      castsSort: Number(r.casts ?? 0),
-      deltaCastsLabel: fmtDelta(r.deltaCasts),
+      castsLabel: (Number(r.casts ?? 0) / Math.max(1, Number(r.games ?? 0))).toFixed(2),
+      castsSort: Number(r.casts ?? 0) / Math.max(1, Number(r.games ?? 0)),
+      deltaCastsLabel:
+        r.deltaCasts != null ? `${r.deltaCasts >= 0 ? '+' : ''}${r.deltaCasts.toFixed(2)}` : '—',
       deltaCastsSort: r.deltaCasts,
       winrate: r.winrate,
       deltaWin: r.deltaWin,
@@ -273,23 +308,37 @@ const displayRows = computed<DisplayRow[]>(() => {
   return sortedPairRows.value.map(r => ({
     key: `p-${r.spellIdD}-${r.spellIdF}`,
     label: `${spellName(r.spellIdD)} + ${spellName(r.spellIdF)}`,
-    imageSpellId: null,
+    imageSpellId: r.spellIdD,
+    imageSpellId2: r.spellIdF,
+    imageOnly: true,
     pickrate: r.pickrate,
     deltaPick: r.deltaPick,
-    castsLabel: `${Number(r.spell1Casts ?? 0).toLocaleString()}/${Number(r.spell2Casts ?? 0).toLocaleString()}`,
-    castsSort: Number(r.spell1Casts ?? 0) + Number(r.spell2Casts ?? 0),
-    deltaCastsLabel: `${fmtDelta(r.deltaSpell1Casts)}/${fmtDelta(r.deltaSpell2Casts)}`,
+    castsLabel: `${(Number(r.spell1Casts ?? 0) / Math.max(1, Number(r.games ?? 0))).toFixed(2)}/${(Number(r.spell2Casts ?? 0) / Math.max(1, Number(r.games ?? 0))).toFixed(2)}`,
+    castsSort:
+      (Number(r.spell1Casts ?? 0) + Number(r.spell2Casts ?? 0)) / Math.max(1, Number(r.games ?? 0)),
+    deltaCastsLabel: `${r.deltaSpell1Casts != null ? `${r.deltaSpell1Casts >= 0 ? '+' : ''}${r.deltaSpell1Casts.toFixed(2)}` : '—'}/${r.deltaSpell2Casts != null ? `${r.deltaSpell2Casts >= 0 ? '+' : ''}${r.deltaSpell2Casts.toFixed(2)}` : '—'}`,
     deltaCastsSort:
       r.deltaSpell1Casts != null || r.deltaSpell2Casts != null
         ? Number(r.deltaSpell1Casts ?? 0) + Number(r.deltaSpell2Casts ?? 0)
         : null,
     winrate: r.winrate,
     deltaWin: r.deltaWin,
-    pctD: null,
-    deltaD: null,
-    pctF: null,
-    deltaF: null,
+    pctD: soloBySpell.get(r.spellIdD)?.pickrate ?? null,
+    deltaD: soloBySpell.get(r.spellIdD)?.deltaPick ?? null,
+    pctF: soloBySpell.get(r.spellIdF)?.pickrate ?? null,
+    deltaF: soloBySpell.get(r.spellIdF)?.deltaPick ?? null,
   }))
+})
+const totalRowsCount = computed(() => displayRows.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value)))
+const paginatedDisplayRows = computed(() => {
+  const pnum = Math.min(page.value, totalPages.value)
+  const start = (pnum - 1) * pageSize.value
+  return displayRows.value.slice(start, start + pageSize.value)
+})
+
+watch([spellsMode, sortBy, sortDir, spellSearchQuery, pageSize], () => {
+  page.value = 1
 })
 
 function fmtPct(v: number | null | undefined): string {
@@ -330,24 +379,6 @@ function deltaLabelClass(v: number | null | undefined): string {
       v-else-if="displayRows.length"
       class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
     >
-      <div class="flex items-center gap-2 border-b border-primary/30 px-3 py-2">
-        <button
-          type="button"
-          class="rounded border border-primary/40 px-2 py-1 text-xs"
-          :class="spellsMode === 'solo' ? 'bg-primary/20 text-text' : 'bg-background text-text/70'"
-          @click="spellsMode = 'solo'"
-        >
-          {{ p.t('statisticsPage.spellsModeSolo') }}
-        </button>
-        <button
-          type="button"
-          class="rounded border border-primary/40 px-2 py-1 text-xs"
-          :class="spellsMode === 'pair' ? 'bg-primary/20 text-text' : 'bg-background text-text/70'"
-          @click="spellsMode = 'pair'"
-        >
-          {{ p.t('statisticsPage.spellsModePair') }}
-        </button>
-      </div>
       <table class="w-full min-w-[1100px] text-left text-sm">
         <thead class="border-b border-primary/30 bg-black/25">
           <tr>
@@ -444,7 +475,7 @@ function deltaLabelClass(v: number | null | undefined): string {
         </thead>
         <tbody class="divide-y divide-primary/20">
           <tr
-            v-for="row in displayRows"
+            v-for="row in paginatedDisplayRows"
             :key="row.key"
             class="odd:bg-white/[0.04] even:bg-black/25 hover:brightness-110"
           >
@@ -458,7 +489,15 @@ function deltaLabelClass(v: number | null | undefined): string {
                   width="50"
                   height="50"
                 />
-                <span class="font-medium text-accent">{{ row.label }}</span>
+                <img
+                  v-if="row.imageSpellId2 != null && spellImage(row.imageSpellId2) && p.gameVersion"
+                  :src="getSpellImageUrl(p.gameVersion, spellImage(row.imageSpellId2)!)"
+                  :alt="row.label"
+                  class="h-[50px] w-[50px] rounded border border-black/30 object-cover"
+                  width="50"
+                  height="50"
+                />
+                <span v-if="!row.imageOnly" class="font-medium text-accent">{{ row.label }}</span>
               </div>
             </td>
             <td class="px-3 py-2 tabular-nums text-text/90">{{ fmtPct(row.pickrate) }}</td>
@@ -488,6 +527,45 @@ function deltaLabelClass(v: number | null | undefined): string {
           </tr>
         </tbody>
       </table>
+      <div
+        v-if="totalRowsCount > 0"
+        class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+      >
+        <span>{{ totalRowsCount }} {{ p.t('statisticsPage.overviewDetailSummonerSpells') }}</span>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-1.5">
+            <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+            <select
+              v-model.number="pageSize"
+              class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+            >
+              <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </label>
+          <span class="text-text/70">
+            {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
+            {{ totalRowsCount }}
+          </span>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+              :disabled="page <= 1"
+              @click="page = Math.max(1, page - 1)"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+              :disabled="page >= totalPages"
+              @click="page = Math.min(totalPages, page + 1)"
+            >
+              ›
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     <div v-else class="text-text/70">{{ p.t('statisticsPage.overviewDetailNoData') }}</div>
   </div>

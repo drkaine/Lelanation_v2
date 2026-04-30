@@ -156,7 +156,7 @@
               </option>
             </select>
           </div>
-          <div v-if="activeTab !== 'balance'">
+          <div v-if="activeTab !== 'balance' && activeTab !== 'surrender'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.overviewMatchesByDivision') }}
             </div>
@@ -214,7 +214,7 @@
               </button>
             </div>
           </div>
-          <div v-else>
+          <div v-else-if="activeTab === 'balance'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.balanceGlobalStatus') }}
             </div>
@@ -300,7 +300,7 @@
               </select>
             </div>
           </div>
-          <div v-if="activeTab !== 'objectives'">
+          <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
             <div class="mb-1 text-sm font-medium text-text">
               {{ t('statisticsPage.filterRole') }}
             </div>
@@ -435,6 +435,40 @@
               <option value="oui">{{ t('statisticsPage.filterOtpYes') }}</option>
               <option value="solo">{{ t('statisticsPage.filterOtpSolo') }}</option>
             </select>
+          </div>
+          <div v-if="activeTab === 'spells'">
+            <label for="spells-mode-filter" class="mb-1 block text-sm font-medium text-text">
+              {{ t('statisticsPage.overviewDetailSummonerSpells') }}
+            </label>
+            <div
+              id="spells-mode-filter"
+              class="inline-flex overflow-hidden rounded border border-primary/40 bg-background"
+            >
+              <button
+                type="button"
+                class="px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  spellsModeFilter === 'solo'
+                    ? 'bg-blue-500/20 text-blue-200'
+                    : 'text-text/75 hover:bg-white/10'
+                "
+                @click="spellsModeFilter = 'solo'"
+              >
+                {{ t('statisticsPage.spellsModeSolo') }}
+              </button>
+              <button
+                type="button"
+                class="border-l border-primary/30 px-2 py-1 text-xs font-medium transition-colors"
+                :class="
+                  spellsModeFilter === 'pair'
+                    ? 'bg-blue-500/20 text-blue-200'
+                    : 'text-text/75 hover:bg-white/10'
+                "
+                @click="spellsModeFilter = 'pair'"
+              >
+                {{ t('statisticsPage.spellsModePair') }}
+              </button>
+            </div>
           </div>
           <div v-if="activeTab !== 'objectives' && activeTab !== 'surrender'">
             <label for="champion-search" class="mb-1 block text-sm font-medium text-text">{{
@@ -818,6 +852,7 @@ function toggleFavoriteCard(cardId: string, title: string): void {
 }
 
 const championSearchQuery = ref('')
+const spellsModeFilter = ref<'solo' | 'pair'>('solo')
 const searchInputLabel = computed(() =>
   activeTab.value === 'items'
     ? t('statisticsPage.searchItem')
@@ -1163,9 +1198,7 @@ const filtersOpen = computed({
   get: () => statisticsUiStore.filtersOpen,
   set: value => statisticsUiStore.setFiltersOpen(value),
 })
-const showFiltersPanel = computed(
-  () => activeTab.value !== 'infos' && activeTab.value !== 'surrender'
-)
+const showFiltersPanel = computed(() => activeTab.value !== 'infos')
 function openFilters() {
   filtersOpen.value = true
 }
@@ -4215,6 +4248,7 @@ const statisticsPageInjectFallback: Record<string, unknown> = {
   sidesRedTopPickrateSince,
   sidesRedTopWinrateSince,
   sidesSurrenderBySide,
+  spellsModeFilter,
   teamPercent,
   tierListPatchDeltaClass,
   tierListPatchDeltaGamesClass,

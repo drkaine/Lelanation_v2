@@ -325,6 +325,13 @@ const getItemCategory = (item: Item): ItemCategory => {
     'anneau de doran',
     'lame de doran',
     'bouclier de doran',
+    'arc de doran',
+    'casque de doran',
+    "doran's ring",
+    "doran's blade",
+    "doran's shield",
+    "doran's arc",
+    "doran's helm",
     'larme de la déesse',
     'cull',
     'abatteur',
@@ -335,12 +342,16 @@ const getItemCategory = (item: Item): ItemCategory => {
     'faucheuse',
     'fragment',
   ]
+  const elixirIds = new Set(['2138', '2139', '2140']) // Fer, Sorcellerie, Rage
 
   if (starterItemIds.has(item.id)) {
     return 'starter'
   }
 
   const itemNameLower = item.name.toLowerCase()
+  if (elixirIds.has(item.id)) {
+    return 'basic'
+  }
   if (starterNamePatterns.some(pattern => itemNameLower.includes(pattern))) {
     return 'starter'
   }
@@ -387,11 +398,8 @@ const getItemCategory = (item: Item): ItemCategory => {
       '2055', // Control Ward
       '2060', // Stealth Ward (if not excluded)
       '2061', // Shurelya's Battlesong (if not excluded)
-      '2138', // Elixir of Iron
-      '2139', // Elixir of Sorcery
-      '2140', // Elixir of Wrath
     ])
-    const consumablePatterns = ['potion', 'ward', 'elixir', 'biscuit']
+    const consumablePatterns = ['potion', 'ward', 'biscuit']
     if (
       consumableIds.has(item.id) ||
       consumablePatterns.some(pattern => item.name.toLowerCase().includes(pattern))

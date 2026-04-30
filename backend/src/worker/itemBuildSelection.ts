@@ -36,14 +36,14 @@ const STARTER_IDS = new Set([
 const ATLAS_UPGRADE_IDS = new Set(['3869', '3870', '3871', '3876', '3877'])
 const STARTER_PATTERNS = [
   'seau', 'anneau de doran', 'lame de doran', 'bouclier de doran',
+  'arc de doran', 'casque de doran',
+  "doran's ring", "doran's blade", "doran's shield", "doran's arc", "doran's helm",
   'larme de la deesse', 'cull', 'abatteur', 'atlas', 'epee de voleur',
   'epee longue', 'long sword', 'faucheuse', 'fragment',
-  'potion', 'ward', 'elixir', 'biscuit',
+  'potion', 'ward', 'biscuit',
 ]
 const FORCED_LEGENDARY_IDS = new Set(['2526'])
-const CONSUMABLE_IDS = new Set([
-  '2003', '2009', '2010', '2031', '2032', '2033', '2055', '2060', '2138', '2139', '2140',
-])
+const CONSUMABLE_IDS = new Set(['2003', '2009', '2010', '2031', '2032', '2033', '2055', '2060'])
 const TRINKET_IDS = new Set(['3340', '3363', '3364'])
 
 let itemMetaCache: Map<number, ItemMeta> | null = null

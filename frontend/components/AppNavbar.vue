@@ -95,7 +95,6 @@
           {{ t('nav.map') }}
         </NuxtLink>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"
@@ -207,7 +206,6 @@
           {{ t('nav.map') }}
         </NuxtLink>
         <NuxtLink
-          v-if="isAdminLoggedIn"
           :to="statisticsIndexLink"
           :title="t('nav.statistics')"
           class="version"

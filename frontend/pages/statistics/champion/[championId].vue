@@ -1629,6 +1629,7 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import { useAdminAuth } from '~/composables/useAdminAuth'
 import {
   getChampionImageUrl,
   getItemImageUrl,
@@ -1645,6 +1646,11 @@ definePageMeta({
 const route = useRoute()
 const localePath = useLocalePath()
 const { t } = useI18n()
+const { checkLoggedIn } = useAdminAuth()
+
+if (import.meta.client && !checkLoggedIn()) {
+  await navigateTo(localePath('/statistics'), { replace: true })
+}
 
 const championId = computed(() => {
   const id = route.params.championId

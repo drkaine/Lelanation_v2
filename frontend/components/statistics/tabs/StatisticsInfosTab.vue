@@ -58,7 +58,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-primary/20">
-            <tr v-for="row in p.infosMatrixRows ?? []" :key="'infos-row-' + row.version">
+            <tr v-for="row in paginatedRows" :key="'infos-row-' + row.version">
               <td class="px-3 py-1 font-medium text-text">{{ row.version }}</td>
               <td
                 v-for="division in p.infosMatrixColumns ?? []"
@@ -78,6 +78,45 @@
             </tr>
           </tbody>
         </table>
+        <div
+          v-if="totalRowsCount > 0"
+          class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
+        >
+          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.infosMatrixPatchHeader') }}</span>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1.5">
+              <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>
+              <select
+                v-model.number="pageSize"
+                class="rounded border border-primary/40 bg-background px-2 py-1 text-text"
+              >
+                <option v-for="n in PAGE_SIZE_OPTIONS" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </label>
+            <span class="text-text/70">
+              {{ (page - 1) * pageSize + 1 }}-{{ Math.min(page * pageSize, totalRowsCount) }} /
+              {{ totalRowsCount }}
+            </span>
+            <div class="flex gap-1">
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="page <= 1"
+                @click="page = Math.max(1, page - 1)"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                class="rounded border border-primary/40 bg-surface/50 px-2 py-1 text-text disabled:opacity-50"
+                :disabled="page >= totalPages"
+                @click="page = Math.min(totalPages, page + 1)"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="rounded-lg border border-primary/30 bg-surface/20 p-2">
         <img
@@ -92,7 +131,31 @@
 </template>
 
 <script setup lang="ts">
-import { inject } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 
 const p = inject('statisticsPageCtx') as any
+const pageSize = ref<number>(20)
+const page = ref<number>(1)
+const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
+  Array.isArray(p.PAGE_SIZE_OPTIONS) && p.PAGE_SIZE_OPTIONS.length > 0
+    ? p.PAGE_SIZE_OPTIONS
+    : [10, 20, 50, 100]
+)
+const totalRowsCount = computed<number>(() => (p.infosMatrixRows ?? []).length)
+const totalPages = computed<number>(() =>
+  Math.max(1, Math.ceil(totalRowsCount.value / pageSize.value))
+)
+const paginatedRows = computed(() => {
+  const rows = p.infosMatrixRows ?? []
+  const pnum = Math.min(page.value, totalPages.value)
+  const start = (pnum - 1) * pageSize.value
+  return rows.slice(start, start + pageSize.value)
+})
+
+watch(
+  () => [p.infosMatrixRows, pageSize.value],
+  () => {
+    page.value = 1
+  }
+)
 </script>

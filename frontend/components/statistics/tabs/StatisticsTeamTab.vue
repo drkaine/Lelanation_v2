@@ -167,7 +167,7 @@ const p = inject('statisticsPageCtx') as any
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
                   <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
-                  Early surrender:
+                  &lt;15 min surrender:
                   {{ Number(p.sidesSurrenderBySide.blue.earlySurrenderCount).toLocaleString() }}
                   ({{
                     p.matchOutcomePct(
@@ -262,7 +262,7 @@ const p = inject('statisticsPageCtx') as any
                 </div>
                 <div class="flex items-center gap-2 text-text/85">
                   <span class="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-amber-300" />
-                  Early surrender:
+                  &lt;15 min surrender:
                   {{ Number(p.sidesSurrenderBySide.red.earlySurrenderCount).toLocaleString() }}
                   ({{
                     p.matchOutcomePct(
