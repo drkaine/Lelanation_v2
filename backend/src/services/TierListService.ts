@@ -7,7 +7,7 @@
 import { prisma } from '../db.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { isDatabaseConfigured } from '../db.js'
-import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
 const MIN_GAMES = 1
 const MIN_PICKRATE = 0.0001
@@ -530,13 +530,23 @@ async function fetchMatchupRoleRows(
 }
 
 async function getLatestPatch(): Promise<string | null> {
-  const row = await prisma.activePatch.findFirst({
-    where: { isCurrent: true },
-    orderBy: { gameVersion: 'desc' },
-    select: { gameVersion: true },
-  })
-  if (!row?.gameVersion) return null
-  return row.gameVersion.includes('.') ? row.gameVersion : normalizePatch(row.gameVersion)
+  const coreFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
+  const rows = await prisma.$queryRawUnsafe<Array<{ patch: string; games: bigint }>>(`
+    SELECT
+      (split_part(ac.game_version, '.', 1) || '.' || split_part(ac.game_version, '.', 2)) AS patch,
+      COALESCE(SUM(ac.count_game), 0)::bigint AS games
+    FROM ${coreFrom}
+    WHERE ac.rank_tier <> 'UNRANKED'
+    GROUP BY 1
+    HAVING COALESCE(SUM(ac.count_game), 0) > 0
+    ORDER BY
+      COALESCE(NULLIF(split_part(patch, '.', 1), ''), '0')::int DESC,
+      COALESCE(NULLIF(split_part(patch, '.', 2), ''), '0')::int DESC
+    LIMIT 1
+  `)
+  const patch = rows[0]?.patch
+  if (!patch) return null
+  return patch.includes('.') ? patch : normalizePatch(patch)
 }
 
 export async function getTierList(options: GetTierListOptions): Promise<GetTierListResult | null> {

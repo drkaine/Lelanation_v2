@@ -21,6 +21,8 @@
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
     "script:league-xp": "tsx src/worker/runScript.ts league-xp",
     "script:backfill-agg": "tsx src/scripts/backfillAggFromIngest.ts",
+    "script:backfill-agg-starter-set": "tsx src/scripts/backfillAggItemStarterSetFromRaw.ts",
+    "script:backfill-agg-objective-outcome": "tsx src/scripts/backfillAggObjectiveOutcomeFromAgg.ts",
     "script:backfill-ingest-player-extras": "tsx src/scripts/backfillIngestPlayerExtras.ts",
     "script:backfill-raw-participants": "tsx src/scripts/backfillMatchIngestRawParticipants.ts",
     "script:repair-missing-ranks": "tsx src/scripts/repairMissingRanks.ts",

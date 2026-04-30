@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { prisma } from '../db.js'
 import { processRawAggregateAndBurn } from '../worker/rawAggregateProcessor.js'
 import type { MatchIngestQueuePayloadV1 } from '../worker/matchIngestQueue.js'
+import { selectMatchPlayerItems } from '../worker/itemBuildSelection.js'
 
 const RETRYABLE_DB_CODES = new Set(['40P01', '40001'])
 const __filename = fileURLToPath(import.meta.url)
@@ -77,6 +78,98 @@ function isRetryableDbError(err: unknown): boolean {
     message.toLowerCase().includes('deadlock detected') ||
     message.toLowerCase().includes('could not serialize access')
   )
+}
+
+async function tableExists(tableName: string): Promise<boolean> {
+  if (!/^[a-z0-9_]+$/i.test(tableName)) return false
+  const rows = await prisma.$queryRawUnsafe<Array<{ ok: boolean }>>(
+    `SELECT to_regclass('public.${tableName}') IS NOT NULL AS ok`
+  )
+  return Boolean(rows[0]?.ok)
+}
+
+async function seedLivePatchesFromArchive(): Promise<void> {
+  const livePatchRows = await prisma.activePatch.findMany({
+    where: { archivedAt: null },
+    select: { gameVersion: true },
+  })
+  const livePatches = livePatchRows
+    .map((r) => String(r.gameVersion ?? '').trim())
+    .filter((v) => v.length > 0)
+  if (livePatches.length === 0) {
+    console.log('[backfill-agg] resume seed skipped: no live patch')
+    return
+  }
+
+  const patchSql = livePatches.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')
+  const versionedTables = [
+    'agg_match_outcome_stats',
+    'agg_champion_core_stats',
+    'agg_team_core_stats',
+    'agg_champion_vs_stats',
+    'agg_champion_side_stats',
+    'agg_botlane_duo_vs_duo_stats',
+    'agg_champion_summoner_spell_pair_stats',
+    'agg_champion_item_starter_set_stats',
+    'agg_objective_outcome_stats',
+  ] as const
+  const championSatTables = [
+    'agg_champion_bucket',
+    'agg_champion_damage_stats',
+    'agg_champion_duo_role_stats',
+    'agg_champion_participant_stats',
+    'agg_champion_spells_stats',
+    'agg_champion_summoner_spells',
+    'agg_champion_runes_stats',
+    'agg_champion_runes_solo_stats',
+    'agg_champion_shard_solo_stats',
+    'agg_champion_item_stats',
+    'agg_champion_item_solo_stats',
+    'agg_champion_bans_by_banner',
+  ] as const
+  const teamSatTables = ['agg_team_bucket'] as const
+
+  console.log(
+    `[backfill-agg] resume seed from archive for live patches: ${livePatches.join(', ')}`
+  )
+
+  for (const table of versionedTables) {
+    const archiveTable = `archive_${table}`
+    if (!(await tableExists(archiveTable))) continue
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO ${table}
+      SELECT *
+      FROM ${archiveTable}
+      WHERE game_version IN (${patchSql})
+      ON CONFLICT DO NOTHING
+    `)
+  }
+
+  for (const table of championSatTables) {
+    const archiveTable = `archive_${table}`
+    if (!(await tableExists(archiveTable))) continue
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO ${table}
+      SELECT s.*
+      FROM ${archiveTable} s
+      INNER JOIN archive_agg_champion_core_stats c ON c.id = s.champion_stat_id
+      WHERE c.game_version IN (${patchSql})
+      ON CONFLICT DO NOTHING
+    `)
+  }
+
+  for (const table of teamSatTables) {
+    const archiveTable = `archive_${table}`
+    if (!(await tableExists(archiveTable))) continue
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO ${table}
+      SELECT s.*
+      FROM ${archiveTable} s
+      INNER JOIN archive_agg_team_core_stats t ON t.id = s.team_stat_id
+      WHERE t.game_version IN (${patchSql})
+      ON CONFLICT DO NOTHING
+    `)
+  }
 }
 
 async function runBackfillOnce(): Promise<void> {
@@ -156,6 +249,9 @@ async function runBackfillOnce(): Promise<void> {
     if (rawResumeEnabled && lastId > 0n) {
       console.log(`[backfill-agg] raw resume enabled -> starting from id>${lastId.toString()}`)
     }
+    if (rawResumeEnabled) {
+      await seedLivePatchesFromArchive()
+    }
     let processed = 0
     while (true) {
       const rows = await prisma.$queryRaw<
@@ -204,6 +300,8 @@ async function runBackfillOnce(): Promise<void> {
         await saveRawResumeLastId(lastId)
       }
     }
+    await backfillItemStarterSetsFromRaw()
+    await backfillObjectiveOutcomeFromAgg()
     console.log(`[backfill-agg] raw rebuild done: ${processed}/${rawRowCount} matches`)
     if (rawResumeEnabled) {
       await unlink(BACKFILL_AGG_PROGRESS_FILE).catch(() => undefined)
@@ -2945,6 +3043,379 @@ async function runBackfillOnce(): Promise<void> {
     console.log(`[backfill-agg] ${row.k}: ${Number(row.c)}`)
   }
   console.log('[backfill-agg] done')
+}
+
+type RawStarterRow = {
+  id: bigint
+  riot_match_id: string
+  payload_json: unknown
+  timeline_json: unknown | null
+}
+
+type TimelineLikeItemEvent = {
+  type: string
+  timestamp?: number
+  participantId?: number
+  itemId?: number
+  beforeId?: number
+  afterId?: number
+}
+
+function normalizeRole(raw: unknown): string {
+  const role = String(raw ?? '').trim().toUpperCase()
+  if (role === 'MID') return 'MIDDLE'
+  if (role === 'ADC') return 'BOTTOM'
+  if (role === 'UTILITY') return 'SUPPORT'
+  return role
+}
+
+function normalizeRankTier(raw: unknown): string {
+  const tier = String(raw ?? 'UNRANKED').trim().toUpperCase()
+  if (!tier) return 'UNRANKED'
+  return tier.split('_')[0] || 'UNRANKED'
+}
+
+function normalizeGameVersion(raw: unknown): string {
+  const s = String(raw ?? '').trim()
+  if (!s) return 'unknown'
+  const [major, minor] = s.split('.')
+  if (!major || !minor) return s
+  return `${major}.${minor}`
+}
+
+function extractTimelineItemEventsFromRaw(timelineRaw: unknown): TimelineLikeItemEvent[] {
+  const timeline = timelineRaw as
+    | {
+        info?: {
+          frames?: Array<{ events?: Array<Record<string, unknown>> }>
+        }
+      }
+    | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return []
+  const out: TimelineLikeItemEvent[] = []
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      out.push({
+        type: String(ev?.type ?? ''),
+        timestamp: typeof ev?.timestamp === 'number' ? ev.timestamp : Number(ev?.timestamp ?? 0),
+        participantId: typeof ev?.participantId === 'number' ? ev.participantId : Number(ev?.participantId ?? 0),
+        itemId: typeof ev?.itemId === 'number' ? ev.itemId : Number(ev?.itemId ?? 0),
+        beforeId: typeof ev?.beforeId === 'number' ? ev.beforeId : Number(ev?.beforeId ?? 0),
+        afterId: typeof ev?.afterId === 'number' ? ev.afterId : Number(ev?.afterId ?? 0),
+      })
+    }
+  }
+  return out
+}
+
+export async function backfillItemStarterSetsFromRaw(): Promise<void> {
+  console.log('[backfill-agg] rebuilding agg_champion_item_starter_set_stats from match_ingest_raw')
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE agg_champion_item_starter_set_stats`)
+  const batchSize = Math.max(100, Math.min(2000, Number(process.env.BACKFILL_AGG_STARTER_BATCH_SIZE ?? 500)))
+  let lastId = 0n
+  let scanned = 0
+  const acc = new Map<string, { gameVersion: string; rankTier: string; role: string; championId: number; starterKey: string; games: number; wins: number }>()
+
+  while (true) {
+    const rows = await prisma.$queryRaw<RawStarterRow[]>`
+      SELECT id, riot_match_id, payload_json, timeline_json
+      FROM match_ingest_raw
+      WHERE payload_json IS NOT NULL
+        AND id > ${lastId}
+      ORDER BY id ASC
+      LIMIT ${batchSize}
+    `
+    if (rows.length === 0) break
+    lastId = rows[rows.length - 1]!.id
+    for (const row of rows) {
+      scanned++
+      const payload = row.payload_json as { info?: { participants?: Array<Record<string, unknown>>; gameVersion?: string } }
+      const participants = payload?.info?.participants
+      if (!Array.isArray(participants) || participants.length === 0) continue
+    const puuids = participants
+      .map((p) => String(p?.puuid ?? '').trim())
+      .filter((v) => v.length > 0)
+    const playerRanks = puuids.length
+      ? await prisma.player.findMany({
+          where: { puuid: { in: puuids } },
+          select: { puuid: true, rankTier: true },
+        })
+      : []
+    const rankByPuuid = new Map(
+      playerRanks.map((r) => [String(r.puuid), normalizeRankTier(r.rankTier)])
+    )
+      const timelineEvents = extractTimelineItemEventsFromRaw(row.timeline_json)
+      const gameVersion = normalizeGameVersion(payload?.info?.gameVersion)
+      for (const p of participants) {
+        const participantId = Number(p?.participantId ?? 0)
+        if (!Number.isFinite(participantId) || participantId <= 0) continue
+        const role = normalizeRole((p?.teamPosition as unknown) ?? (p?.individualPosition as unknown))
+        if (!['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'].includes(role)) continue
+        const puuid = String(p?.puuid ?? '').trim()
+        const rankTier = normalizeRankTier(
+          (p?.tier as unknown) ?? (p?.rankTier as unknown) ?? rankByPuuid.get(puuid) ?? null
+        )
+        if (rankTier === 'UNRANKED') continue
+        const championId = Number(p?.championId ?? 0)
+        if (!Number.isFinite(championId) || championId <= 0) continue
+        const win = p?.win === true ? 1 : 0
+        const selected = await selectMatchPlayerItems({
+          participant: p,
+          participantId,
+          events: timelineEvents,
+        })
+        const starterItems = selected
+          .filter((it) => it.starter === true)
+          .map((it) => Number(it.itemId))
+          .filter((id) =>
+            Number.isFinite(id) &&
+            id > 0 &&
+            ![3340, 3364, 3363, 2055, 2003, 2009, 2010, 2031, 2032, 2033, 2060, 2138, 2139, 2140].includes(id)
+          )
+        if (starterItems.length === 0) continue
+        const starterKey = `[${starterItems.join(',')}]`
+        const key = `${gameVersion}|${rankTier}|${role}|${championId}|${starterKey}`
+        const prev = acc.get(key)
+        if (prev) {
+          prev.games += 1
+          prev.wins += win
+        } else {
+          acc.set(key, {
+            gameVersion,
+            rankTier,
+            role,
+            championId,
+            starterKey,
+            games: 1,
+            wins: win,
+          })
+        }
+      }
+      if (scanned % 500 === 0) {
+        console.log(`[backfill-agg] starter_set scanned raw rows: ${scanned}`)
+      }
+    }
+  }
+
+  const values = Array.from(acc.values())
+  for (const row of values) {
+    await prisma.$executeRaw`
+      INSERT INTO agg_champion_item_starter_set_stats (
+        game_version, rank_tier, role_norm, champion_id, starter_key, count_game, count_win, updated_at
+      )
+      VALUES (
+        ${row.gameVersion}, ${row.rankTier}, ${row.role}, ${row.championId}, ${row.starterKey}, ${row.games}, ${row.wins}, NOW()
+      )
+      ON CONFLICT (game_version, rank_tier, role_norm, champion_id, starter_key) DO UPDATE
+      SET
+        count_game = EXCLUDED.count_game,
+        count_win = EXCLUDED.count_win,
+        updated_at = NOW()
+    `
+  }
+  console.log(`[backfill-agg] starter_set rebuild done: ${values.length} keys`)
+}
+
+export async function backfillObjectiveOutcomeFromAgg(): Promise<void> {
+  console.log('[backfill-agg] rebuilding agg_objective_outcome_stats from agg_team_bucket/team_core')
+  await prisma.$executeRawUnsafe(`
+    INSERT INTO agg_objective_outcome_stats (
+      game_version,
+      rank_tier,
+      baron_win_team,
+      baron_loose_team,
+      drake_win_team,
+      drake_loose_team,
+      void_win_team,
+      void_loose_team,
+      herald_win_team,
+      herald_loose_team,
+      inhibitor_win_team,
+      inhibitor_loose_team,
+      tower_win_team,
+      tower_loose_team,
+      first_blood_win_team,
+      first_blood_loose_team,
+      elder_win_team,
+      elder_loose_team,
+      earth_drake_win_team,
+      earth_drake_loose_team,
+      water_drake_win_team,
+      water_drake_loose_team,
+      wind_drake_win_team,
+      wind_drake_loose_team,
+      fire_drake_win_team,
+      fire_drake_loose_team,
+      hextec_drake_win_team,
+      hextec_drake_loose_team,
+      chem_drake_win_team,
+      chem_drake_loose_team,
+      earth_soul_win_team,
+      earth_soul_loose_team,
+      water_soul_win_team,
+      water_soul_loose_team,
+      wind_soul_win_team,
+      wind_soul_loose_team,
+      fire_soul_win_team,
+      fire_soul_loose_team,
+      hextec_soul_win_team,
+      hextec_soul_loose_team,
+      chem_soul_win_team,
+      chem_soul_loose_team,
+      updated_at
+    )
+    WITH dims AS (
+      SELECT DISTINCT atc.game_version, atc.rank_tier
+      FROM agg_team_core_stats atc
+      WHERE atc.rank_tier <> 'UNRANKED'
+    ),
+    objective_bucket_rows AS (
+      SELECT
+        atc.game_version,
+        atc.rank_tier,
+        tb.objective_key,
+        tb.objective_bucket,
+        SUM(tb.count_win)::int AS count_win,
+        SUM(tb.count_game - tb.count_win)::int AS count_loss
+      FROM agg_team_bucket tb
+      INNER JOIN agg_team_core_stats atc ON atc.id = tb.team_stat_id
+      WHERE atc.rank_tier <> 'UNRANKED'
+      GROUP BY atc.game_version, atc.rank_tier, tb.objective_key, tb.objective_bucket
+    ),
+    objective_bucket_json AS (
+      SELECT
+        game_version,
+        rank_tier,
+        objective_key,
+        COALESCE(jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket) FILTER (WHERE count_win > 0), '{}'::jsonb) AS win_json,
+        COALESCE(jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket) FILTER (WHERE count_loss > 0), '{}'::jsonb) AS loss_json
+      FROM objective_bucket_rows
+      GROUP BY game_version, rank_tier, objective_key
+    ),
+    objective_bucket_json_drake_total AS (
+      SELECT
+        game_version,
+        rank_tier,
+        COALESCE(jsonb_object_agg(objective_bucket::text, count_win ORDER BY objective_bucket) FILTER (WHERE count_win > 0), '{}'::jsonb) AS win_json,
+        COALESCE(jsonb_object_agg(objective_bucket::text, count_loss ORDER BY objective_bucket) FILTER (WHERE count_loss > 0), '{}'::jsonb) AS loss_json
+      FROM (
+        SELECT game_version, rank_tier, objective_bucket, SUM(count_win)::int AS count_win, SUM(count_loss)::int AS count_loss
+        FROM objective_bucket_rows
+        WHERE objective_key IN ('dragon', 'elder')
+        GROUP BY game_version, rank_tier, objective_bucket
+      ) x
+      GROUP BY game_version, rank_tier
+    )
+    SELECT
+      d.game_version,
+      d.rank_tier,
+      COALESCE(ob_baron.win_json, '{}'::jsonb),
+      COALESCE(ob_baron.loss_json, '{}'::jsonb),
+      COALESCE(ob_drake_total.win_json, '{}'::jsonb),
+      COALESCE(ob_drake_total.loss_json, '{}'::jsonb),
+      COALESCE(ob_horde.win_json, '{}'::jsonb),
+      COALESCE(ob_horde.loss_json, '{}'::jsonb),
+      COALESCE(ob_herald.win_json, '{}'::jsonb),
+      COALESCE(ob_herald.loss_json, '{}'::jsonb),
+      COALESCE(ob_inhibitor.win_json, '{}'::jsonb),
+      COALESCE(ob_inhibitor.loss_json, '{}'::jsonb),
+      COALESCE(ob_tower.win_json, '{}'::jsonb),
+      COALESCE(ob_tower.loss_json, '{}'::jsonb),
+      COALESCE(ob_first_blood.win_json, '{}'::jsonb),
+      COALESCE(ob_first_blood.loss_json, '{}'::jsonb),
+      COALESCE(ob_elder.win_json, '{}'::jsonb),
+      COALESCE(ob_elder.loss_json, '{}'::jsonb),
+      COALESCE(ob_earth.win_json, '{}'::jsonb),
+      COALESCE(ob_earth.loss_json, '{}'::jsonb),
+      COALESCE(ob_water.win_json, '{}'::jsonb),
+      COALESCE(ob_water.loss_json, '{}'::jsonb),
+      COALESCE(ob_wind.win_json, '{}'::jsonb),
+      COALESCE(ob_wind.loss_json, '{}'::jsonb),
+      COALESCE(ob_fire.win_json, '{}'::jsonb),
+      COALESCE(ob_fire.loss_json, '{}'::jsonb),
+      COALESCE(ob_hextec.win_json, '{}'::jsonb),
+      COALESCE(ob_hextec.loss_json, '{}'::jsonb),
+      COALESCE(ob_chem.win_json, '{}'::jsonb),
+      COALESCE(ob_chem.loss_json, '{}'::jsonb),
+      COALESCE(ob_earth_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_earth_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_water_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_water_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_wind_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_wind_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_fire_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_fire_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_hextec_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_hextec_soul.loss_json, '{}'::jsonb),
+      COALESCE(ob_chem_soul.win_json, '{}'::jsonb),
+      COALESCE(ob_chem_soul.loss_json, '{}'::jsonb),
+      NOW()
+    FROM dims d
+    LEFT JOIN objective_bucket_json ob_baron ON ob_baron.game_version = d.game_version AND ob_baron.rank_tier = d.rank_tier AND ob_baron.objective_key = 'baron'
+    LEFT JOIN objective_bucket_json_drake_total ob_drake_total ON ob_drake_total.game_version = d.game_version AND ob_drake_total.rank_tier = d.rank_tier
+    LEFT JOIN objective_bucket_json ob_horde ON ob_horde.game_version = d.game_version AND ob_horde.rank_tier = d.rank_tier AND ob_horde.objective_key = 'horde'
+    LEFT JOIN objective_bucket_json ob_herald ON ob_herald.game_version = d.game_version AND ob_herald.rank_tier = d.rank_tier AND ob_herald.objective_key = 'riftHerald'
+    LEFT JOIN objective_bucket_json ob_inhibitor ON ob_inhibitor.game_version = d.game_version AND ob_inhibitor.rank_tier = d.rank_tier AND ob_inhibitor.objective_key = 'inhibitor'
+    LEFT JOIN objective_bucket_json ob_tower ON ob_tower.game_version = d.game_version AND ob_tower.rank_tier = d.rank_tier AND ob_tower.objective_key = 'tower'
+    LEFT JOIN objective_bucket_json ob_first_blood ON ob_first_blood.game_version = d.game_version AND ob_first_blood.rank_tier = d.rank_tier AND ob_first_blood.objective_key = 'first_blood'
+    LEFT JOIN objective_bucket_json ob_elder ON ob_elder.game_version = d.game_version AND ob_elder.rank_tier = d.rank_tier AND ob_elder.objective_key = 'elder'
+    LEFT JOIN objective_bucket_json ob_earth ON ob_earth.game_version = d.game_version AND ob_earth.rank_tier = d.rank_tier AND ob_earth.objective_key = 'earth_drake'
+    LEFT JOIN objective_bucket_json ob_water ON ob_water.game_version = d.game_version AND ob_water.rank_tier = d.rank_tier AND ob_water.objective_key = 'water_drake'
+    LEFT JOIN objective_bucket_json ob_wind ON ob_wind.game_version = d.game_version AND ob_wind.rank_tier = d.rank_tier AND ob_wind.objective_key = 'wind_drake'
+    LEFT JOIN objective_bucket_json ob_fire ON ob_fire.game_version = d.game_version AND ob_fire.rank_tier = d.rank_tier AND ob_fire.objective_key = 'fire_drake'
+    LEFT JOIN objective_bucket_json ob_hextec ON ob_hextec.game_version = d.game_version AND ob_hextec.rank_tier = d.rank_tier AND ob_hextec.objective_key = 'hextec_drake'
+    LEFT JOIN objective_bucket_json ob_chem ON ob_chem.game_version = d.game_version AND ob_chem.rank_tier = d.rank_tier AND ob_chem.objective_key = 'chem_drake'
+    LEFT JOIN objective_bucket_json ob_earth_soul ON ob_earth_soul.game_version = d.game_version AND ob_earth_soul.rank_tier = d.rank_tier AND ob_earth_soul.objective_key = 'earth_soul'
+    LEFT JOIN objective_bucket_json ob_water_soul ON ob_water_soul.game_version = d.game_version AND ob_water_soul.rank_tier = d.rank_tier AND ob_water_soul.objective_key = 'water_soul'
+    LEFT JOIN objective_bucket_json ob_wind_soul ON ob_wind_soul.game_version = d.game_version AND ob_wind_soul.rank_tier = d.rank_tier AND ob_wind_soul.objective_key = 'wind_soul'
+    LEFT JOIN objective_bucket_json ob_fire_soul ON ob_fire_soul.game_version = d.game_version AND ob_fire_soul.rank_tier = d.rank_tier AND ob_fire_soul.objective_key = 'fire_soul'
+    LEFT JOIN objective_bucket_json ob_hextec_soul ON ob_hextec_soul.game_version = d.game_version AND ob_hextec_soul.rank_tier = d.rank_tier AND ob_hextec_soul.objective_key = 'hextec_soul'
+    LEFT JOIN objective_bucket_json ob_chem_soul ON ob_chem_soul.game_version = d.game_version AND ob_chem_soul.rank_tier = d.rank_tier AND ob_chem_soul.objective_key = 'chem_soul'
+    ON CONFLICT (game_version, rank_tier) DO UPDATE
+    SET
+      baron_win_team = EXCLUDED.baron_win_team,
+      baron_loose_team = EXCLUDED.baron_loose_team,
+      drake_win_team = EXCLUDED.drake_win_team,
+      drake_loose_team = EXCLUDED.drake_loose_team,
+      void_win_team = EXCLUDED.void_win_team,
+      void_loose_team = EXCLUDED.void_loose_team,
+      herald_win_team = EXCLUDED.herald_win_team,
+      herald_loose_team = EXCLUDED.herald_loose_team,
+      inhibitor_win_team = EXCLUDED.inhibitor_win_team,
+      inhibitor_loose_team = EXCLUDED.inhibitor_loose_team,
+      tower_win_team = EXCLUDED.tower_win_team,
+      tower_loose_team = EXCLUDED.tower_loose_team,
+      first_blood_win_team = EXCLUDED.first_blood_win_team,
+      first_blood_loose_team = EXCLUDED.first_blood_loose_team,
+      elder_win_team = EXCLUDED.elder_win_team,
+      elder_loose_team = EXCLUDED.elder_loose_team,
+      earth_drake_win_team = EXCLUDED.earth_drake_win_team,
+      earth_drake_loose_team = EXCLUDED.earth_drake_loose_team,
+      water_drake_win_team = EXCLUDED.water_drake_win_team,
+      water_drake_loose_team = EXCLUDED.water_drake_loose_team,
+      wind_drake_win_team = EXCLUDED.wind_drake_win_team,
+      wind_drake_loose_team = EXCLUDED.wind_drake_loose_team,
+      fire_drake_win_team = EXCLUDED.fire_drake_win_team,
+      fire_drake_loose_team = EXCLUDED.fire_drake_loose_team,
+      hextec_drake_win_team = EXCLUDED.hextec_drake_win_team,
+      hextec_drake_loose_team = EXCLUDED.hextec_drake_loose_team,
+      chem_drake_win_team = EXCLUDED.chem_drake_win_team,
+      chem_drake_loose_team = EXCLUDED.chem_drake_loose_team,
+      earth_soul_win_team = EXCLUDED.earth_soul_win_team,
+      earth_soul_loose_team = EXCLUDED.earth_soul_loose_team,
+      water_soul_win_team = EXCLUDED.water_soul_win_team,
+      water_soul_loose_team = EXCLUDED.water_soul_loose_team,
+      wind_soul_win_team = EXCLUDED.wind_soul_win_team,
+      wind_soul_loose_team = EXCLUDED.wind_soul_loose_team,
+      fire_soul_win_team = EXCLUDED.fire_soul_win_team,
+      fire_soul_loose_team = EXCLUDED.fire_soul_loose_team,
+      hextec_soul_win_team = EXCLUDED.hextec_soul_win_team,
+      hextec_soul_loose_team = EXCLUDED.hextec_soul_loose_team,
+      chem_soul_win_team = EXCLUDED.chem_soul_win_team,
+      chem_soul_loose_team = EXCLUDED.chem_soul_loose_team,
+      updated_at = NOW()
+  `)
 }
 
 async function main(): Promise<void> {
