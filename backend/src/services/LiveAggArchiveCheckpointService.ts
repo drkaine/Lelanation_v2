@@ -1,4 +1,7 @@
 import { isDatabaseConfigured, prisma } from '../db.js'
+import { access } from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const VERSIONED_TABLES = [
   'agg_match_outcome_stats',
@@ -50,6 +53,20 @@ export type LiveAggArchiveCheckpointResult = {
   deletedRawRows: number
 }
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const BACKEND_ROOT = path.resolve(__dirname, '..', '..')
+const BACKFILL_LOCK_FILE = path.join(BACKEND_ROOT, 'data', 'locks', 'backfill-agg.lock')
+
+async function isBackfillRunning(): Promise<boolean> {
+  try {
+    await access(BACKFILL_LOCK_FILE)
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function ensureArchiveUpdatedAtColumn(archiveTable: string): Promise<void> {
   const safeArchive = ensureSafeTableName(archiveTable)
   await prisma.$executeRawUnsafe(`
@@ -70,16 +87,28 @@ async function countRowsByPatch(table: string, patchSql: string): Promise<number
 }
 
 async function deleteAggregatedRawRows(): Promise<number> {
+  const retentionMs = Math.max(
+    0,
+    Math.min(
+      30 * 24 * 60 * 60 * 1000,
+      Number(process.env.LIVE_AGG_ARCHIVE_DONE_RETENTION_MS ?? 36 * 60 * 60 * 1000)
+    )
+  )
+  const retentionSec = Math.ceil(retentionMs / 1000)
   const deleted = await prisma.$executeRawUnsafe(`
     DELETE FROM match_ingest_raw
     WHERE status = 'done'
       AND normalized_at IS NOT NULL
+      AND normalized_at <= NOW() - (${retentionSec} * INTERVAL '1 second')
   `)
   return Number(deleted ?? 0)
 }
 
 export async function runLiveAggArchiveCheckpointOnce(): Promise<LiveAggArchiveCheckpointResult> {
   if (!isDatabaseConfigured()) {
+    return { ok: true, livePatches: [], copiedTables: [], deletedRawRows: 0 }
+  }
+  if (await isBackfillRunning()) {
     return { ok: true, livePatches: [], copiedTables: [], deletedRawRows: 0 }
   }
 
@@ -99,71 +128,119 @@ export async function runLiveAggArchiveCheckpointOnce(): Promise<LiveAggArchiveC
   let deletedRawRows = 0
   const livePatchSql = livePatches.map((v) => `'${v.replace(/'/g, "''")}'`).join(',')
 
-  await prisma.$transaction(async (tx) => {
-    for (const table of VERSIONED_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
+  const versionedPresent: (typeof VERSIONED_TABLES)[number][] = []
+  for (const table of VERSIONED_TABLES) {
+    const archiveTable = `archive_${table}`
+    if (await tableExists(archiveTable)) {
       await ensureArchiveUpdatedAtColumn(archiveTable)
-      const safeTable = ensureSafeTableName(table)
-      const safeArchive = ensureSafeTableName(archiveTable)
-      await tx.$executeRawUnsafe(`
+      versionedPresent.push(table)
+    }
+  }
+  const championSatPresent: (typeof CHAMPION_SATELLITE_TABLES)[number][] = []
+  for (const table of CHAMPION_SATELLITE_TABLES) {
+    const archiveTable = `archive_${table}`
+    if (await tableExists(archiveTable)) {
+      await ensureArchiveUpdatedAtColumn(archiveTable)
+      championSatPresent.push(table)
+    }
+  }
+  const teamSatPresent: (typeof TEAM_SATELLITE_TABLES)[number][] = []
+  for (const table of TEAM_SATELLITE_TABLES) {
+    const archiveTable = `archive_${table}`
+    if (await tableExists(archiveTable)) {
+      await ensureArchiveUpdatedAtColumn(archiveTable)
+      teamSatPresent.push(table)
+    }
+  }
+
+  const txTimeoutMs = Math.max(
+    60_000,
+    Math.min(
+      3_600_000,
+      Number(process.env.LIVE_AGG_ARCHIVE_CHECKPOINT_TX_TIMEOUT_MS ?? 1_800_000)
+    )
+  )
+
+  await prisma.$transaction(
+    async (tx) => {
+      for (const table of versionedPresent) {
+        const archiveTable = `archive_${table}`
+        const safeTable = ensureSafeTableName(table)
+        const safeArchive = ensureSafeTableName(archiveTable)
+        await tx.$executeRawUnsafe(`
         DELETE FROM ${safeArchive}
         WHERE game_version IN (${livePatchSql})
       `)
-      await tx.$executeRawUnsafe(`
+        await tx.$executeRawUnsafe(`
         INSERT INTO ${safeArchive}
-        SELECT s.*, NOW() AS updated_at
+        SELECT *
         FROM ${safeTable}
-        AS s
         WHERE game_version IN (${livePatchSql})
       `)
-      copiedTables.push(table)
-    }
+        await tx.$executeRawUnsafe(`
+        UPDATE ${safeArchive}
+        SET updated_at = NOW()
+        WHERE game_version IN (${livePatchSql})
+      `)
+        copiedTables.push(table)
+      }
 
-    for (const table of CHAMPION_SATELLITE_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
-      await ensureArchiveUpdatedAtColumn(archiveTable)
-      const safeTable = ensureSafeTableName(table)
-      const safeArchive = ensureSafeTableName(archiveTable)
-      await tx.$executeRawUnsafe(`
+      for (const table of championSatPresent) {
+        const archiveTable = `archive_${table}`
+        const safeTable = ensureSafeTableName(table)
+        const safeArchive = ensureSafeTableName(archiveTable)
+        await tx.$executeRawUnsafe(`
         DELETE FROM ${safeArchive} s
         USING archive_agg_champion_core_stats c
         WHERE c.id = s.champion_stat_id
           AND c.game_version IN (${livePatchSql})
       `)
-      await tx.$executeRawUnsafe(`
+        await tx.$executeRawUnsafe(`
         INSERT INTO ${safeArchive}
-        SELECT s.*, NOW() AS updated_at
+        SELECT s.*
         FROM ${safeTable} s
         INNER JOIN agg_champion_core_stats c ON c.id = s.champion_stat_id
         WHERE c.game_version IN (${livePatchSql})
       `)
-      copiedTables.push(table)
-    }
+        await tx.$executeRawUnsafe(`
+        UPDATE ${safeArchive} s
+        SET updated_at = NOW()
+        FROM archive_agg_champion_core_stats c
+        WHERE c.id = s.champion_stat_id
+          AND c.game_version IN (${livePatchSql})
+      `)
+        copiedTables.push(table)
+      }
 
-    for (const table of TEAM_SATELLITE_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
-      await ensureArchiveUpdatedAtColumn(archiveTable)
-      const safeTable = ensureSafeTableName(table)
-      const safeArchive = ensureSafeTableName(archiveTable)
-      await tx.$executeRawUnsafe(`
+      for (const table of teamSatPresent) {
+        const archiveTable = `archive_${table}`
+        const safeTable = ensureSafeTableName(table)
+        const safeArchive = ensureSafeTableName(archiveTable)
+        await tx.$executeRawUnsafe(`
         DELETE FROM ${safeArchive} s
         USING archive_agg_team_core_stats t
         WHERE t.id = s.team_stat_id
           AND t.game_version IN (${livePatchSql})
       `)
-      await tx.$executeRawUnsafe(`
+        await tx.$executeRawUnsafe(`
         INSERT INTO ${safeArchive}
-        SELECT s.*, NOW() AS updated_at
+        SELECT s.*
         FROM ${safeTable} s
         INNER JOIN agg_team_core_stats t ON t.id = s.team_stat_id
         WHERE t.game_version IN (${livePatchSql})
       `)
-      copiedTables.push(table)
-    }
-  })
+        await tx.$executeRawUnsafe(`
+        UPDATE ${safeArchive} s
+        SET updated_at = NOW()
+        FROM archive_agg_team_core_stats t
+        WHERE t.id = s.team_stat_id
+          AND t.game_version IN (${livePatchSql})
+      `)
+        copiedTables.push(table)
+      }
+    },
+    { maxWait: 60_000, timeout: txTimeoutMs }
+  )
 
   const coreSrcCount = await countRowsByPatch('agg_champion_core_stats', livePatchSql)
   const coreArchiveExists = await tableExists('archive_agg_champion_core_stats')

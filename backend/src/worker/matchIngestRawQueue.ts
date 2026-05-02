@@ -134,7 +134,8 @@ export async function requeueRawIngestErrors(limit: number): Promise<number> {
       SELECT id
       FROM match_ingest_raw
       WHERE status = 'error'
-      ORDER BY id
+        AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+      ORDER BY COALESCE(next_retry_at, ingested_at), id
       LIMIT ${capped}
     )
     UPDATE match_ingest_raw q

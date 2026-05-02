@@ -9,6 +9,22 @@ import { riotGateway, type RiotGatewayError } from './RiotGateway.js'
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
 const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getRiotNetworkRetryMax(): number {
+  const raw = Number.parseInt(process.env.RIOT_NETWORK_RETRY_MAX ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 0) return 2
+  return Math.min(10, raw)
+}
+
+function getRiotNetworkRetryDelayMs(): number {
+  const raw = Number.parseInt(process.env.RIOT_NETWORK_RETRY_DELAY_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 100) return 1_500
+  return Math.min(60_000, raw)
+}
+
 function resolvePuuidKeyVersionFromEnv(): string {
   const raw = process.env[RIOT_PUUID_KEY_VERSION_ENV]
   const value = typeof raw === 'string' ? raw.trim() : ''
@@ -396,6 +412,12 @@ export class RiotHttpClient {
       if (status === 0) {
         const msg = err instanceof Error ? err.message : String(err)
         void this._log.error('Riot API request failed', msg, url)
+        const retryCount = options?.retryCount ?? 0
+        const maxRetry = getRiotNetworkRetryMax()
+        if (retryCount < maxRetry && !options?.shouldAbort?.()) {
+          await sleep(getRiotNetworkRetryDelayMs())
+          return this.request<T>(method, bucket, url, { ...options, retryCount: retryCount + 1 })
+        }
         return { ok: false, status: 0, message: msg }
       }
     }

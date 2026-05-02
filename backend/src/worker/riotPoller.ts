@@ -61,6 +61,10 @@ import {
   setTrackedMatchStatusForAliases,
   releaseTrackedErrorMatches,
   releaseStalePendingTrackedMatches,
+  upsertTrackedMatchPlayers,
+  upsertTrackedMatchPlayersForAliases,
+  fetchTrackedMatchesForRankHydration,
+  type TrackedMatchPlayerSlot,
 } from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
 import { resolveRiotMatchIdForIngest, trackedMatchIdAliases } from './matchIngestIds.js'
@@ -1396,7 +1400,7 @@ function getMatchIdsPerSummonerCap(): number {
 
 function getRawIngestErrorRequeueBatch(): number {
   const raw = parseInt(process.env.RAW_INGEST_ERROR_REQUEUE_BATCH ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 1) return 100
+  if (!Number.isFinite(raw) || raw < 1) return 500
   return Math.min(10_000, raw)
 }
 
@@ -1418,6 +1422,170 @@ function getTrackedPendingCleanupIntervalMs(): number {
   const raw = parseInt(process.env.TRACKED_PENDING_CLEANUP_INTERVAL_MS ?? '', 10)
   if (!Number.isFinite(raw) || raw < 60_000) return 60_000
   return Math.min(24 * 60 * 60 * 1000, raw)
+}
+
+function getTrackedRankHydrationIntervalMs(): number {
+  const raw = parseInt(process.env.TRACKED_RANK_HYDRATION_INTERVAL_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 5_000) return 15_000
+  return Math.min(5 * 60_000, raw)
+}
+
+function getTrackedRankHydrationBatchSize(): number {
+  const raw = parseInt(process.env.TRACKED_RANK_HYDRATION_BATCH_SIZE ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 10) return 200
+  return Math.min(2_000, raw)
+}
+
+function normalizeTrackedRankTier(raw: unknown): string {
+  const t = String(raw ?? '').trim().toUpperCase()
+  if (!t) return 'UNRANKED'
+  if (t === 'UNRANKED') return 'UNRANKED'
+  return t.split('_')[0] || 'UNRANKED'
+}
+
+function normalizeTrackedRankDivision(raw: unknown): string | null {
+  const d = String(raw ?? '').trim().toUpperCase()
+  if (!d || d === 'UNRANKED') return null
+  return d
+}
+
+function buildTrackedPlayerSlotsFromMatchDto(
+  dto: RiotMatchDto,
+  region: string
+): Array<TrackedMatchPlayerSlot | null> {
+  const participants = Array.isArray(dto.info?.participants) ? dto.info.participants : []
+  const slots: Array<TrackedMatchPlayerSlot | null> = Array.from({ length: 10 }, () => null)
+  for (let i = 0; i < Math.min(10, participants.length); i++) {
+    const p = participants[i] as RiotParticipantDto
+    const gameName = String(
+      (p as unknown as { riotIdGameName?: string; riotIdName?: string }).riotIdGameName ??
+      (p as unknown as { riotIdGameName?: string; riotIdName?: string }).riotIdName ??
+      ''
+    )
+      .trim()
+    const tagName = String(
+      (p as unknown as { riotIdTagline?: string; riotIdTagLine?: string }).riotIdTagline ??
+      (p as unknown as { riotIdTagline?: string; riotIdTagLine?: string }).riotIdTagLine ??
+      ''
+    )
+      .trim()
+    slots[i] = {
+      puuid: p.puuid ? String(p.puuid).trim() : null,
+      gameName: gameName.length > 0 ? gameName : null,
+      tagName: tagName.length > 0 ? tagName : null,
+      region,
+      rankTier: normalizeTrackedRankTier(
+        (p as unknown as { tier?: string; rankTier?: string }).tier ??
+          (p as unknown as { tier?: string; rankTier?: string }).rankTier
+      ),
+      rankDivision: normalizeTrackedRankDivision(
+        (p as unknown as { rank?: string; rankDivision?: string }).rank ??
+          (p as unknown as { rank?: string; rankDivision?: string }).rankDivision
+      ),
+    }
+  }
+  return slots
+}
+
+function buildTrackedPlayerSlotsFromRawPayload(
+  payloadJson: unknown,
+  regionFallback: string
+): Array<TrackedMatchPlayerSlot | null> {
+  const root =
+    payloadJson && typeof payloadJson === 'object' && !Array.isArray(payloadJson)
+      ? (payloadJson as Record<string, unknown>)
+      : {}
+  const info =
+    root.info && typeof root.info === 'object' && !Array.isArray(root.info)
+      ? (root.info as Record<string, unknown>)
+      : {}
+  const participants = Array.isArray(info.participants)
+    ? (info.participants as Array<Record<string, unknown>>)
+    : []
+  const regionRaw = String(root.region ?? regionFallback ?? '')
+    .trim()
+    .toLowerCase()
+  const region = regionRaw || regionFallback
+  const slots: Array<TrackedMatchPlayerSlot | null> = Array.from({ length: 10 }, () => null)
+  for (let i = 0; i < Math.min(10, participants.length); i++) {
+    const p = participants[i] ?? {}
+    const gameName = String(p.riotIdGameName ?? p.riotIdName ?? '').trim()
+    const tagName = String(p.riotIdTagline ?? p.riotIdTagLine ?? '').trim()
+    slots[i] = {
+      puuid: String(p.puuid ?? '').trim() || null,
+      gameName: gameName || null,
+      tagName: tagName || null,
+      region,
+      rankTier: normalizeTrackedRankTier(p.tier ?? p.rankTier),
+      rankDivision: normalizeTrackedRankDivision(p.rank ?? p.rankDivision),
+    }
+  }
+  return slots
+}
+
+async function loadRawTrackedSlotsByMatchId(
+  matchIds: string[]
+): Promise<Map<string, Array<TrackedMatchPlayerSlot | null>>> {
+  const uniq = Array.from(new Set(matchIds.map((m) => String(m ?? '').trim()).filter(Boolean)))
+  if (uniq.length === 0) return new Map()
+  const rows = await prisma.$queryRaw<Array<{ riot_match_id: string; region: string; payload_json: unknown }>>`
+    SELECT riot_match_id, region, payload_json
+    FROM match_ingest_raw
+    WHERE riot_match_id IN (${Prisma.join(uniq)})
+    ORDER BY ingested_at DESC
+  `
+  const out = new Map<string, Array<TrackedMatchPlayerSlot | null>>()
+  for (const r of rows) {
+    if (out.has(r.riot_match_id)) continue
+    out.set(r.riot_match_id, buildTrackedPlayerSlotsFromRawPayload(r.payload_json, r.region))
+  }
+  const missing = uniq.filter((id) => !out.has(id))
+  if (missing.length > 0) {
+    try {
+      const ingestRows = await prisma.ingestMatch.findMany({
+        where: { riotMatchId: { in: missing } },
+        select: {
+          riotMatchId: true,
+          region: true,
+          matchPlayers: {
+            orderBy: { participantId: 'asc' },
+            select: {
+              participantId: true,
+              rankTier: true,
+              rankDivision: true,
+              player: {
+                select: {
+                  puuid: true,
+                  gameName: true,
+                  tagName: true,
+                  region: true,
+                },
+              },
+            },
+          },
+        },
+      })
+      for (const m of ingestRows) {
+        if (out.has(m.riotMatchId)) continue
+        const slots: Array<TrackedMatchPlayerSlot | null> = Array.from({ length: 10 }, () => null)
+        for (const mp of m.matchPlayers) {
+          const idx = Math.max(0, Math.min(9, Number(mp.participantId ?? 1) - 1))
+          slots[idx] = {
+            puuid: mp.player?.puuid ?? null,
+            gameName: mp.player?.gameName ?? null,
+            tagName: mp.player?.tagName ?? null,
+            region: mp.player?.region ?? m.region ?? null,
+            rankTier: normalizeTrackedRankTier(mp.rankTier),
+            rankDivision: normalizeTrackedRankDivision(mp.rankDivision),
+          }
+        }
+        out.set(m.riotMatchId, slots)
+      }
+    } catch {
+      // Some environments no longer have legacy ingest_* tables.
+    }
+  }
+  return out
 }
 
 function getRawIngestStaleProcessingMaxAgeMs(): number {
@@ -1694,6 +1862,11 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         for (const p of rawParticipants ?? []) {
           if (p?.puuid) enqueuePriorityPuuid(p.puuid)
         }
+        await upsertTrackedMatchPlayersForAliases(
+          trackedIdAliases,
+          buildTrackedPlayerSlotsFromMatchDto(matchDto, payload.region),
+          'QUEUED'
+        ).catch(() => undefined)
         await processRawAggregateAndBurn(rawId, payload, trackedRowKeyForAgg)
         await markTrackedMatchAggregatedForAliases(trackedIdAliases).catch((e) =>
           void ctx.logger.alerte('markTrackedMatchAggregatedForAliases failed', {
@@ -1733,6 +1906,12 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             'DEFERRED_AGGREGATE_RETRY'
           ).catch(() => undefined)
           await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
+        } else if (err instanceof Error && err.message === 'tracked_rank_pending') {
+          await setTrackedMatchStatusForAliases(
+            trackedIdAliases,
+            'DEFERRED_RANK_PENDING'
+          ).catch(() => undefined)
+          await markRawIngestError(rawId, 'tracked_rank_pending', 45_000)
         } else {
           await setTrackedMatchStatusForAliases(trackedIdAliases, 'ERROR').catch(() => undefined)
           await markTrackedMatchAggregateErrorForAliases(
@@ -1845,6 +2024,12 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             'DEFERRED_AGGREGATE_RETRY'
           ).catch(() => undefined)
           await markRawIngestError(rawId, 'transient_aggregate_conflict', 20_000)
+        } else if (err instanceof Error && err.message === 'tracked_rank_pending') {
+          await setTrackedMatchStatusForAliases(
+            trackedIdAliases,
+            'DEFERRED_RANK_PENDING'
+          ).catch(() => undefined)
+          await markRawIngestError(rawId, 'tracked_rank_pending', 45_000)
         } else {
           await setTrackedMatchStatus(canonicalRiotMatchId, 'ERROR').catch(() => undefined)
           const delay = Math.min(30 * 60_000, Math.max(60_000, (payload.enqueuedAt ? 1 : 1) * 60_000))
@@ -1879,6 +2064,82 @@ async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void
       }
     })
   )
+}
+
+async function hydrateTrackedMatchesPlayerRanks(client: RiotHttpClient): Promise<{
+  touchedMatches: number
+  fetchedPuuids: number
+}> {
+  const rows = await fetchTrackedMatchesForRankHydration(getTrackedRankHydrationBatchSize())
+  if (rows.length === 0) return { touchedMatches: 0, fetchedPuuids: 0 }
+  const rawSlotsByMatchId = await loadRawTrackedSlotsByMatchId(rows.map((r) => r.matchId))
+
+  const uniquePuuids = new Set<string>()
+  for (const row of rows) {
+    const rowSlots =
+      row.players.some((slot) => String(slot?.puuid ?? '').trim().length > 0)
+        ? row.players
+        : (rawSlotsByMatchId.get(row.matchId) ?? row.players)
+    for (const slot of rowSlots) {
+      const puuid = String(slot?.puuid ?? '').trim()
+      if (!puuid) continue
+      const rankTier = String(slot?.rankTier ?? '').trim().toUpperCase()
+      if (!rankTier || rankTier === 'UNRANKED') uniquePuuids.add(puuid)
+    }
+  }
+
+  const rankByPuuid = new Map<string, { tier: string; division: string | null }>()
+  const fetchList = Array.from(uniquePuuids)
+  for (const puuid of fetchList) {
+    await waitForRiotGlobalCooldownIfNeeded('tracked-rank-hydration')
+    const res = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
+    if (!res.ok || !Array.isArray(res.data)) {
+      rankByPuuid.set(puuid, { tier: 'UNRANKED', division: null })
+      continue
+    }
+    const entries = res.data as unknown as Array<Record<string, unknown>>
+    const solo =
+      entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
+      entries.find((e) => String(e.queueType ?? '').toUpperCase().includes('RANKED_SOLO')) ??
+      entries[0]
+    rankByPuuid.set(puuid, {
+      tier: normalizeTrackedRankTier(solo?.tier),
+      division: normalizeTrackedRankDivision(solo?.rank),
+    })
+  }
+
+  let touchedMatches = 0
+  for (const row of rows) {
+    let missing = false
+    const baseSlots =
+      row.players.some((slot) => String(slot?.puuid ?? '').trim().length > 0)
+        ? row.players
+        : (rawSlotsByMatchId.get(row.matchId) ?? row.players)
+    const nextSlots = baseSlots.map((slot) => {
+      if (!slot) return null
+      const puuid = String(slot.puuid ?? '').trim()
+      if (!puuid) return slot
+      const current = String(slot.rankTier ?? '').trim().toUpperCase()
+      if (current && current !== 'UNRANKED') return slot
+      const fetched = rankByPuuid.get(puuid)
+      if (!fetched) {
+        missing = true
+        return slot
+      }
+      return {
+        ...slot,
+        rankTier: fetched.tier,
+        rankDivision: fetched.division,
+      }
+    })
+    await upsertTrackedMatchPlayers(row.matchId, nextSlots, missing ? 'DEFERRED_RANK_PENDING' : 'QUEUED')
+    if (!missing) {
+      await setTrackedMatchStatus(row.matchId, 'QUEUED').catch(() => undefined)
+    }
+    touchedMatches++
+  }
+
+  return { touchedMatches, fetchedPuuids: fetchList.length }
 }
 
 function startMatchIngestBackgroundProcessor(): void {
@@ -2698,6 +2959,11 @@ async function runStep4ForPlayer(
                 continue
               }
               try {
+                await upsertTrackedMatchPlayers(
+                  work.matchId,
+                  buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region),
+                  'QUEUED'
+                )
                 const payload: MatchIngestQueuePayloadV1 = {
                   v: 1,
                   stepId: fileQueueStepId,
@@ -2756,6 +3022,11 @@ async function runStep4ForPlayer(
           }
 
           try {
+            await upsertTrackedMatchPlayers(
+              work.matchId,
+              buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region),
+              'QUEUED'
+            )
             const payload: MatchIngestQueuePayloadV1 = {
               v: 1,
               stepId: fileQueueStepId,
@@ -3160,6 +3431,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     const rawDoneCleanupIntervalMs = getRawIngestDoneCleanupIntervalMs()
     const rawDoneCleanupBatch = getRawIngestDoneCleanupBatch()
     let nextRawDoneCleanupAtMs = Date.now() + rawDoneCleanupIntervalMs
+    let nextTrackedRankHydrationAtMs = Date.now()
     let nextTrackedErrorRecoveryAtMs = Date.now()
     let nextTrackedPendingCleanupAtMs = Date.now()
     const initLimiterStats = client.getRateLimiterStats()
@@ -3254,6 +3526,26 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         }
       }
       if (isRawIngestQueueEnabled()) {
+        if (Date.now() >= nextTrackedRankHydrationAtMs) {
+          const hydrated = await hydrateTrackedMatchesPlayerRanks(client).catch(() => ({
+            touchedMatches: 0,
+            fetchedPuuids: 0,
+          }))
+          nextTrackedRankHydrationAtMs = Date.now() + getTrackedRankHydrationIntervalMs()
+          if (hydrated.touchedMatches > 0 || hydrated.fetchedPuuids > 0) {
+            void appendUnifiedLog({
+              section: 'back',
+              type: 'info',
+              script: 'poller_ingest',
+              message: `Tracked rank hydration: matches=${hydrated.touchedMatches} puuids=${hydrated.fetchedPuuids}`,
+              json: {
+                touchedMatches: hydrated.touchedMatches,
+                fetchedPuuids: hydrated.fetchedPuuids,
+                intervalMs: getTrackedRankHydrationIntervalMs(),
+              },
+            })
+          }
+        }
         const recovered = await requeueRawIngestStaleProcessing(
           getRawIngestStaleProcessingMaxAgeMs(),
           getRawIngestStaleProcessingRequeueBatch()
@@ -3317,20 +3609,21 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
       }
       if (Date.now() >= nextTrackedPendingCleanupAtMs) {
         const olderThan = new Date(Date.now() - getTrackedPendingCleanupMaxAgeMs())
-        const cleanedPending = await releaseStalePendingTrackedMatches(
+        const markedStalePending = await releaseStalePendingTrackedMatches(
           getTrackedPendingCleanupBatch(),
           olderThan
         ).catch(() => 0)
         nextTrackedPendingCleanupAtMs = Date.now() + getTrackedPendingCleanupIntervalMs()
-        if (cleanedPending > 0) {
+        if (markedStalePending > 0) {
           void appendUnifiedLog({
             section: 'back',
             type: 'warning',
             script: 'poller',
-            message: `Tracked matches cleanup: ${cleanedPending} stale PENDING released`,
+            message: `Tracked matches cleanup: ${markedStalePending} stale PENDING marked ERROR (kept rows)`,
             json: {
-              cleanedPending,
+              markedStalePending,
               sourceStatus: 'PENDING',
+              targetStatus: 'ERROR',
               maxAgeMs: getTrackedPendingCleanupMaxAgeMs(),
               batch: getTrackedPendingCleanupBatch(),
             },

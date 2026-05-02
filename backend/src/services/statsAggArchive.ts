@@ -35,7 +35,18 @@ const CHAMPION_SATELLITE_TABLES = new Set([
 ])
 
 function unifiedArchiveTableName(aggTableName: string): string {
-  return `archive_${aggTableName}`
+  const normalized = normalizeAggTableName(aggTableName)
+  return `archive_${normalized}`
+}
+
+/**
+ * Some services still request legacy `mv_*` names for fallback paths.
+ * Archive snapshot tables are `archive_agg_*`, so we normalize aliases here.
+ */
+function normalizeAggTableName(rawTableName: string): string {
+  const t = String(rawTableName ?? '').trim()
+  if (t.startsWith('mv_')) return `agg_${t.slice(3)}`
+  return t
 }
 
 function patchVersionSqlPredicate(alias: string, p: string): string {
@@ -46,11 +57,12 @@ function patchVersionSqlPredicate(alias: string, p: string): string {
  * Single-patch archive fragment: unified table `archive_<aggTableName>` filtered to one patch.
  */
 function sqlArchivedSinglePatchFragment(aggTableName: string, p: string): string {
-  const archive = unifiedArchiveTableName(aggTableName)
-  if (CHAMPION_SATELLITE_TABLES.has(aggTableName)) {
+  const normalizedTable = normalizeAggTableName(aggTableName)
+  const archive = unifiedArchiveTableName(normalizedTable)
+  if (CHAMPION_SATELLITE_TABLES.has(normalizedTable)) {
     return `(SELECT s.* FROM ${archive} s INNER JOIN archive_agg_champion_core_stats cj ON cj.id = s.champion_stat_id WHERE ${patchVersionSqlPredicate('cj', p)})`
   }
-  if (aggTableName === 'agg_team_bucket') {
+  if (normalizedTable === 'agg_team_bucket') {
     return `(SELECT tb.* FROM ${archive} tb INNER JOIN archive_agg_team_core_stats tj ON tj.id = tb.team_stat_id WHERE ${patchVersionSqlPredicate('tj', p)})`
   }
   return `(SELECT * FROM ${archive} WHERE game_version = '${p}' OR game_version LIKE '${p}.%')`
@@ -69,16 +81,17 @@ async function unifiedArchiveRelationExists(archiveName: string): Promise<boolea
  * Exported so callers can probe columns on the same physical branch as `matchVersionedAggFrom`.
  */
 export async function sqlAggOrArchiveRelation(aggTableName: string, patchKey: string): Promise<string | null> {
-  if (!isSafeIdentSegment(aggTableName)) return null
+  const normalizedTable = normalizeAggTableName(aggTableName)
+  if (!isSafeIdentSegment(normalizedTable)) return null
   const p = normalizePatchMajorMinor(patchKey)
   if (!/^\d+\.\d+$/.test(p)) return null
 
-  const archiveName = unifiedArchiveTableName(aggTableName)
+  const archiveName = unifiedArchiveTableName(normalizedTable)
   if (!(await unifiedArchiveRelationExists(archiveName))) {
     throw new Error(`[statsAggArchive] required archive table missing: ${archiveName}`)
   }
 
-  return sqlArchivedSinglePatchFragment(aggTableName, p)
+  return sqlArchivedSinglePatchFragment(normalizedTable, p)
 }
 
 function normalizeSingleVersionKey(version: string | string[] | null | undefined): string | null {
@@ -95,16 +108,17 @@ export async function matchVersionedAggFrom(
   version: string | string[] | null | undefined,
   asAlias: string
 ): Promise<string> {
-  if (!isSafeIdentSegment(aggTableName) || !/^[a-z][a-z0-9_]*$/.test(asAlias)) {
+  const normalizedTable = normalizeAggTableName(aggTableName)
+  if (!isSafeIdentSegment(normalizedTable) || !/^[a-z][a-z0-9_]*$/.test(asAlias)) {
     throw new Error(`[statsAggArchive] invalid identifier for archive read: ${aggTableName} ${asAlias}`)
   }
   const single = normalizeSingleVersionKey(version)
   if (single) {
-    const rel = await sqlAggOrArchiveRelation(aggTableName, single)
-    const physical = rel ?? sqlArchivedSinglePatchFragment(aggTableName, normalizePatchMajorMinor(single))
+    const rel = await sqlAggOrArchiveRelation(normalizedTable, single)
+    const physical = rel ?? sqlArchivedSinglePatchFragment(normalizedTable, normalizePatchMajorMinor(single))
     return `${physical} ${asAlias}`
   }
-  return sqlAggUnionAllLiveAndArchives(aggTableName, asAlias)
+  return sqlAggUnionAllLiveAndArchives(normalizedTable, asAlias)
 }
 
 export async function sqlAggUnionAllLiveAndArchives(aggTableName: string, asAlias: string): Promise<string> {

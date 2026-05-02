@@ -3,7 +3,8 @@ import { riotLogger } from './RiotLogger.js'
 
 const RIOT_API_KEY_ENV = 'RIOT_API_KEY'
 const RIOT_PUUID_KEY_VERSION_ENV = 'RIOT_PUUID_KEY_VERSION'
-const RIOT_TARGET_REQUESTS_PER_WINDOW = 95
+// Keep a safer headroom under Riot app cap (100/120s) to reduce recurring 429.
+const RIOT_TARGET_REQUESTS_PER_WINDOW = 90
 const RIOT_WINDOW_MS = 125_000
 const RIOT_429_BUFFER_MS = 2_500
 

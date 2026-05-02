@@ -3,8 +3,27 @@ import type { MatchIngestQueuePayloadV1 } from './matchIngestQueue.js'
 import { createHash } from 'node:crypto'
 import { selectMatchPlayerItems } from './itemBuildSelection.js'
 
+const STARTER_SET_EXCLUDED_ITEM_IDS = new Set([
+  3340, 3364, 3363, 2055,
+  2003, 2009, 2010, 2031, 2032, 2033, 2060,
+  2138, 2139, 2140,
+])
+
+/** Prisma interactive transaction default is 5s; raw aggregate does many upserts and can exceed that under load/backfill. */
+function rawAggregateTransactionOptions(): { maxWait: number; timeout: number } {
+  const timeout = Math.max(
+    10_000,
+    Math.min(3_600_000, Number(process.env.RAW_AGGREGATE_TX_TIMEOUT_MS ?? 300_000))
+  )
+  return { maxWait: 60_000, timeout }
+}
+
 type RawParticipant = {
   puuid?: string
+  riotIdGameName?: string
+  riotIdName?: string
+  riotIdTagline?: string
+  riotIdTagLine?: string
   participantId?: number
   championId?: number
   teamId?: number
@@ -20,6 +39,8 @@ type RawParticipant = {
   trueDamageDealtToChampions?: number
   tier?: string
   rankTier?: string
+  rank?: string
+  rankDivision?: string
   summoner1Id?: number
   summoner2Id?: number
   runes?: number[]
@@ -119,6 +140,80 @@ function normalizeRankTier(p: RawParticipant): string {
   return raw.split('_')[0] || 'UNRANKED'
 }
 
+function normalizeRankDivision(p: RawParticipant): string | null {
+  const raw = (p.rank ?? p.rankDivision ?? '').toString().trim().toUpperCase()
+  if (!raw || raw === 'UNRANKED') return null
+  return raw
+}
+
+function participantRiotId(p: RawParticipant): { gameName: string | null; tagName: string | null } {
+  const gameNameRaw = (p.riotIdGameName ?? p.riotIdName ?? '').toString().trim()
+  const tagNameRaw = (p.riotIdTagline ?? p.riotIdTagLine ?? '').toString().trim()
+  return {
+    gameName: gameNameRaw.length > 0 ? gameNameRaw : null,
+    tagName: tagNameRaw.length > 0 ? tagNameRaw : null,
+  }
+}
+
+function buildTrackedPlayersPayload(
+  participants: RawParticipant[],
+  region: string
+): Array<Record<string, unknown> | null> {
+  const slots: Array<Record<string, unknown> | null> = Array.from({ length: 10 }, () => null)
+  for (let i = 0; i < Math.min(10, participants.length); i++) {
+    const p = participants[i]
+    const { gameName, tagName } = participantRiotId(p)
+    slots[i] = {
+      gameName,
+      tagName,
+      region,
+      rankTier: normalizeRankTier(p),
+      rankDivision: normalizeRankDivision(p),
+    }
+  }
+  return slots
+}
+
+async function upsertPlayersFromRawParticipants(
+  tx: any,
+  participants: RawParticipant[],
+  region: string,
+  gameDate: Date | null
+): Promise<void> {
+  for (const participant of participants) {
+    const puuid = String(participant.puuid ?? '').trim()
+    if (!puuid) continue
+    const rankTier = normalizeRankTier(participant)
+    const rankDivision = normalizeRankDivision(participant)
+    const { gameName, tagName } = participantRiotId(participant)
+    const dataUpdate: Record<string, unknown> = {
+      region,
+      lastSeen: gameDate ?? new Date(),
+      gameName,
+      tagName,
+    }
+    if (rankTier !== 'UNRANKED') {
+      dataUpdate['rankTier'] = rankTier
+      dataUpdate['rankDivision'] = rankDivision
+      dataUpdate['rankSnapshotGameDate'] = gameDate ?? new Date()
+    }
+    await tx.player.upsert({
+      where: { puuid },
+      create: {
+        puuid,
+        region,
+        gameName,
+        tagName,
+        lastSeen: gameDate ?? new Date(),
+        rankTier: rankTier === 'UNRANKED' ? null : rankTier,
+        rankDivision: rankTier === 'UNRANKED' ? null : rankDivision,
+        rankSnapshotGameDate: rankTier === 'UNRANKED' ? null : gameDate ?? new Date(),
+      },
+      update: dataUpdate,
+    })
+  }
+}
+
 function normalizeGameVersion(raw: unknown): string {
   const s = String(raw ?? '').trim()
   if (!s) return 'unknown'
@@ -147,6 +242,68 @@ async function loadPlayerRankTiersByPuuid(puuids: string[]): Promise<Map<string,
     if (pu) m.set(pu, tier)
   }
   return m
+}
+
+async function loadTrackedMatchRankTiersByPuuid(trackedMatchId: string): Promise<Map<string, string>> {
+  const rows = await prisma.$queryRaw<
+    Array<{
+      player1: unknown | null
+      player2: unknown | null
+      player3: unknown | null
+      player4: unknown | null
+      player5: unknown | null
+      player6: unknown | null
+      player7: unknown | null
+      player8: unknown | null
+      player9: unknown | null
+      player10: unknown | null
+    }>
+  >`
+    SELECT
+      player1, player2, player3, player4, player5,
+      player6, player7, player8, player9, player10
+    FROM tracked_matches
+    WHERE match_id = ${trackedMatchId}
+    LIMIT 1
+  `
+  const out = new Map<string, string>()
+  const row = rows[0]
+  if (!row) return out
+  const slots = [
+    row.player1,
+    row.player2,
+    row.player3,
+    row.player4,
+    row.player5,
+    row.player6,
+    row.player7,
+    row.player8,
+    row.player9,
+    row.player10,
+  ]
+  for (const slot of slots) {
+    if (!slot || typeof slot !== 'object' || Array.isArray(slot)) continue
+    const rec = slot as Record<string, unknown>
+    const puuid = String(rec['puuid'] ?? '').trim().toLowerCase()
+    if (!puuid) continue
+    const rankTier = String(rec['rankTier'] ?? '').trim().toUpperCase()
+    if (!rankTier) continue
+    out.set(puuid, rankTier)
+  }
+  return out
+}
+
+function ensureTrackedRanksPresentForParticipants(
+  participants: RawParticipant[],
+  trackedRankByPuuid: Map<string, string>
+): boolean {
+  for (const p of participants) {
+    const puuid = String(p.puuid ?? '').trim().toLowerCase()
+    if (!puuid) continue
+    const rankTier = trackedRankByPuuid.get(puuid)
+    if (!rankTier || rankTier.length === 0) return false
+  }
+  return true
 }
 
 function mergeParticipantTiersFromDb(
@@ -594,6 +751,8 @@ export async function processRawAggregateAndBurn(
     }
   }
   const gameVersion = normalizeGameVersion(infoAny.info?.gameVersion)
+  const gameStartTs = toSafeInt((infoAny.info as { gameStartTimestamp?: unknown } | undefined)?.gameStartTimestamp)
+  const gameDate = gameStartTs > 0 ? new Date(gameStartTs) : null
   const durationBucket = toDurationBucket(toSafeInt(infoAny.info?.gameDuration))
   const region = String(payload.region ?? '').trim().toLowerCase() || 'euw1'
   const bannedChampions = new Set<number>()
@@ -607,7 +766,15 @@ export async function processRawAggregateAndBurn(
   const dbRankByPuuid = await loadPlayerRankTiersByPuuid(
     participants.map((p) => String(p.puuid ?? '')).filter((p) => p.length > 0)
   )
-  const participantsForAgg = mergeParticipantTiersFromDb(participants, dbRankByPuuid)
+  const trackedRankByPuuid = await loadTrackedMatchRankTiersByPuuid(trackedMatchId)
+  if (!ensureTrackedRanksPresentForParticipants(participants, trackedRankByPuuid)) {
+    throw new Error('tracked_rank_pending')
+  }
+  const participantsForAgg = mergeParticipantTiersFromDb(
+    mergeParticipantTiersFromDb(participants, trackedRankByPuuid),
+    dbRankByPuuid
+  )
+  const trackedPlayerSlots = buildTrackedPlayersPayload(participantsForAgg, region)
   const timelineSpellOrdersByParticipant = extractTimelineSpellOrdersByParticipant(payload)
   const timelineItemEvents = extractTimelineItemEvents(payload)
   const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
@@ -616,6 +783,7 @@ export async function processRawAggregateAndBurn(
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await prisma.$transaction(async (tx) => {
+    await upsertPlayersFromRawParticipants(tx, participantsForAgg, region, gameDate)
     const resolvedRoles = resolveParticipantRoles(participantsForAgg)
     const participantByTeamRole = new Map<string, RawParticipant[]>()
     const teamRoleByChampion = new Map<string, string>()
@@ -1304,6 +1472,40 @@ export async function processRawAggregateAndBurn(
         `
       }
 
+      const starterItems = selectedItems
+        .filter((item) => item.starter === true)
+        .map((item) => toSafeInt(item.itemId))
+        .filter((itemId) => itemId > 0 && !STARTER_SET_EXCLUDED_ITEM_IDS.has(itemId))
+      if (starterItems.length > 0) {
+        const starterKey = `[${starterItems.join(',')}]`
+        await tx.$executeRaw`
+          INSERT INTO agg_champion_item_starter_set_stats (
+            game_version,
+            rank_tier,
+            role_norm,
+            champion_id,
+            starter_key,
+            count_game,
+            count_win,
+            updated_at
+          )
+          VALUES (
+            ${gameVersion},
+            ${rankTier},
+            ${role},
+            ${championId},
+            ${starterKey},
+            1,
+            ${wins},
+            NOW()
+          )
+          ON CONFLICT (game_version, rank_tier, role_norm, champion_id, starter_key) DO UPDATE
+          SET count_game = agg_champion_item_starter_set_stats.count_game + EXCLUDED.count_game,
+              count_win = agg_champion_item_starter_set_stats.count_win + EXCLUDED.count_win,
+              updated_at = NOW()
+        `
+      }
+
     }
 
     const botTeam100 = (participantByTeamRole.get('100|BOTTOM') ?? [])[0]
@@ -1812,7 +2014,17 @@ export async function processRawAggregateAndBurn(
         aggregate_status,
         aggregate_attempt_count,
         aggregate_last_error,
-        aggregated_at
+        aggregated_at,
+        player1,
+        player2,
+        player3,
+        player4,
+        player5,
+        player6,
+        player7,
+        player8,
+        player9,
+        player10
       )
       VALUES (
         ${trackedMatchId},
@@ -1821,14 +2033,34 @@ export async function processRawAggregateAndBurn(
         'AGGREGATED',
         1,
         NULL,
-        NOW()
+        NOW(),
+        ${trackedPlayerSlots[0]}::jsonb,
+        ${trackedPlayerSlots[1]}::jsonb,
+        ${trackedPlayerSlots[2]}::jsonb,
+        ${trackedPlayerSlots[3]}::jsonb,
+        ${trackedPlayerSlots[4]}::jsonb,
+        ${trackedPlayerSlots[5]}::jsonb,
+        ${trackedPlayerSlots[6]}::jsonb,
+        ${trackedPlayerSlots[7]}::jsonb,
+        ${trackedPlayerSlots[8]}::jsonb,
+        ${trackedPlayerSlots[9]}::jsonb
       )
       ON CONFLICT (match_id) DO UPDATE
       SET status = 'INGESTED',
           aggregate_status = 'AGGREGATED',
           aggregate_attempt_count = tracked_matches.aggregate_attempt_count + 1,
           aggregate_last_error = NULL,
-          aggregated_at = NOW()
+          aggregated_at = NOW(),
+          player1 = EXCLUDED.player1,
+          player2 = EXCLUDED.player2,
+          player3 = EXCLUDED.player3,
+          player4 = EXCLUDED.player4,
+          player5 = EXCLUDED.player5,
+          player6 = EXCLUDED.player6,
+          player7 = EXCLUDED.player7,
+          player8 = EXCLUDED.player8,
+          player9 = EXCLUDED.player9,
+          player10 = EXCLUDED.player10
     `
 
     await tx.$executeRaw`
@@ -1846,7 +2078,7 @@ export async function processRawAggregateAndBurn(
           next_retry_at = NULL
       WHERE id = ${rawId}
     `
-      })
+      }, rawAggregateTransactionOptions())
       break
     } catch (err) {
       if (attempt >= 3 || !isRetryableTxError(err)) throw err
