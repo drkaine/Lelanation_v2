@@ -163,7 +163,9 @@ function buildTrackedPlayersPayload(
   for (let i = 0; i < Math.min(10, participants.length); i++) {
     const p = participants[i]
     const { gameName, tagName } = participantRiotId(p)
+    const puuid = String(p.puuid ?? '').trim()
     slots[i] = {
+      puuid: puuid.length > 0 ? puuid : null,
       gameName,
       tagName,
       region,
