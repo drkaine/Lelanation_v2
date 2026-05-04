@@ -147,13 +147,14 @@ export function computeMatchIdsTimeWindow(
 
 /**
  * Jours calendaires UTC après le `releaseDate` du patch live (version.json) pendant lesquels on ingère
- * aussi le patch N‑1 : peu de matchs sur le nouveau patch au tout début. Env: POLLER_PATCH_ROLLOUT_GRACE_DAYS (défaut 1).
+ * aussi le patch N‑1 (fenêtre [releaseDate, releaseDate+grace] au sens `isWithinPatchRolloutGraceUtc`).
+ * Défaut 2 (= releaseDate + 2 jours après le jour de release, même règle que les tests). Env: POLLER_PATCH_ROLLOUT_GRACE_DAYS.
  */
 export function getPollerPatchRolloutGraceDays(): number {
   const raw = process.env.POLLER_PATCH_ROLLOUT_GRACE_DAYS
-  if (raw == null || raw === '') return 1
+  if (raw == null || raw === '') return 2
   const n = Number.parseInt(raw, 10)
-  if (!Number.isFinite(n) || n < 0) return 1
+  if (!Number.isFinite(n) || n < 0) return 2
   return Math.min(n, 30)
 }
 

@@ -873,31 +873,14 @@ async function resolvePatchPollingPolicy(): Promise<{
   latestPatch: string | null
   latestPatchOnly: boolean
 }> {
-  const patches = await prisma.activePatch.findMany({
-    select: { gameVersion: true, gamesNumber: true, gameNumberMax: true },
-  })
-  if (patches.length === 0) return { latestPatch: null, latestPatchOnly: false }
-
-  const latest = [...patches].sort((x, y) => comparePatchVersionDesc(x.gameVersion, y.gameVersion))[0]
-  const max = Math.trunc(Number(latest.gameNumberMax ?? 0))
-  const current = Math.trunc(Number(latest.gamesNumber ?? 0))
-  const latestPatchOnly = max > 0 && current < max
-
-  /** Patch « live » = data/game/version.json (sync Data Dragon), pas active_patches (peut traîner). */
-  let latestPatch: string | null = null
+  /** Patch courant et mode priorité : uniquement `data/game/version.json` — plus de `game_number_max` / active_patches. */
   const versionInfoRes = await loadCurrentGameVersion()
-  if (versionInfoRes.isOk()) {
-    const info = versionInfoRes.unwrap()
-    if (info?.currentVersion?.trim()) {
-      latestPatch = normalizeGameVersionToMajorMinor(info.currentVersion) || null
-    }
-  }
-  if (!latestPatch) {
-    latestPatch =
-      normalizeGameVersionToMajorMinor(latest.gameVersion) || (latest.gameVersion?.trim() || null)
-  }
-
-  return { latestPatch, latestPatchOnly }
+  if (!versionInfoRes.isOk()) return { latestPatch: null, latestPatchOnly: false }
+  const info = versionInfoRes.unwrap()
+  if (!info?.currentVersion?.trim()) return { latestPatch: null, latestPatchOnly: false }
+  const latestPatch =
+    normalizeGameVersionToMajorMinor(info.currentVersion) || info.currentVersion.trim()
+  return { latestPatch, latestPatchOnly: true }
 }
 
 function canAttemptTimelineFetchNow(matchId: string, nowMs: number): boolean {
@@ -3253,6 +3236,7 @@ async function refreshPriorityRanksOffCriticalIngestPath(
         region: { not: '' },
         puuidKeyVersion: { notIn: ['erreur', 'perdu'] },
         OR: [
+          { rankTier: null },
           { rankSnapshotGameDate: null },
           { rankSnapshotGameDate: { lt: staleBefore } },
         ],
@@ -3796,7 +3780,7 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
         }
       }
 
-      // ── Clôture patches passés ayant atteint maxMatches (archive + suppression brutes) ──
+      // ── Clôture patch N-1 après version.json releaseDate + grâce (archive) — plus maxMatches ──
       if (loopIteration % 200 === 0) {
         try {
           await runPatchCleanupFromConfig(logger)

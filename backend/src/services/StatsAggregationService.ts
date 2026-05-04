@@ -1,10 +1,17 @@
 /**
- * Patch cleanup service:
- * close patches that reached maxMatches (archive + remove from active list + raw cleanup).
+ * Patch cleanup (poller) : clôture du patch N-1 après la fenêtre version.json (releaseDate + grâce UTC).
  */
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { loadMatchFilters } from './RiotConfigService.js'
+import { normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
+import {
+  findPreviousPatchEntry,
+  getPollerPatchRolloutGraceDays,
+  isWithinPatchRolloutGraceUtc,
+  loadCurrentGameVersion,
+  loadGameVersionsRecap,
+  releaseDateToStartOfDayUtcSeconds,
+} from './RiotConfigService.js'
 import { closePatch } from './PatchLifecycleService.js'
 
 type LoggerType = ReturnType<typeof createRiotPollerLogger>
@@ -15,36 +22,55 @@ function isMissingRelationError(err: unknown): boolean {
 }
 
 /**
- * Load active patch counters and close patches that have reached their target.
- * Contrainte : on ne clôture un patch que si games_number >= game_number_max.
- * Utilise close_patch() SQL : copie des tables agg_* vers les archives unifiées archive_agg_* (tous les patches), purge des hot agg_* + ingest pour le patch, gel de la ligne `active_patches` (archived_at, is_current).
+ * Après la fenêtre de rollout (releaseDate dans version.json + grâce UTC, défaut 2 jours),
+ * archive le patch N-1 (dernier avant le courant dans versions.json). Pendant la grâce, les deux patchs restent pollables ; pas de clôture.
+ * Ne s'appuie plus sur `game_number_max` ni sur match-filters.
  */
 export async function runPatchCleanupFromConfig(logger?: LoggerType): Promise<void> {
   if (!isDatabaseConfigured()) return
 
-  const filtersRes = await loadMatchFilters()
-  if (filtersRes.isErr()) return
+  const versionRes = await loadCurrentGameVersion()
+  if (!versionRes.isOk()) return
+  const vi = versionRes.unwrap()
+  if (!vi) return
 
-  const filters = filtersRes.unwrap()
-  const currentPatch = filters.versions[filters.versions.length - 1]?.version
+  const releaseDate = (vi.releaseDate ?? '').trim()
+  const currentFull = (vi.currentVersion ?? '').trim()
+  if (!releaseDate || !currentFull) return
+  if (!Number.isFinite(releaseDateToStartOfDayUtcSeconds(releaseDate))) return
+
+  const graceDays = getPollerPatchRolloutGraceDays()
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (isWithinPatchRolloutGraceUtc(releaseDate, graceDays, nowSec)) return
+
+  const currentPatch = normalizeGameVersionToMajorMinor(currentFull)
   if (!currentPatch) return
 
-  const candidates = await prisma.activePatch.findMany({
-    where: { gameNumberMax: { gt: 0 } },
-    select: { gameVersion: true, gamesNumber: true, gameNumberMax: true },
-  })
+  const recapRes = await loadGameVersionsRecap()
+  if (!recapRes.isOk()) return
+  const prev = findPreviousPatchEntry(recapRes.unwrap(), currentPatch)
+  const prevLabel = (prev?.patchLabel ?? '').trim()
+  if (!prevLabel || prevLabel === currentPatch) return
 
-  for (const c of candidates) {
-    const patch = c.gameVersion
-    if (patch === currentPatch) continue
-    if (c.gamesNumber < c.gameNumberMax) continue
-    if (logger) void logger.step('Patch cleanup: closing patch (archive + delete raw)', { patch, matchCount: c.gamesNumber })
-    try {
-      const summary = await closePatch(patch)
-      if (logger) void logger.step('Patch cleanup complete', { patch, summary })
-    } catch (err) {
-      if (logger) void logger.alerte('close_patch failed', { patch, error: String(err) })
-    }
+  const row = await prisma.activePatch.findUnique({
+    where: { gameVersion: prevLabel },
+    select: { archivedAt: true },
+  })
+  if (row?.archivedAt != null) return
+
+  if (logger) {
+    void logger.step('Patch cleanup: closing previous patch after rollout window (version.json)', {
+      patch: prevLabel,
+      currentPatch,
+      releaseDate,
+      graceDays,
+    })
+  }
+  try {
+    const summary = await closePatch(prevLabel)
+    if (logger) void logger.step('Patch cleanup complete', { patch: prevLabel, summary })
+  } catch (err) {
+    if (logger) void logger.alerte('close_patch failed', { patch: prevLabel, error: String(err) })
   }
 }
 

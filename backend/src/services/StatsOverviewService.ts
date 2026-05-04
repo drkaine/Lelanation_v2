@@ -2572,17 +2572,20 @@ export async function getInfosMetaCounts(
     ])
     const totalMatches = Number(matchRows[0]?.c ?? 0)
     let playersWithIngestMatches = totalPlayers
-    try {
-      playersWithIngestMatches = await withTimeout(
-        countDistinctPlayersInMatchesAdaptive(version, rankTier, role),
-        1500,
-        'countDistinctPlayersInMatchesAdaptive'
-      )
-    } catch (err) {
-      console.warn(
-        '[getInfosMetaCounts] slow playersWithIngestMatches fallback',
-        err instanceof Error ? err.message : err
-      )
+    const ingestLeanExists = await ingestMatchLeanTablesExist().catch(() => false)
+    if (ingestLeanExists) {
+      try {
+        playersWithIngestMatches = await withTimeout(
+          countDistinctPlayersInMatchesAdaptive(version, rankTier, role),
+          1500,
+          'countDistinctPlayersInMatchesAdaptive'
+        )
+      } catch (err) {
+        console.warn(
+          '[getInfosMetaCounts] slow playersWithIngestMatches fallback',
+          err instanceof Error ? err.message : err
+        )
+      }
     }
     return {
       totalMatches,

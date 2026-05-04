@@ -759,7 +759,8 @@ export async function upsertIngestMatchAndParticipants(
                 rankTier: createdRankTier,
                 rankDivision: createdRankDivision,
                 rankLp: createdRankLp,
-                rankSnapshotGameDate: gameDate ?? new Date(),
+                // Do not stamp rank snapshot when rank is unknown; otherwise 24h refresh gate blocks recovery.
+                rankSnapshotGameDate: createdRankTier == null ? null : gameDate ?? new Date(),
               },
               select: { id: true, puuid: true, puuidKeyVersion: true, gameName: true, tagName: true, rankTier: true },
             })
@@ -851,11 +852,11 @@ export async function upsertIngestMatchAndParticipants(
         const shardList = buildShardList(statPerks)
         const summSpells = buildSummonerSpellIds(summoner1Id, summoner2Id)
 
-        if (gameDate && isNewestStoredMatchForPuuid(puuid)) {
+        if (gameDate && isNewestStoredMatchForPuuid(puuid) && finalRankTier !== 'UNRANKED') {
           await tx.player.update({
             where: { id: playerId },
             data: {
-              rankTier: finalRankTier === 'UNRANKED' ? null : finalRankTier,
+              rankTier: finalRankTier,
               rankDivision: finalRankDivision,
               rankLp: finalRankLp,
               rankSnapshotGameDate: gameDate,

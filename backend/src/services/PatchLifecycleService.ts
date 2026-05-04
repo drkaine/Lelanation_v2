@@ -52,16 +52,46 @@ async function tableExists(name: string): Promise<boolean> {
   return Boolean(rows[0]?.ok)
 }
 
+function patchLifecycleTxOptions(): { maxWait: number; timeout: number } {
+  const timeout = Math.max(
+    10_000,
+    Math.min(3_600_000, Number(process.env.PATCH_LIFECYCLE_TX_TIMEOUT_MS ?? 180_000))
+  )
+  return { maxWait: 60_000, timeout }
+}
+
 async function closePatchWithoutLegacyFunction(patch: string): Promise<unknown> {
   const patchKey = normalizePatchKey(patch)
   if (!patchKey) return null
   const patchSql = `'${patchKey.replace(/'/g, "''")}'`
   const copiedTables: string[] = []
+  const versionedArchives = (
+    await Promise.all(
+      VERSIONED_TABLES.map(async (table) => {
+        const archiveTable = `archive_${table}`
+        return (await tableExists(archiveTable)) ? { table, archiveTable } : null
+      })
+    )
+  ).filter((x): x is { table: (typeof VERSIONED_TABLES)[number]; archiveTable: string } => x != null)
+  const championArchives = (
+    await Promise.all(
+      CHAMPION_SATELLITE_TABLES.map(async (table) => {
+        const archiveTable = `archive_${table}`
+        return (await tableExists(archiveTable)) ? { table, archiveTable } : null
+      })
+    )
+  ).filter((x): x is { table: (typeof CHAMPION_SATELLITE_TABLES)[number]; archiveTable: string } => x != null)
+  const teamArchives = (
+    await Promise.all(
+      TEAM_SATELLITE_TABLES.map(async (table) => {
+        const archiveTable = `archive_${table}`
+        return (await tableExists(archiveTable)) ? { table, archiveTable } : null
+      })
+    )
+  ).filter((x): x is { table: (typeof TEAM_SATELLITE_TABLES)[number]; archiveTable: string } => x != null)
 
   await prisma.$transaction(async (tx) => {
-    for (const table of VERSIONED_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
+    for (const { table, archiveTable } of versionedArchives) {
       const safeTable = ensureSafeTableName(table)
       const safeArchive = ensureSafeTableName(archiveTable)
       await tx.$executeRawUnsafe(`
@@ -84,9 +114,7 @@ async function closePatchWithoutLegacyFunction(patch: string): Promise<unknown> 
       copiedTables.push(table)
     }
 
-    for (const table of CHAMPION_SATELLITE_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
+    for (const { table, archiveTable } of championArchives) {
       const safeTable = ensureSafeTableName(table)
       const safeArchive = ensureSafeTableName(archiveTable)
       await tx.$executeRawUnsafe(`
@@ -112,9 +140,7 @@ async function closePatchWithoutLegacyFunction(patch: string): Promise<unknown> 
       copiedTables.push(table)
     }
 
-    for (const table of TEAM_SATELLITE_TABLES) {
-      const archiveTable = `archive_${table}`
-      if (!(await tableExists(archiveTable))) continue
+    for (const { table, archiveTable } of teamArchives) {
       const safeTable = ensureSafeTableName(table)
       const safeArchive = ensureSafeTableName(archiveTable)
       await tx.$executeRawUnsafe(`
@@ -146,7 +172,7 @@ async function closePatchWithoutLegacyFunction(patch: string): Promise<unknown> 
           is_current = false
       WHERE game_version = ${patchSql}
     `)
-  })
+  }, patchLifecycleTxOptions())
 
   return { ok: true, mode: 'ts-fallback', patch: patchKey, copiedTables }
 }
@@ -161,6 +187,11 @@ export async function closePatch(patch: string): Promise<unknown> {
   const value = (patch ?? '').trim()
   if (!value) return null
   let summary: unknown = null
+  if (!(await tableExists('ingest_matchs'))) {
+    summary = await closePatchWithoutLegacyFunction(value)
+    invalidateAggArchivePartitionCache()
+    return summary
+  }
   try {
     const rows = await prisma.$queryRaw<[{ close_patch: unknown }]>`
       SELECT close_patch(${value}::text) AS close_patch

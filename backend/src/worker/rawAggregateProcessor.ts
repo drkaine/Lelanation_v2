@@ -155,6 +155,13 @@ function participantRiotId(p: RawParticipant): { gameName: string | null; tagNam
   }
 }
 
+/** Same default as `ingestMatchLean.ts` (`upsertIngestMatchAndParticipants`). */
+function normalizePuuidKeyVersion(puuidKeyVersion: string | null): string {
+  return typeof puuidKeyVersion === 'string' && puuidKeyVersion.trim() !== ''
+    ? puuidKeyVersion.trim()
+    : 'perso'
+}
+
 function buildTrackedPlayersPayload(
   participants: RawParticipant[],
   region: string
@@ -180,11 +187,16 @@ async function upsertPlayersFromRawParticipants(
   tx: any,
   participants: RawParticipant[],
   region: string,
-  gameDate: Date | null
+  gameDate: Date | null,
+  puuidKeyVersion: string | null
 ): Promise<void> {
+  const normalizedPuuidKeyVersion = normalizePuuidKeyVersion(puuidKeyVersion)
+  const apexNoDivisionTiers = new Set(['MASTER', 'GRANDMASTER', 'CHALLENGER'])
+  const puuidsForKeyBackfill: string[] = []
   for (const participant of participants) {
     const puuid = String(participant.puuid ?? '').trim()
     if (!puuid) continue
+    puuidsForKeyBackfill.push(puuid)
     const rankTier = normalizeRankTier(participant)
     const rankDivision = normalizeRankDivision(participant)
     const { gameName, tagName } = participantRiotId(participant)
@@ -196,7 +208,11 @@ async function upsertPlayersFromRawParticipants(
     }
     if (rankTier !== 'UNRANKED') {
       dataUpdate['rankTier'] = rankTier
-      dataUpdate['rankDivision'] = rankDivision
+      // Keep existing division if incoming payload only carries tier.
+      // Explicitly persist NULL only for apex tiers that do not have divisions.
+      if (rankDivision != null || apexNoDivisionTiers.has(rankTier)) {
+        dataUpdate['rankDivision'] = rankDivision
+      }
       dataUpdate['rankSnapshotGameDate'] = gameDate ?? new Date()
     }
     await tx.player.upsert({
@@ -204,6 +220,7 @@ async function upsertPlayersFromRawParticipants(
       create: {
         puuid,
         region,
+        puuidKeyVersion: normalizedPuuidKeyVersion,
         gameName,
         tagName,
         lastSeen: gameDate ?? new Date(),
@@ -212,6 +229,19 @@ async function upsertPlayersFromRawParticipants(
         rankSnapshotGameDate: rankTier === 'UNRANKED' ? null : gameDate ?? new Date(),
       },
       update: dataUpdate,
+    })
+  }
+  if (normalizedPuuidKeyVersion && puuidsForKeyBackfill.length > 0) {
+    await tx.player.updateMany({
+      where: {
+        puuid: { in: puuidsForKeyBackfill },
+        OR: [
+          { puuidKeyVersion: null },
+          { puuidKeyVersion: '' },
+          { puuidKeyVersion: 'perdu' },
+        ],
+      },
+      data: { puuidKeyVersion: normalizedPuuidKeyVersion },
     })
   }
 }
@@ -785,7 +815,7 @@ export async function processRawAggregateAndBurn(
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await prisma.$transaction(async (tx) => {
-    await upsertPlayersFromRawParticipants(tx, participantsForAgg, region, gameDate)
+    await upsertPlayersFromRawParticipants(tx, participantsForAgg, region, gameDate, payload.puuidKeyVersion)
     const resolvedRoles = resolveParticipantRoles(participantsForAgg)
     const participantByTeamRole = new Map<string, RawParticipant[]>()
     const teamRoleByChampion = new Map<string, string>()
