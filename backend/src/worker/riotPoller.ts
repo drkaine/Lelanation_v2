@@ -64,6 +64,8 @@ import {
   upsertTrackedMatchPlayers,
   upsertTrackedMatchPlayersForAliases,
   fetchTrackedMatchesForRankHydration,
+  getTrackedMatchPlayerSlots,
+  mergeTrackedMatchSlotsPreservingHydratedRanks,
   type TrackedMatchPlayerSlot,
 } from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
@@ -1845,9 +1847,21 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
         for (const p of rawParticipants ?? []) {
           if (p?.puuid) enqueuePriorityPuuid(p.puuid)
         }
+        const dtoSlotsForTracked = buildTrackedPlayerSlotsFromMatchDto(matchDto, payload.region)
+        let slotsForTrackedUpsert = dtoSlotsForTracked
+        for (const tid of trackedIdAliases) {
+          const existingTracked = await getTrackedMatchPlayerSlots(tid).catch(() => null)
+          if (existingTracked) {
+            slotsForTrackedUpsert = mergeTrackedMatchSlotsPreservingHydratedRanks(
+              existingTracked,
+              dtoSlotsForTracked
+            )
+            break
+          }
+        }
         await upsertTrackedMatchPlayersForAliases(
           trackedIdAliases,
-          buildTrackedPlayerSlotsFromMatchDto(matchDto, payload.region),
+          slotsForTrackedUpsert,
           'QUEUED'
         ).catch(() => undefined)
         await processRawAggregateAndBurn(rawId, payload, trackedRowKeyForAgg)
@@ -2942,11 +2956,10 @@ async function runStep4ForPlayer(
                 continue
               }
               try {
-                await upsertTrackedMatchPlayers(
-                  work.matchId,
-                  buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region),
-                  'QUEUED'
-                )
+                const dtoSlotsT = buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region)
+                const existingT = await getTrackedMatchPlayerSlots(work.matchId).catch(() => null)
+                const mergedT = mergeTrackedMatchSlotsPreservingHydratedRanks(existingT, dtoSlotsT)
+                await upsertTrackedMatchPlayers(work.matchId, mergedT, 'QUEUED')
                 const payload: MatchIngestQueuePayloadV1 = {
                   v: 1,
                   stepId: fileQueueStepId,
@@ -3005,11 +3018,10 @@ async function runStep4ForPlayer(
           }
 
           try {
-            await upsertTrackedMatchPlayers(
-              work.matchId,
-              buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region),
-              'QUEUED'
-            )
+            const dtoSlotsOk = buildTrackedPlayerSlotsFromMatchDto(strict.matchDto, region)
+            const existingOk = await getTrackedMatchPlayerSlots(work.matchId).catch(() => null)
+            const mergedOk = mergeTrackedMatchSlotsPreservingHydratedRanks(existingOk, dtoSlotsOk)
+            await upsertTrackedMatchPlayers(work.matchId, mergedOk, 'QUEUED')
             const payload: MatchIngestQueuePayloadV1 = {
               v: 1,
               stepId: fileQueueStepId,

@@ -155,6 +155,29 @@ function participantRiotId(p: RawParticipant): { gameName: string | null; tagNam
   }
 }
 
+/** Same lane/economy fields as agg_champion_vs_stats / side_stats (no jungle skew) for botlane duo rows. */
+function participantBotlaneEconomySums(p: RawParticipant): {
+  goldEarned: number
+  goldSpent: number
+  maxLevelLeadLaneOpponent: number
+  maxKillDeficit: number
+  maxCsAdvantageOnLaneOpponent: number
+  visionScoreAdvantageLaneOpponent: number
+  laningPhaseGoldExpAdvantage: number
+  earlyLaningPhaseGoldExpAdvantage: number
+} {
+  return {
+    goldEarned: readParticipantMetricInt(p, 'goldEarned'),
+    goldSpent: readParticipantMetricInt(p, 'goldSpent'),
+    maxLevelLeadLaneOpponent: readParticipantMetricInt(p, 'maxLevelLeadLaneOpponent'),
+    maxKillDeficit: readParticipantMetricInt(p, 'maxKillDeficit'),
+    maxCsAdvantageOnLaneOpponent: readParticipantMetricInt(p, 'maxCsAdvantageOnLaneOpponent'),
+    visionScoreAdvantageLaneOpponent: readParticipantMetricInt(p, 'visionScoreAdvantageLaneOpponent'),
+    laningPhaseGoldExpAdvantage: readParticipantMetricInt(p, 'laningPhaseGoldExpAdvantage'),
+    earlyLaningPhaseGoldExpAdvantage: readParticipantMetricInt(p, 'earlyLaningPhaseGoldExpAdvantage'),
+  }
+}
+
 /** Same default as `ingestMatchLean.ts` (`upsertIngestMatchAndParticipants`). */
 function normalizePuuidKeyVersion(puuidKeyVersion: string | null): string {
   return typeof puuidKeyVersion === 'string' && puuidKeyVersion.trim() !== ''
@@ -318,9 +341,11 @@ async function loadTrackedMatchRankTiersByPuuid(trackedMatchId: string): Promise
     const rec = slot as Record<string, unknown>
     const puuid = String(rec['puuid'] ?? '').trim().toLowerCase()
     if (!puuid) continue
-    const rankTier = String(rec['rankTier'] ?? '').trim().toUpperCase()
+    const rankTier = String(rec['rankTier'] ?? rec['rank_tier'] ?? '')
+      .trim()
+      .toUpperCase()
     if (!rankTier) continue
-    out.set(puuid, rankTier)
+    out.set(puuid, rankTier.split('_')[0] || rankTier)
   }
   return out
 }
@@ -1561,6 +1586,10 @@ export async function processRawAggregateAndBurn(
       ) {
         const win100 = botTeam100.win === true ? 1 : 0
         const win200 = botTeam200.win === true ? 1 : 0
+        const adc100m = participantBotlaneEconomySums(botTeam100)
+        const sup100m = participantBotlaneEconomySums(supTeam100)
+        const adc200m = participantBotlaneEconomySums(botTeam200)
+        const sup200m = participantBotlaneEconomySums(supTeam200)
         await tx.$executeRaw`
           INSERT INTO agg_botlane_duo_vs_duo_stats (
             adc_id,
@@ -1572,6 +1601,22 @@ export async function processRawAggregateAndBurn(
             region,
             count_win,
             count_game,
+            sum_adc_gold_earned,
+            sum_adc_gold_spent,
+            sum_adc_max_level_lead_lane_opponent,
+            sum_adc_max_kill_deficit,
+            sum_adc_max_cs_advantage_on_lane_opponent,
+            sum_adc_vision_score_advantage_lane_opponent,
+            sum_adc_laning_phase_gold_exp_advantage,
+            sum_adc_early_laning_phase_gold_exp_advantage,
+            sum_support_gold_earned,
+            sum_support_gold_spent,
+            sum_support_max_level_lead_lane_opponent,
+            sum_support_max_kill_deficit,
+            sum_support_max_cs_advantage_on_lane_opponent,
+            sum_support_vision_score_advantage_lane_opponent,
+            sum_support_laning_phase_gold_exp_advantage,
+            sum_support_early_laning_phase_gold_exp_advantage,
             updated_at
           )
           VALUES (
@@ -1584,11 +1629,54 @@ export async function processRawAggregateAndBurn(
             ${region},
             ${win100},
             1,
+            ${adc100m.goldEarned},
+            ${adc100m.goldSpent},
+            ${adc100m.maxLevelLeadLaneOpponent},
+            ${adc100m.maxKillDeficit},
+            ${adc100m.maxCsAdvantageOnLaneOpponent},
+            ${adc100m.visionScoreAdvantageLaneOpponent},
+            ${adc100m.laningPhaseGoldExpAdvantage},
+            ${adc100m.earlyLaningPhaseGoldExpAdvantage},
+            ${sup100m.goldEarned},
+            ${sup100m.goldSpent},
+            ${sup100m.maxLevelLeadLaneOpponent},
+            ${sup100m.maxKillDeficit},
+            ${sup100m.maxCsAdvantageOnLaneOpponent},
+            ${sup100m.visionScoreAdvantageLaneOpponent},
+            ${sup100m.laningPhaseGoldExpAdvantage},
+            ${sup100m.earlyLaningPhaseGoldExpAdvantage},
             NOW()
           )
           ON CONFLICT (adc_id, support_id, opp_adc_id, opp_support_id, rank_tier, game_version, region) DO UPDATE
           SET count_game = agg_botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
               count_win = agg_botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
+              sum_adc_gold_earned = agg_botlane_duo_vs_duo_stats.sum_adc_gold_earned + EXCLUDED.sum_adc_gold_earned,
+              sum_adc_gold_spent = agg_botlane_duo_vs_duo_stats.sum_adc_gold_spent + EXCLUDED.sum_adc_gold_spent,
+              sum_adc_max_level_lead_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_max_level_lead_lane_opponent + EXCLUDED.sum_adc_max_level_lead_lane_opponent,
+              sum_adc_max_kill_deficit = agg_botlane_duo_vs_duo_stats.sum_adc_max_kill_deficit + EXCLUDED.sum_adc_max_kill_deficit,
+              sum_adc_max_cs_advantage_on_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_adc_max_cs_advantage_on_lane_opponent,
+              sum_adc_vision_score_advantage_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_vision_score_advantage_lane_opponent + EXCLUDED.sum_adc_vision_score_advantage_lane_opponent,
+              sum_adc_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_adc_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_laning_phase_gold_exp_advantage,
+              sum_adc_early_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_adc_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_early_laning_phase_gold_exp_advantage,
+              sum_support_gold_earned = agg_botlane_duo_vs_duo_stats.sum_support_gold_earned + EXCLUDED.sum_support_gold_earned,
+              sum_support_gold_spent = agg_botlane_duo_vs_duo_stats.sum_support_gold_spent + EXCLUDED.sum_support_gold_spent,
+              sum_support_max_level_lead_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_level_lead_lane_opponent + EXCLUDED.sum_support_max_level_lead_lane_opponent,
+              sum_support_max_kill_deficit =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_kill_deficit + EXCLUDED.sum_support_max_kill_deficit,
+              sum_support_max_cs_advantage_on_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_support_max_cs_advantage_on_lane_opponent,
+              sum_support_vision_score_advantage_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_vision_score_advantage_lane_opponent + EXCLUDED.sum_support_vision_score_advantage_lane_opponent,
+              sum_support_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_support_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_laning_phase_gold_exp_advantage,
+              sum_support_early_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_support_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_early_laning_phase_gold_exp_advantage,
               updated_at = NOW()
         `
         await tx.$executeRaw`
@@ -1602,6 +1690,22 @@ export async function processRawAggregateAndBurn(
             region,
             count_win,
             count_game,
+            sum_adc_gold_earned,
+            sum_adc_gold_spent,
+            sum_adc_max_level_lead_lane_opponent,
+            sum_adc_max_kill_deficit,
+            sum_adc_max_cs_advantage_on_lane_opponent,
+            sum_adc_vision_score_advantage_lane_opponent,
+            sum_adc_laning_phase_gold_exp_advantage,
+            sum_adc_early_laning_phase_gold_exp_advantage,
+            sum_support_gold_earned,
+            sum_support_gold_spent,
+            sum_support_max_level_lead_lane_opponent,
+            sum_support_max_kill_deficit,
+            sum_support_max_cs_advantage_on_lane_opponent,
+            sum_support_vision_score_advantage_lane_opponent,
+            sum_support_laning_phase_gold_exp_advantage,
+            sum_support_early_laning_phase_gold_exp_advantage,
             updated_at
           )
           VALUES (
@@ -1614,11 +1718,54 @@ export async function processRawAggregateAndBurn(
             ${region},
             ${win200},
             1,
+            ${adc200m.goldEarned},
+            ${adc200m.goldSpent},
+            ${adc200m.maxLevelLeadLaneOpponent},
+            ${adc200m.maxKillDeficit},
+            ${adc200m.maxCsAdvantageOnLaneOpponent},
+            ${adc200m.visionScoreAdvantageLaneOpponent},
+            ${adc200m.laningPhaseGoldExpAdvantage},
+            ${adc200m.earlyLaningPhaseGoldExpAdvantage},
+            ${sup200m.goldEarned},
+            ${sup200m.goldSpent},
+            ${sup200m.maxLevelLeadLaneOpponent},
+            ${sup200m.maxKillDeficit},
+            ${sup200m.maxCsAdvantageOnLaneOpponent},
+            ${sup200m.visionScoreAdvantageLaneOpponent},
+            ${sup200m.laningPhaseGoldExpAdvantage},
+            ${sup200m.earlyLaningPhaseGoldExpAdvantage},
             NOW()
           )
           ON CONFLICT (adc_id, support_id, opp_adc_id, opp_support_id, rank_tier, game_version, region) DO UPDATE
           SET count_game = agg_botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
               count_win = agg_botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
+              sum_adc_gold_earned = agg_botlane_duo_vs_duo_stats.sum_adc_gold_earned + EXCLUDED.sum_adc_gold_earned,
+              sum_adc_gold_spent = agg_botlane_duo_vs_duo_stats.sum_adc_gold_spent + EXCLUDED.sum_adc_gold_spent,
+              sum_adc_max_level_lead_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_max_level_lead_lane_opponent + EXCLUDED.sum_adc_max_level_lead_lane_opponent,
+              sum_adc_max_kill_deficit = agg_botlane_duo_vs_duo_stats.sum_adc_max_kill_deficit + EXCLUDED.sum_adc_max_kill_deficit,
+              sum_adc_max_cs_advantage_on_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_adc_max_cs_advantage_on_lane_opponent,
+              sum_adc_vision_score_advantage_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_adc_vision_score_advantage_lane_opponent + EXCLUDED.sum_adc_vision_score_advantage_lane_opponent,
+              sum_adc_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_adc_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_laning_phase_gold_exp_advantage,
+              sum_adc_early_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_adc_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_early_laning_phase_gold_exp_advantage,
+              sum_support_gold_earned = agg_botlane_duo_vs_duo_stats.sum_support_gold_earned + EXCLUDED.sum_support_gold_earned,
+              sum_support_gold_spent = agg_botlane_duo_vs_duo_stats.sum_support_gold_spent + EXCLUDED.sum_support_gold_spent,
+              sum_support_max_level_lead_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_level_lead_lane_opponent + EXCLUDED.sum_support_max_level_lead_lane_opponent,
+              sum_support_max_kill_deficit =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_kill_deficit + EXCLUDED.sum_support_max_kill_deficit,
+              sum_support_max_cs_advantage_on_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_support_max_cs_advantage_on_lane_opponent,
+              sum_support_vision_score_advantage_lane_opponent =
+                agg_botlane_duo_vs_duo_stats.sum_support_vision_score_advantage_lane_opponent + EXCLUDED.sum_support_vision_score_advantage_lane_opponent,
+              sum_support_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_support_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_laning_phase_gold_exp_advantage,
+              sum_support_early_laning_phase_gold_exp_advantage =
+                agg_botlane_duo_vs_duo_stats.sum_support_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_early_laning_phase_gold_exp_advantage,
               updated_at = NOW()
         `
       }

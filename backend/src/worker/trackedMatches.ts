@@ -9,6 +9,32 @@ export type TrackedMatchPlayerSlot = {
   rankDivision?: string | null
 }
 
+function slotRecord(slot: unknown): Record<string, unknown> | null {
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return null
+  return slot as Record<string, unknown>
+}
+
+/** Tier from slot JSON (camelCase ou snake_case depuis la DB). */
+export function normalizedRankTierFromSlot(slot: unknown): string {
+  const r = slotRecord(slot)
+  if (!r) return 'UNRANKED'
+  const raw = String(r.rankTier ?? r.rank_tier ?? '')
+    .trim()
+    .toUpperCase()
+  if (!raw || raw === 'UNRANKED') return 'UNRANKED'
+  return raw.split('_')[0] || 'UNRANKED'
+}
+
+function rankDivisionFromSlot(slot: unknown): string | null {
+  const r = slotRecord(slot)
+  if (!r) return null
+  const d = String(r.rankDivision ?? r.rank_division ?? '')
+    .trim()
+    .toUpperCase()
+  if (!d || d === 'UNRANKED') return null
+  return d
+}
+
 function normalizeSlotsTo10(
   slots: Array<TrackedMatchPlayerSlot | null | undefined>
 ): Array<TrackedMatchPlayerSlot | null> {
@@ -26,6 +52,68 @@ function normalizeSlotsTo10(
     }
   }
   return out
+}
+
+/**
+ * Avant un upsert depuis le match-v5 DTO : le DTO n’expose souvent pas le ladder réel (UNRANKED),
+ * alors que `tracked_matches` peut déjà contenir rankTier/rankDivision hydratés (league-v4).
+ * On conserve les rangs existants quand le DTO n’apporte pas de tier exploitable.
+ */
+export function mergeTrackedMatchSlotsPreservingHydratedRanks(
+  existing: Array<TrackedMatchPlayerSlot | null | undefined> | null | undefined,
+  incoming: Array<TrackedMatchPlayerSlot | null | undefined>
+): Array<TrackedMatchPlayerSlot | null> {
+  const inc = normalizeSlotsTo10(incoming)
+  const prev = existing ? normalizeSlotsTo10(existing) : Array.from({ length: 10 }, () => null)
+  return inc.map((slot, i) => {
+    const old = prev[i]
+    if (!slot) return old
+    const oldTier = normalizedRankTierFromSlot(old)
+    const newTier = normalizedRankTierFromSlot(slot)
+    if (old && oldTier !== 'UNRANKED' && newTier === 'UNRANKED') {
+      return {
+        ...slot,
+        rankTier: old?.rankTier ?? oldTier,
+        rankDivision: old?.rankDivision ?? rankDivisionFromSlot(old),
+      }
+    }
+    return slot
+  })
+}
+
+export async function getTrackedMatchPlayerSlots(
+  matchId: string
+): Promise<Array<TrackedMatchPlayerSlot | null> | null> {
+  const id = String(matchId ?? '').trim()
+  if (!id) return null
+  const row = await prisma.trackedMatch.findUnique({
+    where: { matchId: id },
+    select: {
+      player1: true,
+      player2: true,
+      player3: true,
+      player4: true,
+      player5: true,
+      player6: true,
+      player7: true,
+      player8: true,
+      player9: true,
+      player10: true,
+    },
+  })
+  if (!row) return null
+  return normalizeSlotsTo10([
+    row.player1 as TrackedMatchPlayerSlot | null,
+    row.player2 as TrackedMatchPlayerSlot | null,
+    row.player3 as TrackedMatchPlayerSlot | null,
+    row.player4 as TrackedMatchPlayerSlot | null,
+    row.player5 as TrackedMatchPlayerSlot | null,
+    row.player6 as TrackedMatchPlayerSlot | null,
+    row.player7 as TrackedMatchPlayerSlot | null,
+    row.player8 as TrackedMatchPlayerSlot | null,
+    row.player9 as TrackedMatchPlayerSlot | null,
+    row.player10 as TrackedMatchPlayerSlot | null,
+  ])
 }
 
 function dedupeNonEmptyTrackedIds(ids: string[]): string[] {

@@ -397,18 +397,18 @@ export async function archiveChampionTierDailySnapshotsInDateRange(
   `
   const n = Number(countRows[0]?.c ?? 0)
   if (n === 0) return { archivedRowCount: 0 }
-  await prisma.$transaction([
-    prisma.$executeRaw`
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
       INSERT INTO champion_tier_daily_snapshots_archive
       SELECT * FROM champion_tier_daily_snapshots
       WHERE date_of_game >= ${startInclusive}::date AND date_of_game < ${endExclusive}::date
       ON CONFLICT DO NOTHING
-    `,
-    prisma.$executeRaw`
+    `
+    await tx.$executeRaw`
       DELETE FROM champion_tier_daily_snapshots
       WHERE date_of_game >= ${startInclusive}::date AND date_of_game < ${endExclusive}::date
-    `,
-  ])
+    `
+  })
   return { archivedRowCount: n }
 }
 

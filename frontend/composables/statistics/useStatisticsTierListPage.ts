@@ -86,8 +86,8 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return championByKey(championId)?.name ?? null
   }
 
-  const tierListViewModel = ref<'table' | 'chart'>('table')
-  function setTierListViewModel(value: 'table' | 'chart') {
+  const tierListViewModel = ref<'table' | 'chart' | 'botlane'>('table')
+  function setTierListViewModel(value: 'table' | 'chart' | 'botlane') {
     tierListViewModel.value = value
   }
   const tierListSortColumn = ref<TierListSortColumn | null>('rank')
@@ -744,6 +744,10 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   async function loadTierList() {
+    if (tierListViewModel.value === 'botlane') {
+      tierListPending.value = false
+      return
+    }
     tierListPending.value = true
     tierListError.value = null
     tierListRefStatsById.value = new Map()
@@ -822,13 +826,14 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     }
   }
   watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
-    loadTierList().catch(() => undefined)
+    if (tierListViewModel.value !== 'botlane') loadTierList().catch(() => undefined)
   })
   watch(effectiveTierListPatch, (patch, oldPatch) => {
+    if (tierListViewModel.value === 'botlane') return
     if (patch || oldPatch) loadTierList().catch(() => undefined)
   })
   watch(progressionFromVersion, () => {
-    loadTierList().catch(() => undefined)
+    if (tierListViewModel.value !== 'botlane') loadTierList().catch(() => undefined)
   })
 
   return {

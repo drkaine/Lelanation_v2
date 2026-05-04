@@ -21,19 +21,20 @@ interface StatisticsUiState {
   activeTab: StatisticsMainTab
 }
 
+/** Même ordre que la barre d’onglets stats (navigation clavier / persistance). */
 const VALID_TABS: StatisticsMainTab[] = [
   'overview',
-  'championTable',
-  'balance',
-  'trends',
   'team',
   'objectives',
   'surrender',
-  'runes',
-  'items',
-  'spells',
-  'infos',
   'bans',
+  'championTable',
+  'balance',
+  'runes',
+  'spells',
+  'items',
+  'infos',
+  'trends',
 ]
 
 function isValidTab(value: unknown): value is StatisticsMainTab {

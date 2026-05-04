@@ -1267,7 +1267,9 @@ async function runBackfillOnce(): Promise<void> {
         a.support_id,
         b.adc_id AS opp_adc_id,
         b.support_id AS opp_support_id,
-        a.team_win
+        a.team_win,
+        a.match_id,
+        a.team_id
       FROM botlane_duos a
       INNER JOIN botlane_duos b
         ON b.match_id = a.match_id
@@ -1277,6 +1279,97 @@ async function runBackfillOnce(): Promise<void> {
         AND a.support_id IS NOT NULL
         AND b.adc_id IS NOT NULL
         AND b.support_id IS NOT NULL
+    ),
+    duo_lane_sums AS (
+      SELECT
+        d.*,
+        COALESCE((adc.stats->>'goldEarned')::bigint, 0) AS adc_gold_earned,
+        COALESCE((adc.stats->>'goldSpent')::bigint, 0) AS adc_gold_spent,
+        COALESCE(
+          COALESCE((adc.stats->>'maxLevelLeadLaneOpponent')::int, (adc.stats->'challenges'->>'maxLevelLeadLaneOpponent')::int),
+          0
+        ) AS adc_max_level_lead_lane_opponent,
+        COALESCE(
+          COALESCE((adc.stats->>'maxKillDeficit')::int, (adc.stats->'challenges'->>'maxKillDeficit')::int),
+          0
+        ) AS adc_max_kill_deficit,
+        COALESCE(
+          COALESCE(
+            (adc.stats->>'maxCsAdvantageOnLaneOpponent')::int,
+            (adc.stats->'challenges'->>'maxCsAdvantageOnLaneOpponent')::int
+          ),
+          0
+        ) AS adc_max_cs_advantage_on_lane_opponent,
+        COALESCE(
+          COALESCE(
+            (adc.stats->>'visionScoreAdvantageLaneOpponent')::int,
+            (adc.stats->'challenges'->>'visionScoreAdvantageLaneOpponent')::int
+          ),
+          0
+        ) AS adc_vision_score_advantage_lane_opponent,
+        COALESCE(
+          COALESCE(
+            (adc.stats->>'laningPhaseGoldExpAdvantage')::int,
+            (adc.stats->'challenges'->>'laningPhaseGoldExpAdvantage')::int
+          ),
+          0
+        ) AS adc_laning_phase_gold_exp_advantage,
+        COALESCE(
+          COALESCE(
+            (adc.stats->>'earlyLaningPhaseGoldExpAdvantage')::int,
+            (adc.stats->'challenges'->>'earlyLaningPhaseGoldExpAdvantage')::int
+          ),
+          0
+        ) AS adc_early_laning_phase_gold_exp_advantage,
+        COALESCE((sup.stats->>'goldEarned')::bigint, 0) AS sup_gold_earned,
+        COALESCE((sup.stats->>'goldSpent')::bigint, 0) AS sup_gold_spent,
+        COALESCE(
+          COALESCE((sup.stats->>'maxLevelLeadLaneOpponent')::int, (sup.stats->'challenges'->>'maxLevelLeadLaneOpponent')::int),
+          0
+        ) AS sup_max_level_lead_lane_opponent,
+        COALESCE(
+          COALESCE((sup.stats->>'maxKillDeficit')::int, (sup.stats->'challenges'->>'maxKillDeficit')::int),
+          0
+        ) AS sup_max_kill_deficit,
+        COALESCE(
+          COALESCE(
+            (sup.stats->>'maxCsAdvantageOnLaneOpponent')::int,
+            (sup.stats->'challenges'->>'maxCsAdvantageOnLaneOpponent')::int
+          ),
+          0
+        ) AS sup_max_cs_advantage_on_lane_opponent,
+        COALESCE(
+          COALESCE(
+            (sup.stats->>'visionScoreAdvantageLaneOpponent')::int,
+            (sup.stats->'challenges'->>'visionScoreAdvantageLaneOpponent')::int
+          ),
+          0
+        ) AS sup_vision_score_advantage_lane_opponent,
+        COALESCE(
+          COALESCE(
+            (sup.stats->>'laningPhaseGoldExpAdvantage')::int,
+            (sup.stats->'challenges'->>'laningPhaseGoldExpAdvantage')::int
+          ),
+          0
+        ) AS sup_laning_phase_gold_exp_advantage,
+        COALESCE(
+          COALESCE(
+            (sup.stats->>'earlyLaningPhaseGoldExpAdvantage')::int,
+            (sup.stats->'challenges'->>'earlyLaningPhaseGoldExpAdvantage')::int
+          ),
+          0
+        ) AS sup_early_laning_phase_gold_exp_advantage
+      FROM duo_vs_duo d
+      INNER JOIN imp_resolved adc
+        ON adc.match_id = d.match_id
+       AND adc.team_id = d.team_id
+       AND adc.role_resolved = 'BOTTOM'
+       AND adc.champion_id = d.adc_id
+      INNER JOIN imp_resolved sup
+        ON sup.match_id = d.match_id
+       AND sup.team_id = d.team_id
+       AND sup.role_resolved = 'SUPPORT'
+       AND sup.champion_id = d.support_id
     )
     INSERT INTO agg_botlane_duo_vs_duo_stats (
       adc_id,
@@ -1288,6 +1381,22 @@ async function runBackfillOnce(): Promise<void> {
       region,
       count_win,
       count_game,
+      sum_adc_gold_earned,
+      sum_adc_gold_spent,
+      sum_adc_max_level_lead_lane_opponent,
+      sum_adc_max_kill_deficit,
+      sum_adc_max_cs_advantage_on_lane_opponent,
+      sum_adc_vision_score_advantage_lane_opponent,
+      sum_adc_laning_phase_gold_exp_advantage,
+      sum_adc_early_laning_phase_gold_exp_advantage,
+      sum_support_gold_earned,
+      sum_support_gold_spent,
+      sum_support_max_level_lead_lane_opponent,
+      sum_support_max_kill_deficit,
+      sum_support_max_cs_advantage_on_lane_opponent,
+      sum_support_vision_score_advantage_lane_opponent,
+      sum_support_laning_phase_gold_exp_advantage,
+      sum_support_early_laning_phase_gold_exp_advantage,
       updated_at
     )
     SELECT
@@ -1300,8 +1409,24 @@ async function runBackfillOnce(): Promise<void> {
       region,
       SUM(CASE WHEN team_win THEN 1 ELSE 0 END)::int AS count_win,
       COUNT(*)::int AS count_game,
+      SUM(adc_gold_earned)::bigint,
+      SUM(adc_gold_spent)::bigint,
+      SUM(adc_max_level_lead_lane_opponent)::int,
+      SUM(adc_max_kill_deficit)::int,
+      SUM(adc_max_cs_advantage_on_lane_opponent)::int,
+      SUM(adc_vision_score_advantage_lane_opponent)::int,
+      SUM(adc_laning_phase_gold_exp_advantage)::int,
+      SUM(adc_early_laning_phase_gold_exp_advantage)::int,
+      SUM(sup_gold_earned)::bigint,
+      SUM(sup_gold_spent)::bigint,
+      SUM(sup_max_level_lead_lane_opponent)::int,
+      SUM(sup_max_kill_deficit)::int,
+      SUM(sup_max_cs_advantage_on_lane_opponent)::int,
+      SUM(sup_vision_score_advantage_lane_opponent)::int,
+      SUM(sup_laning_phase_gold_exp_advantage)::int,
+      SUM(sup_early_laning_phase_gold_exp_advantage)::int,
       NOW()
-    FROM duo_vs_duo
+    FROM duo_lane_sums
     GROUP BY
       adc_id,
       support_id,
@@ -1314,6 +1439,22 @@ async function runBackfillOnce(): Promise<void> {
     SET
       count_win = EXCLUDED.count_win,
       count_game = EXCLUDED.count_game,
+      sum_adc_gold_earned = EXCLUDED.sum_adc_gold_earned,
+      sum_adc_gold_spent = EXCLUDED.sum_adc_gold_spent,
+      sum_adc_max_level_lead_lane_opponent = EXCLUDED.sum_adc_max_level_lead_lane_opponent,
+      sum_adc_max_kill_deficit = EXCLUDED.sum_adc_max_kill_deficit,
+      sum_adc_max_cs_advantage_on_lane_opponent = EXCLUDED.sum_adc_max_cs_advantage_on_lane_opponent,
+      sum_adc_vision_score_advantage_lane_opponent = EXCLUDED.sum_adc_vision_score_advantage_lane_opponent,
+      sum_adc_laning_phase_gold_exp_advantage = EXCLUDED.sum_adc_laning_phase_gold_exp_advantage,
+      sum_adc_early_laning_phase_gold_exp_advantage = EXCLUDED.sum_adc_early_laning_phase_gold_exp_advantage,
+      sum_support_gold_earned = EXCLUDED.sum_support_gold_earned,
+      sum_support_gold_spent = EXCLUDED.sum_support_gold_spent,
+      sum_support_max_level_lead_lane_opponent = EXCLUDED.sum_support_max_level_lead_lane_opponent,
+      sum_support_max_kill_deficit = EXCLUDED.sum_support_max_kill_deficit,
+      sum_support_max_cs_advantage_on_lane_opponent = EXCLUDED.sum_support_max_cs_advantage_on_lane_opponent,
+      sum_support_vision_score_advantage_lane_opponent = EXCLUDED.sum_support_vision_score_advantage_lane_opponent,
+      sum_support_laning_phase_gold_exp_advantage = EXCLUDED.sum_support_laning_phase_gold_exp_advantage,
+      sum_support_early_laning_phase_gold_exp_advantage = EXCLUDED.sum_support_early_laning_phase_gold_exp_advantage,
       updated_at = NOW()
   `)
 

@@ -789,6 +789,25 @@ model AggBotlaneDuoVsDuoStat {
   region       String
   countWin     Int      @default(0) @map("count_win")
   countGame    Int      @default(0) @map("count_game")
+
+  sumAdcGoldEarned                        BigInt @default(0) @map("sum_adc_gold_earned")
+  sumAdcGoldSpent                         BigInt @default(0) @map("sum_adc_gold_spent")
+  sumAdcMaxLevelLeadLaneOpponent          Int    @default(0) @map("sum_adc_max_level_lead_lane_opponent")
+  sumAdcMaxKillDeficit                    Int    @default(0) @map("sum_adc_max_kill_deficit")
+  sumAdcMaxCsAdvantageOnLaneOpponent      Int    @default(0) @map("sum_adc_max_cs_advantage_on_lane_opponent")
+  sumAdcVisionScoreAdvantageLaneOpponent  Int    @default(0) @map("sum_adc_vision_score_advantage_lane_opponent")
+  sumAdcLaningPhaseGoldExpAdvantage       Int    @default(0) @map("sum_adc_laning_phase_gold_exp_advantage")
+  sumAdcEarlyLaningPhaseGoldExpAdvantage  Int    @default(0) @map("sum_adc_early_laning_phase_gold_exp_advantage")
+
+  sumSupportGoldEarned                        BigInt @default(0) @map("sum_support_gold_earned")
+  sumSupportGoldSpent                         BigInt @default(0) @map("sum_support_gold_spent")
+  sumSupportMaxLevelLeadLaneOpponent          Int    @default(0) @map("sum_support_max_level_lead_lane_opponent")
+  sumSupportMaxKillDeficit                    Int    @default(0) @map("sum_support_max_kill_deficit")
+  sumSupportMaxCsAdvantageOnLaneOpponent      Int    @default(0) @map("sum_support_max_cs_advantage_on_lane_opponent")
+  sumSupportVisionScoreAdvantageLaneOpponent  Int    @default(0) @map("sum_support_vision_score_advantage_lane_opponent")
+  sumSupportLaningPhaseGoldExpAdvantage       Int    @default(0) @map("sum_support_laning_phase_gold_exp_advantage")
+  sumSupportEarlyLaningPhaseGoldExpAdvantage  Int    @default(0) @map("sum_support_early_laning_phase_gold_exp_advantage")
+
   updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   @@id([adcId, supportId, oppAdcId, oppSupportId, rankTier, gameVersion, region])

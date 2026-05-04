@@ -7,89 +7,113 @@ export interface StatsEndpointSourceRule {
 }
 
 /**
- * Contract used by the stats runtime: endpoints consumed by statistics page must
- * read only materialized views and/or champion tier daily snapshots.
+ * Contract for stats HTTP handlers: UI reads go through `matchVersionedAggFrom` /
+ * `sqlAggUnionAllLiveAndArchives`, which resolve to unified snapshot tables
+ * `archive_agg_*` (not live `agg_*`). Logical names below are the archive physical tables.
  */
 export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
   {
     path: '/overview',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats', 'agg_match_outcome_stats', 'agg_champion_bans_by_banner'],
+    allowedSources: [
+      'archive_agg_champion_core_stats',
+      'archive_agg_match_outcome_stats',
+      'archive_agg_champion_bans_by_banner',
+    ],
   },
   {
     path: '/overview-detail',
     policy: 'mv_only',
     allowedSources: [
-      'agg_champion_core_stats',
-      'agg_champion_runes_solo_stats',
-      'agg_champion_runes_stats',
-      'agg_champion_item_solo_stats',
-      'agg_champion_item_stats',
-      'agg_champion_summoner_spells',
-      'agg_champion_shard_solo_stats',
-      'agg_champion_summoner_spell_pair_stats',
-      'agg_champion_item_starter_set_stats',
+      'archive_agg_champion_core_stats',
+      'archive_agg_champion_runes_solo_stats',
+      'archive_agg_champion_runes_stats',
+      'archive_agg_champion_item_solo_stats',
+      'archive_agg_champion_item_stats',
+      'archive_agg_champion_summoner_spells',
+      'archive_agg_champion_shard_solo_stats',
+      'archive_agg_champion_summoner_spell_pair_stats',
+      'archive_agg_champion_item_starter_set_stats',
     ],
   },
   {
     path: '/overview-duration-winrate',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats', 'agg_champion_bucket'],
+    allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_bucket'],
   },
   {
     path: '/overview-abandons',
     policy: 'mv_only',
-    allowedSources: ['agg_match_outcome_stats'],
+    allowedSources: ['archive_agg_match_outcome_stats'],
   },
   {
     path: '/overview-teams',
     policy: 'mv_only',
-    allowedSources: ['agg_team_core_stats', 'agg_team_bucket', 'agg_champion_bans_by_banner'],
+    allowedSources: [
+      'archive_agg_team_core_stats',
+      'archive_agg_team_bucket',
+      'archive_agg_champion_bans_by_banner',
+    ],
   },
   {
     path: '/overview-sides',
     policy: 'mv_only',
-    allowedSources: ['agg_team_core_stats', 'agg_team_bucket', 'agg_champion_side_stats', 'agg_champion_bans_by_banner'],
+    allowedSources: [
+      'archive_agg_team_core_stats',
+      'archive_agg_team_bucket',
+      'archive_agg_champion_side_stats',
+      'archive_agg_champion_bans_by_banner',
+    ],
   },
   {
     path: '/overview-sides-progression',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_side_stats', 'agg_champion_bans_by_banner'],
+    allowedSources: ['archive_agg_champion_side_stats', 'archive_agg_champion_bans_by_banner'],
   },
   {
     path: '/overview-progression',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats'],
+    allowedSources: ['archive_agg_champion_core_stats'],
   },
   {
     path: '/overview-progression-full',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats', 'agg_champion_bans_by_banner'],
+    allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_bans_by_banner'],
   },
   {
     path: '/champions',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats'],
+    allowedSources: ['archive_agg_champion_core_stats'],
   },
   {
     path: '/champions/global-table',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_side_stats', 'agg_champion_bans_by_banner'],
+    allowedSources: ['archive_agg_champion_side_stats', 'archive_agg_champion_bans_by_banner'],
   },
   {
     path: '/champions/:championId/damage-split',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats', 'agg_champion_damage_stats'],
+    allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_damage_stats'],
   },
   {
     path: '/champions/bans-table',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_bans_by_banner', 'agg_match_outcome_stats'],
+    allowedSources: ['archive_agg_champion_bans_by_banner', 'archive_agg_match_outcome_stats'],
   },
   {
     path: '/tier-list',
     policy: 'mv_only',
-    allowedSources: ['agg_champion_core_stats', 'agg_champion_vs_stats', 'active_patches'],
+    allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_vs_stats', 'active_patches'],
+  },
+  {
+    path: '/botlane-vs-botlane',
+    policy: 'mv_only',
+    allowedSources: ['archive_agg_botlane_duo_vs_duo_stats'],
+  },
+  {
+    path: '/botlane-duo-tierlist',
+    policy: 'mv_only',
+    allowedSources: ['archive_agg_botlane_duo_vs_duo_stats'],
   },
   {
     path: '/champions/:championId/tier-trend-snapshots',

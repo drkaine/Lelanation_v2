@@ -46,6 +46,10 @@ import {
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { getBalanceFramework } from '../services/StatsBalanceService.js'
 import {
+  getBotlaneDuoOverallTierTable,
+  getBotlaneDuoVsDuoTierTable,
+} from '../services/StatsBotlaneVsBotlaneService.js'
+import {
   batchWatchlistDeltas,
   getGlobalWinrateMovers,
   getWatchlistDelta,
@@ -1381,6 +1385,30 @@ router.get('/tierlist-graph', async (req: Request, res: Response) => {
       winrate: r.winrate,
     })),
   })
+})
+
+/** GET /api/stats/botlane-vs-botlane — botlane duos vs enemy botlane, tier note vs peers (same filters as overview). */
+router.get('/botlane-vs-botlane', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  if (!version) {
+    return res.status(400).json({ error: 'version query parameter is required' })
+  }
+  const data = await getBotlaneDuoVsDuoTierTable(version, rankTier)
+  return res.json(data ?? { version: null, rankTier: null, rows: [] })
+})
+
+/** GET /api/stats/botlane-duo-tierlist — allied botlane duo ranking (aggregated over all matchups). */
+router.get('/botlane-duo-tierlist', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  if (!version) {
+    return res.status(400).json({ error: 'version query parameter is required' })
+  }
+  const data = await getBotlaneDuoOverallTierTable(version, rankTier)
+  return res.json(data ?? { version: null, rankTier: null, rows: [] })
 })
 
 router.get('/balance-framework', async (req: Request, res: Response) => {

@@ -911,19 +911,25 @@ async function resolveAggTableRoleColumn(
 ): Promise<'role' | 'role_norm'> {
   const cached = aggTableRoleColumnNameCache.get(tableName)
   if (cached) return cached
-  const safeTable = tableName.replace(/'/g, "''")
-  const rows = await prisma.$queryRawUnsafe<Array<{ col: string }>>(`
-    SELECT column_name AS col
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = '${safeTable}'
-      AND column_name IN ('role', 'role_norm')
-    ORDER BY CASE WHEN column_name = 'role' THEN 0 ELSE 1 END
-    LIMIT 1
-  `)
-  const col = rows[0]?.col === 'role' ? 'role' : 'role_norm'
-  aggTableRoleColumnNameCache.set(tableName, col)
-  return col
+  const archiveTable = `archive_${tableName}`
+  for (const tn of [archiveTable, tableName]) {
+    const safeTable = tn.replace(/'/g, "''")
+    const rows = await prisma.$queryRawUnsafe<Array<{ col: string }>>(`
+      SELECT column_name AS col
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = '${safeTable}'
+        AND column_name IN ('role', 'role_norm')
+      ORDER BY CASE WHEN column_name = 'role' THEN 0 ELSE 1 END
+      LIMIT 1
+    `)
+    if (rows[0]?.col) {
+      const col = rows[0].col === 'role' ? 'role' : 'role_norm'
+      aggTableRoleColumnNameCache.set(tableName, col)
+      return col
+    }
+  }
+  return 'role_norm'
 }
 
 type SpellPairSqlRow = {
@@ -3475,8 +3481,8 @@ export async function getObjectiveOutcomeAggByPatchDivision(
         tb.objective_bucket,
         SUM(tb.count_game)::bigint AS games,
         SUM(tb.count_win)::bigint AS wins
-      FROM agg_team_bucket tb
-      INNER JOIN agg_team_core_stats tc ON tc.id = tb.team_stat_id
+      FROM archive_agg_team_bucket tb
+      INNER JOIN archive_agg_team_core_stats tc ON tc.id = tb.team_stat_id
       WHERE ${whereSql}
       GROUP BY tc.game_version, tc.rank_tier, tb.objective_key, tb.objective_bucket
       ORDER BY tc.game_version DESC, tc.rank_tier ASC, tb.objective_key ASC, tb.objective_bucket ASC

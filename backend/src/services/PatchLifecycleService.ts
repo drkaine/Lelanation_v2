@@ -7,6 +7,7 @@ const VERSIONED_TABLES = [
   'agg_team_core_stats',
   'agg_champion_vs_stats',
   'agg_champion_side_stats',
+  'agg_champion_bans_by_banner',
   'agg_botlane_duo_vs_duo_stats',
   'agg_champion_summoner_spell_pair_stats',
   'agg_champion_item_starter_set_stats',
@@ -25,7 +26,6 @@ const CHAMPION_SATELLITE_TABLES = [
   'agg_champion_shard_solo_stats',
   'agg_champion_item_stats',
   'agg_champion_item_solo_stats',
-  'agg_champion_bans_by_banner',
 ] as const
 
 const TEAM_SATELLITE_TABLES = ['agg_team_bucket'] as const

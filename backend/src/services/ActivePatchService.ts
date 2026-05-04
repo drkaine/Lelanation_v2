@@ -19,7 +19,7 @@ async function applyActivePatchGameCountsFromDb(): Promise<void> {
       SELECT
         (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
         COALESCE(SUM(count_match), 0)::bigint AS cnt
-      FROM agg_match_outcome_stats
+      FROM archive_agg_match_outcome_stats
       WHERE rank_tier <> 'UNRANKED'
         AND COALESCE(NULLIF(TRIM(game_version), ''), '') <> ''
       GROUP BY 1
@@ -70,7 +70,7 @@ async function syncActivePatchesImpl(): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
     SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
     FROM (
-      SELECT game_version FROM agg_match_outcome_stats
+      SELECT game_version FROM archive_agg_match_outcome_stats
     ) v
     WHERE COALESCE(TRIM(v.game_version), '') <> ''
   `

@@ -22,13 +22,19 @@
     <div class="w-full flex-shrink-0 bg-surface/30 px-4 pb-2 pt-4">
       <div
         ref="tabsNavEl"
+        role="tablist"
+        :aria-label="t('statisticsPage.title')"
         class="flex flex-nowrap gap-1 overflow-x-auto border-b border-primary/30 pb-2"
       >
         <button
           v-for="tab in tabs"
+          :id="`statistics-tab-${tab.id}`"
           :key="tab.id"
           type="button"
+          role="tab"
           :data-tab-id="tab.id"
+          :aria-selected="activeTab === tab.id"
+          :tabindex="activeTab === tab.id ? 0 : -1"
           :class="[
             'rounded px-3 py-1.5 text-sm font-medium transition-colors',
             activeTab === tab.id
@@ -36,8 +42,7 @@
               : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
           ]"
           @click="activeTab = tab.id"
-          @keydown.left.prevent="focusPrevNextTab(tab.id, -1)"
-          @keydown.right.prevent="focusPrevNextTab(tab.id, 1)"
+          @keydown="onStatisticsTabsKeydown($event, tab.id)"
         >
           {{ tab.label }}
         </button>
@@ -796,6 +801,22 @@ const activeTab = ref<
   | 'abandons'
   | 'bans'
 >(initialActiveTabFromRoute())
+
+/** Ordre unique barre d’onglets + navigation clavier (←/→/↑/↓, Home, End). */
+const STATISTICS_TAB_NAV_ORDER: readonly StatisticsMainTab[] = [
+  'overview',
+  'team',
+  'objectives',
+  'surrender',
+  'bans',
+  'championTable',
+  'balance',
+  'runes',
+  'spells',
+  'items',
+  'infos',
+]
+
 const allTabs = computed(() => [
   { id: 'overview' as const, label: t('statisticsPage.tabOverview'), widgetId: 'overview' },
   { id: 'team' as const, label: t('statisticsPage.tabTeam'), widgetId: 'team' },
@@ -821,26 +842,69 @@ const allTabs = computed(() => [
 const activeSection = computed<StatisticsTabSection | null>(() => sectionFromQuery())
 const tabs = computed(() => {
   const section = activeSection.value
-  if (!section) return allTabs.value
-  const visibleTabIds = new Set(STATISTICS_SECTION_TABS[section])
-  return allTabs.value.filter(tab => visibleTabIds.has(tab.id))
+  const byId = new Map(allTabs.value.map(tab => [tab.id, tab]))
+  const allowedIds = section
+    ? new Set(STATISTICS_SECTION_TABS[section])
+    : new Set(STATISTICS_TAB_NAV_ORDER)
+  return STATISTICS_TAB_NAV_ORDER.map(id => byId.get(id)).filter(
+    (tab): tab is (typeof allTabs.value)[number] => tab != null && allowedIds.has(tab.id)
+  )
 })
 const tabsNavEl = ref<HTMLElement | null>(null)
 type VisibleStatisticsTabId = (typeof allTabs.value)[number]['id']
 
-function focusPrevNextTab(currentTabId: VisibleStatisticsTabId, direction: -1 | 1): void {
-  const ids = tabs.value.map(t => t.id) as VisibleStatisticsTabId[]
-  const idx = ids.indexOf(currentTabId)
-  if (idx < 0 || ids.length === 0) return
-  const nextIdx = (idx + direction + ids.length) % ids.length
-  const nextId = ids[nextIdx]
-  if (!nextId) return
+function focusStatisticsTabButton(nextId: VisibleStatisticsTabId): void {
   activeTab.value = nextId
   if (!import.meta.client) return
   requestAnimationFrame(() => {
     const el = tabsNavEl.value?.querySelector<HTMLButtonElement>(`button[data-tab-id="${nextId}"]`)
     el?.focus()
   })
+}
+
+function orderedVisibleTabIds(): VisibleStatisticsTabId[] {
+  return tabs.value.map(t => t.id) as VisibleStatisticsTabId[]
+}
+
+function focusPrevNextTab(currentTabId: VisibleStatisticsTabId, direction: -1 | 1): void {
+  const ids = orderedVisibleTabIds()
+  if (ids.length === 0) return
+  let idx = ids.indexOf(currentTabId)
+  if (idx < 0) idx = ids.indexOf(activeTab.value as VisibleStatisticsTabId)
+  if (idx < 0) idx = 0
+  const nextIdx = (idx + direction + ids.length) % ids.length
+  const nextId = ids[nextIdx]
+  if (!nextId) return
+  focusStatisticsTabButton(nextId)
+}
+
+function focusStatisticsTabEdge(which: 'first' | 'last'): void {
+  const ids = orderedVisibleTabIds()
+  const nextId = which === 'first' ? ids[0] : ids[ids.length - 1]
+  if (!nextId) return
+  focusStatisticsTabButton(nextId)
+}
+
+function onStatisticsTabsKeydown(e: KeyboardEvent, tabId: VisibleStatisticsTabId): void {
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault()
+    focusPrevNextTab(tabId, -1)
+    return
+  }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    focusPrevNextTab(tabId, 1)
+    return
+  }
+  if (e.key === 'Home') {
+    e.preventDefault()
+    focusStatisticsTabEdge('first')
+    return
+  }
+  if (e.key === 'End') {
+    e.preventDefault()
+    focusStatisticsTabEdge('last')
+  }
 }
 
 function cardIsFavorite(cardId: string): boolean {
@@ -1291,12 +1355,23 @@ watch(
   () => queryFirst(route.query.tab as string | string[] | null | undefined),
   tabQ => {
     if (!import.meta.client) return
+    const qTab = String(tabQ || '').toLowerCase()
+    if (['vs-botlane', 'vsbotlane', 'botlane-vs', 'vsbotlane'].includes(qTab)) {
+      const q = { ...route.query } as Record<string, string | string[]>
+      delete q.tab
+      q.view = 'botlane'
+      navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true }).catch(
+        () => undefined
+      )
+      return
+    }
     if (tabQ !== 'tierlist') return
-    const q = { ...route.query } as Record<string, string | string[]>
-    delete q.tab
-    navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true }).catch(
-      () => undefined
-    )
+    const nextQ = { ...route.query } as Record<string, string | string[]>
+    delete nextQ.tab
+    navigateTo(
+      { path: localePath('/statistics/tier-list'), query: nextQ },
+      { replace: true }
+    ).catch(() => undefined)
   },
   { immediate: true }
 )

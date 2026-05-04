@@ -5,6 +5,7 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import {
+  liveAggRelationExists,
   matchVersionedAggFrom,
   normalizePatchMajorMinor,
   sqlAggOrArchiveRelation,
@@ -29,8 +30,8 @@ export function buildRawMatchCond(
 }
 
 /**
- * Nombre de parties (lignes `count_match`) : `agg_match_outcome_stats` ∪ archive,
- * fusion par (game_version, rank_tier) puis somme sur toutes les divisions du filtre.
+ * Nombre de parties (`count_match`) depuis `archive_agg_match_outcome_stats`,
+ * groupé par (game_version, rank_tier) puis somme sur les divisions du filtre.
  */
 export async function sumMatchOutcomeCountUnionLiveArchive(
   version?: string | string[] | null,
@@ -185,11 +186,22 @@ export async function getChampionGlobalTable(
     const single = normalizeSingleVersionKey(version)
     if (single) {
       const rel = await sqlAggOrArchiveRelation(aggTableName, single)
+      if (rel?.includes('UNION ALL')) {
+        const tables: string[] = []
+        if (await archiveAggExists(aggTableName)) tables.push(`archive_${aggTableName}`)
+        if (await liveAggRelationExists(aggTableName)) tables.push(aggTableName)
+        return tables.length > 0 ? tables : [aggTableName]
+      }
       const r = rel ?? aggTableName
       if (r.includes('(')) return [`archive_${aggTableName}`]
       return [aggTableName]
     }
-    if (await archiveAggExists(aggTableName)) return [aggTableName, `archive_${aggTableName}`]
+    if (await archiveAggExists(aggTableName)) {
+      if (await liveAggRelationExists(aggTableName)) {
+        return [`archive_${aggTableName}`, aggTableName]
+      }
+      return [`archive_${aggTableName}`]
+    }
     return [aggTableName]
   }
 
