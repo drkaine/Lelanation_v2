@@ -105,6 +105,8 @@ function rankTierParam(value: unknown): string[] | null {
     .flatMap((s) => (s.includes(',') ? s.split(',').map((x) => x.trim()) : [s.trim()]))
     .map((s) => s.toUpperCase())
     .filter(Boolean)
+    /** Même sémantique que `/tier-list` : `all` / `ALL` = pas de filtre par ligue (pas de `rank_tier = 'ALL'` en SQL). */
+    .filter((s) => s !== 'ALL' && s !== '*')
   return tiers.length ? tiers : null
 }
 
@@ -243,7 +245,7 @@ function filterChampionGlobalRowsByOtp<
 
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD or &rankTier=GOLD&rankTier=PLATINUM */
 router.get('/overview', async (req: Request, res: Response) => {
-  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  res.set('Cache-Control', 'no-store')
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
@@ -311,7 +313,7 @@ router.get('/overview', async (req: Request, res: Response) => {
 
 /** GET /api/stats/overview-detail - runes, rune sets, items, item sets, items by order, summoner spells. Query: ?version=16.1 &rankTier=GOLD &includeSmite=1. Lit précalculé si version null. */
 router.get('/overview-detail', async (req: Request, res: Response) => {
-  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  res.set('Cache-Control', 'no-store')
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)

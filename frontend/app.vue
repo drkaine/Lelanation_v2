@@ -282,6 +282,8 @@ const onKeyDown = (event: KeyboardEvent) => {
     const tabOrder = [
       'overview',
       'team',
+      'objectives',
+      'surrender',
       'bans',
       'championTable',
       'balance',

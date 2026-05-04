@@ -86,9 +86,14 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     return championByKey(championId)?.name ?? null
   }
 
-  const tierListViewModel = ref<'table' | 'chart' | 'botlane'>('table')
-  function setTierListViewModel(value: 'table' | 'chart' | 'botlane') {
+  const tierListViewModel = ref<'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank'>('table')
+  function setTierListViewModel(value: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank') {
     tierListViewModel.value = value
+  }
+  function tierListViewIsBotlanePanel(
+    vm: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank'
+  ): boolean {
+    return vm === 'botlaneMatchups' || vm === 'botlaneDuoRank'
   }
   const tierListSortColumn = ref<TierListSortColumn | null>('rank')
   const tierListSortDir = ref<'asc' | 'desc'>('desc')
@@ -744,7 +749,7 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
   }
 
   async function loadTierList() {
-    if (tierListViewModel.value === 'botlane') {
+    if (tierListViewIsBotlanePanel(tierListViewModel.value)) {
       tierListPending.value = false
       return
     }
@@ -826,14 +831,14 @@ export function useStatisticsTierListPage(args: UseStatisticsTierListPageArgs) {
     }
   }
   watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
-    if (tierListViewModel.value !== 'botlane') loadTierList().catch(() => undefined)
+    if (!tierListViewIsBotlanePanel(tierListViewModel.value)) loadTierList().catch(() => undefined)
   })
   watch(effectiveTierListPatch, (patch, oldPatch) => {
-    if (tierListViewModel.value === 'botlane') return
+    if (tierListViewIsBotlanePanel(tierListViewModel.value)) return
     if (patch || oldPatch) loadTierList().catch(() => undefined)
   })
   watch(progressionFromVersion, () => {
-    if (tierListViewModel.value !== 'botlane') loadTierList().catch(() => undefined)
+    if (!tierListViewIsBotlanePanel(tierListViewModel.value)) loadTierList().catch(() => undefined)
   })
 
   return {

@@ -134,7 +134,8 @@ async function sqlSinglePatchArchivePlusLive(aggTableName: string, p: string): P
         sqlLiveSinglePatchFragment(normalizedTable, p)
       )
     }
-    return `(${sqlArchivedSinglePatchFragment(normalizedTable, p)} UNION ALL ${sqlLiveSinglePatchFragment(normalizedTable, p)})`
+    /** Lecture stats = snapshots `archive_agg_*` uniquement ; l’UNION ALL avec `agg_*` live dupliquait les lignes (totaux ×2, WR objectifs incohérents). */
+    return sqlArchivedSinglePatchFragment(normalizedTable, p)
   }
   if (archiveOk) return sqlArchivedSinglePatchFragment(normalizedTable, p)
   return sqlLiveSinglePatchFragment(normalizedTable, p)
@@ -216,7 +217,7 @@ export async function sqlAggUnionAllLiveAndArchives(aggTableName: string, asAlia
     if (aggTableName === 'agg_match_outcome_stats') {
       return `${sqlUnionMatchOutcomeArchiveLiveDeduped(`(${archSelect()})`, `(${liveSelect()})`)} AS ${asAlias}`
     }
-    return `((${archSelect()}) UNION ALL (${liveSelect()})) AS ${asAlias}`
+    return `((${archSelect()})) AS ${asAlias}`
   }
   if (archiveOk) {
     if (CHAMPION_SATELLITE_TABLES.has(aggTableName)) {

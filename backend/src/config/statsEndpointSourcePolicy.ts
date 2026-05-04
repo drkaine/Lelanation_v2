@@ -8,8 +8,10 @@ export interface StatsEndpointSourceRule {
 
 /**
  * Contract for stats HTTP handlers: UI reads go through `matchVersionedAggFrom` /
- * `sqlAggUnionAllLiveAndArchives`, which resolve to unified snapshot tables
- * `archive_agg_*` (not live `agg_*`). Logical names below are the archive physical tables.
+ * `sqlAggUnionAllLiveAndArchives`. When both `archive_agg_*` and live `agg_*` exist,
+ * single-patch reads prefer **archive only** (no UNION live) to avoid duplicated rows;
+ * live is still used if the archive table is missing. `agg_match_outcome_stats` keeps a
+ * deduped archive∪live union. Logical names below are the archive physical tables.
  */
 export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
   {

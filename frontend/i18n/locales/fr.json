@@ -160,7 +160,19 @@
     "stealth": "Furtivité",
     "tenacity": "Ténacité",
     "trinket": "Objet",
-    "vision": "Vision"
+    "vision": "Vision",
+    "other": "Autres",
+    "selector": {
+      "loading": "Chargement des objets…",
+      "noResults": "Aucun objet trouvé",
+      "validation": {
+        "junglePetRequiresSmite": "Les familiers de jungle nécessitent le sort Punition.",
+        "tier3BootsRequiresMid": "Les bottes de niveau 3 ne sont disponibles qu’avec le rôle Mid.",
+        "atlasRequiresSupport": "Atlas et ses améliorations nécessitent le rôle Support.",
+        "atlasUpgradeSingle": "Une seule amélioration d’Atlas est autorisée.",
+        "atlasUpgradeNeedsStarter": "Placez Atlas dans les objets de départ pour choisir une amélioration."
+      }
+    }
   },
   "runes": {
     "fundamental": "RUNES FONDAMENTALES",
@@ -262,6 +274,8 @@
     "tabObjectives": "Objectifs",
     "tabSurrender": "Surrender",
     "tabTierlistBotlane": "Tier-liste botlane",
+    "tierListViewBotlaneMatchups": "Tier list botlane",
+    "tierListViewBotlaneDuoRank": "Classement duo",
     "tierListBotlaneDuoLabel": "Duo",
     "tierListBotlaneModeTitle": "Affichage",
     "botlaneFilterVersus": "Versus",

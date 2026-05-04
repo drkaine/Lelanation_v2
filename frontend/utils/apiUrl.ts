@@ -11,18 +11,25 @@ function getRuntimeConfigSafe(): any {
 
 export function apiUrl(path: string): string {
   const cfg = getRuntimeConfigSafe()
-
-  // Client: always use same-origin (path only). Requests go to current domain and are proxied by Nitro.
-  // Using apiBase on client would point to localhost on the user's machine, not the server.
-  if (process.client) {
-    return path
-  }
-
-  // Server: need absolute URL. Use apiBase if set (backend on different host/port), else siteUrl.
   const configuredBase =
     (cfg.public?.apiBase as string | undefined) ||
     (process.env.NUXT_PUBLIC_API_BASE as string | undefined) ||
     ''
+
+  // Client: by default use same-origin (Nitro proxy). In local/dev setups, if apiBase points to a local
+  // backend, call it directly to avoid stale/misconfigured proxy targets.
+  if (process.client) {
+    const localApiBase = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(configuredBase.trim())
+    const browserOnLocalhost =
+      typeof window !== 'undefined' &&
+      /^(localhost|127\.0\.0\.1|::1)$/i.test(window.location.hostname)
+    if (localApiBase && browserOnLocalhost) {
+      return configuredBase.replace(/\/$/, '') + path
+    }
+    return path
+  }
+
+  // Server: need absolute URL. Use apiBase if set (backend on different host/port), else siteUrl.
   if (configuredBase) {
     return configuredBase.replace(/\/$/, '') + path
   }

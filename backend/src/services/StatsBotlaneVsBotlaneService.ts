@@ -63,7 +63,9 @@ function ensureTierCoverage(tiers: BotlaneVsTier[], n: number): BotlaneVsTier[] 
 function buildBdMatchCond(version?: string | string[] | null, rankTier?: string | string[] | null): string {
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
   if (versions.length === 1) {
     parts.push(
       `bd.game_version LIKE '${normalizePatchMajorMinor(versions[0]!).replace(/'/g, "''")}%'`,
@@ -73,7 +75,6 @@ function buildBdMatchCond(version?: string | string[] | null, rankTier?: string 
   }
   if (ranks.length === 1) parts.push(`bd.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) parts.push(`bd.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  else parts.push(`bd.rank_tier <> 'UNRANKED'`)
   return parts.length > 0 ? parts.join(' AND ') : '1=1'
 }
 

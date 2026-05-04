@@ -1274,8 +1274,7 @@ async function runBackfillOnce(): Promise<void> {
       INNER JOIN botlane_duos b
         ON b.match_id = a.match_id
        AND b.team_id <> a.team_id
-      WHERE a.rank_tier <> 'UNRANKED'
-        AND a.adc_id IS NOT NULL
+      WHERE a.adc_id IS NOT NULL
         AND a.support_id IS NOT NULL
         AND b.adc_id IS NOT NULL
         AND b.support_id IS NOT NULL

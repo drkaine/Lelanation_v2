@@ -1359,7 +1359,7 @@ watch(
     if (['vs-botlane', 'vsbotlane', 'botlane-vs', 'vsbotlane'].includes(qTab)) {
       const q = { ...route.query } as Record<string, string | string[]>
       delete q.tab
-      q.view = 'botlane'
+      q.view = 'botlane-matchups'
       navigateTo({ path: localePath('/statistics/tier-list'), query: q }, { replace: true }).catch(
         () => undefined
       )

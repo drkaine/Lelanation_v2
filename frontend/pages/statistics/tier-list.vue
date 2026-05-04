@@ -51,13 +51,25 @@
             type="button"
             :class="[
               'rounded px-3 py-1.5 text-sm font-medium transition-colors',
-              tierListViewModel === 'botlane'
+              tierListViewModel === 'botlaneMatchups'
                 ? 'border border-accent/50 bg-accent/20 text-accent'
                 : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
             ]"
-            @click="setTierListMainView('botlane')"
+            @click="setTierListMainView('botlaneMatchups')"
           >
-            {{ t('statisticsPage.tabTierlistBotlane') }}
+            {{ t('statisticsPage.tierListViewBotlaneMatchups') }}
+          </button>
+          <button
+            type="button"
+            :class="[
+              'rounded px-3 py-1.5 text-sm font-medium transition-colors',
+              tierListViewModel === 'botlaneDuoRank'
+                ? 'border border-accent/50 bg-accent/20 text-accent'
+                : 'border border-transparent text-text/80 hover:bg-primary/10 hover:text-text',
+            ]"
+            @click="setTierListMainView('botlaneDuoRank')"
+          >
+            {{ t('statisticsPage.tierListViewBotlaneDuoRank') }}
           </button>
         </div>
         <h2
@@ -213,41 +225,6 @@
                 </option>
               </select>
             </div>
-            <div v-if="tierListViewModel === 'botlane'">
-              <div class="mb-1 text-sm font-medium text-text">
-                {{ t('statisticsPage.tierListBotlaneModeTitle') }}
-              </div>
-              <div
-                class="inline-flex w-full overflow-hidden rounded border border-primary/40 bg-background"
-                role="group"
-                :aria-label="t('statisticsPage.tierListBotlaneModeTitle')"
-              >
-                <button
-                  type="button"
-                  class="flex-1 px-2 py-1.5 text-xs font-medium transition-colors"
-                  :class="
-                    botlaneTierMode === 'versus'
-                      ? 'bg-blue-500/20 text-blue-200'
-                      : 'text-text/75 hover:bg-white/10'
-                  "
-                  @click="botlaneTierMode = 'versus'"
-                >
-                  {{ t('statisticsPage.botlaneFilterVersus') }}
-                </button>
-                <button
-                  type="button"
-                  class="flex-1 border-l border-primary/30 px-2 py-1.5 text-xs font-medium transition-colors"
-                  :class="
-                    botlaneTierMode === 'ranking'
-                      ? 'bg-blue-500/20 text-blue-200'
-                      : 'text-text/75 hover:bg-white/10'
-                  "
-                  @click="botlaneTierMode = 'ranking'"
-                >
-                  {{ t('statisticsPage.botlaneFilterRanking') }}
-                </button>
-              </div>
-            </div>
             <div>
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.overviewMatchesByDivision') }}
@@ -306,7 +283,11 @@
                 </button>
               </div>
             </div>
-            <div v-if="tierListViewModel !== 'botlane'">
+            <div
+              v-if="
+                tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
+              "
+            >
               <div class="mb-1 text-sm font-medium text-text">
                 {{ t('statisticsPage.filterRole') }}
               </div>
@@ -398,10 +379,23 @@
         >
           <div class="w-full space-y-4">
             <StatisticsTierListTab
-              v-show="tierListViewModel !== 'botlane'"
+              v-show="
+                tierListViewModel !== 'botlaneMatchups' && tierListViewModel !== 'botlaneDuoRank'
+              "
               :show-view-model-toggle="false"
             />
-            <StatisticsVsBotlaneTab v-show="tierListViewModel === 'botlane'" />
+            <StatisticsBotlaneMatchupsTierTab
+              v-show="tierListViewModel === 'botlaneMatchups'"
+              :vs-data="botlaneVsData"
+              :vs-pending="botlaneVsPending"
+              :vs-error="botlaneVsError"
+            />
+            <StatisticsVsBotlaneTab
+              v-show="tierListViewModel === 'botlaneDuoRank'"
+              :ranking-data="botlaneRankingData"
+              :ranking-pending="botlaneRankingPending"
+              :ranking-error="botlaneRankingError"
+            />
           </div>
         </div>
       </div>
@@ -449,6 +443,9 @@ const StatisticsTierListTab = defineAsyncComponent(
 )
 const StatisticsVsBotlaneTab = defineAsyncComponent(
   () => import('~/components/statistics/tabs/StatisticsVsBotlaneTab.vue')
+)
+const StatisticsBotlaneMatchupsTierTab = defineAsyncComponent(
+  () => import('~/components/statistics/tabs/StatisticsBotlaneMatchupsTierTab.vue')
 )
 
 const BOTLANE_STATS_TIMEOUT_MS = 60_000
@@ -723,7 +720,10 @@ type BotlaneTierPayload = {
   }>
 } | null
 
-const botlaneTierMode = ref<'versus' | 'ranking'>('versus')
+function isBotlaneTierListView(vm: string): boolean {
+  return vm === 'botlaneMatchups' || vm === 'botlaneDuoRank'
+}
+
 const botlaneVsData = ref<BotlaneTierPayload>(null)
 const botlaneRankingData = ref<BotlaneTierPayload>(null)
 const botlaneVsPending = ref(false)
@@ -731,8 +731,10 @@ const botlaneRankingPending = ref(false)
 const botlaneVsError = ref(false)
 const botlaneRankingError = ref(false)
 
-async function loadBotlaneDashboard(): Promise<void> {
-  if (tierListViewModel.value !== 'botlane') return
+async function loadActiveBotlanePanel(): Promise<void> {
+  const vm = tierListViewModel.value
+  if (!isBotlaneTierListView(vm)) return
+
   const version = statsVersionFilter.value.trim()
   if (!version) {
     botlaneVsData.value = null
@@ -743,48 +745,64 @@ async function loadBotlaneDashboard(): Promise<void> {
     botlaneRankingError.value = false
     return
   }
-  botlaneVsPending.value = true
-  botlaneRankingPending.value = true
-  botlaneVsError.value = false
-  botlaneRankingError.value = false
+
   const params = new URLSearchParams()
   params.set('version', version)
   for (const t of statsDivisionFilter.value) params.append('rankTier', t)
   const q = params.toString() ? `?${params.toString()}` : ''
-  try {
-    const [vs, rk] = await Promise.all([
-      statsFetch<BotlaneTierPayload>(apiUrl('/api/stats/botlane-vs-botlane' + q), {
-        timeout: BOTLANE_STATS_TIMEOUT_MS,
-      }),
-      statsFetch<BotlaneTierPayload>(apiUrl('/api/stats/botlane-duo-tierlist' + q), {
-        timeout: BOTLANE_STATS_TIMEOUT_MS,
-      }),
-    ])
-    botlaneVsData.value = vs
-    botlaneRankingData.value = rk
-  } catch {
-    botlaneVsData.value = null
-    botlaneRankingData.value = null
-    botlaneVsError.value = true
-    botlaneRankingError.value = true
-  } finally {
-    botlaneVsPending.value = false
+  const fetchOpts = {
+    timeout: BOTLANE_STATS_TIMEOUT_MS,
+    cache: 'no-store' as const,
+    headers: { 'cache-control': 'no-cache' },
+  }
+
+  if (vm === 'botlaneMatchups') {
     botlaneRankingPending.value = false
+    botlaneVsPending.value = true
+    botlaneVsError.value = false
+    try {
+      botlaneVsData.value = await statsFetch<BotlaneTierPayload>(
+        apiUrl('/api/stats/botlane-vs-botlane' + q),
+        fetchOpts
+      )
+      botlaneVsError.value = false
+    } catch {
+      botlaneVsData.value = null
+      botlaneVsError.value = true
+    } finally {
+      botlaneVsPending.value = false
+    }
+  } else {
+    botlaneVsPending.value = false
+    botlaneRankingPending.value = true
+    botlaneRankingError.value = false
+    try {
+      botlaneRankingData.value = await statsFetch<BotlaneTierPayload>(
+        apiUrl('/api/stats/botlane-duo-tierlist' + q),
+        fetchOpts
+      )
+      botlaneRankingError.value = false
+    } catch {
+      botlaneRankingData.value = null
+      botlaneRankingError.value = true
+    } finally {
+      botlaneRankingPending.value = false
+    }
   }
 }
 
-function setTierListMainView(view: 'table' | 'chart' | 'botlane') {
+function setTierListMainView(view: 'table' | 'chart' | 'botlaneMatchups' | 'botlaneDuoRank') {
   setTierListViewModel(view)
-  if (view === 'botlane') {
-    loadBotlaneDashboard().catch(() => undefined)
+  if (isBotlaneTierListView(view)) {
+    loadActiveBotlanePanel().catch(() => undefined)
   }
 }
 
 function onStatsFilterChange() {
-  if (tierListViewModel.value !== 'botlane') {
+  if (!isBotlaneTierListView(tierListViewModel.value)) {
     tierList.loadTierList().catch(() => undefined)
   } else {
-    loadBotlaneDashboard().catch(() => undefined)
+    loadActiveBotlanePanel().catch(() => undefined)
   }
   if (statsVersionOptions.value.length <= 1) {
     loadOverviewVersionsCatalog().catch(() => undefined)
@@ -798,7 +816,6 @@ function resetStatsFilters() {
   statsOtpFilter.value = 'non'
   progressionFromVersionOverride.value = ''
   championSearchQuery.value = ''
-  botlaneTierMode.value = 'versus'
   onStatsFilterChange()
 }
 
@@ -820,12 +837,9 @@ function applyTierListStateFromQuery(): void {
   const otpRaw = queryFirst(route.query.otp as string | string[] | null | undefined)
   const divisionsRaw = queryAll(route.query.rankTier as string | string[] | null | undefined)
     .map(v => v.toUpperCase())
-    .filter(Boolean)
+    .filter(v => Boolean(v) && v !== 'ALL')
   const sortRaw = queryFirst(route.query.sort as string | string[] | null | undefined)
   const viewRaw = queryFirst(route.query.view as string | string[] | null | undefined).toLowerCase()
-  const botlaneModeRaw = queryFirst(
-    route.query.botlaneMode as string | string[] | null | undefined
-  ).toLowerCase()
 
   isApplyingQueryState.value = true
   statsVersionFilter.value = versionRaw
@@ -836,9 +850,12 @@ function applyTierListStateFromQuery(): void {
     tierList.tierListSortColumn.value = sortRaw
     tierList.tierListSortDir.value = 'desc'
     tierList.tierListViewModel.value = 'table'
+  } else if (viewRaw === 'botlane-matchups') {
+    tierList.tierListViewModel.value = 'botlaneMatchups'
+  } else if (viewRaw === 'botlane-duos' || viewRaw === 'botlane-ranking') {
+    tierList.tierListViewModel.value = 'botlaneDuoRank'
   } else if (viewRaw === 'botlane') {
-    tierList.tierListViewModel.value = 'botlane'
-    botlaneTierMode.value = botlaneModeRaw === 'ranking' ? 'ranking' : 'versus'
+    tierList.tierListViewModel.value = 'botlaneDuoRank'
   } else if (viewRaw === 'chart') {
     tierList.tierListViewModel.value = 'chart'
   } else if (viewRaw === 'table') {
@@ -874,10 +891,12 @@ function syncTierListStateToQuery(): void {
   if (tierList.tierListViewModel.value === 'chart') {
     nextQuery.view = 'chart'
     delete nextQuery.botlaneMode
-  } else if (tierList.tierListViewModel.value === 'botlane') {
-    nextQuery.view = 'botlane'
-    if (botlaneTierMode.value === 'ranking') nextQuery.botlaneMode = 'ranking'
-    else delete nextQuery.botlaneMode
+  } else if (tierList.tierListViewModel.value === 'botlaneMatchups') {
+    nextQuery.view = 'botlane-matchups'
+    delete nextQuery.botlaneMode
+  } else if (tierList.tierListViewModel.value === 'botlaneDuoRank') {
+    nextQuery.view = 'botlane-duos'
+    delete nextQuery.botlaneMode
   } else {
     delete nextQuery.view
     delete nextQuery.botlaneMode
@@ -895,12 +914,17 @@ watch(
     if (!import.meta.client) return
     if (isSyncingQueryState.value) return
     applyTierListStateFromQuery()
-    // Même instance de page : ?view=botlane n'appelle pas setTierListMainView → il faut recharger les APIs botlane.
-    if (tierListViewModel.value === 'botlane') {
-      loadBotlaneDashboard().catch(() => undefined)
+    // Même instance de page : changement de query sans clic → recharger l’API botlane active.
+    if (isBotlaneTierListView(tierListViewModel.value)) {
+      loadActiveBotlanePanel().catch(() => undefined)
     }
   }
 )
+
+/** Hydrate filtres / vue depuis l’URL avant les effets async (évite une sync query qui enlève `version` avant le premier fetch botlane). */
+if (import.meta.client) {
+  applyTierListStateFromQuery()
+}
 
 watch(
   [
@@ -911,7 +935,6 @@ watch(
     () => tierList.tierListSortColumn.value,
     () => tierList.tierListSortDir.value,
     () => tierList.tierListViewModel.value,
-    botlaneTierMode,
   ],
   () => {
     syncTierListStateToQuery()
@@ -921,7 +944,7 @@ watch(
 watch(
   () => tierListViewModel.value,
   (v, prev) => {
-    if (prev === 'botlane' && v !== 'botlane') {
+    if (isBotlaneTierListView(prev) && !isBotlaneTierListView(v)) {
       tierList.loadTierList().catch(() => undefined)
     }
   }
@@ -938,8 +961,8 @@ onMounted(async () => {
   await loadKnownVersionsFromGameData()
   await loadOverviewVersionsCatalog()
   applyDefaultVersionFiltersFromKnownVersions()
-  if (tierListViewModel.value === 'botlane') {
-    await loadBotlaneDashboard()
+  if (isBotlaneTierListView(tierListViewModel.value)) {
+    await loadActiveBotlanePanel()
   } else {
     await tierList.loadTierList()
   }
@@ -947,14 +970,15 @@ onMounted(async () => {
 })
 
 const __vm = getCurrentInstance()
-if (__vm?.proxy) {
+if (__vm) {
   const __ctx = new Proxy(
     {},
     {
       get(_target, key: string | symbol) {
         if (key === 't') return t
+        const proxyObj = __vm.proxy as Record<string, unknown> | null | undefined
         if (typeof key !== 'string') {
-          return unref((__vm.proxy as Record<string, unknown>)[key as string])
+          return undefined
         }
         if (key in tierList) {
           const v = tierList[key as keyof typeof tierList]
@@ -965,7 +989,7 @@ if (__vm?.proxy) {
         if (setupState && key in setupState) {
           return unref(setupState[key] as never)
         }
-        return unref((__vm.proxy as Record<string, unknown>)[key])
+        return unref(proxyObj?.[key])
       },
       set(_target, key: string | symbol, value: unknown) {
         if (typeof key === 'string') {
@@ -983,7 +1007,10 @@ if (__vm?.proxy) {
             return true
           }
         }
-        ;(__vm.proxy as Record<string, unknown>)[key as string] = value
+        const proxyObj = __vm.proxy as Record<string, unknown> | null | undefined
+        if (proxyObj && typeof key === 'string') {
+          proxyObj[key] = value
+        }
         return true
       },
     }

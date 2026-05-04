@@ -32,6 +32,26 @@ import { isKeptMatchPlayerDurationBucket, timelineTimestampMsToGameMinute } from
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
 
+/** Prisma lean ingest requiert les deux tables ; elles peuvent être absentes après `drop_ingest_tables`. */
+let ingestLeanTablesExistCache: { checkedAtMs: number; ok: boolean } | null = null
+const INGEST_LEAN_TABLES_EXIST_TTL_MS = 60_000
+
+export async function ingestLeanTablesExist(): Promise<boolean> {
+  const now = Date.now()
+  const c = ingestLeanTablesExistCache
+  if (c && now - c.checkedAtMs < INGEST_LEAN_TABLES_EXIST_TTL_MS) return c.ok
+  const rows = await prisma.$queryRaw<Array<{ c: bigint }>>`
+    SELECT COUNT(*)::bigint AS c
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_type = 'BASE TABLE'
+      AND table_name IN ('ingest_match_players', 'ingest_matchs')
+  `
+  const ok = Number(rows[0]?.c ?? 0) === 2
+  ingestLeanTablesExistCache = { checkedAtMs: now, ok }
+  return ok
+}
+
 function ingestAdvisoryLockKeys(riotMatchId: string): { k1: number; k2: number } {
   const h = createHash('sha256').update(`ingest:${riotMatchId}`).digest()
   return { k1: h.readInt32BE(0), k2: h.readInt32BE(4) }
@@ -260,6 +280,28 @@ export async function preloadIngestLeanMatchDbData(puuids: string[]): Promise<Ma
   const unique = [...new Set(puuids.filter(Boolean))]
   if (unique.length === 0) return { maxGameByPuuid, playerRankSnapshotByPuuid, playerDbLadderByPuuid }
 
+  if (!(await ingestLeanTablesExist())) {
+    const playerRows = await prisma.player.findMany({
+      where: { puuid: { in: unique } },
+      select: {
+        puuid: true,
+        rankSnapshotGameDate: true,
+        rankTier: true,
+        rankDivision: true,
+        rankLp: true,
+      },
+    })
+    for (const row of playerRows) {
+      playerRankSnapshotByPuuid.set(row.puuid, { rankSnapshotGameDate: row.rankSnapshotGameDate })
+      playerDbLadderByPuuid.set(row.puuid, {
+        rankTier: row.rankTier,
+        rankDivision: row.rankDivision,
+        rankLp: row.rankLp,
+      })
+    }
+    return { maxGameByPuuid, playerRankSnapshotByPuuid, playerDbLadderByPuuid }
+  }
+
   const rows = await prisma.$queryRaw<Array<{ puuid: string; max_game: Date | null }>>`
     SELECT pl.puuid, MAX(im.game_date) AS max_game
     FROM players pl
@@ -319,6 +361,9 @@ export async function upsertIngestMatchAndParticipants(
       : 'perso'
   const riotMatchId = resolveRiotMatchIdForIngest(queueRiotMatchId, dto)
   if (!riotMatchId) throw new MatchIngestSkippedError('no_riot_match_id')
+  if (!(await ingestLeanTablesExist())) {
+    throw new MatchIngestSkippedError('ingest_tables_absent')
+  }
   const info = dto.info
   if (!info?.participants?.length) throw new MatchIngestSkippedError('no_participants')
   if (info.endOfGameResult && info.endOfGameResult !== 'GameComplete') {

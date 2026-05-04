@@ -235,7 +235,9 @@ export async function getOverviewAbandons(
 
   try {
     const versions = toQueryStringArrayParam(version)
-    const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+    const ranks = toQueryStringArrayParam(rankTier)
+      .map((r) => r.toUpperCase())
+      .filter((r) => r && r !== 'ALL' && r !== '*')
     const cond: string[] = ['1=1']
     const condIngest: string[] = ['1=1']
     if (versions.length === 1)
@@ -265,6 +267,7 @@ export async function getOverviewAbandons(
 
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', pVersion, 'mo')
     const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'tc')
+    const whereTc = whereSql.replace(/\bmo\./g, 'tc.')
 
     const rows = await prisma.$queryRawUnsafe<
       Array<{
@@ -275,14 +278,10 @@ export async function getOverviewAbandons(
       }>
     >(`
       SELECT
-        COALESCE(SUM(mo.count_match), 0)::bigint AS total_matches,
-        COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint AS early_surrender_count,
-        COALESCE(SUM(tc.count_team_surrendered), 0)::bigint AS surrender_count,
+        (SELECT COALESCE(SUM(mo.count_match), 0)::bigint FROM ${moFrom} WHERE ${whereSql}) AS total_matches,
+        (SELECT COALESCE(SUM(tc.count_team_early_surrendered), 0)::bigint FROM ${tcFrom} WHERE ${whereTc}) AS early_surrender_count,
+        (SELECT COALESCE(SUM(tc.count_team_surrendered), 0)::bigint FROM ${tcFrom} WHERE ${whereTc}) AS surrender_count,
         0::bigint AS remake_count
-      FROM ${moFrom}
-      LEFT JOIN ${tcFrom}
-        ON tc.game_version = mo.game_version AND tc.rank_tier = mo.rank_tier
-      WHERE ${whereSql}
     `)
     const row = rows[0]
     const totalMatches = Number(row?.total_matches ?? 0)

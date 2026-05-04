@@ -160,7 +160,19 @@
     "stealth": "Stealth",
     "tenacity": "Tenacity",
     "trinket": "Trinket",
-    "vision": "Vision"
+    "vision": "Vision",
+    "other": "Other",
+    "selector": {
+      "loading": "Loading items…",
+      "noResults": "No items found",
+      "validation": {
+        "junglePetRequiresSmite": "Jungle companions require Smite.",
+        "tier3BootsRequiresMid": "Tier 3 boots can only be selected with the Mid role.",
+        "atlasRequiresSupport": "World Atlas and its upgrades require the Support role.",
+        "atlasUpgradeSingle": "You can only have one World Atlas upgrade.",
+        "atlasUpgradeNeedsStarter": "Add World Atlas to your starting items to pick an upgrade."
+      }
+    }
   },
   "runes": {
     "fundamental": "FUNDAMENTAL RUNES",
@@ -262,6 +274,8 @@
     "tabObjectives": "Objectives",
     "tabSurrender": "Surrender",
     "tabTierlistBotlane": "Botlane tier list",
+    "tierListViewBotlaneMatchups": "Botlane tier list (matchups)",
+    "tierListViewBotlaneDuoRank": "Duo leaderboard",
     "tierListBotlaneDuoLabel": "Duo",
     "tierListBotlaneModeTitle": "View",
     "botlaneFilterVersus": "Versus",

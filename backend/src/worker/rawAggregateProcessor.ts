@@ -1576,14 +1576,7 @@ export async function processRawAggregateAndBurn(
       const support200 = toSafeInt(supTeam200.championId)
       const rankTier100 = normalizeRankTier(botTeam100)
       const rankTier200 = normalizeRankTier(botTeam200)
-      if (
-        adc100 > 0 &&
-        support100 > 0 &&
-        adc200 > 0 &&
-        support200 > 0 &&
-        rankTier100 !== 'UNRANKED' &&
-        rankTier200 !== 'UNRANKED'
-      ) {
+      if (adc100 > 0 && support100 > 0 && adc200 > 0 && support200 > 0) {
         const win100 = botTeam100.win === true ? 1 : 0
         const win200 = botTeam200.win === true ? 1 : 0
         const adc100m = participantBotlaneEconomySums(botTeam100)
@@ -1945,6 +1938,18 @@ export async function processRawAggregateAndBurn(
       `
     }
 
+    const gameEndedInSurrender = participantsForAgg.some(
+      (p) => (p as { gameEndedInSurrender?: boolean }).gameEndedInSurrender === true
+    )
+    const teamEarlySurrenderedByTeam = new Map<number, boolean>()
+    for (const p of participantsForAgg) {
+      const tid = toSafeInt(p.teamId)
+      if (tid !== 100 && tid !== 200) continue
+      if ((p as { teamEarlySurrendered?: boolean }).teamEarlySurrendered === true) {
+        teamEarlySurrenderedByTeam.set(tid, true)
+      }
+    }
+
     for (const team of infoAny.info?.teams ?? []) {
       const teamNum = toSafeInt(team.teamId)
       if (teamNum !== 100 && teamNum !== 200) continue
@@ -1956,12 +1961,16 @@ export async function processRawAggregateAndBurn(
       const inhibitorFirstResolved =
         readFirst('inhibitor') > 0 || firstInhibitorTeamId === teamNum ? 1 : 0
       const win = team.win === true ? 1 : 0
+      const countTeamEarlySurrendered =
+        win === 0 && teamEarlySurrenderedByTeam.get(teamNum) === true ? 1 : 0
+      const countTeamSurrendered = win === 0 && gameEndedInSurrender ? 1 : 0
       const drakeStats = drakeStatsByTeam.get(teamNum) ?? initTeamDrakeStats()
       const elderKillsResolved = Math.max(readKills('elderDragon'), drakeStats.elderKills)
 
       const teamRows = await tx.$queryRaw<Array<{ id: bigint }>>`
         INSERT INTO agg_team_core_stats (
           id, team, rank_tier, game_version, count_win, count_game,
+          count_team_early_surrendered, count_team_surrendered,
           sum_baron_kills, count_baron_first, sum_dragon_kills, count_dragon_first,
           sum_tower_kills, count_tower_first, sum_horde_kills, count_horde_first,
           sum_rift_herald_kills, count_rift_herald_first, sum_inhibitor_kills, count_inhibitor_first,
@@ -1974,6 +1983,7 @@ export async function processRawAggregateAndBurn(
         )
         VALUES (
           ${idCandidate}, ${teamNum}, ${matchRankTier}, ${gameVersion}, ${win}, 1,
+          ${countTeamEarlySurrendered}, ${countTeamSurrendered},
           ${readKills('baron')}, ${readFirst('baron')}, ${readKills('dragon')}, ${readFirst('dragon')},
           ${readKills('tower')}, ${readFirst('tower')}, ${readKills('horde')}, ${readFirst('horde')},
           ${readKills('riftHerald')}, ${readFirst('riftHerald')}, ${readKills('inhibitor')}, ${inhibitorFirstResolved},
@@ -1987,6 +1997,10 @@ export async function processRawAggregateAndBurn(
         ON CONFLICT (team, rank_tier, game_version) DO UPDATE
         SET count_game = agg_team_core_stats.count_game + EXCLUDED.count_game,
             count_win = agg_team_core_stats.count_win + EXCLUDED.count_win,
+            count_team_early_surrendered =
+              agg_team_core_stats.count_team_early_surrendered + EXCLUDED.count_team_early_surrendered,
+            count_team_surrendered =
+              agg_team_core_stats.count_team_surrendered + EXCLUDED.count_team_surrendered,
             sum_baron_kills = agg_team_core_stats.sum_baron_kills + EXCLUDED.sum_baron_kills,
             count_baron_first = agg_team_core_stats.count_baron_first + EXCLUDED.count_baron_first,
             sum_dragon_kills = agg_team_core_stats.sum_dragon_kills + EXCLUDED.sum_dragon_kills,

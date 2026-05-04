@@ -194,12 +194,24 @@ export async function selectMatchPlayerItems(params: {
     .filter((itemId) => isLegendary(itemMeta.get(itemId), itemId))
     .sort((a, b) => (firstTs.get(a) ?? Number.MAX_SAFE_INTEGER) - (firstTs.get(b) ?? Number.MAX_SAFE_INTEGER))
   const legendaries = legendaryCandidates.slice(0, 3)
+  const legendarySet = new Set<number>(legendaries)
+
+  /** Slots finaux hors starters / bottes / top-3 légendaires (épiques, 4e légendaire, etc.) — sinon `count_final` reste 0 et l’overview « objets finaux » est vide. */
+  const finalOthers = finalInventory.filter(
+    (itemId) =>
+      !starters.includes(itemId) &&
+      itemId !== boot &&
+      !legendarySet.has(itemId) &&
+      !isStarter(itemMeta.get(itemId), itemId) &&
+      !isBoots(itemMeta.get(itemId), itemId)
+  )
 
   const selected = uniqueStable([
     ...starters,
     ...(boot != null ? [boot] : []),
     ...legendaries,
-  ]).slice(0, 6)
+    ...finalOthers,
+  ])
 
   const coreSet = new Set<number>([...legendaries])
   const starterSet = new Set<number>(starters)

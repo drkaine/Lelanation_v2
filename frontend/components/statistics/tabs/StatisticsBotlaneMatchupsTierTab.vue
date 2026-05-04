@@ -4,7 +4,7 @@ import { getChampionImageUrl } from '~/utils/imageUrl'
 
 const p = inject('statisticsPageCtx') as any
 
-type SortKey = 'rank' | 'tier' | 'score' | 'winrate' | 'pickrate'
+type SortKey = 'rank' | 'tier' | 'score' | 'winrate' | 'delta' | 'pickrate' | 'games'
 
 type Row = {
   rank: number
@@ -17,18 +17,19 @@ type Row = {
   winrate: number
   note: number
   tier: string
+  deltaVsPeersPp: number | null
 }
 
-type RankingPayload = {
+type VsPayload = {
   version?: string | null
   rankTier?: string | string[] | null
   rows?: Row[]
 } | null
 
 const props = defineProps<{
-  rankingData?: RankingPayload
-  rankingPending?: boolean
-  rankingError?: boolean
+  vsData?: VsPayload
+  vsPending?: boolean
+  vsError?: boolean
 }>()
 
 type ViewRow = Row & { score: number; pickrate: number }
@@ -44,16 +45,13 @@ const PAGE_SIZE_OPTIONS = computed<number[]>(() =>
     : [10, 20, 50, 100]
 )
 
-const rows = computed<Row[]>(() => (props.rankingData ?? p?.botlaneRankingData)?.rows ?? [])
+const rows = computed<Row[]>(() => (props.vsData ?? p?.botlaneVsData)?.rows ?? [])
 
 const activePending = computed(() =>
-  Boolean(
-    unref(props.rankingPending !== undefined ? props.rankingPending : p?.botlaneRankingPending)
-  )
+  Boolean(unref(props.vsPending !== undefined ? props.vsPending : p?.botlaneVsPending))
 )
-
 const activeError = computed(() =>
-  Boolean(unref(props.rankingError !== undefined ? props.rankingError : p?.botlaneRankingError))
+  Boolean(unref(props.vsError !== undefined ? props.vsError : p?.botlaneVsError))
 )
 
 const searchQ = computed(() =>
@@ -82,7 +80,12 @@ const filteredRows = computed(() => {
   const q = searchQ.value
   if (!q) return rowsWithMetrics.value
   return rowsWithMetrics.value.filter(r => {
-    const parts = [champText(r.adcId), champText(r.supportId)]
+    const parts = [
+      champText(r.adcId),
+      champText(r.supportId),
+      champText(r.oppAdcId),
+      champText(r.oppSupportId),
+    ]
     return parts.join(' ').includes(q)
   })
 })
@@ -103,6 +106,11 @@ function toggleSort(key: SortKey) {
 
 const TIER_ORDER: Record<string, number> = { 'S+': 6, S: 5, A: 4, B: 3, C: 2, D: 1, F: 1 }
 
+function deltaSortValue(v: number | null | undefined): number {
+  if (v == null || !Number.isFinite(v)) return Number.NEGATIVE_INFINITY
+  return v
+}
+
 const sortedRows = computed(() => {
   const out = [...filteredRows.value]
   const dir = sortDir.value === 'asc' ? 1 : -1
@@ -112,7 +120,10 @@ const sortedRows = computed(() => {
     if (key === 'tier') return dir * ((TIER_ORDER[a.tier] ?? 0) - (TIER_ORDER[b.tier] ?? 0))
     if (key === 'score') return dir * (a.score - b.score)
     if (key === 'winrate') return dir * (a.winrate - b.winrate)
+    if (key === 'delta')
+      return dir * (deltaSortValue(a.deltaVsPeersPp) - deltaSortValue(b.deltaVsPeersPp))
     if (key === 'pickrate') return dir * (a.pickrate - b.pickrate)
+    if (key === 'games') return dir * (a.games - b.games)
     return 0
   })
   return out
@@ -132,6 +143,12 @@ watch([searchQ, pageSize, sortBy, sortDir], () => {
 
 function fmtPct01(v: number): string {
   return `${(v * 100).toFixed(2)}%`
+}
+
+function fmtDeltaPp(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}`
 }
 
 function tierLabel(tier: string): string {
@@ -158,19 +175,19 @@ function tierLabel(tier: string): string {
       {{ p.t('statisticsPage.loading') }}
     </div>
     <div v-else-if="activeError" class="rounded border border-error bg-surface p-3 text-error">
-      {{ p.t('statisticsPage.vsBotlaneRankingLoadError') }}
+      {{ p.t('statisticsPage.vsBotlaneLoadError') }}
     </div>
     <div
       v-else-if="rows.length === 0"
       class="statistics-overview-surface rounded-lg border border-primary/30 p-4 text-text/70"
     >
-      {{ p.t('statisticsPage.vsBotlaneRankingNoData') }}
+      {{ p.t('statisticsPage.vsBotlaneNoData') }}
     </div>
     <div
       v-else
       class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
     >
-      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[600px]">
+      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[860px]">
         <div
           class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
         >
@@ -184,7 +201,12 @@ function tierLabel(tier: string): string {
           <div
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[88px] shrink-0 items-center justify-center border-b border-black px-1"
           >
-            {{ p.t('statisticsPage.tierListBotlaneDuoLabel') }}
+            {{ p.t('statisticsPage.vsBotlaneOurDuo') }}
+          </div>
+          <div
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[88px] shrink-0 items-center justify-center border-b border-black px-1"
+          >
+            {{ p.t('statisticsPage.vsBotlaneEnemyDuo') }}
           </div>
           <button
             type="button"
@@ -195,7 +217,7 @@ function tierLabel(tier: string): string {
           </button>
           <button
             type="button"
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-14 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-14 shrink-0 items-center justify-center border-b border-black px-0.5 hover:bg-primary/25"
             :title="p.t('statisticsPage.tierListPbiTooltip')"
             @click="toggleSort('score')"
           >
@@ -210,16 +232,31 @@ function tierLabel(tier: string): string {
           </button>
           <button
             type="button"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25 sm:flex"
+            :title="p.t('statisticsPage.vsBotlaneDeltaTooltip')"
+            @click="toggleSort('delta')"
+          >
+            {{ p.t('statisticsPage.vsBotlaneDeltaShort') }}{{ sortIcon('delta') }}
+          </button>
+          <button
+            type="button"
             class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-12 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
             @click="toggleSort('pickrate')"
           >
             {{ p.t('statisticsPage.tierListPickrate') }}{{ sortIcon('pickrate') }}
           </button>
+          <button
+            type="button"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 items-center justify-center border-b border-black hover:bg-primary/25"
+            @click="toggleSort('games')"
+          >
+            {{ p.t('statisticsPage.tierListGames') }}{{ sortIcon('games') }}
+          </button>
         </div>
 
         <div
           v-for="row in paginatedRows"
-          :key="`rk-${row.adcId}-${row.supportId}`"
+          :key="`${row.adcId}-${row.supportId}-${row.oppAdcId}-${row.oppSupportId}`"
           class="tier-list-lolalytics-row flex min-h-[44px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
         >
           <div
@@ -245,6 +282,30 @@ function tierLabel(tier: string): string {
                   getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
                 "
                 :alt="p.championName(row.supportId) || ''"
+                class="h-8 w-8 shrink-0 border border-black object-cover"
+                width="32"
+                height="32"
+              />
+            </template>
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-[88px] shrink-0 items-center justify-center gap-1 px-1"
+          >
+            <template v-if="p.gameVersion">
+              <img
+                v-if="p.championByKey(row.oppAdcId)"
+                :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)"
+                :alt="p.championName(row.oppAdcId) || ''"
+                class="h-8 w-8 shrink-0 border border-black object-cover"
+                width="32"
+                height="32"
+              />
+              <img
+                v-if="p.championByKey(row.oppSupportId)"
+                :src="
+                  getChampionImageUrl(p.gameVersion, p.championByKey(row.oppSupportId)!.image.full)
+                "
+                :alt="p.championName(row.oppSupportId) || ''"
                 class="h-8 w-8 shrink-0 border border-black object-cover"
                 width="32"
                 height="32"
@@ -278,9 +339,28 @@ function tierLabel(tier: string): string {
             {{ fmtPct01(row.winrate) }}
           </div>
           <div
+            class="tier-list-lolalytics-td hidden w-12 shrink-0 items-center justify-center text-[11px] tabular-nums sm:flex"
+            :class="
+              row.deltaVsPeersPp == null
+                ? 'text-text/55'
+                : row.deltaVsPeersPp > 0
+                  ? 'text-green-400/90'
+                  : row.deltaVsPeersPp < 0
+                    ? 'text-red-400/90'
+                    : 'text-text/80'
+            "
+          >
+            {{ fmtDeltaPp(row.deltaVsPeersPp) }}
+          </div>
+          <div
             class="tier-list-lolalytics-td flex w-12 shrink-0 items-center justify-center tabular-nums text-text/80"
           >
             {{ fmtPct01(row.pickrate) }}
+          </div>
+          <div
+            class="tier-list-lolalytics-td flex w-11 shrink-0 items-center justify-center tabular-nums text-text/80"
+          >
+            {{ row.games }}
           </div>
         </div>
 
@@ -288,7 +368,7 @@ function tierLabel(tier: string): string {
           v-if="totalRowsCount > 0"
           class="flex flex-wrap items-center justify-between gap-2 border-t border-primary/20 px-4 py-2 text-sm text-text/80"
         >
-          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.vsBotlaneRankingRowsLabel') }}</span>
+          <span>{{ totalRowsCount }} {{ p.t('statisticsPage.vsBotlaneRowsLabel') }}</span>
           <div class="flex items-center gap-3">
             <label class="flex items-center gap-1.5">
               <span class="text-text/70">{{ p.t('statisticsPage.perPage') }}</span>

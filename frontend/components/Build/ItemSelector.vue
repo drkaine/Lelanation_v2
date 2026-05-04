@@ -34,7 +34,7 @@
     </div>
 
     <div v-if="itemsStore.status === 'loading'" class="py-8 text-center">
-      <p class="text-text">Loading items...</p>
+      <p class="text-text">{{ t('item.selector.loading') }}</p>
     </div>
 
     <div v-else-if="itemsStore.status === 'error'" class="py-8 text-center">
@@ -147,7 +147,7 @@
     </div>
 
     <div v-if="filteredItems.length === 0" class="py-8 text-center">
-      <p class="text-text">No items found</p>
+      <p class="text-text">{{ t('item.selector.noResults') }}</p>
     </div>
   </div>
 </template>
@@ -511,7 +511,7 @@ const getCategoryLabel = (category: ItemCategory): string => {
     basic: t('item.basic'),
     epic: t('item.epic'),
     legendary: t('item.legendary'),
-    other: 'Other',
+    other: t('item.other'),
   }
   return labels[category] || category
 }
@@ -692,6 +692,7 @@ const tier2BootIds = new Set([
   '3111',
   '3117',
   '3158',
+  '3008',
 ])
 
 const isTier3Boots = (item: Item): boolean => {
@@ -711,29 +712,24 @@ const hasAtlasUpgrade = (excludeItemId?: string): boolean => {
 }
 
 const getItemValidationError = (item: Item): string | null => {
-  // Rule 1: Bébés nécessitent Smite
   if (isJunglePet(item) && !hasSmite()) {
-    return 'Les jungle pets nécessitent le sort Smite'
+    return t('item.selector.validation.junglePetRequiresSmite')
   }
 
-  // Rule 2: Bottes tier 3 (améliorations type Jambières de métal, Chaussures du sorcier améliorées) nécessitent le rôle Mid
   if (isTier3Boots(item) && !hasMidRole()) {
-    return "Les bottes tier 3 ne peuvent être sélectionnées qu'avec le rôle Mid"
+    return t('item.selector.validation.tier3BootsRequiresMid')
   }
 
-  // Rule 3: Atlas et améliorations nécessitent le rôle support
   if ((isAtlas(item) || isAtlasUpgrade(item)) && !hasSupportRole()) {
-    return 'Atlas et ses améliorations nécessitent le rôle Support'
+    return t('item.selector.validation.atlasRequiresSupport')
   }
 
-  // Rule 4: On ne peut pas prendre plusieurs améliorations d'Atlas
   if (isAtlasUpgrade(item) && hasAtlasUpgrade(item.id)) {
-    return "Vous ne pouvez avoir qu'une seule amélioration d'Atlas"
+    return t('item.selector.validation.atlasUpgradeSingle')
   }
 
-  // Rule 5: On ne peut prendre une amélioration d'Atlas que si on a Atlas en starter
   if (isAtlasUpgrade(item) && !hasAtlasInStarters()) {
-    return 'Vous devez avoir Atlas dans vos items de départ pour prendre une amélioration'
+    return t('item.selector.validation.atlasUpgradeNeedsStarter')
   }
 
   return null

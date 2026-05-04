@@ -2673,7 +2673,9 @@ function buildRawMatchCond(
 ): string {
   const parts: string[] = []
   const versions = toQueryStringArrayParam(version)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
   if (versions.length === 1)
     parts.push(`m.game_version LIKE '${normalizePatchMajorMinor(versions[0]).replace(/'/g, "''")}%'`)
   else if (versions.length > 1) parts.push(`m.game_version IN (${versions.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`)
@@ -2694,7 +2696,9 @@ async function loadObjectiveDistributionBySides(
 ): Promise<ObjectiveDistributionSides> {
   const conditions = ['1=1']
   if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
   if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) {
     conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
@@ -2758,7 +2762,9 @@ async function loadObjectiveDistributionByOutcome(
 ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
   const conditions = ['1=1']
   if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
-  const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
   if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
   else if (ranks.length > 1) {
     conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)

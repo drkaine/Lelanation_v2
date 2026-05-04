@@ -75,6 +75,7 @@ import {
   upsertIngestMatchAndParticipants,
   extractIngestTimelineExtras,
   preloadIngestLeanMatchDbData,
+  ingestLeanTablesExist,
 } from './ingestMatchLean.js'
 import type { MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
 import {
@@ -630,6 +631,7 @@ let lastSyncActivePatchesAt = 0
 let lastSyncObjectiveOutcomeAt = 0
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
+let lastIngestLeanMissingUnifiedLogAtMs = 0
 
 const MIN_ALLOWED_MAJOR = 16
 const MIN_ALLOWED_MINOR = 1
@@ -1098,6 +1100,12 @@ export async function runPhase2(
   shouldStop: () => boolean = () => state.shouldStop
 ): Promise<void> {
   if (!clefType) return
+  if (!(await ingestLeanTablesExist())) {
+    await logger.step('Phase 2 skipped: ingest_matchs / ingest_match_players absent (lean tables decommissioned)', {
+      clefType,
+    })
+    return
+  }
   await logger.step('Phase 2 start: sync players to current key (positional match-based)', { clefType })
   let totalSynced = 0
   let totalPlaceholder = 0
@@ -1730,7 +1738,7 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
   const ctx = matchIngestStepContext
   if (!ctx) return false
   type Parsed = { path: string | null; rawId: bigint | null; payload: MatchIngestQueuePayloadV1 }
-  const parsed: Parsed[] = []
+  let parsed: Parsed[] = []
   const useRaw = isRawIngestQueueEnabled()
   const useFile = isMatchIngestFileQueueEnabled() && !useRaw
   if (useRaw) {
@@ -1789,6 +1797,30 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
     }
   }
   if (parsed.length === 0) return true
+
+  const hasFileRowsInitial = parsed.some((row) => row.rawId == null)
+  if (hasFileRowsInitial && !(await ingestLeanTablesExist())) {
+    for (const row of parsed) {
+      if (row.rawId == null && row.path) await unlink(row.path).catch(() => undefined)
+    }
+    const kept = parsed.filter((r) => r.rawId != null)
+    if (kept.length === 0) {
+      const now = Date.now()
+      if (now - lastIngestLeanMissingUnifiedLogAtMs >= 300_000) {
+        lastIngestLeanMissingUnifiedLogAtMs = now
+        void appendUnifiedLog({
+          section: 'back',
+          type: 'warning',
+          script: 'poller_ingest',
+          message:
+            'File queue match JSON ignoré: tables ingest_* absentes (raw-only après drop_ingest_tables). Fichiers retirés de la queue.',
+          json: { droppedFileRows: parsed.filter((r) => r.path && r.rawId == null).length },
+        })
+      }
+      return true
+    }
+    parsed = kept
+  }
 
   await acquireMatchIngestDbSlot()
   try {
@@ -3098,7 +3130,7 @@ async function runStep4ForPlayer(
   for (const tracker of playerTrackers) {
     if (tracker.toFetchCount === 0) continue
 
-    if (tracker.ingestedIds.length > 0) {
+    if (tracker.ingestedIds.length > 0 && (await ingestLeanTablesExist())) {
       const dbCount = await prisma.ingestMatch.count({
         where: { riotMatchId: { in: tracker.ingestedIds } },
       })
