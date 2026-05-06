@@ -5,6 +5,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Build } from "@lelanation/shared-types";
 import { apiBase } from "../config";
 import { getSettings, setSettings } from "../settings";
@@ -13,15 +14,19 @@ import type { CompanionConfig } from "../companionConfig";
 import { importBuildToLcu } from "../lcuBuildImport";
 
 const settings = ref(getSettings());
-const showSettings = ref(false);
 const lcuOk = ref<boolean | null>(null);
 const iframeError = ref(false);
 const importInProgress = ref(false);
 const importFeedback = ref("");
 const importOk = ref(true);
+const configLeaguePath = ref("");
+const configShareRanked = ref(false);
+const configLanguage = ref<"fr" | "en">(settings.value.language);
+const configSaving = ref(false);
+const configError = ref("");
+const configSaved = ref(false);
 
 const updateAvailable = ref(false);
-const updateDismissed = ref(false);
 const latestVersion = ref("");
 const currentAppVersion = ref("");
 const pendingUpdate = shallowRef<Update | null>(null);
@@ -29,12 +34,14 @@ const updateInstalling = ref(false);
 const updateRestarting = ref(false);
 const updateProgress = ref(0);
 const updateError = ref("");
+const updateNoticeOpen = ref(false);
+const updateNoticeVersion = ref("");
 
-const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let lcuPollTimer: ReturnType<typeof setInterval> | null = null;
 
-type AppPage = "builds" | "videos" | "statistics" | "tier-list";
+type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "settings";
 const currentPage = ref<AppPage>("builds");
 
 const navEntries = computed(() =>
@@ -54,8 +61,11 @@ const navEntries = computed(() =>
 );
 
 const embeddedPageUrl = computed(() => {
+  if (currentPage.value === "settings") {
+    return "";
+  }
   const locale = settings.value.language === "en" ? "/en" : "";
-  const pathMap: Record<AppPage, string> = {
+  const pathMap: Record<Exclude<AppPage, "settings">, string> = {
     builds: `${locale}/builds`,
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
@@ -68,6 +78,7 @@ const embeddedPageUrl = computed(() => {
   }
   return url.toString();
 });
+const isEmbeddedPage = computed(() => currentPage.value !== "settings");
 
 watch(currentPage, () => {
   iframeError.value = false;
@@ -88,13 +99,20 @@ async function pollLcu() {
 }
 
 async function checkForUpdates() {
-  if (!settings.value.autoUpdate) return;
   try {
     const update = await check();
     if (update) {
       latestVersion.value = update.version;
       pendingUpdate.value = update;
       updateAvailable.value = true;
+      if (settings.value.autoUpdate) {
+        if (!updateInstalling.value && !updateRestarting.value) {
+          await installUpdate();
+        }
+      } else if (updateNoticeVersion.value !== update.version) {
+        updateNoticeVersion.value = update.version;
+        updateNoticeOpen.value = true;
+      }
     }
   } catch {
     /* ignore */
@@ -126,6 +144,54 @@ async function installUpdate() {
 function saveLang(lang: "fr" | "en") {
   settings.value = { ...settings.value, language: lang };
   setSettings({ language: lang });
+}
+
+function onConfigLanguageChange(lang: "fr" | "en") {
+  configLanguage.value = lang;
+  saveLang(lang);
+}
+
+function onAutoUpdateToggle(value: boolean) {
+  settings.value = { ...settings.value, autoUpdate: value };
+  setSettings({ autoUpdate: value });
+}
+
+function onImportPreferenceToggle(
+  key: "importRunes" | "importItems" | "importSummonerSpells",
+  value: boolean
+) {
+  settings.value = { ...settings.value, [key]: value };
+  setSettings({ [key]: value });
+}
+
+async function browseLeagueFolder() {
+  const picked = await open({
+    directory: true,
+    multiple: false,
+    title: settings.value.language === "en" ? "League install folder" : "Dossier d'installation League",
+  });
+  if (typeof picked === "string" && picked) {
+    configLeaguePath.value = picked;
+  }
+}
+
+async function saveCompanionConfig() {
+  configSaving.value = true;
+  configError.value = "";
+  configSaved.value = false;
+  try {
+    const cfg: CompanionConfig = {
+      leagueInstallPath: configLeaguePath.value.trim() || "",
+      onboardingComplete: true,
+      shareRankedDuoStats: configShareRanked.value,
+    };
+    await invoke("companion_save_config", { cfg });
+    configSaved.value = true;
+  } catch (e) {
+    configError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    configSaving.value = false;
+  }
 }
 
 function sourceOrigin(): string | null {
@@ -185,9 +251,12 @@ onMounted(async () => {
   updateCheckTimer = setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
 
   try {
-    await invoke<CompanionConfig>("companion_get_config");
+    const cfg = await invoke<CompanionConfig>("companion_get_config");
+    configLeaguePath.value = cfg.leagueInstallPath?.trim() ?? "";
+    configShareRanked.value = cfg.shareRankedDuoStats === true;
   } catch {
-    /* ignore */
+    configLeaguePath.value = "";
+    configShareRanked.value = false;
   }
 
   window.addEventListener("message", onIframeMessage);
@@ -228,26 +297,20 @@ onUnmounted(() => {
                 : t("status.disconnected")
           }}
         </span>
-        <button type="button" class="icon-btn" :title="t('settings.more')" @click="showSettings = true">
+        <button type="button" class="icon-btn" :title="t('settings.more')" @click="currentPage = 'settings'">
           ⚙
         </button>
       </div>
     </header>
 
-    <div v-if="updateAvailable && !updateDismissed" class="update-banner">
+    <div v-if="updateAvailable && settings.autoUpdate" class="update-banner">
       <span v-if="updateRestarting">{{ t("update.restarting") }}</span>
       <span v-else-if="updateInstalling">{{ t("update.installing", { progress: updateProgress }) }}</span>
       <span v-else>{{ t("update.available", { version: latestVersion }) }}</span>
-      <div class="update-actions">
-        <button v-if="!updateInstalling" type="button" class="btn-sm" @click="installUpdate">
-          {{ t("update.install") }}
-        </button>
-        <button type="button" class="btn-sm ghost" @click="updateDismissed = true">{{ t("update.dismiss") }}</button>
-      </div>
       <p v-if="updateError" class="update-err">{{ t("update.error") }}: {{ updateError }}</p>
     </div>
 
-    <section class="presentation-shell">
+    <section v-if="isEmbeddedPage" class="presentation-shell">
       <iframe
         :key="embeddedPageUrl"
         v-show="!iframeError"
@@ -262,33 +325,135 @@ onUnmounted(() => {
         <button type="button" class="btn-sm" @click="openUrl(embeddedPageUrl)">Ouvrir dans le navigateur</button>
       </div>
     </section>
-    <p v-if="importFeedback && currentPage === 'builds'" class="import-feedback" :class="{ err: !importOk }">
-      {{ importFeedback }}
-    </p>
+    <section v-else class="settings-page">
+      <div class="settings-card">
+        <h2 class="settings-title">{{ t("settings.more") }}</h2>
+        <p class="settings-subtitle">
+          {{
+            settings.language === "en"
+              ? "Configure companion preferences and game connection."
+              : "Configure les preferences de l'application et la connexion au jeu."
+          }}
+        </p>
 
-    <div v-if="showSettings" class="overlay" @click.self="showSettings = false">
-      <div class="settings-panel">
-        <h2>{{ t("settings.more") }}</h2>
-        <label class="row">
-          {{ t("settings.language") }}
-          <select :value="settings.language" @change="saveLang(($event.target as HTMLSelectElement).value as 'fr' | 'en')">
+        <label class="settings-field">
+          <span>{{ settings.language === "en" ? "League install folder" : "Dossier d'installation League" }}</span>
+          <div class="path-row">
+            <input v-model="configLeaguePath" type="text" class="path-input" />
+            <button type="button" class="btn-sm" @click="browseLeagueFolder">
+              {{ settings.language === "en" ? "Browse" : "Parcourir" }}
+            </button>
+          </div>
+        </label>
+
+        <label class="settings-field">
+          <span>{{ t("settings.language") }}</span>
+          <select :value="configLanguage" @change="onConfigLanguageChange(($event.target as HTMLSelectElement).value as 'fr' | 'en')">
             <option value="fr">FR</option>
             <option value="en">EN</option>
           </select>
         </label>
-        <label class="row check">
+
+        <label class="settings-check">
+          <input v-model="configShareRanked" type="checkbox" />
+          <span>
+            {{
+              settings.language === "en"
+                ? "Allow ranked duo match data submission"
+                : "Autoriser l'envoi des matchs classés duo"
+            }}
+          </span>
+        </label>
+
+        <h3 class="settings-subsection">
+          {{ settings.language === "en" ? "Import into LoL client" : "Import dans le client LoL" }}
+        </h3>
+        <label class="settings-check">
+          <input
+            type="checkbox"
+            :checked="settings.importRunes"
+            @change="onImportPreferenceToggle('importRunes', ($event.target as HTMLInputElement).checked)"
+          />
+          <span>{{ settings.language === "en" ? "Import runes" : "Importer les runes" }}</span>
+        </label>
+        <label class="settings-check">
+          <input
+            type="checkbox"
+            :checked="settings.importItems"
+            @change="onImportPreferenceToggle('importItems', ($event.target as HTMLInputElement).checked)"
+          />
+          <span>{{ settings.language === "en" ? "Import item sets" : "Importer les sets d'objets" }}</span>
+        </label>
+        <label class="settings-check">
+          <input
+            type="checkbox"
+            :checked="settings.importSummonerSpells"
+            @change="onImportPreferenceToggle('importSummonerSpells', ($event.target as HTMLInputElement).checked)"
+          />
+          <span>
+            {{ settings.language === "en" ? "Import summoner spells" : "Importer les sorts d'invocateur" }}
+          </span>
+        </label>
+
+        <label class="settings-check">
           <input
             type="checkbox"
             :checked="settings.autoUpdate"
-            @change="
-              settings.autoUpdate = ($event.target as HTMLInputElement).checked;
-              setSettings({ autoUpdate: settings.autoUpdate });
-            "
+            @change="onAutoUpdateToggle(($event.target as HTMLInputElement).checked)"
           />
-          {{ t("settings.autoUpdate") }}
+          <span>
+            {{ settings.language === "en" ? "Enable automatic updates" : "Activer les mises a jour automatiques" }}
+          </span>
         </label>
-        <p class="ver">{{ t("settings.version") }}: v{{ currentAppVersion }}</p>
-        <button type="button" class="btn-sm" @click="showSettings = false">{{ t("detailClose") }}</button>
+
+        <p class="settings-meta">{{ settings.language === "en" ? "Version" : "Version" }}: v{{ currentAppVersion }}</p>
+        <p class="settings-meta">
+          {{
+            settings.language === "en"
+              ? "Update checks run on startup and every hour."
+              : "La verification des mises a jour se fait au demarrage puis toutes les heures."
+          }}
+        </p>
+
+        <div class="settings-actions">
+          <button type="button" class="btn-sm" :disabled="configSaving" @click="saveCompanionConfig">
+            {{
+              configSaving
+                ? (settings.language === "en" ? "Saving..." : "Sauvegarde...")
+                : (settings.language === "en" ? "Save settings" : "Enregistrer")
+            }}
+          </button>
+        </div>
+
+        <p v-if="configSaved" class="settings-success">
+          {{ settings.language === "en" ? "Settings saved." : "Parametres enregistres." }}
+        </p>
+        <p v-if="configError" class="settings-error">{{ configError }}</p>
+      </div>
+    </section>
+    <p v-if="importFeedback && currentPage === 'builds'" class="import-feedback" :class="{ err: !importOk }">
+      {{ importFeedback }}
+    </p>
+    <div v-if="updateNoticeOpen" class="overlay" @click.self="updateNoticeOpen = false">
+      <div class="update-modal">
+        <h3>{{ settings.language === "en" ? "Update available" : "Mise a jour disponible" }}</h3>
+        <p>
+          {{
+            settings.language === "en"
+              ? `A new version (${updateNoticeVersion || latestVersion}) is available.`
+              : `Une nouvelle version (${updateNoticeVersion || latestVersion}) est disponible.`
+          }}
+        </p>
+        <p>
+          {{
+            settings.language === "en"
+              ? "Auto-update is disabled. Enable it in settings to apply updates automatically."
+              : "La mise a jour auto est desactivee. Active-la dans les parametres pour appliquer les mises a jour automatiquement."
+          }}
+        </p>
+        <button type="button" class="btn-sm" @click="updateNoticeOpen = false">
+          {{ settings.language === "en" ? "OK" : "D'accord" }}
+        </button>
       </div>
     </div>
   </div>
@@ -377,6 +542,81 @@ onUnmounted(() => {
   color: #f0e6d2;
   cursor: pointer;
 }
+.settings-page {
+  flex: 1;
+  margin: 0 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.settings-card {
+  width: min(720px, 100%);
+  border: 1px solid rgba(200, 155, 60, 0.35);
+  border-radius: 12px;
+  background: rgba(10, 20, 40, 0.72);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.25);
+  padding: 1rem;
+}
+.settings-title {
+  margin: 0;
+  color: #c8aa6e;
+}
+.settings-subtitle {
+  margin: 0.4rem 0 1rem;
+  font-size: 0.86rem;
+  opacity: 0.9;
+}
+.settings-subsection {
+  margin: 1rem 0 0.55rem;
+  font-size: 0.9rem;
+  color: #c8aa6e;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.88rem;
+}
+.settings-field select,
+.path-input {
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(200, 155, 60, 0.45);
+  background: rgba(5, 15, 35, 0.9);
+  color: #f0e6d2;
+}
+.path-row {
+  display: flex;
+  gap: 0.45rem;
+}
+.path-input {
+  flex: 1;
+}
+.settings-check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.88rem;
+}
+.settings-actions {
+  margin-top: 0.9rem;
+}
+.settings-meta {
+  margin-top: 0.6rem;
+  font-size: 0.83rem;
+  opacity: 0.88;
+}
+.settings-success {
+  margin-top: 0.75rem;
+  color: #b8f0c8;
+  font-size: 0.84rem;
+}
+.settings-error {
+  margin-top: 0.75rem;
+  color: #ffb4b4;
+  font-size: 0.84rem;
+}
 .update-banner {
   margin: 0 1rem 0.75rem;
   padding: 0.65rem 0.85rem;
@@ -444,44 +684,27 @@ onUnmounted(() => {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
   z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 1rem;
-  overflow: auto;
 }
-.settings-panel {
-  margin-top: 3rem;
-  background: rgba(15, 25, 45, 0.96);
+.update-modal {
+  width: min(460px, 100%);
   border: 1px solid rgba(200, 155, 60, 0.45);
   border-radius: 12px;
-  padding: 1.25rem;
-  max-width: 400px;
-  width: 100%;
+  background: rgba(12, 22, 42, 0.96);
   color: #f0e6d2;
+  padding: 1rem;
 }
-.settings-panel h2 {
-  margin-top: 0;
+.update-modal h3 {
+  margin: 0 0 0.5rem;
+  color: #c8aa6e;
 }
-.row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  margin: 0.75rem 0;
+.update-modal p {
+  margin: 0.4rem 0;
   font-size: 0.88rem;
-}
-.row select {
-  padding: 0.35rem;
-  border-radius: 6px;
-}
-.row.check {
-  flex-direction: row;
-  align-items: center;
-}
-.ver {
-  font-size: 0.82rem;
-  opacity: 0.85;
 }
 </style>
