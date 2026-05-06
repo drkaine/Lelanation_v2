@@ -11,20 +11,21 @@ export function runePagePayload(
   shards: ShardSelection
 ): { primaryStyleId: number; subStyleId: number; selectedPerkIds: number[] } {
   const { primary, secondary } = runes;
+  const toRuneId = (value: unknown): number => Number(value);
   const selectedPerkIds = [
-    primary.keystone,
-    primary.slot1,
-    primary.slot2,
-    primary.slot3,
-    secondary.slot1,
-    secondary.slot2,
-    shards.slot1,
-    shards.slot2,
-    shards.slot3,
+    toRuneId(primary.keystone),
+    toRuneId(primary.slot1),
+    toRuneId(primary.slot2),
+    toRuneId(primary.slot3),
+    toRuneId(secondary.slot1),
+    toRuneId(secondary.slot2),
+    toRuneId(shards.slot1),
+    toRuneId(shards.slot2),
+    toRuneId(shards.slot3),
   ];
   return {
-    primaryStyleId: primary.pathId,
-    subStyleId: secondary.pathId,
+    primaryStyleId: toRuneId(primary.pathId),
+    subStyleId: toRuneId(secondary.pathId),
     selectedPerkIds,
   };
 }
@@ -132,9 +133,14 @@ async function tryApplyItemSetLcu(title: string, items: Item[]): Promise<void> {
 
 function summonerSpellNumericId(spell: SummonerSpell | null): number | null {
   if (!spell) return null;
-  const raw = String(spell.id ?? "").trim();
-  const n = parseInt(raw, 10);
-  if (Number.isFinite(n) && n > 0) return n;
+  const candidates = [
+    String((spell as unknown as { key?: string | number }).key ?? "").trim(),
+    String(spell.id ?? "").trim(),
+  ];
+  for (const raw of candidates) {
+    const n = Number.parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
   return null;
 }
 

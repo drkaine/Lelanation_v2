@@ -717,11 +717,31 @@ function sendBuildToCompanion(build: Build) {
   if (typeof window === 'undefined') return
   const parentWindow = window.parent
   if (!parentWindow || parentWindow === window) return
+
+  const subIdx = displayedSubMap.value[build.id]
+  const selectedSub =
+    typeof subIdx === 'number' && subIdx >= 0 ? (build.subBuilds ?? [])[subIdx] : null
+  const buildForImport: Build = selectedSub
+    ? {
+        ...build,
+        name: selectedSub.title || build.name,
+        description: selectedSub.description ?? build.description,
+        items: selectedSub.items,
+        runes: selectedSub.runes,
+        shards: selectedSub.shards,
+        summonerSpells: selectedSub.summonerSpells,
+        skillOrder: selectedSub.skillOrder,
+        roles: selectedSub.roles,
+        tags: selectedSub.tags ?? build.tags,
+        gameVersion: selectedSub.gameVersion || build.gameVersion,
+      }
+    : build
+
   parentWindow.postMessage(
     {
       type: 'lelanation:companion-import-build',
       payload: {
-        build,
+        build: buildForImport,
       },
     },
     '*'
