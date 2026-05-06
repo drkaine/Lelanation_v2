@@ -272,7 +272,7 @@
               {{ t('statisticsPage.championStatsPlayersMasterPlus') }}
             </label>
           </div>
-          <div>
+          <div v-if="activeChampionTab === 'matchups'">
             <label
               for="champion-search-matchups"
               class="mb-1 block text-sm font-medium text-text"
@@ -286,7 +286,7 @@
               class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text placeholder:text-text/50"
             />
           </div>
-          <div>
+          <div v-if="activeChampionTab === 'matchups'">
             <label
               for="champion-matchup-profile-filter"
               class="mb-1 block text-sm font-medium text-text"
@@ -306,7 +306,7 @@
               </option>
             </select>
           </div>
-          <div>
+          <div v-if="activeChampionTab === 'matchups'">
             <label
               for="champion-matchup-otp-filter"
               class="mb-1 block text-sm font-medium text-text"
@@ -320,6 +320,21 @@
               <option value="non">{{ t('statisticsPage.championMatchupFilterOtpOff') }}</option>
               <option value="oui">{{ t('statisticsPage.championMatchupFilterOtpOn') }}</option>
               <option value="solo">{{ t('statisticsPage.championMatchupFilterOtpOnly') }}</option>
+            </select>
+          </div>
+          <div v-if="activeChampionTab === 'spells'">
+            <label
+              for="champion-summoner-mode-filter"
+              class="mb-1 block text-sm font-medium text-text"
+              >{{ t('statisticsPage.summonerSpells') }}</label
+            >
+            <select
+              id="champion-summoner-mode-filter"
+              v-model="championSpellsModeFilter"
+              class="w-full rounded border border-primary/40 bg-background px-1.5 py-0.5 text-[11px] font-medium text-text"
+            >
+              <option value="solo">{{ t('statisticsPage.spellsModeSolo') }}</option>
+              <option value="pair">{{ t('statisticsPage.spellsModePair') }}</option>
             </select>
           </div>
         </div>
@@ -1201,6 +1216,150 @@
                   </div>
                 </div>
               </div>
+              <div
+                v-show="activeChampionTab === 'runes'"
+                id="champion-tab-panel-runes"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div v-if="runesPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div v-else-if="!championRunesPanelData" class="py-4 text-text/70">
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <StatisticsRunesOverviewPanel
+                    v-else
+                    :game-version="gameVersion || versionStore.currentVersion || ''"
+                    :data="championRunesPanelData"
+                    :baseline="null"
+                    :baseline-pending="false"
+                    :comparison-version="null"
+                  />
+                </div>
+              </div>
+              <div
+                v-show="activeChampionTab === 'spells'"
+                id="champion-tab-panel-spells"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div v-if="championSpellsPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div
+                    v-else-if="
+                      !championSpellSoloRowsFiltered.length && !championSpellSetRowsFiltered.length
+                    "
+                    class="py-4 text-text/70"
+                  >
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <SummonerSpellTierTables
+                    v-else
+                    :solo-rows="championSpellSoloRowsFiltered"
+                    :set-rows="championSpellSetRowsFiltered"
+                    :baseline-solo="null"
+                    :baseline-sets="null"
+                    :ref-version-label="null"
+                    :baseline-pending="false"
+                    :game-version="gameVersion || versionStore.currentVersion || null"
+                  />
+                </div>
+              </div>
+              <div
+                v-show="activeChampionTab === 'objectives'"
+                id="champion-tab-panel-objectives"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div
+                    class="mb-3 flex flex-wrap items-center gap-1 border-b border-primary/20 pb-2"
+                  >
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      :class="
+                        championObjectivesView === 'main'
+                          ? 'border border-accent/40 bg-accent/20 text-accent'
+                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                      "
+                      @click="championObjectivesView = 'main'"
+                    >
+                      {{ t('statisticsPage.objectivesTabMain') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      :class="
+                        championObjectivesView === 'drakeTypes'
+                          ? 'border border-accent/40 bg-accent/20 text-accent'
+                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                      "
+                      @click="championObjectivesView = 'drakeTypes'"
+                    >
+                      {{ t('statisticsPage.objectivesTabDrakeTypes') }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      :class="
+                        championObjectivesView === 'souls'
+                          ? 'border border-accent/40 bg-accent/20 text-accent'
+                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                      "
+                      @click="championObjectivesView = 'souls'"
+                    >
+                      {{ t('statisticsPage.objectivesTabSouls') }}
+                    </button>
+                  </div>
+                  <div v-if="championObjectivesPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div v-else-if="championObjectivesError" class="py-2 text-sm text-red-400">
+                    {{ championObjectivesError }}
+                  </div>
+                  <div
+                    v-else-if="!championObjectivesMetricsFiltered.length"
+                    class="py-4 text-text/70"
+                  >
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <div v-else class="overflow-x-auto">
+                    <table class="tier-list-lolalytics w-full min-w-[720px] text-sm">
+                      <thead>
+                        <tr class="border-b border-primary/30 text-left">
+                          <th class="px-2 py-2 font-medium text-text">
+                            {{ t('statisticsPage.overviewTeamsObjective') }}
+                          </th>
+                          <th class="px-2 py-2 text-right font-medium text-text">
+                            {{ t('statisticsPage.tierListGames') }}
+                          </th>
+                          <th class="px-2 py-2 text-right font-medium text-text">/game</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="m in championObjectivesMetricsFiltered"
+                          :key="m.key"
+                          class="border-b border-primary/15 odd:bg-white/[0.02]"
+                        >
+                          <td class="px-2 py-2 text-text/90">{{ m.label }}</td>
+                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                            {{ Number(m.total ?? 0).toLocaleString() }}
+                          </td>
+                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                            {{ Number(m.perGame ?? 0).toFixed(3) }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </template>
         </div>
@@ -1219,6 +1378,8 @@ import { useItemsStore } from '~/stores/ItemsStore'
 import { useRunesStore } from '~/stores/RunesStore'
 import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 import { useVersionStore } from '~/stores/VersionStore'
+import StatisticsRunesOverviewPanel from '~/components/statistics/StatisticsRunesOverviewPanel.vue'
+import SummonerSpellTierTables from '~/components/statistics/SummonerSpellTierTables.vue'
 import {
   getChampionImageUrl,
   getItemImageUrl as _getItemImageUrl,
@@ -1835,6 +1996,86 @@ const championSpellsDuosData = ref<{
   totalGames: number
   duos: Array<{ spellId1: number; spellId2: number; games: number; wins: number; winrate: number }>
 } | null>(null)
+const championObjectivesPending = ref(false)
+const championObjectivesError = ref<string | null>(null)
+const championObjectivesData = ref<{
+  championId: number
+  games: number
+  wins: number
+  winrate: number
+  metrics: Array<{ key: string; label: string; total: number; perGame: number }>
+} | null>(null)
+const championSpellsModeFilter = ref<'solo' | 'pair'>('solo')
+const championObjectivesView = ref<'main' | 'drakeTypes' | 'souls'>('main')
+const championRunesPanelData = computed(() => {
+  const perRune = runesPerRuneData.value
+  const sets = runesData.value
+  const totalParticipants = Number(perRune?.totalGames ?? sets?.totalGames ?? 0)
+  const runes = perRune?.runes ?? []
+  const runeSets = sets?.runes ?? []
+  const shardAgg = new Map<string, { shardId: number; slot: number; games: number; wins: number }>()
+  for (const set of runeSets) {
+    const shards = Array.isArray(set.shards) ? set.shards : []
+    if (!shards.length) continue
+    const setGames = Number(set.games ?? 0)
+    const setWins = Number(set.wins ?? 0)
+    shards.forEach((shardId, slot) => {
+      if (!Number.isFinite(shardId) || shardId <= 0) return
+      const key = `${slot}:${shardId}`
+      const prev = shardAgg.get(key) ?? { shardId, slot, games: 0, wins: 0 }
+      prev.games += setGames
+      prev.wins += setWins
+      shardAgg.set(key, prev)
+    })
+  }
+  const shards = Array.from(shardAgg.values()).map(s => ({
+    shardId: s.shardId,
+    slot: s.slot,
+    games: s.games,
+    wins: s.wins,
+    pickrate: totalParticipants > 0 ? Math.round((10000 * s.games) / totalParticipants) / 100 : 0,
+    winrate: s.games > 0 ? Math.round((10000 * s.wins) / s.games) / 100 : 0,
+  }))
+  if (!runes.length && !runeSets.length) return null
+  return {
+    totalParticipants,
+    runes,
+    runeSets,
+    shards,
+  }
+})
+const championSpellSoloRows = computed(() => championSpellsData.value?.spells ?? [])
+const championSpellSetRows = computed(() => {
+  const totalGames = Number(championSpellsDuosData.value?.totalGames ?? 0)
+  const duos = championSpellsDuosData.value?.duos ?? []
+  return duos.map(d => ({
+    spellIdD: d.spellId1,
+    spellIdF: d.spellId2,
+    games: Number(d.games ?? 0),
+    wins: Number(d.wins ?? 0),
+    pickrate: totalGames > 0 ? (100 * Number(d.games ?? 0)) / totalGames : 0,
+    winrate: Number(d.winrate ?? 0),
+  }))
+})
+const championSpellSoloRowsFiltered = computed(() =>
+  championSpellsModeFilter.value === 'solo' ? championSpellSoloRows.value : []
+)
+const championSpellSetRowsFiltered = computed(() =>
+  championSpellsModeFilter.value === 'pair' ? championSpellSetRows.value : []
+)
+const championObjectivesMetricsFiltered = computed(() => {
+  const metrics = championObjectivesData.value?.metrics ?? []
+  if (championObjectivesView.value === 'drakeTypes') {
+    return metrics.filter(m => m.key.toLowerCase().includes('drake'))
+  }
+  if (championObjectivesView.value === 'souls') {
+    return metrics.filter(m => m.key.toLowerCase().includes('soul'))
+  }
+  return metrics.filter(m => {
+    const k = m.key.toLowerCase()
+    return !k.includes('drake') && !k.includes('soul')
+  })
+})
 
 const durationByTierPending = ref(false)
 const durationByTierData = ref<{
@@ -1889,10 +2130,15 @@ const trendError = ref<string | null>(null)
 const trendPoints = ref<TrendSnapshotPoint[]>([])
 const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 
-const activeChampionTab = ref<'overview' | 'matchups'>('overview')
+const activeChampionTab = ref<'overview' | 'matchups' | 'runes' | 'spells' | 'objectives'>(
+  'overview'
+)
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
+  { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
+  { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
+  { id: 'objectives' as const, label: 'statisticsPage.objectivesTabMain' },
 ]
 
 function queryParams() {
@@ -1928,6 +2174,8 @@ function resetChampionFilters() {
   filterPlayersMasterPlus.value = false
   championProgressionFromVersionOverride.value = ''
   championSearchQueryPlaceholder.value = ''
+  championSpellsModeFilter.value = 'solo'
+  championObjectivesView.value = 'main'
 }
 
 function patchFromVersion(version: string): string | null {
@@ -2142,7 +2390,7 @@ async function _loadChampionSpells() {
   championSpellsDuosData.value = null
   try {
     const q = overviewQueryParams()
-    const [spellsRes, duosRes] = await Promise.all([
+    const [spellsRes, duosRes] = await Promise.allSettled([
       statsFetch<{
         totalGames: number
         spells: Array<{
@@ -2164,14 +2412,31 @@ async function _loadChampionSpells() {
         }>
       }>(apiUrl(`/api/stats/champions/${championId.value}/summoner-spells-duos${q || ''}`)),
     ])
-    championSpellsData.value = spellsRes
-    championSpellsDuosData.value = duosRes
+    championSpellsData.value = spellsRes.status === 'fulfilled' ? spellsRes.value : null
+    championSpellsDuosData.value = duosRes.status === 'fulfilled' ? duosRes.value : null
   } catch {
     championSpellsData.value = null
     championSpellsDuosData.value = null
   } finally {
     championSpellsPending.value = false
     statsPerfEnd('loadChampionSpells', t)
+  }
+}
+
+async function loadChampionObjectives() {
+  if (!championId.value) return
+  championObjectivesPending.value = true
+  championObjectivesError.value = null
+  try {
+    const q = queryParams()
+    championObjectivesData.value = await statsFetch(
+      apiUrl(`/api/stats/champions/${championId.value}/objectives${q || ''}`)
+    )
+  } catch (e) {
+    championObjectivesData.value = null
+    championObjectivesError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    championObjectivesPending.value = false
   }
 }
 
@@ -2966,6 +3231,9 @@ watch(
     loadDurationByTier()
     loadTrendSnapshots()
     loadMatchupsExtended()
+    _loadRunes()
+    _loadChampionSpells()
+    loadChampionObjectives()
   }
 )
 
@@ -3039,6 +3307,9 @@ onMounted(async () => {
     loadDurationByTier()
     loadTrendSnapshots()
     loadMatchupsExtended()
+    _loadRunes()
+    _loadChampionSpells()
+    loadChampionObjectives()
   }
 })
 

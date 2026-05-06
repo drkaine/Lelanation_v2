@@ -453,9 +453,19 @@ function snakeToCamel(snake: string): string {
   return snake.replace(/_([a-z0-9])/g, (_, m: string) => m.toUpperCase())
 }
 
+const PARTICIPANT_AGG_COLUMNS_CACHE_TTL_MS = 60_000
 let participantAggColumnsPromise: Promise<string[]> | null = null
+let participantAggColumnsCachedAtMs = 0
+export function invalidateParticipantAggColumnsCache(): void {
+  participantAggColumnsPromise = null
+  participantAggColumnsCachedAtMs = 0
+}
 async function getParticipantAggColumns(): Promise<string[]> {
-  if (!participantAggColumnsPromise) {
+  const now = Date.now()
+  if (
+    !participantAggColumnsPromise ||
+    now - participantAggColumnsCachedAtMs >= PARTICIPANT_AGG_COLUMNS_CACHE_TTL_MS
+  ) {
     participantAggColumnsPromise = prisma
       .$queryRaw<Array<{ column_name: string }>>`
         SELECT column_name
@@ -466,6 +476,7 @@ async function getParticipantAggColumns(): Promise<string[]> {
         ORDER BY ordinal_position
       `
       .then((rows) => rows.map((r) => String(r.column_name)))
+    participantAggColumnsCachedAtMs = now
   }
   return participantAggColumnsPromise
 }
@@ -766,6 +777,118 @@ function extractTeamDrakeStatsByTeam(payload: MatchIngestQueuePayloadV1): Map<nu
   return out
 }
 
+function extractParticipantObjectiveTimelineStats(
+  payload: MatchIngestQueuePayloadV1,
+  participants: RawParticipant[]
+): Map<number, Record<string, number>> {
+  const out = new Map<number, Record<string, number>>()
+  const participantIdToTeam = new Map<number, number>()
+  const participantIdsByTeam = new Map<number, number[]>()
+
+  participants.forEach((p, idx) => {
+    const pid = toSafeInt((p as Record<string, unknown>).participantId) || idx + 1
+    const teamId = toSafeInt(p.teamId)
+    participantIdToTeam.set(pid, teamId)
+    const list = participantIdsByTeam.get(teamId) ?? []
+    list.push(pid)
+    participantIdsByTeam.set(teamId, list)
+  })
+
+  const inc = (pid: number, key: string) => {
+    if (!participantIdToTeam.has(pid)) return
+    const cur = out.get(pid) ?? {}
+    cur[key] = Number(cur[key] ?? 0) + 1
+    out.set(pid, cur)
+  }
+
+  const timeline = payload.timelineDto as { info?: { frames?: Array<{ events?: TimelineEvent[] }> } } | null
+  const frames = timeline?.info?.frames
+  if (!Array.isArray(frames)) return out
+
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      const evType = String(ev?.type ?? '').trim().toUpperCase()
+      if (!evType) continue
+
+      if (evType === 'ELITE_MONSTER_KILL') {
+        const killerId = toSafeInt((ev as { killerId?: unknown }).killerId)
+        const assistingIdsRaw = (ev as { assistingParticipantIds?: unknown }).assistingParticipantIds
+        const assistingIds = Array.isArray(assistingIdsRaw)
+          ? assistingIdsRaw.map((v) => toSafeInt(v)).filter((v) => v > 0)
+          : []
+        const monsterType = String((ev as { monsterType?: unknown }).monsterType ?? '')
+          .trim()
+          .toUpperCase()
+        const monsterSubType = String((ev as { monsterSubType?: unknown }).monsterSubType ?? '')
+          .trim()
+          .toUpperCase()
+
+        const isDragon = monsterType === 'DRAGON'
+        const isElder = isDragon && monsterSubType.includes('ELDER')
+        const isBaron = monsterType.includes('BARON')
+        const isHerald = monsterType.includes('RIFTHERALD') || monsterType.includes('RIFT_HERALD')
+        const isHorde = monsterType.includes('HORDE') || monsterType.includes('ATAKHAN')
+
+        if (killerId > 0) {
+          if (isBaron) inc(killerId, 'baronKill')
+          if (isDragon) inc(killerId, 'dragonKill')
+          if (isElder) inc(killerId, 'elderKill')
+          if (isHerald) inc(killerId, 'riftHeraldKill')
+          if (isHorde) inc(killerId, 'hordeKill')
+        }
+        for (const aid of assistingIds) {
+          if (isBaron) inc(aid, 'baronAssist')
+          if (isDragon) inc(aid, 'dragonAssist')
+          if (isElder) inc(aid, 'elderAssist')
+          if (isHerald) inc(aid, 'riftHeraldAssist')
+          if (isHorde) inc(aid, 'hordeAssist')
+        }
+
+        if (isDragon) {
+          const element = normalizeDragonElement(monsterSubType)
+          if (element) {
+            if (killerId > 0) inc(killerId, `${element}DrakeKill`)
+            for (const aid of assistingIds) inc(aid, `${element}DrakeAssist`)
+          }
+        }
+      }
+
+      if (evType === 'BUILDING_KILL') {
+        const killerId = toSafeInt((ev as { killerId?: unknown }).killerId)
+        const assistingIdsRaw = (ev as { assistingParticipantIds?: unknown }).assistingParticipantIds
+        const assistingIds = Array.isArray(assistingIdsRaw)
+          ? assistingIdsRaw.map((v) => toSafeInt(v)).filter((v) => v > 0)
+          : []
+        const buildingType = String((ev as { buildingType?: unknown }).buildingType ?? '')
+          .trim()
+          .toUpperCase()
+        const isTower = buildingType.includes('TOWER')
+        const isInhibitor = buildingType.includes('INHIBITOR')
+        if (killerId > 0) {
+          if (isTower) inc(killerId, 'towerKill')
+          if (isInhibitor) inc(killerId, 'inhibitorKill')
+        }
+        for (const aid of assistingIds) {
+          if (isTower) inc(aid, 'towerAssist')
+          if (isInhibitor) inc(aid, 'inhibitorAssist')
+        }
+      }
+
+      if (evType === 'DRAGON_SOUL_GIVEN') {
+        const teamId = toSafeInt((ev as { teamId?: unknown }).teamId)
+        if (teamId !== 100 && teamId !== 200) continue
+        const element = normalizeDragonElement((ev as { name?: unknown }).name)
+        if (!element) continue
+        for (const pid of participantIdsByTeam.get(teamId) ?? []) {
+          inc(pid, `${element}Soul`)
+        }
+      }
+    }
+  }
+
+  return out
+}
+
 function extractFirstInhibitorTeamId(payload: MatchIngestQueuePayloadV1): number | null {
   const timeline = payload.timelineDto as { info?: { frames?: Array<{ events?: TimelineEvent[] }> } } | null
   const frames = timeline?.info?.frames
@@ -835,6 +958,10 @@ export async function processRawAggregateAndBurn(
   const timelineSpellOrdersByParticipant = extractTimelineSpellOrdersByParticipant(payload)
   const timelineItemEvents = extractTimelineItemEvents(payload)
   const drakeStatsByTeam = extractTeamDrakeStatsByTeam(payload)
+  const objectiveTimelineByParticipant = extractParticipantObjectiveTimelineStats(
+    payload,
+    participantsForAgg
+  )
   const firstInhibitorTeamId = extractFirstInhibitorTeamId(payload)
 
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -860,6 +987,11 @@ export async function processRawAggregateAndBurn(
 
     for (let idx = 0; idx < participantsForAgg.length; idx++) {
       const p = participantsForAgg[idx]
+      const participantSlotId = toSafeInt((p as Record<string, unknown>).participantId) || idx + 1
+      const pAgg = {
+        ...(p as Record<string, unknown>),
+        ...(objectiveTimelineByParticipant.get(participantSlotId) ?? {}),
+      } as RawParticipant
       const championId = toSafeInt(p.championId)
       if (championId <= 0) continue
 
@@ -1063,7 +1195,7 @@ export async function processRawAggregateAndBurn(
       `
       const participantAggColumns = await getParticipantAggColumns()
       const participantAggValues = participantAggColumns.map((c) =>
-        Math.trunc(participantValueForAggColumn(p, c))
+        Math.trunc(participantValueForAggColumn(pAgg, c))
       )
       const participantColumnsSql = participantAggColumns.join(', ')
       const participantValuesSql = participantAggValues.join(', ')

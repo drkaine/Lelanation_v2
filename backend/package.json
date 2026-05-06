@@ -30,6 +30,7 @@
     "script:recompute-ingest-ranks": "tsx src/scripts/recomputeIngestRanks.ts",
     "script:global-rank-recovery": "tsx src/scripts/runGlobalRankRecovery.ts",
     "script:verify-agg-parity": "tsx src/scripts/verifyAggParity.ts",
+    "script:reclassify-stale-tracked": "tsx src/scripts/reclassifyStaleTrackedMatches.ts",
     "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts"
   },
   "devDependencies": {

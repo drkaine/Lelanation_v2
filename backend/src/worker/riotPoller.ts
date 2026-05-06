@@ -71,7 +71,7 @@ import {
 } from './trackedMatches.js'
 import { unwrapMatchIngestSkipped } from './matchIngestErrors.js'
 import { resolveRiotMatchIdForIngest, trackedMatchIdAliases } from './matchIngestIds.js'
-import { processRawAggregateAndBurn } from './rawAggregateProcessor.js'
+import { invalidateParticipantAggColumnsCache, processRawAggregateAndBurn } from './rawAggregateProcessor.js'
 import {
   upsertIngestMatchAndParticipants,
   extractIngestTimelineExtras,
@@ -602,6 +602,7 @@ const MATCH_FETCH_RETRY_DELAY_MS = 2_000
 const MATCH_FETCH_MAX_ATTEMPTS = 3
 const SYNC_ACTIVE_PATCHES_EVERY_MS = 4 * 60 * 60 * 1000
 const SYNC_OBJECTIVE_OUTCOME_EVERY_MS = 5 * 60 * 1000
+const REFRESH_AGG_SCHEMA_CACHE_EVERY_MS = 60 * 1000
 const POLLER_SUMMARY_30M_MS = 30 * 60 * 1000
 const POLLER_MATCH_LOSS_ALERT_ABSOLUTE = 20
 const POLLER_MATCH_LOSS_ALERT_RATIO = 0.2
@@ -630,6 +631,7 @@ function formatSummaryTimestamp(d: Date): string {
 /** Dernière sync `active_patches` depuis `ingest_matchs` (process). Même logique anti-burst qu’avant pour le refresh MV. */
 let lastSyncActivePatchesAt = 0
 let lastSyncObjectiveOutcomeAt = 0
+let lastAggSchemaCacheRefreshAt = 0
 
 const timelineRetryState = new Map<string, { attempts: number; nextRetryAtMs: number }>()
 let lastIngestLeanMissingUnifiedLogAtMs = 0
@@ -2120,13 +2122,13 @@ async function hydrateTrackedMatchesPlayerRanks(client: RiotHttpClient): Promise
     }
   }
 
-  const rankByPuuid = new Map<string, { tier: string; division: string | null }>()
+  const rankByPuuid = new Map<string, { tier: string; division: string | null; lp: number | null }>()
   const fetchList = Array.from(uniquePuuids)
   for (const puuid of fetchList) {
     await waitForRiotGlobalCooldownIfNeeded('tracked-rank-hydration')
     const res = await client.getLeagueEntriesByPuuid(puuid, riotIngestRequestOptions())
     if (!res.ok || !Array.isArray(res.data)) {
-      rankByPuuid.set(puuid, { tier: 'UNRANKED', division: null })
+      rankByPuuid.set(puuid, { tier: 'UNRANKED', division: null, lp: null })
       continue
     }
     const entries = res.data as unknown as Array<Record<string, unknown>>
@@ -2134,10 +2136,28 @@ async function hydrateTrackedMatchesPlayerRanks(client: RiotHttpClient): Promise
       entries.find((e) => e.queueType === 'RANKED_SOLO_5x5') ??
       entries.find((e) => String(e.queueType ?? '').toUpperCase().includes('RANKED_SOLO')) ??
       entries[0]
+    const normalizedTier = normalizeTrackedRankTier(solo?.tier)
+    const normalizedDivision = normalizeTrackedRankDivision(solo?.rank)
+    const normalizedLp =
+      typeof solo?.leaguePoints === 'number' && Number.isFinite(solo.leaguePoints)
+        ? Math.trunc(solo.leaguePoints)
+        : null
     rankByPuuid.set(puuid, {
-      tier: normalizeTrackedRankTier(solo?.tier),
-      division: normalizeTrackedRankDivision(solo?.rank),
+      tier: normalizedTier,
+      division: normalizedDivision,
+      lp: normalizedLp,
     })
+    await prisma.player
+      .updateMany({
+        where: { puuid },
+        data: {
+          rankTier: normalizedTier === 'UNRANKED' ? null : normalizedTier,
+          rankDivision: normalizedTier === 'UNRANKED' ? null : normalizedDivision,
+          rankLp: normalizedTier === 'UNRANKED' ? null : normalizedLp,
+          rankSnapshotGameDate: new Date(),
+        },
+      })
+      .catch(() => undefined)
   }
 
   let touchedMatches = 0
@@ -3859,6 +3879,12 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           await logger.alerte('refreshObjectiveOutcomeStats error (non-fatal)', errorMessage)
           lastSyncObjectiveOutcomeAt = Date.now()
         }
+      }
+
+      // ── Refresh agg schema caches (new columns after migrations) ──
+      if (Date.now() - lastAggSchemaCacheRefreshAt >= REFRESH_AGG_SCHEMA_CACHE_EVERY_MS) {
+        invalidateParticipantAggColumnsCache()
+        lastAggSchemaCacheRefreshAt = Date.now()
       }
 
       // ── Clôture patch N-1 après version.json releaseDate + grâce (archive) — plus maxMatches ──

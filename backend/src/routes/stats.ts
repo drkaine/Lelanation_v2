@@ -45,6 +45,7 @@ import {
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
+import { getChampionObjectivesSummary } from '../services/StatsChampionObjectivesService.js'
 import { getBalanceFramework } from '../services/StatsBalanceService.js'
 import {
   getBotlaneDuoOverallTierTable,
@@ -1059,6 +1060,28 @@ router.get('/champions/:championId/summoner-spells-duos', async (req: Request, r
   const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
   if (!data) {
     return res.status(200).json({ totalGames: 0, duos: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/objectives - objective-focused stats for this champion. */
+router.get('/champions/:championId/objectives', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const data = await getChampionObjectivesSummary({
+    championId,
+    version: version ?? null,
+    rankTier: rankTier ?? null,
+    role: role ?? null,
+  })
+  if (!data) {
+    return res.status(200).json({ championId, games: 0, wins: 0, winrate: 0, metrics: [] })
   }
   return res.json(data)
 })
