@@ -7,6 +7,7 @@ import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
 import { getRunesByChampion, getRuneStatsByChampion } from '../services/StatsRunesService.js'
 import { getMatchupsByChampion } from '../services/StatsMatchupsService.js'
+import { getChampionMatchupsExtendedTable } from '../services/StatsChampionMatchupsExtendedService.js'
 import {
   getTierListByLane,
   getMatchupDetailsByChampion,
@@ -879,6 +880,43 @@ router.get('/champions/:championId/matchups-tier', async (req: Request, res: Res
     limit,
   })
   return res.json({ patch, championId, matchups: data })
+})
+
+/** GET /api/stats/champions/:championId/matchups-extended — matchup table (score, lane vs peers, dominance). */
+router.get('/champions/:championId/matchups-extended', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version) ?? queryString(req.query.patch) ?? null
+  const referenceVersion =
+    queryString(req.query.fromVersion) ?? queryString(req.query.baselineVersion) ?? null
+  const rankTier = rankTierParam(req.query.rankTier)
+  const lane = queryString(req.query.lane) ?? queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 80
+  const data = await getChampionMatchupsExtendedTable({
+    championId,
+    version,
+    referenceVersion,
+    rankTier: rankTier ?? null,
+    role: lane ?? null,
+    minGames,
+    limit,
+  })
+  if (!data) {
+    return res.status(200).json({
+      championId,
+      version: null,
+      referenceVersion: null,
+      rankTier: null,
+      roleFilter: null,
+      totalGames: 0,
+      rows: [],
+    })
+  }
+  return res.json(data)
 })
 
 /** GET /api/stats/matchup-tier-list - champion tier rows from matchup scores.

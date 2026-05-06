@@ -1,5 +1,5 @@
 /**
- * Matchups by champion: winrate vs each opponent, from mv_champion_vs_stats (vue matérialisée).
+ * Matchups by champion: winrate vs each opponent, from `agg_champion_vs_stats` (+ archive union).
  */
 import { prisma } from '../db.js'
 import { isDatabaseConfigured } from '../db.js'

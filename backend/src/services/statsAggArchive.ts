@@ -40,8 +40,8 @@ function unifiedArchiveTableName(aggTableName: string): string {
 }
 
 /**
- * Some services still request legacy `mv_*` names for fallback paths.
- * Archive snapshot tables are `archive_agg_*`, so we normalize aliases here.
+ * Logical table name → physical `agg_*` / `archive_agg_*`.
+ * `mv_*` prefixes are normalized to `agg_*` for callers that still pass old names.
  */
 function normalizeAggTableName(rawTableName: string): string {
   const t = String(rawTableName ?? '').trim()

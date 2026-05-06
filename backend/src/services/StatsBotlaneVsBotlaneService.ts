@@ -9,6 +9,9 @@ import { deltaToMatchupBaseScore } from './MatchupTierService.js'
 
 export type BotlaneVsTier = 'S+' | 'S' | 'A' | 'B' | 'C' | 'D'
 
+/** Minimum games per row (duo overall or duo-vs-duo matchup) for tier-list tables. */
+export const MIN_BOTLANE_TIERLIST_GAMES = 10
+
 const TIER_PERCENTILES: Array<{ tier: BotlaneVsTier; maxPct: number }> = [
   { tier: 'S+', maxPct: 5 },
   { tier: 'S', maxPct: 10 },
@@ -129,6 +132,7 @@ export async function getBotlaneDuoVsDuoTierTable(
     FROM ${fromSql}
     WHERE ${whereSql}
     GROUP BY bd.adc_id, bd.support_id, bd.opp_adc_id, bd.opp_support_id
+    HAVING SUM(bd.count_game) >= ${MIN_BOTLANE_TIERLIST_GAMES}
   `)
 
   type Cell = {
@@ -141,19 +145,21 @@ export async function getBotlaneDuoVsDuoTierTable(
     winrate: number
   }
 
-  const cells: Cell[] = raw.map((r) => {
-    const g = Number(r.games ?? 0)
-    const w = Number(r.wins ?? 0)
-    return {
-      adcId: Number(r.adc_id),
-      supportId: Number(r.support_id),
-      oppAdcId: Number(r.opp_adc_id),
-      oppSupportId: Number(r.opp_support_id),
-      games: g,
-      wins: w,
-      winrate: g > 0 ? w / g : 0,
-    }
-  })
+  const cells: Cell[] = raw
+    .map((r) => {
+      const g = Number(r.games ?? 0)
+      const w = Number(r.wins ?? 0)
+      return {
+        adcId: Number(r.adc_id),
+        supportId: Number(r.support_id),
+        oppAdcId: Number(r.opp_adc_id),
+        oppSupportId: Number(r.opp_support_id),
+        games: g,
+        wins: w,
+        winrate: g > 0 ? w / g : 0,
+      }
+    })
+    .filter((c) => c.games >= MIN_BOTLANE_TIERLIST_GAMES)
 
   const allyKey = (c: Cell) => `${c.adcId}:${c.supportId}`
   const oppKey = (c: Cell) => `${c.oppAdcId}:${c.oppSupportId}`
@@ -283,6 +289,7 @@ export async function getBotlaneDuoOverallTierTable(
     FROM ${fromSql}
     WHERE ${whereSql}
     GROUP BY bd.adc_id, bd.support_id
+    HAVING SUM(bd.count_game) >= ${MIN_BOTLANE_TIERLIST_GAMES}
   `)
 
   type DuoCell = {
@@ -293,17 +300,19 @@ export async function getBotlaneDuoOverallTierTable(
     winrate: number
   }
 
-  const cells: DuoCell[] = raw.map((r) => {
-    const g = Number(r.games ?? 0)
-    const w = Number(r.wins ?? 0)
-    return {
-      adcId: Number(r.adc_id),
-      supportId: Number(r.support_id),
-      games: g,
-      wins: w,
-      winrate: g > 0 ? w / g : 0,
-    }
-  })
+  const cells: DuoCell[] = raw
+    .map((r) => {
+      const g = Number(r.games ?? 0)
+      const w = Number(r.wins ?? 0)
+      return {
+        adcId: Number(r.adc_id),
+        supportId: Number(r.support_id),
+        games: g,
+        wins: w,
+        winrate: g > 0 ? w / g : 0,
+      }
+    })
+    .filter((c) => c.games >= MIN_BOTLANE_TIERLIST_GAMES)
 
   if (cells.length === 0) {
     const vKey = toQueryStringArrayParam(version).join(',') || null

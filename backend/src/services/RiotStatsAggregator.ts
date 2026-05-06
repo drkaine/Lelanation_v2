@@ -1,5 +1,5 @@
 /**
- * Aggregates LoL champion stats from mv_champion_core_stats (vue matérialisée).
+ * Aggregates LoL champion stats into `agg_*` tables (incremental; archives on close_patch).
  * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
 import { prisma } from '../db.js'
@@ -107,7 +107,47 @@ export class RiotStatsAggregator {
         return { totalGames: 0, totalMatches: 0, champions: [], generatedAt: new Date().toISOString() }
       }
 
-      const banTotalsByChampion = bansPerChampionFromMvRows(rows)
+      // Prefer bans from dedicated aggregate table (more reliable than count_ban on core rows).
+      // Fallback to core-row bans when the table is unavailable.
+      let banTotalsByChampion = bansPerChampionFromMvRows(rows)
+      try {
+        const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', pVersion, 'bb')
+        const banFilters: string[] = []
+        if (ranks.length === 1) banFilters.push(`bb.rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
+        else if (ranks.length > 1) {
+          banFilters.push(`bb.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`)
+        } else {
+          banFilters.push(`bb.rank_tier <> 'UNRANKED'`)
+        }
+        if (pVersion) {
+          banFilters.push(
+            `bb.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`
+          )
+        }
+        if (pRole) {
+          banFilters.push(`bb.banner_role_norm = '${pRole.toUpperCase().replace(/'/g, "''")}'`)
+        }
+        const bansWhereSql = banFilters.length ? banFilters.join(' AND ') : '1=1'
+        const banRows = await prisma.$queryRawUnsafe<Array<{ championId: number; bans: bigint }>>(`
+          SELECT
+            bb.banned_champion_id AS "championId",
+            COALESCE(SUM(bb.ban_count), 0)::bigint AS bans
+          FROM ${bansFrom}
+          WHERE ${bansWhereSql}
+          GROUP BY bb.banned_champion_id
+        `)
+        if (banRows.length > 0) {
+          const banMap = new Map<number, number>()
+          for (const r of banRows) {
+            const cid = Number(r.championId ?? 0)
+            if (!Number.isFinite(cid) || cid <= 0) continue
+            banMap.set(cid, Number(r.bans ?? 0))
+          }
+          banTotalsByChampion = banMap
+        }
+      } catch {
+        // Keep fallback from core rows.
+      }
 
       // Aggregate by championId
       const byChampion = new Map<

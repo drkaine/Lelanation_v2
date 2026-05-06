@@ -1,3 +1,4 @@
+/** `mv_only` is a legacy label: handlers read `agg_*` ∪ `archive_agg_*` via `matchVersionedAggFrom`, not materialized views. */
 export type StatsDataSourcePolicy = 'mv_only' | 'snapshot_only' | 'mv_or_snapshot'
 
 export interface StatsEndpointSourceRule {
@@ -96,6 +97,11 @@ export const STATS_ENDPOINT_SOURCE_POLICY: StatsEndpointSourceRule[] = [
     path: '/champions/:championId/damage-split',
     policy: 'mv_only',
     allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_damage_stats'],
+  },
+  {
+    path: '/champions/:championId/matchups-extended',
+    policy: 'mv_only',
+    allowedSources: ['archive_agg_champion_core_stats', 'archive_agg_champion_vs_stats'],
   },
   {
     path: '/champions/bans-table',

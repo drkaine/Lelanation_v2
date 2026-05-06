@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { inject } from 'vue'
-import { useAdminAuth } from '~/composables/useAdminAuth'
 
 const p = inject('statisticsPageCtx') as any
-const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 
 withDefaults(
   defineProps<{
@@ -261,20 +259,12 @@ withDefaults(
             :key="row.championId"
             :class="[
               'tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25',
-              isAdminLoggedIn ? 'cursor-pointer hover:brightness-110' : '',
+              'cursor-pointer hover:brightness-110',
             ]"
-            :role="isAdminLoggedIn ? 'button' : undefined"
-            :tabindex="isAdminLoggedIn ? 0 : undefined"
-            @click="
-              isAdminLoggedIn
-                ? navigateTo(p.localePath('/statistics/champion/' + row.championId))
-                : undefined
-            "
-            @keydown.enter="
-              isAdminLoggedIn
-                ? navigateTo(p.localePath('/statistics/champion/' + row.championId))
-                : undefined
-            "
+            role="button"
+            tabindex="0"
+            @click="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
+            @keydown.enter="navigateTo(p.localePath('/statistics/champion/' + row.championId))"
           >
             <div
               class="tier-list-lolalytics-td hidden w-10 shrink-0 flex-col items-center justify-center gap-0 leading-tight md:flex"

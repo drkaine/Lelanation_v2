@@ -1,6 +1,6 @@
 /**
  * Tier list service: one row per champion (all ranks or GM+Challenger slice).
- * Aggregates from mv_champion_core_stats; par défaut stats = rôle le plus joué.
+ * Aggregates from `agg_champion_core_stats` (live + `archive_agg_*` via matchVersionedAggFrom); stats = rôle le plus joué par défaut.
  * Avec option `role`, stats = ce rôle pour tout champion ayant assez de games dessus (même si ce n’est pas son main).
  * Tier score: matchup deltas (centrées) puis percentiles.
  */

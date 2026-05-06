@@ -17,6 +17,7 @@ import {
   loadGameVersionsRecap,
   computeMatchIdsTimeWindow,
   getPollerPatchRolloutGraceDays,
+  releaseDateToStartOfDayUtcSeconds,
   resolveLatestPatchPriorityWindow,
 } from '../services/RiotConfigService.js'
 import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
@@ -945,6 +946,7 @@ const matchIngestConsecutiveFails = new Map<string, number>()
 const matchIngestPending = new Set<string>()
 const MATCH_INGEST_FAILS_BEFORE_BACKOFF = 4
 const MATCH_INGEST_BACKOFF_MS = 45 * 60 * 1000
+const SOLO_DUO_RANKED_QUEUE_ID = 420
 
 function clearMatchIngestCooldownKeys(matchIdFromList: string, canonicalRiotMatchId: string): void {
   for (const k of [matchIdFromList, canonicalRiotMatchId]) {
@@ -1009,7 +1011,8 @@ function buildMatchIdsQueryForPlayer(
 ): { queue: number; count: number; start: number; startTime?: number; endTime?: number } | null {
   const cappedCount = Math.max(1, Math.min(filters.count, getMatchIdsPerSummonerCap()))
   const q: { queue: number; count: number; start: number; startTime?: number; endTime?: number } = {
-    queue: filters.queue,
+    // Poller hard-lock: only queue 420 (ranked solo/duo).
+    queue: SOLO_DUO_RANKED_QUEUE_ID,
     count: cappedCount,
     start: 0,
   }
@@ -2271,10 +2274,19 @@ async function runStep4ForPlayer(
       graceDays: getPollerPatchRolloutGraceDays(),
       nowSec: Math.floor(Date.now() / 1000),
     })
+    const releasePlusOneStart = releaseDate
+      ? releaseDateToStartOfDayUtcSeconds(releaseDate) + 86400
+      : NaN
     if (Number.isFinite(w.matchListStartTime)) {
-      latestPatchDateWindow = {
-        startTime: w.matchListStartTime,
-        endTime: Math.floor(Date.now() / 1000),
+      const startTime = Number.isFinite(releasePlusOneStart)
+        ? Math.max(w.matchListStartTime, releasePlusOneStart)
+        : w.matchListStartTime
+      const endTime = Math.floor(Date.now() / 1000)
+      if (endTime > startTime) {
+        latestPatchDateWindow = {
+          startTime,
+          endTime,
+        }
       }
     }
     priorityAllowedPatches = w.allowedPatches.length ? w.allowedPatches : [patchPolicy.latestPatch]
@@ -3431,10 +3443,35 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
     if (recapRes.isOk()) {
       matchListTimeWindow = computeMatchIdsTimeWindow(filters, recapRes.unwrap())
     }
+    const currentVersionRes = await loadCurrentGameVersion()
+    const releaseDate = currentVersionRes.isOk() ? currentVersionRes.unwrap()?.releaseDate : undefined
+    const releasePlusOneStart = releaseDate
+      ? releaseDateToStartOfDayUtcSeconds(releaseDate) + 86400
+      : NaN
+    if (Number.isFinite(releasePlusOneStart)) {
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (matchListTimeWindow) {
+        const startTime = Math.max(matchListTimeWindow.startTime, releasePlusOneStart)
+        const endTime = Math.min(matchListTimeWindow.endTime, nowSec)
+        matchListTimeWindow = endTime > startTime ? { startTime, endTime } : null
+      } else if (nowSec > releasePlusOneStart) {
+        matchListTimeWindow = { startTime: releasePlusOneStart, endTime: nowSec }
+      }
+    }
     if (recapRes.isErr()) {
-      await logger.step('versions.json indisponible — liste matchs sans startTime/endTime', {
-        error: recapRes.unwrapErr().message,
-      })
+      if (matchListTimeWindow) {
+        await logger.step('versions.json indisponible — fallback fenêtre via version.json (releaseDate+1j)', {
+          error: recapRes.unwrapErr().message,
+          startTime: matchListTimeWindow.startTime,
+          endTime: matchListTimeWindow.endTime,
+          startIso: new Date(matchListTimeWindow.startTime * 1000).toISOString(),
+          endIso: new Date(matchListTimeWindow.endTime * 1000).toISOString(),
+        })
+      } else {
+        await logger.step('versions.json indisponible — liste matchs sans startTime/endTime', {
+          error: recapRes.unwrapErr().message,
+        })
+      }
     } else if (matchListTimeWindow) {
       await logger.step('Fenêtre liste matchs (data/game/versions.json → Riot ids)', {
         startTime: matchListTimeWindow.startTime,

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { inject, ref, unref } from 'vue'
-import { useAdminAuth } from '~/composables/useAdminAuth'
 
 const p = inject('statisticsPageCtx') as any
 const showChampionDealtBreakdown = ref(false)
 const showChampionTakenBreakdown = ref(false)
-const { isLoggedIn: isAdminLoggedIn } = useAdminAuth()
 
 function onChampionPageSizeChange(event: Event): void {
   const target = event.target as HTMLSelectElement | null
@@ -401,7 +399,7 @@ function onChampionPageSizeChange(event: Event): void {
             class="tier-list-lolalytics-td flex w-[110px] shrink-0 flex-col items-center justify-center gap-0.5 px-1 py-0.5 text-center"
           >
             <NuxtLink
-              v-if="isAdminLoggedIn && p.gameVersion && p.championByKey(row.championId)"
+              v-if="p.gameVersion && p.championByKey(row.championId)"
               :to="
                 p.localePath(`/statistics/champion/${encodeURIComponent(String(row.championId))}`)
               "
@@ -419,7 +417,7 @@ function onChampionPageSizeChange(event: Event): void {
               />
             </NuxtLink>
             <img
-              v-else-if="p.gameVersion && p.championByKey(row.championId)"
+              v-else
               :src="
                 p.getChampionImageUrl(p.gameVersion, p.championByKey(row.championId)!.image.full)
               "

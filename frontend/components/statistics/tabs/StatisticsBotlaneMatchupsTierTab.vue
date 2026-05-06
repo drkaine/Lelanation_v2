@@ -187,7 +187,7 @@ function tierLabel(tier: string): string {
       v-else
       class="tier-list-mobile-rotate statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
     >
-      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[860px]">
+      <div class="tier-list-lolalytics w-full min-w-0 text-[13px] max-lg:min-w-[924px]">
         <div
           class="tier-list-lolalytics-head sticky top-0 z-10 flex h-auto min-h-8 w-full items-stretch justify-between border-b border-black bg-[var(--color-grey-300)] text-text-primary/85"
         >
@@ -199,12 +199,12 @@ function tierLabel(tier: string): string {
             {{ p.t('statisticsPage.tierListRank') }}{{ sortIcon('rank') }}
           </button>
           <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[88px] shrink-0 items-center justify-center border-b border-black px-1"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
           >
             {{ p.t('statisticsPage.vsBotlaneOurDuo') }}
           </div>
           <div
-            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[88px] shrink-0 items-center justify-center border-b border-black px-1"
+            class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-[120px] shrink-0 items-center justify-center border-b border-black px-1 max-lg:w-[96px]"
           >
             {{ p.t('statisticsPage.vsBotlaneEnemyDuo') }}
           </div>
@@ -257,7 +257,7 @@ function tierLabel(tier: string): string {
         <div
           v-for="row in paginatedRows"
           :key="`${row.adcId}-${row.supportId}-${row.oppAdcId}-${row.oppSupportId}`"
-          class="tier-list-lolalytics-row flex min-h-[44px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
+          class="tier-list-lolalytics-row flex min-h-[60px] w-full items-center justify-between py-0.5 text-text-primary/90 odd:bg-white/[0.04] even:bg-black/25"
         >
           <div
             class="tier-list-lolalytics-td flex w-10 shrink-0 items-center justify-center tabular-nums"
@@ -265,16 +265,16 @@ function tierLabel(tier: string): string {
             {{ row.rank }}
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-[88px] shrink-0 items-center justify-center gap-1 px-1"
+            class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
           >
             <template v-if="p.gameVersion">
               <img
                 v-if="p.championByKey(row.adcId)"
                 :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.adcId)!.image.full)"
                 :alt="p.championName(row.adcId) || ''"
-                class="h-8 w-8 shrink-0 border border-black object-cover"
-                width="32"
-                height="32"
+                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                width="50"
+                height="50"
               />
               <img
                 v-if="p.championByKey(row.supportId)"
@@ -282,23 +282,23 @@ function tierLabel(tier: string): string {
                   getChampionImageUrl(p.gameVersion, p.championByKey(row.supportId)!.image.full)
                 "
                 :alt="p.championName(row.supportId) || ''"
-                class="h-8 w-8 shrink-0 border border-black object-cover"
-                width="32"
-                height="32"
+                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                width="50"
+                height="50"
               />
             </template>
           </div>
           <div
-            class="tier-list-lolalytics-td flex w-[88px] shrink-0 items-center justify-center gap-1 px-1"
+            class="tier-list-lolalytics-td flex w-[120px] shrink-0 items-center justify-center gap-1 px-1 max-lg:w-[96px]"
           >
             <template v-if="p.gameVersion">
               <img
                 v-if="p.championByKey(row.oppAdcId)"
                 :src="getChampionImageUrl(p.gameVersion, p.championByKey(row.oppAdcId)!.image.full)"
                 :alt="p.championName(row.oppAdcId) || ''"
-                class="h-8 w-8 shrink-0 border border-black object-cover"
-                width="32"
-                height="32"
+                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                width="50"
+                height="50"
               />
               <img
                 v-if="p.championByKey(row.oppSupportId)"
@@ -306,9 +306,9 @@ function tierLabel(tier: string): string {
                   getChampionImageUrl(p.gameVersion, p.championByKey(row.oppSupportId)!.image.full)
                 "
                 :alt="p.championName(row.oppSupportId) || ''"
-                class="h-8 w-8 shrink-0 border border-black object-cover"
-                width="32"
-                height="32"
+                class="h-[50px] w-[50px] shrink-0 border-2 border-black object-cover max-lg:h-10 max-lg:w-10"
+                width="50"
+                height="50"
               />
             </template>
           </div>
