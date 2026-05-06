@@ -109,7 +109,7 @@ const {
   isStreamerMode,
   routeTab: computed(() => (typeof route.query.tab === 'string' ? route.query.tab : undefined)),
   updateRouteTab: async tab => {
-    await navigateTo({ query: { tab } }, { replace: true })
+    await navigateTo({ query: { ...route.query, tab } }, { replace: true })
   },
   t,
   buildStore,

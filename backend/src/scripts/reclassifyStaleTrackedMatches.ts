@@ -7,6 +7,12 @@ function isApplyMode(): boolean {
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on'
 }
 
+function getMaxAgeHours(): number {
+  const raw = Number.parseInt(process.env.STALE_MAX_AGE_HOURS ?? '24', 10)
+  if (!Number.isFinite(raw) || raw <= 0) return 24
+  return Math.min(raw, 24 * 30)
+}
+
 async function tableExists(tableName: string): Promise<boolean> {
   if (!/^[a-z0-9_]+$/i.test(tableName)) return false
   const rows = await prisma.$queryRawUnsafe<Array<{ ok: boolean }>>(
@@ -31,6 +37,8 @@ async function main(): Promise<void> {
   }
   const cutoffSec = releaseStart + 86400
   const cutoffDate = new Date(cutoffSec * 1000)
+  const maxAgeHours = getMaxAgeHours()
+  const ageCutoffDate = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000)
   const hasIngestMatchs = await tableExists('ingest_matchs')
   const hasMatchIngestRaw = await tableExists('match_ingest_raw')
 
@@ -38,6 +46,11 @@ async function main(): Promise<void> {
     `tm.status = 'PENDING'`,
     `tm.aggregate_status = 'PENDING'`,
     `tm.created_at < $1`,
+    `tm.created_at < $2`,
+    `(
+      tm.player1 IS NULL AND tm.player2 IS NULL AND tm.player3 IS NULL AND tm.player4 IS NULL AND tm.player5 IS NULL
+      AND tm.player6 IS NULL AND tm.player7 IS NULL AND tm.player8 IS NULL AND tm.player9 IS NULL AND tm.player10 IS NULL
+    )`,
   ]
   if (hasIngestMatchs) {
     conditions.push(
@@ -54,11 +67,12 @@ async function main(): Promise<void> {
     `SELECT COUNT(*)::bigint AS c
      FROM tracked_matches tm
      WHERE ${whereSql}`,
-    cutoffDate
+    cutoffDate,
+    ageCutoffDate
   )
   const candidates = Number(candidateRows[0]?.c ?? 0)
   console.log(
-    `[reclassify-stale-tracked] releaseDate=${releaseDate} cutoffIso=${cutoffDate.toISOString()} candidates=${candidates} hasIngestMatchs=${hasIngestMatchs ? 1 : 0} hasMatchIngestRaw=${hasMatchIngestRaw ? 1 : 0}`
+    `[reclassify-stale-tracked] releaseDate=${releaseDate} cutoffIso=${cutoffDate.toISOString()} ageCutoffIso=${ageCutoffDate.toISOString()} maxAgeHours=${maxAgeHours} candidates=${candidates} hasIngestMatchs=${hasIngestMatchs ? 1 : 0} hasMatchIngestRaw=${hasMatchIngestRaw ? 1 : 0}`
   )
   if (!isApplyMode()) {
     console.log('[reclassify-stale-tracked] dry-run only (set APPLY=1 to execute update)')
@@ -69,7 +83,8 @@ async function main(): Promise<void> {
     `UPDATE tracked_matches tm
      SET status = 'DEFERRED_PATCH'
      WHERE ${whereSql}`,
-    cutoffDate
+    cutoffDate,
+    ageCutoffDate
   )
   console.log(`[reclassify-stale-tracked] updated=${updated}`)
 }

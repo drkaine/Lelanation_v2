@@ -309,6 +309,8 @@ const getItemCategory = (item: Item): ItemCategory => {
     '1082', // Seau noir (Relic Shield)
     '1083', // Abatteur (Cull)
     '3070', // Larme de la déesse
+    '1086', // Arc de Doran
+    '1087', // Casque de Doran
     // Support starting lines (base items uniquement)
     '3865', // Atlas
     '3866', // Base support item (sickle line)
@@ -341,6 +343,8 @@ const getItemCategory = (item: Item): ItemCategory => {
     'long sword',
     'faucheuse',
     'fragment',
+    'arc de doran',
+    'casque de doran',
   ]
   const elixirIds = new Set(['2138', '2139', '2140']) // Fer, Sorcellerie, Rage
 

@@ -1,5 +1,6 @@
 import { prisma, isDatabaseConfigured } from '../db.js'
 import { invalidateAggArchivePartitionCache } from './statsAggArchive.js'
+import { loadCurrentGameVersion, releaseDateToStartOfDayUtcSeconds } from './RiotConfigService.js'
 
 const VERSIONED_TABLES = [
   'agg_match_outcome_stats',
@@ -58,6 +59,61 @@ function patchLifecycleTxOptions(): { maxWait: number; timeout: number } {
     Math.min(3_600_000, Number(process.env.PATCH_LIFECYCLE_TX_TIMEOUT_MS ?? 180_000))
   )
   return { maxWait: 60_000, timeout }
+}
+
+export function trackedMatchesCutoffDateFromReleaseDate(releaseDate: string | null | undefined): Date | null {
+  const cutoffSec = releaseDateToStartOfDayUtcSeconds((releaseDate ?? '').trim())
+  if (!Number.isFinite(cutoffSec)) return null
+  return new Date(cutoffSec * 1000)
+}
+
+function isMissingRelationError(err: unknown, tableName: string): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  const lower = msg.toLowerCase()
+  return (
+    msg.includes('Code: `42P01`') ||
+    (lower.includes('relation "') && lower.includes('does not exist') && lower.includes(tableName.toLowerCase()))
+  )
+}
+
+async function purgeTrackedMatchesBeforeCurrentReleaseDate(): Promise<{
+  cutoffDateIso: string
+  deletedCount: number
+} | null> {
+  const versionRes = await loadCurrentGameVersion()
+  if (!versionRes.isOk()) return null
+  const releaseDate = (versionRes.unwrap()?.releaseDate ?? '').trim()
+  const cutoffDate = trackedMatchesCutoffDateFromReleaseDate(releaseDate)
+  if (!cutoffDate) return null
+  try {
+    const deleted = await prisma.trackedMatch.deleteMany({
+      where: { createdAt: { lt: cutoffDate } },
+    })
+    return {
+      cutoffDateIso: cutoffDate.toISOString(),
+      deletedCount: deleted.count,
+    }
+  } catch (err) {
+    if (isMissingRelationError(err, 'tracked_matches')) return null
+    throw err
+  }
+}
+
+function appendTrackedMatchesCleanupToCloseSummary(
+  closeSummary: unknown,
+  trackedMatchesCleanup: { cutoffDateIso: string; deletedCount: number } | null
+): unknown {
+  if (!trackedMatchesCleanup) return closeSummary
+  if (closeSummary != null && typeof closeSummary === 'object' && !Array.isArray(closeSummary)) {
+    return {
+      ...(closeSummary as Record<string, unknown>),
+      trackedMatchesCleanup,
+    }
+  }
+  return {
+    closePatch: closeSummary,
+    trackedMatchesCleanup,
+  }
 }
 
 async function closePatchWithoutLegacyFunction(patch: string): Promise<unknown> {
@@ -189,8 +245,9 @@ export async function closePatch(patch: string): Promise<unknown> {
   let summary: unknown = null
   if (!(await tableExists('ingest_matchs'))) {
     summary = await closePatchWithoutLegacyFunction(value)
+    const trackedMatchesCleanup = await purgeTrackedMatchesBeforeCurrentReleaseDate()
     invalidateAggArchivePartitionCache()
-    return summary
+    return appendTrackedMatchesCleanupToCloseSummary(summary, trackedMatchesCleanup)
   }
   try {
     const rows = await prisma.$queryRaw<[{ close_patch: unknown }]>`
@@ -202,6 +259,7 @@ export async function closePatch(patch: string): Promise<unknown> {
     if (!msg.includes('relation "ingest_matchs" does not exist')) throw err
     summary = await closePatchWithoutLegacyFunction(value)
   }
+  const trackedMatchesCleanup = await purgeTrackedMatchesBeforeCurrentReleaseDate()
   invalidateAggArchivePartitionCache()
-  return summary
+  return appendTrackedMatchesCleanupToCloseSummary(summary, trackedMatchesCleanup)
 }

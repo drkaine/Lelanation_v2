@@ -294,6 +294,30 @@
               >
                 ✕
               </button>
+              <button
+                v-if="isCompanionAppEmbed"
+                type="button"
+                class="build-grid-action-button build-grid-action-button--icon build-grid-action-button--companion"
+                :title="t('buildDiscovery.importInCompanion')"
+                :aria-label="t('buildDiscovery.importInCompanion')"
+                @click.stop="sendBuildToCompanion(build)"
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 4v10" />
+                  <path d="m8 10 4 4 4-4" />
+                  <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+              </button>
             </div>
             <!-- Dropdown -->
             <div
@@ -446,7 +470,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import BuildCard from '~/components/Build/BuildCard.vue'
 import NotificationToast from '~/components/NotificationToast.vue'
@@ -558,6 +582,10 @@ const discoveryStore = useBuildDiscoveryStore()
 const voteStore = useVoteStore()
 const favoritesStore = useFavoritesStore()
 const router = useRouter()
+const route = useRoute()
+const isCompanionAppEmbed = computed(
+  () => route.query.app === 'on' || route.query.source === 'companion'
+)
 
 // Filtrer les customBuilds avec les mêmes critères que discoveryStore
 const filteredCustomBuilds = computed(() => {
@@ -683,6 +711,21 @@ const hasActiveFilters = computed(() => {
 const localePath = useLocalePath()
 const navigateToBuild = (buildId: string) => {
   router.push(localePath(`/builds/${buildId}`))
+}
+
+function sendBuildToCompanion(build: Build) {
+  if (typeof window === 'undefined') return
+  const parentWindow = window.parent
+  if (!parentWindow || parentWindow === window) return
+  parentWindow.postMessage(
+    {
+      type: 'lelanation:companion-import-build',
+      payload: {
+        build,
+      },
+    },
+    '*'
+  )
 }
 
 const getUpvoteCount = (buildId: string): number => {
@@ -1111,6 +1154,18 @@ onUnmounted(() => {
 
 .build-grid-action-button--vote {
   flex: 1 1 0;
+}
+
+.build-grid-action-button--companion {
+  border-color: rgb(3 151 171 / 0.85);
+  background: rgb(3 151 171 / 0.16);
+  color: rgb(207 250 254);
+  font-weight: 700;
+}
+
+.build-grid-action-button--companion:hover {
+  border-color: rgb(3 151 171 / 1);
+  background: rgb(3 151 171 / 0.3);
 }
 
 .build-grid-action-button--delete {

@@ -12,8 +12,11 @@ const locale = ref<"fr" | "en">("fr");
 const acceptLegal = ref(false);
 const shareRankedDuo = ref(false);
 const leaguePath = ref("");
+const skipLeaguePath = ref(false);
 const saving = ref(false);
 const formError = ref("");
+const canBypassLeaguePath = import.meta.env.DEV;
+const DEV_ONBOARDING_BYPASS_KEY = "lelanation-companion-dev-onboarding-bypass";
 
 const avatarUrl = `${apiBase}/images/lelariva-quality.png`;
 
@@ -23,10 +26,10 @@ const strings = computed(() => {
       language: "Langue",
       title: "Lelanation Companion",
       intro:
-        "Application Windows pour parcourir les builds publics Lelanation. Connexion au client LoL (LCU) en local — voir la documentation API locale.",
+        "Application Windows pour parcourir les builds publics Lelanation.",
       leagueTitle: "Dossier d'installation League of Legends",
       leagueHint:
-        "Sélectionne le dossier racine du jeu (ex. …\\Riot Games\\League of Legends). Utilisé pour localiser le lockfile LCU quand le client est ouvert.",
+        "Sélectionne le dossier racine du jeu (ex. …\\Riot Games\\League of Legends). Pour permettre la connexion au client LoL.",
       browse: "Parcourir…",
       dataTitle: "Données et confidentialité",
       noPersonal:
@@ -39,6 +42,7 @@ const strings = computed(() => {
       acceptLabel: "J’ai lu et j’accepte les conditions et la politique de confidentialité.",
       privacy: "Politique de confidentialité",
       continue: "Continuer",
+      bypassPath: "Bypass dev: continuer sans dossier League",
       errPath: "Indique le dossier League of Legends.",
       errLegal: "Tu dois accepter les conditions pour continuer.",
       errSave: "Impossible d’enregistrer la configuration.",
@@ -47,10 +51,10 @@ const strings = computed(() => {
       language: "Language",
       title: "Lelanation Companion",
       intro:
-        "Windows app to browse public Lelanation builds. Local League client (LCU) connection — see LCU API docs.",
+        "Windows app to browse public Lelanation builds.",
       leagueTitle: "League of Legends install folder",
       leagueHint:
-        "Pick the game root folder (e.g. …\\Riot Games\\League of Legends). Used to find the LCU lockfile when the client is running.",
+        "Pick the game root folder (e.g. …\\Riot Games\\League of Legends). To allow the connection to the LoL client.",
       browse: "Browse…",
       dataTitle: "Data & privacy",
       noPersonal:
@@ -63,6 +67,7 @@ const strings = computed(() => {
       acceptLabel: "I have read and accept the terms and privacy policy.",
       privacy: "Privacy policy",
       continue: "Continue",
+      bypassPath: "Dev bypass: continue without League folder",
       errPath: "Please set the League of Legends folder.",
       errLegal: "You must accept the terms to continue.",
       errSave: "Could not save configuration.",
@@ -89,21 +94,36 @@ async function submit() {
     return;
   }
   const trimmed = leaguePath.value.trim();
-  if (!trimmed) {
+  if (!trimmed && !(canBypassLeaguePath && skipLeaguePath.value)) {
     formError.value = strings.value.errPath;
     return;
   }
   saving.value = true;
   try {
     const cfg: CompanionConfig = {
-      leagueInstallPath: trimmed,
+      leagueInstallPath: trimmed || "",
       onboardingComplete: true,
       shareRankedDuoStats: shareRankedDuo.value,
     };
     await invoke("companion_save_config", { cfg });
+    if (canBypassLeaguePath && typeof window !== "undefined") {
+      window.localStorage.removeItem(DEV_ONBOARDING_BYPASS_KEY);
+    }
     emit("done");
-  } catch {
-    formError.value = strings.value.errSave;
+  } catch (err) {
+    if (canBypassLeaguePath && skipLeaguePath.value) {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(DEV_ONBOARDING_BYPASS_KEY, "1");
+      }
+      emit("done");
+      return;
+    }
+    if (canBypassLeaguePath) {
+      const msg = err instanceof Error ? err.message : String(err);
+      formError.value = `${strings.value.errSave} (${msg})`;
+    } else {
+      formError.value = strings.value.errSave;
+    }
   } finally {
     saving.value = false;
   }
@@ -159,6 +179,10 @@ watch(locale, (next) => {
           <input v-model="leaguePath" type="text" readonly class="path-input" :placeholder="strings.leagueTitle" />
           <button type="button" class="btn secondary" @click="browseFolder">{{ strings.browse }}</button>
         </div>
+        <label v-if="canBypassLeaguePath" class="check">
+          <input v-model="skipLeaguePath" type="checkbox" />
+          <span>{{ strings.bypassPath }}</span>
+        </label>
       </section>
 
       <section class="box">

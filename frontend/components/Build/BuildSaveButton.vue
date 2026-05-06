@@ -27,6 +27,7 @@ import { useLayoutScaled } from '~/composables/useLayoutScaled'
 
 const buildStore = useBuildStore()
 const router = useRouter()
+const route = useRoute()
 const localePath = useLocalePath()
 const { isLayoutScaled } = useLayoutScaled()
 const emit = defineEmits<{
@@ -66,7 +67,9 @@ const handleSave = async () => {
   const success = await buildStore.saveBuild()
   if (!success) return
   buildStore.createNewBuild()
-  router.push(`${localePath('/builds')}?tab=my-builds`)
+  const query: Record<string, string> = { tab: 'my-builds' }
+  if (route.query.app === 'on') query.app = 'on'
+  router.push(localePath({ path: '/builds', query }))
 }
 </script>
 

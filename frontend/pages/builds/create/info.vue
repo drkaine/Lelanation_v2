@@ -79,9 +79,11 @@ watch(
   () => buildStore.currentBuild?.champion,
   champion => {
     if (!champion && route.path.includes('/builds/create/info')) {
+      const query: Record<string, string> = {}
       const id = buildStore.editSourceBuildId
-      const suffix = id ? `?editId=${encodeURIComponent(id)}` : ''
-      router.replace(localePath(`/builds/create/champion${suffix}`))
+      if (id) query.editId = id
+      if (route.query.app === 'on') query.app = 'on'
+      router.replace(localePath({ path: '/builds/create/champion', query }))
     }
   },
   { immediate: true }

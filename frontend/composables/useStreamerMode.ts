@@ -4,6 +4,7 @@ const STREAMER_MODE_STORAGE_KEY = 'lelanation_streamer_mode'
 const STREAMER_MODE_COOKIE_KEY = 'lelanation_streamer_mode'
 
 export function useStreamerMode() {
+  const route = useRoute()
   const modeCookie = useCookie<string | null>(STREAMER_MODE_COOKIE_KEY, {
     sameSite: 'lax',
     path: '/',
@@ -20,6 +21,19 @@ export function useStreamerMode() {
       if (initialized.value) return
       initialized.value = true
       try {
+        const forceFromQuery =
+          route.query.app === 'on' ||
+          route.query.streamer === '1' ||
+          route.query.presentation === '1' ||
+          route.query.mode === 'presentation'
+
+        if (forceFromQuery) {
+          isStreamerMode.value = true
+          modeCookie.value = '1'
+          localStorage.setItem(STREAMER_MODE_STORAGE_KEY, '1')
+          return
+        }
+
         // Le mode présentation n'est pas supporté sur mobile.
         if (isMobileViewport()) {
           isStreamerMode.value = false

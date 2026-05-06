@@ -40,6 +40,8 @@ describe('isBootsItem', () => {
 describe('isStarterItem', () => {
   it('returns true for known starter IDs', () => {
     expect(isStarterItem(makeItem('1055', { name: "Doran's Blade" }))).toBe(true)
+    expect(isStarterItem(makeItem('1086', { name: "Doran's Arc" }))).toBe(true)
+    expect(isStarterItem(makeItem('1087', { name: "Doran's Helm" }))).toBe(true)
     expect(isStarterItem(makeItem('2003', { name: 'Health Potion' }))).toBe(true)
   })
 

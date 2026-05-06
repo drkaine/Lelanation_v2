@@ -1089,7 +1089,8 @@
     "linkCopied": "Link copied to clipboard.",
     "imageCopied": "Image copied to clipboard.",
     "imageCopyError": "Unable to copy to clipboard.",
-    "anonymous": "Anonymous"
+    "anonymous": "Anonymous",
+    "importInCompanion": "Import into client (Companion)"
   },
   "createBuild": {
     "form": "Form",

@@ -1091,7 +1091,8 @@
     "linkCopied": "Lien copié dans le presse-papiers.",
     "imageCopied": "Image copiée dans le presse-papiers.",
     "imageCopyError": "Impossible de copier dans le presse-papiers.",
-    "anonymous": "Anonyme"
+    "anonymous": "Anonyme",
+    "importInCompanion": "Importer dans le client (Companion)"
   },
   "createBuild": {
     "form": "Formulaire",

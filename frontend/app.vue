@@ -323,8 +323,10 @@ const onKeyDown = (event: KeyboardEvent) => {
 
   event.preventDefault()
   const nextStep = stepOrder[nextIndex]
+  const query: Record<string, string> = {}
   const editId = route.query.editId
-  const query = typeof editId === 'string' && editId.length > 0 ? { editId } : undefined
+  if (typeof editId === 'string' && editId.length > 0) query.editId = editId
+  if (route.query.app === 'on') query.app = 'on'
   router.push(localePath({ path: `/builds/create/${nextStep}`, query }))
 }
 

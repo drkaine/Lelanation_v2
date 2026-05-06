@@ -344,7 +344,7 @@ async function loadTrackedMatchRankTiersByPuuid(trackedMatchId: string): Promise
     const rankTier = String(rec['rankTier'] ?? rec['rank_tier'] ?? '')
       .trim()
       .toUpperCase()
-    if (!rankTier) continue
+    if (!rankTier || rankTier === 'UNRANKED') continue
     out.set(puuid, rankTier.split('_')[0] || rankTier)
   }
   return out
@@ -352,13 +352,17 @@ async function loadTrackedMatchRankTiersByPuuid(trackedMatchId: string): Promise
 
 function ensureTrackedRanksPresentForParticipants(
   participants: RawParticipant[],
-  trackedRankByPuuid: Map<string, string>
+  trackedRankByPuuid: Map<string, string>,
+  dbRankByPuuid: Map<string, string>
 ): boolean {
   for (const p of participants) {
     const puuid = String(p.puuid ?? '').trim().toLowerCase()
     if (!puuid) continue
     const rankTier = trackedRankByPuuid.get(puuid)
-    if (!rankTier || rankTier.length === 0) return false
+    if (rankTier && rankTier.length > 0 && rankTier !== 'UNRANKED') continue
+    const dbTier = dbRankByPuuid.get(puuid)
+    if (dbTier && dbTier.length > 0 && dbTier !== 'UNRANKED') continue
+    return false
   }
   return true
 }
@@ -947,7 +951,7 @@ export async function processRawAggregateAndBurn(
     participants.map((p) => String(p.puuid ?? '')).filter((p) => p.length > 0)
   )
   const trackedRankByPuuid = await loadTrackedMatchRankTiersByPuuid(trackedMatchId)
-  if (!ensureTrackedRanksPresentForParticipants(participants, trackedRankByPuuid)) {
+  if (!ensureTrackedRanksPresentForParticipants(participants, trackedRankByPuuid, dbRankByPuuid)) {
     throw new Error('tracked_rank_pending')
   }
   const participantsForAgg = mergeParticipantTiersFromDb(

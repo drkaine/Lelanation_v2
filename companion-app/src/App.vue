@@ -7,13 +7,22 @@ import type { CompanionConfig } from "./companionConfig";
 
 const booted = ref(false);
 const needsOnboarding = ref(true);
+const DEV_ONBOARDING_BYPASS_KEY = "lelanation-companion-dev-onboarding-bypass";
 
 onMounted(async () => {
   try {
     const cfg = await invoke<CompanionConfig>("companion_get_config");
-    needsOnboarding.value = cfg.onboardingComplete !== true;
+    const bypassedInDev =
+      import.meta.env.DEV &&
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(DEV_ONBOARDING_BYPASS_KEY) === "1";
+    needsOnboarding.value = cfg.onboardingComplete !== true && !bypassedInDev;
   } catch {
-    needsOnboarding.value = true;
+    const bypassedInDev =
+      import.meta.env.DEV &&
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(DEV_ONBOARDING_BYPASS_KEY) === "1";
+    needsOnboarding.value = !bypassedInDev;
   } finally {
     booted.value = true;
   }

@@ -53,9 +53,11 @@ const highlightMissingFields = ref(false)
 
 watch(hasChampion, newValue => {
   if (newValue && route.path.includes('/builds/create/champion')) {
+    const query: Record<string, string> = {}
     const id = buildStore.editSourceBuildId
-    const suffix = id ? `?editId=${encodeURIComponent(id)}` : ''
-    router.push(localePath(`/builds/create/rune${suffix}`))
+    if (id) query.editId = id
+    if (route.query.app === 'on') query.app = 'on'
+    router.push(localePath({ path: '/builds/create/rune', query }))
   }
 })
 

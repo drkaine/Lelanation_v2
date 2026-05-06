@@ -13,13 +13,15 @@ export function isBootsItem(item: Item): boolean {
 }
 
 const STARTER_IDS = new Set([
-  '1036', '1054', '1055', '1056', '1082', '1083', '3070',
+  '1036', '1054', '1055', '1056', '1082', '1083', '3070', '1086', '1087',
   '3865', '3866', '3867', '2003', '2009', '2010',
   '2031', '2032', '2033', '2055', '1101', '1102', '1103',
 ])
 
 const STARTER_NAME_PATTERNS = [
   'seau', 'anneau de doran', 'lame de doran', 'bouclier de doran',
+  'arc de doran', 'casque de doran',
+  "doran's arc", "doran's helm",
   'larme de la déesse', 'cull', 'abatteur', 'atlas', 'épée de voleur',
   'épée longue', 'long sword', 'faucheuse', 'fragment',
   'potion', 'ward', 'elixir', 'biscuit',
