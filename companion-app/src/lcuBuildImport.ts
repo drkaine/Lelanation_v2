@@ -111,6 +111,25 @@ async function applyRunesLcu(pageName: string, runes: RuneSelection, shards: Sha
   await lcu("POST", "/lol-perks/v1/pages", JSON.stringify(mergedBase));
 }
 
+async function tryApplyItemSetLcu(title: string, items: Item[]): Promise<void> {
+  const currentSummonerRaw = await lcu("GET", "/lol-summoner/v1/current-summoner", null);
+  const currentSummoner = JSON.parse(currentSummonerRaw) as {
+    summonerId?: number;
+    id?: number;
+  };
+  const summonerId = Number(currentSummoner.summonerId ?? currentSummoner.id ?? 0);
+  if (!Number.isFinite(summonerId) || summonerId <= 0) {
+    throw new Error("Cannot resolve current summoner id");
+  }
+
+  const itemSetPayload = JSON.parse(buildItemSetJson(title, items)) as Record<string, unknown>;
+  await lcu(
+    "POST",
+    `/lol-item-sets/v1/item-sets/${summonerId}/sets`,
+    JSON.stringify(itemSetPayload)
+  );
+}
+
 function summonerSpellNumericId(spell: SummonerSpell | null): number | null {
   if (!spell) return null;
   const raw = String(spell.id ?? "").trim();
@@ -174,11 +193,16 @@ export async function importBuildToLcu(build: Build): Promise<void> {
     const count = parsed.blocks?.[0]?.items?.length ?? 0;
     if (count > 0) {
       try {
-        await invoke<string>("companion_write_champion_item_set", {
-          championKey,
-          titleStem: `${build.id}_${(build.name || "build").slice(0, 24)}`,
-          jsonContent: json,
-        });
+        try {
+          await tryApplyItemSetLcu(build.name || build.id, build.items);
+        } catch {
+          // Fallback: write to League Config file when LCU endpoint is unavailable.
+          await invoke<string>("companion_write_champion_item_set", {
+            championKey,
+            titleStem: `${build.id}_${(build.name || "build").slice(0, 24)}`,
+            jsonContent: json,
+          });
+        }
         didSomething = true;
       } catch (e) {
         throw new Error(`ITEMS:${e instanceof Error ? e.message : String(e)}`);
