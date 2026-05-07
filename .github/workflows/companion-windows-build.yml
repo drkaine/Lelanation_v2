@@ -88,6 +88,13 @@ jobs:
         working-directory: .
         run: npm ci
 
+      - name: Assert updater signing secrets present
+        run: |
+          if ("${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" -eq "") {
+            throw "Missing secret TAURI_SIGNING_PRIVATE_KEY (required for updater signature and latest.json)."
+          }
+          Write-Host "TAURI_SIGNING_PRIVATE_KEY is configured."
+
       - name: Copy shared icons to companion-app public
         working-directory: .
         run: |
@@ -100,7 +107,7 @@ jobs:
       - name: Build Tauri Windows bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build
 
       - name: Assert signing secrets present
@@ -220,8 +227,7 @@ jobs:
           $zipName = $env:NSIS_ZIP_NAME
 
           if (-not $sig -or -not $zipName) {
-            Write-Host "::warning::Skipping latest.json – no updater signature found (TAURI_SIGNING_PRIVATE_KEY not set?)"
-            exit 0
+            throw "Cannot generate latest.json: missing updater signature (.nsis.zip.sig) or updater bundle (.nsis.zip)."
           }
 
           $url = "https://github.com/drkaine/Lelanation_v2/releases/download/$tag/$zipName"
