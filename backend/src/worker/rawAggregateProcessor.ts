@@ -890,6 +890,102 @@ function extractParticipantObjectiveTimelineStats(
     }
   }
 
+  const objectivePrefixes = ['baron', 'dragon', 'riftHerald', 'horde', 'elder', 'tower', 'inhibitor']
+  for (let idx = 0; idx < participants.length; idx++) {
+    const p = participants[idx]
+    const pid = toSafeInt((p as Record<string, unknown>).participantId) || idx + 1
+    const cur = out.get(pid) ?? {}
+    const win = p.win === true ? 1 : 0
+    for (const prefix of objectivePrefixes) {
+      const kill = Number(cur[`${prefix}Kill`] ?? 0)
+      const assist = Number(cur[`${prefix}Assist`] ?? 0)
+      const killGame = kill > 0 ? 1 : 0
+      const assistGame = assist > 0 ? 1 : 0
+      const involvedGame = killGame || assistGame ? 1 : 0
+      cur[`${prefix}KillGame`] = killGame
+      cur[`${prefix}AssistGame`] = assistGame
+      cur[`${prefix}InvolvedGame`] = involvedGame
+      cur[`${prefix}InvolvedWin`] = involvedGame > 0 ? win : 0
+    }
+    out.set(pid, cur)
+  }
+
+  return out
+}
+
+function extractParticipantKillDeathDiffAtMinutes(
+  payload: MatchIngestQueuePayloadV1,
+  participants: RawParticipant[],
+  minuteMarks: number[]
+): Map<number, Record<number, number>> {
+  const out = new Map<number, Record<number, number>>()
+  const normalizedMarks = Array.from(new Set(minuteMarks.map((m) => Math.max(1, Math.trunc(m))))).sort((a, b) => a - b)
+  if (normalizedMarks.length === 0) return out
+
+  const allowedPids = new Set<number>()
+  const participantById = new Map<number, RawParticipant>()
+  participants.forEach((p, idx) => {
+    const pid = toSafeInt((p as Record<string, unknown>).participantId) || idx + 1
+    if (pid > 0) {
+      allowedPids.add(pid)
+      participantById.set(pid, p)
+    }
+  })
+  if (allowedPids.size === 0) return out
+
+  const killsByPid = new Map<number, number>()
+  const deathsByPid = new Map<number, number>()
+  allowedPids.forEach((pid) => {
+    killsByPid.set(pid, 0)
+    deathsByPid.set(pid, 0)
+  })
+
+  const timeline = payload.timelineDto as { info?: { frames?: Array<{ events?: TimelineEvent[] }> } } | null
+  const frames = timeline?.info?.frames
+  const pendingMarks = [...normalizedMarks]
+  if (!Array.isArray(frames) || pendingMarks.length === 0) {
+    for (const pid of allowedPids) {
+      const pp = participantById.get(pid) as Record<string, unknown> | undefined
+      const finalKills = toSafeInt(pp?.kills)
+      const finalDeaths = toSafeInt(pp?.deaths)
+      const row: Record<number, number> = {}
+      for (const minute of normalizedMarks) row[minute] = finalKills - finalDeaths
+      out.set(pid, row)
+    }
+    return out
+  }
+
+  const pushSnapshot = (minute: number) => {
+    for (const pid of allowedPids) {
+      const cur = out.get(pid) ?? {}
+      cur[minute] = (killsByPid.get(pid) ?? 0) - (deathsByPid.get(pid) ?? 0)
+      out.set(pid, cur)
+    }
+  }
+
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      const timestamp = toSafeInt((ev as { timestamp?: unknown }).timestamp)
+      const evType = String(ev?.type ?? '').trim().toUpperCase()
+      while (pendingMarks.length > 0 && timestamp > pendingMarks[0] * 60_000) {
+        const minute = pendingMarks.shift()!
+        pushSnapshot(minute)
+      }
+      if (evType !== 'CHAMPION_KILL') continue
+      const killerId = toSafeInt((ev as { killerId?: unknown }).killerId)
+      const victimId = toSafeInt((ev as { victimId?: unknown }).victimId)
+      if (killerId > 0 && allowedPids.has(killerId)) {
+        killsByPid.set(killerId, (killsByPid.get(killerId) ?? 0) + 1)
+      }
+      if (victimId > 0 && allowedPids.has(victimId)) {
+        deathsByPid.set(victimId, (deathsByPid.get(victimId) ?? 0) + 1)
+      }
+    }
+  }
+  while (pendingMarks.length > 0) {
+    const minute = pendingMarks.shift()!
+    pushSnapshot(minute)
+  }
   return out
 }
 
@@ -965,6 +1061,11 @@ export async function processRawAggregateAndBurn(
   const objectiveTimelineByParticipant = extractParticipantObjectiveTimelineStats(
     payload,
     participantsForAgg
+  )
+  const killDeathDiffAtMinuteByParticipant = extractParticipantKillDeathDiffAtMinutes(
+    payload,
+    participantsForAgg,
+    [10, 20]
   )
   const firstInhibitorTeamId = extractFirstInhibitorTeamId(payload)
 
@@ -1368,6 +1469,17 @@ export async function processRawAggregateAndBurn(
           sum_minions_killed,
           sum_time_enemy_spent_controlled,
           sum_total_gold,
+          sum_time_played,
+          sum_kills,
+          sum_assists,
+          sum_deaths,
+          sum_kills_assists,
+          sum_kd_diff_10,
+          sum_kd_diff_20,
+          count_kd_diff_10_positive_game,
+          count_kd_diff_10_positive_win,
+          count_kd_diff_20_positive_game,
+          count_kd_diff_20_positive_win,
           count_game_end,
           count_time_enemy_spent_controlled,
           updated_at
@@ -1395,6 +1507,17 @@ export async function processRawAggregateAndBurn(
           ${readParticipantMetricInt(p, 'totalMinionsKilled')},
           ${readParticipantMetricInt(p, 'timeEnemySpentControlled')},
           ${readParticipantMetricInt(p, 'goldEarned')},
+          ${readParticipantMetricInt(p, 'timePlayed')},
+          ${readParticipantMetricInt(p, 'kills')},
+          ${readParticipantMetricInt(p, 'assists')},
+          ${readParticipantMetricInt(p, 'deaths')},
+          ${readParticipantMetricInt(p, 'kills') + readParticipantMetricInt(p, 'assists')},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[10] ?? 0)},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[20] ?? 0)},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[10] ?? 0) > 0 ? 1 : 0},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[10] ?? 0) > 0 && wins > 0 ? 1 : 0},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[20] ?? 0) > 0 ? 1 : 0},
+          ${Number(killDeathDiffAtMinuteByParticipant.get(participantSlotId)?.[20] ?? 0) > 0 && wins > 0 ? 1 : 0},
           1,
           ${readParticipantMetricInt(p, 'timeEnemySpentControlled') > 0 ? 1 : 0},
           NOW()
@@ -1426,6 +1549,21 @@ export async function processRawAggregateAndBurn(
             sum_time_enemy_spent_controlled =
               agg_champion_bucket.sum_time_enemy_spent_controlled + EXCLUDED.sum_time_enemy_spent_controlled,
             sum_total_gold = agg_champion_bucket.sum_total_gold + EXCLUDED.sum_total_gold,
+            sum_time_played = agg_champion_bucket.sum_time_played + EXCLUDED.sum_time_played,
+            sum_kills = agg_champion_bucket.sum_kills + EXCLUDED.sum_kills,
+            sum_assists = agg_champion_bucket.sum_assists + EXCLUDED.sum_assists,
+            sum_deaths = agg_champion_bucket.sum_deaths + EXCLUDED.sum_deaths,
+            sum_kills_assists = agg_champion_bucket.sum_kills_assists + EXCLUDED.sum_kills_assists,
+            sum_kd_diff_10 = agg_champion_bucket.sum_kd_diff_10 + EXCLUDED.sum_kd_diff_10,
+            sum_kd_diff_20 = agg_champion_bucket.sum_kd_diff_20 + EXCLUDED.sum_kd_diff_20,
+            count_kd_diff_10_positive_game =
+              agg_champion_bucket.count_kd_diff_10_positive_game + EXCLUDED.count_kd_diff_10_positive_game,
+            count_kd_diff_10_positive_win =
+              agg_champion_bucket.count_kd_diff_10_positive_win + EXCLUDED.count_kd_diff_10_positive_win,
+            count_kd_diff_20_positive_game =
+              agg_champion_bucket.count_kd_diff_20_positive_game + EXCLUDED.count_kd_diff_20_positive_game,
+            count_kd_diff_20_positive_win =
+              agg_champion_bucket.count_kd_diff_20_positive_win + EXCLUDED.count_kd_diff_20_positive_win,
             count_game_end = agg_champion_bucket.count_game_end + EXCLUDED.count_game_end,
             count_time_enemy_spent_controlled =
               agg_champion_bucket.count_time_enemy_spent_controlled + EXCLUDED.count_time_enemy_spent_controlled,

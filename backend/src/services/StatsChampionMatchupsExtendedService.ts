@@ -35,6 +35,8 @@ export interface ChampionMatchupExtendedRow {
   matchupScoreDeltaVsReference: number | null
   pickrate: number
   pickrateDeltaVsReference: number | null
+  delta1: number
+  delta2: number
   laneScore: number
   laneScoreDeltaVsReference: number | null
   dominanceKeys: ChampionMatchupDominanceKey[]
@@ -50,6 +52,12 @@ export interface ChampionMatchupExtendedResult {
   referenceVersion: string | null
   totalGames: number
   rows: ChampionMatchupExtendedRow[]
+}
+
+export interface ChampionMatchupExportResult {
+  championId: number
+  columns: string[]
+  rows: Array<Record<string, number | string | null>>
 }
 
 type RawMyRow = {
@@ -77,6 +85,32 @@ type RawPeerRow = {
   sum_vision: bigint
   sum_laning: bigint
   sum_early: bigint
+}
+
+type RawOverallRow = {
+  champion_id: number
+  role: string
+  games: bigint
+  wins: bigint
+}
+
+let vsMetricColumnsCache: string[] | null = null
+async function getVsMetricColumns(): Promise<string[]> {
+  if (vsMetricColumnsCache) return vsMetricColumnsCache
+  const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'agg_champion_vs_stats'
+      AND (
+        column_name LIKE 'count\_%' ESCAPE '\'
+        OR column_name LIKE 'sum\_%' ESCAPE '\'
+      )
+      AND column_name NOT IN ('count_game', 'count_win', 'champion_stat_id', 'updated_at')
+    ORDER BY ordinal_position
+  `
+  vsMetricColumnsCache = rows.map((r) => String(r.column_name ?? '').trim()).filter(Boolean)
+  return vsMetricColumnsCache
 }
 
 function buildCoreWhere(
@@ -256,6 +290,26 @@ export async function getChampionMatchupsExtendedTable(options: {
   `
 
   const peerRows = await prisma.$queryRawUnsafe<RawPeerRow[]>(peerSql)
+  const overallRows = await prisma.$queryRawUnsafe<RawOverallRow[]>(`
+    SELECT
+      ac.champion_id,
+      ac.role,
+      SUM(ac.count_game)::bigint AS games,
+      SUM(ac.count_win)::bigint AS wins
+    FROM ${coreFrom}
+    WHERE ${peerWhere}
+      AND ac.champion_id IN (${[championId, ...oppIds].join(',')})
+    GROUP BY ac.champion_id, ac.role
+  `)
+  const overallWrByChampionRole = new Map<string, number>()
+  for (const r of overallRows) {
+    const g = Number(r.games ?? 0)
+    const w = Number(r.wins ?? 0)
+    overallWrByChampionRole.set(
+      `${Number(r.champion_id)}|${String(r.role ?? '').toUpperCase()}`,
+      g > 0 ? (100 * w) / g : 50,
+    )
+  }
   const referenceScoreByOppRole = new Map<string, number>()
   const referenceWinrateByOppRole = new Map<string, number>()
   const referencePickrateByOppRole = new Map<string, number>()
@@ -427,6 +481,11 @@ export async function getChampionMatchupsExtendedTable(options: {
       sumOtherWins += Number(p.wins ?? 0)
     }
     const avgOthersWrPct = sumOtherGames > 0 ? (100 * sumOtherWins) / sumOtherGames : wrPct
+    const myOverallWrPct = overallWrByChampionRole.get(`${championId}|${role}`) ?? 50
+    const oppOverallWrPct = overallWrByChampionRole.get(`${opp}|${role}`) ?? 50
+    const delta1 = wrPct - (100 - oppOverallWrPct)
+    const normalizedWinrateExpected = (myOverallWrPct + (100 - oppOverallWrPct)) / 2
+    const delta2 = wrPct - normalizedWinrateExpected
     const delta = computeDelta(wrPct, avgOthersWrPct)
     const totalRoleGames = gamesInRole.get(role) ?? g
     const matchupScore = matchupScoreFromDeltaAndWeight({
@@ -517,6 +576,8 @@ export async function getChampionMatchupsExtendedTable(options: {
       pickrateDeltaVsReference: referencePickrateByOppRole.has(`${opp}|${role}`)
         ? Number(((totalGames > 0 ? Math.round((10000 * g) / totalGames) / 100 : 0) - (referencePickrateByOppRole.get(`${opp}|${role}`) ?? 0)).toFixed(2))
         : null,
+      delta1: Number(delta1.toFixed(2)),
+      delta2: Number(delta2.toFixed(2)),
       laneScore,
       laneScoreDeltaVsReference: referenceLaneScoreByOppRole.has(`${opp}|${role}`)
         ? Number((laneScore - (referenceLaneScoreByOppRole.get(`${opp}|${role}`) ?? 0)).toFixed(2))
@@ -554,4 +615,91 @@ export async function getChampionMatchupsExtendedTable(options: {
     totalGames,
     rows: rowsOut,
   }
+}
+
+export async function getChampionMatchupsExportRows(options: {
+  championId: number
+  version?: string | null
+  rankTier?: string | string[] | null
+  role?: string | null
+  minGames?: number
+}): Promise<ChampionMatchupExportResult | null> {
+  if (!isDatabaseConfigured()) return null
+  const championId = options.championId
+  const version = options.version != null && options.version !== '' ? options.version : null
+  const roleFilter = options.role != null && options.role !== '' ? options.role.toUpperCase() : null
+  const minGames = options.minGames != null ? Math.max(1, options.minGames) : 10
+  const metricCols = await getVsMetricColumns()
+  const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
+  const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', version, 'vs')
+  const where = buildCoreWhere(championId, version, options.rankTier, roleFilter)
+  const metricSelect = metricCols.map((c) => `COALESCE(SUM(vs.${c}), 0)::bigint AS ${c}`).join(',\n      ')
+  const sql = `
+    SELECT
+      vs.opponent_champion_id,
+      ac.role,
+      COALESCE(SUM(vs.count_game), 0)::bigint AS count_game,
+      COALESCE(SUM(vs.count_win), 0)::bigint AS count_win
+      ${metricSelect ? `,\n      ${metricSelect}` : ''}
+    FROM ${vsFrom}
+    INNER JOIN ${coreFrom} ON ac.id = vs.champion_stat_id
+    WHERE ${where}
+    GROUP BY vs.opponent_champion_id, ac.role
+    HAVING SUM(vs.count_game) >= ${minGames}
+    ORDER BY SUM(vs.count_game) DESC
+  `
+  const rawRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql)
+  const ext = await getChampionMatchupsExtendedTable({
+    championId,
+    version,
+    rankTier: options.rankTier ?? null,
+    role: roleFilter,
+    minGames,
+    limit: 5000,
+  })
+  const extByKey = new Map<string, ChampionMatchupExtendedRow>()
+  for (const r of ext?.rows ?? []) {
+    extByKey.set(`${r.opponentChampionId}|${String(r.role).toUpperCase()}`, r)
+  }
+  const rankLabel =
+    toQueryStringArrayParam(options.rankTier).map((x) => x.toUpperCase()).join(',') || 'ALL'
+  const versionLabel = version ? normalizePatchMajorMinor(version) : 'ALL'
+  const rows = rawRows.map((r) => {
+    const opp = Number(r.opponent_champion_id ?? 0)
+    const role = String(r.role ?? '').toUpperCase()
+    const key = `${opp}|${role}`
+    const calc = extByKey.get(key)
+    const out: Record<string, number | string | null> = {
+      champion_id: championId,
+      opponent_champion_id: opp,
+      role,
+      rank_tier: rankLabel,
+      game_version: versionLabel,
+      count_game: Number(r.count_game ?? 0),
+      count_win: Number(r.count_win ?? 0),
+      pickrate: calc ? Number(calc.pickrate.toFixed(2)) : null,
+      matchup_score: calc ? Number(calc.matchupScore.toFixed(4)) : null,
+      lane_score: calc ? Number(calc.laneScore.toFixed(2)) : null,
+      delta_1: calc ? Number(calc.delta1.toFixed(2)) : null,
+      delta_2: calc ? Number(calc.delta2.toFixed(2)) : null,
+    }
+    for (const c of metricCols) out[c] = Number(r[c] ?? 0)
+    return out
+  })
+  const columns = [
+    'champion_id',
+    'opponent_champion_id',
+    'role',
+    'rank_tier',
+    'game_version',
+    'count_game',
+    'count_win',
+    'pickrate',
+    ...metricCols,
+    'matchup_score',
+    'lane_score',
+    'delta_1',
+    'delta_2',
+  ]
+  return { championId, columns, rows }
 }

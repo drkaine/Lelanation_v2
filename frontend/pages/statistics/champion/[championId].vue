@@ -962,311 +962,454 @@
                   <div v-else-if="!filteredMatchupsExt.length" class="py-4 text-text/70">
                     {{ t('statisticsPage.noData') }}
                   </div>
-                  <div v-else class="overflow-x-auto">
-                    <table class="tier-list-lolalytics w-full min-w-[920px] text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-left">
-                          <th class="px-2 py-2 font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('rank')"
-                            >
-                              {{ t('statisticsPage.tierListRank') }}{{ matchupSortIcon('rank') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('champion')"
-                            >
-                              {{ t('statisticsPage.champion') }}{{ matchupSortIcon('champion') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="t('statisticsPage.championMatchupTooltipScore')"
-                              @click="setMatchupSort('score')"
-                            >
-                              {{ t('statisticsPage.championMatchupColScore')
-                              }}{{ matchupSortIcon('score') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="
-                                t('statisticsPage.tierListPatchDeltaTitle', {
-                                  ref:
-                                    matchupsExtData?.referenceVersion ??
-                                    t('statisticsPage.overviewVersionAll'),
-                                })
-                              "
-                              @click="setMatchupSort('scoreDelta')"
-                            >
-                              {{ t('statisticsPage.championTableDeltaSymbol')
-                              }}{{ matchupSortIcon('scoreDelta') }}
-                            </button>
-                          </th>
-                          <th v-if="!filterRole" class="px-2 py-2 text-left font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              @click="setMatchupSort('role')"
-                            >
-                              {{ t('statisticsPage.filterRole') }}{{ matchupSortIcon('role') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="t('statisticsPage.championMatchupTooltipWinrate')"
-                              @click="setMatchupSort('winrate')"
-                            >
-                              {{ t('statisticsPage.winrate') }}{{ matchupSortIcon('winrate') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="t('statisticsPage.championMatchupTooltipPickrate')"
-                              @click="setMatchupSort('pickrate')"
-                            >
-                              {{ t('statisticsPage.championMatchupColPickrate')
-                              }}{{ matchupSortIcon('pickrate') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="t('statisticsPage.championMatchupTooltipLaneScore')"
-                              @click="setMatchupSort('laneScore')"
-                            >
-                              {{ t('statisticsPage.championMatchupColLaneScore')
-                              }}{{ matchupSortIcon('laneScore') }}
-                            </button>
-                          </th>
-                          <th class="px-2 py-2 text-left font-medium text-text">
-                            <button
-                              type="button"
-                              class="inline-flex items-center gap-1 hover:text-accent"
-                              :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
-                              @click="setMatchupSort('dominance')"
-                            >
-                              {{ t('statisticsPage.championMatchupColDominance')
-                              }}{{ matchupSortIcon('dominance') }}
-                            </button>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in paginatedMatchupsExt"
-                          :key="row.opponentChampionId + '-' + row.role"
-                          class="border-b border-primary/15 odd:bg-white/[0.02]"
-                        >
-                          <td class="px-2 py-2 tabular-nums text-text/90">
-                            {{ (matchupPage - 1) * matchupPageSize + idx + 1 }}
-                          </td>
-                          <td class="px-2 py-2">
-                            <span class="inline-flex min-w-0 items-center gap-2">
-                              <img
-                                v-if="
-                                  gameVersion && championByKey(row.opponentChampionId)?.image?.full
-                                "
-                                :src="
-                                  getChampionImageUrl(
-                                    gameVersion,
-                                    championByKey(row.opponentChampionId)!.image!.full
-                                  )
-                                "
-                                :alt="championName(row.opponentChampionId) ?? ''"
-                                class="h-9 w-9 shrink-0 rounded border border-black/40 object-cover"
-                                width="36"
-                                height="36"
-                              />
-                              <span class="min-w-0 truncate font-medium text-text/90">{{
-                                championName(row.opponentChampionId) ?? row.opponentChampionId
-                              }}</span>
-                            </span>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/90">
-                            {{ row.matchupScore.toFixed(2) }}
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums">
-                            <span :class="matchupDeltaClass(row.matchupScoreDeltaVsReference)">
-                              {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
-                            </span>
-                          </td>
-                          <td v-if="!filterRole" class="px-2 py-2 text-text/85">
-                            <span class="inline-flex items-center gap-1">
-                              <img
-                                v-if="roleIconPath(row.role)"
-                                :src="roleIconPath(row.role)"
-                                :alt="roleLabel(row.role)"
-                                class="h-4 w-4 object-contain"
-                                width="16"
-                                height="16"
-                              />
-                              {{ roleLabel(row.role) }}
-                            </span>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums">
-                            <div>{{ row.winrate.toFixed(2) }}%</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.winrateDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.winrateDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            <div>{{ row.pickrate.toFixed(2) }}%</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.pickrateDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.pickrateDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            <div>{{ row.laneScore.toFixed(2) }}</div>
-                            <div
-                              class="text-[11px]"
-                              :class="matchupDeltaClass(row.laneScoreDeltaVsReference)"
-                            >
-                              {{ formatSignedDelta(row.laneScoreDeltaVsReference) }}
-                            </div>
-                          </td>
-                          <td
-                            class="max-w-xs px-2 py-2 text-xs leading-snug text-text/80"
-                            :title="
-                              dominanceTooltip(
-                                row.dominanceKeys,
-                                row.weaknessKeys,
-                                row.laneProfileByKey
-                              )
-                            "
-                          >
-                            <div>
-                              {{ dominanceStrengthLabel(row.dominanceKeys, row.laneProfileByKey) }}
-                            </div>
-                            <div
-                              v-if="row.weaknessKeys?.length"
-                              class="mt-0.5 text-[11px] text-rose-300"
-                            >
-                              {{ dominanceWeaknessLabel(row.weaknessKeys, row.laneProfileByKey) }}
-                            </div>
-                            <div
-                              v-else-if="!row.dominanceKeys?.length"
-                              class="mt-0.5 text-[11px] text-text/65"
-                            >
-                              {{ t('statisticsPage.championMatchupSignalLevel.even') }}
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div v-else class="space-y-3">
                     <div
-                      class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
+                      class="rounded border border-primary/20 bg-black/20 px-3 py-2 text-xs text-text/80"
                     >
-                      <div class="inline-flex items-center gap-2">
-                        <span>{{ t('statisticsPage.perPage') }}</span>
-                        <select
-                          v-model.number="matchupPageSize"
-                          class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
-                        >
-                          <option v-for="s in matchupPageSizeOptions" :key="s" :value="s">
-                            {{ s }}
-                          </option>
-                        </select>
-                      </div>
-                      <div class="inline-flex items-center gap-2">
-                        <button
-                          type="button"
-                          class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                          :disabled="matchupPage <= 1"
-                          @click="matchupPage = Math.max(1, matchupPage - 1)"
-                        >
-                          {{ t('admin.pagination.prev') }}
-                        </button>
-                        <span>{{
-                          t('statisticsPage.pageXOfY', {
-                            current: matchupPage,
-                            total: totalMatchupPages,
-                          })
-                        }}</span>
-                        <button
-                          type="button"
-                          class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
-                          :disabled="matchupPage >= totalMatchupPages"
-                          @click="matchupPage = Math.min(totalMatchupPages, matchupPage + 1)"
-                        >
-                          {{ t('admin.pagination.next') }}
-                        </button>
+                      <div>{{ t('statisticsPage.championMatchupDelta1Formula') }}</div>
+                      <div class="mt-1">{{ t('statisticsPage.championMatchupDelta2Formula') }}</div>
+                    </div>
+                    <div class="overflow-x-auto">
+                      <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
+                        <thead>
+                          <tr class="border-b border-primary/30 text-left">
+                            <th class="px-2 py-2 font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                @click="setMatchupSort('rank')"
+                              >
+                                {{ t('statisticsPage.tierListRank') }}{{ matchupSortIcon('rank') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                @click="setMatchupSort('champion')"
+                              >
+                                {{ t('statisticsPage.champion') }}{{ matchupSortIcon('champion') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupTooltipScore')"
+                                @click="setMatchupSort('score')"
+                              >
+                                {{ t('statisticsPage.championMatchupColScore')
+                                }}{{ matchupSortIcon('score') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="
+                                  t('statisticsPage.tierListPatchDeltaTitle', {
+                                    ref:
+                                      matchupsExtData?.referenceVersion ??
+                                      t('statisticsPage.overviewVersionAll'),
+                                  })
+                                "
+                                @click="setMatchupSort('scoreDelta')"
+                              >
+                                {{ t('statisticsPage.championTableDeltaSymbol')
+                                }}{{ matchupSortIcon('scoreDelta') }}
+                              </button>
+                            </th>
+                            <th
+                              v-if="!filterRole"
+                              class="px-2 py-2 text-left font-medium text-text"
+                            >
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                @click="setMatchupSort('role')"
+                              >
+                                {{ t('statisticsPage.filterRole') }}{{ matchupSortIcon('role') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupTooltipWinrate')"
+                                @click="setMatchupSort('winrate')"
+                              >
+                                {{ t('statisticsPage.winrate') }}{{ matchupSortIcon('winrate') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupTooltipPickrate')"
+                                @click="setMatchupSort('pickrate')"
+                              >
+                                {{ t('statisticsPage.championMatchupColPickrate')
+                                }}{{ matchupSortIcon('pickrate') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <span :title="t('statisticsPage.championMatchupDelta1Formula')">
+                                {{ t('statisticsPage.championMatchupColDelta1') }}
+                              </span>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <span :title="t('statisticsPage.championMatchupDelta2Formula')">
+                                {{ t('statisticsPage.championMatchupColDelta2') }}
+                              </span>
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupTooltipLaneScore')"
+                                @click="setMatchupSort('laneScore')"
+                              >
+                                {{ t('statisticsPage.championMatchupColLaneScore')
+                                }}{{ matchupSortIcon('laneScore') }}
+                              </button>
+                            </th>
+                            <th class="px-2 py-2 text-left font-medium text-text">
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupTooltipLaneProfile')"
+                                @click="setMatchupSort('dominance')"
+                              >
+                                {{ t('statisticsPage.championMatchupColDominance')
+                                }}{{ matchupSortIcon('dominance') }}
+                              </button>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="(row, idx) in paginatedMatchupsExt"
+                            :key="row.opponentChampionId + '-' + row.role"
+                            class="border-b border-primary/15 odd:bg-white/[0.02]"
+                          >
+                            <td class="px-2 py-2 tabular-nums text-text/90">
+                              {{ (matchupPage - 1) * matchupPageSize + idx + 1 }}
+                            </td>
+                            <td class="px-2 py-2">
+                              <span class="inline-flex min-w-0 items-center gap-2">
+                                <img
+                                  v-if="
+                                    gameVersion &&
+                                    championByKey(row.opponentChampionId)?.image?.full
+                                  "
+                                  :src="
+                                    getChampionImageUrl(
+                                      gameVersion,
+                                      championByKey(row.opponentChampionId)!.image!.full
+                                    )
+                                  "
+                                  :alt="championName(row.opponentChampionId) ?? ''"
+                                  class="h-9 w-9 shrink-0 rounded border border-black/40 object-cover"
+                                  width="36"
+                                  height="36"
+                                />
+                                <span class="min-w-0 truncate font-medium text-text/90">{{
+                                  championName(row.opponentChampionId) ?? row.opponentChampionId
+                                }}</span>
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/90">
+                              {{ row.matchupScore.toFixed(2) }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums">
+                              <span :class="matchupDeltaClass(row.matchupScoreDeltaVsReference)">
+                                {{ formatSignedDelta(row.matchupScoreDeltaVsReference) }}
+                              </span>
+                            </td>
+                            <td v-if="!filterRole" class="px-2 py-2 text-text/85">
+                              <span class="inline-flex items-center gap-1">
+                                <img
+                                  v-if="roleIconPath(row.role)"
+                                  :src="roleIconPath(row.role)"
+                                  :alt="roleLabel(row.role)"
+                                  class="h-4 w-4 object-contain"
+                                  width="16"
+                                  height="16"
+                                />
+                                {{ roleLabel(row.role) }}
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums">
+                              <div>{{ row.winrate.toFixed(2) }}%</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.winrateDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.winrateDeltaVsReference) }}
+                              </div>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <div>{{ row.pickrate.toFixed(2) }}%</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.pickrateDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.pickrateDeltaVsReference) }}
+                              </div>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <span :class="matchupDeltaClass(row.delta1)">
+                                {{ formatSignedDelta(row.delta1) }}
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <span :class="matchupDeltaClass(row.delta2)">
+                                {{ formatSignedDelta(row.delta2) }}
+                              </span>
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              <div>{{ row.laneScore.toFixed(2) }}</div>
+                              <div
+                                class="text-[11px]"
+                                :class="matchupDeltaClass(row.laneScoreDeltaVsReference)"
+                              >
+                                {{ formatSignedDelta(row.laneScoreDeltaVsReference) }}
+                              </div>
+                            </td>
+                            <td
+                              class="max-w-xs px-2 py-2 text-xs leading-snug text-text/80"
+                              :title="
+                                dominanceTooltip(
+                                  row.dominanceKeys,
+                                  row.weaknessKeys,
+                                  row.laneProfileByKey
+                                )
+                              "
+                            >
+                              <div>
+                                {{
+                                  dominanceStrengthLabel(row.dominanceKeys, row.laneProfileByKey)
+                                }}
+                              </div>
+                              <div
+                                v-if="row.weaknessKeys?.length"
+                                class="mt-0.5 text-[11px] text-rose-300"
+                              >
+                                {{ dominanceWeaknessLabel(row.weaknessKeys, row.laneProfileByKey) }}
+                              </div>
+                              <div
+                                v-else-if="!row.dominanceKeys?.length"
+                                class="mt-0.5 text-[11px] text-text/65"
+                              >
+                                {{ t('statisticsPage.championMatchupSignalLevel.even') }}
+                              </div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div
+                        class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-text/80"
+                      >
+                        <div class="inline-flex items-center gap-2">
+                          <span>{{ t('statisticsPage.perPage') }}</span>
+                          <select
+                            v-model.number="matchupPageSize"
+                            class="rounded border border-primary/40 bg-background px-1.5 py-0.5 text-xs text-text"
+                          >
+                            <option v-for="s in matchupPageSizeOptions" :key="s" :value="s">
+                              {{ s }}
+                            </option>
+                          </select>
+                        </div>
+                        <div class="inline-flex items-center gap-2">
+                          <button
+                            type="button"
+                            class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
+                            :disabled="matchupPage <= 1"
+                            @click="matchupPage = Math.max(1, matchupPage - 1)"
+                          >
+                            {{ t('admin.pagination.prev') }}
+                          </button>
+                          <span>{{
+                            t('statisticsPage.pageXOfY', {
+                              current: matchupPage,
+                              total: totalMatchupPages,
+                            })
+                          }}</span>
+                          <button
+                            type="button"
+                            class="rounded border border-primary/30 px-2 py-0.5 disabled:opacity-40"
+                            :disabled="matchupPage >= totalMatchupPages"
+                            @click="matchupPage = Math.min(totalMatchupPages, matchupPage + 1)"
+                          >
+                            {{ t('admin.pagination.next') }}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div
-                v-show="activeChampionTab === 'runes'"
-                id="champion-tab-panel-runes"
-                role="tabpanel"
-                class="space-y-4"
-              >
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <div v-if="runesPending" class="py-6 text-text/70">
-                    {{ t('statisticsPage.loading') }}
+                <div
+                  v-show="activeChampionTab === 'runes'"
+                  id="champion-tab-panel-runes"
+                  role="tabpanel"
+                  class="space-y-4"
+                >
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                    <div v-if="runesPending" class="py-6 text-text/70">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div v-else-if="!championRunesPanelData" class="py-4 text-text/70">
+                      {{ t('statisticsPage.noData') }}
+                    </div>
+                    <StatisticsRunesOverviewPanel
+                      v-else
+                      :game-version="gameVersion || versionStore.currentVersion || ''"
+                      :data="championRunesPanelData"
+                      :baseline="null"
+                      :baseline-pending="false"
+                      :comparison-version="null"
+                    />
                   </div>
-                  <div v-else-if="!championRunesPanelData" class="py-4 text-text/70">
-                    {{ t('statisticsPage.noData') }}
-                  </div>
-                  <StatisticsRunesOverviewPanel
-                    v-else
-                    :game-version="gameVersion || versionStore.currentVersion || ''"
-                    :data="championRunesPanelData"
-                    :baseline="null"
-                    :baseline-pending="false"
-                    :comparison-version="null"
-                  />
                 </div>
-              </div>
-              <div
-                v-show="activeChampionTab === 'spells'"
-                id="champion-tab-panel-spells"
-                role="tabpanel"
-                class="space-y-4"
-              >
-                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                  <div v-if="championSpellsPending" class="py-6 text-text/70">
-                    {{ t('statisticsPage.loading') }}
+                <div
+                  v-show="activeChampionTab === 'spells'"
+                  id="champion-tab-panel-spells"
+                  role="tabpanel"
+                  class="space-y-4"
+                >
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                    <div v-if="championSpellsPending" class="py-6 text-text/70">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div
+                      v-else-if="
+                        !championSpellSoloRowsFiltered.length &&
+                        !championSpellSetRowsFiltered.length
+                      "
+                      class="py-4 text-text/70"
+                    >
+                      {{ t('statisticsPage.noData') }}
+                    </div>
+                    <SummonerSpellTierTables
+                      v-else
+                      :solo-rows="championSpellSoloRowsFiltered"
+                      :set-rows="championSpellSetRowsFiltered"
+                      :baseline-solo="null"
+                      :baseline-sets="null"
+                      :ref-version-label="null"
+                      :baseline-pending="false"
+                      :game-version="gameVersion || versionStore.currentVersion || null"
+                      :hide-games-column="true"
+                      :hide-slot-columns="true"
+                    />
                   </div>
-                  <div
-                    v-else-if="
-                      !championSpellSoloRowsFiltered.length && !championSpellSetRowsFiltered.length
-                    "
-                    class="py-4 text-text/70"
-                  >
-                    {{ t('statisticsPage.noData') }}
+                </div>
+                <div
+                  v-show="activeChampionTab === 'skills'"
+                  id="champion-tab-panel-skills"
+                  role="tabpanel"
+                  class="space-y-4"
+                >
+                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                    <div v-if="championSpellsPending" class="py-6 text-text/70">
+                      {{ t('statisticsPage.loading') }}
+                    </div>
+                    <div v-else-if="!championSpellOrdersRows.length" class="py-4 text-text/70">
+                      {{ t('statisticsPage.noData') }}
+                    </div>
+                    <div v-else class="grid grid-cols-1 gap-3">
+                      <div
+                        v-for="section in championSpellOrderSections"
+                        :key="section.key"
+                        class="rounded border bg-black/20 p-3"
+                        :class="section.borderClass"
+                      >
+                        <div class="mb-2 text-xs font-semibold" :class="section.titleClass">
+                          {{ section.title }}
+                        </div>
+                        <div class="space-y-3">
+                          <div
+                            v-for="row in section.rows"
+                            :key="section.key + '-' + row.key"
+                            class="overflow-x-auto"
+                          >
+                            <table class="champion-skills-orders-table min-w-[940px]">
+                              <thead>
+                                <tr>
+                                  <th class="w-14"></th>
+                                  <th
+                                    v-for="level in championSkillLevels"
+                                    :key="section.key + '-' + row.key + '-h-' + level"
+                                    class="w-9"
+                                  >
+                                    {{ level }}
+                                  </th>
+                                  <th class="min-w-[90px] text-center">
+                                    {{ t('statisticsPage.pickrate') }}
+                                  </th>
+                                  <th class="min-w-[90px] text-center">
+                                    {{ t('statisticsPage.winrate') }}
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr
+                                  v-for="skillKey in championSkillKeys"
+                                  :key="section.key + '-' + row.key + '-' + skillKey"
+                                >
+                                  <td class="champion-skill-icon-cell">
+                                    <img
+                                      v-if="championSkillIconUrl(skillKey)"
+                                      :src="championSkillIconUrl(skillKey)!"
+                                      :alt="championSkillName(skillKey)"
+                                      :title="championSkillName(skillKey)"
+                                      class="h-8 w-8 rounded border border-white/15"
+                                    />
+                                    <span v-else class="text-xs font-semibold text-text/80">{{
+                                      skillKey
+                                    }}</span>
+                                  </td>
+                                  <td
+                                    v-for="level in championSkillLevels"
+                                    :key="
+                                      section.key + '-' + row.key + '-' + skillKey + '-' + level
+                                    "
+                                    class="champion-skill-cell"
+                                    :class="
+                                      championSkillAtLevel(row.order, level) === skillKey
+                                        ? 'champion-skill-cell-active'
+                                        : ''
+                                    "
+                                  >
+                                    {{
+                                      championSkillAtLevel(row.order, level) === skillKey
+                                        ? skillKey
+                                        : ''
+                                    }}
+                                  </td>
+                                  <td
+                                    v-if="skillKey === 'Q'"
+                                    rowspan="4"
+                                    class="champion-skill-metric-cell"
+                                  >
+                                    {{ row.pickrate.toFixed(1) }}%
+                                  </td>
+                                  <td
+                                    v-if="skillKey === 'Q'"
+                                    rowspan="4"
+                                    class="champion-skill-metric-cell"
+                                  >
+                                    {{ row.winrate.toFixed(1) }}%
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <SummonerSpellTierTables
-                    v-else
-                    :solo-rows="championSpellSoloRowsFiltered"
-                    :set-rows="championSpellSetRowsFiltered"
-                    :baseline-solo="null"
-                    :baseline-sets="null"
-                    :ref-version-label="null"
-                    :baseline-pending="false"
-                    :game-version="gameVersion || versionStore.currentVersion || null"
-                  />
                 </div>
               </div>
               <div
@@ -1281,11 +1424,11 @@
                   >
                     <button
                       type="button"
-                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
                       :class="
                         championObjectivesView === 'main'
-                          ? 'border border-accent/40 bg-accent/20 text-accent'
-                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
                       "
                       @click="championObjectivesView = 'main'"
                     >
@@ -1293,11 +1436,11 @@
                     </button>
                     <button
                       type="button"
-                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
                       :class="
                         championObjectivesView === 'drakeTypes'
-                          ? 'border border-accent/40 bg-accent/20 text-accent'
-                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
                       "
                       @click="championObjectivesView = 'drakeTypes'"
                     >
@@ -1305,11 +1448,11 @@
                     </button>
                     <button
                       type="button"
-                      class="rounded px-2 py-1 text-xs font-medium transition-colors"
+                      class="rounded px-2 py-1 text-xs font-semibold transition-colors"
                       :class="
                         championObjectivesView === 'souls'
-                          ? 'border border-accent/40 bg-accent/20 text-accent'
-                          : 'border border-primary/30 text-text/80 hover:bg-primary/10'
+                          ? 'bg-accent text-background'
+                          : 'bg-black/20 text-text/80 hover:bg-white/10'
                       "
                       @click="championObjectivesView = 'souls'"
                     >
@@ -1323,40 +1466,272 @@
                     {{ championObjectivesError }}
                   </div>
                   <div
-                    v-else-if="!championObjectivesMetricsFiltered.length"
+                    v-else-if="
+                      championObjectivesView === 'main'
+                        ? !championObjectivesOutcomeRows.length
+                        : !championObjectivesTableRows.length
+                    "
                     class="py-4 text-text/70"
                   >
                     {{ t('statisticsPage.noData') }}
                   </div>
-                  <div v-else class="overflow-x-auto">
-                    <table class="tier-list-lolalytics w-full min-w-[720px] text-sm">
-                      <thead>
-                        <tr class="border-b border-primary/30 text-left">
-                          <th class="px-2 py-2 font-medium text-text">
-                            {{ t('statisticsPage.overviewTeamsObjective') }}
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">
-                            {{ t('statisticsPage.tierListGames') }}
-                          </th>
-                          <th class="px-2 py-2 text-right font-medium text-text">/game</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="m in championObjectivesMetricsFiltered"
-                          :key="m.key"
-                          class="border-b border-primary/15 odd:bg-white/[0.02]"
+                  <div v-else class="space-y-4">
+                    <div class="overflow-x-auto">
+                      <table
+                        v-if="championObjectivesView === 'main'"
+                        class="tier-list-lolalytics w-full min-w-[860px] text-sm"
+                      >
+                        <thead>
+                          <tr class="border-b border-primary/30 text-left">
+                            <th class="px-2 py-2 font-medium text-text">
+                              {{ t('statisticsPage.overviewTeamsObjective') }}
+                            </th>
+                            <th
+                              class="px-2 py-2 text-center font-medium text-green-500"
+                              colspan="2"
+                            >
+                              Secure
+                            </th>
+                            <th class="px-2 py-2 text-center font-medium text-rose-400" colspan="2">
+                              Yield
+                            </th>
+                          </tr>
+                          <tr class="border-b border-primary/30 text-left">
+                            <th class="px-2 py-2 font-medium text-text"></th>
+                            <th class="px-2 py-2 text-right font-medium text-blue-300">%</th>
+                            <th class="px-2 py-2 text-right font-medium text-green-500">
+                              {{ t('statisticsPage.winrate') }}
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-violet-300">%</th>
+                            <th class="px-2 py-2 text-right font-medium text-rose-400">
+                              {{ t('statisticsPage.winrate') }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="m in championObjectivesOutcomeRows"
+                            :key="'outcome-' + m.key"
+                            class="border-b border-primary/15 odd:bg-white/[0.02]"
+                          >
+                            <td class="px-2 py-2 text-text/90">{{ m.label }}</td>
+                            <td class="px-2 py-2 text-right tabular-nums text-blue-300">
+                              {{
+                                Number.isFinite(Number(m.securePct))
+                                  ? `${Number(m.securePct).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-green-500">
+                              {{
+                                Number.isFinite(Number(m.secureWinPct))
+                                  ? `${Number(m.secureWinPct).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-violet-300">
+                              {{
+                                Number.isFinite(Number(m.yieldPct))
+                                  ? `${Number(m.yieldPct).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-rose-400">
+                              {{
+                                Number.isFinite(Number(m.yieldWinPct))
+                                  ? `${Number(m.yieldWinPct).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <table v-else class="tier-list-lolalytics w-full min-w-[720px] text-sm">
+                        <thead>
+                          <tr class="border-b border-primary/30 text-left">
+                            <th class="px-2 py-2 font-medium text-text">
+                              {{ t('statisticsPage.overviewTeamsObjective') }}
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              {{ t('statisticsPage.objectiveWinrateWhenTaken') }}
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              {{ t('statisticsPage.objectiveKillRate') }}
+                            </th>
+                            <th class="px-2 py-2 text-right font-medium text-text">
+                              {{ t('statisticsPage.objectiveAssistRate') }}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="m in championObjectivesTableRows"
+                            :key="m.key"
+                            class="border-b border-primary/15 odd:bg-white/[0.02]"
+                          >
+                            <td class="px-2 py-2 text-text/90">{{ m.label }}</td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              {{
+                                Number.isFinite(Number(m.objectiveWinrate))
+                                  ? `${Number(m.objectiveWinrate).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              {{
+                                Number.isFinite(Number(m.killRate))
+                                  ? `${Number(m.killRate).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                              {{
+                                Number.isFinite(Number(m.assistRate))
+                                  ? `${Number(m.assistRate).toFixed(2)}%`
+                                  : '—'
+                              }}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div
+                      v-if="objectiveDrakeDistRows.length > 0 || objectiveSoulDistRows.length > 0"
+                      class="grid grid-cols-1 gap-4 lg:grid-cols-3"
+                    >
+                      <div class="rounded border border-primary/20 bg-black/20 p-3">
+                        <div class="mb-2 text-sm font-semibold text-text/90">
+                          {{ t('statisticsPage.objectivesDrakeDistributionCardTitle') }}
+                        </div>
+                        <div
+                          v-if="objectiveDrakeDistRows.length > 0"
+                          class="flex flex-col items-center gap-3"
                         >
-                          <td class="px-2 py-2 text-text/90">{{ m.label }}</td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            {{ Number(m.total ?? 0).toLocaleString() }}
-                          </td>
-                          <td class="px-2 py-2 text-right tabular-nums text-text/85">
-                            {{ Number(m.perGame ?? 0).toFixed(3) }}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                          <div
+                            class="relative inline-flex h-[132px] w-[132px] items-center justify-center"
+                          >
+                            <svg
+                              viewBox="0 0 120 120"
+                              class="absolute inset-0 h-full w-full -rotate-90"
+                            >
+                              <circle
+                                cx="60"
+                                cy="60"
+                                :r="OBJECTIVE_DONUT_RADIUS"
+                                fill="none"
+                                stroke="rgba(148, 163, 184, 0.18)"
+                                :stroke-width="OBJECTIVE_DONUT_STROKE"
+                              />
+                              <circle
+                                v-for="(row, idx) in objectiveDrakeDistRows"
+                                :key="'drake-donut-' + row.key"
+                                cx="60"
+                                cy="60"
+                                :r="OBJECTIVE_DONUT_RADIUS"
+                                fill="none"
+                                :stroke="objectiveDrakeDonutSegments[idx]?.color"
+                                :stroke-width="OBJECTIVE_DONUT_STROKE"
+                                :stroke-dasharray="`${objectiveDrakeDonutSegments[idx]?.arc ?? 0} ${OBJECTIVE_DONUT_CIRCLE - (objectiveDrakeDonutSegments[idx]?.arc ?? 0)}`"
+                                :stroke-dashoffset="`-${objectiveDrakeDonutSegments[idx]?.offset ?? 0}`"
+                              />
+                            </svg>
+                            <span
+                              class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+                              >100%</span
+                            >
+                          </div>
+                          <ul
+                            class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85"
+                          >
+                            <li
+                              v-for="row in objectiveDrakeDistRows"
+                              :key="'drake-dist-legend-' + row.key"
+                              class="flex items-center justify-between gap-2"
+                            >
+                              <span class="inline-flex min-w-0 items-center gap-2">
+                                <span
+                                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                                  :style="{ backgroundColor: row.color }"
+                                />
+                                <span class="truncate">{{ row.label }}</span>
+                              </span>
+                              <span class="shrink-0 font-semibold">{{
+                                objectiveDistPct(row.value, objectiveDrakeDistTotal)
+                              }}</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div v-else class="text-sm text-text/60">
+                          {{ t('statisticsPage.noData') }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/20 bg-black/20 p-3">
+                        <div class="mb-2 text-sm font-semibold text-text/90">
+                          {{ t('statisticsPage.objectivesSoulDistributionCardTitle') }}
+                        </div>
+                        <div
+                          v-if="objectiveSoulDistRows.length > 0"
+                          class="flex flex-col items-center gap-3"
+                        >
+                          <div
+                            class="relative inline-flex h-[132px] w-[132px] items-center justify-center"
+                          >
+                            <svg
+                              viewBox="0 0 120 120"
+                              class="absolute inset-0 h-full w-full -rotate-90"
+                            >
+                              <circle
+                                cx="60"
+                                cy="60"
+                                :r="OBJECTIVE_DONUT_RADIUS"
+                                fill="none"
+                                stroke="rgba(148, 163, 184, 0.18)"
+                                :stroke-width="OBJECTIVE_DONUT_STROKE"
+                              />
+                              <circle
+                                v-for="(row, idx) in objectiveSoulDistRows"
+                                :key="'soul-donut-' + row.key"
+                                cx="60"
+                                cy="60"
+                                :r="OBJECTIVE_DONUT_RADIUS"
+                                fill="none"
+                                :stroke="objectiveSoulDonutSegments[idx]?.color"
+                                :stroke-width="OBJECTIVE_DONUT_STROKE"
+                                :stroke-dasharray="`${objectiveSoulDonutSegments[idx]?.arc ?? 0} ${OBJECTIVE_DONUT_CIRCLE - (objectiveSoulDonutSegments[idx]?.arc ?? 0)}`"
+                                :stroke-dashoffset="`-${objectiveSoulDonutSegments[idx]?.offset ?? 0}`"
+                              />
+                            </svg>
+                            <span
+                              class="relative z-10 text-lg font-bold text-blue-600 dark:text-blue-300"
+                              >100%</span
+                            >
+                          </div>
+                          <ul
+                            class="grid w-full max-w-[360px] grid-cols-2 gap-x-3 gap-y-1 text-xs text-text/85"
+                          >
+                            <li
+                              v-for="row in objectiveSoulDistRows"
+                              :key="'soul-dist-legend-' + row.key"
+                              class="flex items-center justify-between gap-2"
+                            >
+                              <span class="inline-flex min-w-0 items-center gap-2">
+                                <span
+                                  class="h-2.5 w-2.5 shrink-0 rounded-full"
+                                  :style="{ backgroundColor: row.color }"
+                                />
+                                <span class="truncate">{{ row.label }}</span>
+                              </span>
+                              <span class="shrink-0 font-semibold">{{
+                                objectiveDistPct(row.value, objectiveSoulDistTotal)
+                              }}</span>
+                            </li>
+                          </ul>
+                        </div>
+                        <div v-else class="text-sm text-text/60">
+                          {{ t('statisticsPage.noData') }}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1370,7 +1745,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { apiUrl } from '~/utils/apiUrl'
 import { useChampionsStore } from '~/stores/ChampionsStore'
@@ -1382,6 +1757,7 @@ import StatisticsRunesOverviewPanel from '~/components/statistics/StatisticsRune
 import SummonerSpellTierTables from '~/components/statistics/SummonerSpellTierTables.vue'
 import {
   getChampionImageUrl,
+  getChampionSpellImageUrl,
   getItemImageUrl as _getItemImageUrl,
   getRunePathColor,
   getRuneImageUrl as _getRuneImageUrl,
@@ -1394,6 +1770,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const router = useRouter()
 const localePath = useLocalePath()
 const { t } = useI18n()
 const championId = computed(() => {
@@ -1540,6 +1917,8 @@ type MatchupsExtRow = {
   matchupScoreDeltaVsReference?: number | null
   pickrate: number
   pickrateDeltaVsReference?: number | null
+  delta1?: number
+  delta2?: number
   laneScore: number
   laneScoreDeltaVsReference?: number | null
   dominanceKeys: MatchupsExtDominanceKey[]
@@ -1996,6 +2375,17 @@ const championSpellsDuosData = ref<{
   totalGames: number
   duos: Array<{ spellId1: number; spellId2: number; games: number; wins: number; winrate: number }>
 } | null>(null)
+const championSpellOrdersData = ref<{
+  totalGames: number
+  rows: Array<{
+    key: string
+    order: number[]
+    games: number
+    wins: number
+    pickrate: number
+    winrate: number
+  }>
+} | null>(null)
 const championObjectivesPending = ref(false)
 const championObjectivesError = ref<string | null>(null)
 const championObjectivesData = ref<{
@@ -2003,7 +2393,23 @@ const championObjectivesData = ref<{
   games: number
   wins: number
   winrate: number
-  metrics: Array<{ key: string; label: string; total: number; perGame: number }>
+  drakeTypeDistribution: Array<{ key: string; label: string; total: number; pct: number }>
+  soulDistribution: Array<{ key: string; label: string; total: number; pct: number }>
+  rows: Array<{
+    key: string
+    label: string
+    objectiveWinrate: number
+    killRate: number
+    assistRate: number
+  }>
+  outcomeRows: Array<{
+    key: string
+    label: string
+    securePct: number
+    secureWinPct: number
+    yieldPct: number
+    yieldWinPct: number
+  }>
 } | null>(null)
 const championSpellsModeFilter = ref<'solo' | 'pair'>('solo')
 const championObjectivesView = ref<'main' | 'drakeTypes' | 'souls'>('main')
@@ -2063,19 +2469,181 @@ const championSpellSoloRowsFiltered = computed(() =>
 const championSpellSetRowsFiltered = computed(() =>
   championSpellsModeFilter.value === 'pair' ? championSpellSetRows.value : []
 )
-const championObjectivesMetricsFiltered = computed(() => {
-  const metrics = championObjectivesData.value?.metrics ?? []
-  if (championObjectivesView.value === 'drakeTypes') {
-    return metrics.filter(m => m.key.toLowerCase().includes('drake'))
+const championSpellOrdersRows = computed(() => championSpellOrdersData.value?.rows ?? [])
+const championSkillKeys = ['Q', 'W', 'E', 'R'] as const
+type ChampionSkillKey = (typeof championSkillKeys)[number]
+const championSkillLevels = Array.from({ length: 18 }, (_, i) => i + 1)
+const championSpellOrderSections = computed(() => [
+  {
+    key: 'top-wr',
+    title: t('statisticsPage.championSpellOrdersTopWinrate'),
+    rows: championSpellOrdersTopWinrate.value,
+    borderClass: 'border-emerald-500/30',
+    titleClass: 'text-emerald-300',
+  },
+  {
+    key: 'low-wr',
+    title: t('statisticsPage.championSpellOrdersLowWinrate'),
+    rows: championSpellOrdersLowWinrate.value,
+    borderClass: 'border-rose-500/30',
+    titleClass: 'text-rose-300',
+  },
+  {
+    key: 'top-pr',
+    title: t('statisticsPage.championSpellOrdersTopPickrate'),
+    rows: championSpellOrdersTopPickrate.value,
+    borderClass: 'border-blue-500/30',
+    titleClass: 'text-blue-300',
+  },
+  {
+    key: 'low-pr',
+    title: t('statisticsPage.championSpellOrdersLowPickrate'),
+    rows: championSpellOrdersLowPickrate.value,
+    borderClass: 'border-orange-500/30',
+    titleClass: 'text-orange-300',
+  },
+])
+const championSkillChampion = computed(() => championByKey(championId.value))
+function championSkillIndex(key: ChampionSkillKey): number {
+  if (key === 'Q') return 0
+  if (key === 'W') return 1
+  if (key === 'E') return 2
+  return 3
+}
+function championSkillLabelFromOrderValue(v: number): ChampionSkillKey | null {
+  if (v === 1) return 'Q'
+  if (v === 2) return 'W'
+  if (v === 3) return 'E'
+  if (v === 4) return 'R'
+  return null
+}
+function championSkillAtLevel(order: number[], level: number): ChampionSkillKey | null {
+  const raw = Number(Array.isArray(order) ? order[level - 1] : Number.NaN)
+  if (!Number.isFinite(raw)) return null
+  return championSkillLabelFromOrderValue(raw)
+}
+function championSkillName(key: ChampionSkillKey): string {
+  const spell = championSkillChampion.value?.spells?.[championSkillIndex(key)]
+  return spell?.name ?? key
+}
+function championSkillIconUrl(key: ChampionSkillKey): string | null {
+  const spell = championSkillChampion.value?.spells?.[championSkillIndex(key)]
+  const file = spell?.image?.full
+  const version = gameVersion.value ?? versionStore.currentVersion
+  if (!file || championId.value <= 0 || !version) return null
+  return getChampionSpellImageUrl(version, String(championId.value), file)
+}
+const championSpellOrdersTopWinrate = computed(() =>
+  [...championSpellOrdersRows.value]
+    .sort((a, b) => b.winrate - a.winrate || b.games - a.games)
+    .slice(0, 3)
+)
+const championSpellOrdersLowWinrate = computed(() =>
+  [...championSpellOrdersRows.value]
+    .sort((a, b) => a.winrate - b.winrate || b.games - a.games)
+    .slice(0, 3)
+)
+const championSpellOrdersTopPickrate = computed(() =>
+  [...championSpellOrdersRows.value]
+    .sort((a, b) => b.pickrate - a.pickrate || b.games - a.games)
+    .slice(0, 3)
+)
+const championSpellOrdersLowPickrate = computed(() =>
+  [...championSpellOrdersRows.value]
+    .sort((a, b) => a.pickrate - b.pickrate || b.games - a.games)
+    .slice(0, 3)
+)
+const objectiveDrakeDonutLegend = computed(
+  () => championObjectivesData.value?.drakeTypeDistribution ?? []
+)
+const objectiveSoulDonutLegend = computed(
+  () => championObjectivesData.value?.soulDistribution ?? []
+)
+const OBJECTIVE_DONUT_RADIUS = 44
+const OBJECTIVE_DONUT_STROKE = 16
+const OBJECTIVE_DONUT_CIRCLE = 2 * Math.PI * OBJECTIVE_DONUT_RADIUS
+type ObjectiveDistRow = { key: string; label: string; value: number; color: string }
+function objectiveDistributionColor(key: string): string {
+  const colorByKey: Record<string, string> = {
+    earth: '#a3e635',
+    water: '#38bdf8',
+    wind: '#22d3ee',
+    fire: '#fb7185',
+    hextec: '#a78bfa',
+    chem: '#34d399',
   }
-  if (championObjectivesView.value === 'souls') {
-    return metrics.filter(m => m.key.toLowerCase().includes('soul'))
-  }
-  return metrics.filter(m => {
-    const k = m.key.toLowerCase()
-    return !k.includes('drake') && !k.includes('soul')
+  return colorByKey[key] ?? '#94a3b8'
+}
+function objectiveBuildDistRows(
+  rows: Array<{ key: string; label: string; total: number; pct: number }>
+): ObjectiveDistRow[] {
+  return rows
+    .map(row => ({
+      key: row.key,
+      label: row.label,
+      value: Number(row.total ?? 0),
+      color: objectiveDistributionColor(row.key),
+    }))
+    .filter(row => row.value > 0)
+}
+function objectiveDistTotal(rows: ObjectiveDistRow[]): number {
+  return rows.reduce((sum, row) => sum + row.value, 0)
+}
+function objectiveDistPct(value: number, total: number): string {
+  if (!total) return '—'
+  return `${((value / total) * 100).toFixed(2)}%`
+}
+function objectiveDonutSegments(
+  rows: ObjectiveDistRow[]
+): Array<{ arc: number; offset: number; color: string }> {
+  const total = objectiveDistTotal(rows)
+  if (!total) return []
+  let offset = 0
+  return rows.map(row => {
+    const arc = OBJECTIVE_DONUT_CIRCLE * (row.value / total)
+    const segment = { arc, offset, color: row.color }
+    offset += arc
+    return segment
   })
+}
+const objectiveDrakeDistRows = computed<ObjectiveDistRow[]>(() =>
+  objectiveBuildDistRows(objectiveDrakeDonutLegend.value)
+)
+const objectiveSoulDistRows = computed<ObjectiveDistRow[]>(() =>
+  objectiveBuildDistRows(objectiveSoulDonutLegend.value)
+)
+const objectiveDrakeDonutSegments = computed(() =>
+  objectiveDonutSegments(objectiveDrakeDistRows.value)
+)
+const objectiveSoulDonutSegments = computed(() =>
+  objectiveDonutSegments(objectiveSoulDistRows.value)
+)
+const objectiveDrakeDistTotal = computed(() => objectiveDistTotal(objectiveDrakeDistRows.value))
+const objectiveSoulDistTotal = computed(() => objectiveDistTotal(objectiveSoulDistRows.value))
+const championObjectivesTableRows = computed(() => {
+  if (championObjectivesView.value === 'main') {
+    return championObjectivesData.value?.rows ?? []
+  }
+  if (championObjectivesView.value === 'drakeTypes') {
+    return (championObjectivesData.value?.drakeTypeDistribution ?? []).map(r => ({
+      key: `drake-${r.key}`,
+      label: r.label,
+      objectiveWinrate: Number.NaN,
+      killRate: Number(r.pct ?? 0),
+      assistRate: Number.NaN,
+    }))
+  }
+  return (championObjectivesData.value?.soulDistribution ?? []).map(r => ({
+    key: `soul-${r.key}`,
+    label: r.label,
+    objectiveWinrate: Number.NaN,
+    killRate: Number(r.pct ?? 0),
+    assistRate: Number.NaN,
+  }))
 })
+const championObjectivesOutcomeRows = computed(() =>
+  championObjectivesView.value === 'main' ? (championObjectivesData.value?.outcomeRows ?? []) : []
+)
 
 const durationByTierPending = ref(false)
 const durationByTierData = ref<{
@@ -2130,16 +2698,24 @@ const trendError = ref<string | null>(null)
 const trendPoints = ref<TrendSnapshotPoint[]>([])
 const trendVersionsCatalog = ref<Array<{ patchLabel: string; releaseDate: string }>>([])
 
-const activeChampionTab = ref<'overview' | 'matchups' | 'runes' | 'spells' | 'objectives'>(
-  'overview'
-)
+const activeChampionTab = ref<
+  'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
+>('overview')
+type ChampionTabId = 'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
   { id: 'runes' as const, label: 'statisticsPage.championStatsTabRunes' },
   { id: 'spells' as const, label: 'statisticsPage.championStatsTabSpells' },
+  { id: 'skills' as const, label: 'statisticsPage.championStatsTabSkills' },
   { id: 'objectives' as const, label: 'statisticsPage.objectivesTabMain' },
 ]
+const championTabIds = new Set<ChampionTabId>(championTabs.map(t => t.id))
+function normalizeChampionTab(input: unknown): ChampionTabId {
+  const raw = Array.isArray(input) ? input[0] : input
+  const val = String(raw ?? '').trim() as ChampionTabId
+  return championTabIds.has(val) ? val : 'overview'
+}
 
 function queryParams() {
   const p = new URLSearchParams()
@@ -2175,7 +2751,6 @@ function resetChampionFilters() {
   championProgressionFromVersionOverride.value = ''
   championSearchQueryPlaceholder.value = ''
   championSpellsModeFilter.value = 'solo'
-  championObjectivesView.value = 'main'
 }
 
 function patchFromVersion(version: string): string | null {
@@ -2215,6 +2790,7 @@ function overviewQueryParams() {
   const p = new URLSearchParams()
   if (filterVersion.value) p.set('version', filterVersion.value)
   for (const t of filterRank.value) p.append('rankTier', t)
+  if (filterRole.value) p.set('role', filterRole.value)
   return p.toString() ? '?' + p.toString() : ''
 }
 
@@ -2388,9 +2964,10 @@ async function _loadChampionSpells() {
   championSpellsPending.value = true
   championSpellsData.value = null
   championSpellsDuosData.value = null
+  championSpellOrdersData.value = null
   try {
     const q = overviewQueryParams()
-    const [spellsRes, duosRes] = await Promise.allSettled([
+    const [spellsRes, duosRes, ordersRes] = await Promise.allSettled([
       statsFetch<{
         totalGames: number
         spells: Array<{
@@ -2411,12 +2988,25 @@ async function _loadChampionSpells() {
           winrate: number
         }>
       }>(apiUrl(`/api/stats/champions/${championId.value}/summoner-spells-duos${q || ''}`)),
+      statsFetch<{
+        totalGames: number
+        rows: Array<{
+          key: string
+          order: number[]
+          games: number
+          wins: number
+          pickrate: number
+          winrate: number
+        }>
+      }>(apiUrl(`/api/stats/champions/${championId.value}/spell-orders${q || ''}`)),
     ])
     championSpellsData.value = spellsRes.status === 'fulfilled' ? spellsRes.value : null
     championSpellsDuosData.value = duosRes.status === 'fulfilled' ? duosRes.value : null
+    championSpellOrdersData.value = ordersRes.status === 'fulfilled' ? ordersRes.value : null
   } catch {
     championSpellsData.value = null
     championSpellsDuosData.value = null
+    championSpellOrdersData.value = null
   } finally {
     championSpellsPending.value = false
     statsPerfEnd('loadChampionSpells', t)
@@ -3238,6 +3828,26 @@ watch(
 )
 
 if (import.meta.client) {
+  watch(
+    () => route.query.tab,
+    tabRaw => {
+      const tab = normalizeChampionTab(tabRaw)
+      if (activeChampionTab.value !== tab) {
+        activeChampionTab.value = tab
+      }
+    },
+    { immediate: true }
+  )
+  watch(activeChampionTab, async tab => {
+    const current = normalizeChampionTab(route.query.tab)
+    if (current === tab) return
+    await router.replace({
+      query: {
+        ...route.query,
+        tab,
+      },
+    })
+  })
   watch(filterVersion, () => {
     syncChampionProgressionDeltaToVersionBeforeFilter()
   })
@@ -3513,5 +4123,38 @@ useHead({
 .champion-overview-rune-no-stat {
   color: rgb(var(--rgb-text) / 0.5);
   font-size: 0.7rem;
+}
+.champion-skills-orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+.champion-skills-orders-table th,
+.champion-skills-orders-table td {
+  border: 1px solid rgb(var(--rgb-primary) / 0.25);
+  text-align: center;
+  padding: 0.25rem 0.2rem;
+}
+.champion-skills-orders-table thead th {
+  font-weight: 600;
+  color: rgb(var(--rgb-text) / 0.85);
+  background: rgb(var(--rgb-surface) / 0.6);
+}
+.champion-skill-icon-cell {
+  background: rgb(var(--rgb-surface) / 0.45);
+}
+.champion-skill-cell {
+  font-weight: 700;
+  color: rgb(var(--rgb-text) / 0.35);
+  background: rgb(var(--rgb-surface) / 0.25);
+}
+.champion-skill-cell-active {
+  color: rgb(var(--rgb-text));
+  background: rgb(var(--rgb-accent) / 0.2);
+}
+.champion-skill-metric-cell {
+  font-weight: 700;
+  color: rgb(var(--rgb-text) / 0.95);
+  background: rgb(var(--rgb-surface) / 0.65);
 }
 </style>

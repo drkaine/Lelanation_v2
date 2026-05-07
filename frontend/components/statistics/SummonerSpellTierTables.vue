@@ -53,6 +53,8 @@ const props = defineProps<{
   refVersionLabel: string | null
   baselinePending?: boolean
   gameVersion: string | null
+  hideGamesColumn?: boolean
+  hideSlotColumns?: boolean
 }>()
 
 const { t } = useI18n()
@@ -323,6 +325,7 @@ function pctF(row: SummonerSpellSoloRow): string {
               {{ t('statisticsPage.overviewDetailWinRate') }}{{ soloSortIcon('winrate') }}
             </button>
             <button
+              v-if="!props.hideSlotColumns"
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 cursor-pointer flex-col items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[10px] leading-tight hover:bg-primary/25"
               :title="t('statisticsPage.summonerSpellsSlotDTooltip')"
@@ -331,6 +334,7 @@ function pctF(row: SummonerSpellSoloRow): string {
               D{{ soloSortIcon('pctSlotD') }}
             </button>
             <button
+              v-if="!props.hideSlotColumns"
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all flex w-11 shrink-0 cursor-pointer flex-col items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] text-[10px] leading-tight hover:bg-primary/25"
               :title="t('statisticsPage.summonerSpellsSlotFTooltip')"
@@ -339,6 +343,7 @@ function pctF(row: SummonerSpellSoloRow): string {
               F{{ soloSortIcon('pctSlotF') }}
             </button>
             <button
+              v-if="!props.hideGamesColumn"
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-[68px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 sm:flex"
               @click="cycleSoloSort('games')"
@@ -419,18 +424,21 @@ function pctF(row: SummonerSpellSoloRow): string {
               >
             </div>
             <div
+              v-if="!props.hideSlotColumns"
               class="tier-list-lolalytics-td flex w-11 shrink-0 flex-col items-center justify-center text-center text-[11px] leading-tight"
               :title="t('statisticsPage.summonerSpellsSlotDTooltip')"
             >
               {{ pctD(row) }}
             </div>
             <div
+              v-if="!props.hideSlotColumns"
               class="tier-list-lolalytics-td flex w-11 shrink-0 flex-col items-center justify-center text-center text-[11px] leading-tight"
               :title="t('statisticsPage.summonerSpellsSlotFTooltip')"
             >
               {{ pctF(row) }}
             </div>
             <div
+              v-if="!props.hideGamesColumn"
               class="tier-list-lolalytics-td hidden w-[68px] shrink-0 flex-col items-center justify-center text-center text-[11px] leading-tight sm:flex"
             >
               <span>{{ row.games.toLocaleString() }}</span>
@@ -479,10 +487,6 @@ function pctF(row: SummonerSpellSoloRow): string {
     </section>
 
     <section v-if="setRows.length">
-      <h3 class="mb-2 text-lg font-semibold text-text-accent">
-        {{ t('statisticsPage.summonerSpellsTableSets') }}
-      </h3>
-      <p class="mb-2 text-xs text-text/65">{{ t('statisticsPage.summonerSpellsSetsOrderHint') }}</p>
       <div
         class="statistics-overview-surface w-full overflow-x-auto rounded-lg border border-primary/30"
       >
@@ -515,6 +519,7 @@ function pctF(row: SummonerSpellSoloRow): string {
               {{ t('statisticsPage.overviewDetailWinRate') }}{{ setSortIcon('winrate') }}
             </button>
             <button
+              v-if="!props.hideGamesColumn"
               type="button"
               class="tier-list-lolalytics-th tier-list-lolalytics-th-all hidden w-[68px] shrink-0 cursor-pointer items-center justify-center border-b border-t border-black border-t-[var(--color-grey-300)] hover:bg-primary/25 sm:flex"
               @click="cycleSetSort('games')"
@@ -613,6 +618,7 @@ function pctF(row: SummonerSpellSoloRow): string {
               >
             </div>
             <div
+              v-if="!props.hideGamesColumn"
               class="tier-list-lolalytics-td hidden w-[68px] shrink-0 flex-col items-center justify-center text-center text-[11px] leading-tight sm:flex"
             >
               <span>{{ row.games.toLocaleString() }}</span>

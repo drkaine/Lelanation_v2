@@ -7,7 +7,10 @@ import { RiotStatsAggregator } from '../services/RiotStatsAggregator.js'
 import { getBuildsByChampion } from '../services/StatsBuildsService.js'
 import { getRunesByChampion, getRuneStatsByChampion } from '../services/StatsRunesService.js'
 import { getMatchupsByChampion } from '../services/StatsMatchupsService.js'
-import { getChampionMatchupsExtendedTable } from '../services/StatsChampionMatchupsExtendedService.js'
+import {
+  getChampionMatchupsExtendedTable,
+  getChampionMatchupsExportRows,
+} from '../services/StatsChampionMatchupsExtendedService.js'
 import {
   getTierListByLane,
   getMatchupDetailsByChampion,
@@ -44,6 +47,7 @@ import {
   getSummonerSpellsByChampion,
   getSummonerSpellsDuosByChampion,
 } from '../services/StatsSummonerSpellsService.js'
+import { getChampionSpellOrders } from '../services/StatsChampionSpellOrdersService.js'
 import { getChampionTierSnapshotsForCharts } from '../services/ChampionTierDailySnapshotService.js'
 import { getChampionObjectivesSummary } from '../services/StatsChampionObjectivesService.js'
 import { getBalanceFramework } from '../services/StatsBalanceService.js'
@@ -796,12 +800,14 @@ router.get('/champions/:championId/runes', async (req: Request, res: Response) =
   }
   const rankTier = rankTierParam(req.query.rankTier)
   const patch = (req.query.patch as string) || undefined
+  const role = queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 20
   const data = await getRunesByChampion({
     championId,
     rankTier: rankTier ?? null,
     patch: patch ?? null,
+    role: role ?? null,
     minGames,
     limit,
   })
@@ -820,11 +826,13 @@ router.get('/champions/:championId/runes-per-rune', async (req: Request, res: Re
   }
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
   const data = await getRuneStatsByChampion({
     championId,
     version: version ?? null,
     rankTier: rankTier ?? null,
+    role: role ?? null,
     minGames,
   })
   if (!data) {
@@ -917,6 +925,28 @@ router.get('/champions/:championId/matchups-extended', async (req: Request, res:
       rows: [],
     })
   }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/matchups-export-rows — export rows with raw agg_champion_vs_stats metrics + computed deltas/scores. */
+router.get('/champions/:championId/matchups-export-rows', async (req: Request, res: Response) => {
+  const raw = req.params.championId
+  const championId = parseInt(Array.isArray(raw) ? raw[0] : raw, 10)
+  if (Number.isNaN(championId) || championId <= 0) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version) ?? queryString(req.query.patch) ?? null
+  const rankTier = rankTierParam(req.query.rankTier)
+  const lane = queryString(req.query.lane) ?? queryString(req.query.role)
+  const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const data = await getChampionMatchupsExportRows({
+    championId,
+    version,
+    rankTier: rankTier ?? null,
+    role: lane ?? null,
+    minGames,
+  })
+  if (!data) return res.status(200).json({ championId, columns: [], rows: [] })
   return res.json(data)
 })
 
@@ -1041,7 +1071,8 @@ router.get('/champions/:championId/summoner-spells', async (req: Request, res: R
   }
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  const data = await getSummonerSpellsByChampion(championId, version, rankTier)
+  const role = queryString(req.query.role)
+  const data = await getSummonerSpellsByChampion(championId, version, rankTier, role)
   if (!data) {
     return res.status(200).json({ totalGames: 0, spells: [], message: 'No stats yet.' })
   }
@@ -1057,9 +1088,35 @@ router.get('/champions/:championId/summoner-spells-duos', async (req: Request, r
   }
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
-  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
+  const role = queryString(req.query.role)
+  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier, role)
   if (!data) {
     return res.status(200).json({ totalGames: 0, duos: [], message: 'No stats yet.' })
+  }
+  return res.json(data)
+})
+
+/** GET /api/stats/champions/:championId/spell-orders - skill upgrade orders for this champion. */
+router.get('/champions/:championId/spell-orders', async (req: Request, res: Response) => {
+  const rawR = req.params.championId
+  const championId = parseInt(Array.isArray(rawR) ? rawR[0] : rawR, 10)
+  if (Number.isNaN(championId)) {
+    return res.status(400).json({ error: 'Invalid champion ID' })
+  }
+  const version = queryString(req.query.version)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const role = queryString(req.query.role)
+  const minGamesRaw = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 10
+  const minGames = Number.isFinite(minGamesRaw) ? Math.max(1, minGamesRaw) : 10
+  const data = await getChampionSpellOrders({
+    championId,
+    version,
+    rankTier,
+    role,
+    minGames,
+  })
+  if (!data) {
+    return res.status(200).json({ totalGames: 0, rows: [], message: 'No stats yet.' })
   }
   return res.json(data)
 })
@@ -1081,7 +1138,15 @@ router.get('/champions/:championId/objectives', async (req: Request, res: Respon
     role: role ?? null,
   })
   if (!data) {
-    return res.status(200).json({ championId, games: 0, wins: 0, winrate: 0, metrics: [] })
+    return res.status(200).json({
+      championId,
+      games: 0,
+      wins: 0,
+      winrate: 0,
+      drakeTypeDistribution: [],
+      soulDistribution: [],
+      rows: [],
+    })
   }
   return res.json(data)
 })
@@ -1504,8 +1569,7 @@ router.get('/summoners/duos', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  void role
-  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier)
+  const data = await getSummonerSpellsDuosByChampion(championId, version, rankTier, role)
   return res.json({ totalGames: data?.totalGames ?? 0, rows: data?.duos ?? [] })
 })
 router.get('/summoners/solo', async (req: Request, res: Response) => {
@@ -1516,8 +1580,7 @@ router.get('/summoners/solo', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  void role
-  const data = await getSummonerSpellsByChampion(championId, version, rankTier)
+  const data = await getSummonerSpellsByChampion(championId, version, rankTier, role)
   return res.json({ totalGames: data?.totalGames ?? 0, rows: data?.spells ?? [] })
 })
 

@@ -35,10 +35,13 @@ function norm(value: string | string[] | null | undefined): string | null {
 async function getChampionStatIds(
   championId: number,
   pVersion: string | null,
-  rankTier: string | string[] | null
+  rankTier: string | string[] | null,
+  role?: string | null
 ): Promise<{ statIds: bigint[]; totalGames: number }> {
   const filters: string[] = [`champion_id = ${championId}`]
   if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
+  const pRole = norm(role)?.toUpperCase()
+  if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
   const ranks = toQueryStringArrayParam(rankTier).map((r) => r.toUpperCase())
   if (ranks.length === 1) filters.push(`rank_tier = '${ranks[0]!.replace(/'/g, "''")}'`)
   else if (ranks.length > 1) {
@@ -64,13 +67,19 @@ async function getChampionStatIds(
 export async function getSummonerSpellsByChampion(
   championId: number,
   version?: string | null,
-  rankTier?: string | string[] | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<{ totalGames: number; spells: SummonerSpellRow[] } | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = norm(version)
 
   try {
-    const { statIds, totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
+    const { statIds, totalGames } = await getChampionStatIds(
+      championId,
+      pVersion,
+      rankTier ?? null,
+      role ?? null
+    )
     if (statIds.length === 0) return { totalGames: 0, spells: [] }
 
     const spellsFrom = await matchVersionedAggFrom('agg_champion_summoner_spells', pVersion, 'ss')
@@ -135,13 +144,15 @@ export async function getSummonerSpellsByChampion(
 export async function getSummonerSpellsDuosByChampion(
   championId: number,
   version?: string | null,
-  rankTier?: string | string[] | null
+  rankTier?: string | string[] | null,
+  role?: string | null
 ): Promise<{ totalGames: number; duos: SummonerSpellDuoRow[] } | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = norm(version)
 
   try {
-    const { totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null)
+    const pRole = norm(role)?.toUpperCase()
+    const { totalGames } = await getChampionStatIds(championId, pVersion, rankTier ?? null, pRole)
     const versionClause = pVersion
       ? `AND sp.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`
       : ''
@@ -152,6 +163,7 @@ export async function getSummonerSpellsDuosByChampion(
         : ranks.length > 1
           ? `AND sp.rank_tier IN (${ranks.map((r) => `'${r.replace(/'/g, "''")}'`).join(',')})`
           : `AND sp.rank_tier <> 'UNRANKED'`
+    const roleClause = pRole ? `AND UPPER(sp.role) = '${pRole.replace(/'/g, "''")}'` : ''
     const pairFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', pVersion, 'sp')
     const pairRows = await prisma.$queryRawUnsafe<
       Array<{ spellId1: number; spellId2: number; games: bigint; wins: bigint }>
@@ -165,7 +177,9 @@ export async function getSummonerSpellsDuosByChampion(
       WHERE sp.champion_id = ${championId}
         ${versionClause}
         ${rankClause}
+        ${roleClause}
       GROUP BY sp.spell_d, sp.spell_f
+      HAVING SUM(sp.count_game) >= 100
       ORDER BY SUM(sp.count_game) DESC
       LIMIT 50
     `)
