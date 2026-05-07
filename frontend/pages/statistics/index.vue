@@ -511,12 +511,12 @@
           </div>
 
           <!-- Tab: Overview (default) -->
-          <div v-show="activeTab === 'overview'" class="space-y-6">
+          <div v-if="activeTab === 'overview'" class="space-y-6">
             <StatisticsOverviewTab />
           </div>
 
           <!-- Tab: Runes, items, sorts (chargé à l'ouverture de l'onglet) -->
-          <div v-show="activeTab === 'runes'" class="space-y-6">
+          <div v-if="activeTab === 'runes'" class="space-y-6">
             <StatisticsRunesTab />
           </div>
 
@@ -526,55 +526,55 @@
           </div> -->
 
           <!-- Tab: Par côté — fast-stats comme vue d'ensemble -->
-          <div v-show="activeTab === 'team'" class="space-y-6">
+          <div v-if="activeTab === 'team'" class="space-y-6">
             <StatisticsTeamTab />
           </div>
 
-          <div v-show="activeTab === 'objectives'" class="space-y-6">
+          <div v-if="activeTab === 'objectives'" class="space-y-6">
             <StatisticsObjectivesTab />
           </div>
 
-          <div v-show="activeTab === 'surrender'" class="space-y-6">
+          <div v-if="activeTab === 'surrender'" class="space-y-6">
             <StatisticsSurrenderTab />
           </div>
 
           <!-- Tab: Infos -->
-          <div v-show="activeTab === 'infos'">
+          <div v-if="activeTab === 'infos'">
             <StatisticsInfosTab />
           </div>
 
           <!-- Tab: Bans -->
-          <div v-show="activeTab === 'bans'">
+          <div v-if="activeTab === 'bans'">
             <StatisticsBansTab />
           </div>
 
           <!-- Tab: Champion (tableau global bleu/rouge + dégâts + KDA) -->
-          <div v-show="activeTab === 'championTable'" class="space-y-4">
+          <div v-if="activeTab === 'championTable'" class="space-y-4">
             <StatisticsChampionTableTab />
           </div>
 
           <!-- Tab: Balance framework -->
-          <div v-show="activeTab === 'balance'" class="space-y-4">
+          <div v-if="activeTab === 'balance'" class="space-y-4">
             <StatisticsBalanceTab />
           </div>
 
           <!-- Tab: Durée de partie -->
-          <div v-show="activeTab === 'duration'" class="space-y-4">
+          <div v-if="activeTab === 'duration'" class="space-y-4">
             <StatisticsDurationTab />
           </div>
 
           <!-- Tab: Objets (global) -->
-          <div v-show="activeTab === 'items'" class="space-y-6">
+          <div v-if="activeTab === 'items'" class="space-y-6">
             <StatisticsItemsTab />
           </div>
 
           <!-- Tab: Sorts d'invocateur (global) -->
-          <div v-show="activeTab === 'spells'" class="space-y-4">
+          <div v-if="activeTab === 'spells'" class="space-y-4">
             <StatisticsSpellsTab />
           </div>
 
           <!-- Tab: Abandons -->
-          <div v-show="activeTab === 'abandons'" class="space-y-4">
+          <div v-if="activeTab === 'abandons'" class="space-y-4">
             <StatisticsAbandonsTab />
           </div>
         </div>

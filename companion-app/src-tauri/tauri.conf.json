@@ -31,6 +31,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "publisher": "Darkaine",
     "copyright": "© 2026 Darkaine / Lelanation",

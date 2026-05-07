@@ -729,23 +729,16 @@ export async function getOverviewStats(
           champion_id: number
           count_win: bigint
           count_game: bigint
-          count_ban: bigint
-          rank_tier: string
-          game_version: string
-          region: string
         }>
       >(`
         SELECT
           ac.champion_id,
-          ac.count_win,
-          ac.count_game,
-          ac.count_ban,
-          ac.rank_tier,
-          ac.game_version,
-          ac.region
+          COALESCE(SUM(ac.count_win), 0)::bigint AS count_win,
+          COALESCE(SUM(ac.count_game), 0)::bigint AS count_game
         FROM ${coreFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ac.')}
         ${pRole ? `AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''}
+        GROUP BY ac.champion_id
       `),
       prisma.$queryRawUnsafe<Array<{ game_version: string; rank_tier: string; count_match: bigint }>>(`
         SELECT mo.game_version, mo.rank_tier, mo.count_match
@@ -785,18 +778,15 @@ export async function getOverviewStats(
 
     // Aggregate champion stats
     const byChampion = new Map<number, { wins: number; games: number; bans: number }>()
-    let totalParticipants = 0
     for (const row of coreRows) {
       const championId = Number(row.champion_id)
-      let entry = byChampion.get(championId)
-      if (!entry) {
-        entry = { wins: 0, games: 0, bans: 0 }
-        byChampion.set(championId, entry)
-      }
-      entry.wins += Number(row.count_win ?? 0)
-      entry.games += Number(row.count_game ?? 0)
-      totalParticipants += Number(row.count_game ?? 0)
+      byChampion.set(championId, {
+        wins: Number(row.count_win ?? 0),
+        games: Number(row.count_game ?? 0),
+        bans: 0,
+      })
     }
+    const totalParticipants = coreRows.reduce((acc, row) => acc + Number(row.count_game ?? 0), 0)
     for (const [cid, entry] of byChampion) {
       entry.bans = banTotalsByChampion.get(cid) ?? 0
     }

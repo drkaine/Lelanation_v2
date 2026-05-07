@@ -429,7 +429,7 @@
               </div>
             </div>
             <section
-              v-show="activeChampionTab === 'overview'"
+              v-if="activeChampionTab === 'overview'"
               id="champion-tab-panel-overview"
               role="tabpanel"
               class="mb-6 rounded-lg border border-primary/30 bg-surface/30 p-4"
@@ -947,7 +947,7 @@
             </section>
             <div class="champion-tab-panels">
               <div
-                v-show="activeChampionTab === 'matchups'"
+                v-if="activeChampionTab === 'matchups'"
                 id="champion-tab-panel-matchups"
                 role="tabpanel"
                 class="space-y-4"
@@ -963,12 +963,6 @@
                     {{ t('statisticsPage.noData') }}
                   </div>
                   <div v-else class="space-y-3">
-                    <div
-                      class="rounded border border-primary/20 bg-black/20 px-3 py-2 text-xs text-text/80"
-                    >
-                      <div>{{ t('statisticsPage.championMatchupDelta1Formula') }}</div>
-                      <div class="mt-1">{{ t('statisticsPage.championMatchupDelta2Formula') }}</div>
-                    </div>
                     <div class="overflow-x-auto">
                       <table class="tier-list-lolalytics w-full min-w-[1120px] text-sm">
                         <thead>
@@ -1268,7 +1262,7 @@
                   </div>
                 </div>
                 <div
-                  v-show="activeChampionTab === 'runes'"
+                  v-if="isChampionTab('runes')"
                   id="champion-tab-panel-runes"
                   role="tabpanel"
                   class="space-y-4"
@@ -1291,7 +1285,7 @@
                   </div>
                 </div>
                 <div
-                  v-show="activeChampionTab === 'spells'"
+                  v-if="isChampionTab('spells')"
                   id="champion-tab-panel-spells"
                   role="tabpanel"
                   class="space-y-4"
@@ -1324,7 +1318,7 @@
                   </div>
                 </div>
                 <div
-                  v-show="activeChampionTab === 'skills'"
+                  v-if="isChampionTab('skills')"
                   id="champion-tab-panel-skills"
                   role="tabpanel"
                   class="space-y-4"
@@ -1431,7 +1425,7 @@
                 </div>
               </div>
               <div
-                v-show="activeChampionTab === 'objectives'"
+                v-if="activeChampionTab === 'objectives'"
                 id="champion-tab-panel-objectives"
                 role="tabpanel"
                 class="space-y-4"
@@ -1790,7 +1784,7 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const localePath = useLocalePath()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const championId = computed(() => {
   const id = route.params.championId
   if (Array.isArray(id)) return parseInt(id[0] ?? '0', 10)
@@ -1804,7 +1798,7 @@ const runesStore = useRunesStore()
 const summonerSpellsStore = useSummonerSpellsStore()
 
 const gameVersion = computed(() => versionStore.currentVersion ?? null)
-const riotLocale = computed(() => (useI18n().locale.value === 'fr' ? 'fr_FR' : 'en_US'))
+const riotLocale = computed(() => (locale.value === 'fr' ? 'fr_FR' : 'en_US'))
 
 function championByKey(id: number) {
   return championsStore.champions.find(c => c.key === String(id)) ?? null
@@ -2724,6 +2718,15 @@ const activeChampionTab = ref<
   'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
 >('overview')
 type ChampionTabId = 'overview' | 'matchups' | 'runes' | 'spells' | 'skills' | 'objectives'
+const championPageBootstrapped = ref(false)
+const championTabLoaded = ref<Record<ChampionTabId, boolean>>({
+  overview: false,
+  matchups: false,
+  runes: false,
+  spells: false,
+  skills: false,
+  objectives: false,
+})
 const championTabs = [
   { id: 'overview' as const, label: 'statisticsPage.championStatsTabOverview' },
   { id: 'matchups' as const, label: 'statisticsPage.championStatsTabMatchups' },
@@ -2737,6 +2740,36 @@ function normalizeChampionTab(input: unknown): ChampionTabId {
   const raw = Array.isArray(input) ? input[0] : input
   const val = String(raw ?? '').trim() as ChampionTabId
   return championTabIds.has(val) ? val : 'overview'
+}
+
+function isChampionTab(tab: ChampionTabId): boolean {
+  return activeChampionTab.value === tab
+}
+
+function resetChampionTabLoadState(): void {
+  championTabLoaded.value = {
+    overview: false,
+    matchups: false,
+    runes: false,
+    spells: false,
+    skills: false,
+    objectives: false,
+  }
+}
+
+function markChampionTabLoaded(tab: ChampionTabId): void {
+  if (tab === 'spells' || tab === 'skills') {
+    championTabLoaded.value = {
+      ...championTabLoaded.value,
+      spells: true,
+      skills: true,
+    }
+    return
+  }
+  championTabLoaded.value = {
+    ...championTabLoaded.value,
+    [tab]: true,
+  }
 }
 
 function queryParams() {
@@ -3124,6 +3157,43 @@ async function _loadPlayers() {
     playersPending.value = false
     statsPerfEnd('loadPlayers', t)
   }
+}
+
+async function loadChampionDataForTab(tab: ChampionTabId, force = false): Promise<void> {
+  if (!championPageBootstrapped.value) return
+  if (!championId.value || Number.isNaN(championId.value)) return
+  if (!force && championTabLoaded.value[tab]) return
+  if (tab === 'overview') {
+    await Promise.all([loadDurationByTier(), loadTrendSnapshots()])
+    markChampionTabLoaded('overview')
+    return
+  }
+  if (tab === 'matchups') {
+    await loadMatchupsExtended()
+    markChampionTabLoaded('matchups')
+    return
+  }
+  if (tab === 'runes') {
+    await _loadRunes()
+    markChampionTabLoaded('runes')
+    return
+  }
+  if (tab === 'spells' || tab === 'skills') {
+    await _loadChampionSpells()
+    markChampionTabLoaded(tab)
+    return
+  }
+  await loadChampionObjectives()
+  markChampionTabLoaded('objectives')
+}
+
+async function reloadChampionBaseAndActiveTabData(): Promise<void> {
+  if (!championPageBootstrapped.value) return
+  if (!championId.value || Number.isNaN(championId.value)) return
+  await loadChampion()
+  loadChampionDamageSplit().catch(() => undefined)
+  resetChampionTabLoadState()
+  await loadChampionDataForTab(activeChampionTab.value, true)
 }
 
 const TREND_CHART_W = 620
@@ -3837,15 +3907,9 @@ watch(
     championProgressionFromVersion,
   ],
   () => {
+    if (!championPageBootstrapped.value) return
     if (!championId.value || Number.isNaN(championId.value)) return
-    loadChampion()
-    loadChampionDamageSplit()
-    loadDurationByTier()
-    loadTrendSnapshots()
-    loadMatchupsExtended()
-    _loadRunes()
-    _loadChampionSpells()
-    loadChampionObjectives()
+    reloadChampionBaseAndActiveTabData().catch(() => undefined)
   }
 )
 
@@ -3861,6 +3925,7 @@ if (import.meta.client) {
     { immediate: true }
   )
   watch(activeChampionTab, async tab => {
+    loadChampionDataForTab(tab).catch(() => undefined)
     const current = normalizeChampionTab(route.query.tab)
     if (current === tab) return
     await router.replace({
@@ -3933,15 +3998,9 @@ onMounted(async () => {
     runesStore.loadRunes(riotLocale.value),
     summonerSpellsStore.loadSummonerSpells(riotLocale.value),
   ])
+  championPageBootstrapped.value = true
   if (championId.value && !Number.isNaN(championId.value)) {
-    await loadChampion()
-    loadChampionDamageSplit()
-    loadDurationByTier()
-    loadTrendSnapshots()
-    loadMatchupsExtended()
-    _loadRunes()
-    _loadChampionSpells()
-    loadChampionObjectives()
+    await reloadChampionBaseAndActiveTabData()
   }
 })
 
