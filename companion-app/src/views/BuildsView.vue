@@ -36,6 +36,8 @@ const updateProgress = ref(0);
 const updateError = ref("");
 const updateNoticeOpen = ref(false);
 const updateNoticeVersion = ref("");
+const updateChecking = ref(false);
+const updateCheckMessage = ref("");
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -99,6 +101,9 @@ async function pollLcu() {
 }
 
 async function checkForUpdates() {
+  updateChecking.value = true;
+  updateCheckMessage.value = "";
+  updateError.value = "";
   try {
     const update = await check();
     if (update) {
@@ -113,9 +118,27 @@ async function checkForUpdates() {
         updateNoticeVersion.value = update.version;
         updateNoticeOpen.value = true;
       }
+      updateCheckMessage.value =
+        settings.value.language === "en"
+          ? `Update found (v${update.version}).`
+          : `Mise a jour trouvee (v${update.version}).`;
+    } else {
+      updateAvailable.value = false;
+      pendingUpdate.value = null;
+      latestVersion.value = "";
+      updateCheckMessage.value =
+        settings.value.language === "en"
+          ? `App is up to date (v${currentAppVersion.value}).`
+          : `Application a jour (v${currentAppVersion.value}).`;
     }
-  } catch {
-    /* ignore */
+  } catch (e) {
+    updateError.value = e instanceof Error ? e.message : String(e);
+    updateCheckMessage.value =
+      settings.value.language === "en"
+        ? "Update check failed."
+        : "Echec de verification des mises a jour.";
+  } finally {
+    updateChecking.value = false;
   }
 }
 
@@ -154,6 +177,17 @@ function onConfigLanguageChange(lang: "fr" | "en") {
 function onAutoUpdateToggle(value: boolean) {
   settings.value = { ...settings.value, autoUpdate: value };
   setSettings({ autoUpdate: value });
+  if (value) {
+    if (pendingUpdate.value && !updateInstalling.value && !updateRestarting.value) {
+      void installUpdate();
+      return;
+    }
+    void checkForUpdates();
+  }
+}
+
+async function checkForUpdatesManually() {
+  await checkForUpdates();
 }
 
 function onImportPreferenceToggle(
@@ -413,6 +447,24 @@ onUnmounted(() => {
               ? "Update checks run on startup and every hour."
               : "La verification des mises a jour se fait au demarrage puis toutes les heures."
           }}
+        </p>
+        <div class="settings-actions">
+          <button
+            type="button"
+            class="btn-sm"
+            :disabled="updateChecking || updateInstalling || updateRestarting"
+            @click="checkForUpdatesManually"
+          >
+            {{
+              updateChecking
+                ? (settings.language === "en" ? "Checking..." : "Verification...")
+                : (settings.language === "en" ? "Check for updates now" : "Rechercher une mise a jour")
+            }}
+          </button>
+        </div>
+        <p v-if="updateCheckMessage" class="settings-meta">{{ updateCheckMessage }}</p>
+        <p v-if="updateError" class="settings-error">
+          {{ settings.language === "en" ? "Update error:" : "Erreur mise a jour:" }} {{ updateError }}
         </p>
 
         <div class="settings-actions">
