@@ -1053,14 +1053,26 @@
                               </button>
                             </th>
                             <th class="px-2 py-2 text-right font-medium text-text">
-                              <span :title="t('statisticsPage.championMatchupDelta1Formula')">
-                                {{ t('statisticsPage.championMatchupColDelta1') }}
-                              </span>
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupDelta1Formula')"
+                                @click="setMatchupSort('delta1')"
+                              >
+                                {{ t('statisticsPage.championMatchupColDelta1')
+                                }}{{ matchupSortIcon('delta1') }}
+                              </button>
                             </th>
                             <th class="px-2 py-2 text-right font-medium text-text">
-                              <span :title="t('statisticsPage.championMatchupDelta2Formula')">
-                                {{ t('statisticsPage.championMatchupColDelta2') }}
-                              </span>
+                              <button
+                                type="button"
+                                class="inline-flex items-center gap-1 hover:text-accent"
+                                :title="t('statisticsPage.championMatchupDelta2Formula')"
+                                @click="setMatchupSort('delta2')"
+                              >
+                                {{ t('statisticsPage.championMatchupColDelta2')
+                                }}{{ matchupSortIcon('delta2') }}
+                              </button>
                             </th>
                             <th class="px-2 py-2 text-right font-medium text-text">
                               <button
@@ -1157,12 +1169,18 @@
                                 {{ formatSignedDelta(row.pickrateDeltaVsReference) }}
                               </div>
                             </td>
-                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                            <td
+                              class="px-2 py-2 text-right tabular-nums text-text/85"
+                              :title="t('statisticsPage.championMatchupDelta1Formula')"
+                            >
                               <span :class="matchupDeltaClass(row.delta1)">
                                 {{ formatSignedDelta(row.delta1) }}
                               </span>
                             </td>
-                            <td class="px-2 py-2 text-right tabular-nums text-text/85">
+                            <td
+                              class="px-2 py-2 text-right tabular-nums text-text/85"
+                              :title="t('statisticsPage.championMatchupDelta2Formula')"
+                            >
                               <span :class="matchupDeltaClass(row.delta2)">
                                 {{ formatSignedDelta(row.delta2) }}
                               </span>
@@ -1947,6 +1965,8 @@ type MatchupSortKey =
   | 'role'
   | 'winrate'
   | 'pickrate'
+  | 'delta1'
+  | 'delta2'
   | 'laneScore'
   | 'dominance'
 const matchupSortKey = ref<MatchupSortKey>('score')
@@ -2015,6 +2035,8 @@ const filteredMatchupsExt = computed(() => {
     if (matchupSortKey.value === 'role') return dir * a.role.localeCompare(b.role)
     if (matchupSortKey.value === 'winrate') return dir * (a.winrate - b.winrate)
     if (matchupSortKey.value === 'pickrate') return dir * (a.pickrate - b.pickrate)
+    if (matchupSortKey.value === 'delta1') return dir * ((a.delta1 ?? 0) - (b.delta1 ?? 0))
+    if (matchupSortKey.value === 'delta2') return dir * ((a.delta2 ?? 0) - (b.delta2 ?? 0))
     if (matchupSortKey.value === 'laneScore') return dir * (a.laneScore - b.laneScore)
     const ad = (a.dominanceKeys?.length ?? 0) + (a.weaknessKeys?.length ?? 0)
     const bd = (b.dominanceKeys?.length ?? 0) + (b.weaknessKeys?.length ?? 0)

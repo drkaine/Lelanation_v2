@@ -216,6 +216,7 @@ async function upsertPlayersFromRawParticipants(
   const normalizedPuuidKeyVersion = normalizePuuidKeyVersion(puuidKeyVersion)
   const apexNoDivisionTiers = new Set(['MASTER', 'GRANDMASTER', 'CHALLENGER'])
   const puuidsForKeyBackfill: string[] = []
+  const fallbackDate = new Date()
   for (const participant of participants) {
     const puuid = String(participant.puuid ?? '').trim()
     if (!puuid) continue
@@ -223,36 +224,69 @@ async function upsertPlayersFromRawParticipants(
     const rankTier = normalizeRankTier(participant)
     const rankDivision = normalizeRankDivision(participant)
     const { gameName, tagName } = participantRiotId(participant)
-    const dataUpdate: Record<string, unknown> = {
-      region,
-      lastSeen: gameDate ?? new Date(),
-      gameName,
-      tagName,
-    }
-    if (rankTier !== 'UNRANKED') {
-      dataUpdate['rankTier'] = rankTier
-      // Keep existing division if incoming payload only carries tier.
-      // Explicitly persist NULL only for apex tiers that do not have divisions.
-      if (rankDivision != null || apexNoDivisionTiers.has(rankTier)) {
-        dataUpdate['rankDivision'] = rankDivision
-      }
-      dataUpdate['rankSnapshotGameDate'] = gameDate ?? new Date()
-    }
-    await tx.player.upsert({
-      where: { puuid },
-      create: {
+    const matchDate = gameDate ?? fallbackDate
+
+    await tx.$executeRaw`
+      INSERT INTO players (
         puuid,
+        game_name,
+        tag_name,
         region,
-        puuidKeyVersion: normalizedPuuidKeyVersion,
-        gameName,
-        tagName,
-        lastSeen: gameDate ?? new Date(),
-        rankTier: rankTier === 'UNRANKED' ? null : rankTier,
-        rankDivision: rankTier === 'UNRANKED' ? null : rankDivision,
-        rankSnapshotGameDate: rankTier === 'UNRANKED' ? null : gameDate ?? new Date(),
-      },
-      update: dataUpdate,
-    })
+        puuid_key_version,
+        last_seen,
+        rank_tier,
+        rank_division,
+        rank_snapshot_game_date
+      )
+      VALUES (
+        ${puuid},
+        ${gameName},
+        ${tagName},
+        ${region},
+        ${normalizedPuuidKeyVersion},
+        ${matchDate},
+        ${rankTier === 'UNRANKED' ? null : rankTier},
+        ${rankTier === 'UNRANKED' ? null : rankDivision},
+        ${rankTier === 'UNRANKED' ? null : matchDate}
+      )
+      ON CONFLICT (puuid) DO NOTHING
+    `
+
+    // Update profile data only when this match is newer than the player's last update.
+    await tx.$executeRaw`
+      UPDATE players
+      SET
+        region = ${region},
+        last_seen = ${matchDate},
+        game_name = ${gameName},
+        tag_name = ${tagName}
+      WHERE puuid = ${puuid}
+        AND updated_at < ${matchDate}
+    `
+
+    // Update rank only when this match is newer than the last rank snapshot.
+    if (rankTier !== 'UNRANKED') {
+      if (rankDivision != null || apexNoDivisionTiers.has(rankTier)) {
+        await tx.$executeRaw`
+          UPDATE players
+          SET
+            rank_tier = ${rankTier},
+            rank_division = ${rankDivision},
+            rank_snapshot_game_date = ${matchDate}
+          WHERE puuid = ${puuid}
+            AND (rank_snapshot_game_date IS NULL OR rank_snapshot_game_date < ${matchDate})
+        `
+      } else {
+        await tx.$executeRaw`
+          UPDATE players
+          SET
+            rank_tier = ${rankTier},
+            rank_snapshot_game_date = ${matchDate}
+          WHERE puuid = ${puuid}
+            AND (rank_snapshot_game_date IS NULL OR rank_snapshot_game_date < ${matchDate})
+        `
+      }
+    }
   }
   if (normalizedPuuidKeyVersion && puuidsForKeyBackfill.length > 0) {
     await tx.player.updateMany({

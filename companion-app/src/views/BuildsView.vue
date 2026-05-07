@@ -38,6 +38,7 @@ const updateNoticeOpen = ref(false);
 const updateNoticeVersion = ref("");
 const updateChecking = ref(false);
 const updateCheckMessage = ref("");
+const UPDATER_INVALID_RELEASE_JSON = "Could not fetch a valid release JSON from the remote";
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
@@ -68,7 +69,7 @@ const embeddedPageUrl = computed(() => {
   }
   const locale = settings.value.language === "en" ? "/en" : "";
   const pathMap: Record<Exclude<AppPage, "settings">, string> = {
-    builds: `${locale}/builds`,
+    builds: `${locale}/builds?tab=discover`,
     videos: `${locale}/videos`,
     statistics: `${locale}/statistics`,
     "tier-list": `${locale}/statistics/tier-list`,
@@ -132,11 +133,20 @@ async function checkForUpdates() {
           : `Application a jour (v${currentAppVersion.value}).`;
     }
   } catch (e) {
-    updateError.value = e instanceof Error ? e.message : String(e);
-    updateCheckMessage.value =
-      settings.value.language === "en"
-        ? "Update check failed."
-        : "Echec de verification des mises a jour.";
+    const rawError = e instanceof Error ? e.message : String(e);
+    if (rawError.includes(UPDATER_INVALID_RELEASE_JSON)) {
+      updateError.value = "";
+      updateCheckMessage.value =
+        settings.value.language === "en"
+          ? "Update metadata is not published yet (latest.json missing in release assets)."
+          : "Les metadonnees de mise a jour ne sont pas encore publiees (latest.json manquant dans les assets).";
+    } else {
+      updateError.value = rawError;
+      updateCheckMessage.value =
+        settings.value.language === "en"
+          ? "Update check failed."
+          : "Echec de verification des mises a jour.";
+    }
   } finally {
     updateChecking.value = false;
   }
