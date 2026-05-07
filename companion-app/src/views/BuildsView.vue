@@ -19,6 +19,9 @@ const iframeError = ref(false);
 const importInProgress = ref(false);
 const importFeedback = ref("");
 const importOk = ref(true);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+const importNotificationVisible = ref(false);
+const importLogs = ref<string[]>([]);
 const configLeaguePath = ref("");
 const configShareRanked = ref(false);
 const configLanguage = ref<"fr" | "en">(settings.value.language);
@@ -43,6 +46,7 @@ const UPDATER_INVALID_RELEASE_JSON = "Could not fetch a valid release JSON from 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckTimer: ReturnType<typeof setInterval> | null = null;
 let lcuPollTimer: ReturnType<typeof setInterval> | null = null;
+let importNotificationTimer: ReturnType<typeof setTimeout> | null = null;
 
 type AppPage = "builds" | "videos" | "statistics" | "tier-list" | "settings";
 const currentPage = ref<AppPage>("builds");
@@ -76,20 +80,33 @@ const embeddedPageUrl = computed(() => {
   };
   const url = new URL(pathMap[currentPage.value], apiBase);
   url.searchParams.set("app", "on");
-  if (currentPage.value === "builds") {
-    url.searchParams.set("tab", "my-builds");
-  }
   return url.toString();
 });
 const isEmbeddedPage = computed(() => currentPage.value !== "settings");
 
 watch(currentPage, () => {
   iframeError.value = false;
-  importFeedback.value = "";
 });
 
 function t(key: string, params?: Record<string, string | number>): string {
   return translate(settings.value.language, key, params);
+}
+
+function pushImportLog(message: string, details?: unknown) {
+  const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+  importLogs.value = [line, ...importLogs.value].slice(0, 30);
+  if (details !== undefined) console.info("[companion-import]", line, details);
+  else console.info("[companion-import]", line);
+}
+
+function showImportNotification(message: string, ok: boolean) {
+  importFeedback.value = message;
+  importOk.value = ok;
+  importNotificationVisible.value = true;
+  if (importNotificationTimer) clearTimeout(importNotificationTimer);
+  importNotificationTimer = setTimeout(() => {
+    importNotificationVisible.value = false;
+  }, 7000);
 }
 
 async function pollLcu() {
@@ -246,43 +263,93 @@ function sourceOrigin(): string | null {
   }
 }
 
+function allowedIframeOrigins(): string[] {
+  const origins = new Set<string>();
+  const baseOrigin = sourceOrigin();
+  if (baseOrigin) {
+    origins.add(baseOrigin);
+    try {
+      const parsed = new URL(baseOrigin);
+      const { protocol, hostname } = parsed;
+      if (hostname.startsWith("www.")) {
+        origins.add(`${protocol}//${hostname.slice(4)}`);
+      } else {
+        origins.add(`${protocol}//www.${hostname}`);
+      }
+    } catch {
+      // ignore malformed origin
+    }
+  }
+  if (embeddedPageUrl.value) {
+    try {
+      origins.add(new URL(embeddedPageUrl.value).origin);
+    } catch {
+      // ignore malformed URL
+    }
+  }
+  return [...origins];
+}
+
 async function runImportFromIframe(build: Build) {
-  if (importInProgress.value) return;
-  importFeedback.value = "";
-  importOk.value = true;
+  if (importInProgress.value) {
+    pushImportLog("Import ignored: another import is already running.");
+    return;
+  }
+  pushImportLog("Import requested from iframe.", { buildId: build.id, buildName: build.name });
   importInProgress.value = true;
   try {
     await importBuildToLcu(build);
-    importFeedback.value = t("importSuccess");
-    importOk.value = true;
+    pushImportLog("Import success.");
+    showImportNotification(t("importSuccess"), true);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    importOk.value = false;
-    if (msg === "LCU_OFFLINE") importFeedback.value = t("importNeedClient");
-    else if (msg === "NO_CHAMPION") importFeedback.value = t("importNeedChampion");
-    else if (msg === "NOTHING_TO_IMPORT") importFeedback.value = t("importNothingToImport");
-    else if (msg.startsWith("RUNES:")) importFeedback.value = t("importRunesFailed") + msg.slice(6);
-    else if (msg.startsWith("ITEMS:")) importFeedback.value = t("importItemsFailed") + msg.slice(6);
-    else importFeedback.value = msg;
+    pushImportLog("Import failed.", { error: msg });
+    if (msg === "LCU_OFFLINE") showImportNotification(t("importNeedClient"), false);
+    else if (msg === "NO_CHAMPION") showImportNotification(t("importNeedChampion"), false);
+    else if (msg === "NOTHING_TO_IMPORT") showImportNotification(t("importNothingToImport"), false);
+    else if (msg.startsWith("RUNES:")) showImportNotification(t("importRunesFailed") + msg.slice(6), false);
+    else if (msg.startsWith("ITEMS:")) showImportNotification(t("importItemsFailed") + msg.slice(6), false);
+    else showImportNotification(msg, false);
   } finally {
     importInProgress.value = false;
   }
 }
 
 function onIframeMessage(event: MessageEvent) {
-  const expectedOrigin = sourceOrigin();
-  if (!expectedOrigin || event.origin !== expectedOrigin) return;
+  const iframeWindow = iframeRef.value?.contentWindow;
+  if (!iframeWindow || event.source !== iframeWindow) {
+    pushImportLog("Message ignored: source window mismatch.");
+    return;
+  }
+  if (!allowedIframeOrigins().includes(event.origin)) {
+    pushImportLog("Message ignored: origin not allowed.", { origin: event.origin });
+    return;
+  }
 
   const data = event.data as
     | { type?: string; payload?: { build?: Build } }
     | undefined;
-  if (data?.type !== "lelanation:companion-import-build") return;
-  if (!data.payload?.build) return;
+  if (data?.type !== "lelanation:companion-import-build") {
+    pushImportLog("Message ignored: unexpected message type.", { type: data?.type });
+    return;
+  }
+  if (!data.payload?.build) {
+    pushImportLog("Message ignored: missing build payload.");
+    showImportNotification(
+      settings.value.language === "en"
+        ? "Import failed: missing build payload."
+        : "Echec import: payload build manquant.",
+      false
+    );
+    return;
+  }
 
+  pushImportLog("Valid import message received.", { origin: event.origin, buildId: data.payload.build.id });
   void runImportFromIframe(data.payload.build);
 }
 
 onMounted(async () => {
+  pushImportLog("Companion import bridge ready.");
   try {
     currentAppVersion.value = await getVersion();
   } catch {
@@ -308,6 +375,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (updateCheckTimer) clearInterval(updateCheckTimer);
   if (lcuPollTimer) clearInterval(lcuPollTimer);
+  if (importNotificationTimer) clearTimeout(importNotificationTimer);
   window.removeEventListener("message", onIframeMessage);
 });
 </script>
@@ -317,7 +385,6 @@ onUnmounted(() => {
     <header class="top-bar">
       <div class="brand">
         <span class="brand-title">Lelanation Companion</span>
-        <span class="subtitle">{{ t("subtitle") }}</span>
       </div>
       <nav class="app-nav">
         <button
@@ -356,6 +423,7 @@ onUnmounted(() => {
 
     <section v-if="isEmbeddedPage" class="presentation-shell">
       <iframe
+        ref="iframeRef"
         :key="embeddedPageUrl"
         v-show="!iframeError"
         class="presentation-iframe"
@@ -491,9 +559,26 @@ onUnmounted(() => {
           {{ settings.language === "en" ? "Settings saved." : "Parametres enregistres." }}
         </p>
         <p v-if="configError" class="settings-error">{{ configError }}</p>
+
+        <h3 class="settings-subsection">
+          {{ settings.language === "en" ? "Import debug logs" : "Logs debug import" }}
+        </h3>
+        <p class="settings-meta">
+          {{
+            settings.language === "en"
+              ? "Recent events for iframe bridge and LoL import."
+              : "Evenements recents du bridge iframe et de l'import LoL."
+          }}
+        </p>
+        <div class="import-log-list">
+          <p v-for="(line, idx) in importLogs" :key="`${idx}-${line}`" class="import-log-line">{{ line }}</p>
+          <p v-if="importLogs.length === 0" class="import-log-line muted">
+            {{ settings.language === "en" ? "No logs yet." : "Aucun log pour le moment." }}
+          </p>
+        </div>
       </div>
     </section>
-    <p v-if="importFeedback && currentPage === 'builds'" class="import-feedback" :class="{ err: !importOk }">
+    <p v-if="importNotificationVisible && importFeedback" class="import-feedback" :class="{ err: !importOk }">
       {{ importFeedback }}
     </p>
     <div v-if="updateNoticeOpen" class="overlay" @click.self="updateNoticeOpen = false">
@@ -730,7 +815,12 @@ onUnmounted(() => {
   text-align: center;
 }
 .import-feedback {
-  margin: 0.55rem 1rem 0;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1100;
+  margin: 0;
+  max-width: min(620px, calc(100vw - 2rem));
   padding: 0.55rem 0.75rem;
   border-radius: 8px;
   border: 1px solid rgba(80, 200, 120, 0.45);
@@ -742,6 +832,27 @@ onUnmounted(() => {
   border-color: rgba(255, 138, 138, 0.45);
   background: rgba(255, 138, 138, 0.12);
   color: #ffb4b4;
+}
+.import-log-list {
+  margin-top: 0.4rem;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid rgba(200, 155, 60, 0.25);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: rgba(4, 10, 22, 0.72);
+}
+.import-log-line {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #d8ccb4;
+}
+.import-log-line + .import-log-line {
+  margin-top: 0.25rem;
+}
+.import-log-line.muted {
+  opacity: 0.72;
 }
 .overlay {
   position: fixed;
