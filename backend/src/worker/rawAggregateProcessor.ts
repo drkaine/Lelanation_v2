@@ -9,13 +9,13 @@ const STARTER_SET_EXCLUDED_ITEM_IDS = new Set([
   2138, 2139, 2140,
 ])
 
-/** Prisma interactive transaction default is 5s; raw aggregate does many upserts and can exceed that under load/backfill. */
+/** Prisma interactive TX : agrégation lourde. Défaut 20 min (600 s insuffisant sous charge). Surcharge : RAW_AGGREGATE_TX_TIMEOUT_MS. */
 function rawAggregateTransactionOptions(): { maxWait: number; timeout: number } {
   const timeout = Math.max(
     10_000,
-    Math.min(3_600_000, Number(process.env.RAW_AGGREGATE_TX_TIMEOUT_MS ?? 300_000))
+    Math.min(7_200_000, Number(process.env.RAW_AGGREGATE_TX_TIMEOUT_MS ?? 1_200_000))
   )
-  return { maxWait: 60_000, timeout }
+  return { maxWait: 120_000, timeout }
 }
 
 type RawParticipant = {
@@ -327,8 +327,12 @@ async function loadPlayerRankTiersByPuuid(puuids: string[]): Promise<Map<string,
   const m = new Map<string, string>()
   for (const r of rows) {
     const pu = String(r.puuid ?? '').trim().toLowerCase()
-    const tier = String(r.rankTier ?? 'UNRANKED').trim().toUpperCase()
-    if (pu) m.set(pu, tier)
+    if (!pu) continue
+    const raw = r.rankTier
+    if (raw == null || String(raw).trim() === '') continue
+    const tier = String(raw).trim().toUpperCase()
+    if (!tier || tier === 'UNRANKED') continue
+    m.set(pu, tier.split('_')[0] || tier)
   }
   return m
 }
@@ -382,23 +386,6 @@ async function loadTrackedMatchRankTiersByPuuid(trackedMatchId: string): Promise
     out.set(puuid, rankTier.split('_')[0] || rankTier)
   }
   return out
-}
-
-function ensureTrackedRanksPresentForParticipants(
-  participants: RawParticipant[],
-  trackedRankByPuuid: Map<string, string>,
-  dbRankByPuuid: Map<string, string>
-): boolean {
-  for (const p of participants) {
-    const puuid = String(p.puuid ?? '').trim().toLowerCase()
-    if (!puuid) continue
-    const rankTier = trackedRankByPuuid.get(puuid)
-    if (rankTier && rankTier.length > 0 && rankTier !== 'UNRANKED') continue
-    const dbTier = dbRankByPuuid.get(puuid)
-    if (dbTier && dbTier.length > 0 && dbTier !== 'UNRANKED') continue
-    return false
-  }
-  return true
 }
 
 function mergeParticipantTiersFromDb(
@@ -700,7 +687,17 @@ function bannerRoleFromPickOrder(pickOrderRaw: unknown): string {
 
 function isRetryableTxError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err)
-  return message.includes('40P01') || message.toLowerCase().includes('deadlock detected')
+  const lower = message.toLowerCase()
+  if (message.includes('40P01') || lower.includes('deadlock detected')) return true
+  // Timeout interactive TX Prisma / exécution ayant continué sur une TX fermée → nouvel essai (rollback déjà fait).
+  if (
+    lower.includes('expired transaction') ||
+    lower.includes('transaction already closed') ||
+    lower.includes('transaction not found')
+  ) {
+    return true
+  }
+  return false
 }
 
 type SpellOrderAggEntry = {
@@ -1081,9 +1078,7 @@ export async function processRawAggregateAndBurn(
     participants.map((p) => String(p.puuid ?? '')).filter((p) => p.length > 0)
   )
   const trackedRankByPuuid = await loadTrackedMatchRankTiersByPuuid(trackedMatchId)
-  if (!ensureTrackedRanksPresentForParticipants(participants, trackedRankByPuuid, dbRankByPuuid)) {
-    throw new Error('tracked_rank_pending')
-  }
+  /** Tiers manquants restent UNRANKED : on n’attend plus league-v4 / hydration pour débloquer la queue. */
   const participantsForAgg = mergeParticipantTiersFromDb(
     mergeParticipantTiersFromDb(participants, trackedRankByPuuid),
     dbRankByPuuid
