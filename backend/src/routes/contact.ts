@@ -29,7 +29,11 @@ function emptyContactData(): ContactData {
 }
 
 router.post('/', async (req: Request, res: Response) => {
-  const { type, name, message, contact } = req.body as {
+  const body =
+    req.body != null && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body
+      : {}
+  const { type, name, message, contact } = body as {
     type?: string
     name?: string
     message?: string

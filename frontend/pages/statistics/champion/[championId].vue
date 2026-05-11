@@ -1261,163 +1261,160 @@
                     </div>
                   </div>
                 </div>
-                <div
-                  v-if="isChampionTab('runes')"
-                  id="champion-tab-panel-runes"
-                  role="tabpanel"
-                  class="space-y-4"
-                >
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                    <div v-if="runesPending" class="py-6 text-text/70">
-                      {{ t('statisticsPage.loading') }}
-                    </div>
-                    <div v-else-if="!championRunesPanelData" class="py-4 text-text/70">
-                      {{ t('statisticsPage.noData') }}
-                    </div>
-                    <StatisticsRunesOverviewPanel
-                      v-else
-                      :game-version="gameVersion || versionStore.currentVersion || ''"
-                      :data="championRunesPanelData"
-                      :baseline="null"
-                      :baseline-pending="false"
-                      :comparison-version="null"
-                    />
+              </div>
+              <div
+                v-if="isChampionTab('runes')"
+                id="champion-tab-panel-runes"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div v-if="runesPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
                   </div>
+                  <div v-else-if="!championRunesPanelData" class="py-4 text-text/70">
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <StatisticsRunesOverviewPanel
+                    v-else
+                    :game-version="gameVersion || versionStore.currentVersion || ''"
+                    :data="championRunesPanelData"
+                    :baseline="null"
+                    :baseline-pending="false"
+                    :comparison-version="null"
+                  />
                 </div>
-                <div
-                  v-if="isChampionTab('spells')"
-                  id="champion-tab-panel-spells"
-                  role="tabpanel"
-                  class="space-y-4"
-                >
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                    <div v-if="championSpellsPending" class="py-6 text-text/70">
-                      {{ t('statisticsPage.loading') }}
-                    </div>
+              </div>
+              <div
+                v-if="isChampionTab('spells')"
+                id="champion-tab-panel-spells"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div v-if="championSpellsPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div
+                    v-else-if="
+                      !championSpellSoloRowsFiltered.length && !championSpellSetRowsFiltered.length
+                    "
+                    class="py-4 text-text/70"
+                  >
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <SummonerSpellTierTables
+                    v-else
+                    :solo-rows="championSpellSoloRowsFiltered"
+                    :set-rows="championSpellSetRowsFiltered"
+                    :baseline-solo="null"
+                    :baseline-sets="null"
+                    :ref-version-label="null"
+                    :baseline-pending="false"
+                    :game-version="gameVersion || versionStore.currentVersion || null"
+                    :hide-games-column="true"
+                    :hide-slot-columns="true"
+                  />
+                </div>
+              </div>
+              <div
+                v-if="isChampionTab('skills')"
+                id="champion-tab-panel-skills"
+                role="tabpanel"
+                class="space-y-4"
+              >
+                <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
+                  <div v-if="championSpellsPending" class="py-6 text-text/70">
+                    {{ t('statisticsPage.loading') }}
+                  </div>
+                  <div v-else-if="!championSpellOrdersRows.length" class="py-4 text-text/70">
+                    {{ t('statisticsPage.noData') }}
+                  </div>
+                  <div v-else class="grid grid-cols-1 gap-3">
                     <div
-                      v-else-if="
-                        !championSpellSoloRowsFiltered.length &&
-                        !championSpellSetRowsFiltered.length
-                      "
-                      class="py-4 text-text/70"
+                      v-for="section in championSpellOrderSections"
+                      :key="section.key"
+                      class="rounded border bg-black/20 p-3"
+                      :class="section.borderClass"
                     >
-                      {{ t('statisticsPage.noData') }}
-                    </div>
-                    <SummonerSpellTierTables
-                      v-else
-                      :solo-rows="championSpellSoloRowsFiltered"
-                      :set-rows="championSpellSetRowsFiltered"
-                      :baseline-solo="null"
-                      :baseline-sets="null"
-                      :ref-version-label="null"
-                      :baseline-pending="false"
-                      :game-version="gameVersion || versionStore.currentVersion || null"
-                      :hide-games-column="true"
-                      :hide-slot-columns="true"
-                    />
-                  </div>
-                </div>
-                <div
-                  v-if="isChampionTab('skills')"
-                  id="champion-tab-panel-skills"
-                  role="tabpanel"
-                  class="space-y-4"
-                >
-                  <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-                    <div v-if="championSpellsPending" class="py-6 text-text/70">
-                      {{ t('statisticsPage.loading') }}
-                    </div>
-                    <div v-else-if="!championSpellOrdersRows.length" class="py-4 text-text/70">
-                      {{ t('statisticsPage.noData') }}
-                    </div>
-                    <div v-else class="grid grid-cols-1 gap-3">
-                      <div
-                        v-for="section in championSpellOrderSections"
-                        :key="section.key"
-                        class="rounded border bg-black/20 p-3"
-                        :class="section.borderClass"
-                      >
-                        <div class="mb-2 text-xs font-semibold" :class="section.titleClass">
-                          {{ section.title }}
-                        </div>
-                        <div class="space-y-3">
-                          <div
-                            v-for="row in section.rows"
-                            :key="section.key + '-' + row.key"
-                            class="overflow-x-auto"
-                          >
-                            <table class="champion-skills-orders-table min-w-[940px]">
-                              <thead>
-                                <tr>
-                                  <th class="w-14"></th>
-                                  <th
-                                    v-for="level in championSkillLevels"
-                                    :key="section.key + '-' + row.key + '-h-' + level"
-                                    class="w-9"
-                                  >
-                                    {{ level }}
-                                  </th>
-                                  <th class="min-w-[90px] text-center">
-                                    {{ t('statisticsPage.pickrate') }}
-                                  </th>
-                                  <th class="min-w-[90px] text-center">
-                                    {{ t('statisticsPage.winrate') }}
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr
-                                  v-for="skillKey in championSkillKeys"
-                                  :key="section.key + '-' + row.key + '-' + skillKey"
+                      <div class="mb-2 text-xs font-semibold" :class="section.titleClass">
+                        {{ section.title }}
+                      </div>
+                      <div class="space-y-3">
+                        <div
+                          v-for="row in section.rows"
+                          :key="section.key + '-' + row.key"
+                          class="overflow-x-auto"
+                        >
+                          <table class="champion-skills-orders-table min-w-[940px]">
+                            <thead>
+                              <tr>
+                                <th class="w-14"></th>
+                                <th
+                                  v-for="level in championSkillLevels"
+                                  :key="section.key + '-' + row.key + '-h-' + level"
+                                  class="w-9"
                                 >
-                                  <td class="champion-skill-icon-cell">
-                                    <img
-                                      v-if="championSkillIconUrl(skillKey)"
-                                      :src="championSkillIconUrl(skillKey)!"
-                                      :alt="championSkillName(skillKey)"
-                                      :title="championSkillName(skillKey)"
-                                      class="h-8 w-8 rounded border border-white/15"
-                                    />
-                                    <span v-else class="text-xs font-semibold text-text/80">{{
-                                      skillKey
-                                    }}</span>
-                                  </td>
-                                  <td
-                                    v-for="level in championSkillLevels"
-                                    :key="
-                                      section.key + '-' + row.key + '-' + skillKey + '-' + level
-                                    "
-                                    class="champion-skill-cell"
-                                    :class="
-                                      championSkillAtLevel(row.order, level) === skillKey
-                                        ? 'champion-skill-cell-active'
-                                        : ''
-                                    "
-                                  >
-                                    {{
-                                      championSkillAtLevel(row.order, level) === skillKey
-                                        ? skillKey
-                                        : ''
-                                    }}
-                                  </td>
-                                  <td
-                                    v-if="skillKey === 'Q'"
-                                    rowspan="4"
-                                    class="champion-skill-metric-cell"
-                                  >
-                                    {{ row.pickrate.toFixed(1) }}%
-                                  </td>
-                                  <td
-                                    v-if="skillKey === 'Q'"
-                                    rowspan="4"
-                                    class="champion-skill-metric-cell"
-                                  >
-                                    {{ row.winrate.toFixed(1) }}%
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
+                                  {{ level }}
+                                </th>
+                                <th class="min-w-[90px] text-center">
+                                  {{ t('statisticsPage.pickrate') }}
+                                </th>
+                                <th class="min-w-[90px] text-center">
+                                  {{ t('statisticsPage.winrate') }}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr
+                                v-for="skillKey in championSkillKeys"
+                                :key="section.key + '-' + row.key + '-' + skillKey"
+                              >
+                                <td class="champion-skill-icon-cell">
+                                  <img
+                                    v-if="championSkillIconUrl(skillKey)"
+                                    :src="championSkillIconUrl(skillKey)!"
+                                    :alt="championSkillName(skillKey)"
+                                    :title="championSkillName(skillKey)"
+                                    class="h-8 w-8 rounded border border-white/15"
+                                  />
+                                  <span v-else class="text-xs font-semibold text-text/80">{{
+                                    skillKey
+                                  }}</span>
+                                </td>
+                                <td
+                                  v-for="level in championSkillLevels"
+                                  :key="section.key + '-' + row.key + '-' + skillKey + '-' + level"
+                                  class="champion-skill-cell"
+                                  :class="
+                                    championSkillAtLevel(row.order, level) === skillKey
+                                      ? 'champion-skill-cell-active'
+                                      : ''
+                                  "
+                                >
+                                  {{
+                                    championSkillAtLevel(row.order, level) === skillKey
+                                      ? skillKey
+                                      : ''
+                                  }}
+                                </td>
+                                <td
+                                  v-if="skillKey === 'Q'"
+                                  rowspan="4"
+                                  class="champion-skill-metric-cell"
+                                >
+                                  {{ row.pickrate.toFixed(1) }}%
+                                </td>
+                                <td
+                                  v-if="skillKey === 'Q'"
+                                  rowspan="4"
+                                  class="champion-skill-metric-cell"
+                                >
+                                  {{ row.winrate.toFixed(1) }}%
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     </div>

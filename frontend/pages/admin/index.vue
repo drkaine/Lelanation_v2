@@ -156,6 +156,12 @@
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.playersUpdatedLast1h ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">Players updated_at (1h)</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-base font-semibold text-text">
                   {{ dataStats?.lastNewPlayerAt ? formatRiotDate(dataStats.lastNewPlayerAt) : '—' }}
                 </div>
@@ -173,7 +179,78 @@
                   {{ t('admin.data.stats.lastPlayerLastSeen') }}
                 </div>
               </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-base font-semibold text-text">
+                  {{
+                    dataStats?.lastPlayerUpdatedAt
+                      ? formatRiotDate(dataStats.lastPlayerUpdatedAt)
+                      : '—'
+                  }}
+                </div>
+                <div class="text-xs text-text/70">Dernier player updated_at</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.trackedMatchesPendingNow ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">Tracked pending (now)</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.trackedMatchesPendingOver1h ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">Tracked pending &gt; 1h</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-base font-semibold text-text">
+                  {{
+                    dataStats?.trackedOldestPendingCreatedAt
+                      ? formatRiotDate(dataStats.trackedOldestPendingCreatedAt)
+                      : '—'
+                  }}
+                </div>
+                <div class="text-xs text-text/70">Plus ancien tracked pending (created_at)</div>
+              </div>
+              <div class="rounded border border-primary/20 bg-background/30 p-3">
+                <div class="text-xl font-bold text-text">
+                  {{ dataStats?.trackedMatchesDeferredRankPending ?? '—' }}
+                </div>
+                <div class="text-xs text-text/70">
+                  Tracked deferred rank (agrégation en attente de tier)
+                </div>
+              </div>
             </div>
+            <template v-if="dataStats?.matchIngestRaw">
+              <p class="mb-2 mt-4 text-xs font-medium uppercase tracking-wide text-text/60">
+                Raw queue (match_ingest_raw)
+              </p>
+              <div class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ dataStats.matchIngestRaw.pending }}
+                  </div>
+                  <div class="text-xs text-text/70">Pending</div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ dataStats.matchIngestRaw.processing }}
+                  </div>
+                  <div class="text-xs text-text/70">Processing</div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ dataStats.matchIngestRaw.error }}
+                  </div>
+                  <div class="text-xs text-text/70">Error (tous motifs)</div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/30 p-3">
+                  <div class="text-xl font-bold text-text">
+                    {{ dataStats.matchIngestRaw.errorRankPending }}
+                  </div>
+                  <div class="text-xs text-text/70">Error tracked_rank_pending</div>
+                </div>
+              </div>
+            </template>
             <template v-if="dataStats?.pollerResume">
               <p class="mb-2 text-xs font-medium uppercase tracking-wide text-text/60">
                 {{ t('admin.data.stats.resumeTitle') }} — {{ dataStats.pollerResume.script }}
@@ -2259,10 +2336,22 @@ type AdminDataCollectStatsClient = {
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
   lastPlayerLastSeenAt: string | null
+  lastPlayerUpdatedAt: string | null
   totalTrackedMatches: number
   trackedMatchesCreatedLast1h: number
+  trackedMatchesPendingNow: number
+  trackedMatchesPendingOver1h: number
+  trackedOldestPendingCreatedAt: string | null
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
+  playersUpdatedLast1h: number
+  matchIngestRaw: {
+    pending: number
+    processing: number
+    error: number
+    errorRankPending: number
+  } | null
+  trackedMatchesDeferredRankPending: number
   pollerResume: AdminDataCollectPollerResume | null
 }
 const dataStats = ref<AdminDataCollectStatsClient | null>(null)

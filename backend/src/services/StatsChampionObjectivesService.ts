@@ -275,7 +275,7 @@ export async function getChampionObjectivesSummary(options: {
     }
   }
   const toPct = (num: number, den: number): number => (den > 0 ? Number(((100 * num) / den).toFixed(2)) : 0)
-  const rowsOut = [
+  const objectiveBaseRows = [
     {
       key: 'baron',
       label: 'Baron',
@@ -332,59 +332,29 @@ export async function getChampionObjectivesSummary(options: {
       killGame: Number(row?.inhibitor_kill_game ?? 0),
       assistGame: Number(row?.inhibitor_assist_game ?? 0),
     },
-  ].map((r) => ({
+  ]
+  const rowsOut = objectiveBaseRows.map((r) => ({
     key: r.key,
     label: r.label,
     objectiveWinrate: toPct(r.involvedWin, r.involvedGame),
     killRate: toPct(r.killGame, games),
     assistRate: toPct(r.assistGame, games),
   }))
+  const objectiveSourceByKey = new Map(
+    objectiveBaseRows.map((r) => [r.key, { involvedGame: r.involvedGame, involvedWin: r.involvedWin }])
+  )
   const outcomeRows = [
     ...rowsOut.map((r) => {
-      const source = [
-        {
-          key: 'baron',
-          involvedGame: Number(row?.baron_involved_game ?? 0),
-          involvedWin: Number(row?.baron_involved_win ?? 0),
-        },
-        {
-          key: 'dragon',
-          involvedGame: Number(row?.dragon_involved_game ?? 0),
-          involvedWin: Number(row?.dragon_involved_win ?? 0),
-        },
-        {
-          key: 'riftHerald',
-          involvedGame: Number(row?.rift_herald_involved_game ?? 0),
-          involvedWin: Number(row?.rift_herald_involved_win ?? 0),
-        },
-        {
-          key: 'horde',
-          involvedGame: Number(row?.horde_involved_game ?? 0),
-          involvedWin: Number(row?.horde_involved_win ?? 0),
-        },
-        {
-          key: 'elder',
-          involvedGame: Number(row?.elder_involved_game ?? 0),
-          involvedWin: Number(row?.elder_involved_win ?? 0),
-        },
-        {
-          key: 'tower',
-          involvedGame: Number(row?.tower_involved_game ?? 0),
-          involvedWin: Number(row?.tower_involved_win ?? 0),
-        },
-        {
-          key: 'inhibitor',
-          involvedGame: Number(row?.inhibitor_involved_game ?? 0),
-          involvedWin: Number(row?.inhibitor_involved_win ?? 0),
-        },
-      ].find((s) => s.key === r.key) ?? { involvedGame: 0, involvedWin: 0 }
-      const yieldGames = Math.max(0, games - source.involvedGame)
-      const yieldWins = Math.max(0, wins - source.involvedWin)
+      const source = objectiveSourceByKey.get(r.key) ?? { involvedGame: 0, involvedWin: 0 }
+      const secureGames = Math.max(0, Math.min(games, source.involvedGame))
+      const secureWins = Math.max(0, Math.min(secureGames, source.involvedWin))
+      const yieldGames = Math.max(0, games - secureGames)
+      const yieldWins = Math.max(0, Math.min(yieldGames, wins - secureWins))
       return {
         key: r.key,
         label: r.label,
-        securePct: toPct(source.involvedGame, games),
-        secureWinPct: toPct(source.involvedWin, source.involvedGame),
+        securePct: toPct(secureGames, games),
+        secureWinPct: toPct(secureWins, secureGames),
         yieldPct: toPct(yieldGames, games),
         yieldWinPct: toPct(yieldWins, yieldGames),
       }
@@ -417,24 +387,29 @@ export async function getChampionObjectivesSummary(options: {
       yieldPct: number
       yieldWinPct: number
     }> = []
-    if (blue) {
+    const blueGames = Number(blue?.games ?? 0)
+    const blueWins = Number(blue?.wins ?? 0)
+    const redGames = Number(red?.games ?? 0)
+    const redWins = Number(red?.wins ?? 0)
+    const sideGamesTotal = Math.max(0, blueGames + redGames)
+    if (blueGames > 0 || redGames > 0) {
       sideOutcomeRows.push({
         key: 'blueSide',
         label: 'Blue Side',
-        securePct: toPct(Number(blue.games ?? 0), games),
-        secureWinPct: toPct(Number(blue.wins ?? 0), Number(blue.games ?? 0)),
-        yieldPct: Number.NaN,
-        yieldWinPct: Number.NaN,
+        securePct: toPct(blueGames, sideGamesTotal),
+        secureWinPct: toPct(blueWins, blueGames),
+        yieldPct: toPct(redGames, sideGamesTotal),
+        yieldWinPct: toPct(redWins, redGames),
       })
     }
-    if (red) {
+    if (blueGames > 0 || redGames > 0) {
       sideOutcomeRows.push({
         key: 'redSide',
         label: 'Red Side',
-        securePct: toPct(Number(red.games ?? 0), games),
-        secureWinPct: toPct(Number(red.wins ?? 0), Number(red.games ?? 0)),
-        yieldPct: Number.NaN,
-        yieldWinPct: Number.NaN,
+        securePct: toPct(redGames, sideGamesTotal),
+        secureWinPct: toPct(redWins, redGames),
+        yieldPct: toPct(blueGames, sideGamesTotal),
+        yieldWinPct: toPct(blueWins, blueGames),
       })
     }
     if (sideOutcomeRows.length > 0) outcomeRows.unshift(...sideOutcomeRows)
@@ -450,9 +425,10 @@ export async function getChampionObjectivesSummary(options: {
     { key: 'chem', label: 'Chem', total: Number(row?.chem_drake_total ?? 0) },
   ]
   const drakeTotal = drakeTypeDistributionBase.reduce((sum, e) => sum + e.total, 0)
-  const drakeTypeDistribution = drakeTypeDistributionBase
-    .filter((e) => e.total > 0)
-    .map((e) => ({ ...e, pct: drakeTotal > 0 ? Number(((100 * e.total) / drakeTotal).toFixed(2)) : 0 }))
+  const drakeTypeDistribution = drakeTypeDistributionBase.map((e) => ({
+    ...e,
+    pct: drakeTotal > 0 ? Number(((100 * e.total) / drakeTotal).toFixed(2)) : 0,
+  }))
 
   const soulDistributionBase = [
     { key: 'earth', label: 'Earth', total: Number(row?.earth_soul_total ?? 0) },
@@ -463,9 +439,10 @@ export async function getChampionObjectivesSummary(options: {
     { key: 'chem', label: 'Chem', total: Number(row?.chem_soul_total ?? 0) },
   ]
   const soulTotal = soulDistributionBase.reduce((sum, e) => sum + e.total, 0)
-  const soulDistribution = soulDistributionBase
-    .filter((e) => e.total > 0)
-    .map((e) => ({ ...e, pct: soulTotal > 0 ? Number(((100 * e.total) / soulTotal).toFixed(2)) : 0 }))
+  const soulDistribution = soulDistributionBase.map((e) => ({
+    ...e,
+    pct: soulTotal > 0 ? Number(((100 * e.total) / soulTotal).toFixed(2)) : 0,
+  }))
 
   const bucketCols = await getTableColumns(ARCHIVE_BUCKET_TABLE)
   const bucketTotalGoldExpr = pickColumnWithAlias(bucketCols, 'cb', ['sum_total_gold'])

@@ -77,12 +77,15 @@ import {
   extractIngestTimelineExtras,
   preloadIngestLeanMatchDbData,
   ingestLeanTablesExist,
+  invalidateIngestLeanTablesExistCache,
 } from './ingestMatchLean.js'
 import type { MatchIngestRankCache, MatchIngestOptions } from './matchIngestTypes.js'
 import {
   cleanupGlobalRankCache,
   dequeuePriorityPuuids,
   enqueuePriorityPuuid,
+  enqueuePriorityPuuidsNeedingLeagueSnapshot,
+  priorityRankRefreshFallbackMaxAgeMs,
   setCachedRank,
 } from './matchIngestRankCache.js'
 
@@ -133,19 +136,52 @@ type PollerSummaryWindows = {
 
 type PollerDbWindowMetrics = {
   matchesRecovered: number
+  matchesAggregated: number
   playersPolled: number
   playersAdded: number
+  playersUpdated: number
   skippedVersion: number
   deferredPatch: number
+  trackedPendingNow: number
+  trackedPendingOver15m: number
+  trackedPendingOver1h: number
+  trackedOldestPendingAgeSec: number | null
+  aggregateLatencySecP50: number | null
+  aggregateLatencySecP95: number | null
+  rawQueuePending: number
+  rawQueueProcessing: number
+  rawQueueError: number
 }
 
 async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWindowMetrics> {
   const since = new Date(Date.now() - Math.max(1, windowMs))
-  const [trackedRows, trackedSkippedRows, trackedDeferredRows, playersPolled, playersAdded] = await Promise.all([
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+  const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000)
+  const [
+    trackedRows,
+    trackedAggregatedRows,
+    trackedSkippedRows,
+    trackedDeferredRows,
+    trackedPendingRows,
+    trackedPending15mRows,
+    trackedPending1hRows,
+    trackedOldestPendingRows,
+    aggregateLatencyRows,
+    playersPolled,
+    playersAdded,
+    playersUpdated,
+    rawQueueStatus,
+  ] = await Promise.all([
     prisma.$queryRaw<Array<{ c: bigint }>>`
       SELECT COUNT(*)::bigint AS c
       FROM tracked_matches
       WHERE created_at >= ${since}
+    `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE aggregated_at >= ${since}
+        AND aggregate_status = 'AGGREGATED'
     `,
     prisma.$queryRaw<Array<{ c: bigint }>>`
       SELECT COUNT(*)::bigint AS c
@@ -159,15 +195,83 @@ async function loadPollerDbWindowMetrics(windowMs: number): Promise<PollerDbWind
       WHERE created_at >= ${since}
         AND status LIKE 'DEFERRED_%'
     `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE aggregate_status = 'PENDING'
+    `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE aggregate_status = 'PENDING'
+        AND created_at < ${fifteenMinutesAgo}
+    `,
+    prisma.$queryRaw<Array<{ c: bigint }>>`
+      SELECT COUNT(*)::bigint AS c
+      FROM tracked_matches
+      WHERE aggregate_status = 'PENDING'
+        AND created_at < ${oneHourAgo}
+    `,
+    prisma.$queryRaw<Array<{ s: number | null }>>`
+      SELECT
+        CASE
+          WHEN MIN(created_at) IS NULL THEN NULL
+          ELSE EXTRACT(EPOCH FROM (NOW() - MIN(created_at)))::numeric
+        END AS s
+      FROM tracked_matches
+      WHERE aggregate_status = 'PENDING'
+    `,
+    prisma.$queryRaw<Array<{ p50: number | null; p95: number | null }>>`
+      SELECT
+        percentile_cont(0.5) WITHIN GROUP (
+          ORDER BY EXTRACT(EPOCH FROM (aggregated_at - created_at))
+        )::numeric AS p50,
+        percentile_cont(0.95) WITHIN GROUP (
+          ORDER BY EXTRACT(EPOCH FROM (aggregated_at - created_at))
+        )::numeric AS p95
+      FROM tracked_matches
+      WHERE aggregate_status = 'AGGREGATED'
+        AND aggregated_at >= ${since}
+        AND created_at IS NOT NULL
+        AND aggregated_at IS NOT NULL
+    `,
     prisma.player.count({ where: { lastSeen: { gte: since } } }),
     prisma.player.count({ where: { createdAt: { gte: since } } }),
+    prisma.player.count({ where: { updatedAt: { gte: since } } }),
+    countRawIngestByStatus().catch(() => ({ pending: 0, processing: 0, error: 0 })),
   ])
+  const oldestPendingAgeSecRaw =
+    trackedOldestPendingRows[0]?.s == null ? null : Number(trackedOldestPendingRows[0]?.s)
+  const aggregateLatencyP50Raw =
+    aggregateLatencyRows[0]?.p50 == null ? null : Number(aggregateLatencyRows[0]?.p50)
+  const aggregateLatencyP95Raw =
+    aggregateLatencyRows[0]?.p95 == null ? null : Number(aggregateLatencyRows[0]?.p95)
   return {
     matchesRecovered: Number(trackedRows[0]?.c ?? 0),
+    matchesAggregated: Number(trackedAggregatedRows[0]?.c ?? 0),
     playersPolled,
     playersAdded,
+    playersUpdated,
     skippedVersion: Number(trackedSkippedRows[0]?.c ?? 0),
     deferredPatch: Number(trackedDeferredRows[0]?.c ?? 0),
+    trackedPendingNow: Number(trackedPendingRows[0]?.c ?? 0),
+    trackedPendingOver15m: Number(trackedPending15mRows[0]?.c ?? 0),
+    trackedPendingOver1h: Number(trackedPending1hRows[0]?.c ?? 0),
+    trackedOldestPendingAgeSec:
+      oldestPendingAgeSecRaw == null || !Number.isFinite(oldestPendingAgeSecRaw)
+        ? null
+        : Math.max(0, Math.round(oldestPendingAgeSecRaw)),
+    aggregateLatencySecP50:
+      aggregateLatencyP50Raw == null || !Number.isFinite(aggregateLatencyP50Raw)
+        ? null
+        : Math.max(0, Math.round(aggregateLatencyP50Raw)),
+    aggregateLatencySecP95:
+      aggregateLatencyP95Raw == null || !Number.isFinite(aggregateLatencyP95Raw)
+        ? null
+        : Math.max(0, Math.round(aggregateLatencyP95Raw)),
+    rawQueuePending: rawQueueStatus.pending,
+    rawQueueProcessing: rawQueueStatus.processing,
+    rawQueueError: rawQueueStatus.error,
   }
 }
 
@@ -265,10 +369,21 @@ async function emitPollerSummariesIfDue(
   if (now - sw.summary30mWindowStartedAtMs >= POLLER_SUMMARY_30M_MS) {
     const db1h = await loadPollerDbWindowMetrics(60 * 60 * 1000).catch(() => ({
       matchesRecovered: 0,
+      matchesAggregated: 0,
       playersPolled: 0,
       playersAdded: 0,
+      playersUpdated: 0,
       skippedVersion: 0,
       deferredPatch: 0,
+      trackedPendingNow: 0,
+      trackedPendingOver15m: 0,
+      trackedPendingOver1h: 0,
+      trackedOldestPendingAgeSec: null,
+      aggregateLatencySecP50: null,
+      aggregateLatencySecP95: null,
+      rawQueuePending: 0,
+      rawQueueProcessing: 0,
+      rawQueueError: 0,
     }))
     const elapsedMs = Math.max(1, now - sw.summary30mWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.summary30mPlayersPolled
@@ -311,7 +426,7 @@ async function emitPollerSummariesIfDue(
       section: 'back',
       type: 'info',
       script: 'poller_30m',
-      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} matchsApi:+${matchesApiDelta} matchesStored:+${matchesStoredDelta}(${matchesStoredLabel}) rankLeague:+${playersRankDelta} participants:+${participantsDelta} http:+${httpRequestsDelta} moy:${httpWin30.httpAvgPerMinuteOverall}/min moy2min(uniforme):${httpWin30.httpAvgPer2MinUniform} moy2min(réel,${httpWin30.httpTwoMinBucketsComplete} tranches):${httpWin30.httpTwoMinBucketAvg ?? 'n/a'} pic2min:${httpWin30.httpTwoMinBucketPeak} (${httpWin30.httpTwoMinBucketPeakCount}×) (~${httpRequestsProjectedPerHour}/h proj) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
+      message: `Resume 30 min — tracked(created_at,1h):+${db1h.matchesRecovered} tracked(aggregated_at,1h):+${db1h.matchesAggregated} players(last_seen,1h):+${db1h.playersPolled} players(created_at,1h):+${db1h.playersAdded} players(updated_at,1h):+${db1h.playersUpdated} matchsApi:+${matchesApiDelta} matchesStored:+${matchesStoredDelta}(${matchesStoredLabel}) rankLeague:+${playersRankDelta} participants:+${participantsDelta} backlogPending:${db1h.trackedPendingNow} (>15m:${db1h.trackedPendingOver15m}, >1h:${db1h.trackedPendingOver1h}, oldestSec:${db1h.trackedOldestPendingAgeSec ?? 'n/a'}) aggLatencySec(p50/p95):${db1h.aggregateLatencySecP50 ?? 'n/a'}/${db1h.aggregateLatencySecP95 ?? 'n/a'} rawQueue(pending/processing/error):${db1h.rawQueuePending}/${db1h.rawQueueProcessing}/${db1h.rawQueueError} http:+${httpRequestsDelta} moy:${httpWin30.httpAvgPerMinuteOverall}/min moy2min(uniforme):${httpWin30.httpAvgPer2MinUniform} moy2min(réel,${httpWin30.httpTwoMinBucketsComplete} tranches):${httpWin30.httpTwoMinBucketAvg ?? 'n/a'} pic2min:${httpWin30.httpTwoMinBucketPeak} (${httpWin30.httpTwoMinBucketPeakCount}×) (~${httpRequestsProjectedPerHour}/h proj) 429:+${error429Delta} pauses:${nearLimitPauseDelta}`,
       json: {
         windowStartIso: new Date(sw.summary30mWindowStartedAtMs).toISOString(),
         windowEndIso: new Date(now).toISOString(),
@@ -345,6 +460,19 @@ async function emitPollerSummariesIfDue(
         requestsPerHour: httpRequestsProjectedPerHour,
         httpWindowStats: httpWin30,
         dbWindow1h: db1h,
+        queueBacklog: {
+          trackedPendingNow: db1h.trackedPendingNow,
+          trackedPendingOver15m: db1h.trackedPendingOver15m,
+          trackedPendingOver1h: db1h.trackedPendingOver1h,
+          trackedOldestPendingAgeSec: db1h.trackedOldestPendingAgeSec,
+          rawQueuePending: db1h.rawQueuePending,
+          rawQueueProcessing: db1h.rawQueueProcessing,
+          rawQueueError: db1h.rawQueueError,
+        },
+        aggregateLatencySec: {
+          p50: db1h.aggregateLatencySecP50,
+          p95: db1h.aggregateLatencySecP95,
+        },
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
         totals: {
@@ -395,10 +523,21 @@ async function emitPollerSummariesIfDue(
   if (now - sw.hourlyWindowStartedAtMs >= hourlySummaryIntervalMs) {
     const db1h = await loadPollerDbWindowMetrics(60 * 60 * 1000).catch(() => ({
       matchesRecovered: 0,
+      matchesAggregated: 0,
       playersPolled: 0,
       playersAdded: 0,
+      playersUpdated: 0,
       skippedVersion: 0,
       deferredPatch: 0,
+      trackedPendingNow: 0,
+      trackedPendingOver15m: 0,
+      trackedPendingOver1h: 0,
+      trackedOldestPendingAgeSec: null,
+      aggregateLatencySecP50: null,
+      aggregateLatencySecP95: null,
+      rawQueuePending: 0,
+      rawQueueProcessing: 0,
+      rawQueueError: 0,
     }))
     const elapsedMs = Math.max(1, now - sw.hourlyWindowStartedAtMs)
     const playersPolledDelta = state.playersPolled - sw.hourlyPlayersPolled
@@ -449,8 +588,12 @@ async function emitPollerSummariesIfDue(
     const formattedMessage = [
       `[${tsLabel}] RESUME HORAIRE`,
       `- Joueurs polles (last_seen, 1h): ${db1h.playersPolled} | nouveaux joueurs (created_at, 1h): ${db1h.playersAdded}`,
-      `- Matches recuperes (tracked_matches.created_at, 1h): ${db1h.matchesRecovered}`,
+      `- Joueurs modifies (updated_at, 1h): ${db1h.playersUpdated}`,
+      `- Matches recuperes (tracked_matches.created_at, 1h): ${db1h.matchesRecovered} | aggregates (aggregated_at, 1h): ${db1h.matchesAggregated}`,
       `- Matches tracked skip/defer (1h): skipped_version=${db1h.skippedVersion} deferred_patch=${db1h.deferredPatch}`,
+      `- Backlog tracked pending: now=${db1h.trackedPendingNow} >15m=${db1h.trackedPendingOver15m} >1h=${db1h.trackedPendingOver1h} oldestSec=${db1h.trackedOldestPendingAgeSec ?? 'n/a'}`,
+      `- Latence agrégation (tracked created_at -> aggregated_at): p50=${db1h.aggregateLatencySecP50 ?? 'n/a'}s p95=${db1h.aggregateLatencySecP95 ?? 'n/a'}s`,
+      `- Raw queue (pending/processing/error): ${db1h.rawQueuePending}/${db1h.rawQueueProcessing}/${db1h.rawQueueError}`,
       `- Joueurs polles (delta process): ${playersPolledDelta} (Discovery rate: ${discoveryRate.toFixed(2)} matches/player)`,
       `- Matches: ${matchIdsFromApiDelta} trouves | ${matchesStoredDelta} ${matchesStoredLabel} | ${existingMatchesSkippedDelta} deja connus (Efficiency: ${efficiency.toFixed(1)}%)`,
       `- API HTTP (fenêtre): +${httpRequestsDelta} | moy ${httpWinH.httpAvgPerMinuteOverall}/min | moy/2min uniforme ${httpWinH.httpAvgPer2MinUniform} | moy/2min réel (${httpWinH.httpTwoMinBucketsComplete} tranches) ${httpWinH.httpTwoMinBucketAvg ?? 'n/a'} | pic/2min ${httpWinH.httpTwoMinBucketPeak} (${httpWinH.httpTwoMinBucketPeakCount}×) | budget ${httpRequestsDelta}/${requestBudget} (usage ${requestUsagePct.toFixed(1)}%)`,
@@ -500,6 +643,19 @@ async function emitPollerSummariesIfDue(
         requestUsagePct,
         httpWindowStats: httpWinH,
         dbWindow1h: db1h,
+        queueBacklog: {
+          trackedPendingNow: db1h.trackedPendingNow,
+          trackedPendingOver15m: db1h.trackedPendingOver15m,
+          trackedPendingOver1h: db1h.trackedPendingOver1h,
+          trackedOldestPendingAgeSec: db1h.trackedOldestPendingAgeSec,
+          rawQueuePending: db1h.rawQueuePending,
+          rawQueueProcessing: db1h.rawQueueProcessing,
+          rawQueueError: db1h.rawQueueError,
+        },
+        aggregateLatencySec: {
+          p50: db1h.aggregateLatencySecP50,
+          p95: db1h.aggregateLatencySecP95,
+        },
         maxTokenPeak: limiterStats.maxApp120CountObserved,
         rateLimitRefreshPauses: nearLimitPauseDelta,
         rateLimit429Pauses: http429PauseDelta,
@@ -585,6 +741,18 @@ async function emitPollerSummariesIfDue(
 }
 import { Prisma } from '../generated/prisma/index.js'
 import { gameVersionFromMatchInfo, normalizeGameVersionToMajorMinor } from '../utils/gameVersion.js'
+
+function isIngestLeanMissingRelationError(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === 'P2021' || err.code === 'P2010') return true
+    const meta = err.meta as { code?: string } | undefined
+    if (meta?.code === '42P01') return true
+  }
+  const msg = err instanceof Error ? err.message : String(err)
+  return /ingest_matchs|ingest_match_players|relation.*does not exist|does not exist in the current database/i.test(
+    msg
+  )
+}
 import { tryRunChampionTierDailySnapshot } from '../services/ChampionTierDailySnapshotService.js'
 import { refreshObjectiveOutcomeStats, runPatchCleanupFromConfig } from '../services/StatsAggregationService.js'
 import { syncActivePatches } from '../services/ActivePatchService.js'
@@ -1434,6 +1602,12 @@ function getTrackedRankHydrationBatchSize(): number {
   return Math.min(2_000, raw)
 }
 
+function getRawAggregateSlowThresholdMs(): number {
+  const raw = parseInt(process.env.RAW_AGGREGATE_SLOW_THRESHOLD_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 1_000) return 8_000
+  return Math.min(5 * 60_000, raw)
+}
+
 function normalizeTrackedRankTier(raw: unknown): string {
   const t = String(raw ?? '').trim().toUpperCase()
   if (!t) return 'UNRANKED'
@@ -1650,9 +1824,7 @@ function getAsyncPriorityRankRefreshConcurrency(): number {
 }
 
 function getAsyncPriorityRankRefreshFallbackMaxAgeMs(): number {
-  const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_FALLBACK_MAX_AGE_MS ?? '', 10)
-  if (!Number.isFinite(raw) || raw < 60_000) return 6 * 60 * 60 * 1000
-  return Math.min(30 * 24 * 60 * 60 * 1000, raw)
+  return priorityRankRefreshFallbackMaxAgeMs()
 }
 
 function getFileQueueRecoveryIntervalMs(): number {
@@ -1728,8 +1900,33 @@ function noteMatchIngestProcessed(enqueuedAt: number | null | undefined): void {
 
 async function maybeLogMatchIngestMetrics(): Promise<void> {
   const now = Date.now()
-  if (now - matchIngestMetricsLastLogAtMs < 30_000 || matchIngestMetricsProcessed <= 0) return
-  // Poller ingest queue metrics are intentionally disabled (too noisy for unified logs).
+  const elapsedMs = now - matchIngestMetricsLastLogAtMs
+  if (elapsedMs < 60_000 || matchIngestMetricsProcessed <= 0) return
+  const processed = matchIngestMetricsProcessed
+  const avgLagMs =
+    processed > 0 ? Math.round(matchIngestMetricsLagTotalMs / Math.max(1, processed)) : 0
+  const throughputPerMin = Math.round((processed * 60_000) / Math.max(1, elapsedMs))
+  const queueStatus = isRawIngestQueueEnabled()
+    ? await syncRawIngestDepthEstimates().catch(() => ({ pending: 0, processing: 0, error: 0 }))
+    : null
+  const queuePending = queueStatus?.pending ?? (await syncMatchIngestQueueDepthEstimate().catch(() => 0))
+  if (processed >= 50 || avgLagMs >= 30_000 || queuePending >= 500) {
+    await appendUnifiedLog({
+      section: 'back',
+      type: 'info',
+      script: 'poller_ingest',
+      message: `Ingest metrics: processed=${processed} throughput/min=${throughputPerMin} avgLagMs=${avgLagMs} queuePending=${queuePending}`,
+      json: {
+        windowMs: elapsedMs,
+        processed,
+        throughputPerMin,
+        avgLagMs,
+        queuePending,
+        rawQueueProcessing: queueStatus?.processing ?? null,
+        rawQueueError: queueStatus?.error ?? null,
+      },
+    })
+  }
   matchIngestMetricsLastLogAtMs = now
   matchIngestMetricsProcessed = 0
   matchIngestMetricsLagTotalMs = 0
@@ -1829,41 +2026,89 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
 
   await acquireMatchIngestDbSlot()
   try {
-  const canonicalIds: string[] = []
-  for (const { payload } of parsed) {
+  let canonicalIds = parsed.map(({ payload }) => {
     const dto = payload.matchDto as RiotMatchDto
-    canonicalIds.push(resolveRiotMatchIdForIngest(payload.matchId, dto))
-  }
+    return resolveRiotMatchIdForIngest(payload.matchId, dto)
+  })
   const hasFileRows = parsed.some((row) => row.rawId == null)
   const existingMatchIdByRiot = new Map<string, bigint>()
   let rankIngestOpts: MatchIngestOptions | null = null
   if (hasFileRows) {
-    const existingRows = await prisma.ingestMatch.findMany({
-      where: { riotMatchId: { in: canonicalIds } },
-      select: { riotMatchId: true, id: true },
-    })
-    for (const row of existingRows) existingMatchIdByRiot.set(row.riotMatchId, row.id)
-    const puuidsToPreload: string[] = []
-    const batchHasRawIngest = parsed.some((row) => row.rawId != null)
-    for (let i = 0; i < parsed.length; i++) {
-      const { payload, rawId } = parsed[i]
-      const cid = canonicalIds[i]
-      if (existingMatchIdByRiot.has(cid) && rawId == null) continue
-      const dto = payload.matchDto as RiotMatchDto
-      const part = dto.info?.participants as RiotParticipantDto[] | undefined
-      for (const p of part ?? []) {
-        if (p.puuid) puuidsToPreload.push(p.puuid)
+    if (!(await ingestLeanTablesExist())) {
+      for (const row of parsed) {
+        if (row.rawId == null && row.path) await unlink(row.path).catch(() => undefined)
+      }
+      parsed = parsed.filter((r) => r.rawId != null)
+      if (parsed.length === 0) {
+        void appendUnifiedLog({
+          section: 'back',
+          type: 'warning',
+          script: 'poller_ingest',
+          message:
+            'Batch avec fichiers : tables ingest_* absentes au pré-batch — fichiers retirés, aucun raw restant.',
+        })
+        return true
+      }
+      canonicalIds = parsed.map(({ payload }) => {
+        const dto = payload.matchDto as RiotMatchDto
+        return resolveRiotMatchIdForIngest(payload.matchId, dto)
+      })
+    }
+    let existingRows: Array<{ riotMatchId: string; id: bigint }> = []
+    if (await ingestLeanTablesExist()) {
+      try {
+        existingRows = await prisma.ingestMatch.findMany({
+          where: { riotMatchId: { in: canonicalIds } },
+          select: { riotMatchId: true, id: true },
+        })
+      } catch (e) {
+        if (!isIngestLeanMissingRelationError(e)) throw e
+        invalidateIngestLeanTablesExistCache()
+        for (const row of parsed) {
+          if (row.rawId == null && row.path) await unlink(row.path).catch(() => undefined)
+        }
+        parsed = parsed.filter((r) => r.rawId != null)
+        if (parsed.length === 0) {
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'warning',
+            script: 'poller_ingest',
+            message:
+              'ingest_matchs absent au findMany pré-batch (cache obsolète ?) — lignes file retirées, traitement raw uniquement.',
+          })
+          return true
+        }
+        canonicalIds = parsed.map(({ payload }) => {
+          const dto = payload.matchDto as RiotMatchDto
+          return resolveRiotMatchIdForIngest(payload.matchId, dto)
+        })
       }
     }
-    const ingestPreload = await preloadIngestLeanMatchDbData(puuidsToPreload)
-    const sharedAccountRankCache: MatchIngestRankCache = new Map()
-    rankIngestOpts = {
-      ingestPreload,
-      sharedAccountRankCache,
-      shouldAbort: () => state.shouldStop,
-      allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
-      forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
-      refreshExistingIngestParticipantRanks: batchHasRawIngest,
+    for (const row of existingRows) existingMatchIdByRiot.set(row.riotMatchId, row.id)
+    const stillHasFileRows = parsed.some((row) => row.rawId == null)
+    if (stillHasFileRows && (await ingestLeanTablesExist())) {
+      const puuidsToPreload: string[] = []
+      const batchHasRawIngest = parsed.some((row) => row.rawId != null)
+      for (let i = 0; i < parsed.length; i++) {
+        const { payload, rawId } = parsed[i]
+        const cid = canonicalIds[i]
+        if (existingMatchIdByRiot.has(cid) && rawId == null) continue
+        const dto = payload.matchDto as RiotMatchDto
+        const part = dto.info?.participants as RiotParticipantDto[] | undefined
+        for (const p of part ?? []) {
+          if (p.puuid) puuidsToPreload.push(p.puuid)
+        }
+      }
+      const ingestPreload = await preloadIngestLeanMatchDbData(puuidsToPreload)
+      const sharedAccountRankCache: MatchIngestRankCache = new Map()
+      rankIngestOpts = {
+        ingestPreload,
+        sharedAccountRankCache,
+        shouldAbort: () => state.shouldStop,
+        allowLeagueRankApiFetch: isMatchIngestLeagueLookupEnabled(),
+        forceLeagueRankApiForEachParticipant: isMatchIngestLeagueLookupForcedPerParticipant(),
+        refreshExistingIngestParticipantRanks: batchHasRawIngest,
+      }
     }
   }
 
@@ -1880,6 +2125,10 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
 
     if (rawId != null) {
       try {
+        const startedAtMs = Date.now()
+        let trackedUpsertMs = 0
+        let aggregateMs = 0
+        let markAggregatedMs = 0
         const rawParticipants = matchDto.info?.participants as RiotParticipantDto[] | undefined
         for (const p of rawParticipants ?? []) {
           if (p?.puuid) enqueuePriorityPuuid(p.puuid)
@@ -1896,21 +2145,58 @@ async function runMatchIngestProcessOneFile(client: RiotHttpClient): Promise<boo
             break
           }
         }
+        const trackedUpsertStartedAtMs = Date.now()
         await upsertTrackedMatchPlayersForAliases(
           trackedIdAliases,
           slotsForTrackedUpsert,
           'QUEUED'
         ).catch(() => undefined)
+        trackedUpsertMs = Date.now() - trackedUpsertStartedAtMs
+
+        const aggregateStartedAtMs = Date.now()
         await processRawAggregateAndBurn(rawId, payload, trackedRowKeyForAgg)
+        aggregateMs = Date.now() - aggregateStartedAtMs
+
+        const rawPuuids = (rawParticipants ?? [])
+          .map((p) => String((p as RiotParticipantDto).puuid ?? '').trim())
+          .filter((x) => x.length > 0)
+        await enqueuePriorityPuuidsNeedingLeagueSnapshot(rawPuuids).catch(() => undefined)
+
+        const markAggregatedStartedAtMs = Date.now()
         await markTrackedMatchAggregatedForAliases(trackedIdAliases).catch((e) =>
           void ctx.logger.alerte('markTrackedMatchAggregatedForAliases failed', {
             aliases: trackedIdAliases,
             message: e instanceof Error ? e.message : String(e),
           })
         )
+        markAggregatedMs = Date.now() - markAggregatedStartedAtMs
         clearMatchIngestCooldownKeys(matchId, canonicalRiotMatchId)
         ctx.syncLiveCounters()
         noteMatchIngestProcessed(payload.enqueuedAt)
+        const totalMs = Date.now() - startedAtMs
+        if (totalMs >= getRawAggregateSlowThresholdMs()) {
+          const queuedForMs =
+            typeof payload.enqueuedAt === 'number' && Number.isFinite(payload.enqueuedAt)
+              ? Math.max(0, Date.now() - payload.enqueuedAt)
+              : null
+          void appendUnifiedLog({
+            section: 'back',
+            type: 'warning',
+            script: 'poller_ingest',
+            message: `Slow raw aggregate: match=${canonicalRiotMatchId} totalMs=${totalMs} aggregateMs=${aggregateMs}`,
+            json: {
+              rawId: String(rawId),
+              matchId: canonicalRiotMatchId,
+              totalMs,
+              trackedUpsertMs,
+              aggregateMs,
+              markAggregatedMs,
+              queuedForMs,
+              thresholdMs: getRawAggregateSlowThresholdMs(),
+              aliases: trackedIdAliases,
+            },
+          })
+        }
       } catch (err) {
         const skipped = unwrapMatchIngestSkipped(err)
         if (skipped) {
@@ -2103,9 +2389,12 @@ async function drainMatchIngestQueueFolder(client: RiotHttpClient): Promise<void
 async function hydrateTrackedMatchesPlayerRanks(client: RiotHttpClient): Promise<{
   touchedMatches: number
   fetchedPuuids: number
+  scannedMatches: number
+  elapsedMs: number
 }> {
+  const startedAtMs = Date.now()
   const rows = await fetchTrackedMatchesForRankHydration(getTrackedRankHydrationBatchSize())
-  if (rows.length === 0) return { touchedMatches: 0, fetchedPuuids: 0 }
+  if (rows.length === 0) return { touchedMatches: 0, fetchedPuuids: 0, scannedMatches: 0, elapsedMs: 0 }
   const rawSlotsByMatchId = await loadRawTrackedSlotsByMatchId(rows.map((r) => r.matchId))
 
   const uniquePuuids = new Set<string>()
@@ -2191,7 +2480,12 @@ async function hydrateTrackedMatchesPlayerRanks(client: RiotHttpClient): Promise
     touchedMatches++
   }
 
-  return { touchedMatches, fetchedPuuids: fetchList.length }
+  return {
+    touchedMatches,
+    fetchedPuuids: fetchList.length,
+    scannedMatches: rows.length,
+    elapsedMs: Date.now() - startedAtMs,
+  }
 }
 
 function startMatchIngestBackgroundProcessor(): void {
@@ -3163,22 +3457,33 @@ async function runStep4ForPlayer(
     if (tracker.toFetchCount === 0) continue
 
     if (tracker.ingestedIds.length > 0 && (await ingestLeanTablesExist())) {
-      const dbCount = await prisma.ingestMatch.count({
-        where: { riotMatchId: { in: tracker.ingestedIds } },
-      })
-      if (dbCount !== tracker.ingestedIds.length) {
+      try {
+        const dbCount = await prisma.ingestMatch.count({
+          where: { riotMatchId: { in: tracker.ingestedIds } },
+        })
+        if (dbCount !== tracker.ingestedIds.length) {
+          await appendUnifiedLog({
+            section: 'db',
+            type: 'warning',
+            script: 'poller',
+            message: `Écart DB: ${tracker.ingestedIds.length} match(s) attendus, ${dbCount} présents`,
+            json: {
+              playerId: tracker.player.id.toString(),
+              region,
+              expected: tracker.ingestedIds.length,
+              dbCount,
+              riotMatchIdsSample: tracker.ingestedIds.slice(0, 32),
+            },
+          })
+        }
+      } catch (e) {
+        if (!isIngestLeanMissingRelationError(e)) throw e
+        invalidateIngestLeanTablesExistCache()
         await appendUnifiedLog({
           section: 'db',
-          type: 'warning',
+          type: 'info',
           script: 'poller',
-          message: `Écart DB: ${tracker.ingestedIds.length} match(s) attendus, ${dbCount} présents`,
-          json: {
-            playerId: tracker.player.id.toString(),
-            region,
-            expected: tracker.ingestedIds.length,
-            dbCount,
-            riotMatchIdsSample: tracker.ingestedIds.slice(0, 32),
-          },
+          message: 'Vérif ingest_matchs ignorée : table absente (raw-only / migrations).',
         })
       }
     }
@@ -3615,17 +3920,21 @@ async function runLoop(init: RiotPollerInit): Promise<void> {
           const hydrated = await hydrateTrackedMatchesPlayerRanks(client).catch(() => ({
             touchedMatches: 0,
             fetchedPuuids: 0,
+            scannedMatches: 0,
+            elapsedMs: 0,
           }))
           nextTrackedRankHydrationAtMs = Date.now() + getTrackedRankHydrationIntervalMs()
-          if (hydrated.touchedMatches > 0 || hydrated.fetchedPuuids > 0) {
+          if (hydrated.scannedMatches > 0 || hydrated.touchedMatches > 0 || hydrated.fetchedPuuids > 0) {
             void appendUnifiedLog({
               section: 'back',
               type: 'info',
               script: 'poller_ingest',
-              message: `Tracked rank hydration: matches=${hydrated.touchedMatches} puuids=${hydrated.fetchedPuuids}`,
+              message: `Tracked rank hydration: scanned=${hydrated.scannedMatches} touched=${hydrated.touchedMatches} puuids=${hydrated.fetchedPuuids} elapsedMs=${hydrated.elapsedMs}`,
               json: {
+                scannedMatches: hydrated.scannedMatches,
                 touchedMatches: hydrated.touchedMatches,
                 fetchedPuuids: hydrated.fetchedPuuids,
+                elapsedMs: hydrated.elapsedMs,
                 intervalMs: getTrackedRankHydrationIntervalMs(),
               },
             })

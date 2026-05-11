@@ -1,6 +1,8 @@
 // ── Global rank cache (TTL 24 h) ──────────────────────────────────────────────
 // Avoids redundant League-v4 calls for players that appear in multiple matches.
 
+import { prisma } from '../db.js'
+
 type CachedRankEntry = {
   data: { rankTier?: string; rankDivision?: string | null; rankLp?: number | null }
   expiresAt: number
@@ -50,4 +52,32 @@ export function dequeuePriorityPuuids(maxCount: number): string[] {
     out.push(puuid)
   }
   return out
+}
+
+/** Fenêtre max d’âge du snapshot ladder avant refresh league-v4 (env `MATCH_ASYNC_PRIORITY_RANK_REFRESH_FALLBACK_MAX_AGE_MS`). */
+export function priorityRankRefreshFallbackMaxAgeMs(): number {
+  const raw = parseInt(process.env.MATCH_ASYNC_PRIORITY_RANK_REFRESH_FALLBACK_MAX_AGE_MS ?? '', 10)
+  if (!Number.isFinite(raw) || raw < 60_000) return 6 * 60 * 60 * 1000
+  return Math.min(30 * 24 * 60 * 60 * 1000, raw)
+}
+
+/** Après agrégation / ingest : file league-v4 pour joueurs sans tier ou snapshot trop vieux (même fenêtre que le refresh async du poller). */
+export async function enqueuePriorityPuuidsNeedingLeagueSnapshot(puuids: string[]): Promise<void> {
+  const uniq = Array.from(
+    new Set(puuids.map((p) => String(p ?? '').trim()).filter((p) => p.length > 0))
+  )
+  if (uniq.length === 0) return
+  const staleBefore = new Date(Date.now() - priorityRankRefreshFallbackMaxAgeMs())
+  const rows = await prisma.player.findMany({
+    where: {
+      puuid: { in: uniq },
+      OR: [
+        { rankTier: null },
+        { rankSnapshotGameDate: null },
+        { rankSnapshotGameDate: { lt: staleBefore } },
+      ],
+    },
+    select: { puuid: true },
+  })
+  for (const r of rows) enqueuePriorityPuuid(r.puuid)
 }

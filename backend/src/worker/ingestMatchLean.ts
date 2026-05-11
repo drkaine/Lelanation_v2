@@ -52,6 +52,11 @@ export async function ingestLeanTablesExist(): Promise<boolean> {
   return ok
 }
 
+/** Après erreur « table absent » ou drop : forcer un nouveau contrôle information_schema. */
+export function invalidateIngestLeanTablesExistCache(): void {
+  ingestLeanTablesExistCache = null
+}
+
 function ingestAdvisoryLockKeys(riotMatchId: string): { k1: number; k2: number } {
   const h = createHash('sha256').update(`ingest:${riotMatchId}`).digest()
   return { k1: h.readInt32BE(0), k2: h.readInt32BE(4) }

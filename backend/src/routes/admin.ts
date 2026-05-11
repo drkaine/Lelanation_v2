@@ -18,6 +18,7 @@ import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { runLiveAggArchiveCheckpointCronOnce } from '../cron/liveAggArchiveCheckpoint.js'
 import { prisma } from '../db.js'
+import { countRawIngestByStatus, isRawIngestQueueEnabled } from '../worker/matchIngestRawQueue.js'
 import { closePatch } from '../services/PatchLifecycleService.js'
 import { archiveChampionTierDailySnapshotsInDateRange } from '../services/ChampionTierDailySnapshotService.js'
 import { FileManager } from '../utils/fileManager.js'
@@ -260,12 +261,26 @@ export type AdminDataCollectStats = {
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
   lastPlayerLastSeenAt: string | null
+  lastPlayerUpdatedAt: string | null
   totalTrackedMatches: number
   trackedMatchesCreatedLast1h: number
+  trackedMatchesPendingNow: number
+  trackedMatchesPendingOver1h: number
+  trackedOldestPendingCreatedAt: string | null
   trackedAggregateStatus: Record<string, number>
   trackedLastAggregatedAt: string | null
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
+  playersUpdatedLast1h: number
+  /** File `match_ingest_raw` (raw → agrégation). Nul si la raw queue est désactivée. */
+  matchIngestRaw: {
+    pending: number
+    processing: number
+    error: number
+    errorRankPending: number
+  } | null
+  /** tracked_matches encore en attente d' hydration rank avant reprise d'agrégation. */
+  trackedMatchesDeferredRankPending: number
   pollerResume: {
     script: string
     atIso: string
@@ -314,12 +329,19 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
     playersWrongKeyVersion: 0,
     lastNewPlayerAt: null,
     lastPlayerLastSeenAt: null,
+    lastPlayerUpdatedAt: null,
     totalTrackedMatches: 0,
     trackedMatchesCreatedLast1h: 0,
+    trackedMatchesPendingNow: 0,
+    trackedMatchesPendingOver1h: 0,
+    trackedOldestPendingCreatedAt: null,
     trackedAggregateStatus: {},
     trackedLastAggregatedAt: null,
     playersCreatedLast1h: 0,
     playersLastSeenLast1h: 0,
+    playersUpdatedLast1h: 0,
+    matchIngestRaw: null,
+    trackedMatchesDeferredRankPending: 0,
     pollerResume: null,
   }
   const since1h = new Date(Date.now() - 60 * 60 * 1000)
@@ -327,22 +349,44 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
     const [
       lastPlayer,
       maxLastSeenAgg,
+      maxUpdatedAgg,
       totalPlayers,
       trackedTotal,
       tracked1h,
+      trackedPendingNow,
+      trackedPendingOver1h,
+      trackedOldestPendingCreatedAt,
       trackedAggByStatus,
       trackedLastAggregatedAt,
       playersWrongKeyVersion,
       playersCreated1h,
       playersLastSeen1h,
+      playersUpdated1h,
+      trackedDeferredRank,
+      rawRankPendingErr,
       logSummaries,
     ] = await Promise.all([
       prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
       prisma.player.aggregate({ _max: { lastSeen: true } }),
+      prisma.player.aggregate({ _max: { updatedAt: true } }),
       prisma.player.count(),
       prisma.$queryRaw<Array<{ c: bigint }>>`SELECT COUNT(*)::bigint AS c FROM tracked_matches`,
       prisma.$queryRaw<Array<{ c: bigint }>>`
         SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE created_at >= ${since1h}
+      `,
+      prisma.$queryRaw<Array<{ c: bigint }>>`
+        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE aggregate_status = 'PENDING'
+      `,
+      prisma.$queryRaw<Array<{ c: bigint }>>`
+        SELECT COUNT(*)::bigint AS c
+        FROM tracked_matches
+        WHERE aggregate_status = 'PENDING'
+          AND created_at < ${since1h}
+      `,
+      prisma.$queryRaw<Array<{ d: Date | null }>>`
+        SELECT MIN(created_at) AS d
+        FROM tracked_matches
+        WHERE aggregate_status = 'PENDING'
       `,
       prisma.$queryRaw<Array<{ aggregate_status: string; c: bigint }>>`
         SELECT aggregate_status, COUNT(*)::bigint AS c
@@ -356,22 +400,50 @@ async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
       prisma.player.count({ where: { puuidKeyVersion: null } }),
       prisma.player.count({ where: { createdAt: { gte: since1h } } }),
       prisma.player.count({ where: { lastSeen: { gte: since1h } } }),
+      prisma.player.count({ where: { updatedAt: { gte: since1h } } }),
+      prisma.$queryRaw<Array<{ c: bigint }>>`
+        SELECT COUNT(*)::bigint AS c
+        FROM tracked_matches
+        WHERE status = 'DEFERRED_RANK_PENDING'
+          AND aggregate_status = 'PENDING'
+      `,
+      prisma.$queryRaw<Array<{ c: bigint }>>`
+        SELECT COUNT(*)::bigint AS c
+        FROM match_ingest_raw
+        WHERE status = 'error'
+          AND last_error = 'tracked_rank_pending'
+      `,
       findLatestPollerSummaryEntries(),
     ])
+    const rawCounts = isRawIngestQueueEnabled()
+      ? await countRawIngestByStatus().catch(() => ({ pending: 0, processing: 0, error: 0 }))
+      : null
     const latest = pickNewerPollerLogEntry(logSummaries.last30m, logSummaries.lastHourly)
     return {
       totalPlayers,
       playersWrongKeyVersion,
       lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
       lastPlayerLastSeenAt: maxLastSeenAgg._max.lastSeen?.toISOString() ?? null,
+      lastPlayerUpdatedAt: maxUpdatedAgg._max.updatedAt?.toISOString() ?? null,
       totalTrackedMatches: Number(trackedTotal[0]?.c ?? 0),
       trackedMatchesCreatedLast1h: Number(tracked1h[0]?.c ?? 0),
+      trackedMatchesPendingNow: Number(trackedPendingNow[0]?.c ?? 0),
+      trackedMatchesPendingOver1h: Number(trackedPendingOver1h[0]?.c ?? 0),
+      trackedOldestPendingCreatedAt: trackedOldestPendingCreatedAt[0]?.d?.toISOString() ?? null,
       trackedAggregateStatus: Object.fromEntries(
         trackedAggByStatus.map((r) => [r.aggregate_status, Number(r.c ?? 0)])
       ),
       trackedLastAggregatedAt: trackedLastAggregatedAt[0]?.d?.toISOString() ?? null,
       playersCreatedLast1h: playersCreated1h,
       playersLastSeenLast1h: playersLastSeen1h,
+      playersUpdatedLast1h: playersUpdated1h,
+      matchIngestRaw: rawCounts
+        ? {
+            ...rawCounts,
+            errorRankPending: Number(rawRankPendingErr[0]?.c ?? 0),
+          }
+        : null,
+      trackedMatchesDeferredRankPending: Number(trackedDeferredRank[0]?.c ?? 0),
       pollerResume: latest ? pollerResumeFromUnifiedEntry(latest) : null,
     }
   } catch {
