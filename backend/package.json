@@ -18,6 +18,8 @@
     "test:riot-poller": "tsx --test src/utils/rankScore.test.ts src/services/RiotRateLimiter.test.ts src/worker/matchIngestQueue.test.ts src/worker/riotPoller.db.test.ts src/worker/ingestMatchLean.db.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
+    "drizzle:statistiques:migrate": "drizzle-kit migrate --config=drizzle.statistiques.config.ts",
+    "drizzle:statistiques:studio": "drizzle-kit studio --config=drizzle.statistiques.config.ts",
     "script:puuid-migration": "tsx src/worker/runScript.ts puuid-migration",
     "script:league-xp": "tsx src/worker/runScript.ts league-xp",
     "script:backfill-agg": "tsx src/scripts/backfillAggFromIngest.ts",
@@ -31,7 +33,9 @@
     "script:global-rank-recovery": "tsx src/scripts/runGlobalRankRecovery.ts",
     "script:verify-agg-parity": "tsx src/scripts/verifyAggParity.ts",
     "script:reclassify-stale-tracked": "tsx src/scripts/reclassifyStaleTrackedMatches.ts",
-    "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts"
+    "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts",
+    "script:copy-stats-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts",
+    "script:sync-players-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts --sync-players-only"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
@@ -39,6 +43,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.0.9",
     "@types/node-cron": "^3.0.11",
+    "drizzle-kit": "^0.31.10",
     "prisma": "^6.19.2",
     "tsx": "^4.21.0",
     "typescript": "^5.6.3"
@@ -51,6 +56,7 @@
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
     "pg": "^8.18.0",

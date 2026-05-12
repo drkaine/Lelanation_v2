@@ -13,7 +13,8 @@
   ],
   "overrides": {
     "serialize-javascript": "7.0.4",
-    "minimatch": "9.0.7"
+    "minimatch": "9.0.7",
+    "drizzle-kit": "0.31.10"
   },
   "optionalDependencies": {
     "@oxc-parser/binding-android-arm-eabi": "0.112.0",

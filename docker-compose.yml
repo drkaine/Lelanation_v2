@@ -1,6 +1,9 @@
-# PostgreSQL pour les statistiques LoL (backend)
-# Usage: docker compose up -d
-# Puis: cd backend && npx prisma migrate deploy
+# Deux instances PostgreSQL 16 (données persistantes dans les volumes Docker).
+# - postgres → lelanation_stats (Prisma / backend classique), port hôte 5433
+# - postgres-statistiques → lelanation_statistiques (Drizzle), port hôte 5434
+# Usage : docker compose up -d   ou   make docker-db-up
+# Migrations : make migrate-drizzle-statistiques  ;  Prisma (stats classiques) : make migrate-prisma
+# restart: unless-stopped → les conteneurs repartent avec le daemon Docker (reboot machine).
 services:
   postgres:
     image: postgres:16-alpine
@@ -20,5 +23,25 @@ services:
       timeout: 5s
       retries: 5
 
+  # Statistiques agrégées (Drizzle, backend/drizzle/migrations) — port 5434
+  postgres-statistiques:
+    image: postgres:16-alpine
+    container_name: lelanation-postgres-statistiques
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lelanation
+      POSTGRES_PASSWORD: lelanation
+      POSTGRES_DB: lelanation_statistiques
+    ports:
+      - "5434:5432"
+    volumes:
+      - lelanation_statistiques_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lelanation -d lelanation_statistiques"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   lelanation_pgdata:
+  lelanation_statistiques_pgdata:

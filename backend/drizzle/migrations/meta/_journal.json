@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1746969600000,
+      "tag": "0000_lelanation_statistiques",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1747056000000,
+      "tag": "0001_statistiques_partition_by_patch",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1747142400000,
+      "tag": "0002_statistiques_sum_timestamp_ms",
+      "breakpoints": true
+    }
+  ]
+}
