@@ -35,7 +35,8 @@
     "script:reclassify-stale-tracked": "tsx src/scripts/reclassifyStaleTrackedMatches.ts",
     "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts",
     "script:copy-stats-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts",
-    "script:sync-players-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts --sync-players-only"
+    "script:sync-players-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts --sync-players-only",
+    "test:rate-limiter": "vitest run tests/rate-limiter.test.ts"
   },
   "devDependencies": {
     "@types/compression": "^1.8.1",
@@ -46,20 +47,25 @@
     "drizzle-kit": "^0.31.10",
     "prisma": "^6.19.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.6"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^6.19.3",
     "@prisma/client-runtime-utils": "^7.4.0",
     "bottleneck": "^2.19.5",
+    "bullmq": "^5.76.8",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "express": "^5.2.1",
+    "ioredis": "^5.10.1",
     "node-cron": "^4.2.1",
+    "p-limit": "^3.1.0",
     "pg": "^8.18.0",
+    "postgres": "^3.4.9",
     "sharp": "^0.33.5"
   }
 }

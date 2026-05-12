@@ -22,6 +22,20 @@
       "when": 1747142400000,
       "tag": "0002_statistiques_sum_timestamp_ms",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1747228800000,
+      "tag": "0003_champion_spell_stats_spell_order_hash_pkey",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1747315200000,
+      "tag": "0004_champion_bans_banned_champion_id_integer",
+      "breakpoints": true
     }
   ]
 }

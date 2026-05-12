@@ -53,7 +53,7 @@ CREATE TABLE botlane_duo_vs_duo_stats (
   PRIMARY KEY (patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id)
 );
 
-CREATE TABLE champion_spell_stats (
+CREATE TABLE  (
   patch  TEXT        NOT NULL,
   role          TEXT        NOT NULL,
   rank_tier     TEXT        NOT NULL,
@@ -591,7 +591,7 @@ CREATE TABLE champion_summoner_spells (
   PRIMARY KEY (patch, role, rank_tier, region, champion_id, spell_id)
 );
 
-CREATE TABLE champion_vs_stats (
+CREATE TABLE  (
   patch  TEXT        NOT NULL,
   role          TEXT        NOT NULL,
   rank_tier     TEXT        NOT NULL,
