@@ -677,6 +677,30 @@ router.get('/riot-poller/status', async (_req, res) => {
   return res.json(payload)
 })
 
+/** GET /api/admin/poller-v2/observability — latest poller-v2 runtime snapshot (written by poller-v2 process). */
+router.get('/poller-v2/observability', async (_req, res) => {
+  const filePath = join(process.cwd(), '..', 'logs', 'poller-v2-observability.json')
+  try {
+    const raw = await fs.readFile(filePath, 'utf-8')
+    const data = JSON.parse(raw) as Record<string, unknown>
+    const atIso = typeof data['atIso'] === 'string' ? data['atIso'] : null
+    const ageMs = atIso ? Date.now() - new Date(atIso).getTime() : null
+    const stale = typeof ageMs === 'number' ? ageMs > 2 * 60_000 : true
+    return res.json({
+      ok: true,
+      stale,
+      ageMs,
+      data,
+    })
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') {
+      return res.json({ ok: false, stale: true, ageMs: null, data: null })
+    }
+    return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
+  }
+})
+
 /** GET /api/admin/riot-poller/metrics — aggregate poller_hourly / poller_30m from unified log */
 router.get('/riot-poller/metrics', async (req, res) => {
   try {

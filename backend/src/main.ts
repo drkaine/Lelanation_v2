@@ -1,6 +1,8 @@
 import "dotenv/config";
 import { config } from "./config/index.js";
 import { healthCheck, sql } from "./db/client.js";
+import { appendUnifiedLog } from "./logging/unifiedAppLog.js";
+import { pollerV2Observability } from "./observability/poller-v2-observability.js";
 import { scheduleDiscoveryRepeatJob, discoveryWorker } from "./workers/discovery.worker.js";
 import { hydrationWorker } from "./workers/hydration.worker.js";
 import { ingestionWorker } from "./workers/ingestion.worker.js";
@@ -9,6 +11,8 @@ import { loadLuaScript } from "./redis/rate-limiter.js";
 import { redis } from "./redis/client.js";
 
 let metricsInterval: NodeJS.Timeout | null = null;
+let summary30mInterval: NodeJS.Timeout | null = null;
+let summary1hInterval: NodeJS.Timeout | null = null;
 let shuttingDown = false;
 
 function validateConfig(): void {
@@ -31,15 +35,67 @@ async function getDataLagSeconds(): Promise<number | null> {
 }
 
 async function logMetricsTick(): Promise<void> {
+  const startedAt = Date.now();
   const metrics = await getQueueMetrics();
   const lagSeconds = await getDataLagSeconds();
+  const tickDurationMs = Date.now() - startedAt;
+
+  pollerV2Observability.recordQueueSnapshot({
+    discovery: metrics.discovery,
+    hydration: metrics.hydration,
+    ingestion: metrics.ingestion,
+    dataLagSeconds: lagSeconds,
+    tickDurationMs,
+  });
+  await pollerV2Observability.flushSnapshotToDisk();
 
   console.log(
     `[poller-main] queues discovery(w:${metrics.discovery.waiting},a:${metrics.discovery.active},f:${metrics.discovery.failed}) ` +
       `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active},f:${metrics.hydration.failed}) ` +
       `ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
-      `data_lag_seconds=${lagSeconds ?? "n/a"}`,
+      `data_lag_seconds=${lagSeconds ?? "n/a"} tick_ms=${tickDurationMs}`,
   );
+}
+
+async function queryDbWindowStats(windowStartMs: number, windowEndMs: number): Promise<Record<string, unknown>> {
+  const startIso = new Date(windowStartMs).toISOString();
+  const endIso = new Date(windowEndMs).toISOString();
+  const rows = await sql<{
+    players_polled: number;
+    players_updated: number;
+    players_added: number;
+    matches_added: number;
+  }[]>`
+    SELECT
+      (SELECT COUNT(*)::int FROM players WHERE last_seen >= ${startIso}::timestamptz AND last_seen < ${endIso}::timestamptz) AS players_polled,
+      (SELECT COUNT(*)::int FROM players WHERE updated_at >= ${startIso}::timestamptz AND updated_at < ${endIso}::timestamptz) AS players_updated,
+      (SELECT COUNT(*)::int FROM players WHERE created_at >= ${startIso}::timestamptz AND created_at < ${endIso}::timestamptz) AS players_added,
+      (SELECT COUNT(*)::int FROM processed_matches WHERE created_at >= ${startIso}::timestamptz AND created_at < ${endIso}::timestamptz) AS matches_added
+  `;
+  const first = rows[0];
+  return {
+    windowStartIso: startIso,
+    windowEndIso: endIso,
+    playersPolled: first?.players_polled ?? 0,
+    playersUpdated: first?.players_updated ?? 0,
+    playersAdded: first?.players_added ?? 0,
+    matchesAdded: first?.matches_added ?? 0,
+  };
+}
+
+async function emitWindowSummary(window: "30m" | "1h"): Promise<void> {
+  const now = Date.now();
+  const windowMs = window === "30m" ? 30 * 60_000 : 60 * 60_000;
+  const dbWindow = await queryDbWindowStats(now - windowMs, now);
+  const payload = pollerV2Observability.buildWindowSummary(window, dbWindow);
+  await appendUnifiedLog({
+    section: "back",
+    type: "info",
+    script: window === "30m" ? "poller_v2_30m" : "poller_v2_hourly",
+    message: `poller-v2 summary ${window}`,
+    json: payload,
+  });
+  await pollerV2Observability.flushSnapshotToDisk();
 }
 
 async function startMonitoring(): Promise<void> {
@@ -47,6 +103,12 @@ async function startMonitoring(): Promise<void> {
   metricsInterval = setInterval(() => {
     void logMetricsTick();
   }, 30_000);
+  summary30mInterval = setInterval(() => {
+    void emitWindowSummary("30m");
+  }, 30 * 60_000);
+  summary1hInterval = setInterval(() => {
+    void emitWindowSummary("1h");
+  }, 60 * 60_000);
 }
 
 async function bootstrap(): Promise<void> {
@@ -79,6 +141,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (metricsInterval) {
     clearInterval(metricsInterval);
     metricsInterval = null;
+  }
+  if (summary30mInterval) {
+    clearInterval(summary30mInterval);
+    summary30mInterval = null;
+  }
+  if (summary1hInterval) {
+    clearInterval(summary1hInterval);
+    summary1hInterval = null;
   }
 
   try {

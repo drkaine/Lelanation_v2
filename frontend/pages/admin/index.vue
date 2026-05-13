@@ -795,6 +795,142 @@
                 </div>
               </div>
             </div>
+
+            <div class="mb-3 rounded border border-primary/20 bg-background/30 p-3">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-text">
+                  Observabilité poller-v2 (temps réel)
+                </h3>
+                <span
+                  class="rounded px-2 py-0.5 text-xs"
+                  :class="
+                    pollerV2Observability?.stale
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                      : 'bg-green-600/20 text-green-700 dark:text-green-400'
+                  "
+                >
+                  {{ pollerV2Observability?.stale ? 'stale' : 'live' }}
+                </span>
+              </div>
+              <p class="mb-2 text-xs text-text/60">
+                Âge snapshot:
+                {{
+                  pollerV2Observability?.ageMs != null
+                    ? `${Math.round(pollerV2Observability.ageMs / 1000)}s`
+                    : '—'
+                }}
+              </p>
+              <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Tokens / 2 min</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitGrantedCost ?? '—' }}
+                    /
+                    {{ pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Utilisation quota 2min</div>
+                  <div class="font-semibold text-text">
+                    {{
+                      pollerV2Observability?.data?.rolling2m?.tokenUsagePct != null
+                        ? `${pollerV2Observability.data.rolling2m.tokenUsagePct}%`
+                        : '—'
+                    }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">HTTP req / 2 min</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.rolling2m?.apiRequests ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">HTTP 429 / 2 min</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.rolling2m?.api429 ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Rate-limit denied / 2 min</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitDeniedCount ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Wait ms total / 2 min</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.rolling2m?.rateLimitWaitMsTotal ?? '—' }}
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">
+                    Résumé 30 min (players pollés / update / ajoutés / matchs)
+                  </div>
+                  <div class="font-semibold text-text">
+                    {{
+                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersPolled ??
+                      '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersUpdated ??
+                      '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.playersAdded ?? '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last30m?.dbWindow?.matchesAdded ?? '—'
+                    }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">
+                    Résumé 1 h (players pollés / update / ajoutés / matchs)
+                  </div>
+                  <div class="font-semibold text-text">
+                    {{
+                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersPolled ?? '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersUpdated ??
+                      '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.playersAdded ?? '—'
+                    }}
+                    /
+                    {{
+                      pollerV2Observability?.data?.summaries?.last1h?.dbWindow?.matchesAdded ?? '—'
+                    }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Queue (w/a/f) discovery</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.queue?.discovery?.waiting ?? '—' }}/{{
+                      pollerV2Observability?.data?.queue?.discovery?.active ?? '—'
+                    }}/{{ pollerV2Observability?.data?.queue?.discovery?.failed ?? '—' }}
+                  </div>
+                </div>
+                <div class="rounded border border-primary/20 bg-background/40 p-2">
+                  <div class="text-text/70">Queue (w/a/f) hydration</div>
+                  <div class="font-semibold text-text">
+                    {{ pollerV2Observability?.data?.queue?.hydration?.waiting ?? '—' }}/{{
+                      pollerV2Observability?.data?.queue?.hydration?.active ?? '—'
+                    }}/{{ pollerV2Observability?.data?.queue?.hydration?.failed ?? '—' }}
+                  </div>
+                </div>
+              </div>
+            </div>
             <div class="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -2478,6 +2614,60 @@ const riotPollerStatus = ref<{
   http429PauseCount?: number
 } | null>(null)
 
+const pollerV2Observability = ref<{
+  ok: boolean
+  stale: boolean
+  ageMs: number | null
+  data: {
+    runtimeSeconds?: number
+    rolling2m?: {
+      apiRequests?: number
+      api429?: number
+      rateLimitGrantedCost?: number
+      rateLimitDeniedCount?: number
+      rateLimitWaitMsTotal?: number
+      tokenBudget120?: number
+      tokenUsagePct?: number
+    }
+    queue?: {
+      discovery?: { waiting?: number; active?: number; failed?: number }
+      hydration?: { waiting?: number; active?: number; failed?: number }
+      ingestion?: { waiting?: number; active?: number; failed?: number }
+      dataLagSeconds?: number | null
+      tickDurationMs?: number | null
+    }
+    totals?: {
+      playersPolled?: number
+      playersUpdated?: number
+      playersAdded?: number
+      matchesQueuedHydration?: number
+      matchesIngested?: number
+      apiRequests?: number
+      api429?: number
+      rateLimitGrantedCost?: number
+      rateLimitDeniedCount?: number
+    }
+    summaries?: {
+      last30m?: {
+        dbWindow?: {
+          playersPolled?: number
+          playersUpdated?: number
+          playersAdded?: number
+          matchesAdded?: number
+        }
+      } | null
+      last1h?: {
+        dbWindow?: {
+          playersPolled?: number
+          playersUpdated?: number
+          playersAdded?: number
+          matchesAdded?: number
+        }
+      } | null
+    }
+  } | null
+} | null>(null)
+
 type PollerMetricsBucketRow = {
   key: string
   periodStartIso: string
@@ -3607,6 +3797,17 @@ async function loadRiotPollerStatus() {
   }
 }
 
+async function loadPollerV2Observability() {
+  try {
+    const res = await fetchWithAuth(apiUrl('/api/admin/poller-v2/observability'))
+    if (res.status === 401) return
+    const data = await res.json().catch(() => null)
+    pollerV2Observability.value = data
+  } catch {
+    // keep previous value
+  }
+}
+
 async function loadRiotScriptsStatus() {
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/riot-scripts-status'))
@@ -3625,9 +3826,11 @@ async function loadRiotScriptsStatus() {
     riotPollerStatus.value = data?.riotPoller ?? null
     // Refresh poller from dedicated endpoint so we always have up-to-date counts and requestsPerMinute
     await loadRiotPollerStatus()
+    await loadPollerV2Observability()
   } catch {
     // If combined endpoint fails, still try to load poller status alone
     await loadRiotPollerStatus()
+    await loadPollerV2Observability()
   }
 }
 
