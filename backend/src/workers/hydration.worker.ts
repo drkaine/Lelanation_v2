@@ -10,7 +10,8 @@ import { ingestionQueue } from "../queues/index.js";
 import { redis } from "../redis/client.js";
 import { waitForSlot } from "../redis/rate-limiter.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
-import type { MatchDto, ParticipantDto } from "../riot/types.js";
+import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
+import type { MatchDto, MatchTimelineDto, ParticipantDto } from "../riot/types.js";
 import {
   findPreviousPatchEntry,
   getPatchFromVersion,
@@ -38,7 +39,6 @@ type PlayerRankRow = {
 
 type ParticipantIdentity = {
   puuid: string;
-  summonerId: string;
 };
 
 function normalizeTier(value: string | null | undefined): string | null {
@@ -112,7 +112,7 @@ async function refreshMissingTodayRanks(
     let rankLp: number | null = null;
 
     try {
-      const rank = await riotClient.getRank(identity.summonerId, region);
+      const rank = await riotClient.getRank(identity.puuid, region);
       const normalizedTier = normalizeTier(rank?.tier);
       if (normalizedTier) {
         rankTier = normalizedTier;
@@ -212,22 +212,42 @@ async function resolvePatchCutoffStartSec(nowSec: number): Promise<number> {
   return previousReleaseStart + PATCH_SWITCH_GRACE_DAYS * 86400;
 }
 
-function parseTeamStats(match: MatchDto, participants: ParsedParticipantDto[]): TeamStatsDto {
+function resolveTeamStatsRegion(match: MatchDto, queueRegion: string): string {
+  const q = String(queueRegion ?? "euw1")
+    .trim()
+    .toLowerCase();
+  const pl = String(match.info.platformId ?? "")
+    .trim()
+    .toLowerCase();
+  if (!pl || pl === "unknown" || pl === "global") return q || "euw1";
+  return pl;
+}
+
+function parseTeamStats(
+  match: MatchDto,
+  participants: ParsedParticipantDto[],
+  timeline: MatchTimelineDto,
+  queueRegion: string,
+): TeamStatsDto {
   const patch = extractPatch(match.info.gameVersion);
-  const region = String(match.info.platformId ?? "unknown").toLowerCase();
+  const region = resolveTeamStatsRegion(match, queueRegion);
   const team100 = (match.info.teams ?? []).find((team) => team.teamId === 100);
   const team200 = (match.info.teams ?? []).find((team) => team.teamId === 200);
   const team100Win = team100?.win === true;
+  const timestampSums = sumObjectiveTimestampMsByTeamAndKey(match, timeline);
 
   const objectives: TeamStatsDto["objectives"] = [];
   for (const team of [team100, team200]) {
     if (!team) continue;
+    const tid = team.teamId as 100 | 200;
     for (const [type, value] of Object.entries(team.objectives ?? {})) {
+      const sumKey = `${tid}|${type}`;
       objectives.push({
         type,
         count: Number(value.kills ?? 0),
-        team: team.teamId as 100 | 200,
+        team: tid,
         outcome: (team.teamId === 100 ? team100Win : !team100Win) ? "win" : "loss",
+        sumTimestampMs: timestampSums.get(sumKey) ?? 0,
       });
     }
   }
@@ -289,9 +309,8 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
         (match.info.participants ?? [])
           .map((participant) => ({
             puuid: String(participant.puuid ?? "").trim(),
-            summonerId: String(participant.summonerId ?? "").trim(),
           }))
-          .filter((identity) => identity.puuid && identity.summonerId)
+          .filter((identity) => identity.puuid)
           .map((identity) => [identity.puuid, identity]),
       ).values(),
     );
@@ -305,7 +324,7 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
     const participants = parseMatch(enrichedMatch, timeline, patch).filter(
       (participant): participant is ParsedParticipantDto => participant !== null,
     );
-    const teamStats = parseTeamStats(enrichedMatch, participants);
+    const teamStats = parseTeamStats(enrichedMatch, participants, timeline, region);
 
     const payload: IngestionJobData = { participants, teamStats };
     await ingestionQueue.add("ingest-match", payload);

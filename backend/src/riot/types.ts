@@ -359,8 +359,7 @@ export interface MatchTimelineEventDto {
 }
 
 /**
- * Riot endpoint `GET /lol/league/v4/entries/by-summoner/{summonerId}`
- * retourne un tableau: `RankDto[]`.
+ * Riot `GET /lol/league/v4/entries/by-puuid/{encryptedPuuid}` — une entrée par file (solo = RANKED_SOLO_5x5).
  */
 export interface RankDto {
   leagueId: string;

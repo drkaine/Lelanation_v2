@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { sql } from "../src/db/client.js";
+import { sumObjectiveTimestampMsByTeamAndKey } from "../src/parsers/objective-timestamp-sums.js";
 import { parseMatch } from "../src/parsers/match.parser.js";
 import type { IngestionJobData, ParsedParticipantDto } from "../src/dto/match.dto.js";
 import type { MatchDto, MatchTimelineDto } from "../src/riot/types.js";
@@ -12,18 +13,26 @@ function extractPatch(gameVersion: string): string {
   return `${major}.${minor}`;
 }
 
-function buildTeamStats(match: MatchDto, patch: string, matchId: string): IngestionJobData["teamStats"] {
+function buildTeamStats(
+  match: MatchDto,
+  timeline: MatchTimelineDto,
+  patch: string,
+  matchId: string,
+): IngestionJobData["teamStats"] {
   const region = String(match.info.platformId ?? "unknown").toLowerCase();
   const team100 = (match.info.teams ?? []).find((team) => team.teamId === 100);
   const team100Win = team100?.win === true;
+  const timestampSums = sumObjectiveTimestampMsByTeamAndKey(match, timeline);
   const objectives: IngestionJobData["teamStats"]["objectives"] = [];
   for (const team of match.info.teams ?? []) {
+    const tid = team.teamId as 100 | 200;
     for (const [type, value] of Object.entries(team.objectives ?? {})) {
       objectives.push({
         type,
         count: Number(value.kills ?? 0),
-        team: team.teamId as 100 | 200,
+        team: tid,
         outcome: (team.teamId === 100 ? team100Win : !team100Win) ? "win" : "loss",
+        sumTimestampMs: timestampSums.get(`${tid}|${type}`) ?? 0,
       });
     }
   }
@@ -91,7 +100,7 @@ async function main(): Promise<void> {
 
   const payload: IngestionJobData = {
     participants,
-    teamStats: buildTeamStats(match, patch, uniqueMatchId),
+    teamStats: buildTeamStats(match, timeline, patch, uniqueMatchId),
   };
 
   const probe = participants[0];

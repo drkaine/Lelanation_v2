@@ -1,10 +1,14 @@
+import { CHAMPION_STATS_METRIC_COLUMN_SET } from "../constants/championStatsMetricColumns.js";
 import type { ParsedItemDto, ParsedParticipantDto } from "../dto/match.dto.js";
+import { mapChampionStatsRiotMetrics } from "./champion-stats-riot-metrics.js";
+import { timelineChampionObjectiveMetrics } from "./champion-stats-timeline-objectives.js";
 import type {
   ChallengesDto,
   MatchDto,
   MatchTimelineDto,
   MatchTimelineEventDto,
   MatchTimelineFrameDto,
+  MatchTimelineParticipantFrameDto,
   ParticipantDto,
 } from "../riot/types.js";
 
@@ -61,6 +65,21 @@ function computeSpellOrder(events: MatchTimelineEventDto[], participantId: numbe
     })
     .filter((value) => value.length > 0);
   return sequence.join("-");
+}
+
+/** Somme des timestamps (ms) des montées de niveau Q/W/E/R — aligné sur le filtre de `computeSpellOrder`. */
+function computeSpellLevelUpTimestampSumMs(events: MatchTimelineEventDto[], participantId: number): number {
+  const pid = truncateMetric(participantId);
+  if (pid <= 0) return 0;
+  let sum = 0;
+  for (const event of events) {
+    if (event.type !== "SKILL_LEVEL_UP" || truncateMetric(event.participantId) !== pid) continue;
+    const skill = event.skillSlot;
+    if (skill !== 1 && skill !== 2 && skill !== 3 && skill !== 4) continue;
+    const ts = truncateMetric((event as { timestamp?: unknown }).timestamp);
+    if (ts > 0) sum += ts;
+  }
+  return sum;
 }
 
 function computeU15(
@@ -141,6 +160,17 @@ function isBootsItem(itemId: number): boolean {
   return BOOTS_IDS.has(itemId);
 }
 
+/**
+ * Clés challenges dont `toSnakeCase` ne reproduit pas le nom SQL (`*_10_*`, `*_x_*`, `*_20_*`).
+ * Valeur = suffixe après `sum_` (aligné `champion_stats`).
+ */
+const CHALLENGE_SUM_SUFFIX_OVERRIDE: Record<string, string> = {
+  jungleCsBefore10Minutes: "jungle_cs_before_10_minutes",
+  outerTurretExecutesBefore10Minutes: "outer_turret_executes_before_10_minutes",
+  takedownsFirstXMinutes: "takedowns_first_x_minutes",
+  wardTakedownsBefore20M: "ward_takedowns_before_20_m",
+};
+
 function mapChallengeSums(challenges: ChallengesDto | undefined): Record<string, number> {
   if (!challenges) {
     return {};
@@ -154,16 +184,134 @@ function mapChallengeSums(challenges: ChallengesDto | undefined): Record<string,
       key === "killParticipation" ||
       key === "visionScoreAdvantageLaneOpponent";
     const normalized = isPercentLike ? Math.round(raw * 100) : raw;
-    out[`sum_${toSnakeCase(key)}`] = normalized;
+    const suffix = CHALLENGE_SUM_SUFFIX_OVERRIDE[key] ?? toSnakeCase(key);
+    const col = `sum_${suffix}`;
+    if (!CHAMPION_STATS_METRIC_COLUMN_SET.has(col)) continue;
+    out[col] = normalized;
   }
   return out;
 }
 
-function resolveBanByPickOrder(match: MatchDto, teamId: 100 | 200, pickOrder: number): number {
+function truncateMetric(value: unknown): number {
+  const x = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(x) ? Math.trunc(x) : 0;
+}
+
+function getLastParticipantFrame(
+  frames: MatchTimelineFrameDto[],
+  participantId: number,
+): MatchTimelineParticipantFrameDto | null {
+  if (frames.length === 0) return null;
+  const last = frames[frames.length - 1];
+  const key = String(participantId);
+  return last?.participantFrames?.[key] ?? null;
+}
+
+/**
+ * K−D du participant à la clôture de la fenêtre [0, minute] (événements CHAMPION_KILL de la timeline),
+ * aligné sur `extractParticipantKillDeathDiffAtMinutes` dans rawAggregateProcessor.
+ */
+function killDeathDiffAtMinutesForParticipant(
+  frames: MatchTimelineFrameDto[],
+  participant: ParticipantDto,
+  minuteMarks: number[],
+): Record<number, number> {
+  const normalizedMarks = Array.from(new Set(minuteMarks.map((m) => Math.max(1, Math.trunc(m))))).sort(
+    (a, b) => a - b,
+  );
+  const row: Record<number, number> = {};
+  const participantId = truncateMetric(participant.participantId);
+  if (normalizedMarks.length === 0) return row;
+
+  if (!frames.length || participantId <= 0) {
+    const kd = truncateMetric(participant.kills) - truncateMetric(participant.deaths);
+    for (const minute of normalizedMarks) row[minute] = kd;
+    return row;
+  }
+
+  let kills = 0;
+  let deaths = 0;
+  const pendingMarks = [...normalizedMarks];
+
+  const pushSnapshot = (minute: number) => {
+    row[minute] = kills - deaths;
+  };
+
+  for (const frame of frames) {
+    for (const ev of frame.events ?? []) {
+      const timestamp = truncateMetric((ev as { timestamp?: unknown }).timestamp);
+      const evType = String((ev as { type?: unknown }).type ?? "")
+        .trim()
+        .toUpperCase();
+      while (pendingMarks.length > 0 && timestamp > pendingMarks[0]! * 60_000) {
+        const minute = pendingMarks.shift()!;
+        pushSnapshot(minute);
+      }
+      if (evType !== "CHAMPION_KILL") continue;
+      const killerId = truncateMetric((ev as { killerId?: unknown }).killerId);
+      const victimId = truncateMetric((ev as { victimId?: unknown }).victimId);
+      if (killerId > 0 && killerId === participantId) kills++;
+      if (victimId > 0 && victimId === participantId) deaths++;
+    }
+  }
+  while (pendingMarks.length > 0) {
+    const minute = pendingMarks.shift()!;
+    pushSnapshot(minute);
+  }
+  return row;
+}
+
+/**
+ * Stats lues par `numericMetric` dans upsertChampionBucket : elles viennent du participant match-v5
+ * et de la dernière frame timeline (or, mapChallengeSums ne fournit pas ces clés).
+ */
+function mapParticipantBucketIngestMetrics(
+  participant: ParticipantDto,
+  frames: MatchTimelineFrameDto[],
+): Record<string, number> {
+  const n = truncateMetric;
+  const pid = n(participant.participantId);
+  const last = getLastParticipantFrame(frames, pid);
+  const kd = killDeathDiffAtMinutesForParticipant(frames, participant, [10, 20]);
+  const timeEnemy =
+    last != null && last.timeEnemySpentControlled != null
+      ? n(last.timeEnemySpentControlled)
+      : Math.max(n(participant.totalTimeCCDealt), n(participant.timeCCingOthers));
+
+  return {
+    sum_magic_damage_done: n(participant.magicDamageDealt),
+    sum_magic_damage_done_to_champion: n(participant.magicDamageDealtToChampions),
+    sum_magic_damage_taken: n(participant.magicDamageTaken),
+    sum_physical_damage_done: n(participant.physicalDamageDealt),
+    sum_physical_damage_done_to_champion: n(participant.physicalDamageDealtToChampions),
+    sum_physical_damage_taken: n(participant.physicalDamageTaken),
+    sum_true_damage_done: n(participant.trueDamageDealt),
+    sum_true_damage_done_to_champion: n(participant.trueDamageDealtToChampions),
+    sum_true_damage_taken: n(participant.trueDamageTaken),
+    sum_jungle_minions_killed: last != null ? n(last.jungleMinionsKilled) : n(participant.neutralMinionsKilled),
+    sum_level: n(participant.champLevel),
+    sum_minions_killed: n(participant.totalMinionsKilled),
+    sum_current_gold: last != null ? n(last.currentGold) : 0,
+    sum_time_enemy_spent_controlled: timeEnemy,
+    sum_kd_diff_10: kd[10] ?? 0,
+    sum_kd_diff_20: kd[20] ?? 0,
+  };
+}
+
+function getTeamParticipantsSortedById(match: MatchDto, teamId: 100 | 200): ParticipantDto[] {
+  return (match.info.participants ?? [])
+    .filter((p) => p.teamId === teamId)
+    .sort((a, b) => a.participantId - b.participantId);
+}
+
+/** IDs des champions bannis par cette équipe, dans l’ordre du draft (`pickTurn`). */
+function getTeamBanChampionIdsSorted(match: MatchDto, teamId: 100 | 200): number[] {
   const team = (match.info.teams ?? []).find((value) => value.teamId === teamId);
-  if (!team) return 0;
-  const ban = (team.bans ?? []).find((value) => value.pickTurn === pickOrder);
-  return Number(ban?.championId ?? 0);
+  if (!team?.bans?.length) return [];
+  return [...team.bans]
+    .filter((b) => Number(b.championId) > 0)
+    .sort((a, b) => a.pickTurn - b.pickTurn || Number(a.championId) - Number(b.championId))
+    .map((b) => Number(b.championId));
 }
 
 function validateParticipantRequired(participant: ParticipantDto, matchId: string): boolean {
@@ -191,14 +339,11 @@ export function parseMatch(
   const gameDate = new Date(gameEndTimestamp).toISOString();
   const region = String(match.info.platformId ?? "unknown").toLowerCase();
 
-  const teamParticipants = new Map<100 | 200, ParticipantDto[]>();
-  for (const participant of participants) {
-    const teamId = participant.teamId;
-    if (teamId !== 100 && teamId !== 200) continue;
-    const list = teamParticipants.get(teamId) ?? [];
-    list.push(participant);
-    teamParticipants.set(teamId, list);
-  }
+  const team100Sorted = getTeamParticipantsSortedById(match, 100);
+  const team200Sorted = getTeamParticipantsSortedById(match, 200);
+  const bans100 = getTeamBanChampionIdsSorted(match, 100);
+  const bans200 = getTeamBanChampionIdsSorted(match, 200);
+
   return participants.map((participant) => {
     if (!validateParticipantRequired(participant, matchId)) {
       console.warn(`[match.parser] participant dropped for missing required fields in match ${matchId}`);
@@ -245,12 +390,12 @@ export function parseMatch(
     const materialIds = nonConsumableNonBootFinalIds.slice(legendaryCount);
     const coreLegendarySet = new Set(coreLegendaryIds);
 
-    const teamList = teamParticipants.get(participant.teamId as 100 | 200) ?? [];
-    const pickOrder = Math.max(
-      1,
-      teamList.findIndex((value) => value.participantId === participant.participantId) + 1,
-    );
-    const bannedChampionId = resolveBanByPickOrder(match, participant.teamId as 100 | 200, pickOrder);
+    const tid = participant.teamId as 100 | 200;
+    const sortedTeam = tid === 100 ? team100Sorted : team200Sorted;
+    const teamBans = tid === 100 ? bans100 : bans200;
+    const slotIdx = sortedTeam.findIndex((value) => value.participantId === participant.participantId);
+    const pickOrder = Math.max(1, slotIdx + 1);
+    const bannedChampionId = slotIdx >= 0 && slotIdx < teamBans.length ? teamBans[slotIdx]! : 0;
 
     const perkStyleIds = (participant.perks?.styles ?? []).flatMap((style) =>
       (style.selections ?? []).map((selection) => Number(selection.perk)),
@@ -276,6 +421,13 @@ export function parseMatch(
       championId: participant.championId,
       teamId: participant.teamId as 100 | 200,
       win: participant.win,
+      firstBloodKill: participant.firstBloodKill === true,
+      firstBloodAssist: participant.firstBloodAssist === true,
+      firstTowerKill: participant.firstTowerKill === true,
+      firstTowerAssist: participant.firstTowerAssist === true,
+      gameEndedInEarlySurrender: participant.gameEndedInEarlySurrender === true,
+      gameEndedInSurrender: participant.gameEndedInSurrender === true,
+      teamEarlySurrendered: participant.teamEarlySurrendered === true,
       kills: participant.kills,
       deaths: participant.deaths,
       assists: participant.assists,
@@ -284,6 +436,11 @@ export function parseMatch(
       opponentChampionId: Number(opponent?.championId ?? 0),
       opponentRole: opponent ? mapRole(opponent.teamPosition) : "UNKNOWN",
       spellOrder: computeSpellOrder(events, participant.participantId),
+      spellLevelUpTimestampSumMs: computeSpellLevelUpTimestampSumMs(events, participant.participantId),
+      spell1Casts: Math.max(0, Math.trunc(Number(participant.spell1Casts ?? 0))),
+      spell2Casts: Math.max(0, Math.trunc(Number(participant.spell2Casts ?? 0))),
+      spell3Casts: Math.max(0, Math.trunc(Number(participant.spell3Casts ?? 0))),
+      spell4Casts: Math.max(0, Math.trunc(Number(participant.spell4Casts ?? 0))),
       starterKey: serializeItemSet(starterIds),
       coreKey: serializeItemSet(coreLegendaryIds),
       materialKey: serializeItemSet(materialIds),
@@ -312,6 +469,14 @@ export function parseMatch(
       pickOrder,
       u15: computeU15(frames, events, participant),
       ...mapChallengeSums(participant.challenges),
+      ...timelineChampionObjectiveMetrics(
+        events,
+        participant.participantId,
+        participant.teamId as 100 | 200,
+        participant.win === true,
+      ),
+      ...mapParticipantBucketIngestMetrics(participant, frames),
+      ...mapChampionStatsRiotMetrics(participant),
     };
 
     return dto;

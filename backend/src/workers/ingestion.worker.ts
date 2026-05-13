@@ -1,7 +1,9 @@
 import { Worker } from "bullmq";
 import { config } from "../config/index.js";
 import { sql } from "../db/client.js";
+import { CHAMPION_STATS_METRIC_COLUMNS } from "../constants/championStatsMetricColumns.js";
 import type { IngestionJobData, ParsedParticipantDto } from "../dto/match.dto.js";
+import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
@@ -20,7 +22,72 @@ function participantWinCount(participant: ParsedParticipantDto): number {
 function numericMetric(participant: ParsedParticipantDto, key: string): number {
   const raw = (participant as Record<string, unknown>)[key];
   if (typeof raw !== "number" || !Number.isFinite(raw)) return 0;
-  return raw;
+  return Math.trunc(raw);
+}
+
+/** Métriques lane / challenges : colonnes SQL passées en double precision (0008) — pas de troncature. */
+function laneEconomyNumber(participant: ParsedParticipantDto, sumKey: string): number {
+  const raw = (participant as Record<string, unknown>)[sumKey];
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Clé `rank_tier` pour botlane (même logique que les autres upserts : libellé participant). */
+function botlaneRankTierKey(p: ParsedParticipantDto): string {
+  const t = String(p.rankTier ?? "").trim().toUpperCase();
+  return t.length > 0 ? t : "UNRANKED";
+}
+
+function firstBotlaneParticipant(
+  participants: ParsedParticipantDto[],
+  teamId: 100 | 200,
+  role: "ADC" | "SUPPORT",
+): ParsedParticipantDto | undefined {
+  return participants.find((row) => row.teamId === teamId && row.role === role);
+}
+
+/** Champs économie / lane (challenges → `sum_*` via mapChallengeSums dans le parseur). */
+function botlaneEconomyFromParticipant(p: ParsedParticipantDto) {
+  return {
+    goldEarned: Math.trunc(Number(p.goldEarned) || 0),
+    goldSpent: Math.trunc(Number(p.goldSpent) || 0),
+    maxLevelLeadLaneOpponent: laneEconomyNumber(p, "sum_max_level_lead_lane_opponent"),
+    maxKillDeficit: laneEconomyNumber(p, "sum_max_kill_deficit"),
+    maxCsAdvantageOnLaneOpponent: laneEconomyNumber(p, "sum_max_cs_advantage_on_lane_opponent"),
+    visionScoreAdvantageLaneOpponent: laneEconomyNumber(p, "sum_vision_score_advantage_lane_opponent"),
+    laningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_laning_phase_gold_exp_advantage"),
+    earlyLaningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_early_laning_phase_gold_exp_advantage"),
+  };
+}
+
+/** Métriques agrégées côté champion principal (aligné agg_champion_duo_role_stats / vs). */
+function championDuoRoleEconomyFromParticipant(p: ParsedParticipantDto) {
+  return {
+    goldEarned: Math.trunc(Number(p.goldEarned) || 0),
+    goldSpent: Math.trunc(Number(p.goldSpent) || 0),
+    maxLevelLeadLaneOpponent: laneEconomyNumber(p, "sum_max_level_lead_lane_opponent"),
+    maxKillDeficit: laneEconomyNumber(p, "sum_max_kill_deficit"),
+    moreEnemyJungleThanOpponent: laneEconomyNumber(p, "sum_more_enemy_jungle_than_opponent"),
+    maxCsAdvantageOnLaneOpponent: laneEconomyNumber(p, "sum_max_cs_advantage_on_lane_opponent"),
+    visionScoreAdvantageLaneOpponent: laneEconomyNumber(p, "sum_vision_score_advantage_lane_opponent"),
+    laningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_laning_phase_gold_exp_advantage"),
+    earlyLaningPhaseGoldExpAdvantage: laneEconomyNumber(p, "sum_early_laning_phase_gold_exp_advantage"),
+  };
+}
+
+function u15IngestSums(u: ParsedParticipantDto["u15"]) {
+  return {
+    phys: Math.trunc(Number(u.physDmgToChampion) || 0),
+    magic: Math.trunc(Number(u.magicDmgToChampion) || 0),
+    trueDmg: Math.trunc(Number(u.trueDmgToChampion) || 0),
+    kill: Math.trunc(Number(u.kills) || 0),
+    assist: Math.trunc(Number(u.assists) || 0),
+    death: Math.trunc(Number(u.deaths) || 0),
+    vision: Math.trunc(Number(u.visionScore) || 0),
+    shield: Math.trunc(Number(u.shieldAndHeal) || 0),
+    cs: Math.trunc(Number(u.cs) || 0),
+  };
 }
 
 /** Tiers solo flex (ordre elo), comme `rank_tier` en base. */
@@ -209,66 +276,143 @@ async function upsertPlayerRankHistoryFromParticipants(
 }
 
 async function upsertChampionStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
+  const baseCols = ["patch", "role", "rank_tier", "region", "champion_id", "team", "count_game", "count_win"];
+  const metricCols = CHAMPION_STATS_METRIC_COLUMNS;
+  const allCols = [...baseCols, ...metricCols];
+  const updateParts = [
+    "count_game = champion_stats.count_game + EXCLUDED.count_game",
+    "count_win = champion_stats.count_win + EXCLUDED.count_win",
+    ...metricCols.map((c) => `${c} = champion_stats.${c} + EXCLUDED.${c}`),
+    "updated_at = NOW()",
+  ];
+  const insertHeader = `INSERT INTO champion_stats (${allCols.join(", ")})`;
+  const conflict = `ON CONFLICT (patch, role, rank_tier, region, champion_id, team) DO UPDATE SET ${updateParts.join(", ")}`;
+
   for (const participant of participants) {
-    await tx`
-      INSERT INTO champion_stats (
-        patch, role, rank_tier, region, champion_id, team,
-        count_game, count_win, sum_gold_earned, sum_gold_spent, sum_kills, sum_assists
-      )
-      VALUES (
-        ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region}, ${participant.championId}, ${participant.teamId},
-        1, ${participantWinCount(participant)}, ${participant.goldEarned}, ${participant.goldSpent}, ${participant.kills}, ${participant.assists}
-      )
-      ON CONFLICT (patch, role, rank_tier, region, champion_id, team)
-      DO UPDATE SET
-        count_game = champion_stats.count_game + EXCLUDED.count_game,
-        count_win = champion_stats.count_win + EXCLUDED.count_win,
-        sum_gold_earned = champion_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
-        sum_gold_spent = champion_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
-        sum_kills = champion_stats.sum_kills + EXCLUDED.sum_kills,
-        sum_assists = champion_stats.sum_assists + EXCLUDED.sum_assists
-    `;
+    const values: unknown[] = [
+      participant.patch,
+      participant.role,
+      participant.rankTier,
+      participant.region,
+      participant.championId,
+      participant.teamId,
+      1,
+      participantWinCount(participant),
+      ...metricCols.map((c) => championStatsMetricValue(participant, c)),
+    ];
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+    const q = `${insertHeader} VALUES (${placeholders}) ${conflict}`;
+    await (tx as { unsafe: (query: string, params?: unknown[]) => Promise<unknown> }).unsafe(q, values);
   }
 }
 
 async function upsertChampionVsStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants.filter((p) => p.opponentChampionId > 0)) {
+    const m = championDuoRoleEconomyFromParticipant(participant);
+    const u = u15IngestSums(participant.u15);
     await tx`
       INSERT INTO champion_vs_stats (
         patch, role, rank_tier, region, champion_id, opponent_champion_id,
-        count_game, count_win
+        count_win, count_game,
+        sum_gold_earned, sum_gold_spent,
+        sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
+        sum_max_cs_advantage_on_lane_opponent, sum_vision_score_advantage_lane_opponent,
+        sum_laning_phase_gold_exp_advantage, sum_early_laning_phase_gold_exp_advantage,
+        sum_physique_damage_done_to_champion_u15, sum_magic_damage_done_to_champion_u15, sum_true_damage_done_to_champion_u15,
+        sum_kill_u15, sum_assist_u15, sum_death_u15, sum_vision_score_u15, sum_shield_and_heal_u15, sum_minions_killed_u15
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
         ${participant.championId}, ${participant.opponentChampionId},
-        1, ${participantWinCount(participant)}
+        ${participantWinCount(participant)}, 1,
+        ${m.goldEarned}, ${m.goldSpent},
+        ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
+        ${m.maxCsAdvantageOnLaneOpponent}, ${m.visionScoreAdvantageLaneOpponent},
+        ${m.laningPhaseGoldExpAdvantage}, ${m.earlyLaningPhaseGoldExpAdvantage},
+        ${u.phys}, ${u.magic}, ${u.trueDmg},
+        ${u.kill}, ${u.assist}, ${u.death}, ${u.vision}, ${u.shield}, ${u.cs}
       )
       ON CONFLICT (patch, role, rank_tier, region, champion_id, opponent_champion_id)
       DO UPDATE SET
         count_game = champion_vs_stats.count_game + 1,
-        count_win = champion_vs_stats.count_win + EXCLUDED.count_win
+        count_win = champion_vs_stats.count_win + EXCLUDED.count_win,
+        sum_gold_earned = champion_vs_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
+        sum_gold_spent = champion_vs_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
+        sum_max_level_lead_lane_opponent =
+          champion_vs_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
+        sum_max_kill_deficit = champion_vs_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
+        sum_more_enemy_jungle_than_opponent =
+          champion_vs_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
+        sum_max_cs_advantage_on_lane_opponent =
+          champion_vs_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
+        sum_vision_score_advantage_lane_opponent =
+          champion_vs_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
+        sum_laning_phase_gold_exp_advantage =
+          champion_vs_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
+        sum_early_laning_phase_gold_exp_advantage =
+          champion_vs_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
+        sum_physique_damage_done_to_champion_u15 =
+          champion_vs_stats.sum_physique_damage_done_to_champion_u15 + EXCLUDED.sum_physique_damage_done_to_champion_u15,
+        sum_magic_damage_done_to_champion_u15 =
+          champion_vs_stats.sum_magic_damage_done_to_champion_u15 + EXCLUDED.sum_magic_damage_done_to_champion_u15,
+        sum_true_damage_done_to_champion_u15 =
+          champion_vs_stats.sum_true_damage_done_to_champion_u15 + EXCLUDED.sum_true_damage_done_to_champion_u15,
+        sum_kill_u15 = champion_vs_stats.sum_kill_u15 + EXCLUDED.sum_kill_u15,
+        sum_assist_u15 = champion_vs_stats.sum_assist_u15 + EXCLUDED.sum_assist_u15,
+        sum_death_u15 = champion_vs_stats.sum_death_u15 + EXCLUDED.sum_death_u15,
+        sum_vision_score_u15 = champion_vs_stats.sum_vision_score_u15 + EXCLUDED.sum_vision_score_u15,
+        sum_shield_and_heal_u15 = champion_vs_stats.sum_shield_and_heal_u15 + EXCLUDED.sum_shield_and_heal_u15,
+        sum_minions_killed_u15 = champion_vs_stats.sum_minions_killed_u15 + EXCLUDED.sum_minions_killed_u15,
+        updated_at = NOW()
     `;
   }
 }
 
 async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
-    const allies = participants.filter((ally) => ally.matchId === participant.matchId && ally.teamId === participant.teamId && ally.puuid !== participant.puuid);
+    const allies = participants.filter(
+      (ally) => ally.matchId === participant.matchId && ally.teamId === participant.teamId && ally.puuid !== participant.puuid,
+    );
+    const m = championDuoRoleEconomyFromParticipant(participant);
     for (const ally of allies) {
       await tx`
         INSERT INTO champion_duo_role_stats (
           patch, rank_tier, region, champion_id, role, ally_champion_id, ally_role,
-          count_game, count_win
+          count_game, count_win,
+          sum_gold_earned, sum_gold_spent,
+          sum_max_level_lead_lane_opponent, sum_max_kill_deficit, sum_more_enemy_jungle_than_opponent,
+          sum_max_cs_advantage_on_lane_opponent, sum_vision_score_advantage_lane_opponent,
+          sum_laning_phase_gold_exp_advantage, sum_early_laning_phase_gold_exp_advantage
         )
         VALUES (
           ${participant.patch}, ${participant.rankTier}, ${participant.region},
           ${participant.championId}, ${participant.role}, ${ally.championId}, ${ally.role},
-          1, ${participantWinCount(participant)}
+          1, ${participantWinCount(participant)},
+          ${m.goldEarned}, ${m.goldSpent},
+          ${m.maxLevelLeadLaneOpponent}, ${m.maxKillDeficit}, ${m.moreEnemyJungleThanOpponent},
+          ${m.maxCsAdvantageOnLaneOpponent}, ${m.visionScoreAdvantageLaneOpponent},
+          ${m.laningPhaseGoldExpAdvantage}, ${m.earlyLaningPhaseGoldExpAdvantage}
         )
         ON CONFLICT (patch, rank_tier, region, champion_id, role, ally_champion_id, ally_role)
         DO UPDATE SET
           count_game = champion_duo_role_stats.count_game + 1,
-          count_win = champion_duo_role_stats.count_win + EXCLUDED.count_win
+          count_win = champion_duo_role_stats.count_win + EXCLUDED.count_win,
+          sum_gold_earned = champion_duo_role_stats.sum_gold_earned + EXCLUDED.sum_gold_earned,
+          sum_gold_spent = champion_duo_role_stats.sum_gold_spent + EXCLUDED.sum_gold_spent,
+          sum_max_level_lead_lane_opponent =
+            champion_duo_role_stats.sum_max_level_lead_lane_opponent + EXCLUDED.sum_max_level_lead_lane_opponent,
+          sum_max_kill_deficit = champion_duo_role_stats.sum_max_kill_deficit + EXCLUDED.sum_max_kill_deficit,
+          sum_more_enemy_jungle_than_opponent =
+            champion_duo_role_stats.sum_more_enemy_jungle_than_opponent + EXCLUDED.sum_more_enemy_jungle_than_opponent,
+          sum_max_cs_advantage_on_lane_opponent =
+            champion_duo_role_stats.sum_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_max_cs_advantage_on_lane_opponent,
+          sum_vision_score_advantage_lane_opponent =
+            champion_duo_role_stats.sum_vision_score_advantage_lane_opponent + EXCLUDED.sum_vision_score_advantage_lane_opponent,
+          sum_laning_phase_gold_exp_advantage =
+            champion_duo_role_stats.sum_laning_phase_gold_exp_advantage + EXCLUDED.sum_laning_phase_gold_exp_advantage,
+          sum_early_laning_phase_gold_exp_advantage =
+            champion_duo_role_stats.sum_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_early_laning_phase_gold_exp_advantage,
+          updated_at = NOW()
       `;
     }
   }
@@ -276,19 +420,20 @@ async function upsertChampionDuoRoleStats(tx: any, participants: ParsedParticipa
 
 async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
+    const spellTs = Math.max(0, Math.trunc(Number(participant.spellLevelUpTimestampSumMs ?? 0)));
     await tx`
       INSERT INTO champion_spell_stats (
         patch, role, rank_tier, region, champion_id,
         spell_order,
         spell1_casts, spell2_casts, spell3_casts, spell4_casts,
-        count_game, count_win
+        count_game, count_win, sum_timestamp_ms
       )
       VALUES (
         ${participant.patch}, ${participant.role}, ${participant.rankTier}, ${participant.region},
         ${participant.championId},
         ${participant.spellOrder},
-        0, 0, 0, 0,
-        1, ${participantWinCount(participant)}
+        ${participant.spell1Casts}, ${participant.spell2Casts}, ${participant.spell3Casts}, ${participant.spell4Casts},
+        1, ${participantWinCount(participant)}, ${spellTs}
       )
       ON CONFLICT (patch, role, rank_tier, region, champion_id, spell_order_hash)
       DO UPDATE SET
@@ -297,7 +442,9 @@ async function upsertSpellOrderStats(tx: any, participants: ParsedParticipantDto
         spell1_casts = champion_spell_stats.spell1_casts + EXCLUDED.spell1_casts,
         spell2_casts = champion_spell_stats.spell2_casts + EXCLUDED.spell2_casts,
         spell3_casts = champion_spell_stats.spell3_casts + EXCLUDED.spell3_casts,
-        spell4_casts = champion_spell_stats.spell4_casts + EXCLUDED.spell4_casts
+        spell4_casts = champion_spell_stats.spell4_casts + EXCLUDED.spell4_casts,
+        sum_timestamp_ms = champion_spell_stats.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
+        updated_at = NOW()
     `;
   }
 }
@@ -642,6 +789,135 @@ async function upsertChampionBucket(tx: any, participants: ParsedParticipantDto[
   }
 }
 
+async function upsertBotlaneDuoVsDuoStats(tx: any, payload: IngestionJobData): Promise<void> {
+  const { participants, teamStats } = payload;
+  const adc100 = firstBotlaneParticipant(participants, 100, "ADC");
+  const sup100 = firstBotlaneParticipant(participants, 100, "SUPPORT");
+  const adc200 = firstBotlaneParticipant(participants, 200, "ADC");
+  const sup200 = firstBotlaneParticipant(participants, 200, "SUPPORT");
+  if (!adc100 || !sup100 || !adc200 || !sup200) return;
+
+  const championIds = [adc100.championId, sup100.championId, adc200.championId, sup200.championId];
+  if (championIds.some((id) => !Number.isFinite(id) || id <= 0)) return;
+
+  const patch = teamStats.patch;
+  const region = teamStats.region;
+
+  const perspectives = [
+    {
+      rankTier: botlaneRankTierKey(adc100),
+      adc: adc100,
+      sup: sup100,
+      oppAdc: adc200,
+      oppSup: sup200,
+      win: adc100.win ? 1 : 0,
+    },
+    {
+      rankTier: botlaneRankTierKey(adc200),
+      adc: adc200,
+      sup: sup200,
+      oppAdc: adc100,
+      oppSup: sup100,
+      win: adc200.win ? 1 : 0,
+    },
+  ] as const;
+
+  for (const row of perspectives) {
+    const am = botlaneEconomyFromParticipant(row.adc);
+    const sm = botlaneEconomyFromParticipant(row.sup);
+    const a15 = u15IngestSums(row.adc.u15);
+    const s15 = u15IngestSums(row.sup.u15);
+
+    await tx`
+      INSERT INTO botlane_duo_vs_duo_stats (
+        patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id,
+        count_win, count_game,
+        sum_adc_gold_earned, sum_adc_gold_spent,
+        sum_adc_max_level_lead_lane_opponent, sum_adc_max_kill_deficit, sum_adc_max_cs_advantage_on_lane_opponent,
+        sum_adc_vision_score_advantage_lane_opponent, sum_adc_laning_phase_gold_exp_advantage, sum_adc_early_laning_phase_gold_exp_advantage,
+        sum_adc_physique_damage_done_to_champion_u15, sum_adc_magic_damage_done_to_champion_u15, sum_adc_true_damage_done_to_champion_u15,
+        sum_adc_kill_u15, sum_adc_assist_u15, sum_adc_death_u15, sum_adc_vision_score_u15, sum_adc_shield_and_heal_u15, sum_adc_minions_killed_u15,
+        sum_support_gold_earned, sum_support_gold_spent,
+        sum_support_max_level_lead_lane_opponent, sum_support_max_kill_deficit, sum_support_max_cs_advantage_on_lane_opponent,
+        sum_support_vision_score_advantage_lane_opponent, sum_support_laning_phase_gold_exp_advantage, sum_support_early_laning_phase_gold_exp_advantage,
+        sum_support_physique_damage_done_to_champion_u15, sum_support_magic_damage_done_to_champion_u15, sum_support_true_damage_done_to_champion_u15,
+        sum_support_kill_u15, sum_support_assist_u15, sum_support_death_u15, sum_support_vision_score_u15, sum_support_shield_and_heal_u15, sum_support_minions_killed_u15
+      )
+      VALUES (
+        ${patch}, ${row.rankTier}, ${region},
+        ${row.adc.championId}, ${row.sup.championId}, ${row.oppAdc.championId}, ${row.oppSup.championId},
+        ${row.win}, 1,
+        ${am.goldEarned}, ${am.goldSpent},
+        ${am.maxLevelLeadLaneOpponent}, ${am.maxKillDeficit}, ${am.maxCsAdvantageOnLaneOpponent},
+        ${am.visionScoreAdvantageLaneOpponent}, ${am.laningPhaseGoldExpAdvantage}, ${am.earlyLaningPhaseGoldExpAdvantage},
+        ${a15.phys}, ${a15.magic}, ${a15.trueDmg}, ${a15.kill}, ${a15.assist}, ${a15.death}, ${a15.vision}, ${a15.shield}, ${a15.cs},
+        ${sm.goldEarned}, ${sm.goldSpent},
+        ${sm.maxLevelLeadLaneOpponent}, ${sm.maxKillDeficit}, ${sm.maxCsAdvantageOnLaneOpponent},
+        ${sm.visionScoreAdvantageLaneOpponent}, ${sm.laningPhaseGoldExpAdvantage}, ${sm.earlyLaningPhaseGoldExpAdvantage},
+        ${s15.phys}, ${s15.magic}, ${s15.trueDmg}, ${s15.kill}, ${s15.assist}, ${s15.death}, ${s15.vision}, ${s15.shield}, ${s15.cs}
+      )
+      ON CONFLICT (patch, rank_tier, region, adc_id, support_id, opp_adc_id, opp_support_id)
+      DO UPDATE SET
+        count_win = botlane_duo_vs_duo_stats.count_win + EXCLUDED.count_win,
+        count_game = botlane_duo_vs_duo_stats.count_game + EXCLUDED.count_game,
+        sum_adc_gold_earned = botlane_duo_vs_duo_stats.sum_adc_gold_earned + EXCLUDED.sum_adc_gold_earned,
+        sum_adc_gold_spent = botlane_duo_vs_duo_stats.sum_adc_gold_spent + EXCLUDED.sum_adc_gold_spent,
+        sum_adc_max_level_lead_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_adc_max_level_lead_lane_opponent + EXCLUDED.sum_adc_max_level_lead_lane_opponent,
+        sum_adc_max_kill_deficit = botlane_duo_vs_duo_stats.sum_adc_max_kill_deficit + EXCLUDED.sum_adc_max_kill_deficit,
+        sum_adc_max_cs_advantage_on_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_adc_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_adc_max_cs_advantage_on_lane_opponent,
+        sum_adc_vision_score_advantage_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_adc_vision_score_advantage_lane_opponent + EXCLUDED.sum_adc_vision_score_advantage_lane_opponent,
+        sum_adc_laning_phase_gold_exp_advantage =
+          botlane_duo_vs_duo_stats.sum_adc_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_laning_phase_gold_exp_advantage,
+        sum_adc_early_laning_phase_gold_exp_advantage =
+          botlane_duo_vs_duo_stats.sum_adc_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_adc_early_laning_phase_gold_exp_advantage,
+        sum_adc_physique_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_adc_physique_damage_done_to_champion_u15 + EXCLUDED.sum_adc_physique_damage_done_to_champion_u15,
+        sum_adc_magic_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_adc_magic_damage_done_to_champion_u15 + EXCLUDED.sum_adc_magic_damage_done_to_champion_u15,
+        sum_adc_true_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_adc_true_damage_done_to_champion_u15 + EXCLUDED.sum_adc_true_damage_done_to_champion_u15,
+        sum_adc_kill_u15 = botlane_duo_vs_duo_stats.sum_adc_kill_u15 + EXCLUDED.sum_adc_kill_u15,
+        sum_adc_assist_u15 = botlane_duo_vs_duo_stats.sum_adc_assist_u15 + EXCLUDED.sum_adc_assist_u15,
+        sum_adc_death_u15 = botlane_duo_vs_duo_stats.sum_adc_death_u15 + EXCLUDED.sum_adc_death_u15,
+        sum_adc_vision_score_u15 = botlane_duo_vs_duo_stats.sum_adc_vision_score_u15 + EXCLUDED.sum_adc_vision_score_u15,
+        sum_adc_shield_and_heal_u15 = botlane_duo_vs_duo_stats.sum_adc_shield_and_heal_u15 + EXCLUDED.sum_adc_shield_and_heal_u15,
+        sum_adc_minions_killed_u15 = botlane_duo_vs_duo_stats.sum_adc_minions_killed_u15 + EXCLUDED.sum_adc_minions_killed_u15,
+        sum_support_gold_earned = botlane_duo_vs_duo_stats.sum_support_gold_earned + EXCLUDED.sum_support_gold_earned,
+        sum_support_gold_spent = botlane_duo_vs_duo_stats.sum_support_gold_spent + EXCLUDED.sum_support_gold_spent,
+        sum_support_max_level_lead_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_support_max_level_lead_lane_opponent + EXCLUDED.sum_support_max_level_lead_lane_opponent,
+        sum_support_max_kill_deficit =
+          botlane_duo_vs_duo_stats.sum_support_max_kill_deficit + EXCLUDED.sum_support_max_kill_deficit,
+        sum_support_max_cs_advantage_on_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_support_max_cs_advantage_on_lane_opponent + EXCLUDED.sum_support_max_cs_advantage_on_lane_opponent,
+        sum_support_vision_score_advantage_lane_opponent =
+          botlane_duo_vs_duo_stats.sum_support_vision_score_advantage_lane_opponent + EXCLUDED.sum_support_vision_score_advantage_lane_opponent,
+        sum_support_laning_phase_gold_exp_advantage =
+          botlane_duo_vs_duo_stats.sum_support_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_laning_phase_gold_exp_advantage,
+        sum_support_early_laning_phase_gold_exp_advantage =
+          botlane_duo_vs_duo_stats.sum_support_early_laning_phase_gold_exp_advantage + EXCLUDED.sum_support_early_laning_phase_gold_exp_advantage,
+        sum_support_physique_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_support_physique_damage_done_to_champion_u15 + EXCLUDED.sum_support_physique_damage_done_to_champion_u15,
+        sum_support_magic_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_support_magic_damage_done_to_champion_u15 + EXCLUDED.sum_support_magic_damage_done_to_champion_u15,
+        sum_support_true_damage_done_to_champion_u15 =
+          botlane_duo_vs_duo_stats.sum_support_true_damage_done_to_champion_u15 + EXCLUDED.sum_support_true_damage_done_to_champion_u15,
+        sum_support_kill_u15 = botlane_duo_vs_duo_stats.sum_support_kill_u15 + EXCLUDED.sum_support_kill_u15,
+        sum_support_assist_u15 = botlane_duo_vs_duo_stats.sum_support_assist_u15 + EXCLUDED.sum_support_assist_u15,
+        sum_support_death_u15 = botlane_duo_vs_duo_stats.sum_support_death_u15 + EXCLUDED.sum_support_death_u15,
+        sum_support_vision_score_u15 = botlane_duo_vs_duo_stats.sum_support_vision_score_u15 + EXCLUDED.sum_support_vision_score_u15,
+        sum_support_shield_and_heal_u15 =
+          botlane_duo_vs_duo_stats.sum_support_shield_and_heal_u15 + EXCLUDED.sum_support_shield_and_heal_u15,
+        sum_support_minions_killed_u15 =
+          botlane_duo_vs_duo_stats.sum_support_minions_killed_u15 + EXCLUDED.sum_support_minions_killed_u15,
+        updated_at = NOW()
+    `;
+  }
+}
+
 async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipantDto[]): Promise<void> {
   for (const participant of participants) {
     await tx`
@@ -665,17 +941,20 @@ async function upsertTierDailySnapshots(tx: any, participants: ParsedParticipant
 
 async function upsertObjectiveOutcomeHistogram(tx: any, payload: IngestionJobData): Promise<void> {
   for (const objective of payload.teamStats.objectives) {
+    const sumTs = Math.max(0, Math.trunc(Number(objective.sumTimestampMs ?? 0)));
     await tx`
       INSERT INTO objective_outcome_histogram (
-        patch, rank_tier, region, team, objective_type, outcome, obj_count, count_games
+        patch, rank_tier, region, team, objective_type, outcome, obj_count, count_games, sum_timestamp_ms
       )
       VALUES (
         ${payload.teamStats.patch}, ${payload.teamStats.rankTier}, ${payload.teamStats.region},
-        ${objective.team}, ${objective.type}, ${objective.outcome}, ${objective.count}, 1
+        ${objective.team}, ${objective.type}, ${objective.outcome}, ${objective.count}, 1, ${sumTs}
       )
       ON CONFLICT (patch, rank_tier, region, team, objective_type, outcome, obj_count)
       DO UPDATE SET
-        count_games = objective_outcome_histogram.count_games + 1
+        count_games = objective_outcome_histogram.count_games + 1,
+        sum_timestamp_ms = objective_outcome_histogram.sum_timestamp_ms + EXCLUDED.sum_timestamp_ms,
+        updated_at = NOW()
     `;
   }
 }
@@ -760,6 +1039,7 @@ async function runIngestionTransaction(payload: IngestionJobData): Promise<numbe
     await upsertBansByBanner(tx, payload.participants);
     await upsertChampionPickOrder(tx, payload.participants);
     await upsertChampionBucket(tx, payload.participants);
+    await upsertBotlaneDuoVsDuoStats(tx, payload);
     await upsertTierDailySnapshots(tx, payload.participants);
     await upsertObjectiveOutcomeHistogram(tx, payload);
     await upsertMatchOutcomeStats(tx, payload);

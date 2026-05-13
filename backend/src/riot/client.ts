@@ -186,10 +186,13 @@ export class RiotClient {
     return this.fetch<MatchTimelineDto>(url);
   }
 
-  async getRank(summonerId: string, region: string): Promise<RankDto | null> {
-    const url = `https://${getPlatformHost(region)}/lol/league/v4/entries/by-summoner/${encodeURIComponent(summonerId)}`;
+  /** Solo queue entry from League v4 (PUUID — `by-summoner` est retiré / 403 pour les clés API courantes). */
+  async getRank(puuid: string, region: string): Promise<RankDto | null> {
+    const url = `https://${getPlatformHost(region)}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`;
     const entries = await this.fetch<RankDto[]>(url);
-    const solo = entries.find((entry) => entry.queueType === "RANKED_SOLO_5x5");
+    const solo =
+      entries.find((entry) => String(entry.queueType ?? "").toUpperCase() === "RANKED_SOLO_5X5") ??
+      entries.find((entry) => String(entry.queueType ?? "").toUpperCase().includes("RANKED_SOLO"));
     return solo ?? null;
   }
 }

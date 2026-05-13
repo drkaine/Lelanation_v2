@@ -36,6 +36,7 @@
     "script:riot-live-test": "tsx src/scripts/testRiotApiKeyLive.ts",
     "script:copy-stats-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts",
     "script:sync-players-statistiques": "tsx src/scripts/copyStatsToStatistiquesDb.ts --sync-players-only",
+    "script:merge-objective-histogram-global": "tsx src/scripts/runMergeObjectiveHistogramGlobal.ts",
     "test:rate-limiter": "vitest run tests/rate-limiter.test.ts"
   },
   "devDependencies": {

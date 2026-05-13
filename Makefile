@@ -3,7 +3,8 @@
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
 	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify \
-	migrate-prisma migrate-drizzle-statistiques migrate-db copy-stats-statistiques sync-players-statistiques
+	migrate-prisma migrate-drizzle-statistiques migrate-db copy-stats-statistiques sync-players-statistiques \
+	merge-objective-histogram-global
 
 ROOT_DIR := $(CURDIR)
 COMPOSE := docker compose -f "$(ROOT_DIR)/docker-compose.yml"
@@ -37,7 +38,7 @@ help:
 	@echo ""
 	@echo "Build"
 	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller-v2 untouched)"
-	@echo "  make build-all          Same as build + PM2 restart all apps (incl. lelanation-poller-v2)"
+	@echo "  make build-all          Compile + migrations schéma + PM2 (ne remplit pas les tables stats ; pas de merge SQL)"
 	@echo "  make build-backend      migrate-db (Prisma stats + Drizzle statistiques) puis npm run build"
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
@@ -48,7 +49,8 @@ help:
 	@echo "  make migrate-drizzle-statistiques  Migrations Drizzle (DATABASE_URL_STATISTIQUES, base lelanation_statistiques : agrégats, players, player_rank_history, …)"
 	@echo "  make migrate-prisma     Prisma migrate deploy (DATABASE_URL, base lelanation_stats)"
 	@echo "  make migrate-db         migrate-prisma puis migrate-drizzle (les deux bases)"
-	@echo "  make copy-stats-statistiques  Copie lelanation_stats → lelanation_statistiques (passe ARGS après --)"
+	@echo "  make copy-stats-statistiques  Copie lelanation_stats → lelanation_statistiques (passe ARGS après -- ; script à implémenter si absent)"
+	@echo "  make merge-objective-histogram-global  Fusionne region GLOBAL → euw1 sur objective_outcome_histogram (DATABASE_URL_STATISTIQUES ou DATABASE_URL)"
 	@echo "  make sync-players-statistiques  Resync uniquement players (ARGS ex. ARGS='--truncate-dest-players')"
 	@echo ""
 	@echo "Docker PostgreSQL (local)"

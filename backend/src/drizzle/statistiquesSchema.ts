@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { bigint, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
+import { bigint, doublePrecision, integer, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
 
 /** Table initiale du dump SQL agrégé (botlane duo vs duo). Autres tables : uniquement en SQL migration pour l’instant. */
 export const botlaneDuoVsDuoStats = pgTable(
@@ -17,12 +17,16 @@ export const botlaneDuoVsDuoStats = pgTable(
 
     sumAdcGoldEarned: bigint('sum_adc_gold_earned', { mode: 'bigint' }).notNull().default(sql`0`),
     sumAdcGoldSpent: bigint('sum_adc_gold_spent', { mode: 'bigint' }).notNull().default(sql`0`),
-    sumAdcMaxLevelLeadLaneOpponent: integer('sum_adc_max_level_lead_lane_opponent').notNull().default(0),
-    sumAdcMaxKillDeficit: integer('sum_adc_max_kill_deficit').notNull().default(0),
-    sumAdcMaxCsAdvantageOnLaneOpponent: integer('sum_adc_max_cs_advantage_on_lane_opponent').notNull().default(0),
-    sumAdcVisionScoreAdvantageLaneOpponent: integer('sum_adc_vision_score_advantage_lane_opponent').notNull().default(0),
-    sumAdcLaningPhaseGoldExpAdvantage: integer('sum_adc_laning_phase_gold_exp_advantage').notNull().default(0),
-    sumAdcEarlyLaningPhaseGoldExpAdvantage: integer('sum_adc_early_laning_phase_gold_exp_advantage').notNull().default(0),
+    sumAdcMaxLevelLeadLaneOpponent: doublePrecision('sum_adc_max_level_lead_lane_opponent').notNull().default(0),
+    sumAdcMaxKillDeficit: doublePrecision('sum_adc_max_kill_deficit').notNull().default(0),
+    sumAdcMaxCsAdvantageOnLaneOpponent: doublePrecision('sum_adc_max_cs_advantage_on_lane_opponent').notNull().default(0),
+    sumAdcVisionScoreAdvantageLaneOpponent: doublePrecision('sum_adc_vision_score_advantage_lane_opponent')
+      .notNull()
+      .default(0),
+    sumAdcLaningPhaseGoldExpAdvantage: doublePrecision('sum_adc_laning_phase_gold_exp_advantage').notNull().default(0),
+    sumAdcEarlyLaningPhaseGoldExpAdvantage: doublePrecision('sum_adc_early_laning_phase_gold_exp_advantage')
+      .notNull()
+      .default(0),
     sumAdcPhysiqueDamageDoneToChampionU15: bigint('sum_adc_physique_damage_done_to_champion_u15', { mode: 'bigint' })
       .notNull()
       .default(sql`0`),
@@ -41,14 +45,18 @@ export const botlaneDuoVsDuoStats = pgTable(
 
     sumSupportGoldEarned: bigint('sum_support_gold_earned', { mode: 'bigint' }).notNull().default(sql`0`),
     sumSupportGoldSpent: bigint('sum_support_gold_spent', { mode: 'bigint' }).notNull().default(sql`0`),
-    sumSupportMaxLevelLeadLaneOpponent: integer('sum_support_max_level_lead_lane_opponent').notNull().default(0),
-    sumSupportMaxKillDeficit: integer('sum_support_max_kill_deficit').notNull().default(0),
-    sumSupportMaxCsAdvantageOnLaneOpponent: integer('sum_support_max_cs_advantage_on_lane_opponent').notNull().default(0),
-    sumSupportVisionScoreAdvantageLaneOpponent: integer('sum_support_vision_score_advantage_lane_opponent')
+    sumSupportMaxLevelLeadLaneOpponent: doublePrecision('sum_support_max_level_lead_lane_opponent').notNull().default(0),
+    sumSupportMaxKillDeficit: doublePrecision('sum_support_max_kill_deficit').notNull().default(0),
+    sumSupportMaxCsAdvantageOnLaneOpponent: doublePrecision('sum_support_max_cs_advantage_on_lane_opponent')
       .notNull()
       .default(0),
-    sumSupportLaningPhaseGoldExpAdvantage: integer('sum_support_laning_phase_gold_exp_advantage').notNull().default(0),
-    sumSupportEarlyLaningPhaseGoldExpAdvantage: integer('sum_support_early_laning_phase_gold_exp_advantage')
+    sumSupportVisionScoreAdvantageLaneOpponent: doublePrecision('sum_support_vision_score_advantage_lane_opponent')
+      .notNull()
+      .default(0),
+    sumSupportLaningPhaseGoldExpAdvantage: doublePrecision('sum_support_laning_phase_gold_exp_advantage')
+      .notNull()
+      .default(0),
+    sumSupportEarlyLaningPhaseGoldExpAdvantage: doublePrecision('sum_support_early_laning_phase_gold_exp_advantage')
       .notNull()
       .default(0),
     sumSupportPhysiqueDamageDoneToChampionU15: bigint('sum_support_physique_damage_done_to_champion_u15', {
