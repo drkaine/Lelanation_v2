@@ -119,7 +119,9 @@ async function refreshMissingTodayRanks(
         rankDivision = String(rank?.rank ?? "").trim().toUpperCase() || null;
         rankLp = clampRankLp(rank?.leaguePoints ?? 0);
       }
+      pollerV2Observability.recordRankLeagueFetchSucceeded();
     } catch (error) {
+      pollerV2Observability.recordRankLeagueFetchFailed();
       console.warn(
         `[hydration.worker] rank_refresh_failed puuid=${identity.puuid} region=${region} reason=${error instanceof Error ? error.message : String(error)}`,
       );
@@ -289,6 +291,7 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
       console.info(
         `[hydration.worker] skipped_old_patch matchId=${data.matchId} game_end_sec=${gameEndSec} cutoff_sec=${cutoffStartSec}`,
       );
+      pollerV2Observability.recordHydrationSkippedOldPatch();
       return;
     }
 

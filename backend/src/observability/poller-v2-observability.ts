@@ -18,6 +18,7 @@ type Totals = {
   matchesQueuedHydration: number;
   hydrationJobsStarted: number;
   hydrationJobsSucceeded: number;
+  hydrationJobsSkippedOldPatch: number;
   hydrationJobsNotFound: number;
   hydrationJobsFailed: number;
   ingestionJobsStarted: number;
@@ -26,6 +27,9 @@ type Totals = {
   ingestionJobsFailed: number;
   matchesIngested: number;
   participantsIngested: number;
+  /** Appels League v4 `entries/by-puuid` (refresh rang du jour). */
+  rankLeagueFetchesSucceeded: number;
+  rankLeagueFetchesFailed: number;
   apiRequests: number;
   api2xx: number;
   api4xx: number;
@@ -117,6 +121,7 @@ function emptyTotals(): Totals {
     matchesQueuedHydration: 0,
     hydrationJobsStarted: 0,
     hydrationJobsSucceeded: 0,
+    hydrationJobsSkippedOldPatch: 0,
     hydrationJobsNotFound: 0,
     hydrationJobsFailed: 0,
     ingestionJobsStarted: 0,
@@ -125,6 +130,8 @@ function emptyTotals(): Totals {
     ingestionJobsFailed: 0,
     matchesIngested: 0,
     participantsIngested: 0,
+    rankLeagueFetchesSucceeded: 0,
+    rankLeagueFetchesFailed: 0,
     apiRequests: 0,
     api2xx: 0,
     api4xx: 0,
@@ -149,6 +156,23 @@ function deltaTotals(current: Totals, baseline: Totals): Totals {
     out[key] = current[key] - baseline[key];
   }
   return out;
+}
+
+/** Champs attendus par `PollerAdminView` / anciens résumés (log unifié) — alignés sur le delta poller-v2. */
+function legacyTotalsFromV2Delta(delta: Totals): Record<string, number> {
+  const api4xx = delta.api4xx;
+  const api429 = delta.api429;
+  return {
+    httpRequests: delta.apiRequests,
+    requests: delta.apiRequests,
+    error429: api429,
+    error400: Math.max(0, api4xx - api429),
+    matchesInsertedDb: delta.matchesIngested,
+    matches: delta.matchesIngested,
+    newPlayers: delta.playersAdded,
+    playersPolled: delta.playersPolled,
+    participants: delta.participantsIngested,
+  };
 }
 
 class PollerV2Observability {
@@ -270,6 +294,10 @@ class PollerV2Observability {
     this.totals.matchesIngested += Math.max(0, matchesIngested);
   }
 
+  recordHydrationSkippedOldPatch(): void {
+    this.totals.hydrationJobsSkippedOldPatch += 1;
+  }
+
   recordHydrationNotFound(): void {
     this.totals.hydrationJobsNotFound += 1;
   }
@@ -295,6 +323,14 @@ class PollerV2Observability {
   recordIngestionFailure(error: unknown): void {
     this.totals.ingestionJobsFailed += 1;
     this.addError("ingestion", error instanceof Error ? error.message : String(error));
+  }
+
+  recordRankLeagueFetchSucceeded(): void {
+    this.totals.rankLeagueFetchesSucceeded += 1;
+  }
+
+  recordRankLeagueFetchFailed(): void {
+    this.totals.rankLeagueFetchesFailed += 1;
   }
 
   recordRateLimitAttempt(cost: number, granted: boolean, waitMs: number): void {
@@ -358,9 +394,20 @@ class PollerV2Observability {
     const baseline = window === "30m" ? this.baseline30m : this.baseline1h;
     const delta = deltaTotals(this.totals, baseline);
     const rolling = this.rolling2m();
+    const dw = dbWindow as { windowStartIso?: string; windowEndIso?: string };
+    const windowHours = window === "30m" ? 0.5 : 1;
+    const totals = legacyTotalsFromV2Delta(delta);
+    const requestsPerHour =
+      windowHours > 0 && delta.apiRequests > 0
+        ? Math.round((delta.apiRequests / windowHours) * 10) / 10
+        : 0;
     const payload = {
       window,
       atIso: nowIso,
+      windowStartIso: typeof dw.windowStartIso === "string" ? dw.windowStartIso : null,
+      windowEndIso: typeof dw.windowEndIso === "string" ? dw.windowEndIso : null,
+      totals,
+      requestsPerHour,
       delta,
       dbWindow,
       rolling2m: rolling,

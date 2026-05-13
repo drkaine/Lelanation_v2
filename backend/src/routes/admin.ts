@@ -4,7 +4,7 @@ import { promises as fs } from 'fs'
 import { dirname, join, resolve, isAbsolute } from 'path'
 import { fileURLToPath } from 'url'
 import { MetricsService } from '../services/MetricsService.js'
-import { CronStatusService, type CronJobKey, type CronJobStatus } from '../services/CronStatusService.js'
+import { CronStatusService } from '../services/CronStatusService.js'
 import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import {
@@ -17,41 +17,27 @@ import { runDataDragonSyncOnce } from '../cron/dataDragonSync.js'
 import { runYouTubeSyncOnce } from '../cron/youtubeSync.js'
 import { runCommunityDragonSyncOnce } from '../cron/communityDragonSync.js'
 import { runLiveAggArchiveCheckpointCronOnce } from '../cron/liveAggArchiveCheckpoint.js'
-import { prisma } from '../db.js'
-import { countRawIngestByStatus, isRawIngestQueueEnabled } from '../worker/matchIngestRawQueue.js'
-import { closePatch } from '../services/PatchLifecycleService.js'
-import { archiveChampionTierDailySnapshotsInDateRange } from '../services/ChampionTierDailySnapshotService.js'
 import { FileManager } from '../utils/fileManager.js'
 import {
   readUnifiedLogEntries,
   deleteUnifiedLogsInRange,
   appendUnifiedLog,
   getUnifiedLogPathResolved,
-  findLatestPollerSummaryEntries,
   readUnifiedLogTail,
   parseUnifiedLogLine,
-  type ParsedUnifiedLogEntry,
 } from '../logging/unifiedAppLog.js'
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
 import { readBalanceRules, writeBalanceRules } from '../services/BalanceRulesService.js'
-import {
-  startScript,
-  switchToScript,
-  requestStop,
-  isAnyScriptRunning,
-  getOrchestratorStatus,
-  getLastFinishedInfo,
-  type ScriptName,
-  type LeagueXpOptions,
-} from '../worker/scriptOrchestrator.js'
+import { getAdminDataCollectStats } from '../services/AdminDataCollectService.js'
 import { buildRiotPollerAdminPayload } from '../services/PollerAdminView.js'
 import {
   aggregatePollerMetricsFromUnifiedLog,
   type PollerLogSource,
 } from '../services/PollerMetricsFromLog.js'
+import { computePollerV2Dashboard } from '../services/PollerV2DashboardService.js'
 import { resolveRiotApiKey } from '../services/RiotHttpClient.js'
 import { riotGateway } from '../services/RiotGateway.js'
-import type { MatchFiltersConfig } from '../services/RiotConfigService.js'
+export type { AdminDataCollectStats } from '../services/AdminDataCollectService.js'
 
 type YouTubeChannelsConfig = { channels: Array<{ channelId: string; channelName: string } | string> }
 type StoredChannelData = { channelId: string; channelName?: string; lastSync?: string; videos?: Array<unknown> }
@@ -79,7 +65,6 @@ const youtubeDataDir = join(process.cwd(), 'data', 'youtube')
 const frontendYouTubeDir = join(process.cwd(), '..', 'frontend', 'public', 'data', 'youtube')
 const contactFilePath = join(process.cwd(), 'data', 'contact.json')
 const buildsDir = join(process.cwd(), 'data', 'builds')
-const MATCH_FILTERS_FILE = join(process.cwd(), 'data', 'riot', 'match-filters.json')
 
 function maskKey(key: string): string {
   if (key.length <= 8) return '••••••••'
@@ -257,321 +242,9 @@ router.post('/refresh-precomputed-stats', (_req, res) => {
     .catch((e) => console.error('[admin] refresh-precomputed-stats error:', e))
 })
 
-export type AdminDataCollectStats = {
-  totalPlayers: number
-  playersWrongKeyVersion: number
-  lastNewPlayerAt: string | null
-  lastPlayerLastSeenAt: string | null
-  lastPlayerUpdatedAt: string | null
-  totalTrackedMatches: number
-  trackedMatchesCreatedLast1h: number
-  trackedMatchesPendingNow: number
-  trackedMatchesPendingOver1h: number
-  trackedOldestPendingCreatedAt: string | null
-  trackedAggregateStatus: Record<string, number>
-  trackedLastAggregatedAt: string | null
-  playersCreatedLast1h: number
-  playersLastSeenLast1h: number
-  playersUpdatedLast1h: number
-  /** File `match_ingest_raw` (raw → agrégation). Nul si la raw queue est désactivée. */
-  matchIngestRaw: {
-    pending: number
-    processing: number
-    error: number
-    errorRankPending: number
-  } | null
-  /** tracked_matches encore en attente d' hydration rank avant reprise d'agrégation. */
-  trackedMatchesDeferredRankPending: number
-  pollerResume: {
-    script: string
-    atIso: string
-    message: string
-    windowStartIso: string | null
-    windowEndIso: string | null
-    delta: Record<string, unknown>
-    httpWindowStats: unknown
-    dbWindow1h: unknown
-    requestsPerHour: unknown
-    httpRequestsProjectedPerHour: unknown
-  } | null
-}
-
-function pickNewerPollerLogEntry(
-  a: ParsedUnifiedLogEntry | null,
-  b: ParsedUnifiedLogEntry | null,
-): ParsedUnifiedLogEntry | null {
-  if (!a) return b
-  if (!b) return a
-  return a.atIso >= b.atIso ? a : b
-}
-
-function pollerResumeFromUnifiedEntry(
-  e: ParsedUnifiedLogEntry,
-): NonNullable<AdminDataCollectStats['pollerResume']> {
-  const j = e.json ?? {}
-  const delta = (j['delta'] as Record<string, unknown>) ?? {}
-  return {
-    script: e.script,
-    atIso: e.atIso,
-    message: e.message,
-    windowStartIso: typeof j['windowStartIso'] === 'string' ? j['windowStartIso'] : null,
-    windowEndIso: typeof j['windowEndIso'] === 'string' ? j['windowEndIso'] : null,
-    delta,
-    httpWindowStats: j['httpWindowStats'] ?? null,
-    dbWindow1h: j['dbWindow1h'] ?? null,
-    requestsPerHour: j['requestsPerHour'] ?? null,
-    httpRequestsProjectedPerHour: j['httpRequestsProjectedPerHour'] ?? null,
-  }
-}
-
-async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
-  const empty: AdminDataCollectStats = {
-    totalPlayers: 0,
-    playersWrongKeyVersion: 0,
-    lastNewPlayerAt: null,
-    lastPlayerLastSeenAt: null,
-    lastPlayerUpdatedAt: null,
-    totalTrackedMatches: 0,
-    trackedMatchesCreatedLast1h: 0,
-    trackedMatchesPendingNow: 0,
-    trackedMatchesPendingOver1h: 0,
-    trackedOldestPendingCreatedAt: null,
-    trackedAggregateStatus: {},
-    trackedLastAggregatedAt: null,
-    playersCreatedLast1h: 0,
-    playersLastSeenLast1h: 0,
-    playersUpdatedLast1h: 0,
-    matchIngestRaw: null,
-    trackedMatchesDeferredRankPending: 0,
-    pollerResume: null,
-  }
-  const since1h = new Date(Date.now() - 60 * 60 * 1000)
-  try {
-    const [
-      lastPlayer,
-      maxLastSeenAgg,
-      maxUpdatedAgg,
-      totalPlayers,
-      trackedTotal,
-      tracked1h,
-      trackedPendingNow,
-      trackedPendingOver1h,
-      trackedOldestPendingCreatedAt,
-      trackedAggByStatus,
-      trackedLastAggregatedAt,
-      playersWrongKeyVersion,
-      playersCreated1h,
-      playersLastSeen1h,
-      playersUpdated1h,
-      trackedDeferredRank,
-      rawRankPendingErr,
-      logSummaries,
-    ] = await Promise.all([
-      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.player.aggregate({ _max: { lastSeen: true } }),
-      prisma.player.aggregate({ _max: { updatedAt: true } }),
-      prisma.player.count(),
-      prisma.$queryRaw<Array<{ c: bigint }>>`SELECT COUNT(*)::bigint AS c FROM tracked_matches`,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE created_at >= ${since1h}
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM tracked_matches
-        WHERE aggregate_status = 'PENDING'
-          AND created_at < ${since1h}
-      `,
-      prisma.$queryRaw<Array<{ d: Date | null }>>`
-        SELECT MIN(created_at) AS d
-        FROM tracked_matches
-        WHERE aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ aggregate_status: string; c: bigint }>>`
-        SELECT aggregate_status, COUNT(*)::bigint AS c
-        FROM tracked_matches
-        GROUP BY aggregate_status
-      `,
-      prisma.$queryRaw<Array<{ d: Date | null }>>`
-        SELECT MAX(aggregated_at) AS d
-        FROM tracked_matches
-      `,
-      prisma.player.count({ where: { puuidKeyVersion: null } }),
-      prisma.player.count({ where: { createdAt: { gte: since1h } } }),
-      prisma.player.count({ where: { lastSeen: { gte: since1h } } }),
-      prisma.player.count({ where: { updatedAt: { gte: since1h } } }),
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM tracked_matches
-        WHERE status = 'DEFERRED_RANK_PENDING'
-          AND aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM match_ingest_raw
-        WHERE status = 'error'
-          AND last_error = 'tracked_rank_pending'
-      `,
-      findLatestPollerSummaryEntries(),
-    ])
-    const rawCounts = isRawIngestQueueEnabled()
-      ? await countRawIngestByStatus().catch(() => ({ pending: 0, processing: 0, error: 0 }))
-      : null
-    const latest = pickNewerPollerLogEntry(logSummaries.last30m, logSummaries.lastHourly)
-    return {
-      totalPlayers,
-      playersWrongKeyVersion,
-      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      lastPlayerLastSeenAt: maxLastSeenAgg._max.lastSeen?.toISOString() ?? null,
-      lastPlayerUpdatedAt: maxUpdatedAgg._max.updatedAt?.toISOString() ?? null,
-      totalTrackedMatches: Number(trackedTotal[0]?.c ?? 0),
-      trackedMatchesCreatedLast1h: Number(tracked1h[0]?.c ?? 0),
-      trackedMatchesPendingNow: Number(trackedPendingNow[0]?.c ?? 0),
-      trackedMatchesPendingOver1h: Number(trackedPendingOver1h[0]?.c ?? 0),
-      trackedOldestPendingCreatedAt: trackedOldestPendingCreatedAt[0]?.d?.toISOString() ?? null,
-      trackedAggregateStatus: Object.fromEntries(
-        trackedAggByStatus.map((r) => [r.aggregate_status, Number(r.c ?? 0)])
-      ),
-      trackedLastAggregatedAt: trackedLastAggregatedAt[0]?.d?.toISOString() ?? null,
-      playersCreatedLast1h: playersCreated1h,
-      playersLastSeenLast1h: playersLastSeen1h,
-      playersUpdatedLast1h: playersUpdated1h,
-      matchIngestRaw: rawCounts
-        ? {
-            ...rawCounts,
-            errorRankPending: Number(rawRankPendingErr[0]?.c ?? 0),
-          }
-        : null,
-      trackedMatchesDeferredRankPending: Number(trackedDeferredRank[0]?.c ?? 0),
-      pollerResume: latest ? pollerResumeFromUnifiedEntry(latest) : null,
-    }
-  } catch {
-    return empty
-  }
-}
-
-/** GET /api/admin/data-stats — collecte : DB (`tracked_matches`, `players`) + dernier résumé poller (log unifié). */
+/** GET /api/admin/data-stats — collecte : DB stats (`tracked_matches`, `players`) ou snapshot `statistiques` (sans lecture du log poller). */
 router.get('/data-stats', async (_req, res) => {
   return res.json(await getAdminDataCollectStats())
-})
-
-router.get('/active-patches', async (_req, res) => {
-  try {
-    const patches = await prisma.activePatch.findMany({
-      orderBy: { gameVersion: 'asc' },
-      select: {
-        gameVersion: true,
-        gamesNumber: true,
-        gameNumberMax: true,
-        isCurrent: true,
-        archivedAt: true,
-      },
-    })
-    return res.json({ patches })
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
-  }
-})
-
-router.get('/patch-close-options', async (_req, res) => {
-  try {
-    const options = await versionService.listPatchCloseOptions()
-    return res.json({ options })
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
-  }
-})
-
-router.post('/patch-close', async (req, res) => {
-  const patchLabelRaw =
-    typeof req.body?.patchLabel === 'string'
-      ? req.body.patchLabel.trim()
-      : typeof req.body?.patch === 'string'
-        ? req.body.patch.trim()
-        : ''
-  if (!patchLabelRaw) {
-    return res.status(400).json({ error: 'patchLabel is required' })
-  }
-  try {
-    const window = await versionService.resolveSnapshotWindowForPatch(patchLabelRaw)
-    if (!window) {
-      return res.status(400).json({
-        error: 'Unknown patch or invalid date window (check data/game/versions.json)',
-      })
-    }
-    const closeSummary = await closePatch(window.patchLabel)
-    const { archivedRowCount } = await archiveChampionTierDailySnapshotsInDateRange(
-      window.startInclusive,
-      window.endExclusive,
-    )
-    return res.json({
-      ok: true,
-      patch: window.patchLabel,
-      version: window.version,
-      startInclusive: window.startInclusive,
-      endExclusive: window.endExclusive,
-      snapshotRowsArchived: archivedRowCount,
-      isLatestInRecap: window.isLatestInRecap,
-      closeSummary,
-    })
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
-  }
-})
-
-router.put('/active-patches/:patch/max', async (req, res) => {
-  const patch = typeof req.params.patch === 'string' ? req.params.patch.trim() : ''
-  const gameNumberMaxRaw = Number(req.body?.gameNumberMax)
-  if (!patch) return res.status(400).json({ error: 'patch is required' })
-  if (!Number.isFinite(gameNumberMaxRaw) || gameNumberMaxRaw < 1) {
-    return res.status(400).json({ error: 'gameNumberMax must be a positive integer' })
-  }
-  const gameNumberMax = Math.trunc(gameNumberMaxRaw)
-  try {
-    // Source of truth: keep match-filters.json in sync with admin edits.
-    const configResult = await FileManager.readJson<MatchFiltersConfig>(MATCH_FILTERS_FILE)
-    if (configResult.isErr()) {
-      return res.status(500).json({ error: configResult.unwrapErr().message })
-    }
-    const config = configResult.unwrap()
-    if (!Array.isArray(config.versions)) {
-      return res.status(500).json({ error: 'match-filters.json: versions is invalid' })
-    }
-    const versionRow = config.versions.find(v => (v?.version ?? '').trim() === patch)
-    if (!versionRow) {
-      return res.status(404).json({ error: `Patch ${patch} not found in match-filters.json` })
-    }
-    versionRow.maxMatches = gameNumberMax
-    if (typeof versionRow.completed !== 'boolean') versionRow.completed = false
-    const writeResult = await FileManager.writeJson(MATCH_FILTERS_FILE, config)
-    if (writeResult.isErr()) {
-      return res.status(500).json({ error: writeResult.unwrapErr().message })
-    }
-
-    const existing = await prisma.activePatch.findUnique({
-      where: { gameVersion: patch },
-      select: { gamesNumber: true },
-    })
-    if (!existing) return res.status(404).json({ error: 'Patch not found in active_patches' })
-    const updated = await prisma.activePatch.update({
-      where: { gameVersion: patch },
-      data: {
-        gameNumberMax,
-        isCurrent: existing.gamesNumber < gameNumberMax,
-      },
-      select: {
-        gameVersion: true,
-        gamesNumber: true,
-        gameNumberMax: true,
-        isCurrent: true,
-      },
-    })
-    return res.json({ success: true, patch: updated })
-  } catch (err) {
-    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
-  }
 })
 
 router.get('/balance-rules', async (_req, res) => {
@@ -595,74 +268,6 @@ router.put('/balance-rules', async (req, res) => {
   }
 })
 
-const CRON_JOBS: Array<{ key: string; label: string }> = [
-  { key: 'dataDragonSync', label: 'dataDragonSync' },
-  { key: 'youtubeSync', label: 'youtubeSync' },
-  { key: 'communityDragonSync', label: 'communityDragonSync' },
-  { key: 'liveAggArchiveCheckpoint', label: 'liveAggArchiveCheckpoint' },
-]
-
-router.get('/riot-scripts-status', async (_req, res) => {
-  const cronResult = await cronStatus.getStatus()
-  const cronJobs: Record<CronJobKey, CronJobStatus> = cronResult.isOk()
-    ? cronResult.unwrap().jobs
-    : ({
-        dataDragonSync: { job: 'dataDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
-        youtubeSync: { job: 'youtubeSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
-        communityDragonSync: { job: 'communityDragonSync', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
-        liveAggArchiveCheckpoint: { job: 'liveAggArchiveCheckpoint', lastStartAt: null, lastSuccessAt: null, lastFailureAt: null, lastFailureMessage: null },
-      } as Record<CronJobKey, CronJobStatus>)
-
-  const crons = CRON_JOBS.map(({ key, label }) => {
-    const job = cronJobs[key as CronJobKey]
-    return {
-      script: label,
-      type: 'cron' as const,
-      lastStartAt: job?.lastStartAt ?? null,
-      lastSuccessAt: job?.lastSuccessAt ?? null,
-      lastFailureAt: job?.lastFailureAt ?? null,
-      lastFailureMessage: job?.lastFailureMessage ?? null,
-    }
-  })
-
-  const dataStats = await getAdminDataCollectStats()
-
-  const orchestratorStatus = getOrchestratorStatus()
-  const lastFinished = getLastFinishedInfo()
-  const riotPoller = await buildRiotPollerAdminPayload()
-
-  const orchestrator = {
-    activeScript: orchestratorStatus.activeScript,
-    isRunning: orchestratorStatus.isRunning,
-    startedAt: orchestratorStatus.startedAt,
-    finishedAt: orchestratorStatus.finishedAt,
-    lastError: orchestratorStatus.lastError,
-    shouldStop: orchestratorStatus.shouldStop,
-    counters: orchestratorStatus.counters,
-    lastFinishedScript: lastFinished.script,
-    lastFinishedAt: lastFinished.finishedAt,
-  }
-
-  const scripts = [
-    {
-      script: 'puuid-migration',
-      status:
-        orchestratorStatus.activeScript === 'puuid-migration' && orchestratorStatus.isRunning
-          ? 'running'
-          : 'stopped',
-    },
-    {
-      script: 'league-xp',
-      status:
-        orchestratorStatus.activeScript === 'league-xp' && orchestratorStatus.isRunning
-          ? 'running'
-          : 'stopped',
-    },
-  ]
-
-  return res.json({ scripts, crons, dataStats, riotPoller, orchestrator })
-})
-
 const ROOT_LOGS_DIR = resolve(backendRoot, '..', 'logs')
 const SCRIPT_LOGS_DIR = join(ROOT_LOGS_DIR, 'scripts')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
@@ -682,11 +287,13 @@ router.get('/poller-v2/observability', async (_req, res) => {
     const atIso = typeof data['atIso'] === 'string' ? data['atIso'] : null
     const ageMs = atIso ? Date.now() - new Date(atIso).getTime() : null
     const stale = typeof ageMs === 'number' ? ageMs > 2 * 60_000 : true
+    const dashboard = computePollerV2Dashboard(data)
     return res.json({
       ok: true,
       stale,
       ageMs,
       data,
+      dashboard,
     })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
@@ -697,20 +304,16 @@ router.get('/poller-v2/observability', async (_req, res) => {
   }
 })
 
-/** GET /api/admin/riot-poller/metrics — aggregate poller_hourly / poller_30m from unified log */
+/** GET /api/admin/riot-poller/metrics — agrégation des résumés poller-v2 dans le log unifié (`source=both` inclut l’ancien poller). */
 router.get('/riot-poller/metrics', async (req, res) => {
   try {
     const granularity = req.query.granularity === 'day' ? 'day' : 'hour'
-    const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'both'
-    let sources: PollerLogSource[] = [
-      'poller_hourly',
-      'poller_30m',
-      'poller_v2_hourly',
-      'poller_v2_30m',
-    ]
-    if (sourceParam === 'hourly') sources = ['poller_hourly', 'poller_v2_hourly']
-    else if (sourceParam === '30m' || sourceParam === 'poller_30m')
-      sources = ['poller_30m', 'poller_v2_30m']
+    const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'v2'
+    let sources: PollerLogSource[] = ['poller_v2_hourly', 'poller_v2_30m']
+    if (sourceParam === 'both') {
+      sources = ['poller_hourly', 'poller_30m', 'poller_v2_hourly', 'poller_v2_30m']
+    } else if (sourceParam === 'hourly') sources = ['poller_v2_hourly']
+    else if (sourceParam === '30m' || sourceParam === 'poller_30m') sources = ['poller_v2_30m']
 
     const now = new Date()
     const toIso =
@@ -765,13 +368,6 @@ router.get('/riot-poller/metrics', async (req, res) => {
       buckets: [],
     })
   }
-})
-
-/** GET /api/admin/riot-script/status — unified orchestrator status (all scripts). */
-router.get('/riot-script/status', (_req, res) => {
-  const s = getOrchestratorStatus()
-  const lastFinished = getLastFinishedInfo()
-  return res.json({ ...s, lastFinishedScript: lastFinished.script, lastFinishedAt: lastFinished.finishedAt })
 })
 
 /** GET /api/admin/riot-apikey - current key status (masked) */
@@ -832,102 +428,16 @@ router.get('/riot-api-stats', async (_req, res) => {
   return res.json(await buildRiotPollerAdminPayload())
 })
 
-router.post('/riot-poller/stop', (_req, res) => {
-  if (!isAnyScriptRunning()) {
-    return res.json({ success: true, message: 'No script running.' })
-  }
-  requestStop()
-  return res.status(202).json({ success: true, message: 'Stop requested. The current task will finish then the script will stop.' })
-})
-
-router.post('/riot-poller/start', (_req, res) => {
-  return res.status(410).json({
-    success: false,
-    error:
-      'In-process Riot poller removed. Run ingestion via PM2: pm2 restart lelanation-poller-v2 (see ecosystem.config.js).',
-  })
-})
-
-/**
- * POST /api/admin/riot-script/start
- * Body: { script: 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
- * Starts the specified script. Returns 409 if a script is already running.
- */
-router.post('/riot-script/start', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['puuid-migration', 'league-xp']
-  const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
-  if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
-    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
-  }
-
-  const options: LeagueXpOptions = {}
-  if (scriptName === 'league-xp' && req.body?.options && typeof req.body.options === 'object') {
-    const o = req.body.options as Record<string, unknown>
-    if (typeof o['queue'] === 'string') options.queue = o['queue']
-    if (typeof o['tier'] === 'string') options.tier = o['tier'].toUpperCase()
-    if (typeof o['division'] === 'string') options.division = o['division'].toUpperCase()
-    if (typeof o['region'] === 'string') options.region = o['region'].toLowerCase()
-    if (typeof o['maxPages'] === 'number') options.maxPages = Math.max(1, Math.min(100, Math.trunc(o['maxPages'])))
-  }
-
-  const result = await startScript(scriptName, options)
-  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
-  return res.status(202).json({ success: true, message: `Script '${scriptName}' started.` })
-})
-
-/**
- * POST /api/admin/riot-script/switch
- * Body: { script, options? } - stops previous running script (if any), then starts requested one.
- */
-router.post('/riot-script/switch', async (req, res) => {
-  const VALID_SWITCH: ScriptName[] = ['puuid-migration', 'league-xp']
-  const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
-  if (!scriptName || !VALID_SWITCH.includes(scriptName)) {
-    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SWITCH.join(', ')}` })
-  }
-
-  const options: LeagueXpOptions = {}
-  if (scriptName === 'league-xp' && req.body?.options && typeof req.body.options === 'object') {
-    const o = req.body.options as Record<string, unknown>
-    if (typeof o['queue'] === 'string') options.queue = o['queue']
-    if (typeof o['tier'] === 'string') options.tier = o['tier'].toUpperCase()
-    if (typeof o['division'] === 'string') options.division = o['division'].toUpperCase()
-    if (typeof o['region'] === 'string') options.region = o['region'].toLowerCase()
-    if (typeof o['maxPages'] === 'number') options.maxPages = Math.max(1, Math.min(100, Math.trunc(o['maxPages'])))
-  }
-
-  const result = await switchToScript(scriptName, options)
-  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
-  return res.status(202).json({
-    success: true,
-    message: result.previousScript
-      ? `Script '${result.previousScript}' stopped, '${scriptName}' started.`
-      : `Script '${scriptName}' started.`,
-  })
-})
-
-/**
- * POST /api/admin/riot-script/stop
- * Gracefully stops the currently running script.
- */
-router.post('/riot-script/stop', (_req, res) => {
-  if (!isAnyScriptRunning()) {
-    return res.json({ success: true, message: 'No script is running.' })
-  }
-  const s = getOrchestratorStatus()
-  requestStop()
-  return res.status(202).json({
-    success: true,
-    message: `Stop requested for '${s.activeScript}'. It will finish its current task before stopping.`,
-  })
-})
-
 router.get('/riot-poller/logs', async (req, res) => {
   const linesParam = Number(req.query.lines)
   const lines = Number.isFinite(linesParam) && linesParam > 0
     ? Math.min(linesParam, RIOT_POLLER_LOGS_MAX_LINES)
     : 200
   const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
+  const includeLegacyScripts =
+    req.query.legacy === '1' ||
+    req.query.includeLegacy === 'true' ||
+    process.env.ADMIN_POLLER_LEGACY_LOG_SCRIPTS === '1'
   try {
     const tail = await readUnifiedLogTail(2 * 1024 * 1024)
     const allLines = tail.split(/\r?\n/).filter((l) => l.trim().length > 0)
@@ -935,13 +445,12 @@ router.get('/riot-poller/logs', async (req, res) => {
     for (const line of allLines) {
       const p = parseUnifiedLogLine(line, 0)
       if (!p) continue
-      if (
-        p.script === 'poller' ||
-        p.script.startsWith('poller_') ||
-        p.script.startsWith('poller_v2')
-      ) {
-        pollerLines.push(line)
-      }
+      const isV2 = p.script.startsWith('poller_v2')
+      const isLegacyPoller =
+        includeLegacyScripts &&
+        (p.script === 'poller' || p.script === 'poller_30m' || p.script === 'poller_hourly')
+      if (!(isV2 || isLegacyPoller)) continue
+      pollerLines.push(line)
     }
     const log = sort === 'asc' ? pollerLines.slice(-lines) : pollerLines.slice(-lines).reverse()
     return res.json({ log, logDir: 'lelanation-unified.log (tail)' })

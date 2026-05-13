@@ -1,5 +1,9 @@
-import { prisma } from '../db.js'
-import { findLatestPollerSummaryEntries, type ParsedUnifiedLogEntry } from '../logging/unifiedAppLog.js'
+import { prisma, isDatabaseConfigured } from '../db.js'
+import { getStatistiquesPool, isStatistiquesDatabaseConfigured } from '../drizzle/statistiquesDb.js'
+import {
+  findLatestPollerSummaryEntries,
+  type ParsedUnifiedLogEntry,
+} from '../logging/unifiedAppLog.js'
 
 /** No recent poller summary line ⇒ treat as inactive (override with POLLER_ADMIN_LOG_STALE_MS, min 90 min). */
 const envStale = process.env.POLLER_ADMIN_LOG_STALE_MS
@@ -53,6 +57,60 @@ function num(v: unknown): number {
   return 0
 }
 
+/** Résumés poller-v2 (delta + dbWindow) sans bloc `totals` legacy — aligné sur `poller-v2-observability`. */
+function totalsFromV2Delta(d: Record<string, unknown>): Record<string, unknown> {
+  const api4xx = num(d['api4xx'])
+  const api429 = num(d['api429'])
+  return {
+    httpRequests: num(d['apiRequests']),
+    requests: num(d['apiRequests']),
+    error429: api429,
+    error400: Math.max(0, api4xx - api429),
+    matchesInsertedDb: num(d['matchesIngested']),
+    matches: num(d['matchesIngested']),
+    newPlayers: num(d['playersAdded']),
+    playersPolled: num(d['playersPolled']),
+    participants: num(d['participantsIngested']),
+  }
+}
+
+function resolvePollerSummaryJson(j: Record<string, unknown>): {
+  totals: Record<string, unknown>
+  winStart: string | null
+  winEnd: string | null
+  requestsPerHour: number
+} {
+  const rawTotals = (j['totals'] as Record<string, unknown>) ?? {}
+  const hasLegacyHttp = num(rawTotals['httpRequests']) + num(rawTotals['requests']) > 0
+  let totals: Record<string, unknown> = { ...rawTotals }
+  if (!hasLegacyHttp && j['delta'] && typeof j['delta'] === 'object' && j['delta'] !== null) {
+    totals = totalsFromV2Delta(j['delta'] as Record<string, unknown>)
+  }
+  const db = (j['dbWindow'] as Record<string, unknown>) ?? {}
+  const winStart =
+    typeof j['windowStartIso'] === 'string'
+      ? j['windowStartIso']
+      : typeof db['windowStartIso'] === 'string'
+        ? (db['windowStartIso'] as string)
+        : null
+  const winEnd =
+    typeof j['windowEndIso'] === 'string'
+      ? j['windowEndIso']
+      : typeof db['windowEndIso'] === 'string'
+        ? (db['windowEndIso'] as string)
+        : null
+  let requestsPerHour = num(j['requestsPerHour'])
+  if (requestsPerHour <= 0) {
+    const http = num(totals['httpRequests']) || num(totals['requests'])
+    const win = j['window']
+    const hours = win === '1h' ? 1 : win === '30m' ? 0.5 : 0
+    if (hours > 0 && http > 0) {
+      requestsPerHour = Math.round((http / hours) * 100) / 100
+    }
+  }
+  return { totals, winStart, winEnd, requestsPerHour }
+}
+
 function pickNewerSummary(
   a: ParsedUnifiedLogEntry | null,
   b: ParsedUnifiedLogEntry | null
@@ -67,9 +125,8 @@ function payloadFromUnifiedLogEntry(
   now: number,
   latestPlayerLastSeenAt: string | null
 ): RiotPollerAdminPayload {
-  const j = e.json ?? {}
-  const totals = (j['totals'] as Record<string, unknown>) ?? {}
-  const requestsPerHour = num(j['requestsPerHour'])
+  const j = (e.json ?? {}) as Record<string, unknown>
+  const { totals, winStart, winEnd, requestsPerHour } = resolvePollerSummaryJson(j)
   const requestsPerMinute =
     requestsPerHour > 0 ? Math.round((requestsPerHour / 60) * 10) / 10 : null
   const requestsPer2Min =
@@ -78,9 +135,6 @@ function payloadFromUnifiedLogEntry(
   const atMs = new Date(e.atIso).getTime()
   const ageMs = Number.isFinite(atMs) ? now - atMs : Infinity
   const fresh = ageMs < UNIFIED_LOG_STALE_MS
-
-  const winStart = typeof j['windowStartIso'] === 'string' ? j['windowStartIso'] : null
-  const winEnd = typeof j['windowEndIso'] === 'string' ? j['windowEndIso'] : null
 
   return {
     isRunning: fresh,
@@ -146,15 +200,25 @@ function emptyPayload(latestPlayerLastSeenAt: string | null): RiotPollerAdminPay
 export async function buildRiotPollerAdminPayload(): Promise<RiotPollerAdminPayload> {
   const now = Date.now()
 
-  const latestPlayerSeen = await prisma.player
-    .findFirst({
-      where: { lastSeen: { not: null } },
-      orderBy: { lastSeen: 'desc' },
-      select: { lastSeen: true },
-    })
-    .catch(() => null)
-
-  const latestPlayerLastSeenAt = latestPlayerSeen?.lastSeen?.toISOString() ?? null
+  let latestPlayerLastSeenAt: string | null = null
+  if (isDatabaseConfigured()) {
+    const latestPlayerSeen = await prisma.player
+      .findFirst({
+        where: { lastSeen: { not: null } },
+        orderBy: { lastSeen: 'desc' },
+        select: { lastSeen: true },
+      })
+      .catch(() => null)
+    latestPlayerLastSeenAt = latestPlayerSeen?.lastSeen?.toISOString() ?? null
+  } else if (isStatistiquesDatabaseConfigured()) {
+    try {
+      const pool = getStatistiquesPool()
+      const r = await pool.query<{ d: Date | null }>(`SELECT MAX(last_seen) AS d FROM players`)
+      latestPlayerLastSeenAt = r.rows[0]?.d?.toISOString() ?? null
+    } catch {
+      latestPlayerLastSeenAt = null
+    }
+  }
 
   const { last30m, lastHourly } = await findLatestPollerSummaryEntries()
   const e = pickNewerSummary(last30m, lastHourly)

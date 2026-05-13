@@ -105,14 +105,29 @@
         <!-- Section 1: Stats collecte -->
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
           <h2 class="mb-4 text-lg font-semibold text-text">{{ t('admin.data.stats.title') }}</h2>
-          <p class="mb-3 text-xs text-text/70">
-            Totaux et fenêtre 1 h : <code class="text-[11px]">players</code> (created_at, last_seen)
-            et <code class="text-[11px]">tracked_matches</code>. Débit / deltas : dernier
-            <code class="text-[11px]">poller_30m</code> /
-            <code class="text-[11px]">poller_hourly</code> /
-            <code class="text-[11px]">poller_v2_30m</code> /
-            <code class="text-[11px]">poller_v2_hourly</code>
-            dans le log unifié.
+          <p v-if="!dataStatsLoading" class="mb-3 text-xs text-text/70">
+            <template v-if="dataStats?.adminDataSource === 'statistiques_db'">
+              Indicateurs depuis la base statistiques (<code class="text-[11px]"
+                >DATABASE_URL_STATISTIQUES</code
+              >) : <code class="text-[11px]">players</code> et compteurs issus de
+              <code class="text-[11px]">processed_matches</code> (suivi d’agrégation des matchs déjà
+              ingérés). Cet écran ne lit pas la file Prisma
+              <code class="text-[11px]">tracked_matches</code> ni
+              <code class="text-[11px]">match_ingest_raw</code>.
+            </template>
+            <template v-else-if="dataStats?.adminDataSource === 'stats_db'">
+              Mode ingestion Prisma (<code class="text-[11px]">DATABASE_URL</code>) : file
+              <code class="text-[11px]">tracked_matches</code> et optionnellement
+              <code class="text-[11px]">match_ingest_raw</code>. À utiliser seulement si la collecte
+              n’est pas encore exposée via
+              <code class="text-[11px]">DATABASE_URL_STATISTIQUES</code> (prioritaire pour l’admin).
+            </template>
+            <template v-else>
+              Aucune base configurée : définissez
+              <code class="text-[11px]">DATABASE_URL_STATISTIQUES</code> pour les indicateurs
+              courants. <code class="text-[11px]">DATABASE_URL</code> reste optionnel pour la file
+              d’ingestion legacy.
+            </template>
           </p>
           <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
           <template v-else>
@@ -135,14 +150,24 @@
                   {{ dataStats?.totalTrackedMatches ?? '—' }}
                 </div>
                 <div class="text-xs text-text/70">
-                  {{ t('admin.data.stats.totalTrackedMatches') }}
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'Total processed_matches'
+                      : t('admin.data.stats.totalTrackedMatches')
+                  }}
                 </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-xl font-bold text-text">
                   {{ dataStats?.trackedMatchesCreatedLast1h ?? '—' }}
                 </div>
-                <div class="text-xs text-text/70">{{ t('admin.data.stats.trackedMatches1h') }}</div>
+                <div class="text-xs text-text/70">
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'processed_matches créés (1 h)'
+                      : t('admin.data.stats.trackedMatches1h')
+                  }}
+                </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-xl font-bold text-text">
@@ -196,13 +221,25 @@
                 <div class="text-xl font-bold text-text">
                   {{ dataStats?.trackedMatchesPendingNow ?? '—' }}
                 </div>
-                <div class="text-xs text-text/70">Tracked pending (now)</div>
+                <div class="text-xs text-text/70">
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'En attente agrég. (processed_matches)'
+                      : 'Tracked pending (now)'
+                  }}
+                </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-xl font-bold text-text">
                   {{ dataStats?.trackedMatchesPendingOver1h ?? '—' }}
                 </div>
-                <div class="text-xs text-text/70">Tracked pending &gt; 1h</div>
+                <div class="text-xs text-text/70">
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'En attente agrég. > 1 h'
+                      : 'Tracked pending &gt; 1h'
+                  }}
+                </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-base font-semibold text-text">
@@ -212,14 +249,24 @@
                       : '—'
                   }}
                 </div>
-                <div class="text-xs text-text/70">Plus ancien tracked pending (created_at)</div>
+                <div class="text-xs text-text/70">
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'Plus ancien pending (processed_matches)'
+                      : 'Plus ancien tracked pending (created_at)'
+                  }}
+                </div>
               </div>
               <div class="rounded border border-primary/20 bg-background/30 p-3">
                 <div class="text-xl font-bold text-text">
                   {{ dataStats?.trackedMatchesDeferredRankPending ?? '—' }}
                 </div>
                 <div class="text-xs text-text/70">
-                  Tracked deferred rank (agrégation en attente de tier)
+                  {{
+                    dataStats?.adminDataSource === 'statistiques_db'
+                      ? 'Différés rank / agrég. (processed_matches)'
+                      : 'Tracked deferred rank (agrégation en attente de tier)'
+                  }}
                 </div>
               </div>
             </div>
@@ -254,179 +301,7 @@
                 </div>
               </div>
             </template>
-            <template v-if="dataStats?.pollerResume">
-              <p class="mb-2 text-xs font-medium uppercase tracking-wide text-text/60">
-                {{ t('admin.data.stats.resumeTitle') }} — {{ dataStats.pollerResume.script }}
-              </p>
-              <p class="mb-2 font-mono text-[11px] text-text/60">
-                {{ t('admin.data.stats.resumeWindow') }}:
-                {{ dataStats.pollerResume.windowStartIso ?? '—' }} →
-                {{ dataStats.pollerResume.windowEndIso ?? '—' }}
-                <span class="text-text/50">({{ dataStats.pollerResume.atIso }})</span>
-              </p>
-              <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.httpRequests) }}
-                  </div>
-                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resumeHttp') }}</div>
-                  <div
-                    v-if="formatPollerHttpWindowSummary(dataStats.pollerResume.httpWindowStats)"
-                    class="mt-1 text-[11px] leading-snug text-text/65"
-                  >
-                    {{ formatPollerHttpWindowSummary(dataStats.pollerResume.httpWindowStats) }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.error429) }}
-                  </div>
-                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resume429') }}</div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.matchIdsFromApi) }}
-                  </div>
-                  <div class="text-xs text-text/70">{{ t('admin.data.stats.resumeMatchIds') }}</div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.matchesInsertedDb) }}
-                  </div>
-                  <div class="text-xs text-text/70">
-                    {{ t('admin.data.stats.resumeMatchesDb') }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.matchesApiIngestComplete) }}
-                  </div>
-                  <div class="text-xs text-text/70">
-                    {{ t('admin.data.stats.resumeMatchesApi') }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.participants) }}
-                  </div>
-                  <div class="text-xs text-text/70">
-                    {{ t('admin.data.stats.resumeParticipants') }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.playersPolled) }}
-                  </div>
-                  <div class="text-xs text-text/70">
-                    {{ t('admin.data.stats.resumePlayersPolled') }}
-                  </div>
-                </div>
-                <div class="rounded border border-primary/20 bg-background/30 p-3">
-                  <div class="text-xl font-bold text-text">
-                    {{ adminStatNum(dataStats.pollerResume.delta?.newPlayers) }}
-                  </div>
-                  <div class="text-xs text-text/70">
-                    {{ t('admin.data.stats.resumeNewPlayers') }}
-                  </div>
-                </div>
-              </div>
-            </template>
-            <p v-else class="text-sm text-text/60">
-              Aucun résumé poller récent dans le log unifié.
-            </p>
           </template>
-        </div>
-
-        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-          <h2 class="mb-3 text-lg font-semibold text-text">Active patches</h2>
-          <div class="grid gap-2 sm:grid-cols-3">
-            <select
-              v-model="selectedActivePatch"
-              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-            >
-              <option value="" disabled>Sélectionner un patch</option>
-              <option v-for="p in activePatches" :key="p.gameVersion" :value="p.gameVersion">
-                {{ p.gameVersion }} ({{ p.gamesNumber }} / {{ p.gameNumberMax }}){{
-                  p.archivedAt ? ' — archivé' : ''
-                }}
-              </option>
-            </select>
-            <input
-              v-model.number="activePatchMaxInput"
-              type="number"
-              min="1"
-              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-              placeholder="Nouveau game_number_max"
-            />
-            <button
-              type="button"
-              class="rounded bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-              :disabled="activePatchSaveBusy || !selectedActivePatch || !(activePatchMaxInput > 0)"
-              @click="saveActivePatchMax"
-            >
-              {{ activePatchSaveBusy ? '…' : 'Mettre à jour game_number_max' }}
-            </button>
-          </div>
-          <p
-            v-if="activePatchMessage"
-            :class="
-              activePatchError
-                ? 'mt-2 text-sm text-error'
-                : 'mt-2 text-sm text-green-600 dark:text-green-400'
-            "
-          >
-            {{ activePatchMessage }}
-          </p>
-        </div>
-
-        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-          <h2 class="mb-3 text-lg font-semibold text-text">Clôture de patch</h2>
-          <p class="mb-3 text-xs text-text/70">
-            Exécute <code class="rounded bg-background/80 px-1 text-[11px]">close_patch</code> puis
-            archive les
-            <code class="rounded bg-background/80 px-1 text-[11px]"
-              >champion_tier_daily_snapshots</code
-            >
-            dont <code class="rounded bg-background/80 px-1 text-[11px]">date_of_game</code> est
-            dans
-            <code class="rounded bg-background/80 px-1 text-[11px]"
-              >[releaseDate, releaseDate du patch suivant)</code
-            >
-            selon
-            <code class="rounded bg-background/80 px-1 text-[11px]">data/game/versions.json</code>
-            (ordre du fichier : plus récent en premier ; le patch le plus récent du fichier utilise
-            demain UTC comme fin exclusive).
-          </p>
-          <div class="grid gap-2 sm:grid-cols-3">
-            <select
-              v-model="selectedPatchClose"
-              class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-            >
-              <option value="" disabled>Choisir un patch</option>
-              <option v-for="o in patchCloseOptions" :key="o.patchLabel" :value="o.patchLabel">
-                {{ o.patchLabel }} — {{ o.releaseDate }} → {{ o.endExclusive
-                }}{{ o.isLatestInRecap ? ' (tête du recap)' : '' }}
-              </option>
-            </select>
-            <button
-              type="button"
-              class="rounded bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50 sm:col-span-2"
-              :disabled="patchCloseBusy || !selectedPatchClose"
-              @click="runPatchClose"
-            >
-              {{ patchCloseBusy ? '…' : 'Fermer le patch (agg + snapshots)' }}
-            </button>
-          </div>
-          <p
-            v-if="patchCloseMessage"
-            :class="
-              patchCloseError
-                ? 'mt-2 text-sm text-error'
-                : 'mt-2 text-sm text-green-600 dark:text-green-400'
-            "
-          >
-            {{ patchCloseMessage }}
-          </p>
         </div>
 
         <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
@@ -613,7 +488,7 @@
           <div v-show="dataSectionCrons" class="border-t border-primary/20 px-4 pb-4 pt-2">
             <p v-if="cronLoading" class="text-text/70">Chargement…</p>
             <template v-else>
-              <div v-if="(riotScriptsStatusCrons?.length ?? 0) > 0" class="overflow-x-auto">
+              <div v-if="(dataTabCronRows?.length ?? 0) > 0" class="overflow-x-auto">
                 <table class="w-full min-w-[500px] text-left text-sm">
                   <thead class="border-b border-primary/30 bg-surface/50">
                     <tr>
@@ -636,11 +511,7 @@
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-primary/20">
-                    <tr
-                      v-for="c in riotScriptsStatusCrons"
-                      :key="c.script"
-                      class="hover:bg-surface/50"
-                    >
+                    <tr v-for="c in dataTabCronRows" :key="c.script" class="hover:bg-surface/50">
                       <td class="px-3 py-2 font-medium text-text">{{ c.script }}</td>
                       <td class="px-3 py-2 text-text/90">{{ formatRiotDate(c.lastStartAt) }}</td>
                       <td class="px-3 py-2 text-text/90">{{ formatRiotDate(c.lastSuccessAt) }}</td>
@@ -687,14 +558,14 @@
           </div>
         </div>
 
-        <!-- Section 3: Riot Poller -->
+        <!-- Section 3: Poller d’ingestion v2 -->
         <div class="rounded-lg border border-primary/30 bg-surface/30">
           <button
             type="button"
             class="flex w-full items-center justify-between p-4 text-left"
             @click="dataSectionPoller = !dataSectionPoller"
           >
-            <h2 class="text-lg font-semibold text-text">Riot Poller</h2>
+            <h2 class="text-lg font-semibold text-text">Poller d’ingestion (v2)</h2>
             <span class="text-text/60">{{ dataSectionPoller ? '▼' : '▶' }}</span>
           </button>
           <div v-show="dataSectionPoller" class="border-t border-primary/20 px-4 pb-4 pt-2">
@@ -705,99 +576,17 @@
               <code class="rounded bg-background px-1">pm2 stop|restart lelanation-poller-v2</code>.
             </p>
             <p
-              v-if="riotPollerStatus?.heartbeatStale"
+              v-if="pollerV2Observability?.stale"
               class="mb-2 text-xs text-amber-700 dark:text-amber-400"
             >
-              Dernier résumé poller dans le log unifié (poller_30m / poller_hourly / poller_v2_30m /
-              poller_v2_hourly) trop ancien — le process est peut-être arrêté. Totaux = dernier
-              résumé connu.
-              <span v-if="riotPollerStatus?.snapshotAgeMs != null" class="text-text/60">
-                (âge {{ Math.round(riotPollerStatus.snapshotAgeMs / 1000) }} s)
+              Snapshot observabilité poller-v2 ancien (&gt; 2 min) — le process PM2 est peut-être
+              arrêté ou le fichier
+              <code class="rounded bg-background px-1">logs/poller-v2-observability.json</code>
+              n’est pas à jour.
+              <span v-if="pollerV2Observability?.ageMs != null" class="text-text/60">
+                (âge {{ Math.round(pollerV2Observability.ageMs / 1000) }} s)
               </span>
             </p>
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <span
-                :class="riotPollerStatusClass(riotPollerStatus?.status)"
-                class="rounded px-2 py-0.5 text-xs font-medium"
-              >
-                {{ riotPollerStatusLabel(riotPollerStatus?.status) }}
-              </span>
-              <span v-if="riotPollerStatus?.statusSource" class="text-xs text-text/50">
-                source: {{ riotPollerStatus.statusSource }}
-              </span>
-              <span
-                v-if="riotPollerStatus?.lastError"
-                class="max-w-md truncate text-xs text-error"
-                :title="riotPollerStatus.lastError"
-              >
-                {{ riotPollerStatus.lastError }}
-              </span>
-            </div>
-            <div class="mb-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 lg:grid-cols-6">
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Requêtes (session)</span>
-                <div class="font-medium text-text">{{ riotPollerStatus?.requestCount ?? '—' }}</div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Requêtes / 2 min</span>
-                <div class="font-medium text-text">
-                  {{
-                    riotPollerStatus?.requestsPer2Min != null
-                      ? riotPollerStatus.requestsPer2Min
-                      : '—'
-                  }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">429 (session)</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.error429Count ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">400 (session)</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.error400Count ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Pauses near-limit</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.nearLimitPauseCount ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Pauses 429</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.http429PauseCount ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Matchs</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.matchesFetched ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Joueurs pollers</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.playersPolled ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Nouveaux players</span>
-                <div class="font-medium text-text">
-                  {{ riotPollerStatus?.playersFetched ?? '—' }}
-                </div>
-              </div>
-              <div class="rounded border border-primary/20 bg-background/30 p-2">
-                <span class="text-text/70">Dernier lastSeen (DB)</span>
-                <div class="font-medium text-text">
-                  {{ formatRiotDate(riotPollerStatus?.latestPlayerLastSeenAt ?? null) }}
-                </div>
-              </div>
-            </div>
-
             <div class="mb-3 rounded border border-primary/20 bg-background/30 p-3">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <h3 class="text-sm font-semibold text-text">
@@ -822,6 +611,226 @@
                     : '—'
                 }}
               </p>
+
+              <div
+                v-if="pollerV2Observability?.dashboard"
+                class="mb-4 rounded border border-emerald-600/25 bg-emerald-600/5 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10"
+              >
+                <h4 class="mb-1 text-sm font-semibold text-text">
+                  Tableau de bord volume (poller-v2)
+                </h4>
+                <p class="mb-3 text-xs text-text/60">
+                  Moyennes « / min » et « / 2 min » sur les fenêtres 30 min / 1 h : calcul à partir
+                  du
+                  <strong>delta</strong> du dernier tick d’observabilité (durée réelle ≈ 30 min ou 1
+                  h entre deux resets). La ligne « 2 min glissant » compte les requêtes HTTP Riot
+                  sur les 120 dernières secondes côté process.
+                </p>
+
+                <div
+                  v-if="pollerV2Observability.dashboard.rolling2m"
+                  class="mb-4 rounded border border-primary/20 bg-background/40 p-2"
+                >
+                  <div class="mb-1 text-xs font-medium uppercase tracking-wide text-text/55">
+                    Fenêtre glissante 2 min
+                  </div>
+                  <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div class="rounded border border-primary/15 bg-background/50 p-2">
+                      <div class="text-[11px] text-text/65">Requêtes HTTP (total 2 min)</div>
+                      <div class="text-lg font-semibold text-text">
+                        {{
+                          formatDashInt(pollerV2Observability.dashboard.rolling2m.httpRequestsTotal)
+                        }}
+                      </div>
+                    </div>
+                    <div class="rounded border border-primary/15 bg-background/50 p-2">
+                      <div class="text-[11px] text-text/65">Moyenne / minute</div>
+                      <div class="text-lg font-semibold text-text">
+                        {{
+                          formatDashRate(
+                            pollerV2Observability.dashboard.rolling2m.httpRequestsPerMinuteAvg
+                          )
+                        }}
+                      </div>
+                    </div>
+                    <div class="rounded border border-primary/15 bg-background/50 p-2">
+                      <div class="text-[11px] text-text/65">HTTP 429 (2 min)</div>
+                      <div class="text-lg font-semibold text-text">
+                        {{ formatDashInt(pollerV2Observability.data?.rolling2m?.api429) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="grid gap-3 lg:grid-cols-2">
+                  <div
+                    v-for="w in pollerDashWindows"
+                    :key="w.key"
+                    class="rounded border border-primary/20 bg-background/40 p-3"
+                  >
+                    <div class="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                      <span class="text-sm font-semibold text-text">{{ w.labelFr }}</span>
+                      <span v-if="w.atIso" class="font-mono text-[10px] text-text/50">{{
+                        w.atIso
+                      }}</span>
+                    </div>
+                    <p class="mb-2 text-[11px] text-text/55">HTTP Riot</p>
+                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Total période</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.httpRequestsTotal) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Moy. / min</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashRate(w.httpRequestsPerMinuteAvg) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Moy. / 2 min</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashRate(w.httpRequestsPerTwoMinuteAvg) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Minutes (réf.)</div>
+                        <div class="font-semibold text-text">{{ w.windowMinutes }}</div>
+                      </div>
+                    </div>
+                    <p class="mb-2 text-[11px] text-text/55">Joueurs (delta poller / agrégat DB)</p>
+                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Pollés (Δ)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.playersPolledDelta) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">MAJ (Δ)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.playersUpdatedDelta) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Ajoutés (Δ)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.playersAddedDelta) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Pollés (DB)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.playersPolledDb ?? undefined) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">MAJ (DB)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.playersUpdatedDb ?? undefined) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Matchs aj. (DB)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.matchesAddedDb ?? undefined) }}
+                        </div>
+                      </div>
+                    </div>
+                    <p class="mb-2 text-[11px] text-text/55">Rangs League API (by-puuid)</p>
+                    <div class="mb-3 grid grid-cols-2 gap-2">
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Récupérés OK</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.rankLeagueFetchesSucceeded) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Échecs</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.rankLeagueFetchesFailed) }}
+                        </div>
+                      </div>
+                    </div>
+                    <p class="mb-2 text-[11px] text-text/55">
+                      Matchs (découverte → hydratation → ingestion)
+                    </p>
+                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">IDs découverts</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.matchIdsFetched) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">File hydratation</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.matchesQueuedHydration) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Hydrat. OK</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.hydrationJobsSucceeded) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Ingestion OK (ligne en base)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.ingestionJobsSucceeded) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">404 Riot</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.hydrationJobsNotFound) }}
+                        </div>
+                      </div>
+                    </div>
+                    <p
+                      class="mb-2 text-[11px] font-medium text-amber-800/90 dark:text-amber-300/90"
+                    >
+                      Gaspillage / cas limites (delta)
+                    </p>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <div
+                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
+                      >
+                        <div class="text-[10px] text-text/65">
+                          Ingestion duplicate (déjà en base)
+                        </div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.wasteIngestionDuplicate) }}
+                        </div>
+                        <div class="mt-0.5 text-[10px] text-text/55">
+                          API match+timeline déjà consommées en amont.
+                        </div>
+                      </div>
+                      <div
+                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
+                      >
+                        <div class="text-[10px] text-text/65">Ignorés (patch trop ancien)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.wasteSkippedOldPatch) }}
+                        </div>
+                        <div class="mt-0.5 text-[10px] text-text/55">
+                          GET match + timeline puis abandon.
+                        </div>
+                      </div>
+                      <div
+                        class="rounded border border-amber-600/25 bg-amber-500/10 p-2 dark:border-amber-500/30"
+                      >
+                        <div class="text-[10px] text-text/65">Hydrat. erreur</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.hydrationJobsFailed) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 <div class="rounded border border-primary/20 bg-background/40 p-2">
                   <div class="text-text/70">Tokens / 2 min</div>
@@ -940,383 +949,14 @@
                 :disabled="riotPollerLogsLoading"
                 @click="openRiotPollerLogs"
               >
-                {{ riotPollerLogsLoading ? '…' : 'Voir les logs (unifié)' }}
+                {{ riotPollerLogsLoading ? '…' : 'Logs unifiés (poller-v2)' }}
               </button>
             </div>
             <p class="mt-2 text-xs text-text/60">
               Démarrage / arrêt du poller d’ingestion : PM2 uniquement (plus de poller intégré au
               backend).
             </p>
-
-            <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
-              <h3 class="mb-1 text-sm font-semibold text-text">
-                Activité poller — agrégation des résumés (log unifié)
-              </h3>
-              <p class="mb-3 text-xs text-text/60">
-                Somme des <strong>deltas</strong> des lignes
-                <code class="rounded bg-surface px-1">poller_hourly</code> /
-                <code class="rounded bg-surface px-1">poller_30m</code> /
-                <code class="rounded bg-surface px-1">poller_v2_hourly</code> /
-                <code class="rounded bg-surface px-1">poller_v2_30m</code>
-                sur la plage choisie. Les totaux correspondent à la somme des colonnes du tableau
-                (pas au cumul absolu Riot affiché dans un seul résumé).
-              </p>
-              <div class="mb-3 flex flex-wrap gap-2">
-                <button
-                  v-for="p in pollerMetricsPresets"
-                  :key="p.id"
-                  type="button"
-                  class="rounded border border-primary/35 bg-surface/70 px-2.5 py-1 text-xs font-medium text-text hover:bg-primary/15 disabled:opacity-50"
-                  :disabled="pollerMetricsLoading"
-                  @click="applyPollerMetricsPreset(p.id)"
-                >
-                  {{ p.label }}
-                </button>
-              </div>
-              <div class="mb-2 flex flex-wrap items-end gap-2">
-                <label class="flex flex-col gap-0.5 text-xs text-text/70">
-                  Pas
-                  <select
-                    v-model="pollerMetricsGranularity"
-                    class="rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-                  >
-                    <option value="hour">Par heure</option>
-                    <option value="day">Par jour</option>
-                  </select>
-                </label>
-                <label
-                  v-if="pollerMetricsGranularity === 'hour'"
-                  class="flex flex-col gap-0.5 text-xs text-text/70"
-                >
-                  Fenêtre (h)
-                  <input
-                    v-model.number="pollerMetricsHours"
-                    type="number"
-                    min="1"
-                    max="168"
-                    class="w-20 rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-                  />
-                </label>
-                <label v-else class="flex flex-col gap-0.5 text-xs text-text/70">
-                  Fenêtre (j)
-                  <input
-                    v-model.number="pollerMetricsDays"
-                    type="number"
-                    min="1"
-                    max="90"
-                    class="w-20 rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-                  />
-                </label>
-                <label class="flex flex-col gap-0.5 text-xs text-text/70">
-                  Source
-                  <select
-                    v-model="pollerMetricsSource"
-                    class="rounded border border-primary/30 bg-background px-2 py-1.5 text-sm text-text"
-                  >
-                    <option value="both">Horaires + 30 min</option>
-                    <option value="hourly">Horaires seulement</option>
-                    <option value="30m">30 min seulement</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text hover:bg-primary/20 disabled:opacity-50"
-                  :disabled="pollerMetricsLoading"
-                  @click="loadPollerMetrics"
-                >
-                  {{ pollerMetricsLoading ? '…' : 'Actualiser' }}
-                </button>
-              </div>
-              <p v-if="pollerMetricsRangeLabel" class="mb-2 font-mono text-xs text-text/70">
-                Plage UTC : {{ pollerMetricsRangeLabel }}
-              </p>
-              <p v-if="pollerMetricsError" class="mb-2 text-sm text-error">
-                {{ pollerMetricsError }}
-              </p>
-              <div
-                v-if="pollerMetricsTotals && !pollerMetricsLoading"
-                class="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
-              >
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Requêtes HTTP
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.requests) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Paires match+timeline OK
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.matchesApiIngestComplete ?? 0) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Matchs DB (nouvelles lignes)
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.matches) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Participants
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.participants) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Joueurs pollers (Δ)
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.playersPolled) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Nouveaux joueurs DB
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ formatPollerCompact(pollerMetricsTotals.newPlayers) }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    HTTP 429 / 400
-                  </div>
-                  <div class="text-lg font-semibold tabular-nums text-text">
-                    {{ pollerMetricsTotals.error429 }} /
-                    {{ pollerMetricsTotals.error400 }}
-                  </div>
-                </div>
-                <div class="rounded-lg border border-primary/25 bg-surface/50 p-3">
-                  <div class="text-[10px] font-medium uppercase tracking-wide text-text/55">
-                    Lignes log agrégées
-                  </div>
-                  <div class="text-xl font-semibold tabular-nums text-text">
-                    {{ pollerMetricsMatchedLines }}
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="pollerChartGeometry && pollerMetricsTotals && !pollerMetricsLoading"
-                class="mb-4 rounded border border-primary/15 bg-background/40 p-2"
-              >
-                <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <span class="text-xs font-medium text-text/80">Graphique (par période)</span>
-                  <label class="flex items-center gap-1.5 text-xs text-text/70">
-                    Série
-                    <select
-                      v-model="pollerChartMetric"
-                      class="rounded border border-primary/30 bg-background px-2 py-1 text-sm text-text"
-                    >
-                      <option value="requests">Requêtes HTTP</option>
-                      <option value="matchesApi">Paires match+timeline</option>
-                      <option value="matches">Matchs DB</option>
-                    </select>
-                  </label>
-                </div>
-                <svg
-                  class="h-52 w-full text-primary"
-                  :viewBox="`0 0 ${pollerChartGeometry.W} ${pollerChartGeometry.H}`"
-                  preserveAspectRatio="xMidYMid meet"
-                  role="img"
-                  :aria-label="'Histogramme ' + pollerChartMetricLabel"
-                >
-                  <line
-                    :x1="pollerChartGeometry.padL"
-                    :y1="pollerChartGeometry.baselineY"
-                    :x2="pollerChartGeometry.W - pollerChartGeometry.padR"
-                    :y2="pollerChartGeometry.baselineY"
-                    class="stroke-current text-text/25"
-                    stroke-width="1"
-                  />
-                  <text
-                    :x="pollerChartGeometry.padL"
-                    y="14"
-                    class="fill-current text-[11px] text-text/50"
-                  >
-                    max {{ formatPollerCompact(pollerChartGeometry.maxV) }} ·
-                    {{ pollerChartGeometry.bars.length }} barres
-                  </text>
-                  <rect
-                    v-for="(b, idx) in pollerChartGeometry.bars"
-                    :key="b.key + '-' + idx"
-                    :x="b.x"
-                    :y="b.y"
-                    :width="b.w"
-                    :height="b.h"
-                    class="fill-primary/75"
-                    rx="0.5"
-                  />
-                </svg>
-              </div>
-              <h4 class="mb-1 text-xs font-semibold uppercase tracking-wide text-text/60">
-                Détail par période
-              </h4>
-              <div class="max-h-72 overflow-auto rounded border border-primary/15">
-                <table class="w-full min-w-[720px] text-left text-xs">
-                  <thead class="sticky top-0 bg-surface/90 text-text/70">
-                    <tr>
-                      <th class="px-2 py-1.5">Période (UTC)</th>
-                      <th class="px-2 py-1.5 text-right">Req</th>
-                      <th class="px-2 py-1.5 text-right">429</th>
-                      <th class="px-2 py-1.5 text-right">400</th>
-                      <th class="px-2 py-1.5 text-right">Pairs API</th>
-                      <th class="px-2 py-1.5 text-right">Matchs DB</th>
-                      <th class="px-2 py-1.5 text-right">Part.</th>
-                      <th class="px-2 py-1.5 text-right">Pollers</th>
-                      <th class="px-2 py-1.5 text-right">Échant.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr
-                      v-for="row in pollerMetricsBuckets"
-                      :key="row.key"
-                      class="border-t border-primary/10 odd:bg-background/20"
-                    >
-                      <td class="px-2 py-1 font-mono text-text">
-                        {{ formatPollerMetricPeriod(row) }}
-                      </td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.requests }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.error429 }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.error400 }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums">
-                        {{ row.matchesApiIngestComplete ?? 0 }}
-                      </td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.matches }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.participants }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums">{{ row.playersPolled }}</td>
-                      <td class="px-2 py-1 text-right tabular-nums text-text/60">
-                        {{ row.sampleCount }}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <p
-                  v-if="
-                    !pollerMetricsLoading &&
-                    pollerMetricsBuckets.length === 0 &&
-                    !pollerMetricsError
-                  "
-                  class="p-3 text-text/60"
-                >
-                  Aucune donnée dans la plage — cliquez sur Actualiser.
-                </p>
-              </div>
-            </div>
           </div>
-        </div>
-
-        <div class="rounded-lg border border-primary/30 bg-surface/30 p-4">
-          <h2 class="mb-4 text-lg font-semibold text-text">Scripts Riot</h2>
-          <div class="space-y-3">
-            <div
-              v-for="row in riotScriptStatusRows"
-              :key="row.id"
-              class="rounded border border-primary/20 bg-background/30 p-3"
-            >
-              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <div class="font-medium text-text">{{ row.label }}</div>
-                <span
-                  :class="_riotStatusClass(row.status)"
-                  class="rounded px-2 py-0.5 text-xs font-medium"
-                >
-                  {{ _riotStatusLabel(row.status) }}
-                </span>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  :class="[
-                    'rounded px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:opacity-50',
-                    isScriptActive(row.id)
-                      ? 'cursor-not-allowed bg-slate-500'
-                      : 'bg-accent hover:opacity-90',
-                  ]"
-                  :disabled="scriptSwitchBusy[row.id] || isScriptActive(row.id)"
-                  @click="
-                    row.id === 'league-xp'
-                      ? switchScript('league-xp', leagueXpForm)
-                      : switchScript('puuid-migration')
-                  "
-                >
-                  {{ scriptSwitchBusy[row.id] ? '…' : 'Lancer' }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
-                  :disabled="scriptStopBusy[row.id]"
-                  @click="stopScript(row.id as 'puuid-migration' | 'league-xp')"
-                >
-                  {{ scriptStopBusy[row.id] ? '…' : 'Arrêter' }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
-            <h3 class="mb-2 text-sm font-semibold text-text">Paramètres League XP</h3>
-            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-              <input
-                v-model="leagueXpForm.queue"
-                type="text"
-                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                placeholder="Queue"
-              />
-              <input
-                v-model="leagueXpForm.tier"
-                type="text"
-                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                placeholder="Tier"
-              />
-              <input
-                v-model="leagueXpForm.division"
-                type="text"
-                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                placeholder="Division"
-              />
-              <input
-                v-model="leagueXpForm.region"
-                type="text"
-                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                placeholder="Région"
-              />
-              <input
-                v-model.number="leagueXpForm.maxPages"
-                type="number"
-                min="1"
-                max="100"
-                class="rounded border border-primary/30 bg-background px-3 py-2 text-sm text-text"
-                placeholder="Pages"
-              />
-            </div>
-            <div class="mt-3">
-              <button
-                type="button"
-                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="scriptSwitchBusy['league-xp']"
-                @click="switchScript('league-xp', leagueXpForm)"
-              >
-                {{ scriptSwitchBusy['league-xp'] ? '…' : 'Lancer League XP avec ce formulaire' }}
-              </button>
-            </div>
-          </div>
-          <p
-            v-if="scriptActionMessage"
-            :class="
-              scriptActionError
-                ? 'mt-2 text-sm text-error'
-                : 'mt-2 text-sm text-green-600 dark:text-green-400'
-            "
-          >
-            {{ scriptActionMessage }}
-          </p>
         </div>
 
         <!-- Modal: Riot Poller logs -->
@@ -1897,7 +1537,8 @@
                 <option value="youtube" />
                 <option value="community_dragon" />
                 <option value="mv_refresh" />
-                <option value="poller_hourly" />
+                <option value="poller_v2_hourly" />
+                <option value="poller_v2_30m" />
                 <option value="puuid_migration" />
                 <option value="league_xp" />
                 <option value="frontend" />
@@ -2224,142 +1865,6 @@ const adminTabs = computed(() => [
   { id: 'logs' as const, label: t('admin.tabs.logs') },
 ])
 
-type RiotScriptField = {
-  key: string
-  label: string
-  type: 'text' | 'number' | 'select'
-  placeholder?: string
-  defaultValue?: string
-  options?: Array<{ value: string; label: string }>
-}
-type RiotScriptCard = {
-  id: string
-  label: string
-  description: string
-  runMode: 'generic' | 'collect' | 'backfillUntilDone' | 'discoverPlayers' | 'discoverLeagueExp'
-  fields: RiotScriptField[]
-}
-
-const riotScriptCards = computed<RiotScriptCard[]>(() => [
-  {
-    id: 'riot:collect',
-    label: t('admin.riotMatch.scripts.collectOnce'),
-    description: t('admin.riotMatch.scripts.descriptions.collectOnce'),
-    runMode: 'collect',
-    fields: [],
-  },
-  {
-    id: 'riot:backfill-until-done',
-    label: t('admin.riotMatch.scripts.backfillUntilDone'),
-    description: t('admin.riotMatch.scripts.descriptions.backfillUntilDone'),
-    runMode: 'backfillUntilDone',
-    fields: [],
-  },
-  {
-    id: 'riot:discover-league-exp',
-    label: t('admin.riotMatch.scripts.discoverLeagueExp'),
-    description: t('admin.riotMatch.scripts.descriptions.discoverLeagueExp'),
-    runMode: 'discoverLeagueExp',
-    fields: [
-      {
-        key: 'platform',
-        label: 'Platform',
-        type: 'select',
-        defaultValue: 'euw1',
-        options: [
-          { value: 'euw1', label: 'EUW1' },
-          { value: 'eun1', label: 'EUN1' },
-        ],
-      },
-      {
-        key: 'queue',
-        label: 'Queue',
-        type: 'select',
-        defaultValue: 'RANKED_SOLO_5x5',
-        options: [{ value: 'RANKED_SOLO_5x5', label: 'RANKED_SOLO_5x5' }],
-      },
-      {
-        key: 'tier',
-        label: 'Tier',
-        type: 'select',
-        defaultValue: 'GOLD',
-        options: [
-          { value: 'IRON', label: 'IRON' },
-          { value: 'BRONZE', label: 'BRONZE' },
-          { value: 'SILVER', label: 'SILVER' },
-          { value: 'GOLD', label: 'GOLD' },
-          { value: 'PLATINUM', label: 'PLATINUM' },
-          { value: 'EMERALD', label: 'EMERALD' },
-          { value: 'DIAMOND', label: 'DIAMOND' },
-          { value: 'MASTER', label: 'MASTER' },
-          { value: 'GRANDMASTER', label: 'GRANDMASTER' },
-          { value: 'CHALLENGER', label: 'CHALLENGER' },
-        ],
-      },
-      {
-        key: 'division',
-        label: 'Division',
-        type: 'select',
-        defaultValue: 'I',
-        options: [
-          { value: 'I', label: 'I' },
-          { value: 'II', label: 'II' },
-          { value: 'III', label: 'III' },
-          { value: 'IV', label: 'IV' },
-        ],
-      },
-      { key: 'pages', label: 'Pages', type: 'number', defaultValue: '3', placeholder: '3' },
-    ],
-  },
-  {
-    id: 'riot:discover-players',
-    label: t('admin.riotMatch.scripts.discoverPlayers'),
-    description: t('admin.riotMatch.scripts.descriptions.discoverPlayers'),
-    runMode: 'discoverPlayers',
-    fields: [
-      {
-        key: 'region',
-        label: t('admin.riotMatch.scripts.discoverPlayersRegion'),
-        type: 'select',
-        defaultValue: 'euw1',
-        options: [
-          { value: 'euw1', label: 'EUW' },
-          { value: 'eun1', label: 'EUNE' },
-          { value: 'tr1', label: 'TR' },
-          { value: 'ru', label: 'RU' },
-          { value: 'me1', label: 'ME' },
-          { value: 'na1', label: 'NA' },
-          { value: 'br1', label: 'BR' },
-          { value: 'la1', label: 'LA1' },
-          { value: 'la2', label: 'LA2' },
-          { value: 'oc1', label: 'OC1' },
-          { value: 'kr', label: 'KR' },
-          { value: 'jp1', label: 'JP' },
-          { value: 'ph2', label: 'PH' },
-          { value: 'sg2', label: 'SG' },
-          { value: 'th2', label: 'TH' },
-          { value: 'tw2', label: 'TW' },
-          { value: 'vn2', label: 'VN' },
-        ],
-      },
-      {
-        key: 'riotId',
-        label: t('admin.riotMatch.scripts.discoverPlayersRiotId'),
-        type: 'text',
-        defaultValue: '',
-        placeholder: 'GameName#TagLine',
-      },
-      {
-        key: 'replayCount',
-        label: t('admin.riotMatch.scripts.discoverPlayersReplayCount'),
-        type: 'number',
-        defaultValue: '100',
-        placeholder: '100',
-      },
-    ],
-  },
-])
-
 // Contact
 const CONTACT_TYPES = ['suggestion', 'bug', 'reclamation', 'autre'] as const
 type ContactType = (typeof CONTACT_TYPES)[number]
@@ -2416,32 +1921,12 @@ async function deleteContact(type: string, index: number) {
   }
 }
 
-// Data tab: Riot API stats, data stats
-const riotApiStats = ref<{
-  requestsLastHour: number
-  requestsPerHourAvg: number
-  rateLimitExceededCount: number
-  limitPerTwoMin: number
-  limitPerSecond: number
-  limitPerHour: number
-} | null>(null)
-
+// Data tab: collecte + poller v2
 // Data tab: collapsible sections
 const dataSectionCrons = ref(true)
 const dataSectionPoller = ref(true)
-type AdminDataCollectPollerResume = {
-  script: string
-  atIso: string
-  message: string
-  windowStartIso: string | null
-  windowEndIso: string | null
-  delta: Record<string, unknown>
-  httpWindowStats: unknown
-  dbWindow1h: unknown
-  requestsPerHour: unknown
-  httpRequestsProjectedPerHour: unknown
-}
 type AdminDataCollectStatsClient = {
+  adminDataSource?: 'stats_db' | 'statistiques_db'
   totalPlayers: number
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
@@ -2462,60 +1947,10 @@ type AdminDataCollectStatsClient = {
     errorRankPending: number
   } | null
   trackedMatchesDeferredRankPending: number
-  pollerResume: AdminDataCollectPollerResume | null
 }
 const dataStats = ref<AdminDataCollectStatsClient | null>(null)
 const dataStatsLoading = ref(false)
 
-function adminStatNum(v: unknown): string {
-  if (typeof v === 'number' && Number.isFinite(v)) return String(Math.trunc(v))
-  if (typeof v === 'string' && v.trim()) {
-    const n = Number(v)
-    return Number.isFinite(n) ? String(Math.trunc(n)) : '—'
-  }
-  return '—'
-}
-
-function formatPollerHttpWindowSummary(h: unknown): string {
-  if (!h || typeof h !== 'object') return ''
-  const o = h as Record<string, unknown>
-  const bits: string[] = []
-  if (typeof o.httpAvgPerMinuteOverall === 'number')
-    bits.push(`moy ${o.httpAvgPerMinuteOverall}/min`)
-  if (typeof o.httpAvgPer2MinUniform === 'number') bits.push(`moy/2min∼${o.httpAvgPer2MinUniform}`)
-  if (typeof o.httpTwoMinBucketAvg === 'number') bits.push(`moy/2min réel ${o.httpTwoMinBucketAvg}`)
-  if (typeof o.httpTwoMinBucketPeak === 'number') {
-    const c = o.httpTwoMinBucketPeakCount
-    bits.push(`pic/2min ${o.httpTwoMinBucketPeak}${typeof c === 'number' ? ` (${c}×)` : ''}`)
-  }
-  return bits.join(' · ')
-}
-const activePatches = ref<
-  Array<{
-    gameVersion: string
-    gamesNumber: number
-    gameNumberMax: number
-    isCurrent: boolean
-    archivedAt?: string | null
-  }>
->([])
-const selectedActivePatch = ref('')
-const activePatchMaxInput = ref<number>(1000000)
-const activePatchSaveBusy = ref(false)
-const activePatchMessage = ref('')
-const activePatchError = ref(false)
-type PatchCloseOption = {
-  patchLabel: string
-  version: string
-  releaseDate: string
-  endExclusive: string
-  isLatestInRecap: boolean
-}
-const patchCloseOptions = ref<PatchCloseOption[]>([])
-const selectedPatchClose = ref('')
-const patchCloseBusy = ref(false)
-const patchCloseMessage = ref('')
-const patchCloseError = ref(false)
 const balanceRulesLoading = ref(false)
 const balanceRulesSaving = ref(false)
 const balanceRulesMessage = ref('')
@@ -2550,48 +1985,48 @@ const balanceRulesForm = ref<BalanceRulesForm>({
   eliteBanrateTwoPatchAvgMin: 50,
   elitePresenceMax: 7.5,
 })
-const riotScriptsStatusCrons = ref<
-  Array<{
-    script: string
-    type: string
-    lastStartAt: string | null
-    lastSuccessAt: string | null
-    lastFailureAt: string | null
-    lastFailureMessage: string | null
-  }>
->([])
-const riotPollerStatus = ref<{
-  isRunning?: boolean
-  status: string
-  lastError: string | null
-  lastLoopStartedAt: string | null
-  lastLoopFinishedAt: string | null
-  requestCount: number
-  error429Count: number
-  requestsPerMinute: number | null
-  requestsPer2Min?: number | null
-  error400Count: number
-  matchesFetched: number
-  playersFetched: number
-  playersPolled?: number
-  participantsFetched: number
-  matchesRankFixed: number
-  participantsRankFixed: number
-  participantsRoleFixed: number
-  latestPlayerLastSeenAt?: string | null
-  statusSource?: 'unified_log' | 'unified_log_stale'
-  snapshotUpdatedAt?: string | null
-  snapshotAgeMs?: number | null
-  heartbeatStale?: boolean
-  pollerExternal?: boolean
-  nearLimitPauseCount?: number
-  http429PauseCount?: number
-} | null>(null)
+type PollerV2DashboardWindowClient = {
+  key: string
+  labelFr: string
+  windowMinutes: number
+  atIso: string | null
+  httpRequestsTotal: number
+  httpRequestsPerMinuteAvg: number
+  httpRequestsPerTwoMinuteAvg: number
+  playersPolledDelta: number
+  playersUpdatedDelta: number
+  playersAddedDelta: number
+  playersPolledDb: number | null
+  playersUpdatedDb: number | null
+  playersAddedDb: number | null
+  matchesAddedDb: number | null
+  rankLeagueFetchesSucceeded: number
+  rankLeagueFetchesFailed: number
+  matchIdsFetched: number
+  matchesQueuedHydration: number
+  hydrationJobsSucceeded: number
+  hydrationJobsSkippedOldPatch: number
+  hydrationJobsNotFound: number
+  hydrationJobsFailed: number
+  ingestionJobsSucceeded: number
+  ingestionJobsDuplicate: number
+  wasteIngestionDuplicate: number
+  wasteSkippedOldPatch: number
+}
 
 const pollerV2Observability = ref<{
   ok: boolean
   stale: boolean
   ageMs: number | null
+  dashboard?: {
+    rolling2m: {
+      windowMinutes: number
+      httpRequestsTotal: number
+      httpRequestsPerMinuteAvg: number
+    } | null
+    last30m: PollerV2DashboardWindowClient | null
+    last1h: PollerV2DashboardWindowClient | null
+  }
   data: {
     runtimeSeconds?: number
     rolling2m?: {
@@ -2642,54 +2077,6 @@ const pollerV2Observability = ref<{
   } | null
 } | null>(null)
 
-type PollerMetricsBucketRow = {
-  key: string
-  periodStartIso: string
-  requests: number
-  error429: number
-  error400: number
-  matches: number
-  matchesApiIngestComplete?: number
-  participants: number
-  playersPolled: number
-  newPlayers: number
-  rateLimitRefreshPauses: number
-  rateLimit429Pauses: number
-  sampleCount: number
-}
-
-type PollerMetricsPresetId = '24h' | '7d' | '30d'
-
-const pollerMetricsPresets: Array<{ id: PollerMetricsPresetId; label: string }> = [
-  { id: '24h', label: '24 h (horaire)' },
-  { id: '7d', label: '7 jours' },
-  { id: '30d', label: '30 jours' },
-]
-
-const pollerMetricsGranularity = ref<'hour' | 'day'>('hour')
-const pollerMetricsHours = ref(24)
-const pollerMetricsDays = ref(14)
-const pollerMetricsSource = ref<'both' | 'hourly' | '30m'>('hourly')
-const pollerMetricsLoading = ref(false)
-const pollerMetricsError = ref('')
-const pollerMetricsBuckets = ref<PollerMetricsBucketRow[]>([])
-const pollerMetricsTotals = ref<{
-  requests: number
-  error429: number
-  error400: number
-  matches: number
-  matchesApiIngestComplete?: number
-  participants: number
-  playersPolled: number
-  newPlayers: number
-  rateLimitRefreshPauses: number
-  rateLimit429Pauses: number
-  sampleCount: number
-} | null>(null)
-const pollerMetricsMatchedLines = ref(0)
-const pollerMetricsRange = ref<{ fromIso: string; toIso: string } | null>(null)
-const pollerChartMetric = ref<'requests' | 'matches' | 'matchesApi'>('requests')
-
 function formatPollerCompact(n: number): string {
   if (!Number.isFinite(n)) return '0'
   const x = Math.round(n)
@@ -2699,170 +2086,27 @@ function formatPollerCompact(n: number): string {
   return String(x)
 }
 
-const pollerMetricsRangeLabel = computed(() => {
-  const r = pollerMetricsRange.value
-  if (!r?.fromIso || !r?.toIso) return ''
-  try {
-    const a = new Date(r.fromIso)
-    const b = new Date(r.toIso)
-    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${r.fromIso} → ${r.toIso}`
-    const fmt = (d: Date) => d.toISOString().replace('T', ' ').slice(0, 19)
-    return `${fmt(a)} → ${fmt(b)}`
-  } catch {
-    return `${r.fromIso} → ${r.toIso}`
-  }
+const pollerDashWindows = computed(() => {
+  const dash = pollerV2Observability.value?.dashboard
+  if (!dash) return [] as PollerV2DashboardWindowClient[]
+  return [dash.last1h, dash.last30m].filter((w): w is PollerV2DashboardWindowClient => w != null)
 })
 
-const pollerChartMetricLabel = computed(() => {
-  if (pollerChartMetric.value === 'requests') return 'requêtes HTTP'
-  if (pollerChartMetric.value === 'matchesApi') return 'paires match + timeline'
-  return 'matchs insérés en DB'
-})
-
-const pollerChartGeometry = computed(() => {
-  const rows = pollerMetricsBuckets.value
-  const metric = pollerChartMetric.value
-  if (rows.length === 0) return null
-  const W = 880
-  const H = 208
-  const padL = 8
-  const padR = 8
-  const padT = 22
-  const padB = 6
-  const innerW = W - padL - padR
-  const innerH = H - padT - padB
-  const values = rows.map(r => {
-    if (metric === 'requests') return r.requests
-    if (metric === 'matches') return r.matches
-    return r.matchesApiIngestComplete ?? 0
-  })
-  const maxV = Math.max(1, ...values)
-  const n = rows.length
-  const gap = n > 160 ? 0 : n > 80 ? 0.25 : n > 40 ? 0.5 : 1
-  const barW = Math.max(0.35, (innerW - gap * Math.max(0, n - 1)) / n)
-  const baselineY = padT + innerH
-  const bars = rows.map((row, i) => {
-    const v = values[i] ?? 0
-    const hRaw = (v / maxV) * innerH
-    const hVis = v > 0 ? Math.max(hRaw, 0.8) : 0
-    const x = padL + i * (barW + gap)
-    const y = baselineY - hVis
-    return { x, y, w: barW, h: hVis, key: row.key, v }
-  })
-  return { W, H, padL, padR, padT, padB, innerH, baselineY, bars, maxV }
-})
-
-function applyPollerMetricsPreset(id: PollerMetricsPresetId) {
-  if (id === '24h') {
-    pollerMetricsGranularity.value = 'hour'
-    pollerMetricsHours.value = 24
-    pollerMetricsSource.value = 'hourly'
-  } else if (id === '7d') {
-    pollerMetricsGranularity.value = 'day'
-    pollerMetricsDays.value = 7
-    pollerMetricsSource.value = 'hourly'
-  } else {
-    pollerMetricsGranularity.value = 'day'
-    pollerMetricsDays.value = 30
-    pollerMetricsSource.value = 'hourly'
-  }
-  loadPollerMetrics().catch(() => undefined)
+function formatDashRate(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  const x = Math.round(n * 10) / 10
+  return Number.isInteger(x) ? String(x) : x.toFixed(1)
 }
 
-function formatPollerMetricPeriod(row: PollerMetricsBucketRow): string {
-  const g = pollerMetricsGranularity.value
-  if (g === 'day') return row.key
-  if (row.key.length >= 13) {
-    const d = row.key.slice(0, 10)
-    const h = row.key.slice(11, 13)
-    return `${d} ${h}h`
-  }
-  return row.key
+function formatDashInt(n: number | undefined | null): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  return formatPollerCompact(Math.trunc(n))
 }
 
-async function loadPollerMetrics() {
-  pollerMetricsLoading.value = true
-  pollerMetricsError.value = ''
-  try {
-    const params = new URLSearchParams()
-    params.set('granularity', pollerMetricsGranularity.value)
-    params.set('source', pollerMetricsSource.value)
-    if (pollerMetricsGranularity.value === 'hour') {
-      params.set('hours', String(Math.min(168, Math.max(1, pollerMetricsHours.value || 72))))
-    } else {
-      params.set('days', String(Math.min(90, Math.max(1, pollerMetricsDays.value || 14))))
-    }
-    const res = await fetchWithAuth(apiUrl(`/api/admin/riot-poller/metrics?${params.toString()}`))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      pollerMetricsError.value = data?.error ?? `Erreur ${res.status}`
-      pollerMetricsBuckets.value = []
-      pollerMetricsTotals.value = null
-      pollerMetricsRange.value = null
-      return
-    }
-    pollerMetricsBuckets.value = Array.isArray(data?.buckets) ? data.buckets : []
-    pollerMetricsTotals.value = data?.totals ?? null
-    pollerMetricsMatchedLines.value = typeof data?.matchedLines === 'number' ? data.matchedLines : 0
-    if (typeof data?.fromIso === 'string' && typeof data?.toIso === 'string') {
-      pollerMetricsRange.value = { fromIso: data.fromIso, toIso: data.toIso }
-    } else {
-      pollerMetricsRange.value = null
-    }
-  } catch (e) {
-    pollerMetricsError.value = e instanceof Error ? e.message : 'Erreur réseau'
-    pollerMetricsBuckets.value = []
-    pollerMetricsTotals.value = null
-    pollerMetricsRange.value = null
-  } finally {
-    pollerMetricsLoading.value = false
-  }
-}
-const riotScriptStatusRows = computed(() => {
-  const s = riotScriptsStatus.value
-  return [
-    {
-      id: 'puuid-migration',
-      label: 'Migration players (PUUID)',
-      status: s?.['puuid-migration']?.status ?? 'stopped',
-    },
-    { id: 'league-xp', label: 'League XP', status: s?.['league-xp']?.status ?? 'stopped' },
-  ]
-})
-const scriptSwitchBusy = ref<Record<string, boolean>>({})
-const scriptStopBusy = ref<Record<string, boolean>>({})
-const scriptActionMessage = ref('')
-const scriptActionError = ref(false)
-const leagueXpForm = ref({
-  queue: 'RANKED_SOLO_5x5',
-  tier: 'GOLD',
-  division: 'I',
-  region: 'euw1',
-  maxPages: 3,
-})
 const riotPollerLogsOpen = ref(false)
 const riotPollerLogs = ref<string[]>([])
 const riotPollerLogsLoading = ref(false)
 const riotPollerLogsError = ref<string | null>(null)
-
-async function loadRiotApiStats() {
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-api-stats'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    riotApiStats.value = await res.json()
-  } catch {
-    riotApiStats.value = null
-  }
-}
 
 async function loadDataStats() {
   dataStatsLoading.value = true
@@ -2878,132 +2122,6 @@ async function loadDataStats() {
     dataStats.value = null
   } finally {
     dataStatsLoading.value = false
-  }
-}
-
-async function loadActivePatches() {
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/active-patches'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    activePatches.value = Array.isArray(data?.patches) ? data.patches : []
-    if (!selectedActivePatch.value && activePatches.value.length > 0) {
-      const first = activePatches.value[0]
-      if (first) {
-        selectedActivePatch.value = first.gameVersion
-        activePatchMaxInput.value = first.gameNumberMax
-      }
-    }
-  } catch {
-    activePatches.value = []
-  }
-}
-
-async function loadPatchCloseOptions() {
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/patch-close-options'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    patchCloseOptions.value = Array.isArray(data?.options) ? data.options : []
-  } catch {
-    patchCloseOptions.value = []
-  }
-}
-
-async function runPatchClose() {
-  if (!selectedPatchClose.value) return
-  if (
-    !confirm(
-      `Fermer le patch ${selectedPatchClose.value} ? Les agrégats seront archivés (close_patch) et les snapshots quotidiens de la fenêtre versions.json seront déplacés vers l’archive.`
-    )
-  ) {
-    return
-  }
-  patchCloseMessage.value = ''
-  patchCloseError.value = false
-  patchCloseBusy.value = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/patch-close'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patchLabel: selectedPatchClose.value }),
-    })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok) {
-      const cs = data.closeSummary as
-        | {
-            gamesNumber?: number
-            rankedMatchCount?: number
-            rowsInserted?: Record<string, number>
-          }
-        | undefined
-      const ranked = cs?.rankedMatchCount ?? cs?.gamesNumber
-      const coreRows = cs?.rowsInserted?.agg_champion_core_stats
-      patchCloseMessage.value = `Patch ${data.patch} fermé. Matchs classés (somme outcome) : ${ranked ?? '—'}. Lignes core archivées : ${coreRows ?? '—'}. Snapshots : ${data.snapshotRowsArchived ?? 0} ligne(s).`
-      await loadActivePatches()
-      await loadPatchCloseOptions()
-    } else {
-      patchCloseError.value = true
-      patchCloseMessage.value = data?.error ?? 'Erreur'
-    }
-  } catch {
-    patchCloseError.value = true
-    patchCloseMessage.value = 'Erreur réseau'
-  } finally {
-    patchCloseBusy.value = false
-  }
-}
-
-watch(selectedActivePatch, patch => {
-  const row = activePatches.value.find(p => p.gameVersion === patch)
-  if (row) activePatchMaxInput.value = row.gameNumberMax
-})
-
-async function saveActivePatchMax() {
-  if (!selectedActivePatch.value || !(activePatchMaxInput.value > 0)) return
-  activePatchMessage.value = ''
-  activePatchError.value = false
-  activePatchSaveBusy.value = true
-  try {
-    const res = await fetchWithAuth(
-      apiUrl(`/api/admin/active-patches/${encodeURIComponent(selectedActivePatch.value)}/max`),
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gameNumberMax: activePatchMaxInput.value }),
-      }
-    )
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok) {
-      activePatchMessage.value = 'Patch mis à jour.'
-      await loadActivePatches()
-    } else {
-      activePatchError.value = true
-      activePatchMessage.value = data?.error ?? 'Erreur'
-    }
-  } catch {
-    activePatchError.value = true
-    activePatchMessage.value = 'Erreur réseau'
-  } finally {
-    activePatchSaveBusy.value = false
   }
 }
 
@@ -3125,18 +2243,49 @@ async function saveBalanceRules() {
 // Videos / Cron
 const cron = ref<any>(null)
 const cronLoading = ref(false)
-const riotScriptMessage = ref('')
-const riotScriptError = ref(false)
-const riotScriptFields = ref<Record<string, Record<string, string>>>({})
-const riotScriptBusy = ref<Record<string, boolean>>({})
-const riotScriptStopBusy = ref<Record<string, boolean>>({})
-const riotScriptsStatus = ref<Record<string, any>>({})
-/** Miroir de `dataStats` depuis `/api/admin/riot-scripts-status` (même charge utile que `/api/admin/data-stats`). */
-const riotDataStats = ref<AdminDataCollectStatsClient | null>(null)
-const riotScriptLogsOpen = ref(false)
-const riotScriptLogsLoading = ref(false)
-const riotScriptLogsTitle = ref('')
-const riotScriptLogs = ref<string[]>([])
+
+type CronJobRowUi = {
+  script: string
+  type: 'cron'
+  lastStartAt: string | null
+  lastSuccessAt: string | null
+  lastFailureAt: string | null
+  lastFailureMessage: string | null
+}
+
+const DATA_TAB_CRON_KEYS = [
+  'dataDragonSync',
+  'youtubeSync',
+  'communityDragonSync',
+  'liveAggArchiveCheckpoint',
+] as const
+
+const dataTabCronRows = computed((): CronJobRowUi[] => {
+  const jobs = cron.value?.cronJobs as
+    | Record<
+        string,
+        {
+          lastStartAt?: string | null
+          lastSuccessAt?: string | null
+          lastFailureAt?: string | null
+          lastFailureMessage?: string | null
+        }
+      >
+    | undefined
+  if (!jobs || typeof jobs !== 'object') return []
+  return DATA_TAB_CRON_KEYS.map(key => {
+    const job = jobs[key]
+    return {
+      script: key,
+      type: 'cron',
+      lastStartAt: job?.lastStartAt ?? null,
+      lastSuccessAt: job?.lastSuccessAt ?? null,
+      lastFailureAt: job?.lastFailureAt ?? null,
+      lastFailureMessage: job?.lastFailureMessage ?? null,
+    }
+  })
+})
+
 const scriptLogsDir = ref('logs/scripts')
 
 const allLogsOpen = ref(false)
@@ -3701,33 +2850,8 @@ async function loadCron() {
   }
 }
 
-function initRiotScriptFields() {
-  const next: Record<string, Record<string, string>> = {}
-  for (const script of riotScriptCards.value) {
-    const values: Record<string, string> = {}
-    for (const field of script.fields) values[field.key] = field.defaultValue ?? ''
-    next[script.id] = values
-  }
-  riotScriptFields.value = next
-}
-
-function _riotStatusLabel(status: string | undefined) {
-  if (status === 'running') return t('admin.riotMatch.scripts.status.running')
-  if (status === 'started') return t('admin.riotMatch.scripts.status.started')
-  if (status === 'failed') return t('admin.riotMatch.scripts.status.failed')
-  return t('admin.riotMatch.scripts.status.stopped')
-}
-
-function _riotStatusClass(status: string | undefined) {
-  if (status === 'running') return 'bg-green-600/20 text-green-700 dark:text-green-400'
-  if (status === 'started') return 'bg-blue-600/20 text-blue-700 dark:text-blue-300'
-  if (status === 'failed') return 'bg-red-500/20 text-red-700 dark:text-red-300'
-  return 'bg-text/10 text-text/70'
-}
-
-function isScriptActive(scriptId: string) {
-  const status = riotScriptsStatus.value?.[scriptId]?.status
-  return status === 'running' || status === 'started'
+async function refreshDataTabPoller() {
+  await Promise.all([loadDataStats(), loadPollerV2Observability()])
 }
 
 async function triggerSyncData() {
@@ -3755,17 +2879,6 @@ async function triggerSyncData() {
   }
 }
 
-async function loadRiotPollerStatus() {
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/status'))
-    if (res.status === 401) return
-    const data = await res.json()
-    riotPollerStatus.value = data ?? null
-  } catch {
-    // Keep previous value on failure.
-  }
-}
-
 async function loadPollerV2Observability() {
   try {
     const res = await fetchWithAuth(apiUrl('/api/admin/poller-v2/observability'))
@@ -3775,44 +2888,6 @@ async function loadPollerV2Observability() {
   } catch {
     // keep previous value
   }
-}
-
-async function loadRiotScriptsStatus() {
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-scripts-status'))
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    const next: Record<string, any> = {}
-    for (const row of data?.scripts ?? []) next[row.script] = row
-    riotScriptsStatus.value = next
-    riotScriptsStatusCrons.value = Array.isArray(data?.crons) ? data.crons : []
-    riotDataStats.value = data?.dataStats ?? null
-    riotApiStats.value = data?.riotApiStats ?? null
-    riotPollerStatus.value = data?.riotPoller ?? null
-    // Refresh poller from dedicated endpoint so we always have up-to-date counts and requestsPerMinute
-    await loadRiotPollerStatus()
-    await loadPollerV2Observability()
-  } catch {
-    // If combined endpoint fails, still try to load poller status alone
-    await loadRiotPollerStatus()
-    await loadPollerV2Observability()
-  }
-}
-
-function riotPollerStatusLabel(status: string | undefined): string {
-  if (status === 'running') return 'En cours'
-  if (status === 'error') return 'Erreur'
-  return 'Arrêté'
-}
-
-function riotPollerStatusClass(status: string | undefined): string {
-  if (status === 'running') return 'bg-green-600/20 text-green-700 dark:text-green-400'
-  if (status === 'error') return 'bg-red-500/20 text-red-700 dark:text-red-300'
-  return 'bg-text/10 text-text/70'
 }
 
 async function openRiotPollerLogs() {
@@ -3837,94 +2912,6 @@ async function openRiotPollerLogs() {
     riotPollerLogsError.value = e instanceof Error ? e.message : 'Impossible de charger les logs'
   } finally {
     riotPollerLogsLoading.value = false
-  }
-}
-
-async function switchScript(
-  script: 'puuid-migration' | 'league-xp',
-  options?: Record<string, unknown>
-) {
-  scriptActionMessage.value = ''
-  scriptActionError.value = false
-  scriptSwitchBusy.value = { ...scriptSwitchBusy.value, [script]: true }
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script/switch'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ script, options }),
-    })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok) {
-      scriptActionMessage.value = data?.message ?? 'Script lancé.'
-      await loadRiotScriptsStatus()
-    } else {
-      scriptActionError.value = true
-      scriptActionMessage.value = data?.error ?? 'Erreur script'
-    }
-  } catch {
-    scriptActionError.value = true
-    scriptActionMessage.value = 'Erreur réseau'
-  } finally {
-    scriptSwitchBusy.value = { ...scriptSwitchBusy.value, [script]: false }
-  }
-}
-
-async function stopScript(script: 'puuid-migration' | 'league-xp') {
-  scriptActionMessage.value = ''
-  scriptActionError.value = false
-  scriptStopBusy.value = { ...scriptStopBusy.value, [script]: true }
-  try {
-    const activeScript =
-      riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
-        ? 'puuid-migration'
-        : riotScriptsStatus.value?.['league-xp']?.status === 'running'
-          ? 'league-xp'
-          : null
-    if (activeScript !== script) {
-      scriptActionMessage.value = 'Ce script n’est pas actif.'
-      return
-    }
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script/stop'), { method: 'POST' })
-    const data = await res.json().catch(() => ({}))
-    if (res.ok) {
-      scriptActionMessage.value = data?.message ?? 'Arrêt demandé.'
-      await loadRiotScriptsStatus()
-    } else {
-      scriptActionError.value = true
-      scriptActionMessage.value = data?.error ?? 'Erreur arrêt'
-    }
-  } catch {
-    scriptActionError.value = true
-    scriptActionMessage.value = 'Erreur réseau'
-  } finally {
-    scriptStopBusy.value = { ...scriptStopBusy.value, [script]: false }
-  }
-}
-
-async function _openRiotScriptLogs(scriptId: string, label: string) {
-  riotScriptLogsOpen.value = true
-  riotScriptLogsLoading.value = true
-  riotScriptLogsTitle.value = label
-  riotScriptLogs.value = []
-  try {
-    const res = await fetchWithAuth(
-      apiUrl(`/api/admin/script-logs?script=${encodeURIComponent(scriptId)}&lines=50`)
-    )
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    riotScriptLogs.value = Array.isArray(data?.log) ? data.log : []
-    scriptLogsDir.value = data?.logDir ?? 'logs/scripts'
-  } finally {
-    riotScriptLogsLoading.value = false
   }
 }
 
@@ -3976,7 +2963,7 @@ async function triggerCron(script: string) {
     const data = await res.json().catch(() => ({}))
     if (res.ok && data?.success) {
       cronTriggerMessage.value = t('admin.data.crons.runSuccess')
-      await loadRiotScriptsStatus()
+      await Promise.all([loadCron(), refreshDataTabPoller()])
     } else {
       cronTriggerError.value = true
       cronTriggerMessage.value = data?.error ?? t('admin.data.crons.runError')
@@ -4007,106 +2994,6 @@ async function loadAllLogs() {
     scriptLogsDir.value = data?.logDir ?? 'logs/scripts'
   } finally {
     allLogsLoading.value = false
-  }
-}
-
-async function _runRiotScript(card: RiotScriptCard) {
-  if (isScriptActive(card.id)) return
-  riotScriptMessage.value = ''
-  riotScriptError.value = false
-  riotScriptBusy.value[card.id] = true
-  try {
-    let res: Response
-    const f = riotScriptFields.value[card.id] ?? {}
-    if (card.runMode === 'collect') {
-      res = await fetchWithAuth(apiUrl('/api/admin/riot-collect-now'), { method: 'POST' })
-    } else if (card.runMode === 'backfillUntilDone') {
-      res = await fetchWithAuth(apiUrl('/api/admin/riot-backfill-until-done'), { method: 'POST' })
-    } else if (card.runMode === 'discoverPlayers') {
-      const region = (f.region ?? 'euw1').trim() || 'euw1'
-      const riotId = (f.riotId ?? '').trim()
-      const replayCount = Math.min(
-        500,
-        Math.max(1, parseInt(String(f.replayCount || '100'), 10) || 100)
-      )
-      res = await fetchWithAuth(apiUrl('/api/admin/riot-discover-players'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ region, riotId: riotId || undefined, replayCount }),
-      })
-    } else if (card.runMode === 'discoverLeagueExp') {
-      res = await fetchWithAuth(apiUrl('/api/admin/riot-discover-league-exp'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          platform: f.platform || 'euw1',
-          queue: f.queue || 'RANKED_SOLO_5x5',
-          tier: f.tier || 'GOLD',
-          division: f.division || 'I',
-          pages: Number(f.pages || '3'),
-        }),
-      })
-    } else {
-      const args = card.fields
-        .map(field => (f[field.key] ?? '').trim())
-        .filter(Boolean)
-        .slice(0, 10)
-      res = await fetchWithAuth(apiUrl('/api/admin/riot-script-run'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ script: card.id, args }),
-      })
-    }
-
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok || res.status === 202) {
-      riotScriptMessage.value = data.message ?? t('admin.riotMatch.scripts.backgroundLaunched')
-    } else {
-      riotScriptError.value = true
-      riotScriptMessage.value = data?.error ?? t('admin.riotMatch.triggerError')
-    }
-  } catch {
-    riotScriptError.value = true
-    riotScriptMessage.value = t('admin.riotMatch.triggerError')
-  } finally {
-    riotScriptBusy.value[card.id] = false
-    await Promise.all([loadCron(), loadRiotScriptsStatus()])
-  }
-}
-
-async function _stopRiotScript(card: RiotScriptCard) {
-  riotScriptMessage.value = ''
-  riotScriptError.value = false
-  riotScriptStopBusy.value[card.id] = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-script-stop'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ script: card.id }),
-    })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    if (res.ok) {
-      riotScriptMessage.value = data.message ?? t('admin.riotMatch.scripts.stopRequested')
-    } else {
-      riotScriptError.value = true
-      riotScriptMessage.value = data?.error ?? t('admin.riotMatch.scripts.stopError')
-    }
-  } catch {
-    riotScriptError.value = true
-    riotScriptMessage.value = t('admin.riotMatch.scripts.stopError')
-  } finally {
-    riotScriptStopBusy.value[card.id] = false
-    await Promise.all([loadCron(), loadRiotScriptsStatus()])
   }
 }
 
@@ -4330,25 +3217,18 @@ onMounted(async () => {
       { replace: true }
     )
   }
-  initRiotScriptFields()
   await Promise.all([
     loadContact(),
     loadCron(),
-    loadRiotScriptsStatus(),
+    refreshDataTabPoller(),
     loadRiotApikey(),
-    loadRiotApiStats(),
     loadDataStats(),
-    loadActivePatches(),
-    loadPatchCloseOptions(),
     loadBalanceRules(),
     loadSeedPlayers(),
   ])
   if (activeTab.value === 'logs') {
     unifiedLogOffset.value = 0
     loadUnifiedLogs().catch(() => {})
-  }
-  if (activeTab.value === 'data' && dataSectionPoller.value) {
-    loadPollerMetrics().catch(() => {})
   }
 })
 
@@ -4367,18 +3247,12 @@ watch(activeTab, (tab, prevTab) => {
   if (tab === 'contact' && !contactByCategory.value && !contactLoading.value) loadContact()
   if ((tab === 'videos' || tab === 'data') && !cron.value && !cronLoading.value) loadCron()
   if (tab === 'data') {
-    loadRiotScriptsStatus()
-    // Riot API key UI removed
-    loadRiotApiStats()
+    refreshDataTabPoller()
     loadDataStats()
-    loadActivePatches()
-    loadPatchCloseOptions()
     loadBalanceRules()
-    if (dataSectionPoller.value) loadPollerMetrics().catch(() => {})
     // Seed players UI removed
     dataTabPollTimer = setInterval(() => {
-      loadRiotScriptsStatus()
-      loadRiotApiStats()
+      refreshDataTabPoller()
     }, DATA_TAB_POLL_INTERVAL_MS)
   }
   if (tab === 'videos' && cron.value && !cronLoading.value) loadCron()
