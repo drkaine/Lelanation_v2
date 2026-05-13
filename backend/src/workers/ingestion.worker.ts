@@ -23,22 +23,23 @@ function numericMetric(participant: ParsedParticipantDto, key: string): number {
   return raw;
 }
 
-async function insertProcessedMatchSentinel(
-  tx: any,
-  payload: IngestionJobData,
-): Promise<void> {
-  const first = payload.participants[0];
-  if (!first) throw new Error("ingestion_empty_participants");
-  const inserted = await tx<{ riot_match_id: string }[]>`
-    INSERT INTO processed_matches (patch, game_date, riot_match_id, status)
-    VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE')
-    ON CONFLICT (patch, riot_match_id) DO NOTHING
-    RETURNING riot_match_id
-  `;
-  if (inserted.length === 0) {
-    throw new AlreadyProcessedMatchError(payload.teamStats.matchId);
-  }
-}
+/** Tiers solo flex (ordre elo), comme `rank_tier` en base. */
+const SOLO_TIER_ORDER = [
+  "IRON",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "EMERALD",
+  "DIAMOND",
+  "MASTER",
+  "GRANDMASTER",
+  "CHALLENGER",
+] as const;
+
+const SOLO_TIER_INDEX: Record<string, number> = Object.fromEntries(
+  SOLO_TIER_ORDER.map((tier, i) => [tier, i + 1]),
+) as Record<string, number>;
 
 function normalizeRankTier(value: string | null | undefined): string | null {
   const tier = String(value ?? "")
@@ -46,6 +47,43 @@ function normalizeRankTier(value: string | null | undefined): string | null {
     .toUpperCase();
   if (!tier || tier === "UNRANKED") return null;
   return tier;
+}
+
+/**
+ * Tier « moyen » du match : moyenne des ordres de tier des participants classés,
+ * arrondie au tier le plus proche (libellé identique à rank_tier).
+ */
+function averageMatchRankTierLabel(participants: ParsedParticipantDto[]): string | null {
+  const ordinals: number[] = [];
+  for (const participant of participants) {
+    const tier = normalizeRankTier(participant.rankTierValue ?? participant.rankTier);
+    if (!tier) continue;
+    const idx = SOLO_TIER_INDEX[tier];
+    if (idx == null) continue;
+    ordinals.push(idx);
+  }
+  if (ordinals.length === 0) return null;
+  const mean = ordinals.reduce((a, b) => a + b, 0) / ordinals.length;
+  const rounded = Math.min(SOLO_TIER_ORDER.length, Math.max(1, Math.round(mean)));
+  return SOLO_TIER_ORDER[rounded - 1] ?? null;
+}
+
+async function insertProcessedMatchSentinel(
+  tx: any,
+  payload: IngestionJobData,
+): Promise<void> {
+  const first = payload.participants[0];
+  if (!first) throw new Error("ingestion_empty_participants");
+  const rankTier = averageMatchRankTierLabel(payload.participants);
+  const inserted = await tx<{ riot_match_id: string }[]>`
+    INSERT INTO processed_matches (patch, game_date, riot_match_id, status, rank)
+    VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE', ${rankTier})
+    ON CONFLICT (patch, riot_match_id) DO NOTHING
+    RETURNING riot_match_id
+  `;
+  if (inserted.length === 0) {
+    throw new AlreadyProcessedMatchError(payload.teamStats.matchId);
+  }
 }
 
 function normalizeRankDivision(value: string | null | undefined): string | null {
@@ -138,19 +176,34 @@ async function upsertPlayerRankHistoryFromParticipants(
     const region = String(participant.region ?? "").trim().toLowerCase();
     const gameDate = new Date(participant.gameDate);
     if (!Number.isFinite(gameDate.getTime())) continue;
-    const rankTier = normalizeRankTier(participant.rankTierValue ?? participant.rankTier);
-    const rankDivision = normalizeRankDivision(participant.rankDivision);
-    const rankLp = normalizeRankLp(participant.lp);
-    if (!rankTier || !rankDivision || rankLp == null) continue;
+    const normalizedTier = normalizeRankTier(participant.rankTierValue ?? participant.rankTier);
+    const normalizedDivision = normalizeRankDivision(participant.rankDivision);
+    const normalizedLp = normalizeRankLp(participant.lp);
+    const hasResolvedRank = !!normalizedTier && !!normalizedDivision && normalizedLp != null;
+    const rankTier = hasResolvedRank ? normalizedTier : "UNRANKED";
+    const rankDivision = hasResolvedRank ? normalizedDivision : "UNRANKED";
+    const rankLp = hasResolvedRank ? normalizedLp : 0;
 
     await tx`
       INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
       VALUES (${puuid}, ${gameDate.toISOString().slice(0, 10)}::date, ${region}, ${rankTier}, ${rankDivision}, ${rankLp})
       ON CONFLICT (puuid, date, region)
       DO UPDATE SET
-        rank_tier = EXCLUDED.rank_tier,
-        rank_division = EXCLUDED.rank_division,
-        rank_lp = EXCLUDED.rank_lp
+        rank_tier = CASE
+          WHEN EXCLUDED.rank_tier = 'UNRANKED' AND player_rank_history.rank_tier <> 'UNRANKED'
+            THEN player_rank_history.rank_tier
+          ELSE EXCLUDED.rank_tier
+        END,
+        rank_division = CASE
+          WHEN EXCLUDED.rank_tier = 'UNRANKED' AND player_rank_history.rank_tier <> 'UNRANKED'
+            THEN player_rank_history.rank_division
+          ELSE EXCLUDED.rank_division
+        END,
+        rank_lp = CASE
+          WHEN EXCLUDED.rank_tier = 'UNRANKED' AND player_rank_history.rank_tier <> 'UNRANKED'
+            THEN player_rank_history.rank_lp
+          ELSE EXCLUDED.rank_lp
+        END
     `;
   }
 }

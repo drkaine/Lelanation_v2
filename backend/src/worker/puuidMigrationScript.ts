@@ -3,16 +3,14 @@
  *
  * Syncs all players whose puuidKeyVersion != current clefType by positional
  * matching against existing match history. Intended to be run after an API key
- * rotation. Can be triggered from the admin panel or auto-triggered on 400-decrypt
- * errors in the main poller.
+ * rotation. Can be triggered from the admin panel.
  *
  * Runs once (not a loop) and exits when all players are synced.
  */
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { isDatabaseConfigured } from '../db.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
-import { initRiotPoller } from './riotPoller.js'
-import { runPhase2 } from './riotPoller.js'
+import { initRiotClientForPuuidMigration, runPuuidKeySyncPhase2 } from './puuidKeySyncPhase2.js'
 
 export interface PuuidMigrationStatus {
   phase: 'init' | 'running' | 'done' | 'error'
@@ -73,7 +71,7 @@ export async function runPuuidMigrationScript(
   const logger = createRiotPollerLogger('puuid_migration')
 
   try {
-    const init = await initRiotPoller()
+    const init = await initRiotClientForPuuidMigration()
     if (!init.ok) {
       _status = {
         ..._status,
@@ -85,15 +83,15 @@ export async function runPuuidMigrationScript(
       return
     }
 
-    const { client, clefType } = init
+    const { client, clefType, requestCountRef } = init
 
-    // Wrap shouldStop to also track request count via the client callbacks
-    await runPhase2(client, logger, clefType, isShouldStop)
+    await runPuuidKeySyncPhase2(client, logger, clefType, isShouldStop, requestCountRef)
 
     _status = {
       ..._status,
       phase: 'done',
       finishedAt: new Date().toISOString(),
+      requestCount: requestCountRef.n,
     }
     onUpdate?.(_status)
   } catch (err) {

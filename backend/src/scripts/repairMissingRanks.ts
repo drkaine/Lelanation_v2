@@ -424,7 +424,7 @@ async function main(): Promise<void> {
     return
   }
   try {
-    const { stdout, stderr } = await execFileAsync('pm2', ['restart', 'lelanation-poller'])
+    const { stdout, stderr } = await execFileAsync('pm2', ['restart', 'lelanation-poller-v2'])
     if (stdout?.trim()) logLine(`[rank-repair] poller_restart_stdout: ${stdout.trim()}`)
     if (stderr?.trim()) logLine(`[rank-repair] poller_restart_stderr: ${stderr.trim()}`)
     logLine('[rank-repair] poller_restart: done')

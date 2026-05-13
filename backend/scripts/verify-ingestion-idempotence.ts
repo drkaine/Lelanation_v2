@@ -68,8 +68,8 @@ async function applyIngestionStep(tx: any, payload: IngestionJobData): Promise<b
   if (!first) return false;
 
   const inserted = await tx<{ riot_match_id: string }[]>`
-    INSERT INTO processed_matches (patch, game_date, riot_match_id, status)
-    VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE')
+    INSERT INTO processed_matches (patch, game_date, riot_match_id, status, rank)
+    VALUES (${payload.teamStats.patch}, ${first.gameDate}, ${payload.teamStats.matchId}, 'DONE', NULL)
     ON CONFLICT (patch, riot_match_id) DO NOTHING
     RETURNING riot_match_id
   `;

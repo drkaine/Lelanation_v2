@@ -31,7 +31,7 @@ export function createRiotPollerLogger(script: string = 'poller'): RiotPollerLog
   const prefix = `[${script}]`
   return {
     async info(msg: string, ...rest: unknown[]) {
-      // Unified log stays summary-oriented (30m/1h in riotPoller.ts).
+      // Unified log stays summary-oriented (30m / 1h summaries from poller processes).
       // Keep detailed info only on stdout when verbose mode is enabled.
       if (!verbose) return
       console.log(prefix, formatMsg(msg, rest))

@@ -134,7 +134,10 @@ export async function readUnifiedLogTail(maxBytes = 4 * 1024 * 1024): Promise<st
   }
 }
 
-/** Latest poller_30m / poller_hourly lines near end of file (for admin when poller runs in another process). */
+const POLLER_30M_SCRIPTS = new Set(['poller_30m', 'poller_v2_30m'])
+const POLLER_HOURLY_SCRIPTS = new Set(['poller_hourly', 'poller_v2_hourly'])
+
+/** Latest 30m / hourly poller summary lines (legacy poller + poller-v2 scripts). */
 export async function findLatestPollerSummaryEntries(): Promise<{
   last30m: ParsedUnifiedLogEntry | null
   lastHourly: ParsedUnifiedLogEntry | null
@@ -147,9 +150,12 @@ export async function findLatestPollerSummaryEntries(): Promise<{
   for (let i = lines.length - 1; i >= 0; i--) {
     const p = parseUnifiedLogLine(lines[i], i + 1)
     if (!p) continue
-    if (!last30m && p.script === 'poller_30m') last30m = p
-    if (!lastHourly && p.script === 'poller_hourly') lastHourly = p
-    if (last30m && lastHourly) break
+    if (POLLER_30M_SCRIPTS.has(p.script)) {
+      if (!last30m || p.atIso > last30m.atIso) last30m = p
+    }
+    if (POLLER_HOURLY_SCRIPTS.has(p.script)) {
+      if (!lastHourly || p.atIso > lastHourly.atIso) lastHourly = p
+    }
   }
   return { last30m, lastHourly }
 }

@@ -28,6 +28,8 @@ import {
   appendUnifiedLog,
   getUnifiedLogPathResolved,
   findLatestPollerSummaryEntries,
+  readUnifiedLogTail,
+  parseUnifiedLogLine,
   type ParsedUnifiedLogEntry,
 } from '../logging/unifiedAppLog.js'
 import { getBuildEngagement } from '../services/BuildEngagementService.js'
@@ -42,7 +44,6 @@ import {
   type ScriptName,
   type LeagueXpOptions,
 } from '../worker/scriptOrchestrator.js'
-import { getRiotPollerStatus } from '../worker/riotPoller.js'
 import { buildRiotPollerAdminPayload } from '../services/PollerAdminView.js'
 import {
   aggregatePollerMetricsFromUnifiedLog,
@@ -644,10 +645,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
 
   const scripts = [
     {
-      script: 'poller',
-      status: riotPoller.isRunning ? 'running' : 'stopped',
-    },
-    {
       script: 'puuid-migration',
       status:
         orchestratorStatus.activeScript === 'puuid-migration' && orchestratorStatus.isRunning
@@ -668,7 +665,6 @@ router.get('/riot-scripts-status', async (_req, res) => {
 
 const ROOT_LOGS_DIR = resolve(backendRoot, '..', 'logs')
 const SCRIPT_LOGS_DIR = join(ROOT_LOGS_DIR, 'scripts')
-const RIOT_POLLER_LOG_PATH = join(ROOT_LOGS_DIR, 'riot-poller.log')
 const RIOT_POLLER_LOGS_MAX_LINES = 1000
 const SCRIPT_LOGS_MAX_LINES = 5000
 
@@ -706,9 +702,15 @@ router.get('/riot-poller/metrics', async (req, res) => {
   try {
     const granularity = req.query.granularity === 'day' ? 'day' : 'hour'
     const sourceParam = typeof req.query.source === 'string' ? req.query.source.trim() : 'both'
-    let sources: PollerLogSource[] = ['poller_hourly', 'poller_30m']
-    if (sourceParam === 'hourly') sources = ['poller_hourly']
-    else if (sourceParam === '30m' || sourceParam === 'poller_30m') sources = ['poller_30m']
+    let sources: PollerLogSource[] = [
+      'poller_hourly',
+      'poller_30m',
+      'poller_v2_hourly',
+      'poller_v2_30m',
+    ]
+    if (sourceParam === 'hourly') sources = ['poller_hourly', 'poller_v2_hourly']
+    else if (sourceParam === '30m' || sourceParam === 'poller_30m')
+      sources = ['poller_30m', 'poller_v2_30m']
 
     const now = new Date()
     const toIso =
@@ -825,9 +827,9 @@ router.post('/riot-apikey/test', async (_req, res) => {
   }
 })
 
-/** GET /api/admin/riot-api-stats - poller stats for admin UI (legacy endpoint). */
-router.get('/riot-api-stats', (_req, res) => {
-  return res.json(getRiotPollerStatus())
+/** GET /api/admin/riot-api-stats — same payload as riot-poller/status (unified log summaries). */
+router.get('/riot-api-stats', async (_req, res) => {
+  return res.json(await buildRiotPollerAdminPayload())
 })
 
 router.post('/riot-poller/stop', (_req, res) => {
@@ -838,23 +840,21 @@ router.post('/riot-poller/stop', (_req, res) => {
   return res.status(202).json({ success: true, message: 'Stop requested. The current task will finish then the script will stop.' })
 })
 
-router.post('/riot-poller/start', async (_req, res) => {
-  if (isAnyScriptRunning()) {
-    const s = getOrchestratorStatus()
-    return res.json({ success: true, message: `Script '${s.activeScript}' is already running.` })
-  }
-  const result = await startScript('poller')
-  if (!result.ok) return res.status(409).json({ success: false, error: result.error })
-  return res.status(202).json({ success: true, message: 'Poller started.' })
+router.post('/riot-poller/start', (_req, res) => {
+  return res.status(410).json({
+    success: false,
+    error:
+      'In-process Riot poller removed. Run ingestion via PM2: pm2 restart lelanation-poller-v2 (see ecosystem.config.js).',
+  })
 })
 
 /**
  * POST /api/admin/riot-script/start
- * Body: { script: 'poller' | 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
+ * Body: { script: 'puuid-migration' | 'league-xp', options?: { queue, tier, division, region, maxPages } }
  * Starts the specified script. Returns 409 if a script is already running.
  */
 router.post('/riot-script/start', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
+  const VALID_SCRIPTS: ScriptName[] = ['puuid-migration', 'league-xp']
   const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
   if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
     return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
@@ -880,10 +880,10 @@ router.post('/riot-script/start', async (req, res) => {
  * Body: { script, options? } - stops previous running script (if any), then starts requested one.
  */
 router.post('/riot-script/switch', async (req, res) => {
-  const VALID_SCRIPTS: ScriptName[] = ['poller', 'puuid-migration', 'league-xp']
+  const VALID_SWITCH: ScriptName[] = ['puuid-migration', 'league-xp']
   const scriptName = typeof req.body?.script === 'string' ? (req.body.script as ScriptName) : null
-  if (!scriptName || !VALID_SCRIPTS.includes(scriptName)) {
-    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SCRIPTS.join(', ')}` })
+  if (!scriptName || !VALID_SWITCH.includes(scriptName)) {
+    return res.status(400).json({ error: `Invalid script. Allowed: ${VALID_SWITCH.join(', ')}` })
   }
 
   const options: LeagueXpOptions = {}
@@ -928,23 +928,26 @@ router.get('/riot-poller/logs', async (req, res) => {
     ? Math.min(linesParam, RIOT_POLLER_LOGS_MAX_LINES)
     : 200
   const sort = req.query.sort === 'asc' ? 'asc' : 'desc'
-  const pathsToTry = [
-    RIOT_POLLER_LOG_PATH,
-    resolve(process.cwd(), 'logs', 'riot-poller.log'),
-  ]
-  for (const logPath of pathsToTry) {
-    try {
-      const content = await fs.readFile(logPath, 'utf-8')
-      const all = content.split(/\r?\n/).filter((l) => l.trim().length > 0)
-      const log = sort === 'asc' ? all.slice(-lines) : all.slice(-lines).reverse()
-      return res.json({ log, logDir: 'logs' })
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        return res.status(500).json({ error: (err as Error).message })
+  try {
+    const tail = await readUnifiedLogTail(2 * 1024 * 1024)
+    const allLines = tail.split(/\r?\n/).filter((l) => l.trim().length > 0)
+    const pollerLines: string[] = []
+    for (const line of allLines) {
+      const p = parseUnifiedLogLine(line, 0)
+      if (!p) continue
+      if (
+        p.script === 'poller' ||
+        p.script.startsWith('poller_') ||
+        p.script.startsWith('poller_v2')
+      ) {
+        pollerLines.push(line)
       }
     }
+    const log = sort === 'asc' ? pollerLines.slice(-lines) : pollerLines.slice(-lines).reverse()
+    return res.json({ log, logDir: 'lelanation-unified.log (tail)' })
+  } catch (err) {
+    return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   }
-  return res.json({ log: [], logDir: 'logs' })
 })
 
 /** GET /api/admin/script-logs/scripts - list script log filenames (without .log) for "all logs" UI */

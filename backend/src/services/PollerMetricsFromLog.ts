@@ -4,7 +4,7 @@
 import { promises as fs } from 'fs'
 import { parseUnifiedLogLine, getUnifiedLogPathResolved } from '../logging/unifiedAppLog.js'
 
-export type PollerLogSource = 'poller_hourly' | 'poller_30m'
+export type PollerLogSource = 'poller_hourly' | 'poller_30m' | 'poller_v2_hourly' | 'poller_v2_30m'
 
 export type PollerMetricsBucket = {
   key: string

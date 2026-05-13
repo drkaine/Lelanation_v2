@@ -108,8 +108,11 @@
           <p class="mb-3 text-xs text-text/70">
             Totaux et fenêtre 1 h : <code class="text-[11px]">players</code> (created_at, last_seen)
             et <code class="text-[11px]">tracked_matches</code>. Débit / deltas : dernier
-            <code class="text-[11px]">poller_30m</code> ou
-            <code class="text-[11px]">poller_hourly</code> dans le log unifié.
+            <code class="text-[11px]">poller_30m</code> /
+            <code class="text-[11px]">poller_hourly</code> /
+            <code class="text-[11px]">poller_v2_30m</code> /
+            <code class="text-[11px]">poller_v2_hourly</code>
+            dans le log unifié.
           </p>
           <p v-if="dataStatsLoading" class="text-text/70">Chargement…</p>
           <template v-else>
@@ -695,20 +698,19 @@
             <span class="text-text/60">{{ dataSectionPoller ? '▼' : '▶' }}</span>
           </button>
           <div v-show="dataSectionPoller" class="border-t border-primary/20 px-4 pb-4 pt-2">
-            <p v-if="riotPollerStatus?.pollerExternal" class="mb-2 text-xs text-text/70">
-              Poller dans un process PM2 séparé (<code class="rounded bg-background px-1"
-                >lelanation-poller</code
-              >) — contrôle :
-              <code class="rounded bg-background px-1">pm2 stop|restart lelanation-poller</code>.
-              Les boutons ci-dessous ne s’appliquent qu’au poller intégré au backend (sans
-              POLLER_EXTERNAL).
+            <p class="mb-2 text-xs text-text/70">
+              L’ingestion des matchs tourne dans le process PM2
+              <code class="rounded bg-background px-1">lelanation-poller-v2</code>
+              — contrôle :
+              <code class="rounded bg-background px-1">pm2 stop|restart lelanation-poller-v2</code>.
             </p>
             <p
               v-if="riotPollerStatus?.heartbeatStale"
               class="mb-2 text-xs text-amber-700 dark:text-amber-400"
             >
-              Dernier résumé poller dans le log unifié (poller_30m / poller_hourly) trop ancien — le
-              process est peut-être arrêté. Totaux = dernier résumé connu.
+              Dernier résumé poller dans le log unifié (poller_30m / poller_hourly / poller_v2_30m /
+              poller_v2_hourly) trop ancien — le process est peut-être arrêté. Totaux = dernier
+              résumé connu.
               <span v-if="riotPollerStatus?.snapshotAgeMs != null" class="text-text/60">
                 (âge {{ Math.round(riotPollerStatus.snapshotAgeMs / 1000) }} s)
               </span>
@@ -938,42 +940,12 @@
                 :disabled="riotPollerLogsLoading"
                 @click="openRiotPollerLogs"
               >
-                {{ riotPollerLogsLoading ? '…' : 'Voir les logs' }}
-              </button>
-              <button
-                type="button"
-                class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
-                :disabled="
-                  riotPollerStatus?.pollerExternal ||
-                  !riotPollerStatus?.isRunning ||
-                  riotPollerStopBusy
-                "
-                @click="stopRiotPoller"
-              >
-                {{ riotPollerStopBusy ? '…' : 'Arrêter proprement' }}
-              </button>
-              <button
-                type="button"
-                class="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
-                :disabled="
-                  riotPollerStatus?.pollerExternal ||
-                  riotPollerStatus?.isRunning ||
-                  riotPollerStartBusy
-                "
-                @click="startRiotPoller"
-              >
-                {{ riotPollerStartBusy ? '…' : 'Relancer' }}
+                {{ riotPollerLogsLoading ? '…' : 'Voir les logs (unifié)' }}
               </button>
             </div>
-            <p
-              v-if="riotPollerActionMessage"
-              :class="
-                riotPollerActionError
-                  ? 'mt-2 text-sm text-error'
-                  : 'mt-2 text-sm text-green-600 dark:text-green-400'
-              "
-            >
-              {{ riotPollerActionMessage }}
+            <p class="mt-2 text-xs text-text/60">
+              Démarrage / arrêt du poller d’ingestion : PM2 uniquement (plus de poller intégré au
+              backend).
             </p>
 
             <div class="mt-4 rounded border border-primary/20 bg-background/30 p-3">
@@ -983,9 +955,11 @@
               <p class="mb-3 text-xs text-text/60">
                 Somme des <strong>deltas</strong> des lignes
                 <code class="rounded bg-surface px-1">poller_hourly</code> /
-                <code class="rounded bg-surface px-1">poller_30m</code> sur la plage choisie. Les
-                totaux correspondent à la somme des colonnes du tableau (pas au cumul absolu Riot
-                affiché dans un seul résumé).
+                <code class="rounded bg-surface px-1">poller_30m</code> /
+                <code class="rounded bg-surface px-1">poller_v2_hourly</code> /
+                <code class="rounded bg-surface px-1">poller_v2_30m</code>
+                sur la plage choisie. Les totaux correspondent à la somme des colonnes du tableau
+                (pas au cumul absolu Riot affiché dans un seul résumé).
               </p>
               <div class="mb-3 flex flex-wrap gap-2">
                 <button
@@ -1269,7 +1243,7 @@
                   @click="
                     row.id === 'league-xp'
                       ? switchScript('league-xp', leagueXpForm)
-                      : switchScript(row.id as 'poller' | 'puuid-migration')
+                      : switchScript('puuid-migration')
                   "
                 >
                   {{ scriptSwitchBusy[row.id] ? '…' : 'Lancer' }}
@@ -1278,7 +1252,7 @@
                   type="button"
                   class="rounded border border-primary/40 bg-surface/60 px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-primary/20 disabled:opacity-50"
                   :disabled="scriptStopBusy[row.id]"
-                  @click="stopScript(row.id as 'poller' | 'puuid-migration' | 'league-xp')"
+                  @click="stopScript(row.id as 'puuid-migration' | 'league-xp')"
                 >
                   {{ scriptStopBusy[row.id] ? '…' : 'Arrêter' }}
                 </button>
@@ -2605,7 +2579,7 @@ const riotPollerStatus = ref<{
   participantsRankFixed: number
   participantsRoleFixed: number
   latestPlayerLastSeenAt?: string | null
-  statusSource?: 'process' | 'unified_log' | 'unified_log_stale'
+  statusSource?: 'unified_log' | 'unified_log_stale'
   snapshotUpdatedAt?: string | null
   snapshotAgeMs?: number | null
   heartbeatStale?: boolean
@@ -2852,7 +2826,6 @@ async function loadPollerMetrics() {
 const riotScriptStatusRows = computed(() => {
   const s = riotScriptsStatus.value
   return [
-    { id: 'poller', label: 'Riot Poller', status: s?.poller?.status ?? 'stopped' },
     {
       id: 'puuid-migration',
       label: 'Migration players (PUUID)',
@@ -2876,10 +2849,6 @@ const riotPollerLogsOpen = ref(false)
 const riotPollerLogs = ref<string[]>([])
 const riotPollerLogsLoading = ref(false)
 const riotPollerLogsError = ref<string | null>(null)
-const riotPollerStartBusy = ref(false)
-const riotPollerStopBusy = ref(false)
-const riotPollerActionMessage = ref('')
-const riotPollerActionError = ref(false)
 
 async function loadRiotApiStats() {
   try {
@@ -3872,7 +3841,7 @@ async function openRiotPollerLogs() {
 }
 
 async function switchScript(
-  script: 'poller' | 'puuid-migration' | 'league-xp',
+  script: 'puuid-migration' | 'league-xp',
   options?: Record<string, unknown>
 ) {
   scriptActionMessage.value = ''
@@ -3905,19 +3874,17 @@ async function switchScript(
   }
 }
 
-async function stopScript(script: 'poller' | 'puuid-migration' | 'league-xp') {
+async function stopScript(script: 'puuid-migration' | 'league-xp') {
   scriptActionMessage.value = ''
   scriptActionError.value = false
   scriptStopBusy.value = { ...scriptStopBusy.value, [script]: true }
   try {
     const activeScript =
-      riotScriptsStatus.value?.poller?.status === 'running'
-        ? 'poller'
-        : riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
-          ? 'puuid-migration'
-          : riotScriptsStatus.value?.['league-xp']?.status === 'running'
-            ? 'league-xp'
-            : null
+      riotScriptsStatus.value?.['puuid-migration']?.status === 'running'
+        ? 'puuid-migration'
+        : riotScriptsStatus.value?.['league-xp']?.status === 'running'
+          ? 'league-xp'
+          : null
     if (activeScript !== script) {
       scriptActionMessage.value = 'Ce script n’est pas actif.'
       return
@@ -3936,50 +3903,6 @@ async function stopScript(script: 'poller' | 'puuid-migration' | 'league-xp') {
     scriptActionMessage.value = 'Erreur réseau'
   } finally {
     scriptStopBusy.value = { ...scriptStopBusy.value, [script]: false }
-  }
-}
-
-async function stopRiotPoller() {
-  riotPollerActionMessage.value = ''
-  riotPollerActionError.value = false
-  riotPollerStopBusy.value = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/stop'), { method: 'POST' })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    riotPollerActionMessage.value = data?.message ?? 'Arrêt demandé.'
-    await loadRiotScriptsStatus()
-  } catch {
-    riotPollerActionError.value = true
-    riotPollerActionMessage.value = 'Erreur réseau'
-  } finally {
-    riotPollerStopBusy.value = false
-  }
-}
-
-async function startRiotPoller() {
-  riotPollerActionMessage.value = ''
-  riotPollerActionError.value = false
-  riotPollerStartBusy.value = true
-  try {
-    const res = await fetchWithAuth(apiUrl('/api/admin/riot-poller/start'), { method: 'POST' })
-    if (res.status === 401) {
-      clearAuth()
-      await navigateTo(localePath('/admin/login'))
-      return
-    }
-    const data = await res.json()
-    riotPollerActionMessage.value = data?.message ?? 'Poller démarré.'
-    await loadRiotScriptsStatus()
-  } catch {
-    riotPollerActionError.value = true
-    riotPollerActionMessage.value = 'Erreur réseau'
-  } finally {
-    riotPollerStartBusy.value = false
   }
 }
 

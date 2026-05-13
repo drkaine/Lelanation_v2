@@ -1,31 +1,19 @@
 /**
  * Script Orchestrator
  *
- * Manages the lifecycle of all Riot data collection scripts.
+ * Manages the lifecycle of admin-triggered Riot maintenance scripts.
  * Enforces the constraint that only ONE script runs at a time.
  *
  * Scripts:
- *   'poller'          — Main match data collection loop (riotPoller.ts)
  *   'puuid-migration' — Sync player PUUIDs after API key rotation (puuidMigrationScript.ts)
  *   'league-xp'       — Discover new players by Elo tier/division (leagueXpScript.ts)
  *
- * The poller is started automatically at app startup. The admin panel can stop
- * the current script and start a different one.
+ * Match ingestion runs in the separate PM2 process `lelanation-poller-v2` (backend/src/main.ts),
+ * not in this API process.
  *
- * Graceful shutdown: requestStop() signals the active script to finish its
- * current task before exiting. For the poller this means finishing the
- * current match fetch cycle; for the other scripts it means finishing the
- * current batch/page.
+ * Graceful shutdown: requestStop() signals the active script to finish its current batch/page.
  */
 import { isDatabaseConfigured } from '../db.js'
-import {
-  startRiotPoller,
-  requestStopRiotPoller,
-  isRiotPollerRunning,
-  getRiotPollerStatus,
-  getPollerLoopPromise,
-  getAndClearTriggerPuuidMigrationOnPollerExit,
-} from './riotPoller.js'
 import {
   runPuuidMigrationScript,
   getPuuidMigrationStatus,
@@ -39,9 +27,7 @@ import {
 } from './leagueXpScript.js'
 export type { LeagueXpOptions }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export type ScriptName = 'poller' | 'puuid-migration' | 'league-xp'
+export type ScriptName = 'puuid-migration' | 'league-xp'
 
 export interface OrchestratorStatus {
   activeScript: ScriptName | null
@@ -50,75 +36,30 @@ export interface OrchestratorStatus {
   finishedAt: string | null
   lastError: string | null
   shouldStop: boolean
-  /** Script-specific counters. Structure depends on which script is active. */
   counters: Record<string, unknown>
 }
 
-// ─── Mutable state ────────────────────────────────────────────────────────────
-
-/** Tracks non-poller script runs (poller uses its own internal state). */
-interface ActiveNonPollerState {
-  name: 'puuid-migration' | 'league-xp'
+interface ActiveState {
+  name: ScriptName
   shouldStop: boolean
   startedAt: string
 }
 
-let activePoller = false  // mirrors isRiotPollerRunning() but we also track start intent
-let activeNonPoller: ActiveNonPollerState | null = null
+let active: ActiveState | null = null
 let lastFinishedScript: ScriptName | null = null
 let lastFinishedAt: string | null = null
 let lastError: string | null = null
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isPollerActive(): boolean {
-  return activePoller || isRiotPollerRunning()
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/** Returns true if any script is currently running. */
 export function isAnyScriptRunning(): boolean {
-  return isPollerActive() || activeNonPoller !== null
+  return active !== null
 }
 
-/** Returns the name of the currently active script, or null. */
 export function getActiveScriptName(): ScriptName | null {
-  if (isPollerActive()) return 'poller'
-  if (activeNonPoller) return activeNonPoller.name
-  return null
+  return active?.name ?? null
 }
 
-/**
- * Returns a unified status object for the current script.
- * For the poller, counters come from getRiotPollerStatus().
- * For other scripts, counters come from their own status getters.
- */
 export function getOrchestratorStatus(): OrchestratorStatus {
-  if (isPollerActive()) {
-    const s = getRiotPollerStatus()
-    return {
-      activeScript: 'poller',
-      isRunning: s.isRunning,
-      startedAt: s.lastLoopStartedAt,
-      finishedAt: s.lastLoopFinishedAt,
-      lastError: s.lastError,
-      shouldStop: s.shouldStop,
-      counters: {
-        requestCount: s.requestCount,
-        error429Count: s.error429Count,
-        error400Count: s.error400Count,
-        matchesFetched: s.matchesFetched,
-        playersFetched: s.playersFetched,
-        participantsFetched: s.participantsFetched,
-        matchesRankFixed: s.matchesRankFixed,
-        participantsRankFixed: s.participantsRankFixed,
-        participantsRoleFixed: s.participantsRoleFixed,
-      },
-    }
-  }
-
-  if (activeNonPoller?.name === 'puuid-migration') {
+  if (active?.name === 'puuid-migration') {
     const s: PuuidMigrationStatus = getPuuidMigrationStatus()
     return {
       activeScript: 'puuid-migration',
@@ -126,12 +67,12 @@ export function getOrchestratorStatus(): OrchestratorStatus {
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
       lastError: s.lastError,
-      shouldStop: activeNonPoller.shouldStop,
+      shouldStop: active.shouldStop,
       counters: { phase: s.phase, requestCount: s.requestCount },
     }
   }
 
-  if (activeNonPoller?.name === 'league-xp') {
+  if (active?.name === 'league-xp') {
     const s: LeagueXpStatus = getLeagueXpStatus()
     return {
       activeScript: 'league-xp',
@@ -139,7 +80,7 @@ export function getOrchestratorStatus(): OrchestratorStatus {
       startedAt: s.startedAt,
       finishedAt: s.finishedAt,
       lastError: s.lastError,
-      shouldStop: activeNonPoller.shouldStop,
+      shouldStop: active.shouldStop,
       counters: {
         phase: s.phase,
         pagesProcessed: s.pagesProcessed,
@@ -155,7 +96,7 @@ export function getOrchestratorStatus(): OrchestratorStatus {
   return {
     activeScript: null,
     isRunning: false,
-    startedAt: activeNonPoller?.startedAt ?? null,
+    startedAt: active?.startedAt ?? null,
     finishedAt: lastFinishedAt,
     lastError,
     shouldStop: false,
@@ -163,26 +104,10 @@ export function getOrchestratorStatus(): OrchestratorStatus {
   }
 }
 
-/**
- * Gracefully stop the currently running script.
- * The script will finish its current task (match fetch cycle / batch / page) before stopping.
- */
 export function requestStop(): void {
-  if (isPollerActive()) {
-    requestStopRiotPoller()
-  }
-  if (activeNonPoller) {
-    activeNonPoller.shouldStop = true
-  }
+  if (active) active.shouldStop = true
 }
 
-/**
- * Start a script by name. Only one script may run at a time.
- * Returns { ok: false } with an error message if a script is already running.
- *
- * @param name    - 'poller' | 'puuid-migration' | 'league-xp'
- * @param options - LeagueXpOptions (only for 'league-xp')
- */
 export async function startScript(
   name: ScriptName,
   options?: LeagueXpOptions
@@ -196,87 +121,50 @@ export async function startScript(
     return { ok: false, error: 'DATABASE_URL not configured' }
   }
 
-  if (name === 'poller') {
-    if (process.env.POLLER_EXTERNAL) {
-      return { ok: false, error: 'Poller runs as external PM2 process (lelanation-poller). Use: pm2 restart lelanation-poller' }
-    }
-    activePoller = true
-    startRiotPoller()
-    // Clear activePoller flag once the loop finishes; if 400_decrypt triggered, start puuid-migration
-    void (async () => {
-      const loopPromise = getPollerLoopPromise()
-      if (loopPromise) await loopPromise
-      activePoller = false
-      lastFinishedScript = 'poller'
-      lastFinishedAt = new Date().toISOString()
-      lastError = getRiotPollerStatus().lastError
-      if (getAndClearTriggerPuuidMigrationOnPollerExit()) {
-        const r = await startScript('puuid-migration')
-        if (!r.ok) lastError = r.error
-      }
-    })()
-    return { ok: true }
-  }
-
   if (name === 'puuid-migration') {
-    activeNonPoller = {
+    active = {
       name: 'puuid-migration',
       shouldStop: false,
       startedAt: new Date().toISOString(),
     }
-    const ctx = activeNonPoller
-    void runPuuidMigrationScript(
-      () => ctx.shouldStop
-    )
-      .then(async () => {
+    const ctx = active
+    void runPuuidMigrationScript(() => ctx.shouldStop)
+      .then(() => {
         lastFinishedScript = 'puuid-migration'
         lastFinishedAt = new Date().toISOString()
         lastError = getPuuidMigrationStatus().lastError
-        activeNonPoller = null
-        // Requested behavior: restart poller automatically when migration is finished.
-        if (!isAnyScriptRunning()) {
-          const r = await startScript('poller')
-          if (!r.ok) lastError = r.error
-        }
+        active = null
       })
-      .catch(async (err: unknown) => {
+      .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         lastFinishedScript = 'puuid-migration'
         lastFinishedAt = new Date().toISOString()
         lastError = msg
-        activeNonPoller = null
-        // Even on error, restart poller automatically unless another script was started.
-        if (!isAnyScriptRunning()) {
-          const r = await startScript('poller')
-          if (!r.ok) lastError = r.error
-        }
+        active = null
       })
     return { ok: true }
   }
 
   if (name === 'league-xp') {
-    activeNonPoller = {
+    active = {
       name: 'league-xp',
       shouldStop: false,
       startedAt: new Date().toISOString(),
     }
-    const ctx = activeNonPoller
-    void runLeagueXpScript(
-      options ?? {},
-      () => ctx.shouldStop
-    )
+    const ctx = active
+    void runLeagueXpScript(options ?? {}, () => ctx.shouldStop)
       .then(() => {
         lastFinishedScript = 'league-xp'
         lastFinishedAt = new Date().toISOString()
         lastError = getLeagueXpStatus().lastError
-        activeNonPoller = null
+        active = null
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         lastFinishedScript = 'league-xp'
         lastFinishedAt = new Date().toISOString()
         lastError = msg
-        activeNonPoller = null
+        active = null
       })
     return { ok: true }
   }
@@ -284,10 +172,6 @@ export async function startScript(
   return { ok: false, error: `Unknown script: ${name as string}` }
 }
 
-/**
- * Stop any running script gracefully, wait until idle, then start target script.
- * This is used by admin actions where a new script should replace current one.
- */
 export async function switchToScript(
   name: ScriptName,
   options?: LeagueXpOptions
@@ -300,7 +184,7 @@ export async function switchToScript(
       if (Date.now() >= deadline) {
         return { ok: false, error: 'Timed out waiting for running script to stop.' }
       }
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
   }
   const started = await startScript(name, options)
@@ -308,32 +192,11 @@ export async function switchToScript(
   return { ok: true, previousScript }
 }
 
-/** Delay before starting the Riot poller after a backend process start (avoids hammering Riot right after deploy). Default 2 min; set to 0 to disable. */
-const RIOT_POLLER_STARTUP_DELAY_MS = Math.max(
-  0,
-  parseInt(process.env.RIOT_POLLER_STARTUP_DELAY_MS ?? '120000', 10) || 120_000
-)
-
-/**
- * Auto-start the default script (poller) at app startup.
- * Waits {@link RIOT_POLLER_STARTUP_DELAY_MS} first (post-restart cooldown); does not apply when the poller is started later from admin or after another script.
- * Idempotent: does nothing if a script is already running before or after the delay.
- */
+/** @deprecated In-process poller removed; nothing to auto-start in the API process. */
 export function startDefaultScript(): void {
-  if (isAnyScriptRunning()) return
-
-  void (async () => {
-    if (RIOT_POLLER_STARTUP_DELAY_MS > 0) {
-      await new Promise((r) => setTimeout(r, RIOT_POLLER_STARTUP_DELAY_MS))
-    }
-    if (!isAnyScriptRunning()) {
-      const r = await startScript('poller')
-      if (!r.ok) console.warn('[Orchestrator] Default poller did not start:', r.error)
-    }
-  })()
+  // no-op
 }
 
-/** Convenience: get last finished script info (for admin panel display). */
 export function getLastFinishedInfo(): {
   script: ScriptName | null
   finishedAt: string | null

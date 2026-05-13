@@ -24,14 +24,18 @@ module.exports = {
         exec_mode: 'fork'
       },
       {
-        name: 'lelanation-poller',
+        name: 'lelanation-poller-v2',
         cwd: 'path',
         script: 'npx',
-        args: 'tsx src/worker/pollerMain.ts',
+        args: 'tsx src/main.ts',
         interpreter: 'none',
         env: {
           NODE_ENV: 'development',
-          RIOT_POLLER_STARTUP_DELAY_MS: '10000',
+          ENV: 'dev',
+          PLAYER_KEY_VERSION: 'perso',
+          REDIS_URL: 'redis://localhost:6379',
+          DATABASE_URL: 'postgresql://user:pass@localhost:5432/lelanation',
+          RIOT_API_KEY: 'RGAPI-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
         },
         error_file: 'path',
         out_file: 'path',

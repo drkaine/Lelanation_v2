@@ -25,7 +25,7 @@ function validateConfig(): void {
 async function getDataLagSeconds(): Promise<number | null> {
   try {
     const rows = await sql<{ lag_seconds: number | null }[]>`
-      SELECT EXTRACT(EPOCH FROM (NOW() - MAX(aggregated_at)))::bigint AS lag_seconds
+      SELECT EXTRACT(EPOCH FROM (NOW() - MAX(created_at)))::bigint AS lag_seconds
       FROM processed_matches
     `;
     return rows[0]?.lag_seconds ?? null;

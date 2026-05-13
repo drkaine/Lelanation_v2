@@ -1,8 +1,7 @@
 import { prisma } from '../db.js'
 import { findLatestPollerSummaryEntries, type ParsedUnifiedLogEntry } from '../logging/unifiedAppLog.js'
-import { getRiotPollerStatus, type RiotPollerStatus } from '../worker/riotPoller.js'
 
-/** No recent poller_30m / poller_hourly line ⇒ treat as inactive (override with POLLER_ADMIN_LOG_STALE_MS, min 90 min). */
+/** No recent poller summary line ⇒ treat as inactive (override with POLLER_ADMIN_LOG_STALE_MS, min 90 min). */
 const envStale = process.env.POLLER_ADMIN_LOG_STALE_MS
 const envStaleMs = envStale != null && envStale !== '' ? parseInt(envStale, 10) : NaN
 const UNIFIED_LOG_STALE_MS = Math.max(
@@ -29,33 +28,17 @@ export type RiotPollerAdminPayload = {
   requestsPerMinute: number | null
   requestsPer2Min: number | null
   latestPlayerLastSeenAt: string | null
-  /** process = in-memory (API + poller same Node); unified_log = dernier résumé dans lelanation-unified.log */
-  statusSource: 'process' | 'unified_log' | 'unified_log_stale'
-  /** Horodatage du dernier résumé poller_30m / poller_hourly utilisé (ISO) */
+  /** Ingestion runs in PM2 (`lelanation-poller-v2`); this payload is always from unified log summaries. */
+  statusSource: 'unified_log' | 'unified_log_stale'
   snapshotUpdatedAt: string | null
   snapshotAgeMs: number | null
   heartbeatStale: boolean
   pollerExternal: boolean
-  /** Deltas du dernier résumé log (pas cumul global) */
   nearLimitPauseCount?: number
   http429PauseCount?: number
 }
 
-function ratesFromBase(
-  base: Pick<RiotPollerStatus, 'requestCount' | 'lastLoopStartedAt'>
-): { requestsPerMinute: number | null; requestsPer2Min: number | null } {
-  const startedAt = base.lastLoopStartedAt ? new Date(base.lastLoopStartedAt).getTime() : 0
-  const elapsedMin = startedAt > 0 ? (Date.now() - startedAt) / 60000 : 0
-  const requestsPerMinute =
-    elapsedMin >= 1 / 60 ? Math.round((base.requestCount / elapsedMin) * 10) / 10 : null
-  const requestsPer2Min = requestsPerMinute != null ? Math.round(requestsPerMinute * 2 * 10) / 10 : null
-  return { requestsPerMinute, requestsPer2Min }
-}
-
-function statusFromBase(
-  isRunning: boolean,
-  lastError: string | null
-): 'running' | 'stopped' | 'error' {
+function statusFromBase(isRunning: boolean, lastError: string | null): 'running' | 'stopped' | 'error' {
   if (isRunning) return 'running'
   if (lastError) return 'error'
   return 'stopped'
@@ -82,8 +65,7 @@ function pickNewerSummary(
 function payloadFromUnifiedLogEntry(
   e: ParsedUnifiedLogEntry,
   now: number,
-  latestPlayerLastSeenAt: string | null,
-  pollerExternal: boolean
+  latestPlayerLastSeenAt: string | null
 ): RiotPollerAdminPayload {
   const j = e.json ?? {}
   const totals = (j['totals'] as Record<string, unknown>) ?? {}
@@ -127,16 +109,13 @@ function payloadFromUnifiedLogEntry(
     snapshotUpdatedAt: e.atIso,
     snapshotAgeMs: Number.isFinite(ageMs) ? ageMs : null,
     heartbeatStale: !fresh,
-    pollerExternal,
+    pollerExternal: true,
     nearLimitPauseCount: num(j['rateLimitRefreshPauses']),
     http429PauseCount: num(j['rateLimit429Pauses']),
   }
 }
 
-function emptyExternalPayload(
-  latestPlayerLastSeenAt: string | null,
-  pollerExternal: boolean
-): RiotPollerAdminPayload {
+function emptyPayload(latestPlayerLastSeenAt: string | null): RiotPollerAdminPayload {
   return {
     isRunning: false,
     status: 'stopped',
@@ -160,54 +139,25 @@ function emptyExternalPayload(
     snapshotUpdatedAt: null,
     snapshotAgeMs: null,
     heartbeatStale: true,
-    pollerExternal,
+    pollerExternal: true,
   }
 }
 
 export async function buildRiotPollerAdminPayload(): Promise<RiotPollerAdminPayload> {
-  const memory = getRiotPollerStatus()
   const now = Date.now()
-  const pollerExternal = !!process.env.POLLER_EXTERNAL
 
-  const latestPlayerSeen = await prisma.player.findFirst({
-    where: { lastSeen: { not: null } },
-    orderBy: { lastSeen: 'desc' },
-    select: { lastSeen: true },
-  }).catch(() => null)
+  const latestPlayerSeen = await prisma.player
+    .findFirst({
+      where: { lastSeen: { not: null } },
+      orderBy: { lastSeen: 'desc' },
+      select: { lastSeen: true },
+    })
+    .catch(() => null)
 
   const latestPlayerLastSeenAt = latestPlayerSeen?.lastSeen?.toISOString() ?? null
 
-  if (pollerExternal) {
-    const { last30m, lastHourly } = await findLatestPollerSummaryEntries()
-    const e = pickNewerSummary(last30m, lastHourly)
-    if (!e) return emptyExternalPayload(latestPlayerLastSeenAt, pollerExternal)
-    return payloadFromUnifiedLogEntry(e, now, latestPlayerLastSeenAt, pollerExternal)
-  }
-
-  const { requestsPerMinute, requestsPer2Min } = ratesFromBase(memory)
-  return {
-    isRunning: memory.isRunning,
-    status: statusFromBase(memory.isRunning, memory.lastError),
-    lastError: memory.lastError,
-    lastLoopStartedAt: memory.lastLoopStartedAt,
-    lastLoopFinishedAt: memory.lastLoopFinishedAt,
-    requestCount: memory.requestCount,
-    error429Count: memory.error429Count,
-    error400Count: memory.error400Count,
-    matchesFetched: memory.matchesFetched,
-    playersFetched: memory.playersFetched,
-    playersPolled: memory.playersPolled,
-    participantsFetched: memory.participantsFetched,
-    matchesRankFixed: memory.matchesRankFixed,
-    participantsRankFixed: memory.participantsRankFixed,
-    participantsRoleFixed: memory.participantsRoleFixed,
-    requestsPerMinute,
-    requestsPer2Min,
-    latestPlayerLastSeenAt,
-    statusSource: 'process',
-    snapshotUpdatedAt: null,
-    snapshotAgeMs: null,
-    heartbeatStale: false,
-    pollerExternal,
-  }
+  const { last30m, lastHourly } = await findLatestPollerSummaryEntries()
+  const e = pickNewerSummary(last30m, lastHourly)
+  if (!e) return emptyPayload(latestPlayerLastSeenAt)
+  return payloadFromUnifiedLogEntry(e, now, latestPlayerLastSeenAt)
 }

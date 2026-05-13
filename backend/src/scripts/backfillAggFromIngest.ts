@@ -3577,8 +3577,8 @@ async function main(): Promise<void> {
   const maxAttempts = Number.isFinite(maxAttemptsRaw) && maxAttemptsRaw > 0 ? Math.min(maxAttemptsRaw, 10) : 6
   try {
     if (pollerWasPaused) {
-      console.log('[backfill-agg] pausing poller (pm2 stop lelanation-poller)')
-      await runPm2Command(['stop', 'lelanation-poller']).catch((err) => {
+      console.log('[backfill-agg] pausing poller (pm2 stop lelanation-poller-v2)')
+      await runPm2Command(['stop', 'lelanation-poller-v2']).catch((err) => {
         console.warn(
           `[backfill-agg] unable to stop poller automatically: ${
             err instanceof Error ? err.message : String(err)
@@ -3604,8 +3604,8 @@ async function main(): Promise<void> {
     }
   } finally {
     if (pollerWasPaused) {
-      console.log('[backfill-agg] resuming poller (pm2 start lelanation-poller)')
-      await runPm2Command(['start', 'lelanation-poller']).catch((err) => {
+      console.log('[backfill-agg] resuming poller (pm2 start lelanation-poller-v2)')
+      await runPm2Command(['start', 'lelanation-poller-v2']).catch((err) => {
         console.warn(
           `[backfill-agg] unable to restart poller automatically: ${
             err instanceof Error ? err.message : String(err)

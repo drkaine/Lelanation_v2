@@ -36,16 +36,16 @@ help:
 	@echo "  make dev-frontend       Run frontend dev server only"
 	@echo ""
 	@echo "Build"
-	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller untouched)"
-	@echo "  make build-all          Same as build + PM2 restart all apps (incl. lelanation-poller)"
-	@echo "  make build-backend      Drizzle migrate (lelanation_statistiques) + npm run build (incl. prisma generate pour le client Prisma)"
+	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller-v2 untouched)"
+	@echo "  make build-all          Same as build + PM2 restart all apps (incl. lelanation-poller-v2)"
+	@echo "  make build-backend      migrate-db (Prisma stats + Drizzle statistiques) puis npm run build"
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
 	@echo "  make exe-windows        Build Tauri app and copy it to ./Lelanation.exe"
 	@echo ""
 	@echo "Bases de données (migrations)"
-	@echo "  make migrate-drizzle-statistiques  Migrations Drizzle (DATABASE_URL_STATISTIQUES, backend/.env)"
+	@echo "  make migrate-drizzle-statistiques  Migrations Drizzle (DATABASE_URL_STATISTIQUES, base lelanation_statistiques : agrégats, players, player_rank_history, …)"
 	@echo "  make migrate-prisma     Prisma migrate deploy (DATABASE_URL, base lelanation_stats)"
 	@echo "  make migrate-db         migrate-prisma puis migrate-drizzle (les deux bases)"
 	@echo "  make copy-stats-statistiques  Copie lelanation_stats → lelanation_statistiques (passe ARGS après --)"
@@ -65,9 +65,9 @@ help:
 	@echo "  make deploy             Build then pm2 startOrRestart"
 	@echo "  make pm2-logs           Tail all PM2 logs"
 	@echo "  make pm2-logs-backend   Tail backend logs"
-	@echo "  make pm2-logs-poller    Tail poller logs"
+	@echo "  make pm2-logs-poller    Tail poller-v2 logs"
 	@echo "  make pm2-logs-frontend  Tail frontend logs"
-	@echo "  make pm2-restart-poller Restart poller only (preserves pipeline queue via drain)"
+	@echo "  make pm2-restart-poller Restart poller-v2 only"
 	@echo ""
 	@echo "Quality"
 	@echo "  make typecheck          Typecheck backend + frontend + companion"
@@ -105,7 +105,8 @@ build: test-packages build-backend build-frontend build-companion pm2-restart-no
 
 build-all: test-packages build-backend build-frontend build-companion pm2-restart
 
-build-backend: migrate-drizzle-statistiques
+# Applique les deux chaînes de migrations avant le build (sinon prisma generate compile un schéma que la DB n’a pas encore).
+build-backend: migrate-db
 	$(NPM) --prefix "$(BACKEND_DIR)" run build
 
 migrate-drizzle-statistiques:
@@ -194,10 +195,10 @@ pm2-logs-backend:
 	$(PM2) logs lelanation-backend
 
 pm2-logs-poller:
-	$(PM2) logs lelanation-poller
+	$(PM2) logs lelanation-poller-v2
 
 pm2-restart-poller:
-	$(PM2) restart lelanation-poller
+	$(PM2) restart lelanation-poller-v2
 
 pm2-logs-frontend:
 	$(PM2) logs lelanation-frontend

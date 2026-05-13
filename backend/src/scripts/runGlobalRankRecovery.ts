@@ -67,7 +67,7 @@ async function runTsxScript(scriptPath: string, env: NodeJS.ProcessEnv): Promise
 
 async function stopPoller(): Promise<void> {
   try {
-    const { stdout, stderr } = await execFileAsync('pm2', ['stop', 'lelanation-poller'])
+    const { stdout, stderr } = await execFileAsync('pm2', ['stop', 'lelanation-poller-v2'])
     if (stdout?.trim()) console.log('[global-rank-recovery] poller_stop_stdout:', stdout.trim())
     if (stderr?.trim()) console.log('[global-rank-recovery] poller_stop_stderr:', stderr.trim())
   } catch (err) {
@@ -78,7 +78,7 @@ async function stopPoller(): Promise<void> {
 
 async function startPoller(): Promise<void> {
   try {
-    const { stdout, stderr } = await execFileAsync('pm2', ['start', 'lelanation-poller'])
+    const { stdout, stderr } = await execFileAsync('pm2', ['start', 'lelanation-poller-v2'])
     if (stdout?.trim()) console.log('[global-rank-recovery] poller_start_stdout:', stdout.trim())
     if (stderr?.trim()) console.log('[global-rank-recovery] poller_start_stderr:', stderr.trim())
   } catch (err) {

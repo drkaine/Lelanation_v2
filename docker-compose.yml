@@ -2,7 +2,7 @@
 # - postgres → lelanation_stats (Prisma / backend classique), port hôte 5433
 # - postgres-statistiques → lelanation_statistiques (Drizzle), port hôte 5434
 # Usage : docker compose up -d   ou   make docker-db-up
-# Migrations : make migrate-drizzle-statistiques  ;  Prisma (stats classiques) : make migrate-prisma
+# Migrations : make migrate-prisma (lelanation_stats) ; make migrate-drizzle-statistiques (lelanation_statistiques, ex. player_rank_history).
 # restart: unless-stopped → les conteneurs repartent avec le daemon Docker (reboot machine).
 services:
   postgres:

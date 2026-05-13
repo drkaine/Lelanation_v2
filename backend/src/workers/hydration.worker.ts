@@ -36,6 +36,11 @@ type PlayerRankRow = {
   rank_lp: number | null;
 };
 
+type ParticipantIdentity = {
+  puuid: string;
+  summonerId: string;
+};
+
 function normalizeTier(value: string | null | undefined): string | null {
   const tier = String(value ?? "")
     .trim()
@@ -44,15 +49,109 @@ function normalizeTier(value: string | null | undefined): string | null {
   return tier;
 }
 
-async function loadParticipantRankSnapshot(participants: ParticipantDto[]): Promise<Map<string, PlayerRankRow>> {
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function clampRankLp(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(32767, Math.trunc(n)));
+}
+
+async function loadParticipantRankSnapshot(
+  participants: ParticipantDto[],
+  region: string,
+  matchDate: Date,
+): Promise<Map<string, PlayerRankRow>> {
   const puuids = Array.from(new Set(participants.map((participant) => participant.puuid).filter(Boolean)));
   if (puuids.length === 0) return new Map();
   const rows = await sql<PlayerRankRow[]>`
-    SELECT puuid, rank_tier, rank_division, rank_lp
-    FROM players
-    WHERE puuid = ANY(${sql.array(puuids, 25)})
+    SELECT DISTINCT ON (prh.puuid)
+      prh.puuid,
+      prh.rank_tier,
+      prh.rank_division,
+      prh.rank_lp
+    FROM player_rank_history prh
+    WHERE prh.puuid = ANY(${sql.array(puuids, 25)})
+      AND prh.region = ${region}
+      AND prh.date <= ${matchDate.toISOString().slice(0, 10)}::date
+    ORDER BY prh.puuid, prh.date DESC
   `;
   return new Map(rows.map((row) => [row.puuid, row]));
+}
+
+async function loadTodayRankSnapshotPuuids(
+  identities: ParticipantIdentity[],
+  region: string,
+): Promise<Set<string>> {
+  const puuids = Array.from(new Set(identities.map((identity) => identity.puuid).filter(Boolean)));
+  if (puuids.length === 0) return new Set();
+  const rows = await sql<{ puuid: string }[]>`
+    SELECT puuid
+    FROM player_rank_history
+    WHERE region = ${region}
+      AND date = ${todayIsoDate()}::date
+      AND puuid = ANY(${sql.array(puuids, 25)})
+  `;
+  return new Set(rows.map((row) => row.puuid));
+}
+
+async function refreshMissingTodayRanks(
+  identities: ParticipantIdentity[],
+  region: string,
+): Promise<Map<string, PlayerRankRow>> {
+  const refreshed = new Map<string, PlayerRankRow>();
+  const withTodaySnapshot = await loadTodayRankSnapshotPuuids(identities, region);
+  const missing = identities.filter((identity) => !withTodaySnapshot.has(identity.puuid));
+
+  for (const identity of missing) {
+    await waitForSlot(1);
+    let rankTier: string | null = null;
+    let rankDivision: string | null = null;
+    let rankLp: number | null = null;
+
+    try {
+      const rank = await riotClient.getRank(identity.summonerId, region);
+      const normalizedTier = normalizeTier(rank?.tier);
+      if (normalizedTier) {
+        rankTier = normalizedTier;
+        rankDivision = String(rank?.rank ?? "").trim().toUpperCase() || null;
+        rankLp = clampRankLp(rank?.leaguePoints ?? 0);
+      }
+    } catch (error) {
+      console.warn(
+        `[hydration.worker] rank_refresh_failed puuid=${identity.puuid} region=${region} reason=${error instanceof Error ? error.message : String(error)}`,
+      );
+      continue;
+    }
+
+    await sql`
+      INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
+      VALUES (
+        ${identity.puuid},
+        ${todayIsoDate()}::date,
+        ${region},
+        ${rankTier ?? "UNRANKED"},
+        ${rankDivision ?? "UNRANKED"},
+        ${rankLp ?? 0}
+      )
+      ON CONFLICT (puuid, date, region)
+      DO UPDATE SET
+        rank_tier = EXCLUDED.rank_tier,
+        rank_division = EXCLUDED.rank_division,
+        rank_lp = EXCLUDED.rank_lp
+    `;
+
+    refreshed.set(identity.puuid, {
+      puuid: identity.puuid,
+      rank_tier: rankTier,
+      rank_division: rankDivision,
+      rank_lp: rankLp,
+    });
+  }
+
+  return refreshed;
 }
 
 function mergeRankSnapshotIntoMatch(match: MatchDto, rankByPuuid: Map<string, PlayerRankRow>): MatchDto {
@@ -173,7 +272,33 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
       return;
     }
 
-    const rankByPuuid = await loadParticipantRankSnapshot(match.info.participants ?? []);
+    const region = String(match.info.platformId ?? data.region ?? "euw1").toLowerCase();
+    const matchDate = new Date(
+      Number(match.info.gameStartTimestamp ?? 0) ||
+        Number(match.info.gameCreation ?? 0) ||
+        Date.now(),
+    );
+    const safeMatchDate = Number.isFinite(matchDate.getTime()) ? matchDate : new Date();
+    const rankByPuuid = await loadParticipantRankSnapshot(
+      match.info.participants ?? [],
+      region,
+      safeMatchDate,
+    );
+    const identities = Array.from(
+      new Map(
+        (match.info.participants ?? [])
+          .map((participant) => ({
+            puuid: String(participant.puuid ?? "").trim(),
+            summonerId: String(participant.summonerId ?? "").trim(),
+          }))
+          .filter((identity) => identity.puuid && identity.summonerId)
+          .map((identity) => [identity.puuid, identity]),
+      ).values(),
+    );
+    const refreshedTodayRanks = await refreshMissingTodayRanks(identities, region);
+    for (const [puuid, row] of refreshedTodayRanks.entries()) {
+      rankByPuuid.set(puuid, row);
+    }
     const enrichedMatch = mergeRankSnapshotIntoMatch(match, rankByPuuid);
 
     const patch = extractPatch(enrichedMatch.info.gameVersion);

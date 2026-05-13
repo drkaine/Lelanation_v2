@@ -21,7 +21,7 @@ import { setupLiveAggArchiveCheckpoint } from './cron/liveAggArchiveCheckpoint.j
 import { MetricsService } from './services/MetricsService.js'
 // import { getOverviewDetailStats } from './services/StatsOverviewService.js'
 // import { scheduleStatsPrewarm } from './services/StatsPrewarmService.js'
-import { startDefaultScript, requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
+import { requestStop, isAnyScriptRunning } from './worker/scriptOrchestrator.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -71,7 +71,7 @@ try {
 
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 // PM2 (and Docker) sends SIGTERM before killing the process.
-// We stop the poller loop and wait for it to finish its current operation.
+// We stop any active admin script (e.g. puuid-migration) and wait briefly.
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
 function gracefulShutdown(signal: string): void {
@@ -112,13 +112,7 @@ app.listen(PORT, () => {
   //   (r) => r.ok && r.refreshed?.length && console.log('[Server] Precomputed stats initial fill:', r.refreshed.length, 'entries'),
   //   (e) => console.warn('[Server] Precomputed stats initial fill failed:', e instanceof Error ? e.message : e)
   // )
-  // Poller Riot (ingestion) — lance le script `poller` après RIOT_POLLER_STARTUP_DELAY_MS (défaut 2 min).
-  // Quand POLLER_EXTERNAL=1 (ecosystem.config.js), le poller tourne dans son propre process PM2 (lelanation-poller).
-  if (!process.env.POLLER_EXTERNAL) {
-    startDefaultScript()
-  } else {
-    console.log('[Server] POLLER_EXTERNAL=1 — poller runs in separate PM2 process (lelanation-poller)')
-  }
+  console.log('[Server] Match ingestion runs in PM2 as lelanation-poller-v2 (not in this API process).')
 })
 
 export default app
