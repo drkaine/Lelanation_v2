@@ -148,9 +148,30 @@ export interface ParticipantDto {
   totalHeal: number;
   totalHealsOnTeammates?: number;
   totalMinionsKilled: number;
+  totalAllyJungleMinionsKilled?: number;
+  totalEnemyJungleMinionsKilled?: number;
   totalTimeCCDealt: number;
   totalTimeSpentDead: number;
   totalUnitsHealed?: number;
+  /** Variantes possibles selon la version de l’API. */
+  totalUnitsHealedToChampions?: number;
+  totalUnitsHealedToChampion?: number;
+  healFromMapSources?: number;
+  damageDealtToEpicMonsters?: number;
+  allInPings?: number;
+  assistMePings?: number;
+  basicPings?: number;
+  commandPings?: number;
+  dangerPings?: number;
+  enemyMissingPings?: number;
+  enemyVisionPings?: number;
+  getBackPings?: number;
+  holdPings?: number;
+  needVisionPings?: number;
+  onMyWayPings?: number;
+  pushPings?: number;
+  retreatPings?: number;
+  visionClearedPings?: number;
   tripleKills: number;
   trueDamageDealt: number;
   trueDamageDealtToChampions: number;
@@ -258,7 +279,6 @@ export interface ChallengesDto {
   shortestTimeToAceFromFirstTakedown?: number;
   skillshotsDodged?: number;
   skillshotsHit?: number;
-  snowballsHit?: number;
   soloBaronKills?: number;
   soloKills?: number;
   stealthWardsPlaced?: number;
@@ -275,6 +295,7 @@ export interface ChallengesDto {
   teamDamagePercentage?: number;
   teamElderDragonKills?: number;
   teamRiftHeraldKills?: number;
+  twoWardsOneSweeperCount?: number;
   threeWardsOneSweeperCount?: number;
   tookLargeDamageSurvived?: number;
   turretPlatesTaken?: number;

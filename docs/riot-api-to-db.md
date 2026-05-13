@@ -355,7 +355,6 @@ Chaque clé allowlist de `challenges` est stockée dans une colonne `ch_*` (Floa
 | ch_flawless_aces | flawlessAces |
 | ch_had_open_nexus | hadOpenNexus |
 | ch_quick_cleanse | quickCleanse |
-| ch_snowballs_hit | snowballsHit |
 | ch_wards_guarded | wardsGuarded |
 | ch_earliest_baron | earliestBaron |
 | ch_skillshots_hit | skillshotsHit |

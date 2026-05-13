@@ -151,7 +151,6 @@ export const CHAMPION_STATS_METRIC_COLUMNS = [
   "sum_scuttle_crab_kills",
   "sum_skillshots_dodged",
   "sum_skillshots_hit",
-  "sum_snowballs_hit",
   "sum_solo_baron_kills",
   "sum_solo_kills",
   "sum_solo_turrets_lategame",

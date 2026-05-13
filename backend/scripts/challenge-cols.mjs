@@ -1,6 +1,6 @@
 const ALLOWLIST = [
   'soloKills', 'takedowns', 'bountyGold', 'doubleAces', 'buffsStolen',
-  'flawlessAces', 'hadOpenNexus', 'quickCleanse', 'snowballsHit', 'wardsGuarded',
+  'flawlessAces', 'hadOpenNexus', 'quickCleanse', 'wardsGuarded',
   'earliestBaron', 'skillshotsHit', 'unseenRecalls', 'maxKillDeficit',
   'quickSoloKills', 'soloBaronKills', 'voidMonsterKill', 'fullTeamTakedown',
   'initialBuffCount', 'initialCrabCount', 'outnumberedKills', 'pickKillWithAlly',

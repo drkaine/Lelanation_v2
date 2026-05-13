@@ -64,6 +64,13 @@
       "when": 1748006400000,
       "tag": "0008_champion_stats_challenge_floats",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1748092800000,
+      "tag": "0009_champion_stats_drop_sum_snowballs_hit",
+      "breakpoints": true
     }
   ]
 }
