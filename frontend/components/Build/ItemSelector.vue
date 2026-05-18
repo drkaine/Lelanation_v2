@@ -138,8 +138,8 @@
           <!-- eslint-disable vue/no-v-html -->
           <div
             v-if="hoveredItem.description"
-            class="item-tooltip-description"
-            v-html="hoveredItem.description"
+            class="item-tooltip-description tooltip-game-description"
+            v-html="formattedHoveredItemDescription"
           />
           <!-- eslint-enable vue/no-v-html -->
         </div>
@@ -162,6 +162,7 @@ import type { Item } from '~/types/build'
 import { getItemImageUrl } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
+import { formatTooltipMarkupHtml } from '~/utils/formatTooltipMarkupHtml'
 
 const props = withDefaults(defineProps<{ includeMasterwork?: boolean }>(), {
   includeMasterwork: false,
@@ -863,6 +864,10 @@ const tooltipStyle = computed(() => {
     top: `${tooltipPosition.value.y + tooltipOffset}px`,
   }
 })
+
+const formattedHoveredItemDescription = computed(() =>
+  formatTooltipMarkupHtml(hoveredItem.value?.description ?? '')
+)
 
 // Handle mouse move to update tooltip position
 const handleMouseMove = (event: MouseEvent) => {

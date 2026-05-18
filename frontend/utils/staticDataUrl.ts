@@ -5,21 +5,33 @@
 
 /**
  * Get static game data JSON URL
- * Example: /data/game/16.1.1/fr_FR/champion.json
+ * Example: /data/game/16.1.1/fr_FR/item.json
  */
 export function getGameDataUrl(
   version: string,
-  type: 'champion' | 'championFull' | 'item' | 'runesReforged' | 'summoner',
+  type: 'item' | 'runesReforged' | 'summoner',
   language: string = 'fr_FR'
 ): string {
   return `/data/game/${version}/${language}/${type}.json`
+}
+
+export function getChampionIndexUrl(version: string, language: string = 'fr_FR'): string {
+  return `/data/game/${version}/${language}/champions/index.json`
+}
+
+export function getChampionDetailUrl(
+  version: string,
+  language: string,
+  championId: string
+): string {
+  return `/data/game/${version}/${language}/champions/${championId.toLowerCase()}.json`
 }
 
 /**
  * Get static version info URL
  */
 export function getVersionUrl(): string {
-  return '/data/game/version.json'
+  return '/data/game/versions.json'
 }
 
 /**

@@ -7,6 +7,15 @@ import { prisma, isDatabaseConfigured } from '../db.js'
 import { getStatistiquesPool, isStatistiquesDatabaseConfigured } from '../drizzle/statistiquesDb.js'
 import { countRawIngestByStatus, isRawIngestQueueEnabled } from '../worker/matchIngestRawQueue.js'
 
+/** Même règle que `config.PLAYER_KEY_VERSION` sans importer `../config` (évite d’exiger `ENV` au chargement du module). */
+function playerKeyVersionForAdminStats(): string {
+  const explicit = process.env.PLAYER_KEY_VERSION?.trim()
+  if (explicit) return explicit
+  const env = process.env.ENV?.trim()
+  if (env === 'dev' || env === 'prod') return env
+  return 'dev'
+}
+
 export type AdminDataCollectStats = {
   adminDataSource: 'stats_db' | 'statistiques_db'
   totalPlayers: number
@@ -218,7 +227,8 @@ async function getAdminDataCollectStatsFromStatistiques(): Promise<AdminDataColl
         `SELECT MAX(aggregated_at) AS d FROM processed_matches`,
       ),
       pool.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM players WHERE puuid_key_version IS NULL`,
+        `SELECT COUNT(*)::text AS c FROM players WHERE puuid_key_version IS DISTINCT FROM $1`,
+        [playerKeyVersionForAdminStats()],
       ),
       pool.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM players WHERE created_at >= $1`,

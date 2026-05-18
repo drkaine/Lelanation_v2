@@ -254,18 +254,20 @@
     >
       <div class="rune-tooltip-content">
         <div class="rune-tooltip-header">
+          <img
+            v-if="hoveredItem.icon"
+            :src="hoveredItem.icon"
+            :alt="hoveredItem.name"
+            class="rune-tooltip-image"
+            loading="lazy"
+          />
           <div class="rune-tooltip-name">{{ hoveredItem.name }}</div>
         </div>
         <div
-          v-if="hoveredItem.description"
-          class="rune-tooltip-description"
-          v-html="hoveredItem.description"
-        ></div>
-        <div
-          v-else-if="hoveredItem.shortDesc"
-          class="rune-tooltip-description"
-          v-html="hoveredItem.shortDesc"
-        ></div>
+          v-if="formattedHoveredDescription"
+          class="rune-tooltip-description tooltip-game-description"
+          v-html="formattedHoveredDescription"
+        />
       </div>
     </div>
   </div>
@@ -286,6 +288,7 @@ import {
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
 import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
+import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 
 const { version } = useGameVersion()
 const { locale, t } = useI18n()
@@ -615,6 +618,7 @@ watch(
 // Tooltip state
 interface TooltipItem {
   name: string
+  icon?: string
   description?: string
   shortDesc?: string
   longDesc?: string
@@ -625,10 +629,11 @@ const tooltipRef = ref<HTMLElement | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const tooltipOffset = 15
 
-const handlePathHover = (path: { name: string }, event: MouseEvent) => {
+const handlePathHover = (path: { name: string; icon?: string }, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: path.name,
+    icon: path.icon ? getRunePathImageUrl(version.value, path.icon) : undefined,
     description: undefined,
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
@@ -638,12 +643,13 @@ const handlePathHover = (path: { name: string }, event: MouseEvent) => {
 }
 
 const handleRuneHover = (
-  rune: { name: string; shortDesc?: string; longDesc?: string },
+  rune: { name: string; icon?: string; shortDesc?: string; longDesc?: string },
   event: MouseEvent
 ) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: rune.name,
+    icon: rune.icon ? getRuneImageUrl(version.value, rune.icon) : undefined,
     description: rune.longDesc || rune.shortDesc,
     shortDesc: rune.shortDesc,
     longDesc: rune.longDesc,
@@ -658,6 +664,7 @@ const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: spell.name,
+    icon: getSpellImageUrl(version.value, spell.image.full),
     description: formatSpellTooltipHtml(spell, { showCost: false }),
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
@@ -670,6 +677,7 @@ const handleShardHover = (shard: ShardOption, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
   hoveredItem.value = {
     name: shard.name,
+    icon: shardIconSrc(shard.image),
     description: shard.description,
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
@@ -735,6 +743,8 @@ const tooltipStyle = computed(() => {
     top: `${tooltipPosition.value.y + tooltipOffset}px`,
   }
 })
+
+const formattedHoveredDescription = computed(() => formatRuneTooltipHtml(hoveredItem.value ?? {}))
 
 watch(hoveredItem, async newValue => {
   if (newValue) {
@@ -1134,6 +1144,15 @@ watch(locale, () => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.rune-tooltip-image {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid rgb(var(--rgb-accent) / 0.55);
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .rune-tooltip-name {

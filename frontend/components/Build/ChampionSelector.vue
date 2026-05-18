@@ -139,12 +139,16 @@ const isSelected = (champion: Champion): boolean => {
 
 const hasSelectedChampion = computed(() => Boolean(buildStore.currentBuild?.champion?.id))
 
-const selectChampion = (champion: Champion) => {
+const selectChampion = async (champion: Champion) => {
   if (isSelected(champion)) {
     buildStore.clearChampion()
     return
   }
-  buildStore.setChampion(champion)
+  const detailed =
+    (await championsStore
+      .loadChampionDetails(champion.id, currentLanguage.value)
+      .catch(() => null)) ?? champion
+  buildStore.setChampion(detailed as Champion)
 }
 
 const toggleRole = (role: string) => {

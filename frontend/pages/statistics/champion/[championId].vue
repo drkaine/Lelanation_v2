@@ -3969,7 +3969,7 @@ async function loadVersionsForFilter() {
   try {
     const versionsData = await statsFetch<{
       versions?: Array<{ version?: string; patchLabel?: string; releaseDate?: string }>
-    }>(apiUrl('/api/game-data/versions'))
+    }>('/data/game/versions.json')
     const rows =
       versionsData?.versions
         ?.map(v => ({

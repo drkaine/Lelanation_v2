@@ -634,7 +634,7 @@ onMounted(async () => {
     try {
       const versionsData = await $fetch<{
         versions?: Array<{ version?: string; patchLabel?: string }>
-      }>(apiUrl('/api/game-data/versions'))
+      }>('/data/game/versions.json')
       const vals = (versionsData?.versions ?? [])
         .map(v => String(v.version ?? v.patchLabel ?? '').trim())
         .filter(Boolean)
@@ -654,7 +654,7 @@ onMounted(async () => {
   try {
     const versionsData = await $fetch<{
       versions?: Array<{ version?: string; patchLabel?: string }>
-    }>(apiUrl('/api/game-data/versions'))
+    }>('/data/game/versions.json')
     const vals = (versionsData?.versions ?? [])
       .map(v => String(v.version ?? v.patchLabel ?? '').trim())
       .filter(Boolean)

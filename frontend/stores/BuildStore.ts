@@ -863,7 +863,14 @@ export const useBuildStore = defineStore('build', {
 
     recalculateStats() {
       const build = this.displayedBuild ?? this.currentBuild
-      if (!build || !build.champion) {
+      const hasChampionStats = (champion: unknown): boolean => {
+        if (!champion || typeof champion !== 'object') return false
+        const stats = (champion as { stats?: Record<string, unknown> }).stats
+        if (!stats || typeof stats !== 'object') return false
+        return Number.isFinite(Number(stats.hp)) && Number.isFinite(Number(stats.attackdamage))
+      }
+
+      if (!build || !build.champion || !hasChampionStats(build.champion)) {
         this.calculatedStats = null
         return
       }
@@ -871,7 +878,7 @@ export const useBuildStore = defineStore('build', {
       // Import and use stats calculator
       import('@lelanation/builds-stats').then(({ calculateStats }) => {
         const b = this.displayedBuild ?? this.currentBuild
-        if (!b || !b.champion) {
+        if (!b || !b.champion || !hasChampionStats(b.champion)) {
           this.calculatedStats = null
           return
         }

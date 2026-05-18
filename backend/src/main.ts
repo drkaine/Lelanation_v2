@@ -7,7 +7,7 @@ import { scheduleDiscoveryRepeatJob, discoveryWorker } from "./workers/discovery
 import { hydrationWorker } from "./workers/hydration.worker.js";
 import { ingestionWorker } from "./workers/ingestion.worker.js";
 import { getQueueMetrics } from "./queues/index.js";
-import { loadLuaScript } from "./redis/rate-limiter.js";
+import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-limiter.js";
 import { redis } from "./redis/client.js";
 
 let metricsInterval: NodeJS.Timeout | null = null;
@@ -116,7 +116,8 @@ async function bootstrap(): Promise<void> {
   console.log(`[poller-main] config validated env=${config.ENV}`);
 
   await loadLuaScript();
-  console.log("[poller-main] Lua rate limiter loaded");
+  startDrip();
+  console.log("[poller-main] scheduled slot rate limiter loaded (drip started)");
 
   const dbOk = await healthCheck();
   if (!dbOk) {
@@ -125,7 +126,9 @@ async function bootstrap(): Promise<void> {
   console.log("[poller-main] database health check OK");
 
   await scheduleDiscoveryRepeatJob();
-  console.log("[poller-main] discovery repeat job scheduled (30s)");
+  console.log(
+    `[poller-main] discovery repeat job scheduled (${config.DISCOVERY_INTERVAL_MS}ms, ${config.DISCOVERY_PLAYERS_PER_TICK} players/tick)`,
+  );
 
   // Workers are started on import; we only confirm readiness here.
   console.log("[poller-main] workers started: discovery, hydration, ingestion");
@@ -150,6 +153,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
     clearInterval(summary1hInterval);
     summary1hInterval = null;
   }
+  stopDrip();
 
   try {
     await Promise.all([

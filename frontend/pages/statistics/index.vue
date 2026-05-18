@@ -1325,7 +1325,7 @@ async function loadKnownVersionsFromGameData(): Promise<void> {
   try {
     const data = await statsFetch<{
       versions?: Array<{ version?: string; patchLabel?: string }>
-    }>(apiUrl('/api/game-data/versions'))
+    }>('/data/game/versions.json')
     const rows =
       data?.versions
         ?.map(v => {

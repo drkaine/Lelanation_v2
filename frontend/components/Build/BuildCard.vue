@@ -930,7 +930,7 @@
                     </div>
                     <div
                       v-if="formattedPassive"
-                      class="tooltip-spell-description"
+                      class="tooltip-spell-description tooltip-game-description"
                       v-html="formattedPassive"
                     />
                   </div>
@@ -964,7 +964,7 @@
                       </div>
                       <div
                         v-if="spell.description"
-                        class="tooltip-spell-description"
+                        class="tooltip-spell-description tooltip-game-description"
                         v-html="spell.description"
                       />
                     </div>
@@ -1032,14 +1032,9 @@
                   </div>
                   <!-- eslint-disable vue/no-v-html -->
                   <div
-                    v-if="sheetElementTooltipResolved.rune.longDesc"
-                    class="rune-tooltip-description"
-                    v-html="sheetElementTooltipResolved.rune.longDesc"
-                  />
-                  <div
-                    v-else-if="sheetElementTooltipResolved.rune.shortDesc"
-                    class="rune-tooltip-description"
-                    v-html="sheetElementTooltipResolved.rune.shortDesc"
+                    v-if="sheetElementTooltipResolved.rune.descriptionHtml"
+                    class="rune-tooltip-description tooltip-game-description"
+                    v-html="sheetElementTooltipResolved.rune.descriptionHtml"
                   />
                   <!-- eslint-enable vue/no-v-html -->
                 </div>
@@ -1403,6 +1398,7 @@ import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatIte
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
+import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
 
@@ -1831,7 +1827,14 @@ const sheetElementTooltipResolved = computed(() => {
     case 'rune': {
       const id = tt.payload as number
       const rune = findRuneInStore(id)
-      return rune ? { type: 'rune' as const, rune } : null
+      if (!rune) return null
+      return {
+        type: 'rune' as const,
+        rune: {
+          ...rune,
+          descriptionHtml: formatRuneTooltipHtml(rune),
+        },
+      }
     }
     case 'spell': {
       const p = tt.payload as { id?: string; key?: string; name?: string }
@@ -1982,6 +1985,15 @@ const selectedChampion = computed(() => {
   const fullChampion = championsStore.champions.find(c => c.id === champion.id)
   return fullChampion ?? champion
 })
+
+watch(
+  () => [selectedChampion.value?.id, riotLocale.value] as const,
+  ([championId, lang]) => {
+    if (!championId) return
+    championsStore.loadChampionDetails(championId, lang).catch(() => undefined)
+  },
+  { immediate: true }
+)
 
 const hexToRgba = (hexColor: string, alpha: number): string => {
   const normalized = hexColor.trim().replace('#', '')
@@ -2565,8 +2577,9 @@ const translatedTags = computed(() => {
 
 // Format passive description with HTML
 const formattedPassive = computed(() => {
-  if (!selectedChampion.value?.passive?.description) return ''
-  return selectedChampion.value.passive.description
+  const passive: any = selectedChampion.value?.passive
+  if (!passive) return ''
+  return formatSpellTooltipHtml(passive)
 })
 
 // Format spells with HTML descriptions
@@ -4924,6 +4937,21 @@ defineExpose({
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+
+.tooltip-spell-description :deep(.tooltip-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.2em;
+  opacity: 0.95;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
+/* Icon + damage colors: global rules in assets/css/main.css (.tooltip-box …) */
 
 /* Sheet element tooltips (item / rune / spell) — même rendu que ItemSelector / RuneSelector */
 .sheet-element-tooltip-wrapper {

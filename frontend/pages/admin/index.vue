@@ -699,6 +699,36 @@
                         <div class="font-semibold text-text">{{ w.windowMinutes }}</div>
                       </div>
                     </div>
+                    <p class="mb-2 text-[11px] text-text/55">
+                      Limiter Redis (coût accordé) — « % charge moy. » = delta sur la fenêtre /
+                      tranches de 2 min / plafond (comparable au % pic 2 min du bloc résumé).
+                    </p>
+                    <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Coût accordé (Δ)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.rateLimitGrantedCostDelta) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">Plafond 120 s</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashInt(w.tokenBudget120) }}
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">% charge moy. (fenêtre)</div>
+                        <div class="font-semibold text-text">
+                          {{ formatDashRate(w.avgTokenLoadPct) }}%
+                        </div>
+                      </div>
+                      <div class="rounded border border-primary/15 bg-background/50 p-2">
+                        <div class="text-[10px] text-text/60">% pic 2 min (tick)</div>
+                        <div class="font-semibold text-text">
+                          {{ pollerSummaryRollingTokenUsagePctLabel(w.key) }}
+                        </div>
+                      </div>
+                    </div>
                     <p class="mb-2 text-[11px] text-text/55">Joueurs (delta poller / agrégat DB)</p>
                     <div class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                       <div class="rounded border border-primary/15 bg-background/50 p-2">
@@ -849,6 +879,11 @@
                         : '—'
                     }}
                   </div>
+                  <div class="mt-0.5 text-[9px] leading-tight text-text/50">
+                    Dénominateur
+                    {{ pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—' }} = plafond
+                    local 120&nbsp;s (dev), pas une cible à atteindre.
+                  </div>
                 </div>
                 <div class="rounded border border-primary/20 bg-background/40 p-2">
                   <div class="text-text/70">HTTP req / 2 min</div>
@@ -875,6 +910,16 @@
                   </div>
                 </div>
               </div>
+              <p class="mt-1.5 text-[10px] leading-snug text-text/55">
+                Le % quota est une moyenne instantanée sur les 2 dernières minutes (pas sur l’heure
+                ni depuis le démarrage). Après une rafale ou un cooldown Riot, il peut être très bas
+                alors que le résumé 30 min reste élevé. Les 429 « application » sur league/entries
+                sont une limite Riot distincte du bucket dev affiché ici. Un pourcentage proche de
+                100&nbsp;% signifierait saturer en continu le plafond ({{
+                  pollerV2Observability?.data?.rolling2m?.tokenBudget120 ?? '—'
+                }}
+                coût / 120&nbsp;s) — ce n’est ni requis ni souhaitable en fonctionnement normal.
+              </p>
 
               <div class="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                 <div class="rounded border border-primary/20 bg-background/40 p-2">
@@ -1993,6 +2038,9 @@ type PollerV2DashboardWindowClient = {
   httpRequestsTotal: number
   httpRequestsPerMinuteAvg: number
   httpRequestsPerTwoMinuteAvg: number
+  rateLimitGrantedCostDelta: number
+  tokenBudget120: number
+  avgTokenLoadPct: number
   playersPolledDelta: number
   playersUpdatedDelta: number
   playersAddedDelta: number
@@ -2091,6 +2139,17 @@ const pollerDashWindows = computed(() => {
   if (!dash) return [] as PollerV2DashboardWindowClient[]
   return [dash.last1h, dash.last30m].filter((w): w is PollerV2DashboardWindowClient => w != null)
 })
+
+function pollerSummaryRollingTokenUsagePctLabel(windowKey: string): string {
+  if (windowKey !== 'last30m' && windowKey !== 'last1h') return '—'
+  const raw = pollerV2Observability.value?.data?.summaries?.[windowKey]
+  if (!raw || typeof raw !== 'object') return '—'
+  const rolling = (raw as { rolling2m?: { tokenUsagePct?: number } }).rolling2m
+  const n = rolling?.tokenUsagePct
+  if (n == null || !Number.isFinite(n)) return '—'
+  const x = Math.round(n * 10) / 10
+  return `${Number.isInteger(x) ? String(x) : x.toFixed(1)}%`
+}
 
 function formatDashRate(n: number | undefined | null): string {
   if (n == null || !Number.isFinite(n)) return '—'

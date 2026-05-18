@@ -8,7 +8,7 @@ import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
 import { ingestionQueue } from "../queues/index.js";
 import { redis } from "../redis/client.js";
-import { waitForSlot } from "../redis/rate-limiter.js";
+import { waitForMatchSlot, waitForRankSlot } from "../redis/rate-limiter.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
 import type { MatchDto, MatchTimelineDto, ParticipantDto } from "../riot/types.js";
@@ -22,6 +22,8 @@ import {
 
 const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
+/** Limite globale des GET league/entries/by-puuid (limite « application » Riot plus stricte que le bucket dev). */
+const rankLeagueApiLimit = pLimit(2);
 const PATCH_SWITCH_GRACE_DAYS = 2;
 
 function extractPatch(gameVersion: string): string {
@@ -106,50 +108,63 @@ async function refreshMissingTodayRanks(
   const missing = identities.filter((identity) => !withTodaySnapshot.has(identity.puuid));
 
   for (const identity of missing) {
-    await waitForSlot(1);
-    let rankTier: string | null = null;
-    let rankDivision: string | null = null;
-    let rankLp: number | null = null;
-
-    try {
-      const rank = await riotClient.getRank(identity.puuid, region);
-      const normalizedTier = normalizeTier(rank?.tier);
-      if (normalizedTier) {
-        rankTier = normalizedTier;
-        rankDivision = String(rank?.rank ?? "").trim().toUpperCase() || null;
-        rankLp = clampRankLp(rank?.leaguePoints ?? 0);
+    await rankLeagueApiLimit(async () => {
+      const rankSlot = await waitForRankSlot();
+      if (rankSlot === "budget_exhausted") {
+        console.debug(
+          JSON.stringify({
+            msg: "rank_fetch_skipped",
+            reason: "budget_exhausted",
+            puuid: identity.puuid,
+          }),
+        );
+        return;
       }
-      pollerV2Observability.recordRankLeagueFetchSucceeded();
-    } catch (error) {
-      pollerV2Observability.recordRankLeagueFetchFailed();
-      console.warn(
-        `[hydration.worker] rank_refresh_failed puuid=${identity.puuid} region=${region} reason=${error instanceof Error ? error.message : String(error)}`,
-      );
-      continue;
-    }
 
-    await sql`
-      INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
-      VALUES (
-        ${identity.puuid},
-        ${todayIsoDate()}::date,
-        ${region},
-        ${rankTier ?? "UNRANKED"},
-        ${rankDivision ?? "UNRANKED"},
-        ${rankLp ?? 0}
-      )
-      ON CONFLICT (puuid, date, region)
-      DO UPDATE SET
-        rank_tier = EXCLUDED.rank_tier,
-        rank_division = EXCLUDED.rank_division,
-        rank_lp = EXCLUDED.rank_lp
-    `;
+      let rankTier: string | null = null;
+      let rankDivision: string | null = null;
+      let rankLp: number | null = null;
 
-    refreshed.set(identity.puuid, {
-      puuid: identity.puuid,
-      rank_tier: rankTier,
-      rank_division: rankDivision,
-      rank_lp: rankLp,
+      try {
+        const rank = await riotClient.getRank(identity.puuid, region);
+        const normalizedTier = normalizeTier(rank?.tier);
+        if (normalizedTier) {
+          rankTier = normalizedTier;
+          rankDivision = String(rank?.rank ?? "").trim().toUpperCase() || null;
+          rankLp = clampRankLp(rank?.leaguePoints ?? 0);
+        }
+        pollerV2Observability.recordRankLeagueFetchSucceeded();
+      } catch (error) {
+        pollerV2Observability.recordRankLeagueFetchFailed();
+        console.warn(
+          `[hydration.worker] rank_refresh_failed puuid=${identity.puuid} region=${region} reason=${error instanceof Error ? error.message : String(error)}`,
+        );
+        return;
+      }
+
+      await sql`
+        INSERT INTO player_rank_history (puuid, date, region, rank_tier, rank_division, rank_lp)
+        VALUES (
+          ${identity.puuid},
+          ${todayIsoDate()}::date,
+          ${region},
+          ${rankTier ?? "UNRANKED"},
+          ${rankDivision ?? "UNRANKED"},
+          ${rankLp ?? 0}
+        )
+        ON CONFLICT (puuid, date, region)
+        DO UPDATE SET
+          rank_tier = EXCLUDED.rank_tier,
+          rank_division = EXCLUDED.rank_division,
+          rank_lp = EXCLUDED.rank_lp
+      `;
+
+      refreshed.set(identity.puuid, {
+        puuid: identity.puuid,
+        rank_tier: rankTier,
+        rank_division: rankDivision,
+        rank_lp: rankLp,
+      });
     });
   }
 
@@ -273,7 +288,7 @@ function parseTeamStats(
 async function runHydrationJob(data: HydrationJobData): Promise<void> {
   const startedAt = Date.now();
   pollerV2Observability.recordHydrationStart();
-  await waitForSlot(2);
+  await waitForMatchSlot(2);
 
   try {
     const [match, timeline] = await Promise.all([

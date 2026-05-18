@@ -30,6 +30,15 @@ export type PollerV2DashboardWindow = {
   httpRequestsTotal: number
   httpRequestsPerMinuteAvg: number
   httpRequestsPerTwoMinuteAvg: number
+  /** Coût accordé (limiter) sur la fenêtre — somme des `cost` des slots accordés. */
+  rateLimitGrantedCostDelta: number
+  /** Plafond local 120 s (ex. 95 en dev). */
+  tokenBudget120: number
+  /**
+   * Charge moyenne vs plafond : (delta coût / nombre de tranches 2 min dans la fenêtre) / tokenBudget.
+   * À comparer au `rolling2m.tokenUsagePct` du même bloc (pic sur 2 min au moment du tick).
+   */
+  avgTokenLoadPct: number
   /** Compteurs internes poller (delta depuis le tick précédent). */
   playersPolledDelta: number
   playersUpdatedDelta: number
@@ -66,6 +75,7 @@ function buildWindow(
   labelFr: string,
   windowMinutes: number,
   block: unknown,
+  tokenBudgetHint: number,
 ): PollerV2DashboardWindow | null {
   if (!block || typeof block !== 'object') return null
   const b = block as Record<string, unknown>
@@ -75,6 +85,14 @@ function buildWindow(
   const db = dbRaw && typeof dbRaw === 'object' ? (dbRaw as Record<string, unknown>) : null
 
   const httpRequestsTotal = num(delta['apiRequests'])
+  const rateLimitGrantedCostDelta = num(delta['rateLimitGrantedCost'])
+  const tokenBudget120 =
+    num(b['tokenBudget120']) > 0 ? num(b['tokenBudget120']) : tokenBudgetHint > 0 ? tokenBudgetHint : 95
+  const intervals2m = windowMinutes > 0 ? windowMinutes / 2 : 1
+  const avgGrantedPer2m = intervals2m > 0 ? rateLimitGrantedCostDelta / intervals2m : 0
+  const avgTokenLoadPct =
+    tokenBudget120 > 0 ? round1((avgGrantedPer2m / tokenBudget120) * 100) : 0
+
   const playersPolledDelta = num(delta['playersPolled'])
   const playersUpdatedDelta = num(delta['playersUpdated'])
   const playersAddedDelta = num(delta['playersAdded'])
@@ -99,6 +117,9 @@ function buildWindow(
     httpRequestsTotal,
     httpRequestsPerMinuteAvg: windowMinutes > 0 ? round1(httpRequestsTotal / windowMinutes) : 0,
     httpRequestsPerTwoMinuteAvg: windowMinutes > 0 ? round1((httpRequestsTotal / windowMinutes) * 2) : 0,
+    rateLimitGrantedCostDelta,
+    tokenBudget120,
+    avgTokenLoadPct,
     playersPolledDelta,
     playersUpdatedDelta,
     playersAddedDelta,
@@ -133,13 +154,15 @@ export function computePollerV2Dashboard(snapshot: Record<string, unknown>): Pol
       }
     : null
 
+  const tokenBudgetHint = roll ? num(roll['tokenBudget120']) : 0
+
   const summariesRaw = snapshot['summaries']
   const summaries =
     summariesRaw && typeof summariesRaw === 'object' ? (summariesRaw as Record<string, unknown>) : null
 
   return {
     rolling2m,
-    last30m: buildWindow('last30m', 'Dernière fenêtre ~30 min', 30, summaries?.['last30m']),
-    last1h: buildWindow('last1h', 'Dernière fenêtre ~1 h', 60, summaries?.['last1h']),
+    last30m: buildWindow('last30m', 'Dernière fenêtre ~30 min', 30, summaries?.['last30m'], tokenBudgetHint),
+    last1h: buildWindow('last1h', 'Dernière fenêtre ~1 h', 60, summaries?.['last1h'], tokenBudgetHint),
   }
 }

@@ -20,7 +20,8 @@ export function getImageUrl(
  * Get champion image URL
  */
 export function getChampionImageUrl(version: string, imageName: string): string {
-  return getImageUrl('champion', version, imageName)
+  if (!imageName) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${imageName}`
 }
 
 /**
@@ -28,21 +29,24 @@ export function getChampionImageUrl(version: string, imageName: string): string 
  * Stored as: /images/game/{version}/champion/splash_{ChampionId}.jpg
  */
 export function getChampionSplashImageUrl(version: string, championId: string): string {
-  return getImageUrl('champion', version, `splash_${championId}.jpg`)
+  if (!championId) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${championId}_0.jpg`
 }
 
 /**
  * Get item image URL
  */
 export function getItemImageUrl(version: string, imageName: string): string {
-  return getImageUrl('item', version, imageName)
+  if (!imageName) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/item/${imageName}`
 }
 
 /**
  * Get summoner spell image URL
  */
 export function getSpellImageUrl(version: string, imageName: string): string {
-  return getImageUrl('spell', version, imageName)
+  if (!imageName) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
 }
 
 /**
@@ -50,17 +54,19 @@ export function getSpellImageUrl(version: string, imageName: string): string {
  */
 export function getChampionSpellImageUrl(
   version: string,
-  championId: string,
+  _championId: string,
   imageName: string
 ): string {
-  return getImageUrl('champion-spell', version, imageName, championId)
+  if (!imageName) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/spell/${imageName}`
 }
 
 /**
  * Get champion passive image URL
  */
 export function getChampionPassiveImageUrl(version: string, imageName: string): string {
-  return getImageUrl('champion-spell', version, imageName, 'passive')
+  if (!imageName) return ''
+  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/passive/${imageName}`
 }
 
 /**

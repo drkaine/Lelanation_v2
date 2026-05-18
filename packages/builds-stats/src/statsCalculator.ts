@@ -152,27 +152,42 @@ function calculatePassiveStackStats(
 }
 
 function calculateChampionStatsAtLevel(
-  baseStats: ChampionStats,
+  baseStats: ChampionStats | null | undefined,
   level: number
 ): ChampionStats & { attackdamage: number; attackspeed: number } {
+  const safe = (value: unknown): number => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const stats = (baseStats ?? {}) as Partial<ChampionStats>;
   const levelMultiplier = level - 1;
   return {
-    ...baseStats,
-    hp: baseStats.hp + baseStats.hpperlevel * levelMultiplier,
-    mp: baseStats.mp + baseStats.mpperlevel * levelMultiplier,
-    armor: baseStats.armor + baseStats.armorperlevel * levelMultiplier,
+    hp: safe(stats.hp) + safe(stats.hpperlevel) * levelMultiplier,
+    hpperlevel: safe(stats.hpperlevel),
+    mp: safe(stats.mp) + safe(stats.mpperlevel) * levelMultiplier,
+    mpperlevel: safe(stats.mpperlevel),
+    movespeed: safe(stats.movespeed),
+    armor: safe(stats.armor) + safe(stats.armorperlevel) * levelMultiplier,
+    armorperlevel: safe(stats.armorperlevel),
     spellblock:
-      baseStats.spellblock +
-      baseStats.spellblockperlevel * levelMultiplier,
-    hpregen: baseStats.hpregen + baseStats.hpregenperlevel * levelMultiplier,
-    mpregen: baseStats.mpregen + baseStats.mpregenperlevel * levelMultiplier,
-    crit: baseStats.crit + baseStats.critperlevel * levelMultiplier,
+      safe(stats.spellblock) +
+      safe(stats.spellblockperlevel) * levelMultiplier,
+    spellblockperlevel: safe(stats.spellblockperlevel),
+    attackrange: safe(stats.attackrange),
+    hpregen: safe(stats.hpregen) + safe(stats.hpregenperlevel) * levelMultiplier,
+    hpregenperlevel: safe(stats.hpregenperlevel),
+    mpregen: safe(stats.mpregen) + safe(stats.mpregenperlevel) * levelMultiplier,
+    mpregenperlevel: safe(stats.mpregenperlevel),
+    crit: safe(stats.crit) + safe(stats.critperlevel) * levelMultiplier,
+    critperlevel: safe(stats.critperlevel),
     attackdamage:
-      baseStats.attackdamage +
-      baseStats.attackdamageperlevel * levelMultiplier,
+      safe(stats.attackdamage) +
+      safe(stats.attackdamageperlevel) * levelMultiplier,
+    attackdamageperlevel: safe(stats.attackdamageperlevel),
     attackspeed:
-      baseStats.attackspeed *
-      (1 + (baseStats.attackspeedperlevel / 100) * levelMultiplier),
+      safe(stats.attackspeed) *
+      (1 + (safe(stats.attackspeedperlevel) / 100) * levelMultiplier),
+    attackspeedperlevel: safe(stats.attackspeedperlevel),
   };
 }
 

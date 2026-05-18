@@ -208,11 +208,7 @@ async function upsertPlayersFromParticipants(tx: any, participants: ParsedPartic
       SET
         region = ${region || "euw1"},
         last_seen = GREATEST(COALESCE(last_seen, ${snapshotDate}), ${snapshotDate}),
-        puuid_key_version = CASE
-          WHEN puuid_key_version IS NULL OR puuid_key_version = '' OR puuid_key_version = 'perdu'
-            THEN ${config.PLAYER_KEY_VERSION}
-          ELSE puuid_key_version
-        END
+        puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${puuid}
     `;
   }

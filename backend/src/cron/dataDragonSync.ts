@@ -10,6 +10,7 @@ import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
 import { ensureActivePatchVersion, syncActivePatchesFromConfigAndCounts } from '../services/ActivePatchService.js'
 import { FileManager } from '../utils/fileManager.js'
+import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
 
 /**
  * Run Data Dragon sync once (used by cron schedule and manual trigger).
@@ -20,6 +21,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
   const discordService = new DiscordService()
   const cronStatus = new CronStatusService()
   const staticAssets = new StaticAssetsService()
+  const theorycraftBuilder = new TheorycraftDataBuilderService()
   const log = createCronLogger('dataDragonSync')
 
   const startTime = new Date()
@@ -137,8 +139,18 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
 
     await log.info('Data Dragon sync completed. Version:', syncData.version, 'Synced at:', syncData.syncedAt.toISOString())
 
-    // Step 3: Copy static assets to frontend
-    await log.step('Step 3/4: Copying static assets to frontend', { version: syncData.version })
+    // Step 3: Build theorycraft-ready static datasets
+    await log.step('Step 3/5: Building theorycraft datasets', { version: syncData.version })
+    const theorycraftBuild = await theorycraftBuilder.build(syncData.version)
+    if (theorycraftBuild.isErr()) {
+      await log.warn('Theorycraft dataset generation failed:', theorycraftBuild.unwrapErr())
+    } else {
+      const tc = theorycraftBuild.unwrap()
+      await log.info('Theorycraft datasets built', { champions: tc.champions })
+    }
+
+    // Step 4: Copy static assets to frontend
+    await log.step('Step 4/5: Copying static assets to frontend', { version: syncData.version })
 
     const copyResult = await staticAssets.copyAllAssetsToFrontend(
       syncData.version,
@@ -169,7 +181,7 @@ export async function runDataDragonSyncOnce(): Promise<{ ok: true; version?: str
     await cronStatus.markSuccess('dataDragonSync')
 
     const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await log.step('Step 4/4: Done', {
+    await log.step('Step 5/5: Done', {
       version: syncData.version,
       duration: `${duration}s`,
       ...(assetsStats && { dataFiles: assetsStats.dataCopied, imagesCopied: assetsStats.imagesCopied, imagesSkipped: assetsStats.imagesSkipped })

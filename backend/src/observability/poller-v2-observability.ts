@@ -77,6 +77,13 @@ type ErrorEvent = {
   message: string;
 };
 
+type TokenRate10m = {
+  tokenRateAvg10m: number;
+  tokenRateStdDev10m: number;
+  tokenRateMin10m: number;
+  tokenRateMax10m: number;
+};
+
 type Snapshot = {
   atIso: string;
   startedAtIso: string;
@@ -91,6 +98,8 @@ type Snapshot = {
     tokenBudget120: number;
     tokenUsagePct: number;
   };
+  /** Variance du débit token (snapshots rolling2m.tokenUsagePct toutes les 30 s, fenêtre 10 min). */
+  tokenRate10m: TokenRate10m;
   durations: Record<DurationKey, DurationStat & { avgMs: number }>;
   queue: {
     discovery: QueueSlice;
@@ -108,6 +117,11 @@ type Snapshot = {
 
 function nowMs(): number {
   return Date.now();
+}
+
+/** Plafond coût 120 s du limiter Redis (aligné config Riot dev / prod). */
+function tokenBudget120ForEnv(): number {
+  return Number(process.env.ENV === "prod" ? 28_500 : 95);
 }
 
 function emptyTotals(): Totals {
@@ -158,23 +172,6 @@ function deltaTotals(current: Totals, baseline: Totals): Totals {
   return out;
 }
 
-/** Champs attendus par `PollerAdminView` / anciens résumés (log unifié) — alignés sur le delta poller-v2. */
-function legacyTotalsFromV2Delta(delta: Totals): Record<string, number> {
-  const api4xx = delta.api4xx;
-  const api429 = delta.api429;
-  return {
-    httpRequests: delta.apiRequests,
-    requests: delta.apiRequests,
-    error429: api429,
-    error400: Math.max(0, api4xx - api429),
-    matchesInsertedDb: delta.matchesIngested,
-    matches: delta.matchesIngested,
-    newPlayers: delta.playersAdded,
-    playersPolled: delta.playersPolled,
-    participants: delta.participantsIngested,
-  };
-}
-
 class PollerV2Observability {
   private readonly startedAtMs = nowMs();
   private readonly totals: Totals = emptyTotals();
@@ -202,6 +199,10 @@ class PollerV2Observability {
   private last30mSummary: Record<string, unknown> | null = null;
   private last1hSummary: Record<string, unknown> | null = null;
 
+  /** Snapshots tokenUsagePct toutes les 30 s (max 20 = 10 min). */
+  private readonly rateHistory: number[] = [];
+  private readonly maxRateHistory = 20;
+
   private readonly snapshotPath = join(process.cwd(), "..", "logs", "poller-v2-observability.json");
 
   private addError(source: string, message: string): void {
@@ -227,6 +228,64 @@ class PollerV2Observability {
     }
   }
 
+  private recordRateSnapshot(pct: number): void {
+    this.rateHistory.push(pct);
+    if (this.rateHistory.length > this.maxRateHistory) {
+      this.rateHistory.shift();
+    }
+  }
+
+  private tokenRate10m(): TokenRate10m {
+    if (this.rateHistory.length === 0) {
+      return {
+        tokenRateAvg10m: 0,
+        tokenRateStdDev10m: 0,
+        tokenRateMin10m: 0,
+        tokenRateMax10m: 0,
+      };
+    }
+
+    const avg = this.rateHistory.reduce((a, b) => a + b, 0) / this.rateHistory.length;
+    const variance =
+      this.rateHistory.reduce((acc, value) => acc + (value - avg) ** 2, 0) / this.rateHistory.length;
+    const stdDev = Math.sqrt(variance);
+
+    return {
+      tokenRateAvg10m: Math.round(avg * 10) / 10,
+      tokenRateStdDev10m: Math.round(stdDev * 10) / 10,
+      tokenRateMin10m: Math.round(Math.min(...this.rateHistory) * 10) / 10,
+      tokenRateMax10m: Math.round(Math.max(...this.rateHistory) * 10) / 10,
+    };
+  }
+
+  private logTokenRateAlerts(stats: TokenRate10m): void {
+    if (stats.tokenRateStdDev10m > 15) {
+      console.warn(
+        JSON.stringify({
+          msg: "token_rate_unstable",
+          stdDev: stats.tokenRateStdDev10m,
+          avg: stats.tokenRateAvg10m,
+        }),
+      );
+    }
+    if (stats.tokenRateMin10m < 70) {
+      console.warn(
+        JSON.stringify({
+          msg: "token_rate_too_low",
+          min: stats.tokenRateMin10m,
+        }),
+      );
+    }
+    if (stats.tokenRateMax10m > 99) {
+      console.warn(
+        JSON.stringify({
+          msg: "token_rate_over_budget",
+          max: stats.tokenRateMax10m,
+        }),
+      );
+    }
+  }
+
   private rolling2m(now = nowMs()): Snapshot["rolling2m"] {
     const from = now - 120_000;
     let apiRequests = 0;
@@ -247,7 +306,8 @@ class PollerV2Observability {
       waitMsTotal += e.waitMs;
     }
 
-    const tokenBudget120 = Number(process.env.ENV === "prod" ? 28_500 : 95);
+    const tokenBudget120 = tokenBudget120ForEnv();
+    /** Part du plafond 120 s « remplie » par la somme des coûts accordés sur les 2 dernières minutes (pic court, pas une moyenne horaire). */
     const tokenUsagePct = tokenBudget120 > 0 ? (grantedCost / tokenBudget120) * 100 : 0;
     return {
       apiRequests,
@@ -387,6 +447,7 @@ class PollerV2Observability {
     if (payload.tickDurationMs != null) {
       this.addDuration("dbMetricsTickMs", payload.tickDurationMs);
     }
+    this.recordRateSnapshot(this.rolling2m().tokenUsagePct);
   }
 
   buildWindowSummary(window: "30m" | "1h", dbWindow: Record<string, unknown>): Record<string, unknown> {
@@ -394,23 +455,27 @@ class PollerV2Observability {
     const baseline = window === "30m" ? this.baseline30m : this.baseline1h;
     const delta = deltaTotals(this.totals, baseline);
     const rolling = this.rolling2m();
-    const dw = dbWindow as { windowStartIso?: string; windowEndIso?: string };
-    const windowHours = window === "30m" ? 0.5 : 1;
-    const totals = legacyTotalsFromV2Delta(delta);
-    const requestsPerHour =
-      windowHours > 0 && delta.apiRequests > 0
-        ? Math.round((delta.apiRequests / windowHours) * 10) / 10
+    const tokenBudget120 = tokenBudget120ForEnv();
+    const windowMinutes = window === "30m" ? 30 : 60;
+    const intervals2m = windowMinutes / 2;
+    const avgGrantedCostPer2m =
+      intervals2m > 0 ? delta.rateLimitGrantedCost / intervals2m : 0;
+    const avgTokenUsagePctFromWindowDelta =
+      tokenBudget120 > 0
+        ? Math.round((avgGrantedCostPer2m / tokenBudget120) * 1000) / 10
         : 0;
+    const tokenRate10m = this.tokenRate10m();
+    this.logTokenRateAlerts(tokenRate10m);
     const payload = {
       window,
       atIso: nowIso,
-      windowStartIso: typeof dw.windowStartIso === "string" ? dw.windowStartIso : null,
-      windowEndIso: typeof dw.windowEndIso === "string" ? dw.windowEndIso : null,
-      totals,
-      requestsPerHour,
       delta,
       dbWindow,
       rolling2m: rolling,
+      tokenBudget120,
+      /** Moyenne du coût accordé par tranche de 2 min sur la fenêtre (delta / nombre de tranches) / plafond — comparable au % « instantané » rolling2m. */
+      avgTokenUsagePctFromWindowDelta,
+      tokenRate10m,
       queue: this.lastQueue,
     };
     if (window === "30m") {
@@ -438,6 +503,7 @@ class PollerV2Observability {
       runtimeSeconds: Math.max(0, Math.floor((now - this.startedAtMs) / 1000)),
       totals: cloneTotals(this.totals),
       rolling2m: this.rolling2m(now),
+      tokenRate10m: this.tokenRate10m(),
       durations,
       queue: { ...this.lastQueue },
       recentErrors: [...this.recentErrors].slice(-20).reverse(),

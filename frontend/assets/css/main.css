@@ -216,3 +216,295 @@
   color: rgb(252 211 77 / 1) !important; /* gold-300 */
   font-weight: 700;
 }
+
+/* Unified semantic tooltip rendering (items/runes/summoners/shards). */
+.tooltip-game-description {
+  line-height: 1.45;
+}
+
+.tooltip-game-description :is(.dmg-physical, .dmg-magic, .dmg-true, .healing, .shield, .speed) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+}
+
+.tooltip-game-description
+  :is(physicalDamage, magicDamage, trueDamage, healing, shield, speed, gold, .tooltip-icon)::before {
+  content: '';
+  width: 0.9em;
+  height: 0.9em;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+}
+
+.tooltip-game-description :is(physicalDamage, .dmg-physical)::before,
+.tooltip-game-description .tooltip-icon-physical {
+  background-image: url('/icons/statsicon/AD.png');
+}
+
+.tooltip-game-description :is(magicDamage, .dmg-magic)::before,
+.tooltip-game-description .tooltip-icon-magic {
+  background-image: url('/icons/statsicon/ap.png');
+}
+
+.tooltip-game-description :is(trueDamage, .dmg-true)::before,
+.tooltip-game-description .tooltip-icon-true::before {
+  content: '◆';
+  color: rgb(226 232 240 / 1);
+  background-image: none !important;
+}
+
+.tooltip-game-description :is(healing, .healing)::before,
+.tooltip-game-description .tooltip-icon-heal {
+  background-image: url('/icons/statsicon/Health_regeneration.svg');
+}
+
+.tooltip-game-description :is(shield, .shield)::before,
+.tooltip-game-description .tooltip-icon-shield::before {
+  content: '◈';
+  color: rgb(134 239 172 / 1);
+  background-image: none !important;
+}
+
+.tooltip-game-description :is(speed, .speed)::before,
+.tooltip-game-description .tooltip-icon-speed {
+  background-image: url('/icons/statsicon/Movement_speed.png');
+}
+
+.tooltip-game-description gold::before {
+  background-image: url('/icons/statsicon/Gold.svg');
+}
+
+.tooltip-game-description :is(keywordMajor, .keyword-major) {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description :is(keywordStealth, .keyword-stealth) {
+  color: rgb(147 197 253 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(keyword, .keyword, .spell-name, spellName) {
+  color: rgb(191 219 254 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(status, .status-cc) {
+  color: rgb(56 189 248 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(attention, statGood, scaleAD, scaleAP, scaleMana, scaleHealth, scaleLevel) {
+  color: rgb(250 204 21 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description
+  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
+  :is(.tooltip-tag-scalearmor, .tooltip-tag.tooltip-tag-scalearmor) {
+  color: rgb(251 191 36 / 1) !important;
+}
+
+.tooltip-game-description
+  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
+  :is(.tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
+  color: rgb(129 140 248 / 1) !important;
+}
+
+.tooltip-game-description :is(active, .active, recast, .recast) {
+  color: rgb(147 197 253 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-game-description :is(passive, .passive) {
+  color: rgb(253 224 71 / 1) !important;
+  font-weight: 600;
+}
+
+/* Champion spell tooltips (theorycraft + build card) share the same semantic classes. */
+.tooltip-spell-description {
+  line-height: 1.45;
+}
+
+.tooltip-spell-description :is(.dmg-physical, .dmg-magic, .dmg-true, .healing, .shield, .speed) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+}
+
+.tooltip-spell-description
+  :is(physicalDamage, magicDamage, trueDamage, healing, shield, speed, gold, .tooltip-icon)::before,
+.tooltip-spell-description .tooltip-icon::before {
+  content: '';
+  width: 0.9em;
+  height: 0.9em;
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  flex-shrink: 0;
+}
+
+.tooltip-spell-description :is(physicalDamage, .dmg-physical)::before,
+.tooltip-spell-description .tooltip-icon-physical {
+  background-image: url('/icons/statsicon/AD.png');
+}
+
+.tooltip-spell-description :is(magicDamage, .dmg-magic)::before,
+.tooltip-spell-description .tooltip-icon-magic {
+  background-image: url('/icons/statsicon/ap.png');
+}
+
+.tooltip-spell-description :is(trueDamage, .dmg-true)::before,
+.tooltip-spell-description .tooltip-icon-true::before {
+  content: '◆';
+  color: rgb(226 232 240 / 1);
+  background-image: none !important;
+}
+
+.tooltip-spell-description :is(healing, .healing)::before,
+.tooltip-spell-description .tooltip-icon-heal {
+  background-image: url('/icons/statsicon/Health_regeneration.svg');
+}
+
+.tooltip-spell-description :is(shield, .shield)::before,
+.tooltip-spell-description .tooltip-icon-shield::before {
+  content: '◈';
+  color: rgb(134 239 172 / 1);
+  background-image: none !important;
+}
+
+.tooltip-spell-description :is(speed, .speed)::before,
+.tooltip-spell-description .tooltip-icon-speed {
+  background-image: url('/icons/statsicon/Movement_speed.png');
+}
+
+.tooltip-spell-description :is(keywordMajor, .keyword-major) {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-spell-description :is(keyword, .keyword, .spell-name, spellName) {
+  color: rgb(191 219 254 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-spell-description :is(status, .status-cc) {
+  color: rgb(56 189 248 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-spell-description
+  :is(.scale-ad, .scale-ap, .scale-ms, .scale-mana, .scale-hp, scaleAD, scaleAP, scaleMana, scaleHealth) {
+  color: rgb(250 204 21 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-spell-description
+  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
+  :is(.tooltip-tag-scalearmor, .tooltip-tag.tooltip-tag-scalearmor) {
+  color: rgb(251 191 36 / 1) !important;
+}
+
+.tooltip-spell-description
+  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
+  :is(.tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
+  color: rgb(129 140 248 / 1) !important;
+}
+
+.tooltip-spell-description :is(active, .active, recast, .recast) {
+  color: rgb(147 197 253 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-spell-description :is(passive, .passive) {
+  color: rgb(253 224 71 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-spell-description :is(physicalDamage, .dmg-physical) {
+  color: rgb(248 113 113 / 1);
+}
+
+.tooltip-spell-description :is(magicDamage, .dmg-magic) {
+  color: rgb(196 181 253 / 1);
+}
+
+.tooltip-spell-description :is(trueDamage, .dmg-true) {
+  color: rgb(226 232 240 / 1);
+}
+
+/* Build card champion tooltip is teleported to <body>; scoped Vue CSS must not override these. */
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-physical,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-physical {
+  background-image: url('/icons/statsicon/AD.png') !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-magic,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-magic {
+  background-image: url('/icons/statsicon/ap.png') !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-true,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-true {
+  background-image: none !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-true::before,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-true::before {
+  content: '◆' !important;
+  color: rgb(226 232 240 / 1) !important;
+  background-image: none !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-heal,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-heal {
+  background-image: url('/icons/statsicon/Health_regeneration.svg') !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-speed,
+.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-speed {
+  background-image: url('/icons/statsicon/Movement_speed.png') !important;
+}
+
+.tooltip-box .tooltip-spell-description .tooltip-icon::before,
+.tooltip-box .tooltip-game-description .tooltip-icon::before {
+  content: '' !important;
+}
+
+.tooltip-box .tooltip-spell-description .dmg-physical,
+.tooltip-box .tooltip-game-description .dmg-physical {
+  color: rgb(248 113 113 / 1) !important;
+}
+
+.tooltip-box .tooltip-spell-description .dmg-magic,
+.tooltip-box .tooltip-game-description .dmg-magic {
+  color: rgb(196 181 253 / 1) !important;
+}
+
+.tooltip-box .tooltip-spell-description .dmg-true,
+.tooltip-box .tooltip-game-description .dmg-true {
+  color: rgb(226 232 240 / 1) !important;
+}
+
+.tooltip-box .tooltip-spell-description .keyword-major,
+.tooltip-box .tooltip-game-description .keyword-major {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-box .tooltip-spell-description .status-cc,
+.tooltip-box .tooltip-game-description .status-cc {
+  color: rgb(56 189 248 / 1) !important;
+  font-weight: 600;
+}
+
+.tooltip-box .tooltip-spell-description :is(.scale-ad, .scale-ap, .scale-ms, .tooltip-tag.scale-ad),
+.tooltip-box .tooltip-game-description :is(.scale-ad, .scale-ap, .scale-ms, .tooltip-tag.scale-ad) {
+  color: rgb(250 204 21 / 1) !important;
+  font-weight: 700;
+}

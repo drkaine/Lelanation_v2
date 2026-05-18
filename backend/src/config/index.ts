@@ -10,6 +10,9 @@ type Config = {
   RATE_LIMIT_PER_120S: number;
   HYDRATION_CONCURRENCY: number;
   BATCH_SIZE: number;
+  DISCOVERY_PLAYERS_PER_TICK: number;
+  DISCOVERY_MIN_QUEUE_DEPTH: number;
+  DISCOVERY_INTERVAL_MS: number;
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -69,4 +72,10 @@ export const config: Config = {
   RATE_LIMIT_PER_1S: rateLimitPer1sOverride ?? configByEnv[ENV].RATE_LIMIT_PER_1S,
   RATE_LIMIT_PER_120S: rateLimitPer120sOverride ?? configByEnv[ENV].RATE_LIMIT_PER_120S,
   BATCH_SIZE: 500,
+  DISCOVERY_PLAYERS_PER_TICK:
+    parsePositiveInt(process.env.DISCOVERY_PLAYERS_PER_TICK) ?? 16,
+  DISCOVERY_MIN_QUEUE_DEPTH:
+    parsePositiveInt(process.env.DISCOVERY_MIN_QUEUE_DEPTH) ?? 20,
+  DISCOVERY_INTERVAL_MS:
+    parsePositiveInt(process.env.DISCOVERY_INTERVAL_MS) ?? 45_000,
 };

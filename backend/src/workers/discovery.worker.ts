@@ -6,7 +6,7 @@ import { pollerV2Observability } from "../observability/poller-v2-observability.
 import { hydrationQueue, discoveryQueue } from "../queues/index.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
-import { waitForSlot } from "../redis/rate-limiter.js";
+import { waitForMatchSlot } from "../redis/rate-limiter.js";
 import { RiotClient } from "../riot/client.js";
 import {
   findPreviousPatchEntry,
@@ -69,35 +69,48 @@ async function resolveDiscoveryPatchStart(nowSec: number): Promise<{ startTimeSe
   };
 }
 
-async function runDiscoveryCycle(): Promise<void> {
-  const startedAt = Date.now();
-  const nowSec = Math.floor(startedAt / 1000);
-  const patchWindow = await resolveDiscoveryPatchStart(nowSec);
-  pollerV2Observability.incDiscoveryCycle();
-  await sql.begin(async (tx) => {
-    const players = await tx<PlayerRow[]>`
+async function selectPlayersBatch(limit: number): Promise<PlayerRow[]> {
+  return sql.begin(async (tx) => {
+    return tx<PlayerRow[]>`
       SELECT puuid, region, last_seen
       FROM players
-      WHERE puuid_key_version = ${config.PLAYER_KEY_VERSION}
+      WHERE LENGTH(TRIM(puuid)) > 0
+      ORDER BY last_seen ASC NULLS FIRST
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    `;
+  });
+}
+
+async function getNextPlayer(): Promise<PlayerRow | null> {
+  const rows = await sql.begin(async (tx) => {
+    return tx<PlayerRow[]>`
+      SELECT puuid, region, last_seen
+      FROM players
+      WHERE LENGTH(TRIM(puuid)) > 0
       ORDER BY last_seen ASC NULLS FIRST
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     `;
+  });
+  return rows[0] ?? null;
+}
 
-    const player = players[0];
-    if (!player) {
-      pollerV2Observability.incDiscoveryNoPlayerCycle();
-      return;
-    }
+async function processDiscoveryPlayer(
+  player: PlayerRow,
+  patchWindow: { startTimeSec: number },
+  nowSec: number,
+): Promise<void> {
+  pollerV2Observability.recordPlayersPolled(1);
+  const lastSeenSec = toEpochSeconds(player.last_seen);
+  const discoveryStartTime =
+    lastSeenSec == null || lastSeenSec < patchWindow.startTimeSec ? patchWindow.startTimeSec : lastSeenSec;
+  const startTime = Math.min(discoveryStartTime, nowSec);
 
-    pollerV2Observability.recordPlayersPolled(1);
-    const lastSeenSec = toEpochSeconds(player.last_seen);
-    const discoveryStartTime =
-      lastSeenSec == null || lastSeenSec < patchWindow.startTimeSec ? patchWindow.startTimeSec : lastSeenSec;
-    const startTime = Math.min(discoveryStartTime, nowSec);
-    await waitForSlot(1);
-    const matchIds = await riotClient.getMatchlist(player.puuid, player.region, { startTime });
+  await waitForMatchSlot(1);
+  const matchIds = await riotClient.getMatchlist(player.puuid, player.region, { startTime });
 
+  await sql.begin(async (tx) => {
     const knownRows =
       matchIds.length > 0
         ? await tx<{ riot_match_id: string }[]>`
@@ -126,11 +139,43 @@ async function runDiscoveryCycle(): Promise<void> {
 
     await tx`
       UPDATE players
-      SET last_seen = NOW()
+      SET
+        last_seen = NOW(),
+        puuid_key_version = ${config.PLAYER_KEY_VERSION}
       WHERE puuid = ${player.puuid}
     `;
     pollerV2Observability.recordPlayersUpdated(1);
   });
+}
+
+async function runDiscoveryCycle(): Promise<void> {
+  const startedAt = Date.now();
+  const nowSec = Math.floor(startedAt / 1000);
+  const patchWindow = await resolveDiscoveryPatchStart(nowSec);
+  const playersPerTick = config.DISCOVERY_PLAYERS_PER_TICK;
+  const minQueueDepth = config.DISCOVERY_MIN_QUEUE_DEPTH;
+
+  pollerV2Observability.incDiscoveryCycle();
+
+  const players = await selectPlayersBatch(playersPerTick);
+  if (players.length === 0) {
+    pollerV2Observability.incDiscoveryNoPlayerCycle();
+    pollerV2Observability.recordDuration("discoveryCycleMs", Date.now() - startedAt);
+    return;
+  }
+
+  for (const player of players) {
+    await processDiscoveryPlayer(player, patchWindow, nowSec);
+  }
+
+  const queueDepth = await hydrationQueue.getWaitingCount();
+  if (queueDepth < minQueueDepth && players.length === playersPerTick) {
+    const bonusPlayer = await getNextPlayer();
+    if (bonusPlayer) {
+      await processDiscoveryPlayer(bonusPlayer, patchWindow, nowSec);
+    }
+  }
+
   pollerV2Observability.recordDuration("discoveryCycleMs", Date.now() - startedAt);
 }
 
@@ -146,6 +191,14 @@ export const discoveryWorker = new Worker<DiscoveryJobData>(
 );
 
 export async function scheduleDiscoveryRepeatJob(): Promise<void> {
+  const intervalMs = config.DISCOVERY_INTERVAL_MS;
+  const repeatables = await discoveryQueue.getRepeatableJobs();
+  for (const job of repeatables) {
+    if (job.id?.startsWith("discovery:repeat")) {
+      await discoveryQueue.removeRepeatableByKey(job.key);
+    }
+  }
+
   await discoveryQueue.add(
     "discovery-tick",
     {
@@ -154,9 +207,9 @@ export async function scheduleDiscoveryRepeatJob(): Promise<void> {
     },
     {
       repeat: {
-        every: 30_000,
+        every: intervalMs,
       },
-      jobId: "discovery:repeat:30s",
+      jobId: `discovery:repeat:${intervalMs}ms`,
     },
   );
 }

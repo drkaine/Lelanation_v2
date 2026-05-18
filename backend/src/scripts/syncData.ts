@@ -6,6 +6,7 @@ import { VersionService } from '../services/VersionService.js'
 import { YouTubeService } from '../services/YouTubeService.js'
 import { DiscordService } from '../services/DiscordService.js'
 import { StaticAssetsService } from '../services/StaticAssetsService.js'
+import { TheorycraftDataBuilderService } from '../services/TheorycraftDataBuilderService.js'
 import { FileManager } from '../utils/fileManager.js'
 
 interface YouTubeChannelConfig {
@@ -200,6 +201,11 @@ async function main(): Promise<void> {
 
   // --- Copy Assets to Frontend ---
   const staticAssets = new StaticAssetsService()
+  const theorycraftBuilder = new TheorycraftDataBuilderService()
+  const theorycraftBuild = await theorycraftBuilder.build(ddSyncData.version)
+  if (theorycraftBuild.isErr()) {
+    console.warn('[sync:data] Theorycraft data build failed:', theorycraftBuild.unwrapErr())
+  }
   
   // Check if we should restart frontend (default: false, set RESTART_FRONTEND=true to enable)
   const shouldRestartFrontend = process.env.RESTART_FRONTEND === 'true'

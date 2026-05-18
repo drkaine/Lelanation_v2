@@ -250,7 +250,14 @@ export class StaticAssetsService {
         }
 
         // Copy JSON files
-        const files = ['champion.json', 'championFull.json', 'item.json', 'runesReforged.json', 'summoner.json']
+        for (const legacyChampionFile of ['champion.json', 'championFull.json']) {
+          const legacyPath = join(targetDir, legacyChampionFile)
+          if (await FileManager.exists(legacyPath)) {
+            await fs.rm(legacyPath, { force: true })
+          }
+        }
+
+        const files = ['item.json', 'runesReforged.json', 'summoner.json']
         for (const file of files) {
           const sourcePath = join(sourceDir, file)
           const targetPath = join(targetDir, file)
