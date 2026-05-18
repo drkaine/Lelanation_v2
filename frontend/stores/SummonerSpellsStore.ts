@@ -4,6 +4,8 @@ import { useVersionStore } from './VersionStore'
 import { getFallbackGameVersion } from '~/config/version'
 import { apiUrl } from '~/utils/apiUrl'
 import { getGameDataUrl } from '~/utils/staticDataUrl'
+import { normalizeSummonerSpell, resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
+import type { SummonerSpellRefLike } from '~/utils/summonerSpellResolver'
 
 interface SummonerSpellsState {
   spells: SummonerSpell[]
@@ -26,8 +28,18 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
     getSpellById() {
       return (id: string): SummonerSpell | undefined => {
         const normalized = String(id).trim()
-        return this.spells.find(spell => spell.key === normalized || spell.id === normalized)
+        if (!normalized) return undefined
+        return this.spells.find(
+          spell =>
+            spell.key === normalized ||
+            spell.id === normalized ||
+            spell.id.toLowerCase() === normalized.toLowerCase()
+        )
       }
+    },
+    resolveSpell() {
+      return (ref: SummonerSpellRefLike | null | undefined): SummonerSpell | undefined =>
+        resolveSummonerSpellFromRef(ref, this.getSpellById, this.spells)
     },
   },
 
@@ -48,21 +60,13 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
         let useStatic = false
 
         // Load from public/data/game/{version}/{language}/summoner.json (Data Dragon format).
-        // Used to resolve spell ids from Participants.summonerSpells in stats (overview detail).
-        if (process.client) {
-          try {
-            const staticUrl = getGameDataUrl(version, 'summoner', language)
-            const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
-            const staticResponse = await fetch(urlWithCacheBust, {
-              cache: 'no-cache',
-            })
-            if (staticResponse.ok) {
-              data = await staticResponse.json()
-              useStatic = true
-            }
-          } catch (staticError) {
-            // Static file not available, will try API - silently continue
-          }
+        try {
+          const staticUrl = getGameDataUrl(version, 'summoner', language)
+          const urlWithCacheBust = `${staticUrl}?_v=${version.replace(/\./g, '_')}`
+          data = await $fetch<Record<string, unknown>>(urlWithCacheBust)
+          useStatic = true
+        } catch {
+          // Static file not available, will try API
         }
 
         // Fallback to API if static file not available
@@ -86,7 +90,9 @@ export const useSummonerSpellsStore = defineStore('summonerSpells', {
           }
         }
 
-        this.spells = Object.values(data.data || {}) as SummonerSpell[]
+        this.spells = Object.values(data.data || {}).map(spell =>
+          normalizeSummonerSpell(spell as SummonerSpell)
+        )
         this.status = 'success'
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to load summoner spells'

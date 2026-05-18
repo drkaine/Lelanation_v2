@@ -86,6 +86,29 @@ export interface HydrationCatalogs {
   champions: Champion[]
   items: Item[]
   getSpellById: (id: string) => SummonerSpell | undefined
+  summonerSpells?: SummonerSpell[]
+}
+
+function imageStem(filename: string | undefined): string {
+  return String(filename ?? '')
+    .trim()
+    .replace(/\.(png|jpg|jpeg|webp)$/i, '')
+}
+
+function lookupSummonerSpell(
+  id: string,
+  catalogs: HydrationCatalogs
+): SummonerSpell | undefined {
+  const normalized = String(id).trim()
+  if (!normalized) return undefined
+  const fromGetter = catalogs.getSpellById(normalized)
+  if (fromGetter) return fromGetter
+  return catalogs.summonerSpells?.find(
+    spell =>
+      spell.key === normalized ||
+      spell.id === normalized ||
+      spell.id.toLowerCase() === normalized.toLowerCase()
+  )
 }
 
 function resolveChampion(ref: { id: string; name: string; image: { full: string } } | null, catalogs: HydrationCatalogs): Champion | null {
@@ -127,8 +150,15 @@ function resolveItems(refs: ItemRef[], catalogs: HydrationCatalogs): Item[] {
 function resolveSpells(refs: [SummonerSpellRef | null, SummonerSpellRef | null], catalogs: HydrationCatalogs): [SummonerSpell | null, SummonerSpell | null] {
   return refs.map(ref => {
     if (!ref) return null
-    const full = catalogs.getSpellById(ref.id) ?? catalogs.getSpellById(ref.key ?? '')
-    if (full) return full
+    const candidates = new Set<string>()
+    for (const value of [ref.id, ref.key, imageStem(ref.image?.full)]) {
+      const trimmed = String(value ?? '').trim()
+      if (trimmed) candidates.add(trimmed)
+    }
+    for (const candidate of candidates) {
+      const full = lookupSummonerSpell(candidate, catalogs)
+      if (full) return full
+    }
     return {
       id: ref.id, key: ref.key ?? ref.id, name: ref.id, description: '', tooltip: '',
       maxrank: 1, cooldown: [], cooldownBurn: '', cost: [], costBurn: '', datavalues: {},

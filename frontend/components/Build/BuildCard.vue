@@ -1069,7 +1069,7 @@
                   <!-- eslint-disable vue/no-v-html -->
                   <div
                     v-if="sheetElementTooltipResolved.spell.description"
-                    class="item-tooltip-description"
+                    class="item-tooltip-description tooltip-game-description"
                     v-html="sheetElementTooltipResolved.spell.description"
                   />
                   <!-- eslint-enable vue/no-v-html -->
@@ -1397,7 +1397,11 @@ import { useChampionSplashPreference } from '~/composables/useChampionSplashPref
 import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatItemStats'
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
-import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
+import {
+  formatSpellTooltipHtml,
+  formatSummonerSpellTooltipHtml,
+} from '~/utils/gameTooltipFormatter'
+import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
@@ -1837,13 +1841,21 @@ const sheetElementTooltipResolved = computed(() => {
       }
     }
     case 'spell': {
-      const p = tt.payload as { id?: string; key?: string; name?: string }
-      const sid = String(p?.id ?? p?.key ?? '')
-      const spell = sid ? summonerSpellsStore.getSpellById(sid) : undefined
+      const p = tt.payload as {
+        id?: string
+        key?: string
+        name?: string
+        image?: { full?: string }
+      }
+      const spell = resolveSummonerSpellFromRef(
+        p,
+        summonerSpellsStore.getSpellById,
+        summonerSpellsStore.spells
+      )
       return spell
         ? {
             type: 'spell' as const,
-            spell: { ...spell, description: formatSpellTooltipHtml(spell, { showCost: false }) },
+            spell: { ...spell, description: formatSummonerSpellTooltipHtml(spell) },
           }
         : null
     }

@@ -5,6 +5,7 @@ import { useVoteStore } from './VoteStore'
 import { useVersionStore } from './VersionStore'
 import { apiUrl } from '~/utils/apiUrl'
 import { hydrateBuild, isStoredBuild } from '~/utils/buildSerialize'
+import { useSummonerSpellsStore } from '~/stores/SummonerSpellsStore'
 
 export type SortOption = 'recent' | 'popular' | 'name'
 export type FilterRole = 'top' | 'jungle' | 'mid' | 'adc' | 'support' | null
@@ -194,11 +195,17 @@ export const useBuildDiscoveryStore = defineStore('buildDiscovery', {
   actions: {
     async loadBuilds() {
       const buildStore = useBuildStore()
-      const localBuilds = buildStore.getSavedBuilds()
 
       // Synchroniser les builds locaux avec le serveur (en arrière-plan)
       // Cela resauvegarde automatiquement les builds qui n'existent pas sur le serveur
       buildStore.syncAllBuildsToServer().catch(() => {})
+
+      const summonerSpellsStore = useSummonerSpellsStore()
+      if (summonerSpellsStore.spells.length === 0) {
+        await summonerSpellsStore.loadSummonerSpells().catch(() => undefined)
+      }
+
+      const localBuilds = buildStore.getSavedBuilds()
 
       // Charger les builds publics depuis l'API
       let publicBuilds: Build[] = []

@@ -26,5 +26,6 @@ export function hydrateBuild(stored: StoredBuild): Build {
     champions: championsStore.champions,
     items: itemsStore.items,
     getSpellById: (id: string) => spellsStore.getSpellById(id),
+    summonerSpells: spellsStore.spells,
   })
 }

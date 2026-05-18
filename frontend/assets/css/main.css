@@ -181,6 +181,29 @@
   color: rgb(255 231 43 / 0.98) !important;
 }
 
+/* Spell tooltip inline metadata block (CD / cost / range by rank). */
+.tooltip-spell-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Extra spell sections (Kayn forms, R passive body, etc.). */
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-spell-detail {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgb(125 211 252 / 0.25);
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-spell-detail:first-of-type {
+  margin-top: 0;
+}
+
 /* Spell tooltip inline metadata row (CD / Cost / Range / Damage). */
 :is(
     [role='tooltip'],
@@ -438,73 +461,107 @@
   color: rgb(226 232 240 / 1);
 }
 
-/* Build card champion tooltip is teleported to <body>; scoped Vue CSS must not override these. */
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-physical,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-physical {
+/* Teleported tooltips (champion portrait + sheet); scoped Vue CSS must not override these. */
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 0.9em !important;
+  height: 0.9em !important;
+  margin-right: 0.2em;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+  flex-shrink: 0;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-physical {
   background-image: url('/icons/statsicon/AD.png') !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-magic,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-magic {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-magic {
   background-image: url('/icons/statsicon/ap.png') !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-true,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-true {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-true {
   background-image: none !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-true::before,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-true::before {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-true::before {
   content: '◆' !important;
   color: rgb(226 232 240 / 1) !important;
   background-image: none !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-heal,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-heal {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-heal {
   background-image: url('/icons/statsicon/Health_regeneration.svg') !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon.tooltip-icon-speed,
-.tooltip-box .tooltip-game-description .tooltip-icon.tooltip-icon-speed {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon.tooltip-icon-speed {
   background-image: url('/icons/statsicon/Movement_speed.png') !important;
 }
 
-.tooltip-box .tooltip-spell-description .tooltip-icon::before,
-.tooltip-box .tooltip-game-description .tooltip-icon::before {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .tooltip-icon::before {
   content: '' !important;
 }
 
-.tooltip-box .tooltip-spell-description .dmg-physical,
-.tooltip-box .tooltip-game-description .dmg-physical {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .dmg-physical {
   color: rgb(248 113 113 / 1) !important;
 }
 
-.tooltip-box .tooltip-spell-description .dmg-magic,
-.tooltip-box .tooltip-game-description .dmg-magic {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .dmg-magic {
   color: rgb(196 181 253 / 1) !important;
 }
 
-.tooltip-box .tooltip-spell-description .dmg-true,
-.tooltip-box .tooltip-game-description .dmg-true {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .dmg-true {
   color: rgb(226 232 240 / 1) !important;
 }
 
-.tooltip-box .tooltip-spell-description .keyword-major,
-.tooltip-box .tooltip-game-description .keyword-major {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .keyword-major {
   color: rgb(251 191 36 / 1) !important;
   font-weight: 700;
 }
 
-.tooltip-box .tooltip-spell-description .status-cc,
-.tooltip-box .tooltip-game-description .status-cc {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  .status-cc {
   color: rgb(56 189 248 / 1) !important;
   font-weight: 600;
 }
 
-.tooltip-box .tooltip-spell-description :is(.scale-ad, .scale-ap, .scale-ms, .tooltip-tag.scale-ad),
-.tooltip-box .tooltip-game-description :is(.scale-ad, .scale-ap, .scale-ms, .tooltip-tag.scale-ad) {
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  :is(.scale-ad, .scale-ap, .scale-ms, .scale-mana, .scale-hp, .tooltip-tag.scale-ad) {
   color: rgb(250 204 21 / 1) !important;
   font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper)
+  :is(.tooltip-spell-description, .tooltip-game-description, .item-tooltip-description)
+  :is(.healing, .shield, .speed) {
+  color: rgb(134 239 172 / 1) !important;
 }

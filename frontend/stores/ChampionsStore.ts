@@ -33,7 +33,12 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
           spell?.parsedText ??
           ''
       ),
-      descriptionHtml: spell?.descriptionHtml ?? spell?.descriptionParsed,
+      descriptionHtml:
+        spell?.descriptionHtml ??
+        spell?.descriptionParsed ??
+        (typeof spell?.description === 'string' && spell.description.includes('<')
+          ? spell.description
+          : undefined),
       descriptionParsed: spell?.descriptionParsed ?? spell?.descriptionHtml,
       descriptionText: spell?.descriptionText ?? spell?.parsedText,
       parsedText: spell?.parsedText ?? spell?.descriptionText,
@@ -55,7 +60,13 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
             detail.passive?.parsedText ??
             ''
         ),
-        descriptionHtml: detail.passive?.descriptionHtml ?? detail.passive?.descriptionParsed,
+        descriptionHtml:
+          detail.passive?.descriptionHtml ??
+          detail.passive?.descriptionParsed ??
+          (typeof detail.passive?.description === 'string' &&
+          detail.passive.description.includes('<')
+            ? detail.passive.description
+            : undefined),
         descriptionParsed: detail.passive?.descriptionParsed ?? detail.passive?.descriptionHtml,
         descriptionText: detail.passive?.descriptionText ?? detail.passive?.parsedText,
         parsedText: detail.passive?.parsedText ?? detail.passive?.descriptionText,

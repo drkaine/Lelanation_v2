@@ -152,16 +152,10 @@ export class DataDragonService {
   }
 
   /**
-   * Remove description from summoner spells.
+   * Keep DDragon description (plain resolved text) alongside tooltip (detailed template).
    */
   private cleanSummonerSpellsData(spells: SummonerSpellData): SummonerSpellData {
-    const cleaned: SummonerSpellData = {}
-    for (const [spellId, spell] of Object.entries(spells)) {
-      const clone = { ...(spell as Record<string, unknown>) }
-      delete (clone as { description?: unknown }).description
-      cleaned[spellId] = clone as SummonerSpellData[string]
-    }
-    return cleaned
+    return { ...spells }
   }
 
   /**

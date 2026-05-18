@@ -287,7 +287,7 @@ import {
 } from '~/utils/imageUrl'
 import { useGameVersion } from '~/composables/useGameVersion'
 import { useTooltipsPreference } from '~/composables/useTooltipsPreference'
-import { formatSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
+import { formatSummonerSpellTooltipHtml } from '~/utils/gameTooltipFormatter'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 
 const { version } = useGameVersion()
@@ -665,7 +665,7 @@ const handleSpellHover = (spell: SummonerSpell, event: MouseEvent) => {
   hoveredItem.value = {
     name: spell.name,
     icon: getSpellImageUrl(version.value, spell.image.full),
-    description: formatSpellTooltipHtml(spell, { showCost: false }),
+    description: formatSummonerSpellTooltipHtml(spell),
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
   nextTick(() => {
@@ -744,7 +744,15 @@ const tooltipStyle = computed(() => {
   }
 })
 
-const formattedHoveredDescription = computed(() => formatRuneTooltipHtml(hoveredItem.value ?? {}))
+const formattedHoveredDescription = computed(() => {
+  const item = hoveredItem.value
+  if (!item) return ''
+  // Summoner spell hovers store pre-rendered HTML in description (with CD/cost/range).
+  if (item.description && item.icon && !item.longDesc && !item.shortDesc) {
+    return item.description
+  }
+  return formatRuneTooltipHtml(item)
+})
 
 watch(hoveredItem, async newValue => {
   if (newValue) {
