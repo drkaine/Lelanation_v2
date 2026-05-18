@@ -27,6 +27,9 @@ type Totals = {
   ingestionJobsFailed: number;
   matchesIngested: number;
   participantsIngested: number;
+  rankJobsStarted: number;
+  rankJobsSucceeded: number;
+  rankJobsFailed: number;
   /** Appels League v4 `entries/by-puuid` (refresh rang du jour). */
   rankLeagueFetchesSucceeded: number;
   rankLeagueFetchesFailed: number;
@@ -105,9 +108,14 @@ type Snapshot = {
     discovery: QueueSlice;
     hydration: QueueSlice;
     ingestion: QueueSlice;
+    rank: QueueSlice;
     dataLagSeconds: number | null;
     tickDurationMs: number | null;
   };
+  /** Dernier snapshot queue rank — `rank.waiting`. */
+  rankLeagueFetchesPending: number;
+  /** Dernier snapshot queue rank — `rank.active` (doit rester ≤ 2). */
+  rankWorkerConcurrency: number;
   recentErrors: ErrorEvent[];
   summaries: {
     last30m: Record<string, unknown> | null;
@@ -144,6 +152,9 @@ function emptyTotals(): Totals {
     ingestionJobsFailed: 0,
     matchesIngested: 0,
     participantsIngested: 0,
+    rankJobsStarted: 0,
+    rankJobsSucceeded: 0,
+    rankJobsFailed: 0,
     rankLeagueFetchesSucceeded: 0,
     rankLeagueFetchesFailed: 0,
     apiRequests: 0,
@@ -190,6 +201,7 @@ class PollerV2Observability {
     discovery: { waiting: 0, active: 0, failed: 0, delayed: 0 },
     hydration: { waiting: 0, active: 0, failed: 0, delayed: 0 },
     ingestion: { waiting: 0, active: 0, failed: 0, delayed: 0 },
+    rank: { waiting: 0, active: 0, failed: 0, delayed: 0 },
     dataLagSeconds: null as number | null,
     tickDurationMs: null as number | null,
   };
@@ -385,12 +397,46 @@ class PollerV2Observability {
     this.addError("ingestion", error instanceof Error ? error.message : String(error));
   }
 
+  recordRankJobStart(): void {
+    this.totals.rankJobsStarted += 1;
+  }
+
+  recordRankJobSuccess(): void {
+    this.totals.rankJobsSucceeded += 1;
+  }
+
+  recordRankJobFailure(error: unknown): void {
+    this.totals.rankJobsFailed += 1;
+    this.addError("rank", error instanceof Error ? error.message : String(error));
+  }
+
   recordRankLeagueFetchSucceeded(): void {
     this.totals.rankLeagueFetchesSucceeded += 1;
   }
 
   recordRankLeagueFetchFailed(): void {
     this.totals.rankLeagueFetchesFailed += 1;
+  }
+
+  private logRankQueueAlerts(rank: QueueSlice): void {
+    if (rank.waiting > 5000) {
+      console.warn(
+        JSON.stringify({
+          msg: "rank_queue_backlog_high",
+          rankLeagueFetchesPending: rank.waiting,
+          threshold: 5000,
+        }),
+      );
+    }
+    if (rank.active > 2) {
+      console.error(
+        JSON.stringify({
+          msg: "rank_worker_concurrency_bug",
+          rankWorkerConcurrency: rank.active,
+          expectedMax: 2,
+        }),
+      );
+    }
   }
 
   recordRateLimitAttempt(cost: number, granted: boolean, waitMs: number): void {
@@ -440,14 +486,23 @@ class PollerV2Observability {
     discovery: QueueSlice;
     hydration: QueueSlice;
     ingestion: QueueSlice;
+    rank: QueueSlice;
     dataLagSeconds: number | null;
     tickDurationMs: number | null;
   }): void {
     this.lastQueue = { ...payload };
+    this.logRankQueueAlerts(payload.rank);
     if (payload.tickDurationMs != null) {
       this.addDuration("dbMetricsTickMs", payload.tickDurationMs);
     }
     this.recordRateSnapshot(this.rolling2m().tokenUsagePct);
+  }
+
+  private rankQueueMetrics(): { rankLeagueFetchesPending: number; rankWorkerConcurrency: number } {
+    return {
+      rankLeagueFetchesPending: this.lastQueue.rank.waiting,
+      rankWorkerConcurrency: this.lastQueue.rank.active,
+    };
   }
 
   buildWindowSummary(window: "30m" | "1h", dbWindow: Record<string, unknown>): Record<string, unknown> {
@@ -466,7 +521,8 @@ class PollerV2Observability {
         : 0;
     const tokenRate10m = this.tokenRate10m();
     this.logTokenRateAlerts(tokenRate10m);
-    const payload = {
+    const rankQueue = this.rankQueueMetrics();
+    const payload: Record<string, unknown> = {
       window,
       atIso: nowIso,
       delta,
@@ -477,8 +533,13 @@ class PollerV2Observability {
       avgTokenUsagePctFromWindowDelta,
       tokenRate10m,
       queue: this.lastQueue,
+      rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
+      rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
     };
     if (window === "30m") {
+      payload.rankFetchesQueued = delta.rankJobsStarted;
+      payload.rankFetchesSucceeded = delta.rankJobsSucceeded;
+      payload.rankFetchesFailed = delta.rankJobsFailed;
       this.baseline30m = cloneTotals(this.totals);
       this.last30mSummary = payload;
     } else {
@@ -497,6 +558,7 @@ class PollerV2Observability {
         return [key, { ...d, avgMs }];
       }),
     ) as Snapshot["durations"];
+    const rankQueue = this.rankQueueMetrics();
     return {
       atIso: new Date(now).toISOString(),
       startedAtIso: new Date(this.startedAtMs).toISOString(),
@@ -506,6 +568,8 @@ class PollerV2Observability {
       tokenRate10m: this.tokenRate10m(),
       durations,
       queue: { ...this.lastQueue },
+      rankLeagueFetchesPending: rankQueue.rankLeagueFetchesPending,
+      rankWorkerConcurrency: rankQueue.rankWorkerConcurrency,
       recentErrors: [...this.recentErrors].slice(-20).reverse(),
       summaries: {
         last30m: this.last30mSummary,

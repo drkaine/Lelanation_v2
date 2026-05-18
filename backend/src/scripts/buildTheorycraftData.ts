@@ -16,7 +16,11 @@ async function main(): Promise<void> {
   const builder = new TheorycraftDataBuilderService()
   const buildRes = await builder.build(currentVersion)
   if (buildRes.isErr()) {
-    throw new Error(`Theorycraft build failed: ${buildRes.unwrapErr().message}`)
+    const message = buildRes.unwrapErr().message
+    throw new Error(
+      `Theorycraft build failed: ${message}\n` +
+        'Tip: run "npm run sync:data" to sync all game data, or ensure network access to Data Dragon.'
+    )
   }
   const out = buildRes.unwrap()
   console.log(

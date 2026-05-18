@@ -333,6 +333,21 @@
   font-weight: 700;
 }
 
+/* Kayn transformation forms — Shadow Assassin (blue) / Darkin Slayer (red), all locales. */
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description)
+  :is(.kayn-form-shadow, font[color='#8484fb'], font[color='#8484FB']) {
+  color: #8484fb !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description)
+  :is(.kayn-form-darkin, font[color='#fe5c50'], font[color='#FE5C50']) {
+  color: #fe5c50 !important;
+  font-weight: 700;
+}
+
 .tooltip-game-description :is(keywordStealth, .keyword-stealth) {
   color: rgb(147 197 253 / 1) !important;
   font-weight: 600;
@@ -348,21 +363,49 @@
   font-weight: 600;
 }
 
-.tooltip-game-description :is(attention, statGood, scaleAD, scaleAP, scaleMana, scaleHealth, scaleLevel) {
+.tooltip-game-description :is(attention, statGood, scaleLevel) {
   color: rgb(250 204 21 / 1) !important;
   font-weight: 700;
 }
 
-.tooltip-game-description
-  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
-  :is(.tooltip-tag-scalearmor, .tooltip-tag.tooltip-tag-scalearmor) {
-  color: rgb(251 191 36 / 1) !important;
+.tooltip-game-description :is(.scale-ad, .tooltip-tag.scale-ad, scaleAD) {
+  color: rgb(253 224 71 / 1) !important;
+  font-weight: 700;
 }
 
-.tooltip-game-description
-  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
-  :is(.tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
+.tooltip-game-description :is(.scale-ap, .tooltip-tag.scale-ap, scaleAP) {
+  color: rgb(196 181 253 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description :is(.scale-hp, .tooltip-tag.scale-hp, scaleHealth) {
+  color: rgb(134 239 172 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description :is(.scale-mana, .tooltip-tag.scale-mana, scaleMana) {
+  color: rgb(96 165 250 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description :is(
+    .scale-armor,
+    .tooltip-tag.scale-armor,
+    .tooltip-tag-scalearmor,
+    .tooltip-tag.tooltip-tag-scalearmor
+  ) {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-game-description :is(
+    .scale-mr,
+    .tooltip-tag.scale-mr,
+    .tooltip-tag-scalemr,
+    .tooltip-tag.tooltip-tag-scalemr
+  ) {
   color: rgb(129 140 248 / 1) !important;
+  font-weight: 700;
 }
 
 .tooltip-game-description :is(active, .active, recast, .recast) {
@@ -448,22 +491,45 @@
   font-weight: 600;
 }
 
-.tooltip-spell-description
-  :is(.scale-ad, .scale-ap, .scale-ms, .scale-mana, .scale-hp, scaleAD, scaleAP, scaleMana, scaleHealth) {
-  color: rgb(250 204 21 / 1) !important;
+/* Scaling ratios / stat coefficients — per-stat colors (not all yellow). */
+.tooltip-spell-description :is(.scale-ad, .tooltip-tag.scale-ad, scaleAD) {
+  color: rgb(253 224 71 / 1) !important;
   font-weight: 700;
 }
 
-.tooltip-spell-description
-  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
-  :is(.tooltip-tag-scalearmor, .tooltip-tag.tooltip-tag-scalearmor) {
-  color: rgb(251 191 36 / 1) !important;
+.tooltip-spell-description :is(.scale-ap, .tooltip-tag.scale-ap, scaleAP) {
+  color: rgb(196 181 253 / 1) !important;
+  font-weight: 700;
 }
 
-.tooltip-spell-description
-  :is(.dmg-physical, .dmg-magic, .dmg-true, physicalDamage, magicDamage, trueDamage)
-  :is(.tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
+.tooltip-spell-description :is(.scale-hp, .tooltip-tag.scale-hp, scaleHealth) {
+  color: rgb(134 239 172 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-spell-description :is(.scale-mana, .tooltip-tag.scale-mana, scaleMana) {
+  color: rgb(96 165 250 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-spell-description :is(
+    .scale-armor,
+    .tooltip-tag.scale-armor,
+    .tooltip-tag-scalearmor,
+    .tooltip-tag.tooltip-tag-scalearmor
+  ) {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+.tooltip-spell-description :is(
+    .scale-mr,
+    .tooltip-tag.scale-mr,
+    .tooltip-tag-scalemr,
+    .tooltip-tag.tooltip-tag-scalemr
+  ) {
   color: rgb(129 140 248 / 1) !important;
+  font-weight: 700;
 }
 
 .tooltip-spell-description :is(active, .active, recast, .recast) {
@@ -591,18 +657,54 @@
 
 :is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
   :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-ad, .tooltip-tag.scale-ad, scaleAD) {
+  color: rgb(253 224 71 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-ap, .tooltip-tag.scale-ap, scaleAP) {
+  color: rgb(196 181 253 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-hp, .tooltip-tag.scale-hp, scaleHealth) {
+  color: rgb(134 239 172 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-mana, .tooltip-tag.scale-mana, scaleMana) {
+  color: rgb(96 165 250 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
   :is(
-    .scale-ad,
-    .scale-ap,
-    .scale-ms,
-    .scale-mana,
-    .scale-hp,
-    .scale-level,
-    .tooltip-tag.scale-ad,
-    .tooltip-tag.scale-ap,
-    span.scale-ad,
-    span.scale-ap
+    .scale-armor,
+    .tooltip-tag.scale-armor,
+    .tooltip-tag-scalearmor,
+    .tooltip-tag.tooltip-tag-scalearmor
   ) {
+  color: rgb(251 191 36 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-mr, .tooltip-tag.scale-mr, .tooltip-tag-scalemr, .tooltip-tag.tooltip-tag-scalemr) {
+  color: rgb(129 140 248 / 1) !important;
+  font-weight: 700;
+}
+
+:is(.tooltip-box, .sheet-element-tooltip-wrapper, .rune-tooltip)
+  :is(.tooltip-spell-description, .tooltip-game-description, .rune-tooltip-description, .item-tooltip-description)
+  :is(.scale-level, .tooltip-tag.scale-level, scaleLevel) {
   color: rgb(250 204 21 / 1) !important;
   font-weight: 700;
 }

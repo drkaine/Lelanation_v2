@@ -417,6 +417,7 @@ export function parseMatch(
       gameEndTimestamp,
       region,
       rankTier: String((participant as { tier?: string; rankTier?: string }).tier ?? (participant as { rankTier?: string }).rankTier ?? "UNRANKED"),
+      needsRankFetch: false,
       role,
       championId: participant.championId,
       teamId: participant.teamId as 100 | 200,

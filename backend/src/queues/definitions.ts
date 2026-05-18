@@ -1,13 +1,15 @@
 import type { JobsOptions } from "bullmq";
-import type { DiscoveryJobData, HydrationJobData, IngestionJobData } from "../dto/match.dto.js";
+import type { DiscoveryJobData, HydrationJobData, IngestionJobData, RankJobData } from "../dto/match.dto.js";
 
 export const DISCOVERY_QUEUE = "discovery" as const;
 export const HYDRATION_QUEUE = "hydration" as const;
 export const INGESTION_QUEUE = "ingestion" as const;
+export const RANK_QUEUE = "rank" as const;
 
 export type DiscoveryQueueJobData = DiscoveryJobData;
 export type HydrationQueueJobData = HydrationJobData;
 export type IngestionQueueJobData = IngestionJobData;
+export type RankQueueJobData = RankJobData;
 
 export const DISCOVERY_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
@@ -28,4 +30,10 @@ export const INGESTION_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
   backoff: { type: "exponential", delay: 1000 },
   removeOnComplete: { count: 200, age: 1800 },
   removeOnFail: { count: 500 },
+};
+
+export const RANK_QUEUE_DEFAULT_JOB_OPTIONS: JobsOptions = {
+  attempts: 2,
+  removeOnComplete: { count: 500 },
+  removeOnFail: { count: 100 },
 };

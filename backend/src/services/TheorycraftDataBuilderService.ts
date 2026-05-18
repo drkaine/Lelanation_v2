@@ -5,6 +5,7 @@ import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
 import { FileManager } from '../utils/fileManager.js'
 import { Result } from '../utils/Result.js'
 import { AppError } from '../utils/errors.js'
+import { DataDragonService } from './DataDragonService.js'
 
 type ChampionSpell = Record<string, unknown>
 type ChampionRecord = Record<string, unknown>
@@ -40,12 +41,12 @@ const TOOLTIP_TAG_MAP: Record<string, { className: string; icon?: string }> = {
   spellpassive: { className: 'passive' },
   onhit: { className: 'on-hit' },
   true: { className: 'dmg-true', icon: 'true' },
-  scalead: { className: 'scale-ad' },
-  scaleap: { className: 'scale-ap' },
-  scalearmor: { className: 'tooltip-tag-scalearmor' },
-  scalemr: { className: 'tooltip-tag-scalemr' },
-  scalemana: { className: 'scale-mana' },
-  scalehealth: { className: 'scale-hp' },
+  scalead: { className: 'tooltip-tag scale-ad' },
+  scaleap: { className: 'tooltip-tag scale-ap' },
+  scalearmor: { className: 'tooltip-tag scale-armor' },
+  scalemr: { className: 'tooltip-tag scale-mr' },
+  scalemana: { className: 'tooltip-tag scale-mana' },
+  scalehealth: { className: 'tooltip-tag scale-hp' },
 }
 
 const RATIO_STAT_MAP: Record<string, string> = {
@@ -81,6 +82,14 @@ const BIN_STAT_MAP: Record<number, string> = {
   10: 'maxMana',
   11: 'totalHP',
   12: 'bonusHP',
+}
+
+/** Bin mStat index → stat key; omitted mStat defaults to AP (e.g. Lee Sin W shield). */
+function resolveBinStat(rawStat: unknown, fallback: string = 'AP'): string {
+  if (rawStat == null || rawStat === '') return fallback
+  const statId = Number(rawStat)
+  if (!Number.isFinite(statId) || statId < 0) return fallback
+  return BIN_STAT_MAP[statId] ?? fallback
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -132,9 +141,25 @@ function formatValueSeries(values: number[], separator = '/'): string {
   return formatted.join(separator)
 }
 
+function ratioStatDisplayLabel(stat: string): string {
+  const labels: Record<string, string> = {
+    totalAD: 'AD',
+    bonusAD: 'AD',
+    AP: 'AP',
+    bonusArmor: 'bonus Armor',
+    armor: 'Armor',
+    bonusMagicResist: 'bonus Magic Resist',
+    magicResist: 'Magic Resist',
+    totalHP: 'max Health',
+    bonusHP: 'bonusHP',
+    maxMana: 'max Mana',
+  }
+  return labels[stat] ?? stat
+}
+
 function ratioScaleClass(stat: string): string | null {
-  if (stat === 'bonusArmor' || stat === 'armor') return 'tooltip-tag-scalearmor'
-  if (stat === 'bonusMagicResist' || stat === 'magicResist') return 'tooltip-tag-scalemr'
+  if (stat === 'bonusArmor' || stat === 'armor') return 'scale-armor'
+  if (stat === 'bonusMagicResist' || stat === 'magicResist') return 'scale-mr'
   if (stat === 'totalAD' || stat === 'bonusAD') return 'scale-ad'
   if (stat === 'AP') return 'scale-ap'
   if (stat === 'maxMana') return 'scale-mana'
@@ -151,12 +176,7 @@ function formatRatioSuffix(
 ): string {
   const coeffs = ratio.coefficient.filter((c) => Number.isFinite(c) && c !== 0)
   if (coeffs.length === 0) return ''
-  const statLabel =
-    ratio.stat === 'totalAD' || ratio.stat === 'bonusAD'
-      ? 'AD'
-      : ratio.stat === 'AP'
-        ? 'AP'
-        : ratio.stat
+  const statLabel = ratioStatDisplayLabel(ratio.stat)
   let text = ''
   if (coeffs.every((c) => c === coeffs[0])) {
     const pct = formatResolvedNumber(coeffs[0] * 100)
@@ -605,22 +625,21 @@ function extractRatioFromCalculationPart(
     const subpart = asObject(part.mSubpart)
     const values = evaluateCalculationPartValues(subpart, dataValues, options ?? {})
     if (values.length === 0) return null
-    const stat = BIN_STAT_MAP[Number(part.mStat ?? -1)] ?? 'totalAD'
+    const stat = resolveBinStat(part.mStat, 'totalAD')
     return { stat, coefficient: values, type: ratioTypeForStat(stat) }
   }
   if (partType === 'StatByCoefficientCalculationPart') {
     const coeffRaw = Number(part.mCoefficient ?? 0)
     if (!Number.isFinite(coeffRaw) || coeffRaw === 0) return null
     const coeff = Number(formatResolvedNumber(coeffRaw))
-    const stat = BIN_STAT_MAP[Number(part.mStat ?? -1)] ?? 'totalAD'
+    const stat = resolveBinStat(part.mStat, 'AP')
     return { stat, coefficient: [coeff], type: ratioTypeForStat(stat) }
   }
   if (partType === 'StatByNamedDataValueCalculationPart') {
     const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
     if (!values || values.length === 0) return null
     const dataValueName = String(part.mDataValue ?? '').toLowerCase()
-    const rawStat = Number(part.mStat ?? -1)
-    let stat = BIN_STAT_MAP[rawStat] ?? 'AP'
+    let stat = resolveBinStat(part.mStat, 'AP')
     if (dataValueName.includes('armor')) stat = 'bonusArmor'
     else if (dataValueName.includes('mr') || dataValueName.includes('magicresist')) stat = 'bonusMagicResist'
     else if (dataValueName.includes('health') || dataValueName.includes('hp')) stat = 'bonusHP'
@@ -1240,10 +1259,32 @@ function parseTooltip(
   }
 
   return {
-    descriptionParsed: parsed,
+    descriptionParsed: normalizeKaynFormMarkupHtml(parsed),
     unresolvedVariables: Array.from(unresolved),
     descriptionText: normalizeTooltipPlainText(parsed),
   }
+}
+
+/** Kayn Shadow Assassin (blue) / Darkin Slayer (red) — locale-agnostic label matching. */
+function normalizeKaynFormMarkupHtml(html: string): string {
+  if (!html) return ''
+  let out = String(html)
+  out = out.replace(/<font\s+color=["']#fe5c50["']>/gi, '<span class="kayn-form-darkin">')
+  out = out.replace(/<font\s+color=["']#8484fb["']>/gi, '<span class="kayn-form-shadow">')
+  out = out.replace(/<\/font>/gi, '</span>')
+  out = out.replace(
+    /<span class="keyword-major">([^<]*)<\/span>/gi,
+    (match, inner: string) => {
+      if (/Shadow Assassin|Assassin de l['']ombre/i.test(inner)) {
+        return `<span class="kayn-form-shadow">${inner}</span>`
+      }
+      if (/Darkin Slayer|Tueur [Dd]arkin/i.test(inner)) {
+        return `<span class="kayn-form-darkin">${inner}</span>`
+      }
+      return match
+    }
+  )
+  return out
 }
 
 type SupportedLang = (typeof SUPPORTED_LANGS)[number]
@@ -1669,7 +1710,53 @@ export class TheorycraftDataBuilderService {
     const backendPath = join(this.backendGameDir, version, lang, filename)
     const backendRes = await FileManager.readJson<T>(backendPath)
     if (backendRes.isOk()) return backendRes
+
+    const frontendPath = join(this.frontendGameDir, version, lang, filename)
+    const frontendRes = await FileManager.readJson<T>(frontendPath)
+    if (frontendRes.isOk()) return frontendRes
+
     return Result.err(backendRes.unwrapErr())
+  }
+
+  /**
+   * championFull.json is the theorycraft build input (DDragon raw spells).
+   * Download from Data Dragon when missing locally (e.g. after partial sync).
+   */
+  private async readChampionFull(
+    version: string,
+    lang: string
+  ): Promise<Result<{ data: Record<string, ChampionRecord> }, AppError>> {
+    const local = await this.readGameJson<{ data: Record<string, ChampionRecord> }>(
+      version,
+      lang,
+      'championFull.json'
+    )
+    if (local.isOk()) return local
+
+    console.warn(
+      `[theorycraft] championFull.json not found for ${version}/${lang}, fetching from Data Dragon...`
+    )
+    const ddragon = new DataDragonService()
+    const fetched = await ddragon.fetchChampionsFull(version, lang)
+    if (fetched.isErr()) {
+      return Result.err(
+        new AppError(
+          `championFull.json missing and Data Dragon fetch failed: ${fetched.unwrapErr().message}. Run "npm run sync:data" first.`,
+          'DATA_ERROR',
+          fetched.unwrapErr()
+        )
+      )
+    }
+
+    const payload = { data: fetched.unwrap() }
+    const backendPath = join(this.backendGameDir, version, lang, 'championFull.json')
+    const dirResult = await FileManager.ensureDir(join(backendPath, '..'))
+    if (dirResult.isErr()) return Result.err(dirResult.unwrapErr())
+    const writeResult = await FileManager.writeJson(backendPath, payload)
+    if (writeResult.isErr()) return Result.err(writeResult.unwrapErr())
+
+    console.log(`[theorycraft] cached championFull.json → ${backendPath}`)
+    return Result.ok(payload)
   }
 
   /** DDragon championFull is backend-only build input; parsed exports live under champions/. */
@@ -1916,11 +2003,7 @@ export class TheorycraftDataBuilderService {
       let championsCount = 0
 
       for (const lang of SUPPORTED_LANGS) {
-        const championFullRes = await this.readGameJson<{ data: Record<string, ChampionRecord> }>(
-          version,
-          lang,
-          'championFull.json'
-        )
+        const championFullRes = await this.readChampionFull(version, lang)
         if (championFullRes.isErr()) return Result.err(championFullRes.unwrapErr())
 
         const champions = Object.values(championFullRes.unwrap().data ?? {})

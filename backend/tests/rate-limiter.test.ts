@@ -191,6 +191,28 @@ describe("hydration scheduled slot rate limiter", () => {
   });
 });
 
+describe("slow discovery drip (interval > 8s lookahead)", () => {
+  test(
+    "alimente des créneaux même quand la file Redis est vide",
+    async () => {
+      const slowDiscovery = createLuaRateLimiterForTests({
+        redisClient: redis,
+        slotKey: "rl:test:slots:slow-discovery",
+        targetRatePerSec: discoveryTargetRatePerSec(95),
+      });
+      await redis.del("rl:test:slots:slow-discovery");
+      await slowDiscovery.loadScript();
+      slowDiscovery.startDrip();
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+      const count = await redis.zcard("rl:test:slots:slow-discovery");
+      slowDiscovery.stopDrip();
+      await redis.del("rl:test:slots:slow-discovery");
+      expect(count).toBeGreaterThan(0);
+    },
+    15_000,
+  );
+});
+
 describe("rank scheduled slot rate limiter", () => {
   test("retourne budget_exhausted sans creneau", async () => {
     expect(await rankLimiter.tryAcquireRankOnce()).toBe("budget_exhausted");

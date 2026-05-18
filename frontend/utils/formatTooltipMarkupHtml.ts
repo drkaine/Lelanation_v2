@@ -33,8 +33,8 @@ const RIOT_TAG_TO_CLASS: Record<string, string> = {
   status: 'status-cc',
   scalead: 'scale-ad',
   scaleap: 'scale-ap',
-  scalearmor: 'tooltip-tag-scalearmor',
-  scalemr: 'tooltip-tag-scalemr',
+  scalearmor: 'scale-armor',
+  scalemr: 'scale-mr',
   scalemana: 'scale-mana',
   scalehealth: 'scale-hp',
   scalelevel: 'scale-level',
@@ -54,7 +54,17 @@ function convertRiotSemanticTags(html: string): string {
     if (STRIP_WRAPPER_TAGS.includes(lower)) return match
     const className = RIOT_TAG_TO_CLASS[lower]
     if (!className) return match
-    return slash ? '</span>' : `<span class="${className}">`
+    const scaleClasses = new Set([
+      'scale-ad',
+      'scale-ap',
+      'scale-armor',
+      'scale-mr',
+      'scale-mana',
+      'scale-hp',
+      'scale-level',
+    ])
+    const classes = scaleClasses.has(className) ? `tooltip-tag ${className}` : className
+    return slash ? '</span>' : `<span class="${classes}">`
   })
 }
 

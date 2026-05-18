@@ -1,4 +1,6 @@
 import { formatTooltipMarkupHtml } from './formatTooltipMarkupHtml'
+import { normalizeKaynFormMarkup } from './kaynFormTooltipMarkup'
+import { resolveSummonerSpellTooltipText } from './resolveSummonerSpellTooltip'
 
 export type SpellHeaderStat = {
   key: string
@@ -8,6 +10,7 @@ export type SpellHeaderStat = {
 }
 
 type SpellLike = {
+  key?: string
   description?: string
   descriptionHtml?: string
   descriptionParsed?: string
@@ -20,6 +23,8 @@ type SpellLike = {
   cooldownBurn?: string
   rangeBurn?: string
   costType?: string
+  effect?: Array<number[] | null>
+  datavalues?: Record<string, unknown>
 }
 
 export type FormatSpellTooltipOptions = {
@@ -138,24 +143,9 @@ function buildSummonerSpellHeaderStats(spell: SpellLike): SpellHeaderStat[] {
   return stats
 }
 
-/** DDragon description is plain text; tooltip often has unresolved {{ vars }}. */
+/** Resolve summoner tooltip (prefers rich tooltip over generic description since patch ~16). */
 function resolveSummonerSpellBody(spell: SpellLike): string {
-  const description = String(spell.description ?? '').trim()
-  const tooltip = String(spell.tooltip ?? '').trim()
-
-  if (description && !/\{\{[^}]+\}\}/.test(description)) {
-    return description
-  }
-  if (tooltip && !/\{\{[^}]+\}\}/.test(tooltip)) {
-    return tooltip
-  }
-  if (description) return description
-
-  return tooltip
-    .replace(/\{\{[^}]+\}\}/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/\s+([.,;:!?])/g, '$1')
-    .trim()
+  return resolveSummonerSpellTooltipText(spell)
 }
 
 function resolveSpellHeaderStats(
@@ -208,7 +198,7 @@ export function resolveSpellTooltipBodyHtml(
 
   const preParsed = String(spell.descriptionHtml ?? spell.descriptionParsed ?? '').trim()
   if (preParsed && PRE_PARSED_TOOLTIP_MARKUP_RE.test(preParsed)) {
-    return preParsed
+    return normalizeKaynFormMarkup(preParsed)
   }
 
   const fallback = String(
@@ -225,8 +215,10 @@ export function resolveSpellTooltipBodyHtml(
 function formatPreParsedTooltipSection(section: string): string {
   const trimmed = String(section ?? '').trim()
   if (!trimmed) return ''
-  if (PRE_PARSED_TOOLTIP_MARKUP_RE.test(trimmed)) return trimmed
-  return formatTooltipMarkupHtml(trimmed).replace(/\n/g, '<br>')
+  if (PRE_PARSED_TOOLTIP_MARKUP_RE.test(trimmed)) {
+    return normalizeKaynFormMarkup(trimmed)
+  }
+  return normalizeKaynFormMarkup(formatTooltipMarkupHtml(trimmed).replace(/\n/g, '<br>'))
 }
 
 export function formatSummonerSpellTooltipHtml(

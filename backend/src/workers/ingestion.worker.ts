@@ -6,6 +6,7 @@ import type { IngestionJobData, ParsedParticipantDto } from "../dto/match.dto.js
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
+import { rankQueue } from "../queues/index.js";
 import { redis } from "../redis/client.js";
 
 class AlreadyProcessedMatchError extends Error {
@@ -235,6 +236,8 @@ async function upsertPlayerRankHistoryFromParticipants(
   }
 
   for (const participant of latestByDay.values()) {
+    if (participant.needsRankFetch) continue;
+
     const puuid = String(participant.puuid ?? "").trim();
     const region = String(participant.region ?? "").trim().toLowerCase();
     const gameDate = new Date(participant.gameDate);
@@ -1045,6 +1048,36 @@ async function runIngestionTransaction(payload: IngestionJobData): Promise<numbe
   return insertedPlayers;
 }
 
+async function enqueueRankFetchJobs(participants: ParsedParticipantDto[]): Promise<void> {
+  const seen = new Set<string>();
+  const rankJobs: Array<{ name: string; data: { puuid: string; region: string; matchDate: string } }> = [];
+
+  for (const participant of participants) {
+    if (!participant.needsRankFetch) continue;
+
+    const puuid = String(participant.puuid ?? "").trim();
+    const region = String(participant.region ?? "").trim().toLowerCase();
+    if (!puuid || !region) continue;
+
+    const dedupeKey = `${puuid}|${region}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+
+    rankJobs.push({
+      name: "fetch-rank",
+      data: {
+        puuid,
+        region,
+        matchDate: participant.gameDate,
+      },
+    });
+  }
+
+  if (rankJobs.length > 0) {
+    await rankQueue.addBulk(rankJobs);
+  }
+}
+
 export const ingestionWorker = new Worker<IngestionJobData>(
   INGESTION_QUEUE,
   async (job) => {
@@ -1052,6 +1085,7 @@ export const ingestionWorker = new Worker<IngestionJobData>(
     pollerV2Observability.recordIngestionStart();
     try {
       const insertedPlayers = await runIngestionTransaction(job.data);
+      await enqueueRankFetchJobs(job.data.participants);
       pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
       if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
     } catch (error) {

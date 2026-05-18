@@ -6,6 +6,7 @@ import { pollerV2Observability } from "./observability/poller-v2-observability.j
 import { scheduleDiscoveryRepeatJob, discoveryWorker } from "./workers/discovery.worker.js";
 import { hydrationWorker } from "./workers/hydration.worker.js";
 import { ingestionWorker } from "./workers/ingestion.worker.js";
+import { rankWorker } from "./workers/rank.worker.js";
 import { getQueueMetrics } from "./queues/index.js";
 import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
@@ -44,6 +45,7 @@ async function logMetricsTick(): Promise<void> {
     discovery: metrics.discovery,
     hydration: metrics.hydration,
     ingestion: metrics.ingestion,
+    rank: metrics.rank,
     dataLagSeconds: lagSeconds,
     tickDurationMs,
   });
@@ -53,6 +55,7 @@ async function logMetricsTick(): Promise<void> {
     `[poller-main] queues discovery(w:${metrics.discovery.waiting},a:${metrics.discovery.active},f:${metrics.discovery.failed}) ` +
       `hydration(w:${metrics.hydration.waiting},a:${metrics.hydration.active},f:${metrics.hydration.failed}) ` +
       `ingestion(w:${metrics.ingestion.waiting},a:${metrics.ingestion.active},f:${metrics.ingestion.failed}) ` +
+      `rank(w:${metrics.rank.waiting},a:${metrics.rank.active},f:${metrics.rank.failed}) ` +
       `data_lag_seconds=${lagSeconds ?? "n/a"} tick_ms=${tickDurationMs}`,
   );
 }
@@ -131,7 +134,7 @@ async function bootstrap(): Promise<void> {
   );
 
   // Workers are started on import; we only confirm readiness here.
-  console.log("[poller-main] workers started: discovery, hydration, ingestion");
+  console.log("[poller-main] workers started: discovery, hydration, ingestion, rank");
 
   await startMonitoring();
 }
@@ -160,12 +163,14 @@ async function gracefulShutdown(signal: string): Promise<void> {
       discoveryWorker.pause(true),
       hydrationWorker.pause(true),
       ingestionWorker.pause(true),
+      rankWorker.pause(true),
     ]);
 
     await Promise.all([
       discoveryWorker.close(),
       hydrationWorker.close(),
       ingestionWorker.close(),
+      rankWorker.close(),
     ]);
 
     await sql.end();

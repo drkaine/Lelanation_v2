@@ -889,6 +889,8 @@
             ref="tooltipRef"
             class="tooltip-box tooltip-box-fixed z-[9999] rounded-lg border border-accent bg-background shadow-lg"
             :style="tooltipFixedStyle"
+            @mouseenter="onChampionTooltipMouseEnter"
+            @mouseleave="onChampionTooltipMouseLeave"
           >
             <!-- Tooltip content (same as before) -->
             <div class="tooltip-top">
@@ -1832,7 +1834,27 @@ const onChampionMouseMove = (event: MouseEvent) => {
   applyChampionTooltipPosition()
 }
 
+let championTooltipHideTimer: ReturnType<typeof setTimeout> | null = null
+
 const onChampionMouseLeave = () => {
+  championTooltipHideTimer = setTimeout(() => {
+    showTooltip.value = false
+  }, 120)
+}
+
+const onChampionTooltipMouseEnter = () => {
+  if (championTooltipHideTimer) {
+    clearTimeout(championTooltipHideTimer)
+    championTooltipHideTimer = null
+  }
+  showTooltip.value = true
+}
+
+const onChampionTooltipMouseLeave = () => {
+  if (championTooltipHideTimer) {
+    clearTimeout(championTooltipHideTimer)
+    championTooltipHideTimer = null
+  }
   showTooltip.value = false
 }
 
@@ -2711,6 +2733,7 @@ watch(showTooltip, async newValue => {
 })
 
 onUnmounted(() => {
+  if (championTooltipHideTimer) clearTimeout(championTooltipHideTimer)
   window.removeEventListener('resize', applyChampionTooltipPosition)
   document.removeEventListener('mousedown', onDocumentPointerDown)
   championTitleResizeObserver?.disconnect()
@@ -4763,16 +4786,18 @@ defineExpose({
 
 /* Tooltip styles */
 .tooltip-box-fixed {
-  pointer-events: none;
+  pointer-events: auto;
+  overscroll-behavior: contain;
 }
 
 .tooltip-box {
   width: max-content;
-  max-width: min(960px, calc(100vw - 2rem));
-  min-width: min(320px, calc(100vw - 2rem));
-  max-height: min(85vh, 720px);
-  overflow-x: visible;
+  max-width: min(1280px, calc(100vw - 1rem));
+  min-width: min(520px, calc(100vw - 1rem));
+  max-height: 92vh;
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 1.2em;
   display: flex;
   flex-direction: column;
@@ -4782,16 +4807,16 @@ defineExpose({
 
 @media (max-width: 768px) {
   .tooltip-box {
-    max-width: calc(100vw - 2rem);
-    min-width: min(280px, calc(100vw - 2rem));
+    max-width: calc(100vw - 1rem);
+    min-width: min(320px, calc(100vw - 1rem));
     padding: 1em;
   }
 }
 
 @media (max-width: 480px) {
   .tooltip-box {
-    max-width: calc(100vw - 1rem);
-    min-width: min(250px, calc(100vw - 1rem));
+    max-width: calc(100vw - 0.5rem);
+    min-width: min(280px, calc(100vw - 0.5rem));
     padding: 0.8em;
   }
 }
@@ -5083,16 +5108,62 @@ defineExpose({
 }
 
 .tooltip-box :deep(.scale-ad),
+.tooltip-box :deep(.tooltip-tag.scale-ad) {
+  color: rgb(253 224 71) !important;
+  font-weight: 700;
+}
+
 .tooltip-box :deep(.scale-ap),
-.tooltip-box :deep(.tooltip-tag.scale-ad),
 .tooltip-box :deep(.tooltip-tag.scale-ap) {
-  color: rgb(250 204 21) !important;
+  color: rgb(196 181 253) !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.scale-hp),
+.tooltip-box :deep(.tooltip-tag.scale-hp) {
+  color: rgb(134 239 172) !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.scale-mana),
+.tooltip-box :deep(.tooltip-tag.scale-mana) {
+  color: rgb(96 165 250) !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.scale-armor),
+.tooltip-box :deep(.tooltip-tag.scale-armor),
+.tooltip-box :deep(.tooltip-tag-scalearmor),
+.tooltip-box :deep(.tooltip-tag.tooltip-tag-scalearmor) {
+  color: rgb(251 191 36) !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.scale-mr),
+.tooltip-box :deep(.tooltip-tag.scale-mr),
+.tooltip-box :deep(.tooltip-tag-scalemr),
+.tooltip-box :deep(.tooltip-tag.tooltip-tag-scalemr) {
+  color: rgb(129 140 248) !important;
   font-weight: 700;
 }
 
 .tooltip-box :deep(.shield),
 .tooltip-box :deep(.healing) {
   color: rgb(134 239 172) !important;
+}
+
+.tooltip-box :deep(.kayn-form-shadow),
+.tooltip-box :deep(font[color='#8484fb']),
+.tooltip-box :deep(font[color='#8484FB']) {
+  color: #8484fb !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.kayn-form-darkin),
+.tooltip-box :deep(font[color='#fe5c50']),
+.tooltip-box :deep(font[color='#FE5C50']) {
+  color: #fe5c50 !important;
+  font-weight: 700;
 }
 
 /* Icon + damage colors: global rules in assets/css/main.css (.tooltip-box …) */

@@ -14,12 +14,6 @@ type Config = {
   DISCOVERY_MIN_QUEUE_DEPTH: number;
   MAX_HYDRATION_QUEUE_DEPTH: number;
   DISCOVERY_INTERVAL_MS: number;
-  /** Part du budget 120 s (× TARGET_PCT) pour les matchlists discovery. */
-  BUDGET_DISCOVERY_PCT: number;
-  /** Part du budget pour match + timeline (coût 2 par job hydration). */
-  BUDGET_HYDRATION_PCT: number;
-  /** Part du budget pour League v4 entries/by-puuid. */
-  BUDGET_RANK_PCT: number;
 };
 
 function parsePositiveInt(raw: string | undefined): number | null {
@@ -37,13 +31,6 @@ function getRequiredEnv(name: keyof NodeJS.ProcessEnv): string {
   return value;
 }
 
-function parseBudgetPct(raw: string | undefined, fallback: number): number {
-  if (!raw) return fallback;
-  const value = Number.parseFloat(raw);
-  if (!Number.isFinite(value) || value <= 0 || value > 1) return fallback;
-  return value;
-}
-
 function parseEnvironment(rawEnv: string): Environment {
   if (rawEnv === "dev" || rawEnv === "prod") {
     return rawEnv;
@@ -52,16 +39,6 @@ function parseEnvironment(rawEnv: string): Environment {
 }
 
 const ENV = parseEnvironment(getRequiredEnv("ENV"));
-
-const BUDGET_DISCOVERY_PCT = parseBudgetPct(process.env.BUDGET_DISCOVERY_PCT, 0.15);
-const BUDGET_HYDRATION_PCT = parseBudgetPct(process.env.BUDGET_HYDRATION_PCT, 0.75);
-const BUDGET_RANK_PCT = parseBudgetPct(process.env.BUDGET_RANK_PCT, 0.1);
-const budgetSum = BUDGET_DISCOVERY_PCT + BUDGET_HYDRATION_PCT + BUDGET_RANK_PCT;
-if (Math.abs(budgetSum - 1) > 0.001) {
-  throw new Error(
-    `BUDGET_DISCOVERY_PCT + BUDGET_HYDRATION_PCT + BUDGET_RANK_PCT must sum to 1 (got ${budgetSum.toFixed(4)})`,
-  );
-}
 
 const configByEnv: Record<
   Environment,
@@ -104,7 +81,4 @@ export const config: Config = {
     parsePositiveInt(process.env.MAX_HYDRATION_QUEUE_DEPTH) ?? 500,
   DISCOVERY_INTERVAL_MS:
     parsePositiveInt(process.env.DISCOVERY_INTERVAL_MS) ?? 45_000,
-  BUDGET_DISCOVERY_PCT,
-  BUDGET_HYDRATION_PCT,
-  BUDGET_RANK_PCT,
 };

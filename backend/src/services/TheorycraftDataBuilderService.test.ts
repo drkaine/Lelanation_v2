@@ -173,3 +173,24 @@ test('Thresh E passive min/max damage resolves from bin BuffCounter calculations
   assert.ok(!tooltip.descriptionText.includes(' - '))
   assert.match(tooltip.descriptionText, /\b0\b.*AD/)
 })
+
+test('Lee Sin W shield ratio defaults to AP when bin omits mStat', () => {
+  const binSpell = {
+    DataValues: [{ name: 'ShieldValue', values: [-5, 40, 80, 120, 160] }],
+    mSpellCalculations: {
+      ShieldAmount: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          { __type: 'NamedDataValueCalculationPart', mDataValue: 'ShieldValue' },
+          { __type: 'StatByCoefficientCalculationPart', mCoefficient: 0.8 },
+        ],
+      },
+    },
+  }
+  const dataValues = extractBinDataValues(binSpell, 5)
+  const calculations = extractBinCalculations(binSpell, dataValues, { maxRank: 5, slotIndex: 1 })
+  const shield = calculations.find((c) => c.key === 'shieldamount')
+  assert.ok(shield)
+  assert.equal(shield.ratios[0]?.stat, 'AP')
+  assert.ok(shield.expression.includes('(+ 80% AP)'))
+})

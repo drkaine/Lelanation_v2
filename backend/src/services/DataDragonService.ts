@@ -5,6 +5,7 @@ import { FileManager } from '../utils/fileManager.js'
 import { ImageService } from './ImageService.js'
 import { CommunityDragonOrnnService } from './CommunityDragonOrnnService.js'
 import { fetchJson, HttpRequestError } from '../utils/httpFetch.js'
+import { enrichSummonerSpellRecord } from '../utils/summonerSpellTooltip.js'
 
 interface ChampionData {
   [key: string]: {
@@ -152,10 +153,14 @@ export class DataDragonService {
   }
 
   /**
-   * Keep DDragon description (plain resolved text) alongside tooltip (detailed template).
+   * Enrich summoner spells with resolved tooltip text (DDragon description is often generic since ~16.x).
    */
   private cleanSummonerSpellsData(spells: SummonerSpellData): SummonerSpellData {
-    return { ...spells }
+    const cleaned: SummonerSpellData = {}
+    for (const [spellId, spell] of Object.entries(spells)) {
+      cleaned[spellId] = enrichSummonerSpellRecord(spell as SummonerSpellData[string])
+    }
+    return cleaned
   }
 
   /**

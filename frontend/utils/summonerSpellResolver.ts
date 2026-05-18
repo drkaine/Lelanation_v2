@@ -84,12 +84,18 @@ export function resolveSummonerSpellFromRef(
   } as SummonerSpell
 }
 
-export function normalizeSummonerSpell(spell: SummonerSpell): SummonerSpell {
+export function normalizeSummonerSpell(
+  spell: SummonerSpell & { descriptionHtml?: string }
+): SummonerSpell & {
+  descriptionHtml?: string
+} {
   const tooltip = String(spell.tooltip ?? '').trim()
   const description = String(spell.description ?? '').trim()
+  const descriptionHtml = String(spell.descriptionHtml ?? '').trim()
   return {
     ...spell,
     tooltip: tooltip || description,
     description: description || tooltip,
+    ...(descriptionHtml ? { descriptionHtml } : {}),
   }
 }

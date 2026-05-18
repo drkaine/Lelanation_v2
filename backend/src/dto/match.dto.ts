@@ -9,6 +9,12 @@ export interface HydrationJobData {
   puuid: string;
 }
 
+export interface RankJobData {
+  puuid: string;
+  region: string;
+  matchDate: string;
+}
+
 export interface ParsedItemDto {
   itemId: number;
   phase: "starter" | "core" | "final";
@@ -38,6 +44,8 @@ export interface ParsedParticipantDto {
   gameEndTimestamp: number;
   region: string;
   rankTier: string;
+  /** true → rank worker doit appeler League v4 (pas de snapshot du jour en DB). */
+  needsRankFetch: boolean;
   role: string;
   championId: number;
   teamId: 100 | 200;

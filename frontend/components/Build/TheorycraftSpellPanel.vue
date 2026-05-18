@@ -70,6 +70,7 @@
 
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
+import { normalizeKaynFormMarkup } from '~/utils/kaynFormTooltipMarkup'
 
 interface SpellHeaderStat {
   key: string
@@ -128,17 +129,21 @@ const spells = computed<TheorycraftSpellSummary[]>(() => {
         slot: String(row.slot ?? ''),
         name: String(row.name ?? ''),
         summaryHtml: row.summaryHtml,
-        descriptionHtml: String(
-          row.descriptionHtml ??
-            row.descriptionParsed ??
-            row.descriptionText ??
-            row.parsedText ??
-            ''
+        descriptionHtml: normalizeKaynFormMarkup(
+          String(
+            row.descriptionHtml ??
+              row.descriptionParsed ??
+              row.descriptionText ??
+              row.parsedText ??
+              ''
+          )
         ),
         descriptionParsed: row.descriptionParsed ?? row.descriptionHtml,
         descriptionText: row.descriptionText ?? row.parsedText,
         parsedText: row.parsedText ?? row.descriptionText,
-        detailedTexts: Array.isArray(row.detailedTexts) ? row.detailedTexts : [],
+        detailedTexts: Array.isArray(row.detailedTexts)
+          ? row.detailedTexts.map(section => normalizeKaynFormMarkup(String(section ?? '')))
+          : [],
         headerStats: Array.isArray(row.headerStats) ? row.headerStats : [],
         tickStats: Array.isArray(row.tickStats) ? row.tickStats : [],
       }
