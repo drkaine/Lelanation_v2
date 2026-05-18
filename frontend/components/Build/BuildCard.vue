@@ -2079,8 +2079,12 @@ const normalizePercentStat = (value: number | undefined): number => {
 const selectedChampion = computed(() => {
   const champion = displayBuild.value?.champion || null
   if (!champion) return null
-  const fullChampion = championsStore.champions.find(c => c.id === champion.id)
-  return fullChampion ?? champion
+  const fullChampion = (championsStore.champions ?? []).find(c => c.id === champion.id)
+  const merged = fullChampion ?? champion
+  if (!Array.isArray(merged.spells)) {
+    return { ...merged, spells: [] }
+  }
+  return merged
 })
 
 watch(
@@ -2471,11 +2475,24 @@ const createEmptySkillOrder = (): SkillOrder => ({
   skillUpOrder: [null as any, null as any, null as any],
 })
 
+function getChampionSpellBySlot(
+  champion: { spells?: Array<{ slot?: string; image?: { full?: string }; name?: string }> } | null,
+  key: AbilityKey
+) {
+  const spells = champion?.spells
+  if (!Array.isArray(spells) || spells.length === 0) return undefined
+  const slotOrder: AbilityKey[] = ['Q', 'W', 'E', 'R']
+  return (
+    spells.find(s => String(s?.slot ?? '').toUpperCase() === key) ?? spells[slotOrder.indexOf(key)]
+  )
+}
+
 const availableSkillSpells = computed<SkillSlotSpell[]>(() => {
-  if (!selectedChampion.value) return []
+  const champion = selectedChampion.value
+  if (!champion) return []
   return (['Q', 'W', 'E', 'R'] as AbilityKey[])
-    .map((key, index) => {
-      const spell = selectedChampion.value?.spells[index]
+    .map(key => {
+      const spell = getChampionSpellBySlot(champion, key)
       if (!spell?.image?.full) return null
       return {
         key,
@@ -2500,7 +2517,8 @@ const ensureSkillOrderInitialized = () => {
 }
 
 const firstThreeUpSlots = computed<SkillSlotState[]>(() => {
-  const firstThreeUps = displayBuild.value?.skillOrder?.firstThreeUps ?? []
+  const raw = displayBuild.value?.skillOrder?.firstThreeUps
+  const firstThreeUps = Array.isArray(raw) ? raw : []
   return Array.from({ length: 3 }, (_, index) => {
     const key = (firstThreeUps[index] as AbilityKey | null | undefined) ?? null
     return {
@@ -2511,7 +2529,8 @@ const firstThreeUpSlots = computed<SkillSlotState[]>(() => {
 })
 
 const skillOrderSlots = computed<SkillSlotState[]>(() => {
-  const skillUpOrder = displayBuild.value?.skillOrder?.skillUpOrder ?? []
+  const raw = displayBuild.value?.skillOrder?.skillUpOrder
+  const skillUpOrder = Array.isArray(raw) ? raw : []
   return Array.from({ length: 3 }, (_, index) => {
     const key = (skillUpOrder[index] as AbilityKey | null | undefined) ?? null
     return {
@@ -2530,8 +2549,11 @@ const toggleSkillDropdown = (slotId: string) => {
 const toggleFirstThreeUp = (index: number, ability: AbilityKey) => {
   ensureSkillOrderInitialized()
   const skillOrder = buildStore.displayedBuild?.skillOrder ?? createEmptySkillOrder()
-  const current = skillOrder.firstThreeUps[index] ?? null
-  const nextFirstThreeUps = [...skillOrder.firstThreeUps] as Array<AbilityKey | null>
+  const firstThreeUps = Array.isArray(skillOrder.firstThreeUps)
+    ? skillOrder.firstThreeUps
+    : createEmptySkillOrder().firstThreeUps
+  const current = firstThreeUps[index] ?? null
+  const nextFirstThreeUps = [...firstThreeUps] as Array<AbilityKey | null>
   nextFirstThreeUps[index] = current === ability ? null : ability
   buildStore.setSkillOrder({
     ...skillOrder,
@@ -2543,8 +2565,11 @@ const toggleFirstThreeUp = (index: number, ability: AbilityKey) => {
 const toggleSkillUpOrder = (index: number, ability: AbilityKey) => {
   ensureSkillOrderInitialized()
   const skillOrder = buildStore.displayedBuild?.skillOrder ?? createEmptySkillOrder()
-  const current = skillOrder.skillUpOrder[index] ?? null
-  const nextSkillUpOrder = [...skillOrder.skillUpOrder] as Array<AbilityKey | null>
+  const skillUpOrder = Array.isArray(skillOrder.skillUpOrder)
+    ? skillOrder.skillUpOrder
+    : createEmptySkillOrder().skillUpOrder
+  const current = skillUpOrder[index] ?? null
+  const nextSkillUpOrder = [...skillUpOrder] as Array<AbilityKey | null>
   nextSkillUpOrder[index] = current === ability ? null : ability
   buildStore.setSkillOrder({
     ...skillOrder,
@@ -2618,9 +2643,11 @@ const filteredSecondaryRuneIds = computed(() => {
 
 // Find a rune by id across all loaded paths
 function findRuneInStore(runeId: number) {
-  for (const path of runesStore.runePaths) {
-    for (const slot of path.slots) {
-      for (const rune of slot.runes) {
+  for (const path of runesStore.runePaths ?? []) {
+    const slots = Array.isArray(path?.slots) ? path.slots : []
+    for (const slot of slots) {
+      const runes = Array.isArray(slot?.runes) ? slot.runes : []
+      for (const rune of runes) {
         if (rune.id === runeId) return rune
       }
     }
@@ -2713,7 +2740,7 @@ const passiveTooltipMeta = computed(() => {
 const passiveTooltipBody = computed(() => {
   const passive = selectedChampion.value?.passive
   if (!passive) return ''
-  return resolveSpellTooltipBodyHtml(passive)
+  return spellTooltipBody(passive)
 })
 
 const formattedSpells = computed(() => {

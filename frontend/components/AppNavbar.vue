@@ -75,6 +75,16 @@
             >
               {{ t('buildsPage.createBuild') }}
             </NuxtLink>
+            <NuxtLink
+              v-if="isAdminLoggedIn"
+              :to="theorycraftLink"
+              :title="t('nav.theorycraft')"
+              class="version builds-submenu-link"
+              :class="{ 'is-active': isTheorycraftActive }"
+              @click="handleBuildsNavigation"
+            >
+              {{ t('nav.theorycraft') }}
+            </NuxtLink>
           </div>
         </div>
         <NuxtLink
@@ -192,6 +202,16 @@
             >
               {{ t('buildsPage.createBuild') }}
             </NuxtLink>
+            <NuxtLink
+              v-if="isAdminLoggedIn"
+              :to="theorycraftLink"
+              :title="t('nav.theorycraft')"
+              class="builds-submenu-link"
+              :class="{ 'is-active': isTheorycraftActive }"
+              @click="closeBuildsMenu"
+            >
+              {{ t('nav.theorycraft') }}
+            </NuxtLink>
           </div>
         </div>
         <NuxtLink :to="localePath('/videos')" :title="t('nav.videos')" class="version">
@@ -278,6 +298,8 @@ const favoriteBuildsLink = computed(() => ({
   path: localePath('/builds'),
   query: { tab: 'favoris' },
 }))
+const theorycraftLink = computed(() => localePath('/builds/theorycraft'))
+const isTheorycraftActive = computed(() => route.path.includes('/builds/theorycraft'))
 const isBuildsSectionActive = computed(() => route.path.includes('/builds'))
 const currentBuildsTab = computed(() => {
   if (!route.path.includes('/builds') || route.path.includes('/builds/create')) return null

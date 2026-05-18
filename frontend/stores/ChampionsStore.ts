@@ -85,7 +85,7 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
         ? current.tags
         : [],
     image: detail?.image ?? current.image ?? { full: `${championId}.png` },
-    spells: spells.length > 0 ? spells : current.spells,
+    spells: spells.length > 0 ? spells : Array.isArray(current.spells) ? current.spells : [],
     passive,
   } as Champion
 }
@@ -180,6 +180,7 @@ export const useChampionsStore = defineStore('champions', {
             key: String(champion.key ?? ''),
             tags: Array.isArray(champion.tags) ? champion.tags : [],
             image: champion.image ?? { full: `${id}.png` },
+            spells: Array.isArray(champion.spells) ? champion.spells : [],
           } as Champion
         })
         this.status = 'success'

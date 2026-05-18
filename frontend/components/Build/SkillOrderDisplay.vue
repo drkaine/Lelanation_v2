@@ -142,14 +142,14 @@ const getSkillUpOrder = (index: number): 'Q' | 'W' | 'E' | 'R' | null => {
 const getSpellImage = (key: 'Q' | 'W' | 'E' | 'R') => {
   if (!props.build?.champion) return null
   const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
-  return props.build.champion.spells[index]?.image || null
+  return props.build.champion.spells?.[index]?.image || null
 }
 
 // Obtenir le nom d'un sort
 const getSpellName = (key: 'Q' | 'W' | 'E' | 'R') => {
   if (!props.build?.champion) return key
   const index = key === 'Q' ? 0 : key === 'W' ? 1 : key === 'E' ? 2 : 3
-  return props.build.champion.spells[index]?.name || key
+  return props.build.champion.spells?.[index]?.name || key
 }
 
 // Obtenir la couleur d'un sort

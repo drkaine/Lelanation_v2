@@ -26,6 +26,7 @@ const RIOT_TAG_TO_CLASS: Record<string, string> = {
   healing: 'healing',
   shield: 'shield',
   speed: 'speed',
+  attackspeed: 'tooltip-tag-attackspeed',
   gold: 'gold',
   keywordmajor: 'keyword-major',
   keywordstealth: 'keyword-stealth',
@@ -68,9 +69,22 @@ function convertRiotSemanticTags(html: string): string {
   })
 }
 
+function normalizeRiotInlineIconTokens(html: string): string {
+  let text = html
+  text = text.replace(/\s*\(%i:scalearmor%\{\{\s*f1\s*\}\}\)/gi, '')
+  text = text.replace(/\s*\(%i:scalearmor%\{\{\s*f2\s*\}\}\)/gi, '')
+  text = text.replace(/%i:([a-zA-Z][a-zA-Z0-9]*)%\s*(<\s*\1\b)/gi, '$1')
+  text = text.replace(/%i:([a-zA-Z][a-zA-Z0-9]*)%/gi, (_match, tag: string) => {
+    const className = RIOT_TAG_TO_CLASS[tag.toLowerCase()]
+    if (!className) return ''
+    return `<span class="tooltip-tag ${className}"></span>`
+  })
+  return text
+}
+
 export function formatTooltipMarkupHtml(raw: string | null | undefined): string {
   if (!raw) return ''
-  let html = String(raw)
+  let html = normalizeRiotInlineIconTokens(String(raw))
 
   // LoL UI wrapper tags often wrap useful text; keep text, drop wrapper.
   html = html.replace(

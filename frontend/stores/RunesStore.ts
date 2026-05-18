@@ -21,7 +21,7 @@ export const useRunesStore = defineStore('runes', {
   getters: {
     getRunePathById() {
       return (id: number): RunePath | undefined => {
-        return this.runePaths.find(path => path.id === id)
+        return (this.runePaths ?? []).find(path => path.id === id)
       }
     },
   },

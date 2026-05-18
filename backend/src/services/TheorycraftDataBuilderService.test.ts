@@ -174,6 +174,123 @@ test('Thresh E passive min/max damage resolves from bin BuffCounter calculations
   assert.match(tooltip.descriptionText, /\b0\b.*AD/)
 })
 
+test('Kindred Q resolves damage and attack speed from DDragon effects', () => {
+  const binSpell = {
+    mEffectAmount: [
+      { value: [25, 40, 65, 90, 115, 140, 175], __type: 'SpellEffectAmount' },
+      { __type: 'SpellEffectAmount' },
+      { value: [500, 500, 500, 500, 500, 500, 500], __type: 'SpellEffectAmount' },
+      { value: [4.5, 4, 3.5, 3, 2.5, 2, 2], __type: 'SpellEffectAmount' },
+      { value: [100, 100, 100, 100, 100, 100, 100], __type: 'SpellEffectAmount' },
+      { value: [12, 12, 12, 12, 12, 12, 12], __type: 'SpellEffectAmount' },
+      { value: [0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.35], __type: 'SpellEffectAmount' },
+      { value: [4, 4, 4, 4, 4, 4, 4], __type: 'SpellEffectAmount' },
+    ],
+    mSpellCalculations: {
+      TotalDamage: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          { __type: 'EffectValueCalculationPart', mEffectIndex: 1 },
+          { __type: 'StatByCoefficientCalculationPart', mStat: 2, mCoefficient: 0.75 },
+        ],
+      },
+      TotalQAttackSpeed: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          { __type: 'EffectValueCalculationPart', mEffectIndex: 7 },
+          {
+            __type: 'BuffCounterByCoefficientCalculationPart',
+            mCoefficient: 0.05,
+          },
+        ],
+      },
+    },
+  }
+  const ddSpell = {
+    maxrank: 5,
+    id: 'KindredQ',
+    tooltip:
+      'Kindred fait une cabriole et tire sur un maximum de 3 ennemis, infligeant <physicalDamage>{{ totaldamage }} pts de dégâts physiques</physicalDamage> et gagnant <attackSpeed>+{{ totalqattackspeed }} vitesse d attaque</attackSpeed> pendant {{ e8 }} sec.',
+    effect: [
+      null,
+      [40, 65, 90, 115, 140],
+      [0, 0, 0, 0, 0],
+      [500, 500, 500, 500, 500],
+      [4, 3.5, 3, 2.5, 2],
+      [100, 100, 100, 100, 100],
+      [12, 12, 12, 12, 12],
+      [0.35, 0.35, 0.35, 0.35, 0.35],
+      [4, 4, 4, 4, 4],
+    ],
+    vars: [],
+    cooldown: [9, 9, 9, 9, 9],
+    cost: [35, 35, 35, 35, 35],
+    range: [340, 340, 340, 340, 340],
+  }
+  const cdSpell = { maxLevel: 5, coefficients: {}, effectAmounts: {} }
+  const tooltip = parseTooltip(String(ddSpell.tooltip), ddSpell, cdSpell, binSpell)
+  assert.ok(tooltip.descriptionText.includes('40 / 65 / 90 / 115 / 140'))
+  assert.ok(tooltip.descriptionText.includes('(+ 75% AD)'))
+  assert.ok(tooltip.descriptionText.includes('35%'))
+  assert.ok(tooltip.descriptionText.includes('(+ 5% per mark)'))
+})
+
+test('Malphite W strips %i:scaleArmor% and unresolved f1/f2 parentheticals', () => {
+  const binSpell = {
+    DataValues: [
+      {
+        name: 'BonusArmorPassive',
+        values: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35],
+      },
+      { name: 'BonusArmorPassiveMultiplier', values: [3, 3, 3, 3, 3, 3, 3] },
+    ],
+    mSpellCalculations: {
+      TotalBonusDamage: {
+        __type: 'GameCalculation',
+        mFormulaParts: [
+          { __type: 'NamedDataValueCalculationPart', mDataValue: 'ThunderclapBaseDamage' },
+        ],
+      },
+    },
+  }
+  const ddSpell = {
+    maxrank: 5,
+    tooltip:
+      "<spellPassive>Passive : </spellPassive>Malphite gagne <scaleArmor>+{{ bonusarmorpassive*100 }}% d'armure (%i:scaleArmor%{{ f1 }})</scaleArmor>. Cet effet est augmenté à <scaleArmor>+{{ bonusarmorpassive*300 }}% (%i:scaleArmor%{{ f2 }})</scaleArmor> quand <spellName>Bouclier de granit</spellName> est actif.",
+    effect: [null],
+    vars: [],
+  }
+  const cdSpell = { maxLevel: 5, coefficients: {}, effectAmounts: {} }
+  const tooltip = parseTooltip(String(ddSpell.tooltip), ddSpell, cdSpell, binSpell)
+  assert.ok(tooltip.descriptionText.includes("10/15/20/25/30% d'armure"))
+  assert.ok(tooltip.descriptionText.includes('30/45/60/75/90%'))
+  assert.ok(!tooltip.descriptionText.includes('%i:scaleArmor%'))
+  assert.ok(!tooltip.descriptionText.includes('scaleArmor%-'))
+  assert.ok(!tooltip.unresolvedVariables.includes('f1'))
+  assert.ok(!tooltip.unresolvedVariables.includes('f2'))
+})
+
+test('Twitch passive resolves OnHit token and venom damage from bin', () => {
+  const binPath = '/tmp/twitch.bin.json'
+  const bin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const binSpell = findBinSpellForDDragon(bin, ['TwitchDeadlyVenomMarker'])
+  assert.ok(binSpell)
+
+  const passiveDescription =
+    "Les attaques de base de Twitch contaminent sa cible %i:OnHit% <OnHit>à l'impact</OnHit>, lui infligeant des dégâts bruts chaque seconde."
+  const passiveTooltip = parseTooltip(passiveDescription, {}, {}, binSpell)
+  assert.ok(!passiveTooltip.descriptionText.includes('%i:OnHit%'))
+  assert.ok(passiveTooltip.descriptionText.includes("à l'impact"))
+
+  const { buildPassiveVenomDetailFromBin } = theorycraftTooltipTestUtils
+  const venom = buildPassiveVenomDetailFromBin(binSpell!, 'fr_FR')
+  assert.ok(venom)
+  assert.ok(venom.descriptionText.includes('1 / 2 / 3 / 4 / 5'))
+  assert.ok(venom.descriptionText.includes('(+ 3% AP)'))
+  assert.ok(venom.descriptionText.includes('6 / 12 / 18 / 24 / 30'))
+  assert.ok(venom.descriptionText.includes('36 / 72 / 108 / 144 / 180'))
+})
+
 test('Lee Sin W shield ratio defaults to AP when bin omits mStat', () => {
   const binSpell = {
     DataValues: [{ name: 'ShieldValue', values: [-5, 40, 80, 120, 160] }],

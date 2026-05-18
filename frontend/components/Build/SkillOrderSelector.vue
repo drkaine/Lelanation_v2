@@ -215,27 +215,27 @@ const availableSpells = computed(() => {
   return [
     {
       id: 'Q',
-      name: champion.value.spells[0]?.name || 'Q',
-      description: champion.value.spells[0]?.description || '',
-      image: champion.value.spells[0]?.image,
+      name: champion.value?.spells?.[0]?.name || 'Q',
+      description: champion.value?.spells?.[0]?.description || '',
+      image: champion.value?.spells?.[0]?.image,
     },
     {
       id: 'W',
-      name: champion.value.spells[1]?.name || 'W',
-      description: champion.value.spells[1]?.description || '',
-      image: champion.value.spells[1]?.image,
+      name: champion.value?.spells?.[1]?.name || 'W',
+      description: champion.value?.spells?.[1]?.description || '',
+      image: champion.value?.spells?.[1]?.image,
     },
     {
       id: 'E',
-      name: champion.value.spells[2]?.name || 'E',
-      description: champion.value.spells[2]?.description || '',
-      image: champion.value.spells[2]?.image,
+      name: champion.value?.spells?.[2]?.name || 'E',
+      description: champion.value?.spells?.[2]?.description || '',
+      image: champion.value?.spells?.[2]?.image,
     },
     {
       id: 'R',
-      name: champion.value.spells[3]?.name || 'R',
-      description: champion.value.spells[3]?.description || '',
-      image: champion.value.spells[3]?.image,
+      name: champion.value?.spells?.[3]?.name || 'R',
+      description: champion.value?.spells?.[3]?.description || '',
+      image: champion.value?.spells?.[3]?.image,
     },
   ].filter(spell => spell.image)
 })

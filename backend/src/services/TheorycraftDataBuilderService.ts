@@ -29,6 +29,7 @@ const TOOLTIP_TAG_MAP: Record<string, { className: string; icon?: string }> = {
   healing: { className: 'healing', icon: 'heal' },
   shield: { className: 'shield', icon: 'shield' },
   speed: { className: 'speed', icon: 'speed' },
+  attackspeed: { className: 'tooltip-tag tooltip-tag-attackspeed' },
   status: { className: 'status-cc' },
   recast: { className: 'recast' },
   passive: { className: 'passive' },
@@ -223,6 +224,8 @@ function trimByMaxRank(values: number[], maxRank?: number): number[] {
 }
 
 const MAX_CHAMPION_LEVEL = 18
+/** Innate passives scale at these champion levels (not ability rank). */
+const PASSIVE_CHAMPION_LEVELS = [1, 5, 9, 13, 17] as const
 const ABILITY_RANK_CHAMPION_LEVELS: number[][] = [
   [1, 3, 5, 7, 9],
   [3, 5, 7, 9, 11],
@@ -243,6 +246,13 @@ function championLevelForAbilityRank(slotIndex: number, rank: number): number {
   return levels[Math.min(Math.max(rank - 1, 0), levels.length - 1)] ?? rank
 }
 
+function championLevelForCalculationRank(options: BinCalculationBuildOptions, rank: number): number {
+  if (options.isPassive) {
+    return PASSIVE_CHAMPION_LEVELS[Math.min(Math.max(rank - 1, 0), PASSIVE_CHAMPION_LEVELS.length - 1)] ?? rank
+  }
+  return championLevelForAbilityRank(options.slotIndex ?? 0, rank)
+}
+
 function interpolateByCharLevel(start: number, end: number, level: number): number {
   const clamped = Math.min(Math.max(level, 1), MAX_CHAMPION_LEVEL)
   if (MAX_CHAMPION_LEVEL <= 1) return start
@@ -253,9 +263,12 @@ type BinCalculationBuildOptions = {
   htmlRatios?: boolean
   maxRank?: number
   slotIndex?: number
+  /** Innate passives use PASSIVE_CHAMPION_LEVELS instead of ability rank → level mapping. */
+  isPassive?: boolean
   displayAsPercent?: boolean
   precision?: number
   binSpell?: Record<string, unknown>
+  ddSpell?: ChampionSpell
 }
 
 function extractBinEffectAmountValues(
@@ -264,9 +277,36 @@ function extractBinEffectAmountValues(
   maxRank?: number
 ): number[] {
   const raw = binSpell.mEffectAmount
-  if (!Array.isArray(raw) || effectIndex < 0 || effectIndex >= raw.length) return []
-  const entry = asObject(raw[effectIndex])
-  return trimByMaxRank(parseNumberArray(entry.value), maxRank)
+  if (!Array.isArray(raw) || effectIndex < 0) return []
+  const readAt = (idx: number): number[] => {
+    if (idx < 0 || idx >= raw.length) return []
+    const entry = asObject(raw[idx])
+    return trimByMaxRank(parseNumberArray(entry.value), maxRank)
+  }
+  const direct = readAt(effectIndex)
+  if (direct.length > 0) return direct
+  return readAt(effectIndex - 1)
+}
+
+function extractDDragonEffectValues(
+  ddSpell: ChampionSpell | undefined,
+  effectIndex: number,
+  maxRank?: number
+): number[] {
+  const ddEffect = ddSpell?.effect
+  if (!Array.isArray(ddEffect) || effectIndex < 0 || effectIndex >= ddEffect.length) return []
+  return trimByMaxRank(parseNumberArray(ddEffect[effectIndex]), maxRank)
+}
+
+function resolveEffectValueSeries(
+  effectIndex: number,
+  options: BinCalculationBuildOptions
+): number[] {
+  const maxRank = Number(options.maxRank ?? DEFAULT_ABILITY_MAX_RANK)
+  const fromDd = extractDDragonEffectValues(options.ddSpell, effectIndex, maxRank)
+  if (fromDd.length > 0) return fromDd
+  const binSpell = asObject(options.binSpell)
+  return extractBinEffectAmountValues(binSpell, effectIndex, maxRank)
 }
 
 function breakpointUsesAdditiveBonus(part: Record<string, unknown>): boolean {
@@ -314,12 +354,11 @@ function renderByCharLevelBreakpointsSeries(
   options: BinCalculationBuildOptions
 ): { values: number[]; text: string } {
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
-  const slotIndex = Number(options.slotIndex ?? 0)
   const precision = Number(options.precision ?? 2)
   const displayAsPercent = Boolean(options.displayAsPercent)
   const values: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
-    const level = championLevelForAbilityRank(slotIndex, rank)
+    const level = championLevelForCalculationRank(options, rank)
     let value = valueAtCharLevelFromBreakpoints(part, level)
     if (displayAsPercent) value *= 100
     if (Number.isFinite(precision) && precision >= 0) {
@@ -336,13 +375,12 @@ function renderByCharLevelFormulaSeries(
   options: BinCalculationBuildOptions
 ): { values: number[]; text: string } {
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
-  const slotIndex = Number(options.slotIndex ?? 0)
   const precision = Number(options.precision ?? 2)
   const displayAsPercent = Boolean(options.displayAsPercent)
   const allValues = trimByMaxRank(parseNumberArray(part.values), MAX_CHAMPION_LEVEL)
   const values: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
-    const level = championLevelForAbilityRank(slotIndex, rank)
+    const level = championLevelForCalculationRank(options, rank)
     let value = allValues[Math.min(Math.max(level - 1, 0), allValues.length - 1)] ?? 0
     if (displayAsPercent) value *= 100
     if (Number.isFinite(precision) && precision >= 0) {
@@ -423,14 +461,13 @@ function renderByCharLevelInterpolationSeries(
   options: BinCalculationBuildOptions
 ): { values: number[]; text: string } {
   const maxRank = Math.max(1, Number(options.maxRank ?? 5))
-  const slotIndex = Number(options.slotIndex ?? 0)
   const start = Number(part.mStartValue ?? 0)
   const end = Number(part.mEndValue ?? 0)
   const precision = Number(options.precision ?? 2)
   const displayAsPercent = Boolean(options.displayAsPercent)
   const values: number[] = []
   for (let rank = 1; rank <= maxRank; rank += 1) {
-    const level = championLevelForAbilityRank(slotIndex, rank)
+    const level = championLevelForCalculationRank(options, rank)
     let value = interpolateByCharLevel(start, end, level)
     if (displayAsPercent) value *= 100
     if (Number.isFinite(precision) && precision >= 0) {
@@ -511,7 +548,7 @@ function evaluateCalculationPartValues(
   }
   if (partType === 'EffectValueCalculationPart') {
     const effectIndex = Number(part.mEffectIndex ?? -1)
-    return extractBinEffectAmountValues(binSpell, effectIndex, maxRank)
+    return resolveEffectValueSeries(effectIndex, { ...options, binSpell, maxRank })
   }
   if (partType === 'ClampSubPartsCalculationPart') {
     const subparts = Array.isArray(part.mSubparts) ? part.mSubparts : []
@@ -686,10 +723,9 @@ function buildBinCalculationExpression(
           baseValues = scaled
           baseParts.push(formatValueSeries(scaled, ' / '))
         }
-      } else if (Number.isFinite(coeff)) {
-        const zeros = Array.from({ length: Math.max(1, Number(options?.maxRank ?? 5)) }, () => 0)
-        baseValues = zeros
-        baseParts.push('0')
+      } else if (Number.isFinite(coeff) && coeff !== 0) {
+        const pct = formatResolvedNumber(coeff * 100)
+        baseParts.push(`(+ ${pct}% per mark)`)
       }
       continue
     }
@@ -740,7 +776,9 @@ function buildBinCalculationExpression(
       const values = evaluateCalculationPartValues(part, dataValues, options ?? {})
       if (values.length > 0) {
         baseValues = values
-        baseParts.push(formatValueSeries(values, ' / '))
+        baseParts.push(
+          formatCalculationValuesAsText(values, options ?? {}) || formatValueSeries(values, ' / ')
+        )
       }
       continue
     }
@@ -779,10 +817,16 @@ function buildBinCalculationExpression(
   return { expression, baseValues, ratios }
 }
 
+function calculationUsesPercentDisplay(key: string, calculation: Record<string, unknown>): boolean {
+  if (Boolean(calculation.mDisplayAsPercent)) return true
+  const normalized = key.toLowerCase()
+  return /attackspeed|attack speed|msbuff|movementspeed|percentms|slowpercent|percent/.test(normalized)
+}
+
 function extractBinCalculations(
   binSpell: Record<string, unknown>,
   dataValues: Array<{ name: string; values: number[] }>,
-  context?: { maxRank?: number; slotIndex?: number }
+  context?: { maxRank?: number; slotIndex?: number; isPassive?: boolean; ddSpell?: ChampionSpell }
 ): Array<{
   key: string
   expression: string
@@ -798,6 +842,7 @@ function extractBinCalculations(
     ratios: Array<{ stat: string; coefficient: number[]; type: 'physical' | 'magic' | 'true' }>
   }> = []
   const calculations = asObject(binSpell.mSpellCalculations)
+  const spellBin = asObject(binSpell.mSpell ?? binSpell)
   const builtByKey = new Map<
     string,
     {
@@ -821,9 +866,12 @@ function extractBinCalculations(
           const buildOptions: BinCalculationBuildOptions = {
             maxRank: context?.maxRank,
             slotIndex: context?.slotIndex,
-            displayAsPercent: Boolean(calculation.mDisplayAsPercent ?? ref.mDisplayAsPercent),
+            isPassive: context?.isPassive,
+            displayAsPercent: calculationUsesPercentDisplay(key, calculation) ||
+              calculationUsesPercentDisplay(key, ref),
             precision: Number(calculation.mPrecision ?? ref.mPrecision ?? 2),
-            binSpell,
+            binSpell: spellBin,
+            ddSpell: context?.ddSpell,
           }
           const built = buildBinCalculationExpression(refParts, dataValues, buildOptions)
           const builtHtml = buildBinCalculationExpression(refParts, dataValues, {
@@ -844,9 +892,11 @@ function extractBinCalculations(
     const buildOptions: BinCalculationBuildOptions = {
       maxRank: context?.maxRank,
       slotIndex: context?.slotIndex,
-      displayAsPercent: Boolean(calculation.mDisplayAsPercent),
+      isPassive: context?.isPassive,
+      displayAsPercent: calculationUsesPercentDisplay(key, calculation),
       precision: Number(calculation.mPrecision ?? 2),
-      binSpell,
+      binSpell: spellBin,
+      ddSpell: context?.ddSpell,
     }
     const built = buildBinCalculationExpression(parts, dataValues, buildOptions)
     const builtHtml = buildBinCalculationExpression(parts, dataValues, {
@@ -876,9 +926,11 @@ function extractBinCalculations(
     const buildOptions: BinCalculationBuildOptions = {
       maxRank: context?.maxRank,
       slotIndex: context?.slotIndex,
-      displayAsPercent: Boolean(calculation.mDisplayAsPercent ?? false),
+      isPassive: context?.isPassive,
+      displayAsPercent: calculationUsesPercentDisplay(key, calculation),
       precision: Number(calculation.mPrecision ?? 2),
-      binSpell,
+      binSpell: spellBin,
+      ddSpell: context?.ddSpell,
     }
     const multiplier = evaluateCalculationPartValues(
       asObject(calculation.mMultiplier),
@@ -1054,6 +1106,7 @@ function buildSpellVariableMap(
   const calculations = extractBinCalculations(binSpell ?? {}, binDataValues, {
     maxRank,
     slotIndex: inferSpellSlotIndex(ddSpell),
+    ddSpell,
   })
   calculations.forEach((calculation) => {
     let rendered =
@@ -1121,6 +1174,149 @@ function buildSpellVariableMap(
   return map
 }
 
+/** Riot client tokens: %i:scaleArmor%{{ f1 }} — icon + dynamic armor value (f1/f2 not in bin). */
+function normalizeRiotInlineIconTokens(raw: string): string {
+  let text = raw
+  // Armor % is already in the sentence; drop redundant (icon + unresolved f1/f2).
+  text = text.replace(/\s*\(%i:scalearmor%\{\{\s*f1\s*\}\}\)/gi, '')
+  text = text.replace(/\s*\(%i:scalearmor%\{\{\s*f2\s*\}\}\)/gi, '')
+  // e.g. %i:OnHit% <OnHit>…</OnHit> — drop token when the semantic tag follows.
+  text = text.replace(/%i:([a-zA-Z][a-zA-Z0-9]*)%\s*(<\s*\1\b)/gi, '$1')
+  text = text.replace(/%i:([a-zA-Z][a-zA-Z0-9]*)%/gi, (_match, tag: string) => {
+    const meta = TOOLTIP_TAG_MAP[tag.toLowerCase()]
+    if (!meta?.icon) return ''
+    return `<span class="tooltip-icon tooltip-icon-${meta.icon}" aria-hidden="true"></span>`
+  })
+  return text
+}
+
+function wrapTrueDamageHtml(inner: string): string {
+  const trimmed = inner.trim()
+  if (!trimmed) return ''
+  return `<span class="dmg-true"><span class="tooltip-icon tooltip-icon-true" aria-hidden="true"></span> ${trimmed}</span>`
+}
+
+function firstScalarFromDataValues(
+  dataValues: Array<{ name: string; values: number[] }>,
+  name: string
+): number | null {
+  const entry = dataValues.find((v) => v.name.toLowerCase() === name.toLowerCase())
+  if (!entry || entry.values.length === 0) return null
+  const value = Number(entry.values[0])
+  return Number.isFinite(value) ? value : null
+}
+
+function findPassiveBinSpell(
+  championBin: ChampionBinJson | null,
+  championId: string
+): Record<string, unknown> | null {
+  if (!championBin) return null
+  const id = normalizeChampionBinId(championId)
+  const direct = findBinSpellForDDragon(championBin, [
+    `${championId}Passive`,
+    `${id}passive`,
+    'Passive',
+    'DeadlyVenom',
+    'Deadly_Venom',
+    'TwitchDeadlyVenomMarker',
+  ])
+  if (direct) return direct
+
+  let bestSpell: Record<string, unknown> | null = null
+  let bestScore = -1
+  for (const value of Object.values(championBin)) {
+    if (!value || typeof value !== 'object') continue
+    const spell = asObject(asObject(value).mSpell)
+    if (Object.keys(spell).length === 0) continue
+    const calculations = asObject(spell.mSpellCalculations)
+    const hasDamagePerSecond = Object.keys(calculations).some(
+      (key) => key.toLowerCase() === 'damagepersecond'
+    )
+    if (!hasDamagePerSecond) continue
+    const dataValues = extractBinDataValues(spell, DEFAULT_ABILITY_MAX_RANK)
+    const hasStacks = dataValues.some((v) => v.name.toLowerCase() === 'maxstacks')
+    if (!hasStacks) continue
+    const score = dataValues.length + Object.keys(calculations).length
+    if (score > bestScore) {
+      bestScore = score
+      bestSpell = spell
+    }
+  }
+  return bestSpell
+}
+
+const PASSIVE_VENOM_LABELS: Record<
+  SupportedLang,
+  { stacksDuration: string; perStackLine: string; maxStacksLine: string }
+> = {
+  fr_FR: {
+    stacksDuration: 'Les stacks durent {duration} s (maximum {stacks}).',
+    perStackLine:
+      'Par stack : {perSecond} pts de dégâts bruts par seconde ({perStackTotal} sur la durée, selon le niveau).',
+    maxStacksLine: 'À {stacks} stacks : {total} pts de dégâts bruts au total sur la durée (selon le niveau).',
+  },
+  en_US: {
+    stacksDuration: 'Stacks last {duration} seconds (up to {stacks}).',
+    perStackLine:
+      'Per stack: {perSecond} true damage per second ({perStackTotal} over the duration, by level).',
+    maxStacksLine: 'At {stacks} stacks: {total} total true damage over the duration (by level).',
+  },
+}
+
+function applyPassiveLabelTemplate(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_match, key: string) => String(values[key] ?? ''))
+}
+
+function buildPassiveVenomDetailFromBin(
+  binSpell: Record<string, unknown>,
+  lang: SupportedLang
+): { descriptionHtml: string; descriptionText: string } | null {
+  const dataValues = extractBinDataValues(binSpell, PASSIVE_CHAMPION_LEVELS.length)
+  const calcOptions: BinCalculationBuildOptions = {
+    maxRank: PASSIVE_CHAMPION_LEVELS.length,
+    isPassive: true,
+    binSpell,
+    htmlRatios: true,
+  }
+  const calculations = extractBinCalculations(binSpell, dataValues, calcOptions)
+  const perSecond = calculations.find((c) => c.key.toLowerCase() === 'damagepersecond')
+  const perStackTotal = calculations.find((c) => c.key.toLowerCase() === 'damagepersecondmax')
+  const grandTotal = calculations.find((c) => c.key.toLowerCase() === 'damagemaxtotal')
+  if (!perSecond?.expressionHtml && !perSecond?.expression) return null
+
+  const labels = PASSIVE_VENOM_LABELS[lang]
+  const duration = firstScalarFromDataValues(dataValues, 'Duration') ?? 6
+  const stacks = firstScalarFromDataValues(dataValues, 'MaxStacks') ?? 6
+  const perSecondHtml = wrapTrueDamageHtml(perSecond.expressionHtml || perSecond.expression)
+  const perStackTotalHtml = wrapTrueDamageHtml(
+    perStackTotal?.expressionHtml || perStackTotal?.expression || ''
+  )
+  const grandTotalHtml = wrapTrueDamageHtml(grandTotal?.expressionHtml || grandTotal?.expression || '')
+
+  const htmlParts = [
+    applyPassiveLabelTemplate(labels.stacksDuration, { duration, stacks }),
+    applyPassiveLabelTemplate(labels.perStackLine, { perSecond: perSecondHtml, perStackTotal: perStackTotalHtml }),
+    applyPassiveLabelTemplate(labels.maxStacksLine, { stacks, total: grandTotalHtml }),
+  ].filter(Boolean)
+
+  const textParts = [
+    applyPassiveLabelTemplate(labels.stacksDuration, { duration, stacks }),
+    applyPassiveLabelTemplate(labels.perStackLine, {
+      perSecond: perSecond.expression || '',
+      perStackTotal: perStackTotal?.expression || '',
+    }),
+    applyPassiveLabelTemplate(labels.maxStacksLine, {
+      stacks,
+      total: grandTotal?.expression || '',
+    }),
+  ].filter(Boolean)
+
+  return {
+    descriptionHtml: htmlParts.join('<br><br>'),
+    descriptionText: textParts.join('\n\n'),
+  }
+}
+
 function parseTooltip(
   raw: string,
   ddSpell: ChampionSpell,
@@ -1129,6 +1325,7 @@ function parseTooltip(
   sharedVars?: Map<string, string>
 ): { descriptionParsed: string; unresolvedVariables: string[]; descriptionText: string } {
   if (!raw) return { descriptionParsed: '', unresolvedVariables: [], descriptionText: '' }
+  const normalizedRaw = normalizeRiotInlineIconTokens(raw)
   const vars = buildSpellVariableMap(ddSpell, cdSpell, binSpell, sharedVars)
   const unresolved = new Set<string>()
   const openedTags: string[] = []
@@ -1222,7 +1419,7 @@ function parseTooltip(
     return null
   }
 
-  let parsed = raw.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
+  let parsed = normalizedRaw.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, expression: string) => {
     const resolved = resolveExpression(String(expression))
     if (resolved == null) {
       const exp = expression.trim()
@@ -1471,6 +1668,29 @@ function buildSpellHeaderStats(args: {
 
   const rectangleLength = dataByName.get('rectanglelength') ?? []
   const finalLength = dataByName.get('finaltickrectanglelength') ?? []
+
+  const spellRange = trimByMaxRank(parseNumberArray(ddSpell.range), maxRank)
+  if (spellRange.length > 0 && rectangleLength.length === 0) {
+    const valueText = formatValueSeries(spellRange, ' / ')
+    stats.push({ key: 'targetRange', label: labels.targetRange, valueText, valueHtml: valueText })
+  }
+
+  const dashSpeed = dataByName.get('dashspeed') ?? []
+  const dashSpeedScaling = dataByName.get('dashspeedscaling') ?? []
+  if (dashSpeed.length > 0) {
+    const base = formatValueSeries(dashSpeed, ' / ')
+    let valueText = base
+    if (dashSpeedScaling.length > 0) {
+      const scaleRaw = dashSpeedScaling[0] ?? 0
+      const scalePct =
+        scaleRaw > 0 && scaleRaw <= 1 ? formatPercentFromRatio(scaleRaw) : `${formatResolvedNumber(scaleRaw)}%`
+      const speedLabel = lang === 'fr_FR' ? 'vitesse de déplacement' : 'movement speed'
+      valueText = `${base} (+ ${scalePct} ${speedLabel})`
+    }
+    const speedLabel = lang === 'fr_FR' ? 'VITESSE' : 'SPEED'
+    stats.push({ key: 'dashSpeed', label: speedLabel, valueText, valueHtml: valueText })
+  }
+
   if (rectangleLength.length > 0) {
     const start = rectangleLength[0] ?? 0
     const end = finalLength[0] ?? start
@@ -1973,18 +2193,31 @@ export class TheorycraftDataBuilderService {
           full: String(asObject(passiveRaw.image).full ?? `${championId}_Passive.png`),
         },
         ...(() => {
+          const passiveDescription = String(
+            cdPassive.description ?? passiveRaw.description ?? ''
+          ).trim()
+          const passiveBinSpell = findPassiveBinSpell(championBin, championId)
           const passiveTooltip = parseTooltip(
-            String(passiveRaw.description ?? cdPassive.description ?? ''),
+            passiveDescription,
             passiveRaw,
             cdPassive,
-            null,
+            passiveBinSpell,
             sharedVars
           )
+          const venomDetail = passiveBinSpell
+            ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
+            : null
           return {
             descriptionHtml: passiveTooltip.descriptionParsed,
             descriptionParsed: passiveTooltip.descriptionParsed,
             descriptionText: passiveTooltip.descriptionText,
             parsedText: passiveTooltip.descriptionText,
+            ...(venomDetail
+              ? {
+                  detailedTexts: [venomDetail.descriptionHtml],
+                  detailedText: venomDetail.descriptionText,
+                }
+              : {}),
           }
         })(),
       },
@@ -2110,6 +2343,9 @@ export const theorycraftTooltipTestUtils = {
   extractBinDataValues,
   extractBinCalculations,
   extractSpellRatios,
+  normalizeRiotInlineIconTokens,
+  findPassiveBinSpell,
+  buildPassiveVenomDetailFromBin,
   parseTooltip,
   findBinSpellForDDragon,
   inferSpellSlotIndex,
