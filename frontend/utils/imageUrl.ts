@@ -165,6 +165,27 @@ export function getRunePathColor(
   return '#eab308'
 }
 
+/** Colored rune path icon (mask + path color), same as RuneSelector / BuildCard sheet. */
+export function getRunePathMaskStyle(
+  version: string,
+  icon: string,
+  pathId?: number | null,
+  pathName?: string | null
+): Record<string, string> {
+  const maskUrl = getRunePathImageUrl(version, icon, pathId, pathName)
+  return {
+    backgroundColor: getRunePathColor(icon, pathId, pathName),
+    WebkitMaskImage: `url(${maskUrl})`,
+    maskImage: `url(${maskUrl})`,
+    WebkitMaskSize: 'contain',
+    maskSize: 'contain',
+    WebkitMaskPosition: 'center',
+    maskPosition: 'center',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat: 'no-repeat',
+  }
+}
+
 /**
  * Get rune icon URL
  * Icon format: "perk-images/Styles/Domination/Electrocute/Electrocute.png"

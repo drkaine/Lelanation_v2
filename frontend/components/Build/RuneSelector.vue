@@ -254,8 +254,15 @@
     >
       <div class="rune-tooltip-content">
         <div class="rune-tooltip-header">
+          <span
+            v-if="hoveredItem.isPathIcon && hoveredItem.icon"
+            class="rune-path-tooltip-icon"
+            role="img"
+            :aria-label="hoveredItem.name"
+            :style="hoveredItem.pathMaskStyle"
+          />
           <img
-            v-if="hoveredItem.icon"
+            v-else-if="hoveredItem.icon"
             :src="hoveredItem.icon"
             :alt="hoveredItem.name"
             class="rune-tooltip-image"
@@ -282,6 +289,7 @@ import type { RuneSelection, SummonerSpell, ShardSelection } from '~/types/build
 import {
   getRunePathImageUrl,
   getRunePathColor,
+  getRunePathMaskStyle,
   getRuneImageUrl,
   getSpellImageUrl,
 } from '~/utils/imageUrl'
@@ -622,6 +630,8 @@ interface TooltipItem {
   description?: string
   shortDesc?: string
   longDesc?: string
+  isPathIcon?: boolean
+  pathMaskStyle?: Record<string, string>
 }
 
 const hoveredItem = ref<TooltipItem | null>(null)
@@ -629,12 +639,19 @@ const tooltipRef = ref<HTMLElement | null>(null)
 const tooltipPosition = ref({ x: 0, y: 0 })
 const tooltipOffset = 15
 
-const handlePathHover = (path: { name: string; icon?: string }, event: MouseEvent) => {
+const handlePathHover = (path: { id: number; name: string; icon?: string }, event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
+  const icon = path.icon
+    ? getRunePathImageUrl(version.value, path.icon, path.id, path.name)
+    : undefined
   hoveredItem.value = {
     name: path.name,
-    icon: path.icon ? getRunePathImageUrl(version.value, path.icon) : undefined,
+    icon,
     description: undefined,
+    isPathIcon: true,
+    pathMaskStyle: path.icon
+      ? getRunePathMaskStyle(version.value, path.icon, path.id, path.name)
+      : undefined,
   }
   tooltipPosition.value = { x: event.clientX, y: event.clientY }
   nextTick(() => {
@@ -1161,6 +1178,13 @@ watch(locale, () => {
   border: 1px solid rgb(var(--rgb-accent) / 0.55);
   object-fit: cover;
   flex-shrink: 0;
+}
+
+.rune-path-tooltip-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
 }
 
 .rune-tooltip-name {

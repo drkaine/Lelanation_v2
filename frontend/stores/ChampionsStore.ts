@@ -78,6 +78,7 @@ function normalizeChampionDetail(detail: any, current: Champion, fallbackId: str
     ...detail,
     id: championId,
     key: String(detail?.key ?? current.key ?? ''),
+    partype: String(detail?.partype ?? (current as { partype?: string }).partype ?? ''),
     tags: Array.isArray(detail?.tags)
       ? detail.tags
       : Array.isArray(current.tags)

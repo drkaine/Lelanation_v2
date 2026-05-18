@@ -7,7 +7,7 @@ import { scheduleDiscoveryRepeatJob, discoveryWorker } from "./workers/discovery
 import { hydrationWorker } from "./workers/hydration.worker.js";
 import { ingestionWorker } from "./workers/ingestion.worker.js";
 import { getQueueMetrics } from "./queues/index.js";
-import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-limiter.js";
+import { loadLuaScript, startDrip, stopDrip } from "./redis/rate-scheduler.js";
 import { redis } from "./redis/client.js";
 
 let metricsInterval: NodeJS.Timeout | null = null;

@@ -371,6 +371,7 @@
                 loading="eager"
                 decoding="sync"
                 @mouseenter="onChampionMouseEnter"
+                @mousemove="onChampionMouseMove"
                 @mouseleave="onChampionMouseLeave"
               />
               <img
@@ -382,6 +383,7 @@
                 loading="eager"
                 decoding="sync"
                 @mouseenter="onChampionMouseEnter"
+                @mousemove="onChampionMouseMove"
                 @mouseleave="onChampionMouseLeave"
               />
             </template>
@@ -411,6 +413,7 @@
                 class="summoner-spell-icon"
                 :title="sheetTooltip(getSummonerSpellDisplayName(spell), 'Summoner Spell')"
                 @mouseenter="onSheetElementEnter($event, 'spell', spell, 'Summoner Spell')"
+                @mousemove="onSheetElementMove"
                 @mouseleave="onSheetElementLeave"
               />
             </template>
@@ -443,6 +446,7 @@
                 class="keystone-icon"
                 :title="sheetTooltip(keystoneRuneId ? getRuneNameById(keystoneRuneId) : '', 'Rune')"
                 @mouseenter="onSheetElementEnter($event, 'rune', keystoneRuneId ?? 0, 'Rune')"
+                @mousemove="onSheetElementMove"
                 @mouseleave="onSheetElementLeave"
               />
               <div v-else class="keystone-placeholder"></div>
@@ -466,6 +470,7 @@
                   class="primary-rune-icon"
                   :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
                   @mouseenter="onSheetElementEnter($event, 'rune', runeId, 'Rune')"
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 />
                 <div
@@ -493,6 +498,7 @@
                   @mouseenter="
                     onSheetElementEnter($event, 'path', secondaryPathId ?? 0, 'Secondary Path')
                   "
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 >
                   <span
@@ -514,6 +520,7 @@
                   class="secondary-rune-icon"
                   :title="sheetTooltip(runeId ? getRuneNameById(runeId) : '', 'Rune')"
                   @mouseenter="onSheetElementEnter($event, 'rune', runeId, 'Rune')"
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 />
                 <div
@@ -535,6 +542,7 @@
               class="shard-icon-strip"
               :title="sheetTooltip(shardId ? getShardNameById(shardId) : '', 'Shard')"
               @mouseenter="onSheetElementEnter($event, 'shard', shardId, 'Shard')"
+              @mousemove="onSheetElementMove"
               @mouseleave="onSheetElementLeave"
             />
             <div
@@ -568,6 +576,7 @@
               :key="`starter-${item.id}`"
               class="item-wrapper"
               @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+              @mousemove="onSheetElementMove"
               @mouseleave="onSheetElementLeave"
             >
               <img
@@ -597,6 +606,7 @@
                 @mouseenter="
                   onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
                 "
+                @mousemove="onSheetElementMove"
                 @mouseleave="onSheetElementLeave"
               />
 
@@ -611,6 +621,7 @@
                   @mouseenter="
                     onSheetElementEnter($event, 'item', bootsItems[0] ?? { id: '' }, 'Boots')
                   "
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 ></div>
                 <div
@@ -622,6 +633,7 @@
                   @mouseenter="
                     onSheetElementEnter($event, 'item', bootsItems[1] ?? { id: '' }, 'Boots')
                   "
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 ></div>
               </template>
@@ -638,6 +650,7 @@
                 <div
                   class="item-wrapper"
                   @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 >
                   <img
@@ -667,6 +680,7 @@
                 <div
                   class="item-wrapper"
                   @mouseenter="onSheetElementEnter($event, 'item', item, 'Item')"
+                  @mousemove="onSheetElementMove"
                   @mouseleave="onSheetElementLeave"
                 >
                   <img
@@ -929,9 +943,14 @@
                       Passive: {{ selectedChampion.passive.name }}
                     </div>
                     <div
-                      v-if="formattedPassive"
+                      v-if="passiveTooltipMeta"
+                      class="tooltip-spell-meta tooltip-game-description"
+                      v-html="passiveTooltipMeta"
+                    />
+                    <div
+                      v-if="passiveTooltipBody"
                       class="tooltip-spell-description tooltip-game-description"
-                      v-html="formattedPassive"
+                      v-html="passiveTooltipBody"
                     />
                   </div>
                 </div>
@@ -963,9 +982,14 @@
                         {{ ['Q', 'W', 'E', 'R'][index] }}: {{ spell.name }}
                       </div>
                       <div
-                        v-if="spell.description"
+                        v-if="spellTooltipMeta(spell)"
+                        class="tooltip-spell-meta tooltip-game-description"
+                        v-html="spellTooltipMeta(spell)"
+                      />
+                      <div
+                        v-if="spellTooltipBody(spell)"
                         class="tooltip-spell-description tooltip-game-description"
-                        v-html="spell.description"
+                        v-html="spellTooltipBody(spell)"
                       />
                     </div>
                   </div>
@@ -1095,10 +1119,21 @@
                 </div>
               </div>
             </template>
-            <!-- Path: nom seul -->
+            <!-- Path: icône colorée + nom -->
             <template v-else-if="sheetElementTooltipResolved.type === 'path'">
-              <div class="sheet-tooltip-simple px-3 py-2 text-sm">
-                {{ sheetElementTooltipResolved.name }}
+              <div class="rune-tooltip px-3 py-2">
+                <div class="rune-tooltip-header">
+                  <span
+                    v-if="sheetPathTooltipMaskStyle"
+                    class="rune-path-tooltip-icon"
+                    role="img"
+                    :aria-label="sheetElementTooltipResolved.name"
+                    :style="sheetPathTooltipMaskStyle"
+                  />
+                  <div class="rune-tooltip-name text-sm font-semibold text-accent">
+                    {{ sheetElementTooltipResolved.name }}
+                  </div>
+                </div>
               </div>
             </template>
           </div>
@@ -1387,6 +1422,7 @@ import {
   getSpellImageUrl,
   getRunePathColor,
   getRunePathImageUrl,
+  getRunePathMaskStyle,
   getRuneImageUrl,
   getItemImageUrl,
 } from '~/utils/imageUrl'
@@ -1398,10 +1434,13 @@ import { formatLethality, formatPenetrationPercentFlat } from '~/utils/formatIte
 import { linkifyDescription } from '~/utils/linkifyDescription'
 import { sanitizeDescriptionHtml } from '~/utils/sanitizeDescriptionHtml'
 import {
-  formatSpellTooltipHtml,
+  formatSpellDetailedTextsHtml,
+  formatSpellHeaderStatsHtml,
   formatSummonerSpellTooltipHtml,
+  resolveSpellTooltipBodyHtml,
 } from '~/utils/gameTooltipFormatter'
 import { resolveSummonerSpellFromRef } from '~/utils/summonerSpellResolver'
+import { fixedTooltipStyleFromPointer, type TooltipPointer } from '~/utils/tooltipPosition'
 import { formatRuneTooltipHtml } from '~/utils/formatTooltipMarkupHtml'
 import DescriptionEditor from '~/components/Build/DescriptionEditor.vue'
 import DescriptionVideoPreviews from '~/components/Build/DescriptionVideoPreviews.vue'
@@ -1767,13 +1806,30 @@ const showTooltip = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
 const championPortraitRef = ref<HTMLElement | null>(null)
 
-// Fixed positioning for the teleported tooltip
+// Fixed positioning for the teleported tooltip (follows cursor)
 const tooltipFixedStyle = ref<Record<string, string>>({})
+const tooltipPointer = ref<TooltipPointer>({ x: 0, y: 0 })
+
+function setTooltipPointer(event: MouseEvent) {
+  tooltipPointer.value = { x: event.clientX, y: event.clientY }
+}
+
+function applyChampionTooltipPosition() {
+  if (!tooltipRef.value || !showTooltip.value) return
+  tooltipFixedStyle.value = fixedTooltipStyleFromPointer(tooltipRef.value, tooltipPointer.value)
+}
 
 const onChampionMouseEnter = (event: MouseEvent) => {
   if (!tooltipsEnabled.value) return
+  setTooltipPointer(event)
   showTooltip.value = true
   championPortraitRef.value = event.currentTarget as HTMLElement
+}
+
+const onChampionMouseMove = (event: MouseEvent) => {
+  if (!showTooltip.value) return
+  setTooltipPointer(event)
+  applyChampionTooltipPosition()
 }
 
 const onChampionMouseLeave = () => {
@@ -1810,8 +1866,15 @@ function onSheetElementEnter(
   fallback: string
 ) {
   if (!effectiveSheetTooltips.value) return
+  setTooltipPointer(ev)
   const el = ev.currentTarget as HTMLElement
   sheetElementTooltip.value = { show: true, type, payload, fallback: fallback || '', anchorEl: el }
+}
+
+function onSheetElementMove(ev: MouseEvent) {
+  if (!sheetElementTooltip.value.show) return
+  setTooltipPointer(ev)
+  applySheetElementTooltipPosition()
 }
 
 function onSheetElementLeave() {
@@ -1868,40 +1931,37 @@ const sheetElementTooltipResolved = computed(() => {
     case 'path': {
       const id = tt.payload as number
       const path = runesStore.getRunePathById(id)
-      return path
-        ? { type: 'path' as const, name: path.name }
-        : { type: 'path' as const, name: tt.fallback }
+      if (!path) return { type: 'path' as const, name: tt.fallback }
+      return {
+        type: 'path' as const,
+        name: path.name,
+        pathId: path.id,
+        pathIcon: path.icon,
+      }
     }
     default:
       return null
   }
 })
 
-function calculateSheetElementTooltipPosition() {
-  const { anchorEl, show } = sheetElementTooltip.value
+const sheetPathTooltipMaskStyle = computed(() => {
+  const resolved = sheetElementTooltipResolved.value
+  if (!resolved || resolved.type !== 'path' || !resolved.pathIcon) return null
+  return getRunePathMaskStyle(
+    versionForImages.value,
+    resolved.pathIcon,
+    resolved.pathId,
+    resolved.name
+  )
+})
+
+function applySheetElementTooltipPosition() {
   const tooltipEl = sheetElementTooltipRef.value
-  if (!show || !anchorEl || !tooltipEl) return
-  const anchor = anchorEl.getBoundingClientRect()
-  const tooltipRect = tooltipEl.getBoundingClientRect()
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-  const ttWidth = tooltipRect.width || 180
-  const ttHeight = tooltipRect.height || 32
-  let left: number
-  if (
-    anchor.left + anchor.width / 2 - ttWidth / 2 >= 8 &&
-    anchor.left + anchor.width / 2 + ttWidth / 2 <= viewportWidth - 8
-  ) {
-    left = anchor.left + anchor.width / 2 - ttWidth / 2
-  } else if (anchor.right + 8 + ttWidth <= viewportWidth) {
-    left = anchor.right + 8
-  } else {
-    left = Math.max(8, anchor.left - 8 - ttWidth)
-  }
-  let top = anchor.top - 4 - ttHeight
-  if (top < 8) top = anchor.bottom + 4
-  if (top + ttHeight > viewportHeight - 8) top = viewportHeight - ttHeight - 8
-  sheetElementTooltipFixedStyle.value = { position: 'fixed', top: `${top}px`, left: `${left}px` }
+  if (!sheetElementTooltip.value.show || !tooltipEl) return
+  sheetElementTooltipFixedStyle.value = fixedTooltipStyleFromPointer(
+    tooltipEl,
+    tooltipPointer.value
+  )
 }
 
 watch(
@@ -1909,19 +1969,22 @@ watch(
   async newValue => {
     if (newValue) {
       await nextTick()
-      calculateSheetElementTooltipPosition()
-      window.addEventListener('scroll', calculateSheetElementTooltipPosition, true)
-      window.addEventListener('resize', calculateSheetElementTooltipPosition)
+      applySheetElementTooltipPosition()
+      window.addEventListener('resize', applySheetElementTooltipPosition)
     } else {
-      window.removeEventListener('scroll', calculateSheetElementTooltipPosition, true)
-      window.removeEventListener('resize', calculateSheetElementTooltipPosition)
+      window.removeEventListener('resize', applySheetElementTooltipPosition)
     }
   }
 )
 
+watch(sheetElementTooltipResolved, async () => {
+  if (!sheetElementTooltip.value.show) return
+  await nextTick()
+  applySheetElementTooltipPosition()
+})
+
 onUnmounted(() => {
-  window.removeEventListener('scroll', calculateSheetElementTooltipPosition, true)
-  window.removeEventListener('resize', calculateSheetElementTooltipPosition)
+  window.removeEventListener('resize', applySheetElementTooltipPosition)
 })
 
 // Utiliser le build en prop si fourni, sinon le build courant du store
@@ -2587,78 +2650,68 @@ const translatedTags = computed(() => {
     .join(', ')
 })
 
-// Format passive description with HTML
-const formattedPassive = computed(() => {
-  const passive: any = selectedChampion.value?.passive
-  if (!passive) return ''
-  return formatSpellTooltipHtml(passive)
+const RESOURCE_LABEL_BY_PARTYPE: Record<string, { fr: string; en: string }> = {
+  Energy: { fr: 'Énergie', en: 'Energy' },
+  Mana: { fr: 'Mana', en: 'Mana' },
+  Fury: { fr: 'Fureur', en: 'Fury' },
+  Rage: { fr: 'Rage', en: 'Rage' },
+}
+
+function normalizeSpellHeaderStatsForChampion(stats: any[], partype?: string) {
+  if (!partype || !RESOURCE_LABEL_BY_PARTYPE[partype]) return stats
+  const label = RESOURCE_LABEL_BY_PARTYPE[partype][riotLocale.value === 'en_US' ? 'en' : 'fr']
+  return stats.map(stat => {
+    if (stat?.key !== 'cost') return stat
+    const valueText = String(stat.valueText ?? '').replace(/\s*Mana\s*$/i, ` ${label}`)
+    return { ...stat, valueText, valueHtml: valueText }
+  })
+}
+
+function spellTooltipMeta(spell: any) {
+  const stats = spell?.headerStats
+  if (!Array.isArray(stats) || stats.length === 0) return ''
+  const partype = (selectedChampion.value as { partype?: string } | null)?.partype
+  return formatSpellHeaderStatsHtml(normalizeSpellHeaderStatsForChampion(stats, partype))
+}
+
+function spellTooltipBody(spell: any) {
+  if (!spell) return ''
+  const body = resolveSpellTooltipBodyHtml(spell)
+  const details = formatSpellDetailedTextsHtml(spell)
+  return [body, details].filter(Boolean).join('<br>')
+}
+
+const passiveTooltipMeta = computed(() => {
+  const passive = selectedChampion.value?.passive as
+    | { headerStats?: Parameters<typeof formatSpellHeaderStatsHtml>[0] }
+    | undefined
+  return passive ? spellTooltipMeta(passive) : ''
 })
 
-// Format spells with HTML descriptions
+const passiveTooltipBody = computed(() => {
+  const passive = selectedChampion.value?.passive
+  if (!passive) return ''
+  return resolveSpellTooltipBodyHtml(passive)
+})
+
 const formattedSpells = computed(() => {
   if (!Array.isArray(selectedChampion.value?.spells) || selectedChampion.value.spells.length === 0)
     return []
-  return selectedChampion.value.spells.map(spell => ({
-    ...spell,
-    description: formatSpellTooltipHtml(spell),
-  }))
+  return selectedChampion.value.spells
 })
-
-// Calculate tooltip position using fixed coordinates (teleported to body)
-const calculateTooltipPosition = async () => {
-  if (!tooltipRef.value || !showTooltip.value || !championPortraitRef.value) return
-
-  await nextTick()
-
-  const anchor = championPortraitRef.value.getBoundingClientRect()
-  const tooltip = tooltipRef.value
-  const tooltipRect = tooltip.getBoundingClientRect()
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-
-  // Tooltip width/height (may be 0 on first render, use defaults)
-  const ttWidth = tooltipRect.width || 500
-  const ttHeight = tooltipRect.height || 400
-
-  // Horizontal: prefer right of the portrait, fall back to left
-  let left: number
-  if (anchor.right + 8 + ttWidth <= viewportWidth) {
-    left = anchor.right + 8
-  } else {
-    left = Math.max(8, anchor.left - 8 - ttWidth)
-  }
-
-  // Vertical: align to top of portrait, fall back upward if overflows
-  let top: number
-  if (anchor.top + ttHeight <= viewportHeight) {
-    top = anchor.top
-  } else {
-    top = Math.max(8, viewportHeight - ttHeight - 8)
-  }
-
-  tooltipFixedStyle.value = {
-    position: 'fixed',
-    top: `${top}px`,
-    left: `${left}px`,
-  }
-}
 
 watch(showTooltip, async newValue => {
   if (newValue) {
     await nextTick()
-    calculateTooltipPosition()
-
-    window.addEventListener('scroll', calculateTooltipPosition, true)
-    window.addEventListener('resize', calculateTooltipPosition)
+    applyChampionTooltipPosition()
+    window.addEventListener('resize', applyChampionTooltipPosition)
   } else {
-    window.removeEventListener('scroll', calculateTooltipPosition, true)
-    window.removeEventListener('resize', calculateTooltipPosition)
+    window.removeEventListener('resize', applyChampionTooltipPosition)
   }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', calculateTooltipPosition, true)
-  window.removeEventListener('resize', calculateTooltipPosition)
+  window.removeEventListener('resize', applyChampionTooltipPosition)
   document.removeEventListener('mousedown', onDocumentPointerDown)
   championTitleResizeObserver?.disconnect()
   championTitleResizeObserver = null
@@ -4714,31 +4767,31 @@ defineExpose({
 }
 
 .tooltip-box {
-  width: min(1020px, calc(100vw - 2rem));
-  max-width: min(1020px, calc(100vw - 2rem));
-  min-width: 320px;
+  width: max-content;
+  max-width: min(960px, calc(100vw - 2rem));
+  min-width: min(320px, calc(100vw - 2rem));
+  max-height: min(85vh, 720px);
+  overflow-x: visible;
+  overflow-y: auto;
   padding: 1.2em;
   display: flex;
   flex-direction: column;
-  overflow: visible;
   background: #08101f !important;
   border: 1px solid rgb(125 211 252 / 0.75) !important;
 }
 
 @media (max-width: 768px) {
   .tooltip-box {
-    width: calc(100vw - 2rem);
     max-width: calc(100vw - 2rem);
-    min-width: 280px;
+    min-width: min(280px, calc(100vw - 2rem));
     padding: 1em;
   }
 }
 
 @media (max-width: 480px) {
   .tooltip-box {
-    width: calc(100vw - 1rem);
     max-width: calc(100vw - 1rem);
-    min-width: 250px;
+    min-width: min(250px, calc(100vw - 1rem));
     padding: 0.8em;
   }
 }
@@ -4939,28 +4992,107 @@ defineExpose({
 }
 
 /* Force meta labels style inside v-html content in scoped component. */
-.tooltip-spell-description :deep(.tooltip-spell-meta-key) {
+.tooltip-spell-description :deep(.tooltip-spell-meta-key),
+.tooltip-spell-meta :deep(.tooltip-spell-meta-key) {
   color: rgb(252 211 77 / 1) !important;
-  font-weight: 700 !important;
+  font-size: inherit !important;
+  font-weight: 600 !important;
 }
 
 .tooltip-spell-description :deep(.tooltip-spell-meta-line) {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  display: block;
 }
 
-.tooltip-spell-description :deep(.tooltip-icon) {
+.tooltip-spell-meta.tooltip-game-description {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: rgb(var(--rgb-text) / 0.7);
+}
+
+.tooltip-box :deep(.tooltip-spell-description .tooltip-icon),
+.tooltip-box :deep(.tooltip-spell-meta .tooltip-icon) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 0.95em;
-  height: 0.95em;
-  margin-right: 0.2em;
-  opacity: 0.95;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.15em;
+  vertical-align: middle;
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
+  flex-shrink: 0;
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-physical) {
+  background-image: url('/icons/statsicon/AD.png');
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-magic) {
+  background-image: url('/icons/statsicon/ap.png');
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-heal) {
+  background-image: url('/icons/statsicon/Health_regeneration.svg');
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-speed) {
+  background-image: url('/icons/statsicon/Movement_speed.png');
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-true::before) {
+  content: '◆';
+  color: rgb(226 232 240);
+  font-size: 0.75em;
+}
+
+.tooltip-box :deep(.tooltip-icon.tooltip-icon-shield::before) {
+  content: '◈';
+  color: rgb(134 239 172);
+  font-size: 0.85em;
+}
+
+.tooltip-box :deep(.dmg-physical) {
+  color: rgb(248 113 113) !important;
+}
+
+.tooltip-box :deep(.dmg-magic) {
+  color: rgb(196 181 253) !important;
+}
+
+.tooltip-box :deep(.dmg-true) {
+  color: rgb(226 232 240) !important;
+}
+
+.tooltip-box :deep(.status-cc) {
+  color: rgb(56 189 248) !important;
+  font-weight: 600;
+}
+
+.tooltip-box :deep(.recast),
+.tooltip-box :deep(.active) {
+  color: rgb(147 197 253) !important;
+  font-weight: 600;
+}
+
+.tooltip-box :deep(.keyword-stealth),
+.tooltip-box :deep(.keyword),
+.tooltip-box :deep(.keyword-major) {
+  color: rgb(191 219 254) !important;
+  font-weight: 600;
+}
+
+.tooltip-box :deep(.scale-ad),
+.tooltip-box :deep(.scale-ap),
+.tooltip-box :deep(.tooltip-tag.scale-ad),
+.tooltip-box :deep(.tooltip-tag.scale-ap) {
+  color: rgb(250 204 21) !important;
+  font-weight: 700;
+}
+
+.tooltip-box :deep(.shield),
+.tooltip-box :deep(.healing) {
+  color: rgb(134 239 172) !important;
 }
 
 /* Icon + damage colors: global rules in assets/css/main.css (.tooltip-box …) */
@@ -4972,9 +5104,9 @@ defineExpose({
 }
 
 .sheet-element-tooltip-wrapper :deep(.item-tooltip) {
-  width: min(320px, calc(100vw - 2rem));
-  max-width: min(320px, calc(100vw - 2rem));
-  min-width: 280px;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 2rem));
+  min-width: min(280px, calc(100vw - 2rem));
   padding: 1em;
   display: flex;
   flex-direction: column;
@@ -5066,6 +5198,19 @@ defineExpose({
   font-weight: 600;
   color: rgb(var(--rgb-accent));
   line-height: 1.2;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-tooltip-header) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sheet-element-tooltip-wrapper :deep(.rune-path-tooltip-icon) {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
 }
 
 .sheet-element-tooltip-wrapper :deep(.rune-tooltip-description) {

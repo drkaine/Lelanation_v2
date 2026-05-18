@@ -1286,9 +1286,37 @@ const TICK_STAT_LABELS: Record<SupportedLang, Record<string, string>> = {
   },
 }
 
-const NONE_CAST_TIME: Record<SupportedLang, string> = {
-  fr_FR: 'aucune',
-  en_US: 'none',
+const PARTYPE_RESOURCE_LABELS: Record<SupportedLang, Record<string, string>> = {
+  fr_FR: {
+    Mana: 'Mana',
+    Energy: 'Énergie',
+    Fury: 'Fureur',
+    Rage: 'Rage',
+    Ferocity: 'Férocité',
+    Heat: 'Chaleur',
+    BloodWell: 'Puits de sang',
+    GnarFury: 'Fureur',
+    Shields: 'Bouclier',
+    Wind: 'Vents',
+    RunicPower: 'Puissance runique',
+    Flow: 'Flux',
+    Courage: 'Courage',
+  },
+  en_US: {
+    Mana: 'Mana',
+    Energy: 'Energy',
+    Fury: 'Fury',
+    Rage: 'Rage',
+    Ferocity: 'Ferocity',
+    Heat: 'Heat',
+    BloodWell: 'Blood Well',
+    GnarFury: 'Fury',
+    Shields: 'Shield',
+    Wind: 'Wind',
+    RunicPower: 'Runic Power',
+    Flow: 'Flow',
+    Courage: 'Courage',
+  },
 }
 
 const MAX_HP_DAMAGE_SUFFIX: Record<SupportedLang, string> = {
@@ -1331,12 +1359,48 @@ function binDataValueMap(
   return map
 }
 
+function resolveSpellResourceLabel(
+  ddSpell: ChampionSpell,
+  championPartype: string,
+  lang: SupportedLang
+): string {
+  const costType = String(ddSpell.costType ?? ddSpell.resource ?? '')
+    .replace(/\{\{[^}]+\}\}/g, '')
+    .trim()
+    .toLowerCase()
+
+  if (costType.includes('energy') || costType.includes('énergie')) {
+    return lang === 'fr_FR' ? 'Énergie' : 'Energy'
+  }
+  if (costType.includes('mana')) {
+    return lang === 'fr_FR' ? 'Mana' : 'Mana'
+  }
+  if (costType.includes('fury') || costType.includes('fureur')) {
+    return lang === 'fr_FR' ? 'Fureur' : 'Fury'
+  }
+  if (costType.includes('rage')) {
+    return lang === 'fr_FR' ? 'Rage' : 'Rage'
+  }
+  if (costType.includes('ferocity') || costType.includes('férocité')) {
+    return lang === 'fr_FR' ? 'Férocité' : 'Ferocity'
+  }
+
+  const partype = String(championPartype ?? '').trim()
+  const fromPartype = PARTYPE_RESOURCE_LABELS[lang][partype]
+  if (fromPartype) return fromPartype
+
+  if (costType) return costType
+
+  return lang === 'fr_FR' ? 'Mana' : 'Mana'
+}
+
 function buildSpellHeaderStats(args: {
   ddSpell: ChampionSpell
   binSpell: Record<string, unknown> | null | undefined
+  championPartype?: string
   lang: SupportedLang
 }): Array<{ key: string; label: string; valueText: string; valueHtml?: string }> {
-  const { ddSpell, binSpell, lang } = args
+  const { ddSpell, binSpell, championPartype = '', lang } = args
   const labels = SPELL_STAT_LABELS[lang]
   const maxRank = Number(ddSpell.maxrank ?? 5)
   const stats: Array<{ key: string; label: string; valueText: string; valueHtml?: string }> = []
@@ -1344,11 +1408,9 @@ function buildSpellHeaderStats(args: {
   const dataByName = binDataValueMap(binSpell, maxRank)
 
   const cost = trimByMaxRank(parseNumberArray(ddSpell.cost), maxRank)
-  if (cost.length > 0) {
-    const resource = String(ddSpell.costType ?? ddSpell.resource ?? '')
-      .replace(/\{\{[^}]+\}\}/g, '')
-      .trim()
-    const resourceLabel = resource || (lang === 'fr_FR' ? 'Mana' : 'Mana')
+  const hasNonZeroCost = cost.some((value) => Number(value) > 0)
+  if (cost.length > 0 && hasNonZeroCost) {
+    const resourceLabel = resolveSpellResourceLabel(ddSpell, championPartype, lang)
     const valueText = `${formatValueSeries(cost, ' / ')} ${resourceLabel}`.trim()
     stats.push({ key: 'cost', label: labels.cost, valueText, valueHtml: valueText })
   }
@@ -1361,9 +1423,10 @@ function buildSpellHeaderStats(args: {
 
   const castFrame = Number(spellBin.castFrame ?? 0)
   const castSeconds = castFrame > 0 ? castFrame / 30 : 0
-  const castValue =
-    castSeconds >= 0.5 ? `${formatResolvedNumber(castSeconds)} sec` : NONE_CAST_TIME[lang]
-  stats.push({ key: 'castTime', label: labels.castTime, valueText: castValue, valueHtml: castValue })
+  if (castSeconds >= 0.5) {
+    const castValue = `${formatResolvedNumber(castSeconds)} sec`
+    stats.push({ key: 'castTime', label: labels.castTime, valueText: castValue, valueHtml: castValue })
+  }
 
   const rectangleLength = dataByName.get('rectanglelength') ?? []
   const finalLength = dataByName.get('finaltickrectanglelength') ?? []
@@ -1489,9 +1552,10 @@ function buildExportedSpell(args: {
   cdSpell: CDragonChampionSpell
   binSpell: Record<string, unknown> | null | undefined
   sharedVars: Map<string, string>
+  championPartype?: string
   lang: SupportedLang
 }): Record<string, unknown> {
-  const { championId, slotIndex, ddSpell, cdSpell, binSpell, sharedVars, lang } = args
+  const { championId, slotIndex, ddSpell, cdSpell, binSpell, sharedVars, championPartype = '', lang } = args
   const spellImage = asObject(ddSpell.image)
   const resolvedSlot = normalizeSpellSlot(slotIndex)
 
@@ -1507,7 +1571,7 @@ function buildExportedSpell(args: {
     ? parseTooltip(String(ddSpell.description ?? ''), ddSpell, cdSpell, binSpell, sharedVars)
     : null
 
-  const headerStats = buildSpellHeaderStats({ ddSpell, binSpell, lang })
+  const headerStats = buildSpellHeaderStats({ ddSpell, binSpell, championPartype, lang })
   const tickStats = buildSpellTickStats({ ddSpell, binSpell, lang })
 
   return {
@@ -1762,6 +1826,7 @@ export class TheorycraftDataBuilderService {
     const stats = asObject(champion.stats)
     const championImage = asObject(champion.image)
     const championId = String(champion.id ?? '')
+    const championPartype = String(champion.partype ?? '')
     const sharedVars = buildChampionSharedVariableMap(championBin)
 
     const spells = spellsRaw.map((ddSpell, idx) => {
@@ -1779,6 +1844,7 @@ export class TheorycraftDataBuilderService {
         cdSpell,
         binSpell,
         sharedVars,
+        championPartype,
         lang: resolvedLang,
       })
     })
@@ -1788,6 +1854,7 @@ export class TheorycraftDataBuilderService {
       key: Number(champion.key ?? 0),
       name: String(champion.name ?? ''),
       title: String(champion.title ?? ''),
+      partype: championPartype,
       image: {
         full: String(championImage.full ?? `${championId}.png`),
       },

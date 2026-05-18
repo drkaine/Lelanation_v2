@@ -6,7 +6,7 @@ import { pollerV2Observability } from "../observability/poller-v2-observability.
 import { hydrationQueue, discoveryQueue } from "../queues/index.js";
 import { DISCOVERY_QUEUE } from "../queues/definitions.js";
 import { redis } from "../redis/client.js";
-import { waitForMatchSlot } from "../redis/rate-limiter.js";
+import { waitForDiscoverySlot } from "../redis/rate-scheduler.js";
 import { RiotClient } from "../riot/client.js";
 import {
   findPreviousPatchEntry,
@@ -24,6 +24,11 @@ type PlayerRow = {
 
 const riotClient = new RiotClient();
 const PATCH_SWITCH_GRACE_DAYS = 2;
+const QUEUED_MATCH_TTL_SEC = 86_400;
+
+function queuedMatchKey(matchId: string): string {
+  return `rl:queued:${matchId}`;
+}
 
 function toEpochSeconds(value: Date | string | null): number | null {
   if (!value) return null;
@@ -69,6 +74,39 @@ async function resolveDiscoveryPatchStart(nowSec: number): Promise<{ startTimeSe
   };
 }
 
+async function filterMatchIdsNotAlreadyQueued(matchIds: string[]): Promise<string[]> {
+  if (matchIds.length === 0) {
+    return [];
+  }
+
+  const pipeline = redis.pipeline();
+  for (const matchId of matchIds) {
+    pipeline.exists(queuedMatchKey(matchId));
+  }
+  const results = await pipeline.exec();
+
+  const toEnqueue: string[] = [];
+  for (let i = 0; i < matchIds.length; i += 1) {
+    const exists = results?.[i]?.[1];
+    if (exists !== 1) {
+      toEnqueue.push(matchIds[i]!);
+    }
+  }
+  return toEnqueue;
+}
+
+async function markMatchIdsQueued(matchIds: string[]): Promise<void> {
+  if (matchIds.length === 0) {
+    return;
+  }
+
+  const pipeline = redis.pipeline();
+  for (const matchId of matchIds) {
+    pipeline.set(queuedMatchKey(matchId), "1", "EX", QUEUED_MATCH_TTL_SEC);
+  }
+  await pipeline.exec();
+}
+
 async function selectPlayersBatch(limit: number): Promise<PlayerRow[]> {
   return sql.begin(async (tx) => {
     return tx<PlayerRow[]>`
@@ -107,7 +145,7 @@ async function processDiscoveryPlayer(
     lastSeenSec == null || lastSeenSec < patchWindow.startTimeSec ? patchWindow.startTimeSec : lastSeenSec;
   const startTime = Math.min(discoveryStartTime, nowSec);
 
-  await waitForMatchSlot(1);
+  await waitForDiscoverySlot();
   const matchIds = await riotClient.getMatchlist(player.puuid, player.region, { startTime });
 
   await sql.begin(async (tx) => {
@@ -122,11 +160,14 @@ async function processDiscoveryPlayer(
 
     const knownIds = new Set(knownRows.map((row) => row.riot_match_id));
     const newMatchIds = matchIds.filter((matchId) => !knownIds.has(matchId));
-    pollerV2Observability.recordDiscoveryMatches(matchIds.length, newMatchIds.length);
+    const toEnqueue = await filterMatchIdsNotAlreadyQueued(newMatchIds);
 
-    if (newMatchIds.length > 0) {
+    pollerV2Observability.recordDiscoveryMatches(matchIds.length, toEnqueue.length);
+
+    if (toEnqueue.length > 0) {
+      await markMatchIdsQueued(toEnqueue);
       await hydrationQueue.addBulk(
-        newMatchIds.map((matchId) => ({
+        toEnqueue.map((matchId) => ({
           name: "hydrate-match",
           data: {
             matchId,
@@ -150,6 +191,21 @@ async function processDiscoveryPlayer(
 
 async function runDiscoveryCycle(): Promise<void> {
   const startedAt = Date.now();
+  const hydrationWaiting = await hydrationQueue.getWaitingCount();
+  const maxHydrationQueueDepth = config.MAX_HYDRATION_QUEUE_DEPTH;
+
+  if (hydrationWaiting > maxHydrationQueueDepth) {
+    console.debug(
+      JSON.stringify({
+        msg: "discovery_paused_queue_full",
+        hydrationWaiting,
+        limit: maxHydrationQueueDepth,
+      }),
+    );
+    pollerV2Observability.recordDuration("discoveryCycleMs", Date.now() - startedAt);
+    return;
+  }
+
   const nowSec = Math.floor(startedAt / 1000);
   const patchWindow = await resolveDiscoveryPatchStart(nowSec);
   const playersPerTick = config.DISCOVERY_PLAYERS_PER_TICK;

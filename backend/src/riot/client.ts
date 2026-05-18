@@ -1,6 +1,6 @@
 import { config } from "../config/index.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
-import { setGlobalRateLimitCooldown } from "../redis/rate-limiter.js";
+import { setGlobalRateLimitCooldown } from "../redis/rate-scheduler.js";
 import type { MatchDto, MatchTimelineDto, MatchlistDto, RankDto } from "./types.js";
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000] as const;

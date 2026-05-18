@@ -1,4 +1,4 @@
-import { loadLuaScript } from "../src/redis/rate-limiter.js";
+import { loadLuaScript } from "../src/redis/rate-scheduler.js";
 import { redis } from "../src/redis/client.js";
 
 async function main(): Promise<void> {

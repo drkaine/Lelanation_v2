@@ -8,7 +8,7 @@ import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
 import { ingestionQueue } from "../queues/index.js";
 import { redis } from "../redis/client.js";
-import { waitForMatchSlot, waitForRankSlot } from "../redis/rate-limiter.js";
+import { waitForHydrationSlot, waitForRankSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
 import { sumObjectiveTimestampMsByTeamAndKey } from "../parsers/objective-timestamp-sums.js";
 import type { MatchDto, MatchTimelineDto, ParticipantDto } from "../riot/types.js";
@@ -288,7 +288,7 @@ function parseTeamStats(
 async function runHydrationJob(data: HydrationJobData): Promise<void> {
   const startedAt = Date.now();
   pollerV2Observability.recordHydrationStart();
-  await waitForMatchSlot(2);
+  await waitForHydrationSlot();
 
   try {
     const [match, timeline] = await Promise.all([

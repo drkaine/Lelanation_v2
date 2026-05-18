@@ -1,0 +1,446 @@
+/**
+ * Allocation explicite du budget Riot (TARGET_PCT × RATE_LIMIT_PER_120S) :
+ * discovery 15% · hydration 75% · rank 10% — voir config BUDGET_*_PCT.
+ */
+import { readFileSync } from "fs";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { config } from "../config/index.js";
+import { pollerV2Observability } from "../observability/poller-v2-observability.js";
+import { redis } from "./client.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua"), "utf8");
+
+export const TARGET_PCT = 0.92;
+
+export const DISCOVERY_SLOT_KEY = "rl:slots:discovery";
+export const HYDRATION_SLOT_KEY = "rl:slots:hydration";
+export const RANK_SLOT_KEY = "rl:slots:rank";
+
+/** @deprecated use HYDRATION_SLOT_KEY */
+export const MATCH_SLOT_KEY = HYDRATION_SLOT_KEY;
+/** @deprecated use DISCOVERY_SLOT_KEY or HYDRATION_SLOT_KEY */
+export const SLOT_KEY = HYDRATION_SLOT_KEY;
+
+const GLOBAL_COOLDOWN_KEY = "rl:app:global-cooldown";
+const MAX_LOOKAHEAD_MS = 8000;
+const DRIP_INTERVAL_MS = 200;
+const RANK_SLOT_MAX_WAIT_MS = 5000;
+
+let acquireSlotSha: string | null = null;
+const dripIntervals: NodeJS.Timeout[] = [];
+const dripAccumulators = new Map<string, number>();
+
+export type RankSlotResult = "ok" | "budget_exhausted";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function totalTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
+  return (rateLimitPer120s * TARGET_PCT) / 120;
+}
+
+export function discoveryTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
+  return totalTargetRatePerSec(rateLimitPer120s) * config.BUDGET_DISCOVERY_PCT;
+}
+
+export function hydrationTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
+  return totalTargetRatePerSec(rateLimitPer120s) * config.BUDGET_HYDRATION_PCT;
+}
+
+export function rankTargetRatePerSec(rateLimitPer120s = config.RATE_LIMIT_PER_120S): number {
+  return totalTargetRatePerSec(rateLimitPer120s) * config.BUDGET_RANK_PCT;
+}
+
+function slotIntervalMs(targetRatePerSec: number): number {
+  return 1000 / targetRatePerSec;
+}
+
+export function advanceDripAccumulator(
+  accumulator: number,
+  targetRatePerSec: number,
+  dripIntervalMs = DRIP_INTERVAL_MS,
+): { accumulator: number; slotsToAdd: number } {
+  const tokensPerInterval = (targetRatePerSec * dripIntervalMs) / 1000;
+  const next = accumulator + tokensPerInterval;
+  const slotsToAdd = Math.floor(next);
+  return { accumulator: next - slotsToAdd, slotsToAdd };
+}
+
+function slotMemberPrefix(slotKey: string): string {
+  if (slotKey === DISCOVERY_SLOT_KEY) return "d";
+  if (slotKey === HYDRATION_SLOT_KEY) return "h";
+  if (slotKey === RANK_SLOT_KEY) return "r";
+  return "s";
+}
+
+async function evalAcquireSlot(
+  slotKey: string,
+  cost: 1 | 2,
+  nowMs: number,
+): Promise<[number, number]> {
+  if (!acquireSlotSha) {
+    await loadLuaScript();
+  }
+
+  const args = [slotKey, cost.toString(), nowMs.toString()] as const;
+
+  try {
+    return (await redis.evalsha(acquireSlotSha as string, 1, ...args)) as [number, number];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("NOSCRIPT")) {
+      throw error;
+    }
+
+    acquireSlotSha = (await redis.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
+    return (await redis.eval(ACQUIRE_SLOT_LUA, 1, ...args)) as [number, number];
+  }
+}
+
+async function getGlobalCooldownMs(): Promise<number> {
+  const ttl = await redis.pttl(GLOBAL_COOLDOWN_KEY);
+  return ttl > 0 ? ttl : 0;
+}
+
+async function runDripTick(slotKey: string, targetRatePerSec: number): Promise<void> {
+  const now = Date.now();
+  const maxFutureTs = now + MAX_LOOKAHEAD_MS;
+  const intervalMs = slotIntervalMs(targetRatePerSec);
+
+  const last = await redis.zrange(slotKey, -1, -1, "WITHSCORES");
+  const lastTs = last.length >= 2 ? Number.parseFloat(last[1]!) : now;
+
+  const { accumulator, slotsToAdd } = advanceDripAccumulator(
+    dripAccumulators.get(slotKey) ?? 0,
+    targetRatePerSec,
+  );
+  dripAccumulators.set(slotKey, accumulator);
+
+  const queueDepth = await redis.zcard(slotKey);
+
+  if (process.env.RATE_SCHEDULER_DEBUG === "1") {
+    console.debug(
+      JSON.stringify({
+        msg: "drip_tick",
+        slotKey,
+        lastTs,
+        slotIntervalMs: Math.round(intervalMs * 100) / 100,
+        slotsToAdd,
+        queueDepth,
+        targetTokensPerSec: targetRatePerSec,
+        dripAccumulator: accumulator,
+      }),
+    );
+  }
+
+  if (lastTs >= maxFutureTs) {
+    await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
+    return;
+  }
+
+  if (slotsToAdd <= 0) {
+    await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
+    return;
+  }
+
+  const prefix = slotMemberPrefix(slotKey);
+  const zaddArgs: Array<string | number> = [];
+  for (let i = 1; i <= slotsToAdd; i += 1) {
+    const ts = lastTs + intervalMs * i;
+    if (ts > maxFutureTs) {
+      break;
+    }
+    zaddArgs.push(ts, `${prefix}:${ts.toFixed(0)}:${i}`);
+  }
+
+  if (process.env.RATE_SCHEDULER_DEBUG === "1" && zaddArgs.length > 0) {
+    console.debug(
+      JSON.stringify({
+        msg: "drip_tick_added",
+        slotKey,
+        slotsAdded: zaddArgs.length / 2,
+      }),
+    );
+  }
+
+  if (zaddArgs.length > 0) {
+    await redis.zadd(slotKey, ...zaddArgs);
+  }
+
+  await redis.zremrangebyscore(slotKey, "-inf", now - 5000);
+}
+
+function startDripForKey(slotKey: string, targetRatePerSec: number): void {
+  void runDripTick(slotKey, targetRatePerSec).catch((error) => {
+    console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
+  });
+
+  const interval = setInterval(() => {
+    void runDripTick(slotKey, targetRatePerSec).catch((error) => {
+      console.error(`[rate-scheduler] drip tick failed key=${slotKey}`, error);
+    });
+  }, DRIP_INTERVAL_MS);
+
+  dripIntervals.push(interval);
+}
+
+export async function loadLuaScript(): Promise<void> {
+  acquireSlotSha = (await redis.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
+}
+
+export function startDrip(): void {
+  if (dripIntervals.length > 0) {
+    return;
+  }
+
+  const discoveryRate = discoveryTargetRatePerSec();
+  const hydrationRate = hydrationTargetRatePerSec();
+  const rankRate = rankTargetRatePerSec();
+
+  startDripForKey(DISCOVERY_SLOT_KEY, discoveryRate);
+  startDripForKey(HYDRATION_SLOT_KEY, hydrationRate);
+  startDripForKey(RANK_SLOT_KEY, rankRate);
+
+  console.log(
+    `[rate-scheduler] drip started ` +
+      `discovery=${discoveryRate.toFixed(4)}/s hydration=${hydrationRate.toFixed(4)}/s rank=${rankRate.toFixed(4)}/s ` +
+      `(budgets ${config.BUDGET_DISCOVERY_PCT * 100}%/${config.BUDGET_HYDRATION_PCT * 100}%/${config.BUDGET_RANK_PCT * 100}% of ${TARGET_PCT * 100}% cap)`,
+  );
+}
+
+export function stopDrip(): void {
+  while (dripIntervals.length > 0) {
+    const interval = dripIntervals.pop();
+    if (interval) {
+      clearInterval(interval);
+    }
+  }
+  dripAccumulators.clear();
+}
+
+async function waitForScheduledSlot(slotKey: string, cost: 1 | 2): Promise<void> {
+  while (true) {
+    const globalCooldownMs = await getGlobalCooldownMs();
+    if (globalCooldownMs > 0) {
+      await sleep(globalCooldownMs + 10);
+      continue;
+    }
+
+    const now = Date.now();
+    const [allowed, value] = await evalAcquireSlot(slotKey, cost, now);
+
+    if (allowed === 1) {
+      const delay = value - Date.now();
+      pollerV2Observability.recordRateLimitAttempt(cost, true, Math.max(0, delay));
+      if (delay > 5) {
+        await sleep(delay);
+      }
+      return;
+    }
+
+    const waitMs = Math.max(value, 0);
+    pollerV2Observability.recordRateLimitAttempt(cost, false, waitMs);
+    await sleep(waitMs);
+  }
+}
+
+export async function waitForDiscoverySlot(): Promise<void> {
+  await waitForScheduledSlot(DISCOVERY_SLOT_KEY, 1);
+}
+
+export async function waitForHydrationSlot(): Promise<void> {
+  await waitForScheduledSlot(HYDRATION_SLOT_KEY, 2);
+}
+
+export async function waitForRankSlot(): Promise<RankSlotResult> {
+  const globalCooldownMs = await getGlobalCooldownMs();
+  if (globalCooldownMs > 0) {
+    return "budget_exhausted";
+  }
+
+  const now = Date.now();
+  const [allowed, value] = await evalAcquireSlot(RANK_SLOT_KEY, 1, now);
+
+  if (allowed !== 1) {
+    const waitMs = Math.max(value, 0);
+    pollerV2Observability.recordRateLimitAttempt(1, false, waitMs);
+    if (waitMs > RANK_SLOT_MAX_WAIT_MS) {
+      return "budget_exhausted";
+    }
+    await sleep(waitMs);
+    return waitForRankSlot();
+  }
+
+  const delay = value - Date.now();
+  pollerV2Observability.recordRateLimitAttempt(1, true, Math.max(0, delay));
+
+  if (delay > RANK_SLOT_MAX_WAIT_MS) {
+    return "budget_exhausted";
+  }
+
+  if (delay > 5) {
+    await sleep(delay);
+  }
+  return "ok";
+}
+
+/** @deprecated use waitForDiscoverySlot or waitForHydrationSlot */
+export async function waitForMatchSlot(cost: 1 | 2): Promise<void> {
+  if (cost === 1) {
+    await waitForDiscoverySlot();
+    return;
+  }
+  await waitForHydrationSlot();
+}
+
+/** @deprecated use waitForHydrationSlot */
+export const waitForSlot = waitForMatchSlot;
+
+export async function tryAcquireSlot(cost: 1 | 2): Promise<{ granted: boolean; waitMs: number }> {
+  const slotKey = cost === 1 ? DISCOVERY_SLOT_KEY : HYDRATION_SLOT_KEY;
+  const now = Date.now();
+  const [allowed, value] = await evalAcquireSlot(slotKey, cost, now);
+  const granted = allowed === 1;
+  const waitMs = granted ? Math.max(0, value - now) : Math.max(value, 0);
+  pollerV2Observability.recordRateLimitAttempt(cost, granted, waitMs);
+  return { granted, waitMs };
+}
+
+export async function setGlobalRateLimitCooldown(waitMs: number): Promise<void> {
+  const safeWaitMs = Math.max(0, Math.trunc(waitMs));
+  if (safeWaitMs <= 0) return;
+  await redis.set(GLOBAL_COOLDOWN_KEY, "1", "PX", safeWaitMs);
+}
+
+export function createLuaRateLimiterForTests(params: {
+  redisClient: {
+    script: (command: string, script: string) => Promise<string>;
+    evalsha: (...args: unknown[]) => Promise<unknown>;
+    eval: (...args: unknown[]) => Promise<unknown>;
+    zrange: (...args: unknown[]) => Promise<string[]>;
+    zadd: (...args: unknown[]) => Promise<unknown>;
+    zremrangebyscore: (...args: unknown[]) => Promise<unknown>;
+    del: (...args: unknown[]) => Promise<unknown>;
+  };
+  slotKey: string;
+  targetRatePerSec: number;
+}) {
+  let sha: string | null = null;
+  let testDripInterval: NodeJS.Timeout | null = null;
+  let testDripAccumulator = 0;
+
+  async function loadScript(): Promise<void> {
+    sha = (await params.redisClient.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
+  }
+
+  async function evalSlot(cost: 1 | 2, nowMs: number): Promise<[number, number]> {
+    if (!sha) {
+      await loadScript();
+    }
+
+    const args = [params.slotKey, cost.toString(), nowMs.toString()] as const;
+
+    try {
+      return (await params.redisClient.evalsha(sha as string, 1, ...args)) as [number, number];
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes("NOSCRIPT")) {
+        throw error;
+      }
+      sha = (await params.redisClient.script("LOAD", ACQUIRE_SLOT_LUA)) as string;
+      return (await params.redisClient.eval(ACQUIRE_SLOT_LUA, 1, ...args)) as [number, number];
+    }
+  }
+
+  async function runTestDripTick(): Promise<void> {
+    const now = Date.now();
+    const maxFutureTs = now + MAX_LOOKAHEAD_MS;
+    const intervalMs = slotIntervalMs(params.targetRatePerSec);
+
+    const last = await params.redisClient.zrange(params.slotKey, -1, -1, "WITHSCORES");
+    const lastTs = last.length >= 2 ? Number.parseFloat(last[1]!) : now;
+
+    const advanced = advanceDripAccumulator(testDripAccumulator, params.targetRatePerSec);
+    testDripAccumulator = advanced.accumulator;
+    const slotsToAdd = advanced.slotsToAdd;
+
+    if (lastTs >= maxFutureTs || slotsToAdd <= 0) {
+      await params.redisClient.zremrangebyscore(params.slotKey, "-inf", now - 5000);
+      return;
+    }
+
+    const zaddArgs: Array<string | number> = [];
+    for (let i = 1; i <= slotsToAdd; i += 1) {
+      const ts = lastTs + intervalMs * i;
+      if (ts > maxFutureTs) {
+        break;
+      }
+      zaddArgs.push(ts, `s:${ts.toFixed(0)}:${i}`);
+    }
+
+    if (zaddArgs.length > 0) {
+      await params.redisClient.zadd(params.slotKey, ...zaddArgs);
+    }
+
+    await params.redisClient.zremrangebyscore(params.slotKey, "-inf", now - 5000);
+  }
+
+  return {
+    loadScript,
+    async tryAcquire(cost: 1 | 2): Promise<{ granted: boolean; waitMs: number }> {
+      const now = Date.now();
+      const [allowed, value] = await evalSlot(cost, now);
+      const granted = allowed === 1;
+      return {
+        granted,
+        waitMs: granted ? Math.max(0, value - now) : Math.max(value, 0),
+      };
+    },
+    async tryAcquireRankOnce(): Promise<RankSlotResult> {
+      const now = Date.now();
+      const [allowed, value] = await evalSlot(1, now);
+      if (allowed !== 1) {
+        return "budget_exhausted";
+      }
+      const delay = value - now;
+      if (delay > RANK_SLOT_MAX_WAIT_MS) {
+        return "budget_exhausted";
+      }
+      if (delay > 5) {
+        await sleep(delay);
+      }
+      return "ok";
+    },
+    async seedSlots(count: number, startTs = Date.now(), spacingMs = 1): Promise<void> {
+      const zaddArgs: Array<string | number> = [];
+      for (let i = 0; i < count; i += 1) {
+        const ts = startTs + spacingMs * i;
+        zaddArgs.push(ts, `s:seed:${ts}:${i}`);
+      }
+      if (zaddArgs.length > 0) {
+        await params.redisClient.zadd(params.slotKey, ...zaddArgs);
+      }
+    },
+    startDrip(): void {
+      if (testDripInterval) {
+        return;
+      }
+      void runTestDripTick();
+      testDripInterval = setInterval(() => {
+        void runTestDripTick();
+      }, DRIP_INTERVAL_MS);
+    },
+    stopDrip(): void {
+      if (!testDripInterval) {
+        return;
+      }
+      clearInterval(testDripInterval);
+      testDripInterval = null;
+      testDripAccumulator = 0;
+    },
+    slotIntervalMs: () => slotIntervalMs(params.targetRatePerSec),
+  };
+}
