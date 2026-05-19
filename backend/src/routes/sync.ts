@@ -104,34 +104,38 @@ router.post('/trigger', async (_req, res) => {
 router.post('/community-dragon', async (_req, res) => {
 
   try {
-    // Sync with retry logic
-    const syncResult = await retryWithBackoff(
-      () => communityDragonService.syncAllChampions(),
-      {
-        maxRetries: 3,
-        initialDelay: 5000,
-        maxDelay: 30000,
-        multiplier: 2,
-      }
-    )
+    const [emblemsResult, objectiveIconsResult, mapPlannerResult] = await Promise.all([
+      communityDragonService.syncRankedEmblems(),
+      communityDragonService.syncScoreboardObjectiveIcons(),
+      communityDragonService.syncMapPlannerAssets(),
+    ])
 
-    if (syncResult.isErr()) {
-      const error = syncResult.unwrapErr()
-      console.error('[Manual Sync] Community Dragon sync failed after retries:', error)
+    if (emblemsResult.isErr() || objectiveIconsResult.isErr() || mapPlannerResult.isErr()) {
+      const error = emblemsResult.isErr()
+        ? emblemsResult.unwrapErr()
+        : objectiveIconsResult.isErr()
+          ? objectiveIconsResult.unwrapErr()
+          : mapPlannerResult.unwrapErr()
+      console.error('[Manual Sync] Community Dragon assets sync failed:', error)
       return res.status(500).json({
-        error: 'Sync failed after retries',
+        error: 'Community Dragon assets sync failed',
         details: error.message,
       })
     }
 
-    const syncData = syncResult.unwrap()
+    const emblems = emblemsResult.unwrap()
+    const objectiveIcons = objectiveIconsResult.unwrap()
+    const mapPlanner = mapPlannerResult.unwrap()
+    const synced = emblems.synced + objectiveIcons.synced + mapPlanner.synced
+    const failed = emblems.failed + objectiveIcons.failed + mapPlanner.failed
+    const errors = [...emblems.errors, ...objectiveIcons.errors, ...mapPlanner.errors]
     
     return res.json({
       success: true,
-      synced: syncData.synced,
-      failed: syncData.failed,
-      skipped: syncData.skipped,
-      errors: syncData.errors,
+      synced,
+      failed,
+      skipped: 0,
+      errors,
     })
   } catch (error) {
     console.error('[Manual Sync] Unexpected error:', error)

@@ -1,7 +1,6 @@
 import cron from 'node-cron'
 import { CommunityDragonService } from '../services/CommunityDragonService.js'
 import { DiscordService } from '../services/DiscordService.js'
-import { retryWithBackoff } from '../utils/retry.js'
 import { CronStatusService } from '../services/CronStatusService.js'
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
 import { createCronLogger } from '../utils/cronLogger.js'
@@ -28,108 +27,80 @@ export async function runCommunityDragonSyncOnce(): Promise<
 
   await cronStatus.markStart('communityDragonSync')
 
-  await log.step('Syncing all champions')
-
-  const syncResult = await retryWithBackoff(
-    () => communityDragonService.syncAllChampions(),
-    {
-      maxRetries: 3,
-      initialDelay: 5000,
-      maxDelay: 30000,
-      multiplier: 2,
-    }
-  )
-
-  if (syncResult.isErr()) {
-    const error = syncResult.unwrapErr()
-    await log.error('Community Dragon sync failed after retries:', error)
-    await cronStatus.markFailure('communityDragonSync', error)
-
-    const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
-    await discordService.sendAlert(
-      '❌ Community Dragon Sync Failed',
-      `Failed to synchronize Community Dragon data after 3 retry attempts`,
-      error,
-      {
-        duration: `${duration}s`,
-        retries: '3',
-        timestamp: new Date().toISOString(),
-      }
-    )
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
-  }
-
-  const syncData = syncResult.unwrap()
-
-  await log.info('Community Dragon sync completed. Synced:', syncData.synced, 'Failed:', syncData.failed, 'Skipped:', syncData.skipped)
-
   await log.step('Syncing ranked emblems')
   const emblemResult = await communityDragonService.syncRankedEmblems()
-  if (emblemResult.isErr()) {
-    await log.warn('Ranked emblems sync failed:', emblemResult.unwrapErr())
-  } else {
-    const emblemData = emblemResult.unwrap()
-    await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
-  }
 
   await log.step('Syncing scoreboard objective icons')
   const objectiveIconsResult = await communityDragonService.syncScoreboardObjectiveIcons()
-  if (objectiveIconsResult.isErr()) {
-    await log.warn('Scoreboard objective icons sync failed:', objectiveIconsResult.unwrapErr())
-  } else {
-    const objectiveIconsData = objectiveIconsResult.unwrap()
-    await log.info(
-      'Scoreboard objective icons:',
-      objectiveIconsData.synced,
-      'synced,',
-      objectiveIconsData.failed,
-      'failed'
-    )
-  }
 
   await log.step('Syncing map planner assets')
   const mapPlannerResult = await communityDragonService.syncMapPlannerAssets()
-  if (mapPlannerResult.isErr()) {
-    await log.warn('Map planner assets sync failed:', mapPlannerResult.unwrapErr())
-  } else {
-    const mapPlannerData = mapPlannerResult.unwrap()
-    await log.info(
-      'Map planner assets:',
-      mapPlannerData.synced,
-      'synced,',
-      mapPlannerData.failed,
-      'failed'
-    )
+  if (emblemResult.isErr() || objectiveIconsResult.isErr() || mapPlannerResult.isErr()) {
+    const firstError = emblemResult.isErr()
+      ? emblemResult.unwrapErr()
+      : objectiveIconsResult.isErr()
+        ? objectiveIconsResult.unwrapErr()
+        : mapPlannerResult.unwrapErr()
+    await log.error('Community Dragon assets sync failed:', firstError)
+    await cronStatus.markFailure('communityDragonSync', firstError)
+    return { ok: false, error: firstError instanceof Error ? firstError.message : String(firstError) }
   }
+
+  const emblemData = emblemResult.unwrap()
+  const objectiveIconsData = objectiveIconsResult.unwrap()
+  const mapPlannerData = mapPlannerResult.unwrap()
+  const synced = emblemData.synced + objectiveIconsData.synced + mapPlannerData.synced
+  const failed = emblemData.failed + objectiveIconsData.failed + mapPlannerData.failed
+
+  await log.info('Ranked emblems:', emblemData.synced, 'synced,', emblemData.failed, 'failed')
+  await log.info(
+    'Scoreboard objective icons:',
+    objectiveIconsData.synced,
+    'synced,',
+    objectiveIconsData.failed,
+    'failed'
+  )
+  await log.info(
+    'Map planner assets:',
+    mapPlannerData.synced,
+    'synced,',
+    mapPlannerData.failed,
+    'failed'
+  )
 
   await cronStatus.markSuccess('communityDragonSync')
 
   const duration = Math.round((new Date().getTime() - startTime.getTime()) / 1000)
   await log.step('Done', {
-    synced: syncData.synced,
-    failed: syncData.failed,
-    skipped: syncData.skipped,
+    synced,
+    failed,
+    skipped: 0,
     duration: `${duration}s`
   })
 
-  if (syncData.failed > 0) {
+  if (failed > 0) {
+    const allErrors = [
+      ...emblemData.errors,
+      ...objectiveIconsData.errors,
+      ...mapPlannerData.errors,
+    ]
     const successContext: Record<string, unknown> = {
-      synced: syncData.synced,
-      failed: syncData.failed,
-      skipped: syncData.skipped,
+      synced,
+      failed,
+      skipped: 0,
       duration: `${duration}s`,
       timestamp: new Date().toISOString(),
     }
-    if (syncData.errors.length > 0) {
-      successContext.errors = syncData.errors.slice(0, 10)
-      if (syncData.errors.length > 10) {
-        successContext.moreErrors = `${syncData.errors.length - 10} more errors...`
+    if (allErrors.length > 0) {
+      successContext.errors = allErrors.slice(0, 10)
+      if (allErrors.length > 10) {
+        successContext.moreErrors = `${allErrors.length - 10} more errors...`
       }
     }
     await discordService.sendAlert(
-      '⚠️ Community Dragon Sync Completed with Errors',
-      `Sync completed but some champions failed to sync`,
-      new Error(`${syncData.failed} champions failed to sync`),
+      '⚠️ Community Dragon Assets Sync Completed with Errors',
+      'Sync completed but some Community Dragon assets failed to sync',
+      new Error(`${failed} assets failed to sync`),
       successContext
     )
   }
@@ -140,18 +111,18 @@ export async function runCommunityDragonSyncOnce(): Promise<
     script: 'community_dragon',
     message: 'Community Dragon sync terminé',
     json: {
-      synced: syncData.synced,
-      failed: syncData.failed,
-      skipped: syncData.skipped,
+      synced,
+      failed,
+      skipped: 0,
       durationSeconds: duration,
     },
   })
 
   return {
     ok: true,
-    synced: syncData.synced,
-    failed: syncData.failed,
-    skipped: syncData.skipped,
+    synced,
+    failed,
+    skipped: 0,
   }
 }
 
