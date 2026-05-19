@@ -2,7 +2,7 @@
  * Précharge les caches stats en arrière-plan pour limiter 504/502 et premières requêtes lentes.
  * Lance après le démarrage du serveur (décalé) ; exécute les appels un par un avec délai pour ne pas surcharger la DB.
  */
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { RiotStatsAggregator } from './RiotStatsAggregator.js'
 import {
   getOverviewDetailStats,

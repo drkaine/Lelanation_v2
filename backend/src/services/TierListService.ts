@@ -4,9 +4,9 @@
  * Avec option `role`, stats = ce rôle pour tout champion ayant assez de games dessus (même si ce n’est pas son main).
  * Tier score: matchup deltas (centrées) puis percentiles.
  */
-import { prisma } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
 const MIN_GAMES = 1
@@ -378,7 +378,7 @@ async function fetchRoleRows(
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
 
-  const coreRows = await prisma.$queryRawUnsafe<Array<{
+  const coreRows = await queryRawUnsafe<Array<{
     championId: number
     role: string
     gameVersion: string
@@ -482,7 +482,7 @@ async function fetchMatchupRoleRows(
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch, 'ac')
   const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', patch, 'vs')
 
-  const coreRows = await prisma.$queryRawUnsafe<Array<{ id: bigint; championId: number; role: string }>>(`
+  const coreRows = await queryRawUnsafe<Array<{ id: bigint; championId: number; role: string }>>(`
     SELECT id, champion_id AS "championId", role
     FROM ${coreFrom}
     WHERE ${whereSql}
@@ -493,7 +493,7 @@ async function fetchMatchupRoleRows(
     coreById.set(String(r.id), { championId: r.championId, role: r.role })
   }
 
-  const vsRows = await prisma.$queryRawUnsafe<Array<{
+  const vsRows = await queryRawUnsafe<Array<{
     championStatId: bigint
     opponentChampionId: number
     countGame: number
@@ -531,7 +531,7 @@ async function fetchMatchupRoleRows(
 
 async function getLatestPatch(): Promise<string | null> {
   const coreFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 'ac')
-  const rows = await prisma.$queryRawUnsafe<Array<{ patch: string; games: bigint }>>(`
+  const rows = await queryRawUnsafe<Array<{ patch: string; games: bigint }>>(`
     WITH patch_totals AS (
       SELECT
         (split_part(ac.game_version, '.', 1) || '.' || split_part(ac.game_version, '.', 2)) AS patch,

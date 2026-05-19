@@ -1,29 +1,7 @@
-# Deux instances PostgreSQL 16 (données persistantes dans les volumes Docker).
-# - postgres → lelanation_stats (Prisma / backend classique), port hôte 5433
-# - postgres-statistiques → lelanation_statistiques (Drizzle), port hôte 5434
+# PostgreSQL 16 — base unique `lelanation_statistiques` (Drizzle, port hôte 5434).
 # Usage : docker compose up -d   ou   make docker-db-up
-# Migrations : make migrate-prisma (lelanation_stats) ; make migrate-drizzle-statistiques (lelanation_statistiques, ex. player_rank_history).
-# restart: unless-stopped → les conteneurs repartent avec le daemon Docker (reboot machine).
+# Migrations : make migrate-db (Drizzle)
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: lelanation-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: lelanation
-      POSTGRES_PASSWORD: lelanation
-      POSTGRES_DB: lelanation_stats
-    ports:
-      - "5433:5432"
-    volumes:
-      - lelanation_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lelanation -d lelanation_stats"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # Statistiques agrégées (Drizzle, backend/drizzle/migrations) — port 5434
   postgres-statistiques:
     image: postgres:16-alpine
     container_name: lelanation-postgres-statistiques
@@ -43,5 +21,4 @@ services:
       retries: 5
 
 volumes:
-  lelanation_pgdata:
   lelanation_statistiques_pgdata:

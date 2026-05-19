@@ -27,37 +27,21 @@ npm install
 
 ### Database (PostgreSQL)
 
-La base est utilisée pour les **statistiques LoL** (matches, participants). Option 1 : Docker à la racine du projet :
+Une seule base : **`lelanation_statistiques`** (agrégats partitionnés, poller-v2, API stats).
 
 ```bash
 # À la racine du repo
 docker compose up -d
+make migrate-db
 ```
 
-PostgreSQL écoute sur le port **5433** (pour éviter un conflit avec un Postgres local sur 5432). Dans `backend/.env` :
+Dans `backend/.env` (port **5434** via Docker) :
 
 ```env
-DATABASE_URL="postgresql://lelanation:lelanation@localhost:5433/lelanation_stats"
+DATABASE_URL="postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques"
 ```
 
-Option 2 : PostgreSQL déjà installé sur la machine (port 5432) — créez la base `lelanation_stats` et un utilisateur si besoin, puis :
-
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/lelanation_stats"
-```
-
-Appliquer les migrations :
-
-```bash
-cd backend
-npx prisma migrate deploy
-```
-
-Créer une nouvelle migration après modification de `prisma/schema.prisma` :
-
-```bash
-npx prisma migrate dev --name nom_de_la_migration
-```
+Migrations Drizzle : `npm run drizzle:statistiques:migrate` ou `make migrate-db`.
 
 ### Environment Variables
 
@@ -68,7 +52,7 @@ Create a `.env` file in the backend directory (see also `.env.example`):
 PORT=3001
 
 # Database (required for stats / match collection)
-# DATABASE_URL="postgresql://lelanation:lelanation@localhost:5433/lelanation_stats"
+# DATABASE_URL="postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques"
 
 # Discord Webhooks (optional)
 # Alerts (cron failures, etc.)

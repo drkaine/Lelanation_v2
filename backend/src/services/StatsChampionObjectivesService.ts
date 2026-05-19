@@ -1,4 +1,4 @@
-import { isDatabaseConfigured, prisma } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -106,7 +106,7 @@ const columnCache = new Map<string, Set<string>>()
 async function getTableColumns(tableName: string): Promise<Set<string>> {
   const cached = columnCache.get(tableName)
   if (cached) return cached
-  const rows = await prisma.$queryRawUnsafe<Array<{ column_name: string }>>(
+  const rows = await queryRawUnsafe<Array<{ column_name: string }>>(
     `
       SELECT column_name
       FROM information_schema.columns
@@ -210,7 +210,7 @@ export async function getChampionObjectivesSummary(options: {
   const fireSoulTotalExpr = pickColumn(cols, ['count_fire_soul'])
   const hextecSoulTotalExpr = pickColumn(cols, ['count_hextec_soul'])
   const chemSoulTotalExpr = pickColumn(cols, ['count_chem_soul'])
-  const rows = await prisma.$queryRawUnsafe<RawObjectiveAgg[]>(`
+  const rows = await queryRawUnsafe<RawObjectiveAgg[]>(`
     SELECT
       COALESCE(SUM(ac.count_game), 0)::bigint AS games,
       COALESCE(SUM(ac.count_win), 0)::bigint AS wins,
@@ -361,7 +361,7 @@ export async function getChampionObjectivesSummary(options: {
     }),
   ]
   try {
-    const sideRows = await prisma.$queryRawUnsafe<Array<{ team_num: number; games: bigint; wins: bigint }>>(
+    const sideRows = await queryRawUnsafe<Array<{ team_num: number; games: bigint; wins: bigint }>>(
       `
         SELECT
           team_num,
@@ -454,7 +454,7 @@ export async function getChampionObjectivesSummary(options: {
   const bucketKd10PosWinsExpr = pickColumnWithAlias(bucketCols, 'cb', ['count_kd_diff_10_positive_win'])
   const bucketKd20PosGamesExpr = pickColumnWithAlias(bucketCols, 'cb', ['count_kd_diff_20_positive_game'])
   const bucketKd20PosWinsExpr = pickColumnWithAlias(bucketCols, 'cb', ['count_kd_diff_20_positive_win'])
-  const durationAgg = await prisma.$queryRawUnsafe<RawDurationAgg[]>(`
+  const durationAgg = await queryRawUnsafe<RawDurationAgg[]>(`
     SELECT
       cb.duration_bucket,
       COALESCE(SUM(cb.count_game), 0)::bigint AS games,

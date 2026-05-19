@@ -3,8 +3,8 @@
  * Remake = match où au moins un participant n'a aucun item (déco / non connecté).
  * Cache mémoire 5 min pour limiter les requêtes lourdes.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { rankTierCacheKey, toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -93,10 +93,7 @@ const SURRENDER_MATRIX_CACHE_TTL_MS = 2 * 60 * 1000
 const surrenderMatrixCache = new Map<string, { data: SurrenderMatrixResult; expiresAt: number }>()
 
 async function ingestMatchsTableExists(): Promise<boolean> {
-  const rows = await prisma.$queryRaw<Array<{ ok: boolean }>>`
-    SELECT to_regclass('public.ingest_matchs') IS NOT NULL AS ok
-  `
-  return Boolean(rows[0]?.ok)
+  return false
 }
 
 function surrenderMatrixCacheKey(version: string | null, baselineVersion: string | null): string {
@@ -148,7 +145,7 @@ async function loadSurrenderTeamAgg(version: string | null): Promise<TeamAggRow[
   const versionWhere = version
     ? ` AND tc.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`
     : ''
-  return prisma.$queryRawUnsafe<TeamAggRow[]>(`
+  return queryRawUnsafe<TeamAggRow[]>(`
     SELECT
       tc.rank_tier,
       tc.team,
@@ -269,7 +266,7 @@ export async function getOverviewAbandons(
     const tcFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'tc')
     const whereTc = whereSql.replace(/\bmo\./g, 'tc.')
 
-    const rows = await prisma.$queryRawUnsafe<
+    const rows = await queryRawUnsafe<
       Array<{
         total_matches: bigint
         early_surrender_count: bigint
@@ -307,7 +304,7 @@ export async function getOverviewAbandons(
     let surrenderFinal = surrenderCount
     if (fallbackNeeded && (await ingestMatchsTableExists())) {
       try {
-        const ingestRows = await prisma.$queryRawUnsafe<
+        const ingestRows = await queryRawUnsafe<
           Array<{ early_surrender_count: bigint; surrender_count: bigint }>
         >(`
           SELECT

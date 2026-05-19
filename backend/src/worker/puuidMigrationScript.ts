@@ -8,7 +8,7 @@
  * Runs once (not a loop) and exits when all players are synced.
  */
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { initRiotClientForPuuidMigration, runPuuidKeySyncPhase2 } from './puuidKeySyncPhase2.js'
 

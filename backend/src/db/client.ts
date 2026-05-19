@@ -1,5 +1,12 @@
 import postgres from "postgres";
-import { config } from "../config/index.js";
+
+function requireDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    throw new Error("Missing required environment variable: DATABASE_URL");
+  }
+  return url;
+}
 
 function parseBigIntToNumber(value: string): number {
   const parsed = Number(value);
@@ -9,7 +16,7 @@ function parseBigIntToNumber(value: string): number {
   return parsed;
 }
 
-export const sql = postgres(config.DATABASE_URL, {
+export const sql = postgres(requireDatabaseUrl(), {
   max: 20,
   connection: {
     options: "-c synchronous_commit=off",

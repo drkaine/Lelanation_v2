@@ -4,7 +4,7 @@
  */
 import cron from 'node-cron'
 import { refreshPrecomputedStats } from '../services/StatsPrecomputedService.js'
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 
 const CRON_SCHEDULE = process.env.STATS_PRECOMPUTED_CRON_SCHEDULE ?? '0 * * * *' // every hour at :00
 

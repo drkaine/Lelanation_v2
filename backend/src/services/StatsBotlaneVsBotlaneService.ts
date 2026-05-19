@@ -2,7 +2,7 @@
  * Botlane duo vs duo: tier-style note per (ally ADC+support vs enemy ADC+support),
  * comparing winrate vs the same enemy botlane to other allied duos (delta method, aligned with TierListService).
  */
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { deltaToMatchupBaseScore } from './MatchupTierService.js'
@@ -112,7 +112,7 @@ export async function getBotlaneDuoVsDuoTierTable(
   const fromSql = await matchVersionedAggFrom('agg_botlane_duo_vs_duo_stats', version, 'bd')
   const whereSql = buildBdMatchCond(version, rankTier)
 
-  const raw = await prisma.$queryRawUnsafe<
+  const raw = await queryRawUnsafe<
     Array<{
       adc_id: number
       support_id: number
@@ -273,7 +273,7 @@ export async function getBotlaneDuoOverallTierTable(
   const fromSql = await matchVersionedAggFrom('agg_botlane_duo_vs_duo_stats', version, 'bd')
   const whereSql = buildBdMatchCond(version, rankTier)
 
-  const raw = await prisma.$queryRawUnsafe<
+  const raw = await queryRawUnsafe<
     Array<{
       adc_id: number
       support_id: number

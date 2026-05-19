@@ -1,5 +1,3 @@
-import { Prisma } from '../generated/prisma/index.js'
-import { prisma } from '../db.js'
 
 const VALID_LANES = new Set(['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'SUPPORT'] as const)
 const GLOBAL_RANK_KEY = 'GLOBAL'
@@ -158,74 +156,6 @@ export function computeDelta(
   return winrateAVsBPercent - avgWinrateOthersVsBPercent
 }
 
-async function recomputeScoreAndDelta(row: {
-  patch: string
-  lane: string
-  championId: number
-  opponentChampionId: number
-  rankFilterKey: string
-}): Promise<void> {
-  const current = await prisma.$queryRaw<
-    Array<{
-      games: number
-      wins: number
-      sum_kda: number
-      sum_level: number
-    }>
-  >(Prisma.sql`
-    SELECT games, wins, sum_kda, sum_level
-    FROM matchup_tier_scores
-    WHERE patch = ${row.patch}
-      AND lane = ${row.lane}
-      AND champion_id = ${row.championId}
-      AND opponent_champion_id = ${row.opponentChampionId}
-      AND rank_filter_key = ${row.rankFilterKey}
-    LIMIT 1
-  `)
-  const cur = current[0]
-  if (!cur) return
-
-  const games = Number(cur.games)
-  const wins = Number(cur.wins)
-  const avgKda = games > 0 ? Number(cur.sum_kda) / games : 0
-  const avgLevel = games > 0 ? Number(cur.sum_level) / games : 0
-  const { score, confidence } = computeScoreFromAggregates(games, wins, avgKda, avgLevel)
-
-  const prev = previousPatch(row.patch)
-  const prevScoreRows =
-    prev == null
-      ? []
-      : await prisma.$queryRaw<Array<{ score: number }>>(Prisma.sql`
-          SELECT score
-          FROM matchup_tier_scores
-          WHERE patch = ${prev}
-            AND lane = ${row.lane}
-            AND champion_id = ${row.championId}
-            AND opponent_champion_id = ${row.opponentChampionId}
-            AND rank_filter_key = ${row.rankFilterKey}
-          LIMIT 1
-        `)
-  const prevScore = prevScoreRows[0] ? Number(prevScoreRows[0].score) : null
-  const delta = prevScore == null ? null : score - prevScore
-
-  await prisma.$executeRaw(Prisma.sql`
-    UPDATE matchup_tier_scores
-    SET
-      avg_kda = ${avgKda},
-      avg_level = ${avgLevel},
-      score = ${score},
-      confidence = ${confidence},
-      prev_patch_score = ${prevScore},
-      delta_vs_prev_patch = ${delta},
-      updated_at = NOW()
-    WHERE patch = ${row.patch}
-      AND lane = ${row.lane}
-      AND champion_id = ${row.championId}
-      AND opponent_champion_id = ${row.opponentChampionId}
-      AND rank_filter_key = ${row.rankFilterKey}
-  `)
-}
-
 function buildMatchupRows(params: {
   patch: string
   matchRank: string | null
@@ -302,31 +232,7 @@ export async function ingestMatchupTierScoresFromMatch(params: {
     matchRank: params.matchRank ?? null,
     participants: params.participants,
   })
-  for (const row of rows) {
-    await prisma.$executeRaw(Prisma.sql`
-      INSERT INTO matchup_tier_scores (
-        patch, lane, champion_id, opponent_champion_id, rank_filter_key,
-        games, wins, sum_kda, sum_level
-      ) VALUES (
-        ${row.patch}, ${row.lane}, ${row.championId}, ${row.opponentChampionId}, ${row.rankFilterKey},
-        ${row.games}, ${row.wins}, ${row.sumKda}, ${row.sumLevel}
-      )
-      ON CONFLICT (patch, lane, champion_id, opponent_champion_id, rank_filter_key)
-      DO UPDATE SET
-        games = matchup_tier_scores.games + EXCLUDED.games,
-        wins = matchup_tier_scores.wins + EXCLUDED.wins,
-        sum_kda = matchup_tier_scores.sum_kda + EXCLUDED.sum_kda,
-        sum_level = matchup_tier_scores.sum_level + EXCLUDED.sum_level,
-        updated_at = NOW()
-    `)
-    await recomputeScoreAndDelta({
-      patch: row.patch,
-      lane: row.lane,
-      championId: row.championId,
-      opponentChampionId: row.opponentChampionId,
-      rankFilterKey: row.rankFilterKey,
-    })
-  }
+  void rows
 }
 
 /** Stub: table matchup_tier_scores removed. Returns zero rows. */

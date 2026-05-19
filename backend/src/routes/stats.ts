@@ -22,7 +22,7 @@ import { getChampionBansTable } from '../services/ChampionBansTableService.js'
 import { getChampionDamageSplit } from '../services/ChampionDamageSplitService.js'
 import {
   getTopPlayers,
-  getTopPlayersByChampion,
+  getTopPlayersForChampion,
   getPlayerBySummonerName,
   getChampionStatsForPlayer,
 } from '../services/StatsPlayersService.js'
@@ -60,7 +60,7 @@ import {
   getGlobalWinrateMovers,
   getWatchlistDelta,
 } from '../services/StatsWatchlistService.js'
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 
 const router = Router()
 const aggregator = new RiotStatsAggregator()
@@ -1191,7 +1191,7 @@ router.get('/champions/:championId/players', async (req: Request, res: Response)
   const highRankOnly = req.query.highRankOnly === '1' || req.query.highRankOnly === 'true'
   const minGames = req.query.minGames != null ? parseInt(String(req.query.minGames), 10) : 20
   const limit = req.query.limit != null ? parseInt(String(req.query.limit), 10) : 50
-  const list = await getTopPlayersByChampion({
+  const list = await getTopPlayersForChampion({
     championId,
     rankTier,
     highRankOnly,

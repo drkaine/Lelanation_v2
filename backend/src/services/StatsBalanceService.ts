@@ -1,4 +1,4 @@
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { readBalanceRules, type BalanceLevelKey, type BalanceRulesConfig } from './BalanceRulesService.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
@@ -104,7 +104,7 @@ function findPreviousPatch(current: string, available: string[]): string | null 
 
 async function listAvailablePatches(): Promise<string[]> {
   const union = await sqlAggUnionAllLiveAndArchives('agg_champion_core_stats', 't')
-  const rows = await prisma.$queryRawUnsafe<Array<{ game_version: string }>>(`
+  const rows = await queryRawUnsafe<Array<{ game_version: string }>>(`
     SELECT DISTINCT game_version
     FROM (
       SELECT t.game_version AS game_version
@@ -218,7 +218,7 @@ async function buildPatchSnapshot(
   const tiersSql = tiers.map((t) => `'${String(t).replace(/'/g, "''")}'`).join(', ')
   const roleSql = role ? `AND role = '${String(role).replace(/'/g, "''")}'` : ''
   const patchLike = `${normalizePatchMajorMinor(patch).replace(/'/g, "''")}%`
-  const coreRowsEffective = await prisma.$queryRawUnsafe<CoreRow[]>(`
+  const coreRowsEffective = await queryRawUnsafe<CoreRow[]>(`
       SELECT champion_id, rank_tier, role, count_game, count_win
       FROM ${coreFrom}
       WHERE game_version LIKE '${patchLike}'
@@ -227,7 +227,7 @@ async function buildPatchSnapshot(
     `)
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', patch, 'bb')
   const banRoleSql = role ? `AND banner_role_norm = '${String(role).replace(/'/g, "''")}'` : ''
-  const banRowsEffective = await prisma.$queryRawUnsafe<BanRow[]>(`
+  const banRowsEffective = await queryRawUnsafe<BanRow[]>(`
       SELECT banned_champion_id, rank_tier, banner_role_norm, ban_count
       FROM ${bansFrom}
       WHERE game_version LIKE '${patchLike}'

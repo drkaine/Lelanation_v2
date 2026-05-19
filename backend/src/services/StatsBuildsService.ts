@@ -1,8 +1,8 @@
 /**
  * Builds stats by champion from champion_item_stats and champion_item_solo_stats aggregate tables.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -56,7 +56,7 @@ async function getCoreStatIdsAndTotalGames(options: {
   }
   const whereSql = filters.join(' AND ')
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', patch ?? null, 'cc')
-  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+  const coreStats = await queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT id, count_game AS "countGame"
     FROM ${coreFrom}
     WHERE ${whereSql}
@@ -89,7 +89,7 @@ export async function getBuildsByChampion(
     const itemsFrom = await matchVersionedAggFrom('agg_champion_item_stats', pPatch, 'it')
 
     // Item combinations
-    const itemStatRows = await prisma.$queryRawUnsafe<
+    const itemStatRows = await queryRawUnsafe<
       Array<{ itemList: string; countWin: number; countGame: number; sumTimestampMs: number }>
     >(`
       SELECT
@@ -139,7 +139,7 @@ export async function getBuildsByChampion(
     const soloFrom = await matchVersionedAggFrom('agg_champion_item_solo_stats', pPatch, 'iso')
 
     // Solo items
-    const soloRows = await prisma.$queryRawUnsafe<
+    const soloRows = await queryRawUnsafe<
       Array<{
         itemId: number
         countStarter: number

@@ -625,15 +625,7 @@ router.post('/cron/trigger/:job', async (req, res) => {
     }
     if (job === 'liveAggArchiveCheckpoint') {
       const result = await runLiveAggArchiveCheckpointCronOnce()
-      if (result.ok) {
-        return res.json({
-          success: true,
-          livePatches: result.livePatches ?? [],
-          copiedTables: result.copiedTables ?? [],
-          deletedRawRows: result.deletedRawRows ?? 0,
-        })
-      }
-      return res.status(500).json({ success: false, error: result.error })
+      return res.json({ success: result.ok, skipped: result.skipped ?? true })
     }
     return res.status(400).json({ error: `Invalid cron job: ${job}` })
   } catch (err) {

@@ -1,4 +1,4 @@
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 
@@ -41,7 +41,7 @@ export async function getChampionDamageSplit(
   else where.push(`ac.rank_tier <> 'UNRANKED'`)
   if (roleNorm) where.push(`ac.role = '${esc(roleNorm)}'`)
 
-  const rows = await prisma.$queryRawUnsafe<
+  const rows = await queryRawUnsafe<
     Array<{
       games: number
       sum_phys: number

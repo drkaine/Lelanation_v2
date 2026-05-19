@@ -3,7 +3,7 @@
  * Données lues depuis la table d'agrégat `agg_champion_bans_by_banner`.
  * Filtres patch / ligue alignés sur ChampionGlobalTableService (sans filtre OTP : tous les champions avec des bans).
  */
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { buildRawMatchCond, sumMatchOutcomeCountUnionLiveArchive } from './ChampionGlobalTableService.js'
 import { matchVersionedAggFrom } from './statsAggArchive.js'
 
@@ -93,7 +93,7 @@ export async function getChampionBansTable(
     bans_support: number
   }
 
-  const raw = await prisma.$queryRawUnsafe<SqlRow[]>(sql)
+  const raw = await queryRawUnsafe<SqlRow[]>(sql)
   const rows: ChampionBansTableRow[] = raw.map((r) => ({
     championId: Number(r.champion_id),
     bansTotal: Number(r.bans_total),

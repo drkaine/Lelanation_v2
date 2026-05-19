@@ -1,5 +1,5 @@
-import { prisma, isDatabaseConfigured } from '../db.js'
-import { getStatistiquesPool, isStatistiquesDatabaseConfigured } from '../drizzle/statistiquesDb.js'
+import { isDatabaseConfigured } from '../db/query.js'
+import { getStatistiquesPool } from '../drizzle/statistiquesDb.js'
 import {
   findLatestPollerSummaryEntries,
   type ParsedUnifiedLogEntry,
@@ -202,15 +202,6 @@ export async function buildRiotPollerAdminPayload(): Promise<RiotPollerAdminPayl
 
   let latestPlayerLastSeenAt: string | null = null
   if (isDatabaseConfigured()) {
-    const latestPlayerSeen = await prisma.player
-      .findFirst({
-        where: { lastSeen: { not: null } },
-        orderBy: { lastSeen: 'desc' },
-        select: { lastSeen: true },
-      })
-      .catch(() => null)
-    latestPlayerLastSeenAt = latestPlayerSeen?.lastSeen?.toISOString() ?? null
-  } else if (isStatistiquesDatabaseConfigured()) {
     try {
       const pool = getStatistiquesPool()
       const r = await pool.query<{ d: Date | null }>(`SELECT MAX(last_seen) AS d FROM players`)

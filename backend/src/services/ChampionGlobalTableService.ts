@@ -2,7 +2,7 @@
  * Table globale champions : WR / pick / ban par côté, dégâts moyens, KDA.
  * Runtime source policy: incremental aggregate tables.
  */
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import {
   liveAggRelationExists,
@@ -40,7 +40,7 @@ export async function sumMatchOutcomeCountUnionLiveArchive(
   if (!isDatabaseConfigured()) return 0
   const moUnion = await sqlAggUnionAllLiveAndArchives('agg_match_outcome_stats', 'src')
   const where = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'src.')
-  const rows = await prisma.$queryRawUnsafe<Array<{ mc: bigint }>>(`
+  const rows = await queryRawUnsafe<Array<{ mc: bigint }>>(`
     SELECT COALESCE(SUM(b.mc), 0)::bigint AS mc
     FROM (
       SELECT src.game_version, src.rank_tier, SUM(src.count_match)::bigint AS mc
@@ -150,7 +150,7 @@ export async function getChampionGlobalTable(
   const pickDenom = 5 * matchCount
   const hasColumn = async (tableName: string, columnName: string): Promise<boolean> => {
     if (!/^[a-z][a-z0-9_]*$/.test(tableName) || !/^[a-z][a-z0-9_]*$/.test(columnName)) return false
-    const rows = await prisma.$queryRawUnsafe<Array<{ ok: number }>>(`
+    const rows = await queryRawUnsafe<Array<{ ok: number }>>(`
       SELECT CASE WHEN EXISTS (
         SELECT 1
         FROM information_schema.columns c
@@ -172,7 +172,7 @@ export async function getChampionGlobalTable(
   const archiveAggExists = async (aggTableName: string): Promise<boolean> => {
     if (!/^[a-z][a-z0-9_]*$/.test(aggTableName)) return false
     const archive = `archive_${aggTableName}`
-    const rows = await prisma.$queryRawUnsafe<Array<{ ok: number }>>(
+    const rows = await queryRawUnsafe<Array<{ ok: number }>>(
       `SELECT CASE WHEN to_regclass('public.${archive}') IS NOT NULL THEN 1 ELSE 0 END AS ok`
     )
     return Number(rows[0]?.ok ?? 0) === 1
@@ -272,7 +272,7 @@ export async function getChampionGlobalTable(
     ${rolePlayedCond}
     GROUP BY mv.team_num, mv.champion_id
   `
-  const aggRows = await prisma.$queryRawUnsafe<AggRow[]>(aggSql)
+  const aggRows = await queryRawUnsafe<AggRow[]>(aggSql)
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cs')
   const bucketFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
@@ -316,7 +316,7 @@ export async function getChampionGlobalTable(
       : '0::bigint'
   const kdaJoinSql = usePartForKda ? ` LEFT JOIN ${partFrom} ON ps.champion_stat_id = cs.id` : ''
 
-  const kdaRows = await prisma.$queryRawUnsafe<
+  const kdaRows = await queryRawUnsafe<
     Array<{ champion_id: number; sum_k: bigint; sum_de: bigint; sum_a: bigint }>
   >(`
     SELECT
@@ -339,7 +339,7 @@ export async function getChampionGlobalTable(
     })
   }
 
-  const takenRows = await prisma.$queryRawUnsafe<
+  const takenRows = await queryRawUnsafe<
     Array<{ champion_id: number; phys_t: bigint; magic_t: bigint; true_t: bigint; total_t: bigint }>
   >(`
     SELECT
@@ -366,7 +366,7 @@ export async function getChampionGlobalTable(
 
   const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
   const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
-  const banRows = await prisma.$queryRawUnsafe<
+  const banRows = await queryRawUnsafe<
     Array<{ team_id: number; champion_id: number; cnt: number }>
   >(`
     SELECT

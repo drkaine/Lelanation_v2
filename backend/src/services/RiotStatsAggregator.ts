@@ -2,8 +2,8 @@
  * Aggregates LoL champion stats into `agg_*` tables (incremental; archives on close_patch).
  * Winrate / pickrate by champion; optional filters by rank and role. Cache mémoire 5 min.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
@@ -80,7 +80,7 @@ export class RiotStatsAggregator {
 
       const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
 
-      const rows = await prisma.$queryRawUnsafe<Array<{
+      const rows = await queryRawUnsafe<Array<{
         championId: number
         role: string
         countWin: number
@@ -128,7 +128,7 @@ export class RiotStatsAggregator {
           banFilters.push(`bb.banner_role_norm = '${pRole.toUpperCase().replace(/'/g, "''")}'`)
         }
         const bansWhereSql = banFilters.length ? banFilters.join(' AND ') : '1=1'
-        const banRows = await prisma.$queryRawUnsafe<Array<{ championId: number; bans: bigint }>>(`
+        const banRows = await queryRawUnsafe<Array<{ championId: number; bans: bigint }>>(`
           SELECT
             bb.banned_champion_id AS "championId",
             COALESCE(SUM(bb.ban_count), 0)::bigint AS bans

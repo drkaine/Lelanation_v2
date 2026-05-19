@@ -10,7 +10,7 @@ const DB_BATCH_SIZE = 500;
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 /** `processed_matches` vit sur la base statistiques (même URL que le poller). */
-const databaseUrl = process.env.DATABASE_URL_STATISTIQUES ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL;
 
 const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
 const hydrationQueue = new Queue(HYDRATION_QUEUE, { connection: redis });
@@ -69,7 +69,7 @@ async function main(): Promise<void> {
 
   let alreadyInDb = 0;
   if (!databaseUrl) {
-    console.warn("DATABASE_URL / DATABASE_URL_STATISTIQUES not set — skip processed_matches check");
+    console.warn("DATABASE_URL not set — skip processed_matches check");
   } else {
     try {
       alreadyInDb = await countKnownInDb([...unique]);
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
       console.warn(
-        `processed_matches check failed (${code}) — use DATABASE_URL_STATISTIQUES. Only duplicate rate will decide obliterate.`,
+        `processed_matches check failed (${code}) — set DATABASE_URL. Only duplicate rate will decide obliterate.`,
       );
     }
   }

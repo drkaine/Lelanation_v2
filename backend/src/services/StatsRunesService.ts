@@ -2,8 +2,8 @@
  * Runes stats by champion from champion_runes_stats (combinations) and
  * champion_runes_solo_stats (per-rune) aggregate tables.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
@@ -50,7 +50,7 @@ async function getCoreStatIdsAndTotalGames(options: {
   }
   const whereSql = filters.join(' AND ')
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', versionOrPatch ?? null, 'cc')
-  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+  const coreStats = await queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT id, count_game AS "countGame"
     FROM ${coreFrom}
     WHERE ${whereSql}
@@ -82,7 +82,7 @@ export async function getRunesByChampion(
 
     const runesFrom = await matchVersionedAggFrom('agg_champion_runes_stats', pPatch, 'rs')
 
-    const runeStatRows = await prisma.$queryRawUnsafe<
+    const runeStatRows = await queryRawUnsafe<
       Array<{ runeList: string; shardList: string; countWin: number; countGame: number }>
     >(`
       SELECT
@@ -184,7 +184,7 @@ export async function getRuneStatsByChampion(
 
     const soloFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
 
-    const soloRows = await prisma.$queryRawUnsafe<
+    const soloRows = await queryRawUnsafe<
       Array<{ perkId: number; countWin: number; countGame: number }>
     >(`
       SELECT
@@ -263,7 +263,7 @@ export async function getShardStatsByChampion(options: {
 
     const shardFrom = await matchVersionedAggFrom('agg_champion_shard_solo_stats', pVersion, 'sh')
 
-    const shardRows = await prisma.$queryRawUnsafe<
+    const shardRows = await queryRawUnsafe<
       Array<{ shardId: number; slot: number; countWin: number; countGame: number }>
     >(`
       SELECT

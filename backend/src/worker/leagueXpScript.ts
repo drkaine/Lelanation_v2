@@ -9,7 +9,8 @@
  * Default: RANKED_SOLO_5x5 / GOLD / I on euw1, up to 5 pages (200 players/page).
  */
 import { appendUnifiedLog } from '../logging/unifiedAppLog.js'
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { sql } from '../db/client.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { createRiotPollerLogger } from '../utils/riotPollerLogger.js'
 import { RiotRateLimiter } from '../services/RiotRateLimiter.js'
 import { RiotHttpClient } from '../services/RiotHttpClient.js'
@@ -163,33 +164,23 @@ export async function runLeagueXpScript(
       }
 
       // Find which PUUIDs we already have
-      const existing = await prisma.player.findMany({
-        where: { puuid: { in: puuids } },
-        select: { puuid: true },
-      })
+      const existing = await sql<Array<{ puuid: string }>>`
+        SELECT puuid FROM players WHERE puuid = ANY(${puuids})
+      `
       const existingSet = new Set(existing.map((p) => p.puuid))
 
-      // Create records for new players
       const newEntries = entries.filter((e) => e.puuid && !existingSet.has(e.puuid))
-      if (newEntries.length > 0) {
-        const toCreate = newEntries.map((e) => ({
-          puuid: e.puuid!,
-          region,
-          puuidKeyVersion: activeKeyInfo.clefType,
-          gameName: null as string | null,
-          tagName: null as string | null,
-          lastSeen: null as Date | null,
-        }))
-
+      for (const e of newEntries) {
+        if (!e.puuid) continue
         try {
-          const result = await prisma.player.createMany({
-            data: toCreate,
-            skipDuplicates: true,
-          })
-          _status.playersCreated += result.count
+          await sql`
+            INSERT INTO players (puuid, region, puuid_key_version, created_at, updated_at)
+            VALUES (${e.puuid}, ${region}, ${activeKeyInfo.clefType}, NOW(), NOW())
+            ON CONFLICT (puuid) DO NOTHING
+          `
+          _status.playersCreated++
         } catch {
-          // Non-fatal: log and continue
-          await logger.error('Failed to create player batch', { page, count: newEntries.length })
+          await logger.error('Failed to create player', { page, puuid: e.puuid })
         }
       }
 

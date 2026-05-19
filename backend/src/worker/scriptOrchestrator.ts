@@ -13,7 +13,7 @@
  *
  * Graceful shutdown: requestStop() signals the active script to finish its current batch/page.
  */
-import { isDatabaseConfigured } from '../db.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import {
   runPuuidMigrationScript,
   getPuuidMigrationStatus,

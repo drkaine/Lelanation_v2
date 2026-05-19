@@ -44,7 +44,7 @@ Si après un Ctrl+C la commande `prisma migrate resolve --rolled-back ...` écho
 
 ```bash
 # Adapter l’URL si besoin (port, user, DB)
-psql "postgresql://lelanation:lelanation@localhost:5433/lelanation_stats" -c "
+psql "postgresql://lelanation:lelanation@localhost:5434/lelanation_statistiques" -c "
   SELECT pg_terminate_backend(l.pid)
   FROM pg_locks l
   JOIN pg_stat_activity a ON a.pid = l.pid

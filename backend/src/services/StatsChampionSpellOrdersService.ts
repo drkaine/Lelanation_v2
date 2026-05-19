@@ -1,4 +1,4 @@
-import { isDatabaseConfigured, prisma } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -47,7 +47,7 @@ export async function getChampionSpellOrders(options: {
 
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'cc')
     const spellsFrom = await matchVersionedAggFrom('agg_champion_spells_stats', pVersion, 'cs')
-    const totalRows = await prisma.$queryRawUnsafe<Array<{ totalGames: bigint }>>(`
+    const totalRows = await queryRawUnsafe<Array<{ totalGames: bigint }>>(`
       SELECT COALESCE(SUM(cc.count_game), 0)::bigint AS "totalGames"
       FROM ${coreFrom}
       WHERE ${whereSql}
@@ -55,7 +55,7 @@ export async function getChampionSpellOrders(options: {
     const totalGames = Number(totalRows[0]?.totalGames ?? 0)
     if (totalGames <= 0) return { totalGames: 0, rows: [] }
 
-    const rows = await prisma.$queryRawUnsafe<
+    const rows = await queryRawUnsafe<
       Array<{
         key: string
         games: bigint

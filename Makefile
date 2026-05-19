@@ -3,8 +3,7 @@
 	deploy sync-data typecheck typecheck-frontend typecheck-companion lint lint-frontend format format-frontend \
 	test test-packages clean \
 	docker-db-up docker-db-down docker-db-restart docker-db-wait-healthy docker-db-verify \
-	migrate-prisma migrate-drizzle-statistiques migrate-db copy-stats-statistiques sync-players-statistiques \
-	merge-objective-histogram-global
+	migrate-drizzle-statistiques migrate-db merge-objective-histogram-global
 
 ROOT_DIR := $(CURDIR)
 COMPOSE := docker compose -f "$(ROOT_DIR)/docker-compose.yml"
@@ -39,19 +38,15 @@ help:
 	@echo "Build"
 	@echo "  make build              Build backend + frontend + companion; PM2 restart backend+frontend only (poller-v2 untouched)"
 	@echo "  make build-all          Compile + migrations schéma + PM2 (ne remplit pas les tables stats ; pas de merge SQL)"
-	@echo "  make build-backend      migrate-db (Prisma stats + Drizzle statistiques) puis npm run build"
+	@echo "  make build-backend      migrate-db (Drizzle) puis npm run build"
 	@echo "  make build-frontend     Build frontend only"
 	@echo "  make build-companion    Build companion Vite app only"
 	@echo "  make build-companion-exe  Build companion Windows .exe at project root"
 	@echo "  make exe-windows        Build Tauri app and copy it to ./Lelanation.exe"
 	@echo ""
 	@echo "Bases de données (migrations)"
-	@echo "  make migrate-drizzle-statistiques  Migrations Drizzle (DATABASE_URL_STATISTIQUES, base lelanation_statistiques : agrégats, players, player_rank_history, …)"
-	@echo "  make migrate-prisma     Prisma migrate deploy (DATABASE_URL, base lelanation_stats)"
-	@echo "  make migrate-db         migrate-prisma puis migrate-drizzle (les deux bases)"
-	@echo "  make copy-stats-statistiques  Copie lelanation_stats → lelanation_statistiques (passe ARGS après -- ; script à implémenter si absent)"
-	@echo "  make merge-objective-histogram-global  Fusionne region GLOBAL → euw1 sur objective_outcome_histogram (DATABASE_URL_STATISTIQUES ou DATABASE_URL)"
-	@echo "  make sync-players-statistiques  Resync uniquement players (ARGS ex. ARGS='--truncate-dest-players')"
+	@echo "  make migrate-db         Migrations Drizzle (DATABASE_URL → lelanation_statistiques)"
+	@echo "  make merge-objective-histogram-global  Fusionne region GLOBAL → euw1 sur objective_outcome_histogram (DATABASE_URL)"
 	@echo ""
 	@echo "Docker PostgreSQL (local)"
 	@echo "  make docker-db-up       docker compose up -d + attente healthcheck"
@@ -83,8 +78,6 @@ help:
 	@echo ""
 	@echo "Utilities"
 	@echo "  make sync-data          Run backend data sync script"
-	@echo "  make copy-stats-statistiques  Copie stats Prisma → Drizzle (ARGS=…, ex. ARGS='--replace')"
-	@echo "  make sync-players-statistiques  Resync table players uniquement (ARGS='--truncate-dest-players' optionnel)"
 	@echo "  make clean              Remove build artifacts"
 	@echo ""
 
@@ -107,28 +100,24 @@ build: test-packages build-backend build-frontend build-companion pm2-restart-no
 
 build-all: test-packages build-backend build-frontend build-companion pm2-restart
 
-# Applique les deux chaînes de migrations avant le build (sinon prisma generate compile un schéma que la DB n’a pas encore).
+# Applique les migrations Drizzle (statistiques) avant le build.
 build-backend: migrate-db
 	$(NPM) --prefix "$(BACKEND_DIR)" run build
 
 migrate-drizzle-statistiques:
 	$(NPM) --prefix "$(BACKEND_DIR)" run drizzle:statistiques:migrate
 
-migrate-prisma:
-	cd "$(BACKEND_DIR)" && npx prisma migrate deploy
-
-migrate-db: migrate-prisma migrate-drizzle-statistiques
+migrate-db: migrate-drizzle-statistiques
 
 # ─── Docker (PostgreSQL local) ─────────────────────────────────────────────────
 docker-db-wait-healthy:
 	@elapsed=0; max=60; \
 	while [ $$elapsed -lt $$max ]; do \
-	  s1=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-postgres 2>/dev/null || echo missing); \
-	  s2=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-postgres-statistiques 2>/dev/null || echo missing); \
-	  if [ "$$s1" = "healthy" ] && [ "$$s2" = "healthy" ]; then echo "docker-db: healthy (postgres=$$s1 statistiques=$$s2)"; exit 0; fi; \
+	  s=$$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lelanation-postgres-statistiques 2>/dev/null || echo missing); \
+	  if [ "$$s" = "healthy" ]; then echo "docker-db: healthy (lelanation_statistiques=$$s)"; exit 0; fi; \
 	  sleep 2; elapsed=$$((elapsed+2)); \
 	done; \
-	echo "docker-db: timeout (lelanation-postgres=$$s1 lelanation-postgres-statistiques=$$s2)"; exit 1
+	echo "docker-db: timeout (lelanation-postgres-statistiques=$$s)"; exit 1
 
 docker-db-up:
 	$(COMPOSE) up -d
@@ -237,14 +226,6 @@ test-packages:
 # ─── Utilities ───────────────────────────────────────────────────────────────────
 sync-data:
 	$(NPM) --prefix "$(BACKEND_DIR)" run sync:data
-
-# Exemple : make copy-stats-statistiques ARGS='--replace --skip-players'
-copy-stats-statistiques:
-	$(NPM) --prefix "$(BACKEND_DIR)" run script:copy-stats-statistiques -- $(ARGS)
-
-# Exemple : make sync-players-statistiques ARGS='--truncate-dest-players'
-sync-players-statistiques:
-	$(NPM) --prefix "$(BACKEND_DIR)" run script:sync-players-statistiques -- $(ARGS)
 
 clean:
 	rm -rf "$(BACKEND_DIR)/dist" \

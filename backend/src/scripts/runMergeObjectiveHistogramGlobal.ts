@@ -2,7 +2,7 @@
  * Fusionne `objective_outcome_histogram` region = GLOBAL vers euw1, puis supprime GLOBAL.
  * SQL : backend/scripts/sql/merge_objective_outcome_histogram_global_into_euw1.sql
  *
- * Connexion : `DATABASE_URL_STATISTIQUES` ou, à défaut, `DATABASE_URL` (ex. poller → statistiques).
+ * Connexion : `DATABASE_URL` → `lelanation_statistiques`.
  *
  * Usage : npm run script:merge-objective-histogram-global
  */
@@ -15,13 +15,9 @@ import postgres from "postgres";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function resolveStatistiquesUrl(): string {
-  const a = process.env.DATABASE_URL_STATISTIQUES?.trim();
-  const b = process.env.DATABASE_URL?.trim();
-  const url = a || b;
+  const url = process.env.DATABASE_URL?.trim();
   if (!url) {
-    throw new Error(
-      "Missing DATABASE_URL_STATISTIQUES or DATABASE_URL (same DB as lelanation-poller-v2 for histogram writes).",
-    );
+    throw new Error('Missing DATABASE_URL (lelanation_statistiques).');
   }
   return url;
 }

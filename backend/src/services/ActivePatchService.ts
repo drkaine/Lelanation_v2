@@ -1,137 +1,57 @@
-import { prisma, isDatabaseConfigured } from '../db.js'
+/**
+ * Patch catalog: `data/game/versions.json` + `version.json` for rollout windows;
+ * match volumes from `match_outcome_stats` (no `active_patches` table).
+ */
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { loadMatchFilters } from './RiotConfigService.js'
+import { normalizePatchMajorMinor } from '../stats/statsPatchQuery.js'
 
-let activePatchTail: Promise<unknown> = Promise.resolve()
-
-function enqueueActivePatchUpdate<T>(fn: () => Promise<T>): Promise<T> {
-  const next = activePatchTail.then(fn) as Promise<T>
-  activePatchTail = next.then(
-    () => undefined,
-    () => undefined
-  )
-  return next
+export type PatchMatchCount = {
+  patch: string
+  matchCount: number
 }
 
-async function applyActivePatchGameCountsFromDb(): Promise<void> {
-  if (!isDatabaseConfigured()) return
-  const rows = await prisma.$queryRaw<Array<{ patch: string; cnt: bigint | number }>>`
-    WITH agg_per_patch AS (
-      SELECT
-        (split_part(game_version, '.', 1) || '.' || split_part(game_version, '.', 2)) AS patch,
-        COALESCE(SUM(count_match), 0)::bigint AS cnt
-      FROM archive_agg_match_outcome_stats
-      WHERE rank_tier <> 'UNRANKED'
-        AND COALESCE(NULLIF(TRIM(game_version), ''), '') <> ''
-      GROUP BY 1
-    )
-    SELECT patch, cnt
-    FROM agg_per_patch
-    WHERE COALESCE(NULLIF(TRIM(patch), ''), '') <> ''
-  `
-
-  const countByPatch = new Map<string, number>()
-  for (const r of rows) {
-    const p = (r.patch ?? '').trim()
-    if (!p) continue
-    countByPatch.set(p, typeof r.cnt === 'bigint' ? Number(r.cnt) : Number(r.cnt ?? 0))
-  }
-
-  const existing = await prisma.activePatch.findMany({
-    select: { gameVersion: true, gameNumberMax: true, archivedAt: true },
-  })
-
-  const patches = new Set<string>()
-  for (const r of existing) patches.add(r.gameVersion.trim())
-  for (const p of countByPatch.keys()) patches.add(p)
-
-  for (const patch of patches) {
-    const row = existing.find((e) => e.gameVersion === patch)
-    if (row?.archivedAt != null) continue
-
-    const count = countByPatch.get(patch) ?? 0
-    const max = row?.gameNumberMax ?? 0
-    await prisma.activePatch.upsert({
-      where: { gameVersion: patch },
-      create: {
-        gameVersion: patch,
-        gamesNumber: count,
-        gameNumberMax: max,
-        isCurrent: max <= 0 ? true : count < max,
-      },
-      update: {
-        gamesNumber: count,
-        isCurrent: max <= 0 ? true : count < max,
-      },
-    })
-  }
+/** Total ranked matches per major.minor patch from `match_outcome_stats`. */
+export async function getPatchMatchCountsFromDb(): Promise<PatchMatchCount[]> {
+  if (!isDatabaseConfigured()) return []
+  const rows = await queryRawUnsafe<Array<{ patch: string; cnt: string | number | bigint }>>(`
+    SELECT patch, COALESCE(SUM(count_match), 0)::bigint AS cnt
+    FROM match_outcome_stats
+    WHERE rank_tier <> 'UNRANKED'
+      AND COALESCE(NULLIF(TRIM(patch), ''), '') <> ''
+    GROUP BY patch
+    ORDER BY patch DESC
+  `)
+  return rows.map((r) => ({
+    patch: String(r.patch ?? '').trim(),
+    matchCount:
+      typeof r.cnt === 'bigint' ? Number(r.cnt) : Number.parseInt(String(r.cnt ?? 0), 10) || 0,
+  }))
 }
 
-async function syncActivePatchesImpl(): Promise<number> {
-  const rows = await prisma.$queryRaw<Array<{ patch: string }>>`
-    SELECT DISTINCT (split_part(v.game_version, '.', 1) || '.' || split_part(v.game_version, '.', 2)) AS patch
-    FROM (
-      SELECT game_version FROM archive_agg_match_outcome_stats
-    ) v
-    WHERE COALESCE(TRIM(v.game_version), '') <> ''
-  `
-  let added = 0
-  for (const { patch } of rows) {
-    if (!patch) continue
-    await prisma.activePatch.upsert({
-      where: { gameVersion: patch },
-      create: { gameVersion: patch, isCurrent: true },
-      update: {},
-    })
-    added++
-  }
-  await applyActivePatchGameCountsFromDb()
-  return added
-}
-
-export async function syncActivePatches(): Promise<number> {
-  if (!isDatabaseConfigured()) return 0
-  return enqueueActivePatchUpdate(() => syncActivePatchesImpl())
-}
-
-async function syncActivePatchesFromConfigAndCountsImpl(): Promise<number> {
+/** Patches listed in match-filters config (versions.json-driven). */
+export async function getConfiguredPatchLabels(): Promise<string[]> {
   const filtersRes = await loadMatchFilters()
-  if (filtersRes.isErr()) return 0
-  const filters = filtersRes.unwrap()
-
-  let touched = 0
-  for (const v of filters.versions) {
-    const patch = (v.version ?? '').trim()
-    if (!patch) continue
-    const max = Math.max(0, Number(v.maxMatches ?? 0))
-    await prisma.activePatch.upsert({
-      where: { gameVersion: patch },
-      create: {
-        gameVersion: patch,
-        gameNumberMax: max,
-        gamesNumber: 0,
-        isCurrent: true,
-      },
-      update: { gameNumberMax: max },
-    })
-    touched++
-  }
-
-  await applyActivePatchGameCountsFromDb()
-  return touched
+  if (filtersRes.isErr()) return []
+  return filtersRes
+    .unwrap()
+    .versions.map((v) => normalizePatchMajorMinor(String(v.version ?? '').trim()))
+    .filter(Boolean)
 }
 
+/** @deprecated No-op — patches are LIST partitions; config + match_outcome_stats drive UI. */
+export async function syncActivePatches(): Promise<number> {
+  return (await getPatchMatchCountsFromDb()).length
+}
+
+/** Ensures match-filters config is loadable after a Data Dragon sync. */
 export async function syncActivePatchesFromConfigAndCounts(): Promise<number> {
-  if (!isDatabaseConfigured()) return 0
-  return enqueueActivePatchUpdate(() => syncActivePatchesFromConfigAndCountsImpl())
+  const patches = await getConfiguredPatchLabels()
+  await getPatchMatchCountsFromDb()
+  return patches.length
 }
 
+/** @deprecated No-op */
 export async function ensureActivePatchVersion(patch: string): Promise<void> {
-  if (!isDatabaseConfigured()) return
-  const value = (patch ?? '').trim()
-  if (!value) return
-  await prisma.activePatch.upsert({
-    where: { gameVersion: value },
-    create: { gameVersion: value, isCurrent: true },
-    update: {},
-  })
+  void normalizePatchMajorMinor(patch)
 }

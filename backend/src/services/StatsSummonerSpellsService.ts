@@ -2,8 +2,8 @@
  * Summoner spell stats by champion from champion_summoner_spells_agg aggregate table.
  * Individual spell stats from MV; duos from agg_champion_summoner_spell_pair_stats.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -52,7 +52,7 @@ async function getChampionStatIds(
 
   const whereSql = filters.join(' AND ')
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'cc')
-  const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
+  const coreStats = await queryRawUnsafe<Array<{ id: bigint; countGame: number }>>(`
     SELECT
       id,
       count_game AS "countGame"
@@ -84,7 +84,7 @@ export async function getSummonerSpellsByChampion(
 
     const spellsFrom = await matchVersionedAggFrom('agg_champion_summoner_spells', pVersion, 'ss')
 
-    const spellRows = await prisma.$queryRawUnsafe<
+    const spellRows = await queryRawUnsafe<
       Array<{
         spellId: number
         countWin: number
@@ -165,7 +165,7 @@ export async function getSummonerSpellsDuosByChampion(
           : `AND sp.rank_tier <> 'UNRANKED'`
     const roleClause = pRole ? `AND UPPER(sp.role) = '${pRole.replace(/'/g, "''")}'` : ''
     const pairFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', pVersion, 'sp')
-    const pairRows = await prisma.$queryRawUnsafe<
+    const pairRows = await queryRawUnsafe<
       Array<{ spellId1: number; spellId2: number; games: bigint; wins: bigint }>
     >(`
       SELECT

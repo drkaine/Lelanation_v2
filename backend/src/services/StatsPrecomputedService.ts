@@ -3,8 +3,8 @@
  * Les APIs lisent en priorité quand version est null et rank_tier/role correspondent.
  * Un job horaire appelle refreshAll() pour remplir les tables.
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { sql } from '../db/client.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 
 const RANK_TIERS = ['', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'EMERALD', 'DIAMOND', 'MASTER'] as const
 /** Rôles pour pré-calcul champions (évite 504 sur /champions?role=JUNGLE etc.) */
@@ -30,7 +30,7 @@ async function hasPrecomputedTables(): Promise<boolean> {
   if (!isDatabaseConfigured()) return false
   if (precomputedTablesAvailable != null) return precomputedTablesAvailable
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    const row = await queryRawUnsafe<Array<{ exists: boolean }>>(
       `SELECT to_regclass('public.stats_precomputed_champions') IS NOT NULL AS "exists"`
     )
     precomputedTablesAvailable = row[0]?.exists === true
@@ -47,11 +47,10 @@ export async function getPrecomputedChampions(
 ): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_champions WHERE rank_tier = $1 AND role = $2 LIMIT 1',
-      toKey(rankTier),
-      toKey(role)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_champions
+      WHERE rank_tier = ${toKey(rankTier)} AND role = ${toKey(role)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -63,10 +62,9 @@ export async function getPrecomputedChampions(
 export async function getPrecomputedOverview(rankTier: string | null): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_overview WHERE rank_tier = $1 LIMIT 1',
-      toKey(rankTier)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_overview WHERE rank_tier = ${toKey(rankTier)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -78,10 +76,9 @@ export async function getPrecomputedOverview(rankTier: string | null): Promise<{
 export async function getPrecomputedOverviewTeams(rankTier: string | null): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_overview_teams WHERE rank_tier = $1 LIMIT 1',
-      toKey(rankTier)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_overview_teams WHERE rank_tier = ${toKey(rankTier)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -96,11 +93,10 @@ export async function getPrecomputedOverviewDetail(
 ): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_overview_detail WHERE rank_tier = $1 AND include_smite = $2 LIMIT 1',
-      toKey(rankTier),
-      includeSmite
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_overview_detail
+      WHERE rank_tier = ${toKey(rankTier)} AND include_smite = ${includeSmite} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -112,10 +108,9 @@ export async function getPrecomputedOverviewDetail(
 export async function getPrecomputedDurationWinrate(rankTier: string | null): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_duration_winrate WHERE rank_tier = $1 LIMIT 1',
-      toKey(rankTier)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_duration_winrate WHERE rank_tier = ${toKey(rankTier)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -127,10 +122,9 @@ export async function getPrecomputedDurationWinrate(rankTier: string | null): Pr
 export async function getPrecomputedSides(rankTier: string | null): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_sides WHERE rank_tier = $1 LIMIT 1',
-      toKey(rankTier)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_sides WHERE rank_tier = ${toKey(rankTier)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -142,10 +136,9 @@ export async function getPrecomputedSides(rankTier: string | null): Promise<{ da
 export async function getPrecomputedAbandons(rankTier: string | null): Promise<{ data: unknown } | null> {
   if (!(await hasPrecomputedTables())) return null
   try {
-    const row = await prisma.$queryRawUnsafe<Array<{ data: unknown }>>(
-      'SELECT data FROM stats_precomputed_abandons WHERE rank_tier = $1 LIMIT 1',
-      toKey(rankTier)
-    )
+    const row = await sql<Array<{ data: unknown }>>`
+      SELECT data FROM stats_precomputed_abandons WHERE rank_tier = ${toKey(rankTier)} LIMIT 1
+    `
     return row[0] ?? null
   } catch (err) {
     markPrecomputedTablesUnavailableIfMissing(err)
@@ -179,17 +172,17 @@ export async function refreshPrecomputedStats(): Promise<{ ok: boolean; error?: 
       const data = globalChampResults[i]
       const roleKey = CHAMPION_ROLES[i] || ''
       if (data) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_champions (rank_tier, role, data, updated_at) VALUES ('', $1, $2::jsonb, now())
-           ON CONFLICT (rank_tier, role) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          roleKey,
-          JSON.stringify({
-            totalGames: data.totalGames,
-            totalMatches: data.totalMatches,
-            champions: data.champions,
-            generatedAt: data.generatedAt,
-          })
-        )
+        const payload = JSON.stringify({
+          totalGames: data.totalGames,
+          totalMatches: data.totalMatches,
+          champions: data.champions,
+          generatedAt: data.generatedAt,
+        })
+        await sql`
+          INSERT INTO stats_precomputed_champions (rank_tier, role, data, updated_at)
+          VALUES ('', ${roleKey}, ${payload}::jsonb, now())
+          ON CONFLICT (rank_tier, role) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`champions(global,role=${roleKey || 'all'})`)
       }
     }
@@ -209,66 +202,59 @@ export async function refreshPrecomputedStats(): Promise<{ ok: boolean; error?: 
       ])
 
       if (overview) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_overview (rank_tier, data, updated_at) VALUES ($1, $2::jsonb, now())
-           ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(overview)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_overview (rank_tier, data, updated_at)
+          VALUES (${r}, ${JSON.stringify(overview)}::jsonb, now())
+          ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`overview(${r || 'global'})`)
       }
       if (overviewTeams) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_overview_teams (rank_tier, data, updated_at) VALUES ($1, $2::jsonb, now())
-           ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(overviewTeams)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_overview_teams (rank_tier, data, updated_at)
+          VALUES (${r}, ${JSON.stringify(overviewTeams)}::jsonb, now())
+          ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`overview_teams(${r || 'global'})`)
       }
       if (detailFalse) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_overview_detail (rank_tier, include_smite, data, updated_at) VALUES ($1, false, $2::jsonb, now())
-           ON CONFLICT (rank_tier, include_smite) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(detailFalse)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_overview_detail (rank_tier, include_smite, data, updated_at)
+          VALUES (${r}, false, ${JSON.stringify(detailFalse)}::jsonb, now())
+          ON CONFLICT (rank_tier, include_smite) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`overview_detail(${r || 'global'},smite=false)`)
       }
       if (detailTrue) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_overview_detail (rank_tier, include_smite, data, updated_at) VALUES ($1, true, $2::jsonb, now())
-           ON CONFLICT (rank_tier, include_smite) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(detailTrue)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_overview_detail (rank_tier, include_smite, data, updated_at)
+          VALUES (${r}, true, ${JSON.stringify(detailTrue)}::jsonb, now())
+          ON CONFLICT (rank_tier, include_smite) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`overview_detail(${r || 'global'},smite=true)`)
       }
       if (durationWinrate) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_duration_winrate (rank_tier, data, updated_at) VALUES ($1, $2::jsonb, now())
-           ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(durationWinrate)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_duration_winrate (rank_tier, data, updated_at)
+          VALUES (${r}, ${JSON.stringify(durationWinrate)}::jsonb, now())
+          ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`duration_winrate(${r || 'global'})`)
       }
       if (sides) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_sides (rank_tier, data, updated_at) VALUES ($1, $2::jsonb, now())
-           ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(sides)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_sides (rank_tier, data, updated_at)
+          VALUES (${r}, ${JSON.stringify(sides)}::jsonb, now())
+          ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`sides(${r || 'global'})`)
       }
       if (abandons) {
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO stats_precomputed_abandons (rank_tier, data, updated_at) VALUES ($1, $2::jsonb, now())
-           ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-          r,
-          JSON.stringify(abandons)
-        )
+        await sql`
+          INSERT INTO stats_precomputed_abandons (rank_tier, data, updated_at)
+          VALUES (${r}, ${JSON.stringify(abandons)}::jsonb, now())
+          ON CONFLICT (rank_tier) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+        `
         refreshed.push(`abandons(${r || 'global'})`)
       }
     }
@@ -285,18 +271,16 @@ export async function refreshPrecomputedStats(): Promise<{ ok: boolean; error?: 
         const data = results[i]
         const roleKey = CHAMPION_ROLES[i] || ''
         if (data) {
-          await prisma.$executeRawUnsafe(
-            `INSERT INTO stats_precomputed_champions (rank_tier, role, data, updated_at) VALUES ($1, $2, $3::jsonb, now())
-             ON CONFLICT (rank_tier, role) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-            r,
-            roleKey,
-            JSON.stringify({
+          await sql`
+            INSERT INTO stats_precomputed_champions (rank_tier, role, data, updated_at)
+            VALUES (${r}, ${roleKey}, ${JSON.stringify({
               totalGames: data.totalGames,
               totalMatches: data.totalMatches,
               champions: data.champions,
               generatedAt: data.generatedAt,
-            })
-          )
+            })}::jsonb, now())
+            ON CONFLICT (rank_tier, role) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+          `
           refreshed.push(`champions(${r || 'global'},role=${roleKey || 'all'})`)
         }
       }

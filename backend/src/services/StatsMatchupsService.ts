@@ -1,8 +1,8 @@
 /**
  * Matchups by champion: winrate vs each opponent, from `agg_champion_vs_stats` (+ archive union).
  */
-import { prisma } from '../db.js'
-import { isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe } from '../db/query.js'
+import { isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
@@ -46,7 +46,7 @@ export async function getMatchupsByChampion(
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
     const vsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', pVersion, 'vs')
 
-    const coreStats = await prisma.$queryRawUnsafe<Array<{ id: bigint }>>(`
+    const coreStats = await queryRawUnsafe<Array<{ id: bigint }>>(`
       SELECT id
       FROM ${coreFrom}
       WHERE ${whereSql}
@@ -55,7 +55,7 @@ export async function getMatchupsByChampion(
 
     const statIds = coreStats.map((s) => s.id)
 
-    const vsRows = await prisma.$queryRawUnsafe<Array<{
+    const vsRows = await queryRawUnsafe<Array<{
       opponentChampionId: number
       countWin: number
       countGame: number

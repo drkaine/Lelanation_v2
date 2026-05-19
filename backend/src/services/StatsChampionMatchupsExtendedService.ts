@@ -1,7 +1,7 @@
 /**
  * Champion page: rich matchup table (lane sums, peer-relative lane score, dominance hints).
  */
-import { prisma, isDatabaseConfigured } from '../db.js'
+import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
@@ -97,18 +97,18 @@ type RawOverallRow = {
 let vsMetricColumnsCache: string[] | null = null
 async function getVsMetricColumns(): Promise<string[]> {
   if (vsMetricColumnsCache) return vsMetricColumnsCache
-  const rows = await prisma.$queryRaw<Array<{ column_name: string }>>`
+  const rows = await queryRawUnsafe<Array<{ column_name: string }>>(`
     SELECT column_name
     FROM information_schema.columns
     WHERE table_schema = 'public'
-      AND table_name = 'agg_champion_vs_stats'
+      AND table_name = 'champion_vs_stats'
       AND (
         column_name LIKE 'count\_%' ESCAPE '\'
         OR column_name LIKE 'sum\_%' ESCAPE '\'
       )
       AND column_name NOT IN ('count_game', 'count_win', 'champion_stat_id', 'updated_at')
     ORDER BY ordinal_position
-  `
+  `)
   vsMetricColumnsCache = rows.map((r) => String(r.column_name ?? '').trim()).filter(Boolean)
   return vsMetricColumnsCache
 }
@@ -247,7 +247,7 @@ export async function getChampionMatchupsExtendedTable(options: {
     HAVING SUM(vs.count_game) >= ${minGames}
   `
 
-  const myRows = await prisma.$queryRawUnsafe<RawMyRow[]>(mySql)
+  const myRows = await queryRawUnsafe<RawMyRow[]>(mySql)
   if (myRows.length === 0) {
     const vKey = version != null ? normalizePatchMajorMinor(version) : null
     const rKey =
@@ -289,8 +289,8 @@ export async function getChampionMatchupsExtendedTable(options: {
     HAVING SUM(vs.count_game) >= 3
   `
 
-  const peerRows = await prisma.$queryRawUnsafe<RawPeerRow[]>(peerSql)
-  const overallRows = await prisma.$queryRawUnsafe<RawOverallRow[]>(`
+  const peerRows = await queryRawUnsafe<RawPeerRow[]>(peerSql)
+  const overallRows = await queryRawUnsafe<RawOverallRow[]>(`
     SELECT
       ac.champion_id,
       ac.role,
@@ -318,7 +318,7 @@ export async function getChampionMatchupsExtendedTable(options: {
     const refCoreFrom = await matchVersionedAggFrom('agg_champion_core_stats', referenceVersion, 'ac')
     const refVsFrom = await matchVersionedAggFrom('agg_champion_vs_stats', referenceVersion, 'vs')
     const refMyWhere = buildCoreWhere(championId, referenceVersion, options.rankTier, roleFilter)
-    const refMyRows = await prisma.$queryRawUnsafe<RawMyRow[]>(`
+    const refMyRows = await queryRawUnsafe<RawMyRow[]>(`
       SELECT
         vs.opponent_champion_id,
         ac.role,
@@ -340,7 +340,7 @@ export async function getChampionMatchupsExtendedTable(options: {
       const refTotalGames = refMyRows.reduce((s, r) => s + Number(r.games ?? 0), 0)
       const refOppIds = [...new Set(refMyRows.map((r) => Number(r.opponent_champion_id)))]
       const refPeerWhere = buildPeerCoreWhere(referenceVersion, options.rankTier, roleFilter)
-      const refPeerRows = await prisma.$queryRawUnsafe<RawPeerRow[]>(`
+      const refPeerRows = await queryRawUnsafe<RawPeerRow[]>(`
         SELECT
           vs.opponent_champion_id,
           ac.role,
@@ -648,7 +648,7 @@ export async function getChampionMatchupsExportRows(options: {
     HAVING SUM(vs.count_game) >= ${minGames}
     ORDER BY SUM(vs.count_game) DESC
   `
-  const rawRows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql)
+  const rawRows = await queryRawUnsafe<Array<Record<string, unknown>>>(sql)
   const ext = await getChampionMatchupsExtendedTable({
     championId,
     version,

@@ -1,13 +1,8 @@
 /**
- * Métriques admin « collecte » (sans lecture du log unifié / résumé poller).
- * - Priorité : `DATABASE_URL_STATISTIQUES` → `players` + `processed_matches`.
- * - Sinon `DATABASE_URL` (Prisma) → file d’ingestion `tracked_matches`, `match_ingest_raw`, etc.
+ * Métriques admin « collecte » depuis `lelanation_statistiques` (`players`, `processed_matches`).
  */
-import { prisma, isDatabaseConfigured } from '../db.js'
 import { getStatistiquesPool, isStatistiquesDatabaseConfigured } from '../drizzle/statistiquesDb.js'
-import { countRawIngestByStatus, isRawIngestQueueEnabled } from '../worker/matchIngestRawQueue.js'
 
-/** Même règle que `config.PLAYER_KEY_VERSION` sans importer `../config` (évite d’exiger `ENV` au chargement du module). */
 function playerKeyVersionForAdminStats(): string {
   const explicit = process.env.PLAYER_KEY_VERSION?.trim()
   if (explicit) return explicit
@@ -17,7 +12,7 @@ function playerKeyVersionForAdminStats(): string {
 }
 
 export type AdminDataCollectStats = {
-  adminDataSource: 'stats_db' | 'statistiques_db'
+  adminDataSource: 'statistiques_db'
   totalPlayers: number
   playersWrongKeyVersion: number
   lastNewPlayerAt: string | null
@@ -33,12 +28,7 @@ export type AdminDataCollectStats = {
   playersCreatedLast1h: number
   playersLastSeenLast1h: number
   playersUpdatedLast1h: number
-  matchIngestRaw: {
-    pending: number
-    processing: number
-    error: number
-    errorRankPending: number
-  } | null
+  matchIngestRaw: null
   trackedMatchesDeferredRankPending: number
 }
 
@@ -65,117 +55,9 @@ function emptyStats(): AdminDataCollectStats {
   }
 }
 
-async function getAdminDataCollectStatsFromPrisma(): Promise<AdminDataCollectStats> {
-  const empty = { ...emptyStats(), adminDataSource: 'stats_db' as const }
-  const since1h = new Date(Date.now() - 60 * 60 * 1000)
-  try {
-    const [
-      lastPlayer,
-      maxLastSeenAgg,
-      maxUpdatedAgg,
-      totalPlayers,
-      trackedTotal,
-      tracked1h,
-      trackedPendingNow,
-      trackedPendingOver1h,
-      trackedOldestPendingCreatedAt,
-      trackedAggByStatus,
-      trackedLastAggregatedAt,
-      playersWrongKeyVersion,
-      playersCreated1h,
-      playersLastSeen1h,
-      playersUpdated1h,
-      trackedDeferredRank,
-      rawRankPendingErr,
-    ] = await Promise.all([
-      prisma.player.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.player.aggregate({ _max: { lastSeen: true } }),
-      prisma.player.aggregate({ _max: { updatedAt: true } }),
-      prisma.player.count(),
-      prisma.$queryRaw<Array<{ c: bigint }>>`SELECT COUNT(*)::bigint AS c FROM tracked_matches`,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE created_at >= ${since1h}
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c FROM tracked_matches WHERE aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM tracked_matches
-        WHERE aggregate_status = 'PENDING'
-          AND created_at < ${since1h}
-      `,
-      prisma.$queryRaw<Array<{ d: Date | null }>>`
-        SELECT MIN(created_at) AS d
-        FROM tracked_matches
-        WHERE aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ aggregate_status: string; c: bigint }>>`
-        SELECT aggregate_status, COUNT(*)::bigint AS c
-        FROM tracked_matches
-        GROUP BY aggregate_status
-      `,
-      prisma.$queryRaw<Array<{ d: Date | null }>>`
-        SELECT MAX(aggregated_at) AS d
-        FROM tracked_matches
-      `,
-      prisma.player.count({ where: { puuidKeyVersion: null } }),
-      prisma.player.count({ where: { createdAt: { gte: since1h } } }),
-      prisma.player.count({ where: { lastSeen: { gte: since1h } } }),
-      prisma.player.count({ where: { updatedAt: { gte: since1h } } }),
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM tracked_matches
-        WHERE status = 'DEFERRED_RANK_PENDING'
-          AND aggregate_status = 'PENDING'
-      `,
-      prisma.$queryRaw<Array<{ c: bigint }>>`
-        SELECT COUNT(*)::bigint AS c
-        FROM match_ingest_raw
-        WHERE status = 'error'
-          AND last_error = 'tracked_rank_pending'
-      `,
-    ])
-    const rawCounts = isRawIngestQueueEnabled()
-      ? await countRawIngestByStatus().catch(() => ({ pending: 0, processing: 0, error: 0 }))
-      : null
-    return {
-      adminDataSource: 'stats_db',
-      totalPlayers,
-      playersWrongKeyVersion,
-      lastNewPlayerAt: lastPlayer?.createdAt?.toISOString() ?? null,
-      lastPlayerLastSeenAt: maxLastSeenAgg._max.lastSeen?.toISOString() ?? null,
-      lastPlayerUpdatedAt: maxUpdatedAgg._max.updatedAt?.toISOString() ?? null,
-      totalTrackedMatches: Number(trackedTotal[0]?.c ?? 0),
-      trackedMatchesCreatedLast1h: Number(tracked1h[0]?.c ?? 0),
-      trackedMatchesPendingNow: Number(trackedPendingNow[0]?.c ?? 0),
-      trackedMatchesPendingOver1h: Number(trackedPendingOver1h[0]?.c ?? 0),
-      trackedOldestPendingCreatedAt: trackedOldestPendingCreatedAt[0]?.d?.toISOString() ?? null,
-      trackedAggregateStatus: Object.fromEntries(
-        trackedAggByStatus.map((r) => [r.aggregate_status, Number(r.c ?? 0)]),
-      ),
-      trackedLastAggregatedAt: trackedLastAggregatedAt[0]?.d?.toISOString() ?? null,
-      playersCreatedLast1h: playersCreated1h,
-      playersLastSeenLast1h: playersLastSeen1h,
-      playersUpdatedLast1h: playersUpdated1h,
-      matchIngestRaw: rawCounts
-        ? {
-            ...rawCounts,
-            errorRankPending: Number(rawRankPendingErr[0]?.c ?? 0),
-          }
-        : null,
-      trackedMatchesDeferredRankPending: Number(trackedDeferredRank[0]?.c ?? 0),
-    }
-  } catch {
-    return empty
-  }
-}
+export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
+  if (!isStatistiquesDatabaseConfigured()) return emptyStats()
 
-/**
- * Vue admin depuis `lelanation_statistiques` : `processed_matches` remplace la file `tracked_matches`
- * pour les compteurs agrégés ; pas de `match_ingest_raw`.
- */
-async function getAdminDataCollectStatsFromStatistiques(): Promise<AdminDataCollectStats> {
   const empty = emptyStats()
   const since1h = new Date(Date.now() - 60 * 60 * 1000)
   const pool = getStatistiquesPool()
@@ -273,14 +155,4 @@ async function getAdminDataCollectStatsFromStatistiques(): Promise<AdminDataColl
   } catch {
     return empty
   }
-}
-
-export async function getAdminDataCollectStats(): Promise<AdminDataCollectStats> {
-  if (isStatistiquesDatabaseConfigured()) {
-    return getAdminDataCollectStatsFromStatistiques()
-  }
-  if (isDatabaseConfigured()) {
-    return getAdminDataCollectStatsFromPrisma()
-  }
-  return emptyStats()
 }
