@@ -6,8 +6,13 @@ import type { IngestionJobData, ParsedParticipantDto } from "../dto/match.dto.js
 import { championStatsMetricValue } from "../parsers/champion-stats-metric-value.js";
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { INGESTION_QUEUE } from "../queues/definitions.js";
-import { rankQueue } from "../queues/index.js";
+import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
 import { redis } from "../redis/client.js";
+import {
+  averageMatchRankTierLabel,
+  matchReadyForAggregation,
+  normalizeParticipantRankTier,
+} from "./match-rank-readiness.js";
 
 class AlreadyProcessedMatchError extends Error {
   constructor(matchId: string) {
@@ -89,51 +94,6 @@ function u15IngestSums(u: ParsedParticipantDto["u15"]) {
     shield: Math.trunc(Number(u.shieldAndHeal) || 0),
     cs: Math.trunc(Number(u.cs) || 0),
   };
-}
-
-/** Tiers solo flex (ordre elo), comme `rank_tier` en base. */
-const SOLO_TIER_ORDER = [
-  "IRON",
-  "BRONZE",
-  "SILVER",
-  "GOLD",
-  "PLATINUM",
-  "EMERALD",
-  "DIAMOND",
-  "MASTER",
-  "GRANDMASTER",
-  "CHALLENGER",
-] as const;
-
-const SOLO_TIER_INDEX: Record<string, number> = Object.fromEntries(
-  SOLO_TIER_ORDER.map((tier, i) => [tier, i + 1]),
-) as Record<string, number>;
-
-function normalizeRankTier(value: string | null | undefined): string | null {
-  const tier = String(value ?? "")
-    .trim()
-    .toUpperCase();
-  if (!tier || tier === "UNRANKED") return null;
-  return tier;
-}
-
-/**
- * Tier « moyen » du match : moyenne des ordres de tier des participants classés,
- * arrondie au tier le plus proche (libellé identique à rank_tier).
- */
-function averageMatchRankTierLabel(participants: ParsedParticipantDto[]): string | null {
-  const ordinals: number[] = [];
-  for (const participant of participants) {
-    const tier = normalizeRankTier(participant.rankTierValue ?? participant.rankTier);
-    if (!tier) continue;
-    const idx = SOLO_TIER_INDEX[tier];
-    if (idx == null) continue;
-    ordinals.push(idx);
-  }
-  if (ordinals.length === 0) return null;
-  const mean = ordinals.reduce((a, b) => a + b, 0) / ordinals.length;
-  const rounded = Math.min(SOLO_TIER_ORDER.length, Math.max(1, Math.round(mean)));
-  return SOLO_TIER_ORDER[rounded - 1] ?? null;
 }
 
 async function insertProcessedMatchSentinel(
@@ -242,7 +202,7 @@ async function upsertPlayerRankHistoryFromParticipants(
     const region = String(participant.region ?? "").trim().toLowerCase();
     const gameDate = new Date(participant.gameDate);
     if (!Number.isFinite(gameDate.getTime())) continue;
-    const normalizedTier = normalizeRankTier(participant.rankTierValue ?? participant.rankTier);
+    const normalizedTier = normalizeParticipantRankTier(participant.rankTierValue ?? participant.rankTier);
     const normalizedDivision = normalizeRankDivision(participant.rankDivision);
     const normalizedLp = normalizeRankLp(participant.lp);
     const hasResolvedRank = !!normalizedTier && !!normalizedDivision && normalizedLp != null;
@@ -1024,8 +984,17 @@ async function upsertTeamCoreStat(tx: any, payload: IngestionJobData): Promise<v
   `;
 }
 
-async function runIngestionTransaction(payload: IngestionJobData): Promise<number> {
-  if (payload.participants.length === 0) return 0;
+async function runIngestionTransaction(payload: IngestionJobData): Promise<{ insertedPlayers: number; aggregated: boolean }> {
+  if (payload.participants.length === 0) return { insertedPlayers: 0, aggregated: false };
+
+  if (!matchReadyForAggregation(payload.participants)) {
+    let insertedPlayers = 0;
+    await sql.begin(async (tx) => {
+      insertedPlayers = await upsertPlayersFromParticipants(tx, payload.participants);
+      await upsertPlayerRankHistoryFromParticipants(tx, payload.participants);
+    });
+    return { insertedPlayers, aggregated: false };
+  }
 
   let insertedPlayers = 0;
   await sql.begin(async (tx) => {
@@ -1050,29 +1019,7 @@ async function runIngestionTransaction(payload: IngestionJobData): Promise<numbe
     await upsertTeamCoreStat(tx, payload);
   });
 
-  return insertedPlayers;
-}
-
-async function enqueueRankFetchJobs(participants: ParsedParticipantDto[]): Promise<void> {
-  const today = new Date().toISOString().split("T")[0];
-
-  const rankJobs = participants
-    .filter((p) => p.needsRankFetch)
-    .map((p) => ({
-      name: "fetch-rank",
-      data: { puuid: p.puuid, region: p.region, matchDate: p.gameDate },
-      opts: {
-        jobId: `rank:${p.puuid}:${today}`,
-        attempts: 2,
-        backoff: { type: "fixed" as const, delay: 30000 },
-        removeOnComplete: { count: 100 },
-        removeOnFail: { count: 100 },
-      },
-    }));
-
-  if (rankJobs.length > 0) {
-    await rankQueue.addBulk(rankJobs);
-  }
+  return { insertedPlayers, aggregated: true };
 }
 
 export const ingestionWorker = new Worker<IngestionJobData>(
@@ -1081,9 +1028,11 @@ export const ingestionWorker = new Worker<IngestionJobData>(
     const startedAt = Date.now();
     pollerV2Observability.recordIngestionStart();
     try {
-      const insertedPlayers = await runIngestionTransaction(job.data);
-      await enqueueRankFetchJobs(job.data.participants);
-      pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
+      const { insertedPlayers, aggregated } = await runIngestionTransaction(job.data);
+      await enqueueRankFetchJobsForParticipants(job.data.participants);
+      if (aggregated) {
+        pollerV2Observability.recordIngestionSuccess(job.data.participants.length);
+      }
       if (insertedPlayers > 0) pollerV2Observability.recordPlayersAdded(insertedPlayers);
     } catch (error) {
       if (error instanceof AlreadyProcessedMatchError) {

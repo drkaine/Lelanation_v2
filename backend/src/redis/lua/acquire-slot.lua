@@ -4,7 +4,7 @@ local count = redis.call('ZCARD', KEYS[1])
 
 if count < cost then
   local last = redis.call('ZRANGE', KEYS[1], -1, -1, 'WITHSCORES')
-  local waitMs = 1500
+  local waitMs = 3000
   if #last > 0 then
     waitMs = math.max(100, tonumber(last[2]) - now + 100)
   end

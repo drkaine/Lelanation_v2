@@ -6,7 +6,9 @@ import type { HydrationJobData, IngestionJobData, ParsedParticipantDto, TeamStat
 import { pollerV2Observability } from "../observability/poller-v2-observability.js";
 import { parseMatch } from "../parsers/match.parser.js";
 import { HYDRATION_QUEUE } from "../queues/definitions.js";
-import { ingestionQueue } from "../queues/index.js";
+import { hydrationQueue, ingestionQueue } from "../queues/index.js";
+import { enqueueRankFetchJobsForParticipants } from "../queues/rank-jobs.js";
+import { matchReadyForAggregation, participantHasResolvedRank } from "./match-rank-readiness.js";
 import { redis } from "../redis/client.js";
 import { waitForHydrationSlot } from "../redis/rate-scheduler.js";
 import { NotFoundError, RiotClient } from "../riot/client.js";
@@ -23,6 +25,8 @@ import {
 const riotClient = new RiotClient();
 const hydrationLimit = pLimit(config.HYDRATION_CONCURRENCY);
 const PATCH_SWITCH_GRACE_DAYS = 2;
+/** Ré-hydratation après fetch rank (match non marqué processed tant que rang manquant). */
+const HYDRATION_RANK_RETRY_DELAY_MS = 120_000;
 
 function extractPatch(gameVersion: string): string {
   const [major, minor] = (gameVersion ?? "").split(".");
@@ -241,6 +245,23 @@ async function runHydrationJob(data: HydrationJobData): Promise<void> {
     const withTodaySnapshot = await loadTodayRankSnapshotPuuids(puuids, region);
     for (const participant of participants) {
       participant.needsRankFetch = !withTodaySnapshot.has(participant.puuid);
+    }
+
+    if (!matchReadyForAggregation(participants)) {
+      await enqueueRankFetchJobsForParticipants(participants);
+      await hydrationQueue.add(
+        "hydrate-match",
+        data,
+        {
+          delay: HYDRATION_RANK_RETRY_DELAY_MS,
+          jobId: `hydrate-rank-wait:${data.matchId}`,
+        },
+      );
+      console.info(
+        `[hydration.worker] deferred_ingestion_pending_rank matchId=${data.matchId} region=${region} unresolved=${participants.filter((p) => !participantHasResolvedRank(p)).length}`,
+      );
+      pollerV2Observability.recordHydrationSuccess(1);
+      return;
     }
 
     const teamStats = parseTeamStats(enrichedMatch, participants, timeline, region);

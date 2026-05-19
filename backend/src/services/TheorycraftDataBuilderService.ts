@@ -89,10 +89,33 @@ const BIN_STAT_MAP: Record<number, string> = {
   4: 'magicResist',
   5: 'bonusAD',
   6: 'bonusMagicResist',
+  8: 'critChance',
+  9: 'critDamage',
   10: 'maxMana',
   11: 'totalHP',
   12: 'bonusHP',
 }
+
+/** Baseline stats for bin tooltip previews (0% crit → base headshot ratios only). */
+const DEFAULT_BIN_STAT_VALUES: Record<string, number> = {
+  critChance: 0,
+  critDamage: 1.75,
+  totalAD: 1,
+  bonusAD: 0,
+  AP: 0,
+}
+
+function defaultBinStatValue(stat: string): number {
+  return DEFAULT_BIN_STAT_VALUES[stat] ?? 0
+}
+
+const APHELIOS_WEAPON_KEYS = [
+  'Calibrum',
+  'Severum',
+  'Infernum',
+  'Crescendum',
+  'Gravitum',
+] as const
 
 /** Bin mStat index → stat key; omitted mStat defaults to AP (e.g. Lee Sin W shield). */
 function resolveBinStat(rawStat: unknown, fallback: string = 'AP'): string {
@@ -139,7 +162,9 @@ function toSha256(value: string): string {
 
 function formatResolvedNumber(value: number): string {
   if (!Number.isFinite(value)) return '0'
-  const fixed = Number(value.toFixed(2))
+  const abs = Math.abs(value)
+  const precision = abs > 0 && abs < 1 ? 4 : 2
+  const fixed = Number(value.toFixed(precision))
   return Number.isInteger(fixed) ? String(fixed) : String(fixed).replace(/\.?0+$/, '')
 }
 
@@ -186,6 +211,11 @@ function formatRatioSuffix(
 ): string {
   const coeffs = ratio.coefficient.filter((c) => Number.isFinite(c) && c !== 0)
   if (coeffs.length === 0) return ''
+  if (ratio.stat === 'critDamage') {
+    const pct = formatValueSeries(coeffs.map((c) => (c <= 1 ? c * 100 : c)))
+    const text = `${pct}%`
+    return options?.html ? `<span class="tooltip-tag tooltip-tag-crit">${text}</span>` : text
+  }
   const statLabel = ratioStatDisplayLabel(ratio.stat)
   let text = ''
   if (coeffs.every((c) => c === coeffs[0])) {
@@ -435,7 +465,7 @@ function resolveReferencedCalculationValues(
   const refType = String(ref.__type ?? '')
   if (refType === 'GameCalculationConditional') {
     const namedRef = String(ref.mConditionalGameCalculation ?? ref.mDefaultGameCalculation ?? '')
-    if (namedRef && !namedRef.startsWith('{')) {
+    if (namedRef) {
       return resolveReferencedCalculationValues(namedRef, dataValues, options)
     }
     return []
@@ -597,6 +627,27 @@ function evaluateCalculationPartValues(
     }
     return out
   }
+  if (partType === 'StatByCoefficientCalculationPart') {
+    const stat = resolveBinStat(part.mStat, 'AP')
+    const coeff = Number(part.mCoefficient ?? 1)
+    if (!Number.isFinite(coeff)) return []
+    const statValue = defaultBinStatValue(stat)
+    return Array.from({ length: maxRank }, () => statValue * coeff)
+  }
+  if (partType === 'StatByNamedDataValueCalculationPart') {
+    const stat = resolveBinStat(part.mStat, 'AP')
+    const dvValues = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
+    const coeffSeries =
+      dvValues && dvValues.length > 0
+        ? trimByMaxRank(dvValues, maxRank)
+        : Array.from({ length: maxRank }, () => 1)
+    const statValue = defaultBinStatValue(stat)
+    return coeffSeries.map((coeff) => statValue * coeff)
+  }
+  if (partType === 'StatBySubPartCalculationPart') {
+    const subpart = asObject(part.mSubpart)
+    return evaluateCalculationPartValues(subpart, dataValues, options)
+  }
   return []
 }
 
@@ -685,6 +736,9 @@ function extractRatioFromCalculationPart(
     const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
     if (!values || values.length === 0) return null
     const dataValueName = String(part.mDataValue ?? '').toLowerCase()
+    if (dataValueName.startsWith('astoad') || dataValueName.startsWith('astoap')) {
+      return null
+    }
     if (
       dataValueName.includes('percentmana') ||
       dataValueName.includes('manaincrease') ||
@@ -715,16 +769,26 @@ function buildBinCalculationExpression(
 } {
   let baseValues: number[] = []
   const baseParts: string[] = []
+  const numericBaseSeries: number[][] = []
   const ratios: Array<{ stat: string; coefficient: number[]; type: 'physical' | 'magic' | 'true' }> = []
 
   for (const rawPart of parts) {
     const part = asObject(rawPart)
     const partType = String(part.__type ?? '')
+    if (part.mSpellCalculationKey) {
+      const values = resolveReferencedCalculationValues(String(part.mSpellCalculationKey), dataValues, options ?? {})
+      if (values.length > 0) {
+        baseValues = values
+        baseParts.push(formatCalculationValuesAsText(values, options ?? {}) || formatValueSeries(values, ' / '))
+      }
+      continue
+    }
     if (partType === 'NamedDataValueCalculationPart') {
       const values = firstValuesFromDataValues(dataValues, String(part.mDataValue ?? ''))
       if (values && values.length > 0) {
         baseValues = values
         baseParts.push(formatValueSeries(values, ' / '))
+        numericBaseSeries.push(values)
       }
       continue
     }
@@ -738,6 +802,7 @@ function buildBinCalculationExpression(
             coeff !== 0 && Number.isFinite(coeff) ? values.map((v) => v * coeff) : values
           baseValues = scaled
           baseParts.push(formatValueSeries(scaled, ' / '))
+          numericBaseSeries.push(scaled)
         }
       } else if (Number.isFinite(coeff) && coeff !== 0) {
         const pct = formatResolvedNumber(coeff * 100)
@@ -753,6 +818,7 @@ function buildBinCalculationExpression(
           Number.isFinite(coeff) && coeff !== 1 ? values.map((v) => v * coeff) : values
         baseValues = scaled
         baseParts.push(formatValueSeries(scaled, ' / '))
+        numericBaseSeries.push(scaled)
       }
       continue
     }
@@ -761,6 +827,7 @@ function buildBinCalculationExpression(
       if (rendered.values.length > 0) {
         baseValues = rendered.values
         baseParts.push(rendered.text)
+        numericBaseSeries.push(rendered.values)
       }
       continue
     }
@@ -769,6 +836,7 @@ function buildBinCalculationExpression(
       if (rendered.values.length > 0) {
         baseValues = rendered.values
         baseParts.push(rendered.text)
+        numericBaseSeries.push(rendered.values)
       }
       continue
     }
@@ -777,6 +845,7 @@ function buildBinCalculationExpression(
       if (rendered.values.length > 0) {
         baseValues = rendered.values
         baseParts.push(rendered.text)
+        numericBaseSeries.push(rendered.values)
       }
       continue
     }
@@ -785,6 +854,7 @@ function buildBinCalculationExpression(
       if (values.length > 0) {
         baseValues = values
         baseParts.push(formatCalculationValuesAsText(values, options ?? {}))
+        numericBaseSeries.push(values)
       }
       continue
     }
@@ -795,6 +865,7 @@ function buildBinCalculationExpression(
         baseParts.push(
           formatCalculationValuesAsText(values, options ?? {}) || formatValueSeries(values, ' / ')
         )
+        numericBaseSeries.push(values)
       }
       continue
     }
@@ -802,6 +873,12 @@ function buildBinCalculationExpression(
       const dataValueName = String(part.mDataValue ?? '')
       const values = firstValuesFromDataValues(dataValues, dataValueName)
       const lower = dataValueName.toLowerCase()
+      if (values && values.length > 0 && (lower.startsWith('astoad') || lower.startsWith('astoap'))) {
+        baseValues = values
+        baseParts.push(formatValueSeries(values, ' / '))
+        numericBaseSeries.push(values)
+        continue
+      }
       if (
         values &&
         values.length > 0 &&
@@ -811,6 +888,7 @@ function buildBinCalculationExpression(
       ) {
         baseValues = values
         baseParts.push(formatValueSeries(values, ' / '))
+        numericBaseSeries.push(values)
         continue
       }
     }
@@ -828,6 +906,7 @@ function buildBinCalculationExpression(
       if (values.length > 0) {
         baseValues = values
         baseParts.push(formatCalculationValuesAsText(values, options ?? {}) || formatValueSeries(values, ' / '))
+        numericBaseSeries.push(values)
       }
       const subparts = Array.isArray(part.mSubparts)
         ? part.mSubparts
@@ -843,7 +922,22 @@ function buildBinCalculationExpression(
     .map((ratio) => formatRatioSuffix(ratio, { html: options?.htmlRatios }))
     .filter(Boolean)
     .join(' ')
-  const baseText = baseParts.filter(Boolean).join(' + ')
+  let baseText = baseParts.filter(Boolean).join(' + ')
+  if (numericBaseSeries.length > 1) {
+    const limit = Math.max(...numericBaseSeries.map((series) => series.length))
+    const summed: number[] = []
+    for (let i = 0; i < limit; i += 1) {
+      let sum = 0
+      for (const series of numericBaseSeries) {
+        sum += series[Math.min(i, series.length - 1)] ?? 0
+      }
+      summed.push(sum)
+    }
+    if (summed.length > 0) {
+      baseValues = summed
+      baseText = formatCalculationValuesAsText(summed, options ?? {}) || formatValueSeries(summed, ' / ')
+    }
+  }
   let expression = [baseText, ratioText].filter(Boolean).join(' ')
   if (baseText === '0' && ratioText) expression = ratioText
   return { expression, baseValues, ratios }
@@ -895,8 +989,10 @@ function extractBinCalculations(
     const calculationType = String(calculation.__type ?? '')
     if (calculationType === 'GameCalculationModified') continue
     if (calculationType === 'GameCalculationConditional') {
-      const namedRef = String(calculation.mConditionalGameCalculation ?? '')
-      if (namedRef && !namedRef.startsWith('{')) {
+      const namedRef = String(
+        calculation.mConditionalGameCalculation ?? calculation.mDefaultGameCalculation ?? ''
+      )
+      if (namedRef) {
         const ref = findCalculationByKey(calculations, namedRef)
         if (ref) {
           const refParts = Array.isArray(ref.mFormulaParts) ? ref.mFormulaParts : []
@@ -1182,6 +1278,24 @@ function buildSpellVariableMap(
   binDataValues.forEach((entry) => {
     setVar(entry.name, formatValueSeries(entry.values))
   })
+  if (options?.isPassive) {
+    const id = String(ddSpell.id ?? '').toLowerCase()
+    // Riot sometimes ships passive templates with legacy @fXX@ placeholders.
+    // Provide known aliases from bin data values when available.
+    if (id.includes('xayahpassive')) {
+      const fAliases: Array<[string, string]> = [
+        ['f12', 'PFeatherDuration'],
+        ['f14', 'PStacksPerCast'],
+        ['f16', 'PDamageFalloffMax'],
+      ]
+      fAliases.forEach(([alias, dataKey]) => {
+        const found = binDataValues.find((entry) => entry.name.toLowerCase() === dataKey.toLowerCase())
+        if (found && found.values.length > 0) {
+          setVar(alias, formatValueSeries(found.values))
+        }
+      })
+    }
+  }
   const calculations = extractBinCalculations(binSpell ?? {}, binDataValues, {
     maxRank,
     slotIndex: inferSpellSlotIndex(ddSpell),
@@ -1190,6 +1304,14 @@ function buildSpellVariableMap(
   })
   calculations.forEach((calculation) => {
     const calcKeyLower = calculation.key.toLowerCase()
+    if (calcKeyLower === 'currentcritdamage') {
+      const mod = binDataValues.find((v) => v.name.toLowerCase() === 'critdamagemod')
+      if (mod && mod.values.length > 0) {
+        const pct = formatValueSeries(mod.values.map((v) => Math.round(v * 100)))
+        setVar(calculation.key, `${pct}%`)
+        return
+      }
+    }
     if (calcKeyLower.includes('passivemanacalctooltip') || calcKeyLower.includes('manacalctooltip')) {
       if (calculation.baseValues.length > 0) {
         const percentSeries = calculation.baseValues.map((value) => {
@@ -1204,6 +1326,13 @@ function buildSpellVariableMap(
       calculation.expressionHtml ||
       calculation.expression ||
       (calculation.baseValues.length > 0 ? formatValueSeries(calculation.baseValues, ' / ') : '')
+    if (
+      options?.isPassive &&
+      calculation.baseValues.length > 0 &&
+      calculation.ratios.some((ratio) => ratio.coefficient.some((coeff) => Math.abs(coeff) >= 5))
+    ) {
+      rendered = formatValueSeries(calculation.baseValues, ' / ')
+    }
     if (!rendered && calculation.ratios.length > 0) {
       rendered = calculation.ratios
         .map((ratio) => formatRatioSuffix(ratio, { html: Boolean(calculation.expressionHtml) }))
@@ -1226,6 +1355,7 @@ function buildSpellVariableMap(
   for (const [key, raw] of Object.entries(cdSpell)) {
     const normalizedKey = key.toLowerCase()
     if (!normalizedKey) continue
+    if (map.has(normalizedKey)) continue
     if (typeof raw === 'number' && Number.isFinite(raw)) {
       setVar(normalizedKey, formatResolvedNumber(raw))
       continue
@@ -1368,7 +1498,7 @@ function resolveStringTableMustacheRefs(
 }
 
 function extractClientTooltipMarkup(raw: string): string {
-  let text = String(raw ?? '').trim()
+  let text = sanitizeRiotTooltipMarkup(String(raw ?? '').trim())
   if (!text) return ''
   const mainMatch = text.match(/<mainText>([\s\S]*?)<\/mainText>/i)
   if (mainMatch) text = mainMatch[1].trim()
@@ -1390,9 +1520,81 @@ function buildChampionPassivePrefixes(championId: string): string[] {
   return [...new Set([id, `${id}p`, `${id}passive`, `${id}passivebuff`])]
 }
 
-/** Client tooltips use @PassiveHealAmount@; spell parser expects {{ PassiveHealAmount }}. */
+function derivePassiveScriptTokensFromLocKeys(locKeys: ReturnType<typeof extractPassiveTooltipLocKeys>): string[] {
+  const out = new Set<string>()
+  const candidates = [locKeys.tooltipKey, locKeys.extendedKey, locKeys.summaryKey]
+  for (const raw of candidates) {
+    const key = String(raw ?? '').trim().toLowerCase()
+    if (!key) continue
+    const stripped = key
+      .replace(/^spell_/, '')
+      .replace(/^generatedtip_passive_/, '')
+      .replace(/^game_character_passivetooltip_/, '')
+      .replace(/_(tooltipwithextendedbehaviorhint|tooltipextended|tooltip|summary|description)$/g, '')
+      .replace(/_+\d+$/g, '')
+      .trim()
+    if (stripped) out.add(stripped)
+  }
+  return [...out]
+}
+
+function expandPassiveScriptTokenVariants(token: string, championId: string): string[] {
+  const out = new Set<string>()
+  const normalizedToken = String(token ?? '').trim().toLowerCase()
+  if (!normalizedToken) return []
+  out.add(normalizedToken)
+  const id = normalizeChampionBinId(championId)
+  if (id) {
+    if (normalizedToken.startsWith(id) && normalizedToken.length > id.length) {
+      const rest = normalizedToken.slice(id.length).replace(/^_+/, '')
+      if (rest) {
+        out.add(`${id}_${rest}`)
+        out.add(`${id}${rest}`)
+      }
+    } else {
+      out.add(`${id}_${normalizedToken}`)
+      out.add(`${id}${normalizedToken}`)
+    }
+  }
+  return [...out]
+}
+
+/** Client tooltips use @PassiveHealAmount@ or @HealthPercentPer5*100@; parser expects {{ … }}. */
 function normalizeAtVariablesToMustache(raw: string): string {
-  return raw.replace(/@([a-zA-Z0-9_.:*\-]+)@/g, '{{ $1 }}')
+  return raw.replace(/@([a-zA-Z0-9_.:]+(?:\*[.\d-]+)?)@/gi, '{{ $1 }}')
+}
+
+function sanitizeRiotTooltipMarkup(raw: string): string {
+  let text = String(raw ?? '')
+  text = text.replace(/<font\b[^>]*>/gi, '')
+  text = text.replace(/<\/font>/gi, '')
+  text = text.replace(/<color\b[^>]*>/gi, '')
+  text = text.replace(/<\/color>/gi, '')
+  return text
+}
+
+function cleanupTooltipArtifacts(html: string): string {
+  let out = String(html ?? '')
+  out = out.replace(/\(\s*\+\s*-\s*\)/g, '')
+  out = out.replace(/\(\s*\+-\s*\)/g, '')
+  out = out.replace(/\(\s*-\s*\)/g, '')
+  out = out.replace(
+    /<span class="tooltip-tag[^"]*">\s*\+\s*<span class="tooltip-tag[^"]*">\(\s*-\s*\)<\/span>\s*<\/span>/g,
+    ''
+  )
+  out = out.replace(/<span class="[^"]*">\s*-\s*<\/span>/g, '')
+  out = out.replace(/\}\}(?=\s*(?:<|$))/g, '')
+  out = out.replace(/\s{2,}/g, ' ')
+  return out.trim()
+}
+
+function stripInlineHtmlTags(html: string): string {
+  return String(html ?? '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function buildPassiveStringTableLookupKeys(
@@ -1418,9 +1620,13 @@ function buildPassiveStringTableLookupKeys(
       `spell_${prefix}_tooltip_${gameMode}`,
       `spell_${prefix}_tooltip`,
       `generatedtip_passive_${prefix}_tooltip`,
+      `spell_${prefix}passivebuff_tooltip_${gameMode}`,
+      `spell_${prefix}passivebuff_tooltip`,
+      `generatedtip_passive_${prefix}passivebuff_tooltip`,
       `spell_${prefix}passive_tooltip_${gameMode}`,
       `spell_${prefix}passive_tooltip`,
       `spell_${prefix}_tooltipextended`,
+      `spell_${prefix}passivebuff_tooltipextended`,
       `generatedtip_passive_${prefix}_tooltipextended`
     )
   }
@@ -1431,8 +1637,26 @@ function buildPassiveStringTableLookupKeys(
     locKeys.summaryKey ?? '',
     `spell_${id}passive_summary`,
     scriptName ? `generatedtip_passive_${scriptName}_description` : '',
+    `game_character_passivetooltip_${id}`,
     `game_character_passivedescription_${id}`
   )
+
+  // Many passives live under generatedtip_passive_{ruby_}{scriptToken}_tooltip.
+  const scriptTokens = derivePassiveScriptTokensFromLocKeys(locKeys)
+  scriptTokens.forEach((token) => {
+    const variants = expandPassiveScriptTokenVariants(token, championId)
+    variants.forEach((variant) => {
+      keys.push(
+        `generatedtip_passive_${variant}_tooltip`,
+        `generatedtip_passive_${variant}_tooltipextended`,
+        `generatedtip_passive_${variant}_tooltipwithextendedbehaviorhint`,
+        `generatedtip_passive_ruby_${variant}_tooltip`,
+        `generatedtip_passive_ruby_${variant}_tooltipextended`,
+        `generatedtip_passive_ruby_${variant}_tooltipwithextendedbehaviorhint`
+      )
+    })
+  })
+
   const normalized = keys
     .filter((key): key is string => Boolean(key))
     .map((key) => key.toLowerCase())
@@ -1529,11 +1753,35 @@ function resolvePassiveTooltipContent(args: {
   const locKeys = extractPassiveTooltipLocKeys(passiveBinSpell)
   const gameMode = resolveGameModeInteger(passiveBinSpell)
   const lookupKeys = buildPassiveStringTableLookupKeys(championId, passiveBinSpell, locKeys, gameMode)
-  const main = pickBestPassiveTooltipFromKeys(lookupKeys, stringTable, gameMode)
+  let main = pickBestPassiveTooltipFromKeys(lookupKeys, stringTable, gameMode)
 
   const extendedKeys = lookupKeys.filter((key) => key.includes('extended') || key.includes('tooltipextended'))
+  const discoveredKeys: string[] = []
+  if (!main) {
+    const id = normalizeChampionBinId(championId)
+    if (id) {
+      for (const key of Object.keys(stringTable)) {
+        const normalized = key.toLowerCase()
+        if (!normalized.startsWith('generatedtip_passive_')) continue
+        if (!normalized.includes(id)) continue
+        if (!normalized.includes('tooltip')) continue
+        if (normalized.includes('tooltipsimple')) continue
+        if (normalized.includes('tft_')) continue
+        discoveredKeys.push(normalized)
+      }
+      const fallbackMain = pickBestPassiveTooltipFromKeys(discoveredKeys, stringTable, gameMode)
+      if (fallbackMain) {
+        main = fallbackMain
+      }
+    }
+  }
+
+  const allExtendedKeys = [
+    ...extendedKeys,
+    ...discoveredKeys.filter((key) => key.includes('extended') || key.includes('tooltipextended')),
+  ]
   const extended: string[] = []
-  for (const key of extendedKeys) {
+  for (const key of allExtendedKeys) {
     const raw = lookupStringTableEntry(stringTable, key)
     if (!raw) continue
     const normalized = normalizePassiveStringTableSection(raw, stringTable, gameMode)
@@ -1619,11 +1867,106 @@ function normalizeStringTableTooltipSection(
   stringTable: StringTableEntries,
   gameMode = 1
 ): string {
-  const resolved = resolveStringTableMustacheRefs(String(section ?? ''), stringTable, gameMode)
+  const resolved = resolveStringTableMustacheRefs(
+    sanitizeRiotTooltipMarkup(String(section ?? '')),
+    stringTable,
+    gameMode
+  )
   const extracted = extractClientTooltipMarkup(resolved)
   let out = extracted || resolved
   out = out.replace(/@?spellmodifierdescriptionappend@?/gi, '')
   return normalizeAtVariablesToMustache(out)
+}
+
+function isDuplicateTooltipSection(mainHtml: string, sectionHtml: string): boolean {
+  const mainPlain = normalizeTooltipPlainText(mainHtml).replace(/\s+/g, ' ').trim()
+  const sectionPlain = normalizeTooltipPlainText(sectionHtml).replace(/\s+/g, ' ').trim()
+  if (!sectionPlain) return true
+  if (!mainPlain) return false
+  if (sectionPlain === mainPlain) return true
+  if (sectionPlain.length > 40 && mainPlain.includes(sectionPlain.slice(0, Math.min(100, sectionPlain.length)))) {
+    return true
+  }
+  if (mainPlain.length > 40 && sectionPlain.includes(mainPlain.slice(0, Math.min(100, mainPlain.length)))) {
+    return true
+  }
+  return false
+}
+
+function isNearDuplicateTooltipSection(mainHtml: string, sectionHtml: string): boolean {
+  const normalize = (value: string): string =>
+    value
+      .toLowerCase()
+      .replace(/\d+(?:[.,]\d+)?/g, '')
+      .replace(/[^a-zàâäçéèêëîïôöùûüÿñæœ\s]/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const mainPlain = normalize(normalizeTooltipPlainText(mainHtml))
+  const sectionPlain = normalize(normalizeTooltipPlainText(sectionHtml))
+  if (!mainPlain || !sectionPlain) return false
+  const firstSentence = (value: string): string => {
+    const idx = value.search(/[.!?]/)
+    return (idx >= 0 ? value.slice(0, idx) : value).trim()
+  }
+  const mainFirst = firstSentence(mainPlain)
+  const sectionFirst = firstSentence(sectionPlain)
+  if (mainFirst.length < 30 || sectionFirst.length < 30) return false
+  if (mainFirst === sectionFirst) return true
+  if (mainPlain.includes(sectionFirst) || sectionPlain.includes(mainFirst)) return true
+  return false
+}
+
+function buildUniqueSupplementalSections(mainHtml: string, sections: string[]): string[] {
+  const mainPlain = normalizeTooltipPlainText(mainHtml).replace(/\s+/g, ' ').trim()
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const section of sections) {
+    const supplemental = extractSupplementalPassiveSection(mainHtml, section)
+      .replace(/^(?:<br\s*\/?>\s*)+/i, '')
+      .trim()
+    if (!supplemental) continue
+    const fragments = supplemental
+      .split(/<br\s*\/?>\s*<br\s*\/?>/i)
+      .map((fragment) => fragment.trim())
+      .filter(Boolean)
+    const filteredFragments = fragments.filter((fragment) => {
+      const fragmentPlain = normalizeTooltipPlainText(fragment).replace(/\s+/g, ' ').trim()
+      if (!fragmentPlain) return false
+      return !mainPlain.includes(fragmentPlain)
+    })
+    const resolvedSection = filteredFragments.length > 0
+      ? filteredFragments.join('<br><br>')
+      : supplemental
+    const plain = normalizeTooltipPlainText(resolvedSection).replace(/\s+/g, ' ').trim()
+    if (
+      /:\s*$/.test(plain) ||
+      /\+\s*(puissance|dégâts d'attaque|attack damage)\.?$/i.test(plain)
+    ) {
+      continue
+    }
+    if (/\bmoins de\s+unités\b/i.test(plain) || /\bwithin\s+units\b/i.test(plain)) {
+      continue
+    }
+    const normalizeForCompare = (value: string): string =>
+      value
+        .toLowerCase()
+        .replace(/\d+(?:[.,]\d+)?/g, '')
+        .replace(/[^a-zàâäçéèêëîïôöùûüÿñæœ\s]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    const mainCompare = normalizeForCompare(mainPlain)
+    const sectionCompare = normalizeForCompare(plain)
+    if (mainCompare && sectionCompare) {
+      const prefixLen = Math.min(90, mainCompare.length, sectionCompare.length)
+      if (prefixLen >= 50 && mainCompare.slice(0, prefixLen) === sectionCompare.slice(0, prefixLen)) {
+        continue
+      }
+    }
+    if (!plain || plain === mainPlain || seen.has(plain)) continue
+    seen.add(plain)
+    out.push(resolvedSection)
+  }
+  return out
 }
 
 function resolveSpellTooltipContent(args: {
@@ -1718,6 +2061,10 @@ function findPassiveBinSpell(
     if (tooltipKey.includes('_tooltip')) score += 8
     if (Object.keys(asObject(spell.mSpellCalculations)).length > 0) score += 5
     if (Array.isArray(spell.DataValues) && spell.DataValues.length > 0) score += 3
+    const calcKeys = Object.keys(asObject(spell.mSpellCalculations)).map((k) => k.toLowerCase())
+    if (calcKeys.some((k) => k.includes('minionad') || k.includes('championad') || k.includes('passivemanacalc'))) {
+      score += 12
+    }
     if (score > bestScore) {
       bestScore = score
       bestSpell = spell
@@ -1839,7 +2186,7 @@ function parseTooltip(
   options?: { isPassive?: boolean }
 ): { descriptionParsed: string; unresolvedVariables: string[]; descriptionText: string } {
   if (!raw) return { descriptionParsed: '', unresolvedVariables: [], descriptionText: '' }
-  const normalizedRaw = normalizeRiotInlineIconTokens(raw)
+  const normalizedRaw = normalizeAtVariablesToMustache(normalizeRiotInlineIconTokens(raw))
   const vars = buildSpellVariableMap(ddSpell, cdSpell, binSpell, sharedVars, options)
   const unresolved = new Set<string>()
   const openedTags: string[] = []
@@ -1847,6 +2194,11 @@ function parseTooltip(
   const lookupVar = (rawValue: string): string | null => {
     const base = rawValue.toLowerCase()
     const candidates = new Set<string>([base, base.replace(/[^a-z0-9]/g, '')])
+    const baseWithoutDecimalSuffix = base.replace(/\.\d+$/, '')
+    if (baseWithoutDecimalSuffix !== base) {
+      candidates.add(baseWithoutDecimalSuffix)
+      candidates.add(baseWithoutDecimalSuffix.replace(/[^a-z0-9]/g, ''))
+    }
     const colonIndex = base.lastIndexOf(':')
     if (colonIndex >= 0 && colonIndex < base.length - 1) {
       const tail = base.slice(colonIndex + 1)
@@ -1886,8 +2238,14 @@ function parseTooltip(
     const rightRaw = opMatch[3]
     const leftVar = lookupVar(leftRaw)
     const rightVar = lookupVar(rightRaw)
-    const leftNum = Number(leftRaw)
-    const rightNum = Number(rightRaw)
+    const parseNum = (raw: string): number => {
+      const trimmed = raw.trim()
+      if (/^-\.\d+$/.test(trimmed)) return -Number(`0${trimmed}`)
+      if (/^\.\d+$/.test(trimmed)) return Number(`0${trimmed}`)
+      return Number(trimmed)
+    }
+    const leftNum = parseNum(leftRaw)
+    const rightNum = parseNum(rightRaw)
 
     const computeSeries = (series: number[], scalar: number, scalarLeft: boolean): string => {
       const computed = series.map((n) =>
@@ -1950,7 +2308,7 @@ function parseTooltip(
         if (display != null) return display
       }
       if (exp.includes('{{') || exp.includes('}}')) return ''
-      return '-'
+      return ''
     }
     return resolved
   })
@@ -1978,6 +2336,7 @@ function parseTooltip(
   }
 
   parsed = parsed.replace(/___TOOLTIP_BR___/g, '<br>')
+  parsed = cleanupTooltipArtifacts(parsed)
 
   return {
     descriptionParsed: normalizeKaynFormMarkupHtml(parsed),
@@ -2364,9 +2723,25 @@ function buildExportedSpell(args: {
   })
 
   const mainTooltip = parseTooltip(mainRaw, ddSpell, cdSpell, binSpell, sharedVars)
-  const detailedParsed = detailRaws.map((section) =>
-    parseTooltip(section, ddSpell, cdSpell, binSpell, sharedVars)
+  const detailedParsed = detailRaws
+    .map((section) => parseTooltip(section, ddSpell, cdSpell, binSpell, sharedVars))
+    .filter(
+      (section) =>
+        !isBrokenTooltipText(section.descriptionText) &&
+        !isDuplicateTooltipSection(mainTooltip.descriptionParsed, section.descriptionParsed) &&
+        !isNearDuplicateTooltipSection(mainTooltip.descriptionParsed, section.descriptionParsed)
+    )
+  const detailedSections = buildUniqueSupplementalSections(
+    mainTooltip.descriptionParsed,
+    detailedParsed.map((section) => section.descriptionParsed)
   )
+  const cleanedDetailedSections =
+    String(ddSpell.id ?? '').toLowerCase() === 'illaoiw' &&
+    normalizeTooltipPlainText(mainTooltip.descriptionParsed)
+      .toLowerCase()
+      .includes("les dégâts selon les pv s'élèvent au minimum")
+      ? []
+      : detailedSections
   const summaryParsed = String(ddSpell.description ?? '').trim()
     ? parseTooltip(String(ddSpell.description ?? ''), ddSpell, cdSpell, binSpell, sharedVars)
     : null
@@ -2391,15 +2766,222 @@ function buildExportedSpell(args: {
     descriptionParsed: mainTooltip.descriptionParsed,
     descriptionText: mainTooltip.descriptionText,
     parsedText: mainTooltip.descriptionText,
-    ...(detailedParsed.length > 0
+    ...(cleanedDetailedSections.length > 0
       ? {
-          detailedTexts: detailedParsed.map((section) => section.descriptionParsed),
-          detailedText: detailedParsed.map((section) => section.descriptionText).join('\n\n'),
+          detailedTexts: cleanedDetailedSections,
+          detailedText: cleanedDetailedSections
+            .map((section) => normalizeTooltipPlainText(section))
+            .join('\n\n'),
         }
       : {}),
     ...(headerStats.length > 0 ? { headerStats } : {}),
     ...(tickStats.length > 0 ? { tickStats } : {}),
   }
+}
+
+type ExportedTheorycraftSpell = ReturnType<typeof buildExportedSpell>
+
+function parseApheliosWeaponTooltipSection(args: {
+  tooltipRaw: string
+  detailRaw?: string
+  weaponKey: string
+  weaponIndex: number
+  championBin: ChampionBinJson | null
+  stringTable: StringTableEntries
+  sharedVars: Map<string, string>
+}): { descriptionParsed: string; descriptionText: string; detailedTexts: string[] } | null {
+  const { tooltipRaw, detailRaw, weaponKey, championBin, stringTable, sharedVars } = args
+  const gameMode = 1
+  const normalized = normalizeStringTableTooltipSection(tooltipRaw, stringTable, gameMode)
+  if (!normalized || isMetaDdragonTooltip(normalized)) return null
+
+  const binSpell = findBinSpellForDDragon(championBin, [`Aphelios${weaponKey}Q`])
+  const ddSpell: ChampionSpell = { id: `Aphelios${weaponKey}Q`, maxrank: DEFAULT_ABILITY_MAX_RANK }
+  const prepared = normalizeAtVariablesToMustache(sanitizeRiotTooltipMarkup(normalized))
+  const main = parseTooltip(prepared, ddSpell, {}, binSpell, sharedVars)
+  if (isBrokenTooltipText(main.descriptionText)) return null
+
+  const detailedTexts: string[] = []
+  if (detailRaw) {
+    const detailNorm = normalizeStringTableTooltipSection(detailRaw, stringTable, gameMode)
+    const detailPrepared = normalizeAtVariablesToMustache(sanitizeRiotTooltipMarkup(detailNorm))
+    const detail = parseTooltip(detailPrepared, ddSpell, {}, binSpell, sharedVars)
+    if (
+      detail.descriptionParsed &&
+      !isBrokenTooltipText(detail.descriptionText) &&
+      !isDuplicateTooltipSection(main.descriptionParsed, detail.descriptionParsed)
+    ) {
+      detailedTexts.push(detail.descriptionParsed)
+    }
+  }
+
+  return {
+    descriptionParsed: main.descriptionParsed,
+    descriptionText: main.descriptionText,
+    detailedTexts,
+  }
+}
+
+function buildApheliosWeaponAbilitySections(args: {
+  championBin: ChampionBinJson | null
+  stringTable: StringTableEntries
+  sharedVars: Map<string, string>
+}): Array<{
+  name: string
+  descriptionHtml: string
+  descriptionText: string
+  detailedTexts: string[]
+}> {
+  const { championBin, stringTable, sharedVars } = args
+  const sections: Array<{
+    name: string
+    descriptionHtml: string
+    descriptionText: string
+    detailedTexts: string[]
+  }> = []
+
+  APHELIOS_WEAPON_KEYS.forEach((weaponKey, index) => {
+    const weaponIndex = index + 1
+    const tooltipRaw =
+      lookupStringTableEntry(stringTable, `spell_apheliosq_tooltip_${weaponIndex}`) ||
+      lookupStringTableEntry(stringTable, `Spell_ApheliosQ_Tooltip_${weaponIndex}`)
+    if (!tooltipRaw) return
+
+    const detailRaw =
+      lookupStringTableEntry(stringTable, `spell_apheliosq_tooltipextended_${weaponIndex}`) ||
+      lookupStringTableEntry(stringTable, `Spell_ApheliosQ_TooltipExtended_${weaponIndex}`)
+
+    const parsed = parseApheliosWeaponTooltipSection({
+      tooltipRaw,
+      detailRaw: detailRaw ?? undefined,
+      weaponKey,
+      weaponIndex,
+      championBin,
+      stringTable,
+      sharedVars,
+    })
+    if (!parsed) return
+
+    const loreName =
+      lookupStringTableEntry(stringTable, `apheliosgun_lorename_${weaponIndex}`) ||
+      lookupStringTableEntry(stringTable, `ApheliosGun_LoreName_${weaponIndex}`) ||
+      weaponKey
+    const name = stripInlineHtmlTags(loreName) || weaponKey
+
+    sections.push({
+      name,
+      descriptionHtml: parsed.descriptionParsed,
+      descriptionText: parsed.descriptionText,
+      detailedTexts: parsed.detailedTexts,
+    })
+  })
+
+  return sections
+}
+
+function buildApheliosEWeaponSections(args: {
+  championBin: ChampionBinJson | null
+  stringTable: StringTableEntries
+  sharedVars: Map<string, string>
+}): Array<{ name: string; descriptionHtml: string; descriptionText: string }> {
+  const { championBin, stringTable, sharedVars } = args
+  const sections: Array<{ name: string; descriptionHtml: string; descriptionText: string }> = []
+  const gameMode = 1
+
+  APHELIOS_WEAPON_KEYS.forEach((weaponKey, index) => {
+    const weaponIndex = index + 1
+    const longRaw =
+      lookupStringTableEntry(stringTable, `spell_apheliose_long_${weaponIndex}`) ||
+      lookupStringTableEntry(stringTable, `Spell_ApheliosE_Long_${weaponIndex}`)
+    if (!longRaw) return
+
+    const normalized = normalizeStringTableTooltipSection(longRaw, stringTable, gameMode)
+    const binSpell = findBinSpellForDDragon(championBin, [`Aphelios${weaponKey}Q`, `Aphelios${weaponKey}`])
+    const ddSpell: ChampionSpell = { id: `Aphelios${weaponKey}`, maxrank: 1 }
+    const prepared = normalizeAtVariablesToMustache(sanitizeRiotTooltipMarkup(normalized))
+    const parsed = parseTooltip(prepared, ddSpell, {}, binSpell, sharedVars)
+    if (!parsed.descriptionParsed || isBrokenTooltipText(parsed.descriptionText)) return
+
+    const loreName =
+      lookupStringTableEntry(stringTable, `apheliosgun_lorename_${weaponIndex}`) || weaponKey
+    const name = stripInlineHtmlTags(loreName) || weaponKey
+    sections.push({
+      name,
+      descriptionHtml: parsed.descriptionParsed,
+      descriptionText: parsed.descriptionText,
+    })
+  })
+
+  return sections
+}
+
+function enrichApheliosSpells(
+  spells: ExportedTheorycraftSpell[],
+  args: {
+    championBin: ChampionBinJson | null
+    stringTable: StringTableEntries
+    sharedVars: Map<string, string>
+  }
+): ExportedTheorycraftSpell[] {
+  const weaponSections = buildApheliosWeaponAbilitySections(args)
+  const eSections = buildApheliosEWeaponSections(args)
+  if (weaponSections.length === 0 && eSections.length === 0) return spells
+
+  return spells.map((spell) => {
+    if (spell.slot === 'Q' && weaponSections.length > 0) {
+      const descriptionHtml = weaponSections
+        .map(
+          (weapon) =>
+            `<p class="tooltip-weapon-title"><strong>${weapon.name}</strong></p>${weapon.descriptionHtml}`
+        )
+        .join('<br><br>')
+      const descriptionText = weaponSections
+        .map((weapon) => `${weapon.name}\n${weapon.descriptionText}`)
+        .join('\n\n')
+      const detailedTexts = [
+        ...(Array.isArray(spell.detailedTexts) ? spell.detailedTexts : []),
+        ...weaponSections.flatMap((weapon) => weapon.detailedTexts),
+      ].filter(Boolean)
+      return {
+        ...spell,
+        descriptionHtml,
+        descriptionParsed: descriptionHtml,
+        descriptionText,
+        parsedText: descriptionText,
+        ...(detailedTexts.length > 0
+          ? {
+              detailedTexts,
+              detailedText: detailedTexts
+                .map((section) => normalizeTooltipPlainText(section))
+                .join('\n\n'),
+            }
+          : {}),
+      }
+    }
+    if (spell.slot === 'E' && eSections.length > 0) {
+      const summaryHtml =
+        lookupStringTableEntry(args.stringTable, 'spell_apheliose_summary') ||
+        String(spell.summaryHtml ?? '')
+      const descriptionHtml = eSections
+        .map(
+          (weapon) =>
+            `<p class="tooltip-weapon-title"><strong>${weapon.name}</strong></p>${weapon.descriptionHtml}`
+        )
+        .join('<br><br>')
+      const descriptionText = eSections
+        .map((weapon) => `${weapon.name}\n${weapon.descriptionText}`)
+        .join('\n\n')
+      return {
+        ...spell,
+        ...(summaryHtml ? { summaryHtml, summaryText: stripInlineHtmlTags(summaryHtml) } : {}),
+        descriptionHtml,
+        descriptionParsed: descriptionHtml,
+        descriptionText,
+        parsedText: descriptionText,
+      }
+    }
+    return spell
+  })
 }
 
 function enrichSharedVarsWithSpellDisplayNames(
@@ -2464,7 +3046,9 @@ function buildChampionSharedVariableMap(championBin: ChampionBinJson | null): Ma
         (calc.baseValues.length > 0 ? formatValueSeries(calc.baseValues, ' / ') : '')
       if (!rendered) return
       const calcKey = calc.key.toLowerCase()
-      shared.set(calcKey, rendered)
+      if (!shared.has(calcKey)) {
+        shared.set(calcKey, rendered)
+      }
       if (scriptName) {
         shared.set(`${scriptName}:${calcKey}`, rendered)
         shared.set(`spell.${scriptName}:${calcKey}`, rendered)
@@ -2729,7 +3313,7 @@ export class TheorycraftDataBuilderService {
     const sharedVars = buildChampionSharedVariableMap(championBin)
     enrichSharedVarsWithSpellDisplayNames(sharedVars, championId, spellsRaw, stringTable)
 
-    const spells = spellsRaw.map((ddSpell, idx) => {
+    let spells: ExportedTheorycraftSpell[] = spellsRaw.map((ddSpell, idx) => {
       const cdSpell = (cdSpells[idx] ?? {}) as CDragonChampionSpell
       const slot = normalizeSpellSlot(idx)
       const binSpell = findBinSpellForDDragon(championBin, [
@@ -2749,6 +3333,10 @@ export class TheorycraftDataBuilderService {
         lang: resolvedLang,
       })
     })
+
+    if (normalizeChampionBinId(championId) === 'aphelios') {
+      spells = enrichApheliosSpells(spells, { championBin, stringTable, sharedVars })
+    }
 
     return {
       id: String(champion.id ?? ''),
@@ -2840,7 +3428,10 @@ export class TheorycraftDataBuilderService {
                 ? buildPassiveVenomDetailFromBin(passiveBinSpell, resolvedLang)
                 : null
           const detailedTexts = [
-            ...extendedParsed.map((section) => section.descriptionParsed),
+            ...buildUniqueSupplementalSections(
+              passiveTooltip.descriptionParsed,
+              extendedParsed.map((section) => section.descriptionParsed)
+            ),
             ...(venomDetail ? [venomDetail.descriptionHtml] : []),
           ].filter(Boolean)
           return {

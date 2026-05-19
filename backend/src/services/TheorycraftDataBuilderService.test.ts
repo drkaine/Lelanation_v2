@@ -407,6 +407,45 @@ test('Twitch passive resolves OnHit token and venom damage from bin', () => {
   assert.ok(venom.descriptionText.includes('36 / 72 / 108 / 144 / 180'))
 })
 
+test('Caitlyn passive headshot bonus uses level AD ratios without negative crit artifact', () => {
+  const binPath = join(process.cwd(), 'data/theorycraft-cache/cdragon-bin-caitlyn.json')
+  const championBin = JSON.parse(readFileSync(binPath, 'utf-8')) as Record<string, unknown>
+  const passiveBin = findPassiveBinSpell(championBin, 'Caitlyn')
+  assert.ok(passiveBin)
+
+  const dataValues = extractBinDataValues(passiveBin!, 5)
+  const calculations = extractBinCalculations(passiveBin!, dataValues, {
+    maxRank: 5,
+    isPassive: true,
+  })
+  const headshot = calculations.find((c) => c.key === 'headshotbonusdamage')
+  assert.ok(headshot)
+  assert.ok(headshot!.ratios.some((r) => r.stat === 'totalAD'))
+  const adRatio = headshot!.ratios.find((r) => r.stat === 'totalAD')
+  assert.ok(adRatio)
+  assert.ok(adRatio!.coefficient.every((c) => c > 0))
+  assert.ok(adRatio!.coefficient[0]! >= 0.5)
+
+  const shared = buildChampionSharedVariableMap(championBin)
+  const wBin = findBinSpellForDDragon(championBin, ['CaitlynW'])
+  assert.ok(wBin)
+  const wCalcs = extractBinCalculations(wBin!, extractBinDataValues(wBin!, 5), { maxRank: 5, slotIndex: 1 })
+  const trapBonus = wCalcs.find((c) => c.key === 'headshotbonusdamage')
+  assert.ok(trapBonus)
+  assert.ok(shared.get('spell.caitlynw:headshotbonusdamage')?.includes('35'))
+
+  const crossRef = parseTooltip(
+    'Piège: @spell.CaitlynW:HeadshotBonusDamage@',
+    { id: 'CaitlynPassive', maxrank: 5 },
+    {},
+    passiveBin,
+    shared,
+    { isPassive: true }
+  )
+  assert.ok(crossRef.descriptionText.includes('35'))
+  assert.ok(!crossRef.descriptionText.includes('@spell'))
+})
+
 test('Lee Sin W shield ratio defaults to AP when bin omits mStat', () => {
   const binSpell = {
     DataValues: [{ name: 'ShieldValue', values: [-5, 40, 80, 120, 160] }],

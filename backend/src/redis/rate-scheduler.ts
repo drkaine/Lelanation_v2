@@ -2,7 +2,7 @@
  * Trois drips Redis (discovery / hydration / rank) sur un budget unique :
  *
  *   TOTAL_RATE = RATE_LIMIT_PER_120S * TARGET_PCT / 120
- *   // dev : 95 * 0.92 / 120 ≈ 0.7283 tokens/s
+ *   // dev : 95 * 0.95 / 120 ≈ 0.7521 tokens/s
  *
  *   discovery 15% · hydration 65% · rank 20%
  *   // dev : 0.109/s (~9.2s/slot) · 0.473/s (~2.1s/slot, coût 2) · 0.146/s (~6.8s/slot)
@@ -21,7 +21,7 @@ import { redis } from "./client.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ACQUIRE_SLOT_LUA = readFileSync(join(__dirname, "lua", "acquire-slot.lua"), "utf8");
 
-export const TARGET_PCT = 0.92;
+export const TARGET_PCT = 0.95;
 
 /** Part de TOTAL_RATE pour matchlists discovery (coût 1). */
 export const DISCOVERY_BUDGET_PCT = 0.15;
