@@ -3,6 +3,8 @@ import { computed, ref, watch, type Ref } from 'vue'
 export type BansTableRow = {
   championId: number
   bansTotal: number
+  bansWhenTeamWon: number
+  bansWhenTeamLost: number
   bansBlue: number
   bansRed: number
   bansTop: number
@@ -160,30 +162,42 @@ export function useStatisticsBansTab(params: {
     return out
   })
 
+  function bansOutcomeCount(championId: number, outcome: 'win' | 'loss'): number {
+    const row = bansTableData.value?.rows?.find(r => r.championId === championId)
+    if (row) {
+      return outcome === 'win'
+        ? Number(row.bansWhenTeamWon ?? 0)
+        : Number(row.bansWhenTeamLost ?? 0)
+    }
+    return outcome === 'win'
+      ? (bansByWinMap.value.get(championId) ?? 0)
+      : (bansByLossMap.value.get(championId) ?? 0)
+  }
+
+  function bansOutcomeRefCount(championId: number, outcome: 'win' | 'loss'): number {
+    const refRow = bansRefByChampion.value.get(championId)
+    if (refRow) {
+      return outcome === 'win'
+        ? Number(refRow.bansWhenTeamWon ?? 0)
+        : Number(refRow.bansWhenTeamLost ?? 0)
+    }
+    return outcome === 'win'
+      ? (bansByWinRefMap.value.get(championId) ?? 0)
+      : (bansByLossRefMap.value.get(championId) ?? 0)
+  }
+
   function bansOutcomePct(championId: number, outcome: 'win' | 'loss'): number {
     const matchCount = bansTableData.value?.matchCount ?? 0
     if (matchCount <= 0) return 0
-    const count =
-      outcome === 'win'
-        ? (bansByWinMap.value.get(championId) ?? 0)
-        : (bansByLossMap.value.get(championId) ?? 0)
-    return banPctForCount(count, matchCount, 2)
+    return banPctForCount(bansOutcomeCount(championId, outcome), matchCount, 2)
   }
 
   function bansOutcomeDeltaPct(championId: number, outcome: 'win' | 'loss'): number | null {
     const currMc = bansTableData.value?.matchCount ?? 0
-    const refMc = params.overviewTeamsBaselineData.value?.matchCount ?? 0
+    const refMc = bansTableRefData.value?.matchCount ?? 0
     if (currMc <= 0 || refMc <= 0) return null
-    const currCount =
-      outcome === 'win'
-        ? (bansByWinMap.value.get(championId) ?? 0)
-        : (bansByLossMap.value.get(championId) ?? 0)
-    const refCount =
-      outcome === 'win'
-        ? (bansByWinRefMap.value.get(championId) ?? 0)
-        : (bansByLossRefMap.value.get(championId) ?? 0)
-    const currPct = banPctForCount(currCount, currMc, 2)
-    const refPct = banPctForCount(refCount, refMc, 2)
+    const currPct = banPctForCount(bansOutcomeCount(championId, outcome), currMc, 2)
+    const refPct = banPctForCount(bansOutcomeRefCount(championId, outcome), refMc, 2)
     return Math.round((currPct - refPct) * 100) / 100
   }
 

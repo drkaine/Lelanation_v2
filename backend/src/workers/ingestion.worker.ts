@@ -652,7 +652,8 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
     await tx`
       INSERT INTO champion_bans_by_banner (
         patch, rank_tier, region, banned_champion_id,
-        count_banner_team_100, count_banner_team_200, count_banner_top, count_banner_jungle, count_banner_mid, count_banner_adc, count_banner_support
+        count_banner_team_100, count_banner_team_200, count_banner_top, count_banner_jungle, count_banner_mid, count_banner_adc, count_banner_support,
+        count_ban_when_team_won, count_ban_when_team_lost
       )
       VALUES (
         ${participant.patch}, ${participant.rankTier}, ${participant.region},
@@ -663,7 +664,9 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
         ${roleColumn === "count_banner_jungle" ? 1 : 0},
         ${roleColumn === "count_banner_mid" ? 1 : 0},
         ${roleColumn === "count_banner_adc" ? 1 : 0},
-        ${roleColumn === "count_banner_support" ? 1 : 0}
+        ${roleColumn === "count_banner_support" ? 1 : 0},
+        ${participant.win ? 1 : 0},
+        ${participant.win ? 0 : 1}
       )
       ON CONFLICT (patch, rank_tier, region, banned_champion_id)
       DO UPDATE SET
@@ -673,7 +676,9 @@ async function upsertBansByBanner(tx: any, participants: ParsedParticipantDto[])
         count_banner_jungle = champion_bans_by_banner.count_banner_jungle + EXCLUDED.count_banner_jungle,
         count_banner_mid = champion_bans_by_banner.count_banner_mid + EXCLUDED.count_banner_mid,
         count_banner_adc = champion_bans_by_banner.count_banner_adc + EXCLUDED.count_banner_adc,
-        count_banner_support = champion_bans_by_banner.count_banner_support + EXCLUDED.count_banner_support
+        count_banner_support = champion_bans_by_banner.count_banner_support + EXCLUDED.count_banner_support,
+        count_ban_when_team_won = champion_bans_by_banner.count_ban_when_team_won + EXCLUDED.count_ban_when_team_won,
+        count_ban_when_team_lost = champion_bans_by_banner.count_ban_when_team_lost + EXCLUDED.count_ban_when_team_lost
     `;
   }
 }

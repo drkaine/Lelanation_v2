@@ -28,6 +28,7 @@ import {
 } from '../services/StatsPlayersService.js'
 import {
   getOverviewStats,
+  getMatchesByVersionStats,
   getOverviewMeta,
   getOverviewDetailStats,
   getOverviewTeamsStats,
@@ -249,12 +250,21 @@ function filterChampionGlobalRowsByOtp<
   return filtered.length > 0 ? filtered : otpGamesFiltered
 }
 
+/** GET /api/stats/versions-with-matches — patches ayant au moins un match (`match_outcome_stats`). */
+router.get('/versions-with-matches', async (req: Request, res: Response) => {
+  res.set('Cache-Control', `public, max-age=${STATS_CACHE_MAX_AGE}`)
+  const rankTier = rankTierParam(req.query.rankTier)
+  const versions = await getMatchesByVersionStats(rankTier ?? null)
+  return res.json({ versions })
+})
+
 /** GET /api/stats/overview - total matches, last update, top winrate champions, matches per division, player count. Query: ?version=16.1 &rankTier=GOLD or &rankTier=GOLD&rankTier=PLATINUM */
 router.get('/overview', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store')
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
+  const otpMode = otpModeFromQuery(req.query.otp)
   const sqlStart = Date.now()
 
   const runOverview = async () => {
@@ -313,7 +323,29 @@ router.get('/overview', async (req: Request, res: Response) => {
     }
   }
 
-  // Top pick / WR / ban : vrai top agrégé (pas de filtre OTP ici — voir tier list).
+  if (otpMode !== 'oui') {
+    if (Array.isArray(data.topWinrateChampions)) {
+      data.topWinrateChampions = filterChampionRowsByOtp(data.topWinrateChampions, otpMode)
+    }
+    if (Array.isArray(data.topPickrateChampions)) {
+      data.topPickrateChampions = filterChampionRowsByOtp(data.topPickrateChampions, otpMode)
+    }
+    if (Array.isArray(data.topBanrateChampions)) {
+      const pool = data._championPool ?? []
+      const allowed = new Set(
+        filterChampionRowsByOtp(
+          pool.map((c) => ({ championId: c.championId, pickrate: c.pickrate })),
+          otpMode
+        ).map((c) => c.championId)
+      )
+      if (allowed.size > 0) {
+        data.topBanrateChampions = data.topBanrateChampions.filter((c) =>
+          allowed.has(c.championId)
+        )
+      }
+    }
+  }
+
   return res.json(data)
 })
 
@@ -1589,9 +1621,10 @@ router.get('/infos/meta', async (req: Request, res: Response) => {
   const version = queryString(req.query.version)
   const rankTier = rankTierParam(req.query.rankTier)
   const role = queryString(req.query.role)
-  const [overview, counts] = await Promise.all([
+  const [overview, counts, matchesByVersion] = await Promise.all([
     getOverviewStats(version, rankTier, role),
     getInfosMetaCounts(version, rankTier, role),
+    getMatchesByVersionStats(rankTier ?? null),
   ])
   return res.json({
     totalGames: overview?.totalMatches ?? 0,
@@ -1600,7 +1633,7 @@ router.get('/infos/meta', async (req: Request, res: Response) => {
     totalPlayers: counts?.totalPlayers ?? 0,
     playersWithIngestMatches: counts?.playersWithIngestMatches ?? 0,
     matchesByDivision: overview?.matchesByDivision ?? [],
-    matchesByVersion: overview?.matchesByVersion ?? [],
+    matchesByVersion,
     otpPickrateThreshold: STATS_OTP_PICKRATE_THRESHOLD,
   })
 })

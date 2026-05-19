@@ -5,7 +5,12 @@
 import { queryRawUnsafe } from '../db/query.js'
 import { isDatabaseConfigured } from '../db/query.js'
 import { bansPerChampionFromMvRows } from '../utils/statsMvBanAggregate.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import {
+  normalizeStatsRoleForBanner,
+  normalizeStatsRoleForChampion,
+  statsRoleSqlLiteral,
+  toQueryStringArrayParam,
+} from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 const CHAMPIONS_CACHE_TTL_MS = 5 * 60 * 1000
@@ -56,7 +61,7 @@ export class RiotStatsAggregator {
     if (!isDatabaseConfigured()) return null
     try {
       const { rankTier, role, version, region } = options
-      const pRole = role != null && role !== '' ? role : null
+      const pRole = normalizeStatsRoleForChampion(role)
       const pVersion = version != null && version !== '' ? version : null
       const pRegion = region != null && region !== '' ? region : null
 
@@ -73,7 +78,7 @@ export class RiotStatsAggregator {
       } else {
         filters.push(`rank_tier <> 'UNRANKED'`)
       }
-      if (pRole) filters.push(`role = '${pRole.replace(/'/g, "''")}'`)
+      if (pRole) filters.push(`role = '${statsRoleSqlLiteral(pRole)}'`)
       if (pVersion) filters.push(`game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`)
       if (pRegion) filters.push(`region = '${pRegion.replace(/'/g, "''")}'`)
       const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1'
@@ -124,8 +129,9 @@ export class RiotStatsAggregator {
             `bb.game_version LIKE '${normalizePatchMajorMinor(pVersion).replace(/'/g, "''")}%'`
           )
         }
-        if (pRole) {
-          banFilters.push(`bb.banner_role_norm = '${pRole.toUpperCase().replace(/'/g, "''")}'`)
+        const bannerRole = normalizeStatsRoleForBanner(role)
+        if (bannerRole) {
+          banFilters.push(`bb.banner_role_norm = '${statsRoleSqlLiteral(bannerRole)}'`)
         }
         const bansWhereSql = banFilters.length ? banFilters.join(' AND ') : '1=1'
         const banRows = await queryRawUnsafe<Array<{ championId: number; bans: bigint }>>(`

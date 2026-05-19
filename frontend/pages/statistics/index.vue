@@ -1304,43 +1304,42 @@ function compareVersionsDesc(a: string, b: string): number {
   }
   return b.localeCompare(a)
 }
-function mergeKnownVersions(
+/** Uniquement les patchs avec des matchs en base (`match_outcome_stats`). */
+function setVersionsWithMatches(
   rows: Array<{ version: string; matchCount: number }> | null | undefined
 ): void {
   if (!rows?.length) return
-  const byVersion = new Map<string, number>(
-    statsKnownVersions.value.map(v => [v.version, v.matchCount])
-  )
-  for (const row of rows) {
-    if (!row?.version) continue
-    const prev = byVersion.get(row.version) ?? 0
-    byVersion.set(row.version, Math.max(prev, Number(row.matchCount) || 0))
-  }
-  statsKnownVersions.value = Array.from(byVersion.entries())
-    .map(([version, matchCount]) => ({ version, matchCount }))
+  statsKnownVersions.value = rows
+    .filter(r => r?.version && Number(r.matchCount) > 0)
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
 }
 
-async function loadKnownVersionsFromGameData(): Promise<void> {
+function mergeKnownVersions(
+  rows: Array<{ version: string; matchCount: number }> | null | undefined
+): void {
+  setVersionsWithMatches(rows)
+}
+
+async function loadVersionsWithMatches(): Promise<void> {
+  const params = new URLSearchParams()
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  const q = params.toString()
   try {
     const data = await statsFetch<{
-      versions?: Array<{ version?: string; patchLabel?: string }>
-    }>('/data/game/versions.json')
-    const rows =
-      data?.versions
-        ?.map(v => {
-          const version = String(v.patchLabel ?? v.version ?? '').trim()
-          return version ? { version, matchCount: 0 } : null
-        })
-        .filter((v): v is { version: string; matchCount: number } => v != null) ?? []
-    mergeKnownVersions(rows)
+      versions?: Array<{ version: string; matchCount: number }>
+    }>(apiUrl('/api/stats/versions-with-matches' + (q ? `?${q}` : '')))
+    if (data?.versions?.length) setVersionsWithMatches(data.versions)
   } catch {
-    // ignore versions catalog failures, overview data remains fallback
+    setVersionsWithMatches(overviewData.value?.matchesByVersion)
   }
 }
+
 const statsVersionOptions = computed(() => {
-  if (statsKnownVersions.value.length > 0) return statsKnownVersions.value
-  const fallback = overviewData.value?.matchesByVersion ?? []
+  const fromKnown = statsKnownVersions.value.filter(v => Number(v.matchCount) > 0)
+  if (fromKnown.length > 0) return fromKnown
+  const fallback = (overviewData.value?.matchesByVersion ?? []).filter(
+    v => Number(v.matchCount) > 0
+  )
   return [...fallback].sort((a, b) => compareVersionsDesc(a.version, b.version))
 })
 
@@ -1508,11 +1507,18 @@ function onStatsFilterChange() {
   overviewDetailError.value = false
   balanceFrameworkData.value = null
   balanceFrameworkError.value = false
-  if (activeTab.value === 'overview') loadOverview()
+  if (activeTab.value === 'overview') {
+    loadOverview()
+    loadChampions()
+  }
   if (activeTab.value === 'infos') loadOverview()
   if (activeTab.value === 'infos') loadInfosMeta()
   if (activeTab.value === 'infos') loadBalanceFramework()
-  if (activeTab.value === 'bans') bansTab.loadBansTable()
+  if (activeTab.value === 'bans') {
+    bansTab.loadBansTable()
+    loadOverviewTeams()
+    loadObjectivesBaseline()
+  }
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'sides') loadOverviewSides()
   if (activeTab.value === 'champions') loadChampions()
@@ -1824,21 +1830,7 @@ async function loadInfosMeta() {
 }
 
 async function loadOverviewVersionsCatalog() {
-  mergeKnownVersions(overviewData.value?.matchesByVersion)
-  await loadKnownVersionsFromGameData()
-  const params = new URLSearchParams()
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
-  const q = params.toString() ? '?' + params.toString() : ''
-  try {
-    const data = await statsFetch<{
-      matchesByVersion?: Array<{ version: string; matchCount: number }>
-    }>(apiUrl('/api/stats/overview' + q))
-    mergeKnownVersions(data?.matchesByVersion)
-  } catch {
-    // Keep current options if catalog request fails.
-  }
+  await loadVersionsWithMatches()
 }
 /** Duration vs winrate (5-min buckets, uses version + rank filters). */
 const overviewDurationWinrateData = ref<{
@@ -2062,7 +2054,7 @@ const progressionFromVersion = computed(() => {
   return normalizeVersionToPrefix(versionStore.currentVersion)
 })
 const progressionSelectableVersions = computed(() => {
-  const versions = statsVersionOptions.value
+  const versions = statsVersionOptions.value.filter(v => Number(v.matchCount) > 0)
   if (!statsVersionFilter.value) return versions
   const filtered = versions.filter(v => v.version !== statsVersionFilter.value)
   return filtered.length > 0 ? filtered : versions
@@ -3211,22 +3203,39 @@ const overviewFilteredChampionIds = computed(() => {
   return new Set((championsData.value?.champions ?? []).map(c => c.championId))
 })
 const FAST_STAT_ROW_COUNT = 5
+/** Aligné sur STATS_OTP_PICKRATE_THRESHOLD backend (défaut 1 %). */
+const STATS_OTP_PICKRATE_THRESHOLD_PCT = 1
+
+function overviewRowMatchesOtpFilter(row: { pickrate?: number }): boolean {
+  const pr = Number(row.pickrate ?? 0)
+  if (statsOtpFilter.value === 'solo') return pr < STATS_OTP_PICKRATE_THRESHOLD_PCT
+  if (statsOtpFilter.value === 'non') return pr >= STATS_OTP_PICKRATE_THRESHOLD_PCT
+  return true
+}
+
 /**
- * Prend les n premières lignes en conservant l’ordre API ; priorité aux IDs présents dans /champions,
- * puis complète pour toujours remplir l’affichage fast-stat.
+ * Prend les n premières lignes en conservant l’ordre API ; filtre OTP (pickrate) puis priorité
+ * aux IDs de GET /api/stats/champions quand disponibles.
  */
-function takeOverviewChampionTopN<T extends { championId: number }>(
+function takeOverviewChampionTopN<T extends { championId: number; pickrate?: number }>(
   rows: readonly T[],
   n: number = FAST_STAT_ROW_COUNT
 ): T[] {
   if (!rows.length || n <= 0) return []
   if (statsOtpFilter.value === 'oui') return rows.slice(0, n)
+
+  let pool = rows.filter(r => overviewRowMatchesOtpFilter(r))
+  if (pool.length === 0) pool = [...rows]
+
   const allowed = overviewFilteredChampionIds.value
-  if (allowed.size === 0) return rows.slice(0, n)
+  if (allowed.size > 0) {
+    const intersected = pool.filter(r => allowed.has(r.championId))
+    if (intersected.length > 0) pool = intersected
+  }
+
   const out: T[] = []
   const seen = new Set<number>()
-  for (const row of rows) {
-    if (!allowed.has(row.championId)) continue
+  for (const row of pool) {
     if (seen.has(row.championId)) continue
     seen.add(row.championId)
     out.push(row)
@@ -4044,6 +4053,7 @@ function formatChampionGlobalNumericDelta(d: number): string {
 }
 
 watch([statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+  loadVersionsWithMatches()
   const tab = activeTab.value
   if (tab === 'overview') loadChampions()
   if (tab === 'championTable') loadChampionGlobalTable()
@@ -4080,7 +4090,10 @@ function itemEconomicForItem(itemId: number): string[] {
 }
 
 watch(activeTab, async tab => {
-  if (tab === 'overview') loadOverview()
+  if (tab === 'overview') {
+    loadOverview()
+    loadChampions()
+  }
   if (tab === 'objectives') {
     if (!overviewData.value?.matchesByVersion?.length) await loadOverview()
     loadOverviewSides()
@@ -4107,6 +4120,11 @@ watch(activeTab, async tab => {
   if (tab === 'surrender') loadSurrenderMatrix()
 })
 watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter], () => {
+  if (activeTab.value === 'overview') {
+    loadVersionsWithMatches()
+    loadOverview()
+    loadChampions()
+  }
   if (activeTab.value === 'team') {
     loadOverviewSides()
     loadOverviewTeams()
@@ -4123,7 +4141,11 @@ watch([statsVersionFilter, statsDivisionFilter, statsRoleFilter, statsOtpFilter]
     loadInfosPatchDivisionMatrix().catch(() => undefined)
     loadBalanceFramework()
   }
-  if (activeTab.value === 'bans') bansTab.loadBansTable()
+  if (activeTab.value === 'bans') {
+    bansTab.loadBansTable()
+    loadOverviewTeams()
+    loadObjectivesBaseline()
+  }
   if (activeTab.value === 'surrender') loadSurrenderMatrix()
 })
 
@@ -4156,8 +4178,9 @@ onMounted(async () => {
   const tVersion = statsPerfStart('version')
   await versionPromise
   statsPerfEnd('version', tVersion)
-  await loadKnownVersionsFromGameData()
+  await loadVersionsWithMatches()
   await loadOverview()
+  if (activeTab.value === 'overview') loadChampions()
   // Apply default version only after first overview call, so we can prefer patches
   // that actually have matches (matchesByVersion), not only catalog versions.
   const defaultVersionApplied = applyDefaultVersionFiltersFromKnownVersions()
@@ -4177,7 +4200,11 @@ onMounted(async () => {
   if (activeTab.value === 'championTable') loadChampionGlobalTable()
   if (activeTab.value === 'balance') loadBalanceFramework()
   if (activeTab.value === 'infos') loadBalanceFramework()
-  if (activeTab.value === 'bans') runInBackground(bansTab.loadBansTable())
+  if (activeTab.value === 'bans') {
+    runInBackground(bansTab.loadBansTable())
+    runInBackground(loadOverviewTeams())
+    runInBackground(loadObjectivesBaseline())
+  }
 })
 
 // Références explicites pour le build prod : bindings uniquement consommés via inject (onglets).

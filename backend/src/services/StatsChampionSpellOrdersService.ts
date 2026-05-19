@@ -1,5 +1,9 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import {
+  normalizeStatsRoleForChampion,
+  statsRoleSqlLiteral,
+  toQueryStringArrayParam,
+} from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 
 export type ChampionSpellOrderRow = {
@@ -42,7 +46,8 @@ export async function getChampionSpellOrders(options: {
     } else {
       filters.push(`cc.rank_tier <> 'UNRANKED'`)
     }
-    if (role) filters.push(`cc.role = '${role.replace(/'/g, "''")}'`)
+    const roleDb = normalizeStatsRoleForChampion(role)
+    if (roleDb) filters.push(`cc.role = '${statsRoleSqlLiteral(roleDb)}'`)
     const whereSql = filters.join(' AND ')
 
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'cc')

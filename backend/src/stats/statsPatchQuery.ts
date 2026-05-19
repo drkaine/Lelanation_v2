@@ -53,6 +53,12 @@ function sqlChampionCoreFragment(patchKey: string | null): string {
       cs.sum_vision_score_advantage_lane_opponent,
       cs.sum_laning_phase_gold_exp_advantage,
       cs.sum_early_laning_phase_gold_exp_advantage,
+      cs.sum_kills,
+      cs.sum_deaths_by_enemy_champs AS sum_deaths,
+      cs.sum_assists,
+      cs.sum_physical_damage_done_to_champions,
+      cs.sum_magic_damage_done_to_champions,
+      cs.sum_true_damage_done_to_champions,
       cs.updated_at
     FROM champion_stats cs
     WHERE ${pf}
@@ -85,9 +91,12 @@ function sqlChampionSideFragment(patchKey: string | null): string {
       cs.sum_physical_damage_done_to_champions AS sum_physical_damage_to_champions,
       cs.sum_magic_damage_done_to_champions AS sum_magic_damage_to_champions,
       cs.sum_true_damage_done_to_champions AS sum_true_damage_to_champions,
-      cs.sum_total_damage_dealt_to_champions AS sum_total_damage_dealt_to_champions,
+      (cs.sum_physical_damage_done_to_champions + cs.sum_magic_damage_done_to_champions + cs.sum_true_damage_done_to_champions) AS sum_total_damage_dealt_to_champions,
+      cs.sum_physical_damage_done_to_champions,
+      cs.sum_magic_damage_done_to_champions,
+      cs.sum_true_damage_done_to_champions,
       cs.sum_total_heal AS sum_total_units_healed,
-      cs.sum_total_heal_on_teammates AS sum_total_units_healed_to_champions,
+      cs.sum_total_heals_on_teammates AS sum_total_units_healed_to_champions,
       cs.sum_damage_self_mitigated,
       cs.sum_damage_dealt_to_buildings,
       cs.sum_damage_dealt_to_turrets,
@@ -141,8 +150,59 @@ function sqlTeamCoreFragment(patchKey: string | null): string {
       0::integer AS count_inhibitor_first,
       0::integer AS count_first_blood,
       0::integer AS sum_elder_kills,
-      tc.updated_at
+      0::integer AS count_earth_drake,
+      0::integer AS count_water_drake,
+      0::integer AS count_wind_drake,
+      0::integer AS count_fire_drake,
+      0::integer AS count_hextec_drake,
+      0::integer AS count_chem_drake,
+      0::integer AS count_earth_drake_soul,
+      0::integer AS count_water_drake_soul,
+      0::integer AS count_wind_drake_soul,
+      0::integer AS count_fire_drake_soul,
+      0::integer AS count_hextec_drake_soul,
+      0::integer AS count_chem_drake_soul,
+      NULL::timestamptz AS updated_at
     FROM team_core_stat tc
+    WHERE ${pf}
+  )`
+}
+
+function sqlSummonerSpellsFragment(patchKey: string | null): string {
+  const pf = patchFilterClause('ss', patchKey)
+  return `(
+    SELECT
+      ss.*,
+      ss.patch AS game_version,
+      (ss.count_win_d + ss.count_win_f)::integer AS count_win,
+      (ss.count_game_d + ss.count_game_f)::integer AS count_game,
+      ss.count_slotd AS count_slot0,
+      ss.count_slotf AS count_slot1
+    FROM champion_summoner_spells ss
+    WHERE ${pf}
+  )`
+}
+
+/** Une ligne par (patch, rank, region, champion) — totaux bans sans éclatement par rôle. */
+function sqlBansCoreFragment(patchKey: string | null): string {
+  const pf = patchFilterClause('bb', patchKey)
+  return `(
+    SELECT
+      bb.patch AS game_version,
+      bb.rank_tier,
+      bb.region,
+      bb.banned_champion_id,
+      bb.count_banner_team_100,
+      bb.count_banner_team_200,
+      (bb.count_banner_team_100 + bb.count_banner_team_200)::integer AS ban_count,
+      bb.count_banner_top,
+      bb.count_banner_jungle,
+      bb.count_banner_mid,
+      bb.count_banner_adc,
+      bb.count_banner_support,
+      bb.count_ban_when_team_won,
+      bb.count_ban_when_team_lost
+    FROM champion_bans_by_banner bb
     WHERE ${pf}
   )`
 }
@@ -223,11 +283,16 @@ function sqlPatchFragmentForLogical(logicalTable: string, patchKey: string | nul
       return sqlTeamCoreFragment(patchKey)
     case 'agg_champion_bans_by_banner':
       return sqlBansBannerFragment(patchKey)
+    case 'agg_champion_bans_by_banner_core':
+      return sqlBansCoreFragment(patchKey)
+    case 'agg_champion_summoner_spells':
+      return sqlSummonerSpellsFragment(patchKey)
     case 'agg_botlane_duo_vs_duo_stats':
       return sqlBotlaneFragment(patchKey)
     case 'agg_champion_damage_stats':
     case 'agg_champion_participant_stats':
       return sqlChampionSideFragment(patchKey)
+    case 'agg_champion_bucket':
     case 'agg_team_bucket':
       return sqlGenericPatchTableFragment('champion_bucket', patchKey)
     default: {

@@ -6,7 +6,11 @@
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { sql } from '../db/client.js'
 import {
+  normalizeStatsRoleForBanner,
+  normalizeStatsRoleForChampion,
   rankTierCacheKey,
+  statsRoleCacheKey,
+  statsRoleSqlLiteral,
   toQueryStringArrayParam,
 } from '../utils/statsFilters.js'
 import { mergeLegacyStatShardAggregates } from '../utils/statShardLegacyMerge.js'
@@ -403,7 +407,6 @@ export interface ObjectiveOutcomeAggByPatchDivision {
 
 const OVERVIEW_CACHE_TTL_MS = 5 * 60 * 1000
 const OVERVIEW_DETAIL_CACHE_TTL_MS = 10 * 60 * 1000
-let hasWarnedMissingTeamBucket = false
 
 const overviewStatsCache = new Map<string, { data: OverviewStats; expiresAt: number }>()
 const overviewTeamsCache = new Map<string, { data: OverviewTeamsStats; expiresAt: number }>()
@@ -440,6 +443,18 @@ function sidesCacheKey(
 }
 
 // ── Param normalisation ──────────────────────────────────────────────────────
+
+function resolveOverviewRoleFilters(role: string | null | undefined): {
+  champion: string | null
+  banner: string | null
+  cacheKey: string
+} {
+  return {
+    champion: normalizeStatsRoleForChampion(role),
+    banner: normalizeStatsRoleForBanner(role),
+    cacheKey: statsRoleCacheKey(role),
+  }
+}
 
 function normalizeOverviewParam(
   value: string | string[] | null | undefined
@@ -702,10 +717,10 @@ export async function getOverviewStats(
 ): Promise<OverviewStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = normalizeOverviewParam(version)
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const pRankTierKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(pVersion, pRankTierKey)}|${pRole ?? ''}`
+  const cacheKey = `${overviewCacheKey(pVersion, pRankTierKey)}|${roleFilters.cacheKey}`
   const cached = overviewStatsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -713,8 +728,8 @@ export async function getOverviewStats(
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'ac')
     const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', version, 'mo')
     const banFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
-    const banRoleSql = pRole
-      ? ` AND mv.banner_role_norm = '${String(pRole).trim().toUpperCase().replace(/'/g, "''")}'`
+    const banRoleSql = roleFilters.banner
+      ? ` AND mv.banner_role_norm = '${statsRoleSqlLiteral(roleFilters.banner)}'`
       : ''
     const [coreRows, matchOutcomeRows, matchDivisionRows, matchVersionRows, banAggRows] = await Promise.all([
       queryRawUnsafe<
@@ -730,7 +745,7 @@ export async function getOverviewStats(
           COALESCE(SUM(ac.count_game), 0)::bigint AS count_game
         FROM ${coreFrom}
         WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ac.')}
-        ${pRole ? `AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''}
+        ${roleFilters.champion ? `AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'` : ''}
         GROUP BY ac.champion_id
       `),
       queryRawUnsafe<Array<{ game_version: string; rank_tier: string; count_match: bigint }>>(`
@@ -838,20 +853,30 @@ export async function getOverviewStats(
       matchCount: Number(r.match_count ?? 0),
     }))
 
-    const matchesByVersion = matchVersionRows.map((r) => ({
-      version: r.game_version,
-      matchCount: Number(r.match_count ?? 0),
-    }))
+    const matchesByVersion = matchVersionRows
+      .map((r) => ({
+        version: r.game_version,
+        matchCount: Number(r.match_count ?? 0),
+      }))
+      .filter((r) => r.matchCount > 0)
 
     const playerCount = Math.round(totalParticipants)
     const blueMatchTotal = totalMatches
     const redMatchTotal = totalMatches
-    const surrenderBySide = await loadSurrenderBySideCounts(
-      version,
-      rankTier,
-      blueMatchTotal,
-      redMatchTotal
-    )
+    let surrenderBySide: OverviewSurrenderBySide | undefined
+    try {
+      surrenderBySide = await loadSurrenderBySideCounts(
+        version,
+        rankTier,
+        blueMatchTotal,
+        redMatchTotal
+      )
+    } catch (err) {
+      console.warn(
+        '[getOverviewStats] surrenderBySide',
+        err instanceof Error ? err.message : err
+      )
+    }
 
     const result: OverviewStats = {
       totalMatches,
@@ -871,6 +896,33 @@ export async function getOverviewStats(
   } catch (err) {
     console.error('[getOverviewStats]', err instanceof Error ? err.message : err)
     return null
+  }
+}
+
+/** Patches présents dans `match_outcome_stats` (au moins un match), pour filtres version / référence. */
+export async function getMatchesByVersionStats(
+  rankTier?: string | string[] | null
+): Promise<Array<{ version: string; matchCount: number }>> {
+  if (!isDatabaseConfigured()) return []
+  try {
+    const moFrom = await matchVersionedAggFrom('agg_match_outcome_stats', null, 'mo')
+    const rows = await queryRawUnsafe<Array<{ game_version: string; match_count: bigint }>>(`
+      SELECT
+        mo.game_version,
+        COALESCE(SUM(mo.count_match), 0)::bigint AS match_count
+      FROM ${moFrom}
+      WHERE ${buildRawMatchCond(null, rankTier).replace(/\bm\./g, 'mo.')}
+      GROUP BY mo.game_version
+      HAVING COALESCE(SUM(mo.count_match), 0) > 0
+      ORDER BY match_count DESC
+    `)
+    return rows.map((r) => ({
+      version: String(r.game_version ?? '').trim(),
+      matchCount: Number(r.match_count ?? 0),
+    })).filter((r) => r.version && r.matchCount > 0)
+  } catch (err) {
+    console.warn('[getMatchesByVersionStats]', err instanceof Error ? err.message : err)
+    return []
   }
 }
 
@@ -935,9 +987,9 @@ async function loadSummonerSpellPairsFromMatches(
     /\bm\./g,
     'ag.'
   )
-  const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
+  const roleNorm = normalizeStatsRoleForChampion(role)
   const roleCol = await resolveAggTableRoleColumn('agg_champion_summoner_spell_pair_stats')
-  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${roleNorm.replace(/'/g, "''")}'` : ''
+  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${statsRoleSqlLiteral(roleNorm)}'` : ''
   const smiteSql = includeSmite ? '' : ` AND ag.spell_d <> 11 AND ag.spell_f <> 11`
   const agFrom = await matchVersionedAggFrom('agg_champion_summoner_spell_pair_stats', version, 'ag')
   const sql = `
@@ -946,8 +998,8 @@ async function loadSummonerSpellPairsFromMatches(
         ag.spell_f::int AS spell_f,
         SUM(ag.count_game)::int AS games,
         SUM(ag.count_win)::int AS wins,
-        COALESCE(SUM(ag.spell1_casts), 0)::bigint AS spell1_casts,
-        COALESCE(SUM(ag.spell2_casts), 0)::bigint AS spell2_casts
+        COALESCE(SUM(ag.spell_d_casts), 0)::bigint AS spell1_casts,
+        COALESCE(SUM(ag.spell_f_casts), 0)::bigint AS spell2_casts
       FROM ${agFrom}
       WHERE ${matchCond}${roleSql}${smiteSql}
       GROUP BY ag.spell_d, ag.spell_f
@@ -970,24 +1022,93 @@ async function loadSummonerSpellPairsFromMatches(
 
 type ItemStarterSetSqlRow = { starter_key: string; games: number; wins: number }
 
+function buildOverviewDetailWhere(
+  alias: string,
+  pVersion: string | null,
+  rankTier: string | string[] | null | undefined,
+  roleNorm: string | null
+): string {
+  const parts = [buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, `${alias}.`)]
+  if (roleNorm) parts.push(`upper(${alias}.role::text) = '${statsRoleSqlLiteral(roleNorm)}'`)
+  return parts.join(' AND ')
+}
+
+function parseItemSetKeyString(key: string): number[] {
+  if (!key) return []
+  const trimmed = key.trim()
+  if (trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed) as unknown
+      if (Array.isArray(parsed)) {
+        return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0)
+      }
+    } catch {
+      /* legacy JSON parse failed */
+    }
+  }
+  return trimmed
+    .split('_')
+    .map((x) => Number(x.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+}
+
+function securedGamesFromOutcome(dist: Record<string, number>): number {
+  let total = 0
+  for (const [bucketRaw, countRaw] of Object.entries(dist)) {
+    const bucket = Number(bucketRaw)
+    if (!Number.isFinite(bucket) || bucket < 1) continue
+    total += Number(countRaw ?? 0)
+  }
+  return total
+}
+
+/** Expression SQL du nombre de bans (filtrable par rôle du banneur). */
+function bannerRoleBanCountSqlExpr(bannerRole: string | null, alias: string): string {
+  const r = bannerRole ? statsRoleSqlLiteral(bannerRole) : null
+  if (r === 'TOP') return `${alias}.count_banner_top`
+  if (r === 'JUNGLE') return `${alias}.count_banner_jungle`
+  if (r === 'MIDDLE') return `${alias}.count_banner_mid`
+  if (r === 'BOTTOM') return `${alias}.count_banner_adc`
+  if (r === 'SUPPORT') return `${alias}.count_banner_support`
+  return `${alias}.ban_count`
+}
+
+function enrichTeamObjectiveAggFromHistogram(
+  aggWin: Record<string, { first: number; kills?: number }>,
+  aggLoss: Record<string, { first: number; kills?: number }>,
+  key: string,
+  dist: { win: Record<string, number>; loss: Record<string, number> }
+): void {
+  const w = aggWin[key]
+  const l = aggLoss[key]
+  if (!w || !l) return
+  w.first = securedGamesFromOutcome(dist.win)
+  l.first = securedGamesFromOutcome(dist.loss)
+  if ('kills' in w && 'kills' in l) {
+    w.kills = sumObjectiveCountFromDistribution(dist.win)
+    l.kills = sumObjectiveCountFromDistribution(dist.loss)
+  }
+}
+
 async function loadItemStarterSetsFromMatches(
   version: string | null,
   rankTier: string | string[] | null,
   role: string | null
 ): Promise<ItemStarterSetSqlRow[]> {
   const matchCond = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'ag.')
-  const roleNorm = role != null && role !== '' ? String(role).trim().toUpperCase() : null
-  const roleCol = await resolveAggTableRoleColumn('agg_champion_item_starter_set_stats')
-  const roleSql = roleNorm ? ` AND ag.${roleCol} = '${roleNorm.replace(/'/g, "''")}'` : ''
-  const agFrom = await matchVersionedAggFrom('agg_champion_item_starter_set_stats', version, 'ag')
+  const roleNorm = normalizeStatsRoleForChampion(role)
+  const roleSql = roleNorm ? ` AND upper(ag.role::text) = '${statsRoleSqlLiteral(roleNorm)}'` : ''
+  const agFrom = await matchVersionedAggFrom('agg_champion_item_stats', version, 'ag')
   const sql = `
       SELECT
-        ag.starter_key,
+        ag.item_set_key AS starter_key,
         SUM(ag.count_game)::int AS games,
         SUM(ag.count_win)::int AS wins
       FROM ${agFrom}
       WHERE ${matchCond}${roleSql}
-      GROUP BY ag.starter_key
+        AND ag.phase = 'starter'
+        AND ag.item_set_key <> ''
+      GROUP BY ag.item_set_key
       HAVING SUM(ag.count_game) >= 5
       ORDER BY games DESC
       LIMIT 50
@@ -1012,14 +1133,14 @@ export async function getOverviewDetailStats(
 ): Promise<OverviewDetailStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRole = role != null && role !== '' ? role : null
-  const key = overviewDetailCacheKey(pVersion, rankTier, pRole, includeSmite ?? false)
+  const roleFilters = resolveOverviewRoleFilters(role)
+  const key = overviewDetailCacheKey(pVersion, rankTier, roleFilters.cacheKey || null, includeSmite ?? false)
   const now = Date.now()
   const cached = overviewDetailCache.get(key)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const detailWhere = buildOverviewDetailWhere('ac', pVersion, rankTier, roleFilters.champion)
     const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
     const rsFrom = await matchVersionedAggFrom('agg_champion_runes_solo_stats', pVersion, 'rs')
     const isoFrom = await matchVersionedAggFrom('agg_champion_item_solo_stats', pVersion, 'iso')
@@ -1027,29 +1148,34 @@ export async function getOverviewDetailStats(
     const shFrom = await matchVersionedAggFrom('agg_champion_shard_solo_stats', pVersion, 'sh')
     const istFrom = await matchVersionedAggFrom('agg_champion_item_stats', pVersion, 'ist')
     const crsFrom = await matchVersionedAggFrom('agg_champion_runes_stats', pVersion, 'crs')
-    const coreStats = await queryRawUnsafe<Array<{ id: bigint; count_game: bigint }>>(`
-      SELECT ac.id, ac.count_game
+    const totalRows = await queryRawUnsafe<Array<{ total: bigint }>>(`
+      SELECT COALESCE(SUM(ac.count_game), 0)::bigint AS total
       FROM ${coreFrom}
-      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'ac.')}
-      ${roleSql}
+      WHERE ${detailWhere}
     `)
-    const totalParticipants = coreStats.reduce((s, r) => s + Number(r.count_game ?? 0), 0)
+    const totalParticipants = Number(totalRows[0]?.total ?? 0)
     if (totalParticipants === 0) {
       overviewDetailCache.set(key, { data: EMPTY_OVERVIEW_DETAIL, expiresAt: now + OVERVIEW_DETAIL_CACHE_TTL_MS })
       return EMPTY_OVERVIEW_DETAIL
     }
 
-    const statIds = coreStats.map((s) => s.id)
+    const rsWhere = buildOverviewDetailWhere('rs', pVersion, rankTier, roleFilters.champion)
+    const isoWhere = buildOverviewDetailWhere('iso', pVersion, rankTier, roleFilters.champion)
+    const ssWhere = buildOverviewDetailWhere('ss', pVersion, rankTier, roleFilters.champion)
+    const shWhere = buildOverviewDetailWhere('sh', pVersion, rankTier, roleFilters.champion)
+    const istWhere = buildOverviewDetailWhere('ist', pVersion, rankTier, roleFilters.champion)
+    const crsWhere = buildOverviewDetailWhere('crs', pVersion, rankTier, roleFilters.champion)
+    const smiteSpellSql = includeSmite ? '' : 'AND ss.spell_id <> 11'
 
-    const statIdsSql = statIds.map((s) => s.toString()).join(',')
     const [soloRunes, soloItems, spells, soloShards] = await Promise.all([
       queryRawUnsafe<Array<{ perkId: number; countWin: bigint; countGame: bigint }>>(`
         SELECT
-          perk_id AS "perkId",
-          count_win AS "countWin",
-          count_game AS "countGame"
+          rs.perk_id AS "perkId",
+          SUM(rs.count_win)::bigint AS "countWin",
+          SUM(rs.count_game)::bigint AS "countGame"
         FROM ${rsFrom}
-        WHERE champion_stat_id IN (${statIdsSql})
+        WHERE ${rsWhere}
+        GROUP BY rs.perk_id
       `),
       queryRawUnsafe<
         Array<{
@@ -1062,36 +1188,38 @@ export async function getOverviewDetailStats(
         }>
       >(`
         SELECT
-          item_id AS "itemId",
-          count_win AS "countWin",
-          count_game AS "countGame",
-          count_starter AS "countStarter",
-          count_core AS "countCore",
-          count_final AS "countFinal"
+          iso.item_id AS "itemId",
+          SUM(iso.count_win)::bigint AS "countWin",
+          SUM(iso.count_game)::bigint AS "countGame",
+          SUM(iso.count_starter)::bigint AS "countStarter",
+          SUM(iso.count_core)::bigint AS "countCore",
+          SUM(iso.count_final)::bigint AS "countFinal"
         FROM ${isoFrom}
-        WHERE champion_stat_id IN (${statIdsSql})
+        WHERE ${isoWhere}
+        GROUP BY iso.item_id
       `),
       queryRawUnsafe<
         Array<{ spellId: number; countWin: bigint; countGame: bigint; countSlot0: bigint; countSlot1: bigint }>
       >(`
         SELECT
-          spell_id AS "spellId",
-          count_win AS "countWin",
-          count_game AS "countGame",
-          count_slot0 AS "countSlot0",
-          count_slot1 AS "countSlot1"
+          ss.spell_id AS "spellId",
+          SUM(ss.count_win)::bigint AS "countWin",
+          SUM(ss.count_game)::bigint AS "countGame",
+          SUM(ss.count_slot0)::bigint AS "countSlot0",
+          SUM(ss.count_slot1)::bigint AS "countSlot1"
         FROM ${ssFrom}
-        WHERE champion_stat_id IN (${statIdsSql})
-        ${includeSmite ? '' : 'AND spell_id <> 11'}
+        WHERE ${ssWhere} ${smiteSpellSql}
+        GROUP BY ss.spell_id
       `),
       queryRawUnsafe<Array<{ shardId: number; slot: number; countWin: bigint; countGame: bigint }>>(`
         SELECT
-          shard_id AS "shardId",
-          slot,
-          count_win AS "countWin",
-          count_game AS "countGame"
+          sh.shard_id AS "shardId",
+          sh.slot,
+          SUM(sh.count_win)::bigint AS "countWin",
+          SUM(sh.count_game)::bigint AS "countGame"
         FROM ${shFrom}
-        WHERE champion_stat_id IN (${statIdsSql})
+        WHERE ${shWhere}
+        GROUP BY sh.shard_id, sh.slot
       `),
     ])
 
@@ -1262,26 +1390,16 @@ export async function getOverviewDetailStats(
       e.slot1 += Number(r.countSlot1 ?? 0)
     }
 
-    const apexRoleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
-    const apexCoreStats = await queryRawUnsafe<Array<{ id: bigint }>>(`
-      SELECT ac.id
-      FROM ${coreFrom}
-      WHERE ${buildRawMatchCond(pVersion, [...APEX_LADDER_TIERS]).replace(/\bm\./g, 'ac.')}
-      ${apexRoleSql}
+    const apexSsWhere = buildOverviewDetailWhere('ss', pVersion, [...APEX_LADDER_TIERS], roleFilters.champion)
+    const apexSpellRows = await queryRawUnsafe<Array<{ spellId: number; countWin: bigint; countGame: bigint }>>(`
+      SELECT
+        ss.spell_id AS "spellId",
+        SUM(ss.count_win)::bigint AS "countWin",
+        SUM(ss.count_game)::bigint AS "countGame"
+      FROM ${ssFrom}
+      WHERE ${apexSsWhere} ${smiteSpellSql}
+      GROUP BY ss.spell_id
     `)
-    const apexStatIds = apexCoreStats.map((s) => s.id)
-    const apexSpellRows =
-      apexStatIds.length > 0
-        ? await queryRawUnsafe<Array<{ spellId: number; countWin: bigint; countGame: bigint }>>(`
-            SELECT
-              spell_id AS "spellId",
-              count_win AS "countWin",
-              count_game AS "countGame"
-            FROM ${ssFrom}
-            WHERE champion_stat_id IN (${apexStatIds.map((id) => id.toString()).join(',')})
-            ${includeSmite ? '' : 'AND spell_id <> 11'}
-          `)
-        : []
     const apexSpellMap = new Map<number, { wins: number; games: number }>()
     for (const r of apexSpellRows) {
       let e = apexSpellMap.get(r.spellId)
@@ -1330,9 +1448,9 @@ export async function getOverviewDetailStats(
     }))
 
     const [pairRowsMain, pairRowsApex, itemStarterSetRows] = await Promise.all([
-      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, pRole, includeSmite ?? false, false),
-      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, pRole, includeSmite ?? false, true),
-      loadItemStarterSetsFromMatches(pVersion, rankTier ?? null, pRole),
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, roleFilters.champion, includeSmite ?? false, false),
+      loadSummonerSpellPairsFromMatches(pVersion, rankTier ?? null, roleFilters.champion, includeSmite ?? false, true),
+      loadItemStarterSetsFromMatches(pVersion, rankTier ?? null, roleFilters.champion),
     ])
     const apexPairMap = new Map<string, { games: number; wins: number }>()
     for (const r of pairRowsApex) {
@@ -1391,11 +1509,14 @@ export async function getOverviewDetailStats(
       Array<{ itemList: string; countWin: bigint; countGame: bigint }>
     >(`
       SELECT
-        item_list AS "itemList",
-        count_win AS "countWin",
-        count_game AS "countGame"
+        ist.item_set_key AS "itemList",
+        SUM(ist.count_win)::bigint AS "countWin",
+        SUM(ist.count_game)::bigint AS "countGame"
       FROM ${istFrom}
-      WHERE champion_stat_id IN (${statIdsSql})
+      WHERE ${istWhere}
+        AND ist.phase = 'final'
+        AND ist.item_set_key <> ''
+      GROUP BY ist.item_set_key
       LIMIT 2000
     `)
     const itemSetMap = new Map<string, { wins: number; games: number }>()
@@ -1407,8 +1528,7 @@ export async function getOverviewDetailStats(
     const itemSets = Array.from(itemSetMap.entries())
       .filter(([, e]) => e.games >= 5)
       .map(([listStr, e]) => {
-        let parsedItems: number[]
-        try { parsedItems = JSON.parse(listStr) as number[] } catch { parsedItems = [] }
+        const parsedItems = parseItemSetKeyString(listStr)
         return {
           items: parsedItems.filter(
             (id) => !OVERVIEW_DETAIL_EXCLUDED_ITEM_IDS.has(id) && !isBootItemId(id)
@@ -1425,12 +1545,7 @@ export async function getOverviewDetailStats(
 
     const itemStarterSets = itemStarterSetRows
       .map((r) => {
-        let parsedItems: number[]
-        try {
-          parsedItems = JSON.parse(r.starter_key) as number[]
-        } catch {
-          parsedItems = []
-        }
+        const parsedItems = parseItemSetKeyString(r.starter_key)
         const games = Number(r.games)
         const wins = Number(r.wins)
         return {
@@ -1454,12 +1569,13 @@ export async function getOverviewDetailStats(
       Array<{ runeList: string; shardList: string; countWin: bigint; countGame: bigint }>
     >(`
       SELECT
-        rune_list AS "runeList",
-        shard_list AS "shardList",
-        count_win AS "countWin",
-        count_game AS "countGame"
+        crs.rune_list AS "runeList",
+        crs.shard_list AS "shardList",
+        SUM(crs.count_win)::bigint AS "countWin",
+        SUM(crs.count_game)::bigint AS "countGame"
       FROM ${crsFrom}
-      WHERE champion_stat_id IN (${statIdsSql})
+      WHERE ${crsWhere}
+      GROUP BY crs.rune_list, crs.shard_list
       LIMIT 2000
     `)
     const runeSetAggKeySep = '\u001e'
@@ -1555,10 +1671,10 @@ export async function getOverviewTeamsStats(
 ): Promise<OverviewTeamsStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${pRole ?? ''}`
+  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${roleFilters.cacheKey}`
   const cached = overviewTeamsCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -1707,27 +1823,52 @@ export async function getOverviewTeamsStats(
       horde: { first: toN(team200?.count_horde_first), kills: toN(team200?.sum_horde_kills) },
     }
 
-    const banFromTeams = await matchVersionedAggFrom('agg_champion_bans_by_banner', pVersion, 'mv')
+    const banCoreFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner_core', pVersion, 'bb')
+    const banWhere = buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'bb.')
+    const banCountExpr = bannerRoleBanCountSqlExpr(roleFilters.banner, 'bb')
     const banRows = await queryRawUnsafe<
       Array<{ champion_id: number; total_bans: bigint }>
     >(`
-      SELECT mv.banned_champion_id AS champion_id, SUM(mv.ban_count)::bigint AS total_bans
-      FROM ${banFromTeams}
-      WHERE ${buildRawMatchCond(pVersion, rankTier).replace(/\bm\./g, 'mv.')}
-      ${pRole ? `AND mv.banner_role_norm = '${String(pRole).toUpperCase().replace(/'/g, "''")}'` : ''}
-      GROUP BY mv.banned_champion_id
+      SELECT bb.banned_champion_id AS champion_id, SUM(${banCountExpr})::bigint AS total_bans
+      FROM ${banCoreFrom}
+      WHERE ${banWhere}
+      GROUP BY bb.banned_champion_id
       ORDER BY total_bans DESC
       LIMIT 20
     `)
     const totalBans = banRows.reduce((a, r) => a + Number(r.total_bans ?? 0), 0)
-    const top20Total = banRows.map((r) => {
+    const toBanRow = (r: { champion_id: number; total_bans: bigint }) => {
       const count = Number(r.total_bans ?? 0)
       return {
         championId: Number(r.champion_id),
         count,
         banRatePercent: totalBans > 0 ? (Math.round((count / totalBans) * 1000) / 10).toFixed(1) + '%' : '—',
       }
-    })
+    }
+    const top20Total = banRows.map(toBanRow)
+
+    const [banByWinRows, banByLossRows] = await Promise.all([
+      queryRawUnsafe<Array<{ champion_id: number; total_bans: bigint }>>(`
+        SELECT bb.banned_champion_id AS champion_id, SUM(bb.count_ban_when_team_won)::bigint AS total_bans
+        FROM ${banCoreFrom}
+        WHERE ${banWhere}
+        GROUP BY bb.banned_champion_id
+        HAVING SUM(bb.count_ban_when_team_won) > 0
+        ORDER BY total_bans DESC
+        LIMIT 20
+      `),
+      queryRawUnsafe<Array<{ champion_id: number; total_bans: bigint }>>(`
+        SELECT bb.banned_champion_id AS champion_id, SUM(bb.count_ban_when_team_lost)::bigint AS total_bans
+        FROM ${banCoreFrom}
+        WHERE ${banWhere}
+        GROUP BY bb.banned_champion_id
+        HAVING SUM(bb.count_ban_when_team_lost) > 0
+        ORDER BY total_bans DESC
+        LIMIT 20
+      `),
+    ])
+    const byWin = banByWinRows.map(toBanRow)
+    const byLoss = banByLossRows.map(toBanRow)
 
     const [
       distBaron,
@@ -1772,6 +1913,13 @@ export async function getOverviewTeamsStats(
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'horde'),
       loadObjectiveDistributionByOutcome(pVersion, rankTier, 'first_blood'),
     ])
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'baron', distBaron)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'dragon', distDragon)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'tower', distTower)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'inhibitor', distInhibitor)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'riftHerald', distRiftHerald)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'horde', distHorde)
+    enrichTeamObjectiveAggFromHistogram(aggWin, aggLoss, 'elder', distElder)
     const objData = (
       win: { first: number; kills: number },
       loss: { first: number; kills: number },
@@ -1797,8 +1945,8 @@ export async function getOverviewTeamsStats(
         horde: firstBucketWinrateFromOutcome(distHorde),
       },
       bans: {
-        byWin: top20Total,
-        byLoss: top20Total,
+        byWin,
+        byLoss,
         top20Total,
       },
       objectives: {
@@ -1901,15 +2049,17 @@ export async function getOverviewDurationWinrateStats(
 ): Promise<OverviewDurationWinrateStats | null> {
   if (!isDatabaseConfigured()) return null
   const pVersion = version != null && version !== '' ? version : null
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${pRole ?? ''}`
+  const cacheKey = `${overviewCacheKey(pVersion, pRankKey)}|${roleFilters.cacheKey}`
   const cached = overviewDurationWinrateCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const roleSql = pRole ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'` : ''
+    const roleSql = roleFilters.champion
+      ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
+      : ''
     const acFromDur = await matchVersionedAggFrom('agg_champion_core_stats', pVersion, 'ac')
     const cbFromDur = await matchVersionedAggFrom('agg_champion_bucket', pVersion, 'cb')
     const bucketRows = await queryRawUnsafe<
@@ -2030,9 +2180,8 @@ export async function getDurationWinrateByChampionByTier(
 ): Promise<ChampionDurationWinrateByTier | null> {
   if (!isDatabaseConfigured()) return null
   try {
-    let roleNorm = role != null && String(role).trim() !== '' ? String(role).trim().toUpperCase() : null
-    if (roleNorm === 'UTILITY') roleNorm = 'SUPPORT'
-    const roleSql = roleNorm ? ` AND ac.role = '${roleNorm.replace(/'/g, "''")}'` : ''
+    const roleNorm = normalizeStatsRoleForChampion(role)
+    const roleSql = roleNorm ? ` AND ac.role = '${statsRoleSqlLiteral(roleNorm)}'` : ''
 
     const acFromTier = await matchVersionedAggFrom('agg_champion_core_stats', version ?? null, 'ac')
     const cbFromTier = await matchVersionedAggFrom('agg_champion_bucket', version ?? null, 'cb')
@@ -2114,16 +2263,16 @@ export async function getOverviewProgressionStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, gainers: [], losers: [] }
   }
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${pRole ?? ''}`
+  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${roleFilters.cacheKey}`
   const cached = overviewProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const roleFilterSql = pRole
-      ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
+    const roleFilterSql = roleFilters.champion
+      ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
     const oldestPrefix = normalizePatchMajorMinor(String(versionOldest)).replace(/'/g, "''")
@@ -2213,19 +2362,19 @@ export async function getOverviewProgressionFullStats(
   if (!versionOldest || versionOldest === '') {
     return { oldestVersion: null, champions: [] }
   }
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const pRankKey = rankTierCacheKey(rankTier)
   const now = Date.now()
-  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${pRole ?? ''}`
+  const cacheKey = `${overviewCacheKey(versionOldest, pRankKey)}|${roleFilters.cacheKey}`
   const cached = overviewProgressionFullCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
   try {
-    const roleFilterSql = pRole
-      ? ` AND ac.role = '${String(pRole).replace(/'/g, "''")}'`
+    const roleFilterSql = roleFilters.champion
+      ? ` AND ac.role = '${statsRoleSqlLiteral(roleFilters.champion)}'`
       : ''
-    const roleFilterBannerSql = pRole
-      ? ` AND mv.banner_role_norm = '${String(pRole).trim().toUpperCase().replace(/'/g, "''")}'`
+    const roleFilterBannerSql = roleFilters.banner
+      ? ` AND mv.banner_role_norm = '${statsRoleSqlLiteral(roleFilters.banner)}'`
       : ''
     const rawCond = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'ac.')
     const rawCondMv = buildRawMatchCond(undefined, rankTier).replace(/\bm\./g, 'mv.')
@@ -2665,70 +2814,103 @@ function escapeSqlLikePrefix(v: string): string {
   return v.replace(/'/g, "''")
 }
 
+/** Legacy objective_key → `objective_outcome_histogram.objective_type` (null = not stored). */
+const OBJECTIVE_KEY_TO_HISTOGRAM_TYPE: Record<string, string | null> = {
+  baron: 'baron',
+  dragon: 'dragon',
+  tower: 'tower',
+  inhibitor: 'inhibitor',
+  riftHerald: 'riftHerald',
+  horde: 'horde',
+  elder: null,
+  earth_drake: null,
+  water_drake: null,
+  wind_drake: null,
+  fire_drake: null,
+  hextec_drake: null,
+  chem_drake: null,
+  earth_soul: null,
+  water_soul: null,
+  wind_soul: null,
+  fire_soul: null,
+  hextec_soul: null,
+  chem_soul: null,
+  first_blood: null,
+}
+
+function buildObjectiveHistogramWhere(
+  pVersion: string | null,
+  rankTier: string | string[] | null | undefined
+): string {
+  const conditions = ['1=1']
+  if (pVersion) {
+    conditions.push(`oh.game_version LIKE '${escapeSqlLikePrefix(normalizePatchMajorMinor(pVersion))}%'`)
+  }
+  const ranks = toQueryStringArrayParam(rankTier)
+    .map((r) => r.toUpperCase())
+    .filter((r) => r && r !== 'ALL' && r !== '*')
+  if (ranks.length === 1) conditions.push(`oh.rank_tier = '${ranks[0]}'`)
+  else if (ranks.length > 1) {
+    conditions.push(`oh.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
+  } else {
+    conditions.push(`oh.rank_tier <> 'UNRANKED'`)
+  }
+  return conditions.join(' AND ')
+}
+
+function securedGamesFromSideDistribution(dist: Record<string, number>): number {
+  let total = 0
+  for (const [bucketRaw, gamesRaw] of Object.entries(dist)) {
+    const bucket = Number(bucketRaw)
+    if (!Number.isFinite(bucket) || bucket < 1) continue
+    total += Number(gamesRaw ?? 0)
+  }
+  return total
+}
+
 async function loadObjectiveDistributionBySides(
   pVersion: string | null,
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
 ): Promise<ObjectiveDistributionSides> {
-  const conditions = ['1=1']
-  if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
-  const ranks = toQueryStringArrayParam(rankTier)
-    .map((r) => r.toUpperCase())
-    .filter((r) => r && r !== 'ALL' && r !== '*')
-  if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) {
-    conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  } else {
-    conditions.push(`b.rank_tier <> 'UNRANKED'`)
+  const histogramType = OBJECTIVE_KEY_TO_HISTOGRAM_TYPE[objectiveKey]
+  if (!histogramType) {
+    return { blue: {}, red: {}, blueWins: {}, redWins: {} }
   }
-  const whereSql = conditions.join(' AND ')
-  const safeKey = objectiveKey.replace(/'/g, "''")
-  try {
-    const tbFrom = await matchVersionedAggFrom('agg_team_bucket', pVersion, 'tb')
-    const bFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'b')
-    const rows = await queryRawUnsafe<
-      Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
-    >(`
-          SELECT
-            b.team,
-            tb.objective_bucket,
-            SUM(tb.count_win)::int AS count_win,
-            SUM(tb.count_game)::int AS count_game
-          FROM ${tbFrom}
-          JOIN ${bFrom} ON b.id = tb.team_stat_id
-          WHERE tb.objective_key = '${safeKey}'
-            AND ${whereSql}
-          GROUP BY b.team, tb.objective_bucket
-        `)
-    const blue: Record<string, number> = {}
-    const red: Record<string, number> = {}
-    const blueWins: Record<string, number> = {}
-    const redWins: Record<string, number> = {}
-    for (const r of rows) {
-      const bucket = String(Number(r.objective_bucket ?? 0))
-      const g = Number(r.count_game ?? 0)
-      const w = Number(r.count_win ?? 0)
-      const tid = Number(r.team)
-      if (tid === 100) {
-        blue[bucket] = (blue[bucket] ?? 0) + g
-        blueWins[bucket] = (blueWins[bucket] ?? 0) + w
-      } else if (tid === 200) {
-        red[bucket] = (red[bucket] ?? 0) + g
-        redWins[bucket] = (redWins[bucket] ?? 0) + w
-      }
+  const whereSql = buildObjectiveHistogramWhere(pVersion, rankTier)
+  const safeType = histogramType.replace(/'/g, "''")
+  const ohFrom = await matchVersionedAggFrom('agg_objective_outcome_stats', pVersion, 'oh')
+  const rows = await queryRawUnsafe<
+    Array<{ team: number; objective_bucket: number; count_win: number; count_game: number }>
+  >(`
+    SELECT
+      oh.team,
+      oh.obj_count AS objective_bucket,
+      SUM(CASE WHEN oh.outcome = 'win' THEN oh.count_games ELSE 0 END)::int AS count_win,
+      SUM(oh.count_games)::int AS count_game
+    FROM ${ohFrom}
+    WHERE oh.objective_type = '${safeType}'
+      AND ${whereSql}
+    GROUP BY oh.team, oh.obj_count
+  `)
+  const blue: Record<string, number> = {}
+  const red: Record<string, number> = {}
+  const blueWins: Record<string, number> = {}
+  const redWins: Record<string, number> = {}
+  for (const r of rows) {
+    const bucket = String(Number(r.objective_bucket ?? 0))
+    const g = Number(r.count_game ?? 0)
+    const w = Number(r.count_win ?? 0)
+    const tid = Number(r.team)
+    if (tid === 100) {
+      blue[bucket] = (blue[bucket] ?? 0) + g
+      blueWins[bucket] = (blueWins[bucket] ?? 0) + w
+    } else if (tid === 200) {
+      red[bucket] = (red[bucket] ?? 0) + g
+      redWins[bucket] = (redWins[bucket] ?? 0) + w
     }
-    return { blue, red, blueWins, redWins }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (message.includes('42P01') || message.includes('agg_team_bucket')) {
-      if (!hasWarnedMissingTeamBucket) {
-        hasWarnedMissingTeamBucket = true
-        console.warn('[loadObjectiveDistributionBySides] agg_team_bucket missing; empty distributions')
-      }
-      return { blue: {}, red: {}, blueWins: {}, redWins: {} }
-    }
-    throw err
   }
+  return { blue, red, blueWins, redWins }
 }
 
 async function loadObjectiveDistributionByOutcome(
@@ -2736,54 +2918,33 @@ async function loadObjectiveDistributionByOutcome(
   rankTier: string | string[] | null | undefined,
   objectiveKey: string
 ): Promise<{ win: Record<string, number>; loss: Record<string, number> }> {
-  const conditions = ['1=1']
-  if (pVersion) conditions.push(`b.game_version LIKE '${escapeSqlLikePrefix(pVersion)}%'`)
-  const ranks = toQueryStringArrayParam(rankTier)
-    .map((r) => r.toUpperCase())
-    .filter((r) => r && r !== 'ALL' && r !== '*')
-  if (ranks.length === 1) conditions.push(`b.rank_tier = '${ranks[0]}'`)
-  else if (ranks.length > 1) {
-    conditions.push(`b.rank_tier IN (${ranks.map((r) => `'${r}'`).join(',')})`)
-  } else {
-    conditions.push(`b.rank_tier <> 'UNRANKED'`)
+  const histogramType = OBJECTIVE_KEY_TO_HISTOGRAM_TYPE[objectiveKey]
+  if (!histogramType) {
+    return { win: {}, loss: {} }
   }
-  const whereSql = conditions.join(' AND ')
-  const safeKey = objectiveKey.replace(/'/g, "''")
-  try {
-    const tbFrom = await matchVersionedAggFrom('agg_team_bucket', pVersion, 'tb')
-    const bFrom = await matchVersionedAggFrom('agg_team_core_stats', pVersion, 'b')
-    const rows = await queryRawUnsafe<
-      Array<{ objective_bucket: number; win_cnt: number; loss_cnt: number }>
-    >(`
-      SELECT
-        tb.objective_bucket,
-        SUM(tb.count_win)::int AS win_cnt,
-        SUM(tb.count_game - tb.count_win)::int AS loss_cnt
-      FROM ${tbFrom}
-      JOIN ${bFrom} ON b.id = tb.team_stat_id
-      WHERE tb.objective_key = '${safeKey}'
-        AND ${whereSql}
-      GROUP BY tb.objective_bucket
-    `)
-    const win: Record<string, number> = {}
-    const loss: Record<string, number> = {}
-    for (const r of rows) {
-      const bucket = String(Number(r.objective_bucket ?? 0))
-      win[bucket] = (win[bucket] ?? 0) + Number(r.win_cnt ?? 0)
-      loss[bucket] = (loss[bucket] ?? 0) + Number(r.loss_cnt ?? 0)
-    }
-    return { win, loss }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    if (message.includes('42P01') || message.includes('agg_team_bucket')) {
-      if (!hasWarnedMissingTeamBucket) {
-        hasWarnedMissingTeamBucket = true
-        console.warn('[loadObjectiveDistributionByOutcome] agg_team_bucket missing; empty distributions')
-      }
-      return { win: {}, loss: {} }
-    }
-    throw err
+  const whereSql = buildObjectiveHistogramWhere(pVersion, rankTier)
+  const safeType = histogramType.replace(/'/g, "''")
+  const ohFrom = await matchVersionedAggFrom('agg_objective_outcome_stats', pVersion, 'oh')
+  const rows = await queryRawUnsafe<
+    Array<{ objective_bucket: number; win_cnt: number; loss_cnt: number }>
+  >(`
+    SELECT
+      oh.obj_count AS objective_bucket,
+      SUM(CASE WHEN oh.outcome = 'win' THEN oh.count_games ELSE 0 END)::int AS win_cnt,
+      SUM(CASE WHEN oh.outcome = 'loss' THEN oh.count_games ELSE 0 END)::int AS loss_cnt
+    FROM ${ohFrom}
+    WHERE oh.objective_type = '${safeType}'
+      AND ${whereSql}
+    GROUP BY oh.obj_count
+  `)
+  const win: Record<string, number> = {}
+  const loss: Record<string, number> = {}
+  for (const r of rows) {
+    const bucket = String(Number(r.objective_bucket ?? 0))
+    win[bucket] = (win[bucket] ?? 0) + Number(r.win_cnt ?? 0)
+    loss[bucket] = (loss[bucket] ?? 0) + Number(r.loss_cnt ?? 0)
   }
+  return { win, loss }
 }
 
 function sumObjectiveCountFromDistribution(dist: Record<string, number> | undefined): number {
@@ -2869,7 +3030,7 @@ export async function getOverviewSidesStats(
   const cached = overviewSidesCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
   const pVersion = toQueryStringArrayParam(version).length === 1 ? toQueryStringArrayParam(version)[0] : null
-  const pRole = normalizeOverviewParam(role)?.toUpperCase() ?? null
+  const roleFilters = resolveOverviewRoleFilters(role)
   try {
     const condTeam = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
     const mvSidesA = await matchVersionedAggFrom('agg_team_core_stats', version, 'mv')
@@ -2901,7 +3062,7 @@ export async function getOverviewSidesStats(
         SUM(mv.count_win)::bigint AS wins
       FROM ${sideChampFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
-      ${pRole ? `AND upper(mv.role_norm::text) = '${pRole.replace(/'/g, "''")}'` : ''}
+      ${roleFilters.champion ? `AND upper(mv.role_norm::text) = '${statsRoleSqlLiteral(roleFilters.champion)}'` : ''}
       GROUP BY mv.team_num, mv.champion_id
       HAVING SUM(mv.count_game) >= 5
     `)
@@ -2929,7 +3090,7 @@ export async function getOverviewSidesStats(
         SUM(mv.ban_count)::bigint AS cnt
       FROM ${banSidesFrom}
       WHERE ${buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')}
-      ${pRole ? `AND upper(mv.banner_role_norm::text) = '${pRole.replace(/'/g, "''")}'` : ''}
+      ${roleFilters.banner ? `AND upper(mv.banner_role_norm::text) = '${statsRoleSqlLiteral(roleFilters.banner)}'` : ''}
       GROUP BY mv.team_num, mv.banned_champion_id
     `)
     const bansBlue = banRows
@@ -3136,6 +3297,30 @@ export async function getOverviewSidesStats(
       loadObjectiveDistributionBySides(pVersion, rankTier, 'horde'),
       loadObjectiveDistributionBySides(pVersion, rankTier, 'first_blood'),
     ])
+    objectivesBySide.blue.baronKills = sumObjectiveCountFromDistribution(distBaron.blue)
+    objectivesBySide.red.baronKills = sumObjectiveCountFromDistribution(distBaron.red)
+    objectivesBySide.blue.baronFirst = securedGamesFromSideDistribution(distBaron.blue)
+    objectivesBySide.red.baronFirst = securedGamesFromSideDistribution(distBaron.red)
+    objectivesBySide.blue.dragonKills = sumObjectiveCountFromDistribution(distDragon.blue)
+    objectivesBySide.red.dragonKills = sumObjectiveCountFromDistribution(distDragon.red)
+    objectivesBySide.blue.dragonFirst = securedGamesFromSideDistribution(distDragon.blue)
+    objectivesBySide.red.dragonFirst = securedGamesFromSideDistribution(distDragon.red)
+    objectivesBySide.blue.towerKills = sumObjectiveCountFromDistribution(distTower.blue)
+    objectivesBySide.red.towerKills = sumObjectiveCountFromDistribution(distTower.red)
+    objectivesBySide.blue.towerFirst = securedGamesFromSideDistribution(distTower.blue)
+    objectivesBySide.red.towerFirst = securedGamesFromSideDistribution(distTower.red)
+    objectivesBySide.blue.inhibitorKills = sumObjectiveCountFromDistribution(distInhibitor.blue)
+    objectivesBySide.red.inhibitorKills = sumObjectiveCountFromDistribution(distInhibitor.red)
+    objectivesBySide.blue.inhibitorFirst = securedGamesFromSideDistribution(distInhibitor.blue)
+    objectivesBySide.red.inhibitorFirst = securedGamesFromSideDistribution(distInhibitor.red)
+    objectivesBySide.blue.riftHeraldKills = sumObjectiveCountFromDistribution(distRiftHerald.blue)
+    objectivesBySide.red.riftHeraldKills = sumObjectiveCountFromDistribution(distRiftHerald.red)
+    objectivesBySide.blue.riftHeraldFirst = securedGamesFromSideDistribution(distRiftHerald.blue)
+    objectivesBySide.red.riftHeraldFirst = securedGamesFromSideDistribution(distRiftHerald.red)
+    objectivesBySide.blue.hordeKills = sumObjectiveCountFromDistribution(distHorde.blue)
+    objectivesBySide.red.hordeKills = sumObjectiveCountFromDistribution(distHorde.red)
+    objectivesBySide.blue.hordeFirst = securedGamesFromSideDistribution(distHorde.blue)
+    objectivesBySide.red.hordeFirst = securedGamesFromSideDistribution(distHorde.red)
     drakesBySide.types.elder.byBlue = sumObjectiveCountFromDistribution(distElder.blue)
     drakesBySide.types.elder.byRed = sumObjectiveCountFromDistribution(distElder.red)
     drakesBySide.types.earth.byBlue = sumObjectiveCountFromDistribution(distEarthDrake.blue)
@@ -3217,18 +3402,18 @@ export async function getOverviewSidesStats(
     drakesBySide.souls.chem.winrateRed = wrChemSoul.red
     const objectivesBySideTable: OverviewSidesApiStats['objectivesBySideTable'] = {
       firstBlood: {
-        firstByBlue: n(blue?.count_first_blood),
-        firstByRed: n(red?.count_first_blood),
+        firstByBlue: objectivesBySide.blue.firstBlood,
+        firstByRed: objectivesBySide.red.firstBlood,
         distributionByBlue: distFirstBloodSides.blue,
         distributionByRed: distFirstBloodSides.red,
       },
-      baron: { firstByBlue: n(blue?.count_baron_first), firstByRed: n(red?.count_baron_first), killsByBlue: n(blue?.sum_baron_kills), killsByRed: n(red?.sum_baron_kills), distributionByBlue: distBaron.blue, distributionByRed: distBaron.red },
-      dragon: { firstByBlue: n(blue?.count_dragon_first), firstByRed: n(red?.count_dragon_first), killsByBlue: n(blue?.sum_dragon_kills), killsByRed: n(red?.sum_dragon_kills), distributionByBlue: distDragon.blue, distributionByRed: distDragon.red },
-      elder: { firstByBlue: 0, firstByRed: 0, killsByBlue: n(blue?.sum_elder_kills), killsByRed: n(red?.sum_elder_kills), distributionByBlue: distElder.blue, distributionByRed: distElder.red },
-      tower: { firstByBlue: n(blue?.count_tower_first), firstByRed: n(red?.count_tower_first), killsByBlue: n(blue?.sum_tower_kills), killsByRed: n(red?.sum_tower_kills), distributionByBlue: distTower.blue, distributionByRed: distTower.red },
-      inhibitor: { firstByBlue: n(blue?.count_inhibitor_first), firstByRed: n(red?.count_inhibitor_first), killsByBlue: n(blue?.sum_inhibitor_kills), killsByRed: n(red?.sum_inhibitor_kills), distributionByBlue: distInhibitor.blue, distributionByRed: distInhibitor.red },
-      riftHerald: { firstByBlue: n(blue?.count_rift_herald_first), firstByRed: n(red?.count_rift_herald_first), killsByBlue: n(blue?.sum_rift_herald_kills), killsByRed: n(red?.sum_rift_herald_kills), distributionByBlue: distRiftHerald.blue, distributionByRed: distRiftHerald.red },
-      horde: { firstByBlue: n(blue?.count_horde_first), firstByRed: n(red?.count_horde_first), killsByBlue: n(blue?.sum_horde_kills), killsByRed: n(red?.sum_horde_kills), distributionByBlue: distHorde.blue, distributionByRed: distHorde.red },
+      baron: { firstByBlue: objectivesBySide.blue.baronFirst, firstByRed: objectivesBySide.red.baronFirst, killsByBlue: objectivesBySide.blue.baronKills, killsByRed: objectivesBySide.red.baronKills, distributionByBlue: distBaron.blue, distributionByRed: distBaron.red },
+      dragon: { firstByBlue: objectivesBySide.blue.dragonFirst, firstByRed: objectivesBySide.red.dragonFirst, killsByBlue: objectivesBySide.blue.dragonKills, killsByRed: objectivesBySide.red.dragonKills, distributionByBlue: distDragon.blue, distributionByRed: distDragon.red },
+      elder: { firstByBlue: objectivesBySide.blue.elderFirst, firstByRed: objectivesBySide.red.elderFirst, killsByBlue: objectivesBySide.blue.elderKills, killsByRed: objectivesBySide.red.elderKills, distributionByBlue: distElder.blue, distributionByRed: distElder.red },
+      tower: { firstByBlue: objectivesBySide.blue.towerFirst, firstByRed: objectivesBySide.red.towerFirst, killsByBlue: objectivesBySide.blue.towerKills, killsByRed: objectivesBySide.red.towerKills, distributionByBlue: distTower.blue, distributionByRed: distTower.red },
+      inhibitor: { firstByBlue: objectivesBySide.blue.inhibitorFirst, firstByRed: objectivesBySide.red.inhibitorFirst, killsByBlue: objectivesBySide.blue.inhibitorKills, killsByRed: objectivesBySide.red.inhibitorKills, distributionByBlue: distInhibitor.blue, distributionByRed: distInhibitor.red },
+      riftHerald: { firstByBlue: objectivesBySide.blue.riftHeraldFirst, firstByRed: objectivesBySide.red.riftHeraldFirst, killsByBlue: objectivesBySide.blue.riftHeraldKills, killsByRed: objectivesBySide.red.riftHeraldKills, distributionByBlue: distRiftHerald.blue, distributionByRed: distRiftHerald.red },
+      horde: { firstByBlue: objectivesBySide.blue.hordeFirst, firstByRed: objectivesBySide.red.hordeFirst, killsByBlue: objectivesBySide.blue.hordeKills, killsByRed: objectivesBySide.red.hordeKills, distributionByBlue: distHorde.blue, distributionByRed: distHorde.red },
     }
 
     const result: OverviewSidesApiStats = {
@@ -3260,9 +3445,9 @@ export async function getOverviewSidesStats(
 }
 
 function roleSqlClause(role: string | null | undefined): string {
-  if (role == null || role === '') return ''
-  const r = role.replace(/'/g, "''").toUpperCase()
-  return ` AND upper(mv.role_norm::text) = '${r}'`
+  const r = normalizeStatsRoleForChampion(role)
+  if (!r) return ''
+  return ` AND upper(mv.role_norm::text) = '${statsRoleSqlLiteral(r)}'`
 }
 
 async function sideChampionMap(
@@ -3323,7 +3508,7 @@ export async function getOverviewSidesProgressionFullStats(
   const voRaw = String(versionOldest).trim()
   const vo = escapeSqlLikePrefix(voRaw)
   const pRankKey = rankTierCacheKey(rankTier)
-  const pRole = role != null && role !== '' ? role : null
+  const roleFilters = resolveOverviewRoleFilters(role)
   const sinceRaw =
     sinceVersionPrefix != null && String(sinceVersionPrefix).trim() !== ''
       ? String(sinceVersionPrefix).trim()
@@ -3334,7 +3519,7 @@ export async function getOverviewSidesProgressionFullStats(
   const now = Date.now()
   // Cache key v2: base match condition must not include versionOldest — oldest/since filters are
   // oldestClause / sinceClause only; including both produced contradictory WHERE (no rows).
-  const cacheKey = `sidesprog3|${vo}|${pRankKey ?? ''}|${pRole ?? ''}|${sinceEsc ?? 'all'}`
+  const cacheKey = `sidesprog3|${vo}|${pRankKey ?? ''}|${roleFilters.cacheKey}|${sinceEsc ?? 'all'}`
   const cached = overviewSidesProgressionCache.get(cacheKey)
   if (cached && cached.expiresAt > now) return cached.data
 
@@ -3345,7 +3530,7 @@ export async function getOverviewSidesProgressionFullStats(
       sinceEsc != null && sinceEsc !== ''
         ? `mv.game_version LIKE '${sinceEsc}%'`
         : `mv.game_version NOT LIKE '${vo}%'`
-    const rSql = roleSqlClause(pRole)
+    const rSql = roleSqlClause(roleFilters.champion)
 
     const oldestSideFrom = await matchVersionedAggFrom('agg_champion_side_stats', voRaw, 'mv')
     const sinceSideFrom = await sqlAggUnionAllLiveAndArchives('agg_champion_side_stats', 'mv')

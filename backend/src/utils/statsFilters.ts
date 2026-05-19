@@ -42,3 +42,58 @@ export function rankTierCacheKey(rankTier: string | string[] | null | undefined)
   if (ranks.length === 0) return null
   return [...ranks].sort().join(',')
 }
+
+/** Rôles stockés dans `champion_stats` et tables dérivées (poller v2). */
+const STATS_ROLE_CHAMPION: Record<string, string> = {
+  TOP: 'TOP',
+  JUNGLE: 'JUNGLE',
+  MIDDLE: 'MID',
+  MID: 'MID',
+  BOTTOM: 'ADC',
+  ADC: 'ADC',
+  BOT: 'ADC',
+  SUPPORT: 'SUPPORT',
+  UTILITY: 'SUPPORT',
+}
+
+/** Libellés `banner_role_norm` (fragment bans SQL legacy). */
+const STATS_ROLE_BANNER: Record<string, string> = {
+  TOP: 'TOP',
+  JUNGLE: 'JUNGLE',
+  MIDDLE: 'MIDDLE',
+  MID: 'MIDDLE',
+  BOTTOM: 'BOTTOM',
+  ADC: 'BOTTOM',
+  BOT: 'BOTTOM',
+  SUPPORT: 'SUPPORT',
+  UTILITY: 'SUPPORT',
+}
+
+function normalizeStatsRole(
+  role: string | null | undefined,
+  map: Record<string, string>,
+): string | null {
+  if (!role?.trim()) return null
+  const u = role.trim().toUpperCase()
+  return map[u] ?? u
+}
+
+/** Filtre rôle pour `champion_stats.role`, `role_norm` (= upper(role)), spell pairs, etc. */
+export function normalizeStatsRoleForChampion(role: string | null | undefined): string | null {
+  return normalizeStatsRole(role, STATS_ROLE_CHAMPION)
+}
+
+/** Filtre rôle pour `banner_role_norm` (bans par rôle du banneur). */
+export function normalizeStatsRoleForBanner(role: string | null | undefined): string | null {
+  return normalizeStatsRole(role, STATS_ROLE_BANNER)
+}
+
+export function statsRoleSqlLiteral(role: string): string {
+  return role.replace(/'/g, "''")
+}
+
+/** Clé cache / query string (garde MIDDLE/BOTTOM côté front). */
+export function statsRoleCacheKey(role: string | null | undefined): string {
+  if (!role?.trim()) return ''
+  return role.trim().toUpperCase()
+}

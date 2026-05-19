@@ -492,69 +492,46 @@ const statsKnownVersions = ref<Array<{ version: string; matchCount: number }>>([
 /** Fallback si `statsKnownVersions` est encore vide (même logique que la page stats `/statistics`). */
 const tierListOverviewMatchVersions = ref<Array<{ version: string; matchCount: number }>>([])
 
-function mergeKnownVersions(
+function setVersionsWithMatches(
   rows: Array<{ version: string; matchCount: number }> | null | undefined
 ): void {
   if (!rows?.length) return
-  const byVersion = new Map<string, number>(
-    statsKnownVersions.value.map(v => [v.version, v.matchCount])
-  )
-  for (const row of rows) {
-    if (!row?.version) continue
-    const prev = byVersion.get(row.version) ?? 0
-    byVersion.set(row.version, Math.max(prev, Number(row.matchCount) || 0))
-  }
-  statsKnownVersions.value = Array.from(byVersion.entries())
-    .map(([version, matchCount]) => ({ version, matchCount }))
+  const filtered = rows
+    .filter(r => r?.version && Number(r.matchCount) > 0)
     .sort((a, b) => compareVersionsDesc(a.version, b.version))
+  statsKnownVersions.value = filtered
+  tierListOverviewMatchVersions.value = filtered
 }
 
 function statsFetch<T = unknown>(url: string, options?: Parameters<typeof $fetch>[1]): Promise<T> {
   return $fetch(url, { ...options }) as Promise<T>
 }
 
-async function loadKnownVersionsFromGameData(): Promise<void> {
+async function loadVersionsWithMatches(): Promise<void> {
+  const params = new URLSearchParams()
+  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
+  const q = params.toString()
   try {
     const data = await statsFetch<{
-      versions?: Array<{ version?: string; patchLabel?: string }>
-    }>('/data/game/versions.json')
-    const rows =
-      data?.versions
-        ?.map(v => {
-          const version = String(v.patchLabel ?? v.version ?? '').trim()
-          return version ? { version, matchCount: 0 } : null
-        })
-        .filter((v): v is { version: string; matchCount: number } => v != null) ?? []
-    mergeKnownVersions(rows)
+      versions?: Array<{ version: string; matchCount: number }>
+    }>(apiUrl('/api/stats/versions-with-matches' + (q ? `?${q}` : '')))
+    if (data?.versions?.length) setVersionsWithMatches(data.versions)
   } catch {
     /* ignore */
   }
 }
 
 async function loadOverviewVersionsCatalog() {
-  await loadKnownVersionsFromGameData()
-  const params = new URLSearchParams()
-  for (const t of statsDivisionFilter.value) params.append('rankTier', t)
-  if (statsRoleFilter.value) params.set('role', statsRoleFilter.value)
-  params.set('otp', statsOtpFilter.value)
-  const q = params.toString() ? `?${params.toString()}` : ''
-  try {
-    const data = await statsFetch<{
-      matchesByVersion?: Array<{ version: string; matchCount: number }>
-    }>(apiUrl('/api/stats/overview' + q))
-    tierListOverviewMatchVersions.value = data?.matchesByVersion ?? []
-    mergeKnownVersions(data?.matchesByVersion)
-  } catch {
-    /* ignore */
-  }
+  await loadVersionsWithMatches()
 }
 
-/** Comme la page stats principale : versions catalogue + enrichissement overview (matchs réels). */
+/** Patches avec matchs en base uniquement (`match_outcome_stats`). */
 const statsVersionOptions = computed(() => {
-  if (statsKnownVersions.value.length > 0) return statsKnownVersions.value
-  return [...tierListOverviewMatchVersions.value].sort((a, b) =>
-    compareVersionsDesc(a.version, b.version)
-  )
+  const fromKnown = statsKnownVersions.value.filter(v => Number(v.matchCount) > 0)
+  if (fromKnown.length > 0) return fromKnown
+  return [...tierListOverviewMatchVersions.value]
+    .filter(v => Number(v.matchCount) > 0)
+    .sort((a, b) => compareVersionsDesc(a.version, b.version))
 })
 
 const statsVersionFilter = ref('')
@@ -602,7 +579,7 @@ const progressionFromVersion = computed(() => {
 })
 
 const progressionSelectableVersions = computed(() => {
-  const versions = statsVersionOptions.value
+  const versions = statsVersionOptions.value.filter(v => Number(v.matchCount) > 0)
   if (!statsVersionFilter.value) return versions
   const filtered = versions.filter(v => v.version !== statsVersionFilter.value)
   return filtered.length > 0 ? filtered : versions
@@ -958,7 +935,7 @@ onMounted(async () => {
   if (!versionStore.currentVersion) {
     await versionStore.loadCurrentVersion()
   }
-  await loadKnownVersionsFromGameData()
+  await loadVersionsWithMatches()
   await loadOverviewVersionsCatalog()
   applyDefaultVersionFiltersFromKnownVersions()
   if (isBotlaneTierListView(tierListViewModel.value)) {

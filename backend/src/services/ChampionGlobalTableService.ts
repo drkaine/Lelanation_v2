@@ -4,13 +4,7 @@
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
 import { toQueryStringArrayParam } from '../utils/statsFilters.js'
-import {
-  liveAggRelationExists,
-  matchVersionedAggFrom,
-  normalizePatchMajorMinor,
-  sqlAggOrArchiveRelation,
-  sqlAggUnionAllLiveAndArchives,
-} from './statsAggArchive.js'
+import { matchVersionedAggFrom, normalizePatchMajorMinor, sqlAggUnionAllLiveAndArchives } from './statsAggArchive.js'
 
 export function buildRawMatchCond(
   version?: string | string[] | null,
@@ -148,73 +142,6 @@ export async function getChampionGlobalTable(
   }
 
   const pickDenom = 5 * matchCount
-  const hasColumn = async (tableName: string, columnName: string): Promise<boolean> => {
-    if (!/^[a-z][a-z0-9_]*$/.test(tableName) || !/^[a-z][a-z0-9_]*$/.test(columnName)) return false
-    const rows = await queryRawUnsafe<Array<{ ok: number }>>(`
-      SELECT CASE WHEN EXISTS (
-        SELECT 1
-        FROM information_schema.columns c
-        WHERE c.table_schema = 'public'
-          AND c.table_name = '${tableName}'
-          AND c.column_name = '${columnName}'
-      ) THEN 1 ELSE 0 END AS ok
-    `)
-    return Number(rows[0]?.ok ?? 0) === 1
-  }
-
-  /** Column must exist on every physical table that can appear in `matchVersionedAggFrom` for this version. */
-  const normalizeSingleVersionKey = (v: string | string[] | null | undefined): string | null => {
-    const arr = toQueryStringArrayParam(v)
-    if (arr.length !== 1) return null
-    return normalizePatchMajorMinor(arr[0]!)
-  }
-
-  const archiveAggExists = async (aggTableName: string): Promise<boolean> => {
-    if (!/^[a-z][a-z0-9_]*$/.test(aggTableName)) return false
-    const archive = `archive_${aggTableName}`
-    const rows = await queryRawUnsafe<Array<{ ok: number }>>(
-      `SELECT CASE WHEN to_regclass('public.${archive}') IS NOT NULL THEN 1 ELSE 0 END AS ok`
-    )
-    return Number(rows[0]?.ok ?? 0) === 1
-  }
-
-  const physicalAggTablesForVersion = async (
-    aggTableName: string,
-    version: string | string[] | null | undefined
-  ): Promise<string[]> => {
-    if (!/^[a-z][a-z0-9_]*$/.test(aggTableName)) return [aggTableName]
-    const single = normalizeSingleVersionKey(version)
-    if (single) {
-      const rel = await sqlAggOrArchiveRelation(aggTableName, single)
-      if (rel?.includes('UNION ALL')) {
-        const tables: string[] = []
-        if (await archiveAggExists(aggTableName)) tables.push(`archive_${aggTableName}`)
-        if (await liveAggRelationExists(aggTableName)) tables.push(aggTableName)
-        return tables.length > 0 ? tables : [aggTableName]
-      }
-      const r = rel ?? aggTableName
-      if (r.includes('(')) return [`archive_${aggTableName}`]
-      return [aggTableName]
-    }
-    if (await archiveAggExists(aggTableName)) {
-      if (await liveAggRelationExists(aggTableName)) {
-        return [`archive_${aggTableName}`, aggTableName]
-      }
-      return [`archive_${aggTableName}`]
-    }
-    return [aggTableName]
-  }
-
-  const hasColumnOnAllBranches = async (
-    aggTableName: string,
-    columnName: string
-  ): Promise<boolean> => {
-    const tables = await physicalAggTablesForVersion(aggTableName, version)
-    for (const t of tables) {
-      if (!(await hasColumn(t, columnName))) return false
-    }
-    return true
-  }
 
   type AggRow = {
     team_id: number
@@ -276,56 +203,18 @@ export async function getChampionGlobalTable(
 
   const coreFrom = await matchVersionedAggFrom('agg_champion_core_stats', version, 'cs')
   const bucketFrom = await matchVersionedAggFrom('agg_champion_bucket', version, 'cb')
-  const partFrom = await matchVersionedAggFrom('agg_champion_participant_stats', version, 'ps')
   const coreWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cs.')
   const coreRoleSql = roleFilterSqlValueList ? ` AND cs.role IN (${roleFilterSqlValueList})` : ''
-  const coreHasSumKills = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_kills')
-  const coreHasSumDeaths = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_deaths')
-  const coreHasSumAssists = await hasColumnOnAllBranches('agg_champion_core_stats', 'sum_assists')
-  const partHasSumKills = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_kills')
-  const partHasSumAssists = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_assists')
-  const partHasSumDeaths = await hasColumnOnAllBranches('agg_champion_participant_stats', 'sum_deaths')
-  const partHasSumDeathsByEnemy = await hasColumnOnAllBranches(
-    'agg_champion_participant_stats',
-    'sum_deaths_by_enemy_champs'
-  )
-  const usePartForKda =
-    !coreHasSumKills ||
-    !coreHasSumDeaths ||
-    !coreHasSumAssists ||
-    partHasSumKills ||
-    partHasSumAssists ||
-    partHasSumDeaths ||
-    partHasSumDeathsByEnemy
-  const kExpr = coreHasSumKills
-    ? 'COALESCE(SUM(cs.sum_kills), 0)::bigint'
-    : partHasSumKills
-      ? 'COALESCE(SUM(ps.sum_kills), 0)::bigint'
-      : '0::bigint'
-  const dExpr = coreHasSumDeaths
-    ? 'COALESCE(SUM(cs.sum_deaths), 0)::bigint'
-    : partHasSumDeaths
-      ? 'COALESCE(SUM(ps.sum_deaths), 0)::bigint'
-      : partHasSumDeathsByEnemy
-        ? 'COALESCE(SUM(ps.sum_deaths_by_enemy_champs), 0)::bigint'
-        : '0::bigint'
-  const aExpr = coreHasSumAssists
-    ? 'COALESCE(SUM(cs.sum_assists), 0)::bigint'
-    : partHasSumAssists
-      ? 'COALESCE(SUM(ps.sum_assists), 0)::bigint'
-      : '0::bigint'
-  const kdaJoinSql = usePartForKda ? ` LEFT JOIN ${partFrom} ON ps.champion_stat_id = cs.id` : ''
 
   const kdaRows = await queryRawUnsafe<
     Array<{ champion_id: number; sum_k: bigint; sum_de: bigint; sum_a: bigint }>
   >(`
     SELECT
       cs.champion_id,
-      ${kExpr} AS sum_k,
-      ${dExpr} AS sum_de,
-      ${aExpr} AS sum_a
+      COALESCE(SUM(cs.sum_kills), 0)::bigint AS sum_k,
+      COALESCE(SUM(cs.sum_deaths), 0)::bigint AS sum_de,
+      COALESCE(SUM(cs.sum_assists), 0)::bigint AS sum_a
     FROM ${coreFrom}
-    ${kdaJoinSql}
     WHERE ${coreWhere}
     ${coreRoleSql}
     GROUP BY cs.champion_id
@@ -339,20 +228,24 @@ export async function getChampionGlobalTable(
     })
   }
 
+  const bucketWhere = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'cb.')
+  const bucketRoleSql = roleFilterSqlValueList ? ` AND cb.role IN (${roleFilterSqlValueList})` : ''
   const takenRows = await queryRawUnsafe<
     Array<{ champion_id: number; phys_t: bigint; magic_t: bigint; true_t: bigint; total_t: bigint }>
   >(`
     SELECT
-      cs.champion_id,
+      cb.champion_id,
       COALESCE(SUM(cb.sum_physical_damage_taken), 0)::bigint AS phys_t,
       COALESCE(SUM(cb.sum_magic_damage_taken), 0)::bigint AS magic_t,
       COALESCE(SUM(cb.sum_true_damage_taken), 0)::bigint AS true_t,
-      COALESCE(SUM(cb.sum_total_damage_taken), 0)::bigint AS total_t
-    FROM ${coreFrom}
-    JOIN ${bucketFrom} ON cb.champion_stat_id = cs.id
-    WHERE ${coreWhere}
-    ${coreRoleSql}
-    GROUP BY cs.champion_id
+      COALESCE(
+        SUM(cb.sum_physical_damage_taken + cb.sum_magic_damage_taken + cb.sum_true_damage_taken),
+        0
+      )::bigint AS total_t
+    FROM ${bucketFrom}
+    WHERE ${bucketWhere}
+    ${bucketRoleSql}
+    GROUP BY cb.champion_id
   `)
   const takenByChampion = new Map<number, { phys: number; magic: number; true: number; total: number }>()
   for (const r of takenRows) {
@@ -364,18 +257,28 @@ export async function getChampionGlobalTable(
     })
   }
 
-  const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'mv.')
-  const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner', version, 'mv')
+  const matchCondBans = buildRawMatchCond(version, rankTier).replace(/\bm\./g, 'bb.')
+  const bansFrom = await matchVersionedAggFrom('agg_champion_bans_by_banner_core', version, 'bb')
   const banRows = await queryRawUnsafe<
     Array<{ team_id: number; champion_id: number; cnt: number }>
   >(`
     SELECT
-      mv.team_num AS team_id,
-      mv.banned_champion_id AS champion_id,
-      SUM(mv.ban_count)::int AS cnt
+      100 AS team_id,
+      bb.banned_champion_id AS champion_id,
+      SUM(bb.count_banner_team_100)::int AS cnt
     FROM ${bansFrom}
-    WHERE ${matchCondBans} AND mv.team_num IN (100, 200)
-    GROUP BY mv.team_num, mv.banned_champion_id
+    WHERE ${matchCondBans}
+    GROUP BY bb.banned_champion_id
+    HAVING SUM(bb.count_banner_team_100) > 0
+    UNION ALL
+    SELECT
+      200 AS team_id,
+      bb.banned_champion_id AS champion_id,
+      SUM(bb.count_banner_team_200)::int AS cnt
+    FROM ${bansFrom}
+    WHERE ${matchCondBans}
+    GROUP BY bb.banned_champion_id
+    HAVING SUM(bb.count_banner_team_200) > 0
   `)
 
   const banMap = new Map<string, number>()

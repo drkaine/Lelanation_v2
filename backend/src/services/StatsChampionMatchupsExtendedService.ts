@@ -2,7 +2,11 @@
  * Champion page: rich matchup table (lane sums, peer-relative lane score, dominance hints).
  */
 import { queryRawUnsafe, isDatabaseConfigured } from '../db/query.js'
-import { toQueryStringArrayParam } from '../utils/statsFilters.js'
+import {
+  normalizeStatsRoleForChampion,
+  statsRoleSqlLiteral,
+  toQueryStringArrayParam,
+} from '../utils/statsFilters.js'
 import { matchVersionedAggFrom, normalizePatchMajorMinor } from './statsAggArchive.js'
 import { computeDelta, matchupScoreFromDeltaAndWeight } from './MatchupTierService.js'
 
@@ -128,9 +132,8 @@ function buildCoreWhere(
   if (version != null && version !== '') {
     parts.push(`ac.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
   }
-  if (role != null && role !== '') {
-    parts.push(`ac.role = '${role.replace(/'/g, "''").toUpperCase()}'`)
-  }
+  const roleDb = normalizeStatsRoleForChampion(role)
+  if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
   return parts.join(' AND ')
 }
 
@@ -148,9 +151,8 @@ function buildPeerCoreWhere(
   if (version != null && version !== '') {
     parts.push(`ac.game_version LIKE '${normalizePatchMajorMinor(version).replace(/'/g, "''")}%'`)
   }
-  if (role != null && role !== '') {
-    parts.push(`ac.role = '${role.replace(/'/g, "''").toUpperCase()}'`)
-  }
+  const roleDb = normalizeStatsRoleForChampion(role)
+  if (roleDb) parts.push(`ac.role = '${statsRoleSqlLiteral(roleDb)}'`)
   return parts.join(' AND ')
 }
 
